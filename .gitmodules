@@ -1,0 +1,12 @@
+[submodule "3rdparty/QuickUI"]
+	path = 3rdparty/QuickUI
+	url = https://github.com/QWERDF007/QuickUI
+	branch = main
+[submodule "3rdparty/pybind11"]
+	path = 3rdparty/pybind11
+	url = https://github.com/pybind/pybind11.git
+	branch = master
+[submodule "3rdparty/taskflow"]
+	path = 3rdparty/taskflow
+	url = https://github.com/taskflow/taskflow.git
+	branch = master
