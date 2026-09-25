@@ -159,7 +159,7 @@ ApplicationWindow {
             containmentMask: Item {
                 x: window.leftExpanded ? -3 : 0
                 width: window.leftExpanded ? 10 : 0
-                height: window.leftExpanded ? parent.height : 0
+                height: window.leftExpanded ? workbench.height : 0
             }
         }
         Item {
