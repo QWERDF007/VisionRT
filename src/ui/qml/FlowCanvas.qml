@@ -116,60 +116,208 @@ FocusScope {
         function onProjectReplaced() { root.flowViews = ({}); root.selection = []; root.viewedFlow = app.currentFlow; root.fit() }
         function onNodesChanged() { root.selection = root.selection.filter(function(id) { return root.findNode(id) !== null }) }
     }
+    Rectangle {
+        anchors.fill: parent; color: QuiColor.Primary; border.color: "#d0d7de"; border.width: 1
+    }
     ColumnLayout {
-        anchors.fill: parent; spacing: 0
+        anchors.fill: parent; anchors.margins: 1; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34; color: QuiColor.Primary
+            Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                height: 1; color: "#d0d7de"
+            }
             RowLayout {
-                anchors.fill: parent; anchors.margins: 3; spacing: 4
-                QuiText { text: "流程图"; Layout.leftMargin: 5 }
-                QuiTextField {
-                    id: search; objectName: "flowSearch"
-                    Layout.fillWidth: true; implicitHeight: 28; placeholderText: "搜索工具 / 备注 / 序号"
-                    onTextChanged: { app.searchNodes(text); root.searchIndex = 0 }
-                    Keys.onDownPressed: root.searchIndex = Math.min(app.searchResults.length - 1, root.searchIndex + 1)
-                    Keys.onUpPressed: root.searchIndex = Math.max(0, root.searchIndex - 1)
-                    Keys.onReturnPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
-                    Keys.onEnterPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
-                    Keys.onEscapePressed: { text = ""; surface.forceActiveFocus() }
+                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
+                QuiText {
+                    text: "流程图绘制区"
+                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                    color: "#24292f"
                 }
-                QuiTextIconButton { text: "清空搜索"; iconSource: QuiFontIcon.Clear; visible: search.text.length > 0; onClicked: search.text = "" }
-                QuiTextIconButton { text: "适应全部节点"; iconSource: QuiFontIcon.FullScreen; onClicked: root.fit() }
+                QuiTextIconButton {
+                    iconSource: QuiFontIcon.Settings
+                    implicitWidth: 24; implicitHeight: 24
+                    text: "流程图设置"
+                }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    id: searchBox
+                    Layout.preferredWidth: Math.min(200, root.width * 0.35)
+                    Layout.preferredHeight: 24
+                    color: "#ffffff"; radius: 3
+                    border.color: search.activeFocus ? QuiColor.Highlight : "#c5ccd5"; border.width: 1
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+                        QuiTextIcon {
+                            iconSource: QuiFontIcon.Search; iconSize: 12; iconColor: "#8c959f"
+                        }
+                        TextInput {
+                            id: search; objectName: "flowSearch"
+                            Layout.fillWidth: true
+                            font: QuiFont.Body; color: QuiColor.FontPrimary; selectByMouse: true
+                            verticalAlignment: Text.AlignVCenter
+                            onTextChanged: { app.searchNodes(text); root.searchIndex = 0 }
+                            Keys.onDownPressed: root.searchIndex = Math.min(app.searchResults.length - 1, root.searchIndex + 1)
+                            Keys.onUpPressed: root.searchIndex = Math.max(0, root.searchIndex - 1)
+                            Keys.onReturnPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
+                            Keys.onEnterPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
+                            Keys.onEscapePressed: { text = ""; surface.forceActiveFocus() }
+                            Text {
+                                anchors.fill: parent; text: "搜索关键字"
+                                color: "#8c959f"; font: QuiFont.Body
+                                visible: !search.text && !search.activeFocus
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        QuiTextIcon {
+                            iconSource: QuiFontIcon.Clear; iconSize: 11; iconColor: "#8c959f"
+                            visible: search.text.length > 0
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: { search.text = ""; surface.forceActiveFocus() }
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    id: flowDropdown
+                    Layout.preferredWidth: 120; Layout.preferredHeight: 24; radius: 3
+                    color: "#ffffff"; border.color: "#c5ccd5"; border.width: 1
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+                        QuiText {
+                            Layout.fillWidth: true; elide: Text.ElideRight
+                            text: {
+                                let idx = 1
+                                for (let i = 0; i < app.flows.length; ++i) {
+                                    if (app.flows[i].id === app.currentFlow) { idx = i + 1; break; }
+                                }
+                                return "选择流程: " + idx + "/" + (app.flows.length || 1)
+                            }
+                            font: QuiFont.Caption; color: QuiColor.FontPrimary
+                        }
+                        QuiTextIcon {
+                            iconSource: QuiFontIcon.ChevronDown; iconSize: 10; iconColor: "#57606a"
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        onClicked: selectFlowMenu.popup(flowDropdown, 0, flowDropdown.height + 2)
+                    }
+                }
+                QuiMenu {
+                    id: selectFlowMenu
+                    Repeater {
+                        model: app.flows
+                        QuiMenuItem {
+                            required property var modelData
+                            text: modelData.name + (modelData.id === app.currentFlow ? " ✓" : "")
+                            onTriggered: app.selectFlow(modelData.id)
+                        }
+                    }
+                }
+                QuiTextIconButton {
+                    iconSource: QuiFontIcon.FullScreen
+                    implicitWidth: 26; implicitHeight: 24
+                    text: "适应全部节点"
+                    onClicked: root.fit()
+                }
             }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34; color: QuiColor.Primary
+            Layout.fillWidth: true; Layout.preferredHeight: 28; color: "#f6f8fa"
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                height: 1; color: "#d0d7de"
+            }
             RowLayout {
-                anchors.fill: parent; spacing: 0
-                QuiTextIconButton { text: "新增流程"; iconSource: QuiFontIcon.Add; enabled: !app.busy; onClicked: root.openName("addFlow", "") }
+                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+                Rectangle {
+                    Layout.preferredWidth: 22; Layout.preferredHeight: 22; radius: 3
+                    color: addMouse.containsMouse ? "#f0f2f5" : "#ffffff"
+                    border.color: "#d0d7de"; border.width: 1
+                    enabled: !app.busy
+                    QuiTextIcon {
+                        anchors.centerIn: parent
+                        iconSource: QuiFontIcon.Add; iconSize: 12; iconColor: "#57606a"
+                    }
+                    MouseArea {
+                        id: addMouse; anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openName("addFlow", "")
+                    }
+                }
                 Flickable {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                     contentWidth: flowTabs.width; contentHeight: height
                     Row {
-                        id: flowTabs; height: parent.height
+                        id: flowTabs; height: parent.height; spacing: 4
                         Repeater {
                             model: app.flows
-                            Row {
+                            Rectangle {
+                                id: flowTabItem
                                 required property var modelData
-                                height: flowTabs.height
-                                QuiCheckBox {
-                                    height: parent.height; checked: modelData.selected; enabled: !app.busy
-                                    Accessible.name: "运行 " + modelData.name
-                                    onClicked: app.setFlowSelected(modelData.id, checked)
+                                readonly property bool isActive: app.currentFlow === modelData.id
+                                height: 25; width: tabRow.width + 16
+                                anchors.bottom: parent.bottom
+                                radius: 3
+                                color: isActive ? "#ffffff" : "#f6f8fa"
+                                border.color: isActive ? "#d0d7de" : "#e1e4e8"
+                                border.width: 1
+                                Rectangle {
+                                    visible: flowTabItem.isActive
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                    height: 2; color: QuiColor.Highlight
                                 }
-                                QuiTabButton {
-                                    height: parent.height; text: modelData.name; checked: app.currentFlow === modelData.id
-                                    showIndicator: true
-                                    normalColor: "transparent"; checkedColor: QuiColor.Primary
-                                    normalTextColor: QuiColor.FontPrimary; checkedTextColor: QuiColor.Highlight
-                                    onClicked: app.selectFlow(modelData.id)
-                                    TapHandler { acceptedButtons: Qt.RightButton; onTapped: { root.contextFlow = modelData.id; flowMenu.popup() } }
+                                RowLayout {
+                                    id: tabRow
+                                    anchors.centerIn: parent; spacing: 6
+                                    Rectangle {
+                                        width: 7; height: 7; radius: 3.5
+                                        color: flowTabItem.modelData.selected ? "#2da44e" : "transparent"
+                                        border.color: flowTabItem.modelData.selected ? "#2da44e" : "#8c959f"
+                                        border.width: 1
+                                        MouseArea {
+                                            anchors.fill: parent; anchors.margins: -4
+                                            enabled: !app.busy
+                                            onClicked: app.setFlowSelected(flowTabItem.modelData.id, !flowTabItem.modelData.selected)
+                                        }
+                                    }
+                                    QuiText {
+                                        text: flowTabItem.modelData.name
+                                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: flowTabItem.isActive })
+                                        color: flowTabItem.isActive ? QuiColor.Highlight : "#57606a"
+                                    }
+                                    QuiTextIcon {
+                                        iconSource: QuiFontIcon.Cancel; iconSize: 9
+                                        iconColor: tabCloseMouse.containsMouse ? "#cf222e" : "#8c959f"
+                                        visible: app.flows.length > 1
+                                        MouseArea {
+                                            id: tabCloseMouse; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
+                                            enabled: !app.busy
+                                            onClicked: {
+                                                root.contextFlow = flowTabItem.modelData.id
+                                                deleteFlowDialog.open()
+                                            }
+                                        }
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: function(mouse) {
+                                        if (mouse.button === Qt.LeftButton) {
+                                            app.selectFlow(flowTabItem.modelData.id)
+                                        } else if (mouse.button === Qt.RightButton) {
+                                            root.contextFlow = flowTabItem.modelData.id
+                                            flowMenu.popup()
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                QuiText { text: Math.round(root.zoom * 100) + "%"; font: QuiFont.Caption; Layout.rightMargin: 6 }
+                QuiText { text: Math.round(root.zoom * 100) + "%"; font: QuiFont.Caption; color: "#57606a"; Layout.rightMargin: 6 }
             }
         }
         FocusScope {
@@ -183,7 +331,7 @@ FocusScope {
                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) { app.deleteNodes(root.selection); root.selection = []; event.accepted = true }
                 else if (event.key === Qt.Key_Escape) { root.selection = []; root.gesture = ""; root.dragX = 0; root.dragY = 0; event.accepted = true }
             }
-            Rectangle { anchors.fill: parent; color: "#f5f7fa" }
+            Rectangle { anchors.fill: parent; color: "#8c9197" }
             Canvas {
                 id: grid; anchors.fill: parent
                 onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
@@ -194,7 +342,7 @@ FocusScope {
                     function onPanYChanged() { grid.requestPaint() }
                 }
                 onPaint: {
-                    let ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); ctx.fillStyle = "#cfd7e2"
+                    let ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); ctx.fillStyle = "#7e8389"
                     let step = 24 * root.zoom
                     for (let x = ((root.panX % step) + step) % step; x < width; x += step)
                         for (let y = ((root.panY % step) + step) % step; y < height; y += step) ctx.fillRect(x, y, 1, 1)
@@ -217,7 +365,7 @@ FocusScope {
                         let bottom = (Math.max(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
                         let ids = root.selection.slice()
                         for (let n of app.nodes)
-                            if (n.x * root.cellWidth + 156 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 68 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
+                            if (n.x * root.cellWidth + 168 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 70 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
                         root.selection = ids
                         if (ids.length) app.selectNode(ids[ids.length - 1])
                     }
@@ -238,9 +386,9 @@ FocusScope {
                     model: app.wires
                     WireItem {
                         required property var modelData
-                        sourceX: root.nodeX(modelData.source) + 78; sourceY: root.nodeY(modelData.source) + 68
-                        targetX: root.nodeX(modelData.target) + 78; targetY: root.nodeY(modelData.target)
-                        lineColor: root.selected(modelData.target) ? "#d8ae28" : root.selected(modelData.source) ? "#2589df" : "#7f8996"
+                        sourceX: root.nodeX(modelData.source) + 84; sourceY: root.nodeY(modelData.source) + 70
+                        targetX: root.nodeX(modelData.target) + 84; targetY: root.nodeY(modelData.target)
+                        lineColor: root.selected(modelData.target) ? "#e68218" : root.selected(modelData.source) ? "#1887d8" : "#3d444d"
                     }
                 }
                 Repeater {

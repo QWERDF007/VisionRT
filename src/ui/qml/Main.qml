@@ -23,9 +23,9 @@ ApplicationWindow {
     property bool unsavedSaving: false
     property var notices: []
     property int toastCount: 0
-    property real leftRatio: 0.36
+    property real leftRatio: 0.362
     property real libraryRatio: 0.38
-    property real resultsRatio: 0.60
+    property real resultsRatio: 0.59
     readonly property real leftMinimum: Math.min(320, workbench.width * 0.34)
     readonly property real rightMinimum: Math.min(640, workbench.width * 0.60)
 
@@ -36,9 +36,9 @@ ApplicationWindow {
     function resetLayout() {
         leftExpanded = true
         libraryExpanded = true
-        leftRatio = 0.36
+        leftRatio = 0.362
         libraryRatio = 0.38
-        resultsRatio = 0.60
+        resultsRatio = 0.59
         let w = workbench.width > 200 ? workbench.width : window.width
         savedLeftWidth = Math.round(w * leftRatio)
         leftHost.SplitView.preferredWidth = savedLeftWidth
@@ -53,10 +53,8 @@ ApplicationWindow {
     function toggleLeft() {
         if (leftExpanded) {
             savedLeftWidth = leftHost.width
-            if (leftContent.activeFocus || leftContent.containsFocusItem(window.activeFocusItem))
-                drawerButton.forceActiveFocus()
             leftExpanded = false
-            leftHost.SplitView.preferredWidth = 28
+            leftHost.SplitView.preferredWidth = 24
         } else {
             leftExpanded = true
             leftHost.SplitView.preferredWidth = Math.max(320,
@@ -76,10 +74,11 @@ ApplicationWindow {
         QuiColor.themeMode = QuiColor.Light
         QuiColor.Background = "#f5f7fa"
         QuiColor.Primary = "#ffffff"
-        QuiColor.Border = "#dce1e8"
+        QuiColor.Border = "#d0d7de"
         QuiColor.Highlight = "#1887d8"
-        QuiColor.FontPrimary = "#344253"
-        QuiColor.Button = "#f4f6f9"
+        QuiColor.FontPrimary = "#24292f"
+        QuiColor.FontCaption = "#57606a"
+        QuiColor.Button = "#f6f8fa"
         QuiFont.Body = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12 })
         QuiFont.Caption = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
         Qt.callLater(resetLayout)
@@ -102,20 +101,26 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+F"; onActivated: window.focusSearch() }
 
     header: ToolBar {
-        height: 46
-        background: Rectangle { color: QuiColor.Primary; border.color: QuiColor.Border }
+        height: 38
+        background: Rectangle {
+            color: "#ffffff"
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                height: 1; color: "#d0d7de"
+            }
+        }
         RowLayout {
-            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 7
-            QuiButton { text: "文件"; focusPolicy: Qt.TabFocus; onClicked: fileMenu.popup() }
-            QuiButton { text: "工具"; focusPolicy: Qt.TabFocus; onClicked: toolsMenu.popup() }
-            QuiButton { text: "帮助"; focusPolicy: Qt.TabFocus; onClicked: helpMenu.popup() }
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 24; color: QuiColor.Border }
-            QuiTextIconButton { action: saveAction; iconSource: QuiFontIcon.Save; display: AbstractButton.TextBesideIcon }
-            QuiTextIconButton { action: runAction; iconSource: QuiFontIcon.Play; display: AbstractButton.TextBesideIcon }
-            QuiTextIconButton { action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll; display: AbstractButton.TextBesideIcon }
+            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+            QuiButton { text: "文件"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: fileMenu.popup() }
+            QuiButton { text: "工具"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: toolsMenu.popup() }
+            QuiButton { text: "帮助"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: helpMenu.popup() }
+            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 20; color: "#d0d7de" }
+            QuiTextIconButton { action: saveAction; iconSource: QuiFontIcon.Save; implicitHeight: 26; display: AbstractButton.TextBesideIcon }
+            QuiTextIconButton { action: runAction; iconSource: QuiFontIcon.Play; implicitHeight: 26; display: AbstractButton.TextBesideIcon }
+            QuiTextIconButton { action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll; implicitHeight: 26; display: AbstractButton.TextBesideIcon }
             Item { Layout.fillWidth: true }
             QuiText { text: app.busy ? app.runState : "就绪"; color: app.busy ? QuiColor.Highlight : QuiColor.FontCaption }
-            QuiButton { text: "运行时复位"; enabled: !app.busy; focusPolicy: Qt.TabFocus; onClicked: resetDialog.open() }
+            QuiButton { text: "运行时复位"; implicitHeight: 26; enabled: !app.busy; focusPolicy: Qt.TabFocus; onClicked: resetDialog.open() }
         }
     }
     QuiMenu {
@@ -143,30 +148,26 @@ ApplicationWindow {
         id: workbench
         anchors.fill: parent
         orientation: Qt.Horizontal
-        backgroundColor: QuiColor.Border
-        handleColor: "#adb8c6"
+        backgroundColor: "#d0d7de"
+        handleColor: "#d0d7de"
         onWidthChanged: {
             if (window.leftExpanded && !leftHost.SplitHandle.pressed && workbench.width > 200) {
                 leftHost.SplitView.preferredWidth = Math.round(workbench.width * window.leftRatio)
             }
         }
         handle: Rectangle {
-            implicitWidth: window.leftExpanded ? 4 : 0
+            implicitWidth: 1
             implicitHeight: workbench.height
-            visible: window.leftExpanded
-            enabled: window.leftExpanded
-            color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : QuiColor.Border
+            color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
             containmentMask: Item {
-                x: window.leftExpanded ? -3 : 0
-                width: window.leftExpanded ? 10 : 0
-                height: window.leftExpanded ? workbench.height : 0
+                x: -3; width: 7; height: workbench.height
             }
         }
         Item {
             id: leftHost
             SplitView.fillWidth: false
-            SplitView.minimumWidth: window.leftExpanded ? 320 : 28
-            SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 28
+            SplitView.minimumWidth: window.leftExpanded ? 320 : 24
+            SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 24
             SplitView.preferredWidth: Math.round(workbench.width * window.leftRatio)
             onWidthChanged: {
                 if (window.leftExpanded && leftHost.SplitHandle.pressed && workbench.width > 200) {
@@ -175,7 +176,7 @@ ApplicationWindow {
             }
             FocusScope {
                 id: leftContent
-                anchors.fill: parent; anchors.rightMargin: 28
+                anchors.fill: parent
                 visible: window.leftExpanded
                 enabled: window.leftExpanded
                 clip: true
@@ -187,8 +188,16 @@ ApplicationWindow {
                     id: leftSplit
                     anchors.fill: parent
                     orientation: Qt.Vertical
-                    backgroundColor: QuiColor.Border
-                    handleColor: "#adb8c6"
+                    backgroundColor: "#d0d7de"
+                    handleColor: "#d0d7de"
+                    handle: Rectangle {
+                        implicitHeight: 1
+                        implicitWidth: leftSplit.width
+                        color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+                        containmentMask: Item {
+                            y: -3; height: 7; width: leftSplit.width
+                        }
+                    }
                     onHeightChanged: {
                         if (window.libraryExpanded && leftSplit.height > 200) {
                             library.SplitView.preferredHeight = Math.round(leftSplit.height * window.libraryRatio)
@@ -199,8 +208,8 @@ ApplicationWindow {
                         expanded: window.libraryExpanded
                         SplitView.fillHeight: false
                         SplitView.preferredHeight: Math.round(leftSplit.height * window.libraryRatio)
-                        SplitView.minimumHeight: expanded ? 160 : 30
-                        SplitView.maximumHeight: expanded ? Math.round(leftSplit.height * 0.60) : 30
+                        SplitView.minimumHeight: expanded ? 160 : 34
+                        SplitView.maximumHeight: expanded ? Math.round(leftSplit.height * 0.60) : 34
                         onHeightChanged: {
                             if (window.libraryExpanded && leftSplit.height > 200 && library.SplitHandle.pressed) {
                                 window.libraryRatio = Math.max(0.20, Math.min(0.60, library.height / leftSplit.height))
@@ -210,7 +219,7 @@ ApplicationWindow {
                             if (window.libraryExpanded) {
                                 window.savedLibraryHeight = height
                                 window.libraryExpanded = false
-                                SplitView.preferredHeight = 30
+                                SplitView.preferredHeight = 34
                             } else {
                                 window.libraryExpanded = true
                                 SplitView.preferredHeight = Math.min(window.savedLibraryHeight || Math.round(leftSplit.height * window.libraryRatio),
@@ -224,16 +233,39 @@ ApplicationWindow {
                         SplitView.minimumHeight: 260
                     }
                 }
+                Rectangle {
+                    id: floatCollapseBtn
+                    visible: window.leftExpanded
+                    z: 50
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    width: 12; height: 48; radius: 3
+                    color: floatMouse.containsMouse ? QuiColor.Highlight : "#d0d7de"
+                    opacity: floatMouse.containsMouse ? 1.0 : 0.6
+                    QuiTextIcon {
+                        anchors.centerIn: parent
+                        iconSource: QuiFontIcon.ChevronLeft
+                        iconSize: 10
+                        iconColor: floatMouse.containsMouse ? "#ffffff" : "#57606a"
+                    }
+                    MouseArea {
+                        id: floatMouse; anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: window.toggleLeft()
+                    }
+                }
             }
             Rectangle {
-                width: 28; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                color: QuiColor.Primary
+                id: collapsedBar
+                anchors.fill: parent
+                visible: !window.leftExpanded
+                color: "#f6f8fa"
+                border.color: "#d0d7de"; border.width: 1
                 QuiTextIconButton {
                     id: drawerButton
                     objectName: "drawerToggle"
-                    anchors.centerIn: parent; width: 28; height: 64
-                    iconSource: window.leftExpanded ? QuiFontIcon.ChevronLeft : QuiFontIcon.ChevronRight
-                    text: window.leftExpanded ? "收起左侧工作区" : "展开左侧工作区"
+                    anchors.centerIn: parent; width: 22; height: 64
+                    iconSource: QuiFontIcon.ChevronRight
+                    text: "展开左侧工作区"
                     Accessible.name: text
                     focusPolicy: Qt.TabFocus
                     onClicked: window.toggleLeft()
@@ -245,8 +277,16 @@ ApplicationWindow {
             orientation: Qt.Vertical
             SplitView.fillWidth: true
             SplitView.minimumWidth: 500
-            backgroundColor: QuiColor.Border
-            handleColor: "#adb8c6"
+            backgroundColor: "#d0d7de"
+            handleColor: "#d0d7de"
+            handle: Rectangle {
+                implicitHeight: 1
+                implicitWidth: rightSplit.width
+                color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+                containmentMask: Item {
+                    y: -3; height: 7; width: rightSplit.width
+                }
+            }
             onHeightChanged: {
                 if (rightSplit.height > 200) {
                     results.SplitView.preferredHeight = Math.round(rightSplit.height * window.resultsRatio)
@@ -274,13 +314,17 @@ ApplicationWindow {
         }
     }
     footer: Rectangle {
-        height: 28; color: QuiColor.Primary
+        height: 28; color: "#f6f8fa"
+        Rectangle {
+            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+            height: 1; color: "#d0d7de"
+        }
         RowLayout {
-            anchors.fill: parent; anchors.margins: 5
-            QuiText { text: app.timingText; font: QuiFont.Caption }
+            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+            QuiText { text: app.timingText; font: QuiFont.Caption; color: "#57606a" }
             Item { Layout.fillWidth: true }
             QuiText { Layout.maximumWidth: window.width * 0.48; elide: Text.ElideRight; text: app.diagnostic; color: "#ba641a"; font: QuiFont.Caption }
-            QuiButton { text: "操作提示"; implicitHeight: 23; focusPolicy: Qt.TabFocus; onClicked: noticeDialog.open() }
+            QuiButton { text: "操作提示"; implicitHeight: 20; focusPolicy: Qt.TabFocus; onClicked: noticeDialog.open() }
         }
     }
     FileDialog {

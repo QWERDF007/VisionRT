@@ -9,8 +9,8 @@ Item {
     property real sourceY: 0
     property real targetX: 0
     property real targetY: 0
-    property color lineColor: "#798491"
-    property real lineWidth: 1.4
+    property color lineColor: "#3d444d"
+    property real lineWidth: 1.6
     readonly property real elbowY: targetY >= sourceY + 12 ? (sourceY + targetY) / 2 : sourceY + 24
     readonly property real detourX: Math.max(sourceX, targetX) + 100
     readonly property var route: targetY >= sourceY + 12
