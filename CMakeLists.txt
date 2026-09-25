@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(ConfigBuildTree)
 include(ConfigCompiler)
+include(ConfigVersion)
 
 include(CTest)
 find_package(OpenCV CONFIG REQUIRED COMPONENTS core imgproc imgcodecs)
@@ -20,9 +21,12 @@ add_subdirectory(3rdparty/pybind11 EXCLUDE_FROM_ALL)
 add_library(visionrt_taskflow INTERFACE)
 target_include_directories(visionrt_taskflow INTERFACE 3rdparty/taskflow)
 
-add_library(visionrt_common src/common/Value.cpp)
+add_library(visionrt_common
+    src/common/Value.cpp
+    src/common/Version.cpp)
 target_include_directories(visionrt_common PUBLIC src ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(visionrt_common PUBLIC ${OpenCV_LIBS})
+configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 add_library(visionrt_core
     src/core/Tool.cpp
@@ -109,6 +113,35 @@ if(VISIONRT_BUILD_APP AND VISIONRT_BUILD_INFER)
     add_dependencies(deploy VisionRTInfer)
 endif()
 
+file(REAL_PATH "${OpenCV_DIR}/../bin" VISIONRT_OPENCV_BIN)
+file(GLOB OPENCV_DLLS "${VISIONRT_OPENCV_BIN}/*.dll")
+add_custom_target(deploy_opencv_dlls ALL
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${OPENCV_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    COMMENT "Deploying OpenCV DLLs to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+)
+
+get_target_property(VISIONRT_QT_CORE Qt6::Core IMPORTED_LOCATION_RELEASE)
+if(NOT VISIONRT_QT_CORE)
+    get_target_property(VISIONRT_QT_CORE Qt6::Core LOCATION)
+endif()
+if(VISIONRT_QT_CORE)
+    get_filename_component(VISIONRT_QT_BIN "${VISIONRT_QT_CORE}" DIRECTORY)
+endif()
+get_filename_component(VISIONRT_PYTHON_BIN "${Python3_EXECUTABLE}" DIRECTORY)
+
+function(visionrt_apply_test_environment TEST_NAME)
+    if(WIN32)
+        file(TO_NATIVE_PATH "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}" _p0)
+        file(TO_NATIVE_PATH "${VISIONRT_QT_BIN}" _p1)
+        file(TO_NATIVE_PATH "${VISIONRT_OPENCV_BIN}" _p2)
+        file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}" _p3)
+        file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}/Library/bin" _p4)
+        set_tests_properties(${TEST_NAME} PROPERTIES
+            ENVIRONMENT "PATH=${_p0}\;${_p1}\;${_p2}\;${_p3}\;${_p4}\;$ENV{PATH}"
+        )
+    endif()
+endfunction()
+
 function(visionrt_contract name library)
     add_executable(${name} tests/${name}.cpp)
     target_link_libraries(${name} PRIVATE ${library})
@@ -118,15 +151,25 @@ function(visionrt_contract name library)
         target_compile_options(${name} PRIVATE -UNDEBUG)
     endif()
     add_test(NAME ${name} COMMAND ${name} ${ARGN})
+    visionrt_apply_test_environment(${name})
 endfunction()
 
 if(BUILD_TESTING)
+    add_executable(version_contract tests/version_contract.cpp)
+    target_link_libraries(version_contract PRIVATE visionrt_common)
+    add_test(NAME version_contract COMMAND version_contract)
+    visionrt_apply_test_environment(version_contract)
+
     add_executable(value_contract tests/value_contract.cpp)
     target_link_libraries(value_contract PRIVATE visionrt_common)
     add_test(NAME value_contract COMMAND value_contract)
+    visionrt_apply_test_environment(value_contract)
+
     add_executable(path_contract tests/path_contract.cpp)
     target_link_libraries(path_contract PRIVATE visionrt_core)
     add_test(NAME path_contract COMMAND path_contract)
+    visionrt_apply_test_environment(path_contract)
+
     visionrt_contract(tool_registry_contract visionrt_core "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
     visionrt_contract(project_editor_contract visionrt_core)
     visionrt_contract(project_storage_contract visionrt_core "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
@@ -136,6 +179,7 @@ if(BUILD_TESTING)
     add_executable(infer_contract tests/infer_contract.cpp src/infer/YoloPostprocess.cpp)
     target_link_libraries(infer_contract PRIVATE visionrt_common)
     add_test(NAME infer_contract COMMAND infer_contract)
+    visionrt_apply_test_environment(infer_contract)
     if(MSVC)
         target_compile_options(infer_contract PRIVATE /UNDEBUG)
     endif()
