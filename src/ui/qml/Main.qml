@@ -146,12 +146,11 @@ ApplicationWindow {
         backgroundColor: QuiColor.Border
         handleColor: "#adb8c6"
         onWidthChanged: {
-            if (window.leftExpanded && !outerHandle.SplitHandle.pressed && workbench.width > 200) {
+            if (window.leftExpanded && !leftHost.SplitHandle.pressed && workbench.width > 200) {
                 leftHost.SplitView.preferredWidth = Math.round(workbench.width * window.leftRatio)
             }
         }
         handle: Rectangle {
-            id: outerHandle
             implicitWidth: window.leftExpanded ? 4 : 0
             implicitHeight: workbench.height
             visible: window.leftExpanded
@@ -160,7 +159,7 @@ ApplicationWindow {
             containmentMask: Item {
                 x: window.leftExpanded ? -3 : 0
                 width: window.leftExpanded ? 10 : 0
-                height: window.leftExpanded ? outerHandle.height : 0
+                height: window.leftExpanded ? parent.height : 0
             }
         }
         Item {
@@ -170,7 +169,7 @@ ApplicationWindow {
             SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 28
             SplitView.preferredWidth: Math.round(workbench.width * window.leftRatio)
             onWidthChanged: {
-                if (window.leftExpanded && outerHandle.SplitHandle.pressed && workbench.width > 200) {
+                if (window.leftExpanded && leftHost.SplitHandle.pressed && workbench.width > 200) {
                     window.leftRatio = Math.max(0.20, Math.min(0.55, leftHost.width / workbench.width))
                 }
             }
