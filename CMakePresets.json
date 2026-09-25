@@ -10,7 +10,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_PREFIX_PATH": "$env{QT_ROOT};$env{QUICKUI_ROOT};$env{YAML_ROOT}",
-        "Python3_ROOT_DIR": "$env{PYTHON_ROOT}",
+        "Python3_ROOT_DIR": "E:/Softwares/Anaconda3/envs/py312",
         "OpenCV_DIR": "$env{OpenCV_DIR}",
         "BUILD_TESTING": "ON"
       }
