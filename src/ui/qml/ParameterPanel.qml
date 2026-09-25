@@ -10,7 +10,12 @@ QuiSplitView {
     property int currentTab: 0
     readonly property var tabs: ["基本输入", "预处理", "检测", "结果处理"]
     property var collapsedGroups: ({})
-    function resetSplit() { inputs.SplitView.preferredWidth = width * 0.54 }
+    function resetSplit() {
+        let w = root.width > 200 ? root.width : 980
+        inputs.SplitView.preferredWidth = Math.round(w * 0.52)
+        outputPanel.SplitView.preferredWidth = Math.round(w * 0.48)
+    }
+    Component.onCompleted: Qt.callLater(resetSplit)
     function groups() {
         let result = [], byName = ({})
         for (let p of app.parameters) {
@@ -32,8 +37,9 @@ QuiSplitView {
     }
     Rectangle {
         id: inputs
-        SplitView.minimumWidth: Math.min(280, root.width * 0.40)
-        SplitView.preferredWidth: root.width * 0.54
+        SplitView.fillWidth: true
+        SplitView.minimumWidth: 320
+        SplitView.preferredWidth: 520
         color: QuiColor.Primary
         ColumnLayout {
             anchors.fill: parent; spacing: 0
@@ -86,7 +92,12 @@ QuiSplitView {
             }
         }
     }
-    OutputPanel { SplitView.fillWidth: true; SplitView.minimumWidth: Math.min(240, root.width * 0.34) }
+    OutputPanel {
+        id: outputPanel
+        SplitView.fillWidth: true
+        SplitView.minimumWidth: 280
+        SplitView.preferredWidth: 480
+    }
     QuiPopup {
         id: roiPicker; width: Math.min(420, parent ? parent.width - 32 : 420); height: Math.min(320, roiList.contentHeight + 54)
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
