@@ -57,10 +57,25 @@ RowLayout {
 
     Component {
         id: upstreamEditor
-        QuiButton {
-            text: root.parameter.source || "未选择 · 选择上层输入"
-            focusPolicy: Qt.TabFocus
-            onClicked: binding.openInput(root.parameter.id, root.parameter.name)
+        Rectangle {
+            implicitHeight: 26; implicitWidth: 160
+            color: "#ffffff"; radius: 3; border.color: "#c5ccd5"; border.width: 1
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 6; spacing: 4
+                QuiText {
+                    Layout.fillWidth: true; elide: Text.ElideRight
+                    text: root.parameter.source || "未选择 · 点击选择上层输入"
+                    font: QuiFont.Body
+                    color: root.parameter.source ? QuiColor.FontPrimary : "#8c959f"
+                }
+                QuiTextIcon {
+                    iconSource: QuiFontIcon.ChevronDown; iconSize: 10; iconColor: "#57606a"
+                }
+            }
+            MouseArea {
+                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                onClicked: binding.openInput(root.parameter.id, root.parameter.name)
+            }
         }
     }
     Component {

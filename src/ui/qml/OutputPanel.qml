@@ -7,6 +7,8 @@ import quickui
 Rectangle {
     id: root
     color: QuiColor.Primary
+    border.color: "#d0d7de"
+    border.width: 1
     property bool relations: false
     property int selectedRow: -1
     property string selectedPort: ""
@@ -19,25 +21,55 @@ Rectangle {
         outputMenu.popup(item, point.x, point.y)
     }
     ColumnLayout {
-        anchors.fill: parent; spacing: 0
-        RowLayout {
-            Layout.fillWidth: true; Layout.preferredHeight: 32; spacing: 4
-            QuiText { text: "输出参数"; Layout.leftMargin: 8 }
-            Item { Layout.fillWidth: true }
-            QuiTabButton {
-                text: "数据"; checked: !root.relations
-                implicitWidth: 46; implicitHeight: 24; radius: 3; font: QuiFont.Caption
-                checkedColor: QuiColor.Highlight; checkedTextColor: "#ffffff"
-                normalColor: "transparent"; normalTextColor: QuiColor.FontPrimary
-                onClicked: root.relations = false
+        anchors.fill: parent; anchors.margins: 1; spacing: 0
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                height: 1; color: "#d0d7de"
             }
-            QuiTabButton {
-                text: "关系"; checked: root.relations
-                implicitWidth: 46; implicitHeight: 24; radius: 3; font: QuiFont.Caption
-                checkedColor: QuiColor.Highlight; checkedTextColor: "#ffffff"
-                normalColor: "transparent"; normalTextColor: QuiColor.FontPrimary
-                Layout.rightMargin: 8
-                onClicked: root.relations = true
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
+                QuiText {
+                    text: "输出参数"
+                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                    color: "#24292f"
+                }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    Layout.preferredWidth: 92; Layout.preferredHeight: 22
+                    radius: 3; color: "#ffffff"; border.color: QuiColor.Highlight; border.width: 1
+                    clip: true
+                    Row {
+                        anchors.fill: parent
+                        Rectangle {
+                            width: parent.width / 2; height: parent.height
+                            color: !root.relations ? QuiColor.Highlight : "transparent"
+                            QuiText {
+                                anchors.centerIn: parent; text: "数据"
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: !root.relations })
+                                color: !root.relations ? "#ffffff" : QuiColor.Highlight
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: root.relations = false
+                            }
+                        }
+                        Rectangle {
+                            width: parent.width / 2; height: parent.height
+                            color: root.relations ? QuiColor.Highlight : "transparent"
+                            QuiText {
+                                anchors.centerIn: parent; text: "关系"
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: root.relations })
+                                color: root.relations ? "#ffffff" : QuiColor.Highlight
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: root.relations = true
+                            }
+                        }
+                    }
+                }
             }
         }
         QuiTableView {
@@ -65,12 +97,13 @@ Rectangle {
                 { title: "引用数", dataIndex: "count", readOnly: true }
             ]
             view.columnWidthProvider: function(column) {
-                if (root.relations) return column === 0 ? Math.max(140, table.width * 0.68) : column === 3 ? Math.max(80, table.width * 0.32) : 0
-                return column === 0 ? Math.max(120, table.width * 0.32) : column === 1 ? Math.max(90, table.width * 0.20) : column === 2 ? Math.max(170, table.width * 0.48) : 0
+                if (root.relations) return column === 0 ? Math.max(140, Math.round(table.width * 0.65)) : column === 3 ? Math.max(80, table.width - Math.max(140, Math.round(table.width * 0.65)) - 2) : 0
+                let col0 = Math.max(130, Math.round(table.width * 0.35))
+                return column === 0 ? col0 : column === 2 ? Math.max(180, table.width - col0 - 2) : 0
             }
             resizableRows: false; resizableColumns: false
-            rowHeight: 32; headerHeight: 30; showGridLines: true
-            rowColor: QuiColor.Primary; zebraColor: "#f3f5f8"
+            rowHeight: 28; headerHeight: 28; showGridLines: true
+            rowColor: "#ffffff"; zebraColor: "#f8f9fa"
             selectedColor: "#dceefa"; selectedBorderColor: QuiColor.Highlight; hoverColor: "#eaf4fc"
         }
     }
@@ -83,7 +116,9 @@ Rectangle {
             QuiText {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
-                text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
+                font: QuiFont.Body
+                color: cell.options.column === 0 && !cell.options.system ? QuiColor.Highlight : QuiColor.FontPrimary
+                text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system && root.relations ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
             }
             MouseArea {
                 id: cellPointer; anchors.fill: parent; hoverEnabled: true

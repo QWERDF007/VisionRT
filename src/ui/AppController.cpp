@@ -344,8 +344,12 @@ QVariantList AppController::nodes() const {
                 .arg(value.timing.totalMs, 0, 'f', 2);
         }
         if (impl_->lifecycleErrors.contains(node.id)) { state = "red"; detail += "\n" + q(impl_->lifecycleErrors.at(node.id).message); }
+        const auto* def = impl_->registry.find(node.toolId);
+        const QString version = def ? q(def->version) : QStringLiteral("1.0");
+        const QString category = def ? q(def->category) : QString();
         const bool missing = impl_->registry.availability(node.toolId).state != ToolAvailability::Available;
         result.push_back(QVariantMap{{"id", QString::number(node.id)}, {"title", q(node.title())}, {"alias", q(node.alias)},
+            {"toolId", q(node.toolId)}, {"version", version}, {"category", category},
             {"x", node.position.x}, {"y", node.position.y}, {"state", state}, {"timing", timing}, {"timingDetail", detail}, {"missing", missing}});
     }
     return result;
