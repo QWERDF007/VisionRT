@@ -309,8 +309,21 @@ struct PythonRuntime::Impl {
         PyConfig_InitIsolatedConfig(&config);
         config.parse_argv = 0;
         config.install_signal_handlers = 0;
-        if (!pythonHome.empty()) {
-            const auto home = pythonHome.wstring();
+        std::filesystem::path resolvedHome = pythonHome;
+        if (resolvedHome.empty()) {
+            if (const char* env = std::getenv("VISIONRT_PYTHON_HOME"); env && *env) {
+                resolvedHome = env;
+            } else if (const char* envPy = std::getenv("PYTHONHOME"); envPy && *envPy) {
+                resolvedHome = envPy;
+            }
+#ifdef VISIONRT_PYTHON_DEFAULT_HOME
+            else {
+                resolvedHome = VISIONRT_PYTHON_DEFAULT_HOME;
+            }
+#endif
+        }
+        if (!resolvedHome.empty()) {
+            const auto home = resolvedHome.wstring();
             const auto status = PyConfig_SetString(&config, &config.home, home.c_str());
             if (PyStatus_Exception(status)) {
                 const std::string message = status.err_msg ? status.err_msg : "Cannot configure Python home";

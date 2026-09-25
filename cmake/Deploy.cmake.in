@@ -45,7 +45,7 @@ file(GLOB_RECURSE python_extensions "${DESTINATION}/python/*.pyd")
 file(GET_RUNTIME_DEPENDENCIES
     EXECUTABLES "${DESTINATION}/VisionRT.exe"
     LIBRARIES ${python_extensions}
-    DIRECTORIES "${python_home}" "${python_home}/Library/bin" "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
+    DIRECTORIES "${python_home}" "${python_home}/Library/bin" "${python_home}/Lib/site-packages/numpy.libs" "E:/Softwares/Anaconda3/Library/bin" "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
     RESOLVED_DEPENDENCIES_VAR dependencies UNRESOLVED_DEPENDENCIES_VAR unresolved
     PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*" "[Pp][Yy][Tt][Hh][Oo][Nn]3.*" "[Vv][Cc][Rr][Uu][Nn][Tt][Ii][Mm][Ee]140.*" "[Mm][Ss][Vv][Cc][Pp]140.*" "[Uu][Cc][Rr][Tt][Bb][Aa][Ss][Ee].*"
     POST_EXCLUDE_REGEXES ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\\\][Ss][Yy][Ss][Tt][Ee][Mm]32.*")
@@ -65,7 +65,11 @@ file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/pybind11/LICENSE" DESTINATION "${DESTINAT
 file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/taskflow/LICENSE" DESTINATION "${DESTINATION}/licenses/Taskflow")
 file(COPY "${python_home}/LICENSE_PYTHON.txt" DESTINATION "${DESTINATION}/licenses/Python")
 foreach(metadata IN LISTS numpy_metadata)
-    file(COPY "${metadata}/LICENSE.txt" DESTINATION "${DESTINATION}/licenses/NumPy")
+    if(EXISTS "${metadata}/LICENSE.txt")
+        file(COPY "${metadata}/LICENSE.txt" DESTINATION "${DESTINATION}/licenses/NumPy")
+    elseif(EXISTS "${metadata}/licenses")
+        file(COPY "${metadata}/licenses/" DESTINATION "${DESTINATION}/licenses/NumPy")
+    endif()
 endforeach()
 if(EXISTS "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRTInfer.dll")
     file(COPY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRTInfer.dll" DESTINATION "${DESTINATION}")

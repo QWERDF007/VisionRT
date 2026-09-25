@@ -14,6 +14,9 @@ include(CTest)
 find_package(OpenCV CONFIG REQUIRED COMPONENTS core imgproc imgcodecs)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 find_package(yaml-cpp CONFIG REQUIRED)
+if(NOT DEFINED Python3_ROOT_DIR AND NOT DEFINED ENV{PYTHON_ROOT})
+    set(Python3_ROOT_DIR "E:/Softwares/Anaconda3/envs/py312")
+endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Embed)
 set(PYBIND11_FINDPYTHON ON)
 add_subdirectory(3rdparty/pybind11 EXCLUDE_FROM_ALL)
@@ -41,7 +44,10 @@ target_link_libraries(visionrt_tools PUBLIC visionrt_core)
 
 add_library(visionrt_python src/python/PythonRuntime.cpp src/python/PythonBridge.cpp)
 target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed)
-target_compile_definitions(visionrt_python PUBLIC PYBIND11_DETAILED_ERROR_MESSAGES)
+get_filename_component(VISIONRT_PYTHON_HOME "${Python3_EXECUTABLE}" DIRECTORY)
+target_compile_definitions(visionrt_python PUBLIC
+    PYBIND11_DETAILED_ERROR_MESSAGES
+    VISIONRT_PYTHON_DEFAULT_HOME="${VISIONRT_PYTHON_HOME}")
 
 add_library(visionrt_runtime
     src/runtime/RuntimeEngine.cpp
@@ -115,9 +121,15 @@ endif()
 
 file(REAL_PATH "${OpenCV_DIR}/../bin" VISIONRT_OPENCV_BIN)
 file(GLOB OPENCV_DLLS "${VISIONRT_OPENCV_BIN}/*.dll")
-add_custom_target(deploy_opencv_dlls ALL
+get_filename_component(VISIONRT_PYTHON_BIN "${Python3_EXECUTABLE}" DIRECTORY)
+file(GLOB PYTHON_DLLS "${VISIONRT_PYTHON_BIN}/python3*.dll")
+file(GLOB YAML_DLLS "${VISIONRT_PYTHON_BIN}/Library/bin/*yaml*.dll" "E:/Softwares/Anaconda3/Library/bin/*yaml*.dll")
+
+add_custom_target(deploy_runtime_dlls ALL
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${OPENCV_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    COMMENT "Deploying OpenCV DLLs to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${PYTHON_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${YAML_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    COMMENT "Deploying runtime DLLs to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
 get_target_property(VISIONRT_QT_CORE Qt6::Core IMPORTED_LOCATION_RELEASE)
@@ -127,7 +139,6 @@ endif()
 if(VISIONRT_QT_CORE)
     get_filename_component(VISIONRT_QT_BIN "${VISIONRT_QT_CORE}" DIRECTORY)
 endif()
-get_filename_component(VISIONRT_PYTHON_BIN "${Python3_EXECUTABLE}" DIRECTORY)
 
 function(visionrt_apply_test_environment TEST_NAME)
     if(WIN32)
@@ -136,8 +147,10 @@ function(visionrt_apply_test_environment TEST_NAME)
         file(TO_NATIVE_PATH "${VISIONRT_OPENCV_BIN}" _p2)
         file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}" _p3)
         file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}/Library/bin" _p4)
+        file(TO_NATIVE_PATH "E:/Softwares/Anaconda3/Library/bin" _p5)
+        file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}" _pyhome)
         set_tests_properties(${TEST_NAME} PROPERTIES
-            ENVIRONMENT "PATH=${_p0}\;${_p1}\;${_p2}\;${_p3}\;${_p4}\;$ENV{PATH}"
+            ENVIRONMENT "PATH=${_p0}\;${_p1}\;${_p2}\;${_p3}\;${_p4}\;${_p5}\;$ENV{PATH};PYTHONHOME=${_pyhome}"
         )
     endif()
 endfunction()
