@@ -33,11 +33,13 @@ ApplicationWindow {
     function resetLayout() {
         leftExpanded = true
         libraryExpanded = true
-        savedLeftWidth = workbench.width * 0.36
+        savedLeftWidth = Math.round(workbench.width > 200 ? workbench.width * 0.36 : window.width * 0.36)
         leftHost.SplitView.preferredWidth = savedLeftWidth
-        savedLibraryHeight = leftSplit.height * 0.38
+        savedLibraryHeight = Math.round(leftSplit.height > 200 ? leftSplit.height * 0.38 : (window.height - 74) * 0.38)
         library.SplitView.preferredHeight = savedLibraryHeight
-        results.SplitView.preferredHeight = rightSplit.height * 0.58
+        let rightH = rightSplit.height > 200 ? rightSplit.height : (window.height - 74)
+        results.SplitView.preferredHeight = Math.round(rightH * 0.60)
+        parameters.SplitView.preferredHeight = Math.round(rightH * 0.40)
         parameters.resetSplit()
     }
     function toggleLeft() {
@@ -150,9 +152,10 @@ ApplicationWindow {
         }
         Item {
             id: leftHost
-            SplitView.minimumWidth: window.leftExpanded ? window.leftMinimum : 28
-            SplitView.maximumWidth: window.leftExpanded ? workbench.width - window.rightMinimum - 4 : 28
-            SplitView.preferredWidth: workbench.width * 0.36
+            SplitView.fillWidth: false
+            SplitView.minimumWidth: window.leftExpanded ? 320 : 28
+            SplitView.maximumWidth: window.leftExpanded ? Math.round(window.width * 0.55) : 28
+            SplitView.preferredWidth: Math.round(window.width * 0.36)
             FocusScope {
                 id: leftContent
                 anchors.fill: parent; anchors.rightMargin: 28
@@ -172,9 +175,10 @@ ApplicationWindow {
                     ToolLibrary {
                         id: library
                         expanded: window.libraryExpanded
-                        SplitView.minimumHeight: expanded ? Math.min(160, leftSplit.height * 0.3) : 30
-                        SplitView.maximumHeight: expanded ? leftSplit.height - Math.min(260, leftSplit.height * 0.46) : 30
-                        SplitView.preferredHeight: leftSplit.height * 0.38
+                        SplitView.fillHeight: false
+                        SplitView.preferredHeight: Math.round((window.height - 74) * 0.38)
+                        SplitView.minimumHeight: expanded ? 160 : 30
+                        SplitView.maximumHeight: expanded ? Math.round((window.height - 74) * 0.60) : 30
                         onToggleRequested: {
                             if (window.libraryExpanded) {
                                 window.savedLibraryHeight = height
@@ -182,15 +186,15 @@ ApplicationWindow {
                                 SplitView.preferredHeight = 30
                             } else {
                                 window.libraryExpanded = true
-                                SplitView.preferredHeight = Math.min(window.savedLibraryHeight || leftSplit.height * 0.38,
-                                    leftSplit.height - Math.min(260, leftSplit.height * 0.46))
+                                SplitView.preferredHeight = Math.min(window.savedLibraryHeight || Math.round((window.height - 74) * 0.38),
+                                    Math.round((window.height - 74) * 0.60))
                             }
                         }
                     }
                     FlowCanvas {
                         id: flowCanvas
                         SplitView.fillHeight: true
-                        SplitView.minimumHeight: Math.min(260, leftSplit.height * 0.46)
+                        SplitView.minimumHeight: 260
                     }
                 }
             }
@@ -213,19 +217,21 @@ ApplicationWindow {
             id: rightSplit
             orientation: Qt.Vertical
             SplitView.fillWidth: true
-            SplitView.minimumWidth: window.rightMinimum
+            SplitView.minimumWidth: 500
             backgroundColor: QuiColor.Border
             handleColor: "#adb8c6"
             ResultsPanel {
                 id: results
-                SplitView.preferredHeight: rightSplit.height * 0.58
-                SplitView.minimumHeight: Math.min(260, rightSplit.height * 0.40)
+                SplitView.fillHeight: true
+                SplitView.preferredHeight: Math.round((window.height - 74) * 0.60)
+                SplitView.minimumHeight: 280
                 onRoiRequested: parameters.focusRoi()
             }
             ParameterPanel {
                 id: parameters
                 SplitView.fillHeight: true
-                SplitView.minimumHeight: Math.min(220, rightSplit.height * 0.38)
+                SplitView.preferredHeight: Math.round((window.height - 74) * 0.40)
+                SplitView.minimumHeight: 220
             }
         }
     }
