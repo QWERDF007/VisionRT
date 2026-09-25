@@ -55,26 +55,77 @@ RowLayout {
         onClicked: root.startRoi()
     }
 
+    function currentUpstreamValue() {
+        if (root.parameter.sourceNode && root.parameter.sourcePort) {
+            return JSON.stringify({ node: String(root.parameter.sourceNode), port: String(root.parameter.sourcePort) })
+        }
+        return ""
+    }
+
+    function buildBindingGroups() {
+        let candidates = app.bindingCandidates(root.parameter.id)
+        let groups = []
+        if (root.parameter.source) {
+            groups.push({
+                label: "解除绑定",
+                value: "__unbind__",
+                subOptions: []
+            })
+        }
+        if (!candidates || candidates.length === 0) {
+            if (!root.parameter.source) {
+                groups.push({
+                    label: "无可用兼容输出",
+                    value: "__none__",
+                    subOptions: []
+                })
+            }
+            return groups
+        }
+        let nodeMap = {}
+        for (let i = 0; i < candidates.length; ++i) {
+            let c = candidates[i]
+            let key = String(c.node)
+            if (!nodeMap[key]) {
+                let nodeEntry = {
+                    label: c.title,
+                    value: "",
+                    subOptions: []
+                }
+                nodeMap[key] = nodeEntry
+                groups.push(nodeEntry)
+            }
+            nodeMap[key].subOptions.push({
+                label: c.name + (c.type ? " (" + c.type + ")" : ""),
+                value: JSON.stringify({ node: String(c.node), port: String(c.port) })
+            })
+        }
+        return groups
+    }
+
     Component {
         id: upstreamEditor
-        Rectangle {
-            implicitHeight: 26; implicitWidth: 160
-            color: "#ffffff"; radius: 3; border.color: "#c5ccd5"; border.width: 1
-            RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 6; spacing: 4
-                QuiText {
-                    Layout.fillWidth: true; elide: Text.ElideRight
-                    text: root.parameter.source || "未选择 · 点击选择上层输入"
-                    font: QuiFont.Body
-                    color: root.parameter.source ? QuiColor.FontPrimary : "#8c959f"
-                }
-                QuiTextIcon {
-                    iconSource: QuiFontIcon.ChevronDown; iconSize: 10; iconColor: "#57606a"
-                }
+        QuiGroupComboBox {
+            id: groupCombo
+            Layout.fillWidth: true
+            implicitHeight: 26
+            savedValue: root.currentUpstreamValue()
+            displayText: root.parameter.source ? root.parameter.source : "未选择 · 选择上层输入"
+            optionGroups: root.buildBindingGroups()
+            onAboutToOpen: {
+                optionGroups = root.buildBindingGroups()
             }
-            MouseArea {
-                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                onClicked: binding.openInput(root.parameter.id, root.parameter.name)
+            onCommit: function(val) {
+                if (!val || val === "__unbind__") {
+                    app.unbindInput(root.parameter.id)
+                } else if (val !== "__none__") {
+                    try {
+                        let target = JSON.parse(val)
+                        app.bindInput(root.parameter.id, target.node, target.port)
+                    } catch (e) {
+                        console.warn("Invalid binding value", val)
+                    }
+                }
             }
         }
     }
@@ -149,7 +200,6 @@ RowLayout {
         id: imageEditor
         QuiText { text: "图像由上层输出提供"; color: QuiColor.FontCaption; elide: Text.ElideRight }
     }
-    BindingPopup { id: binding }
     FileDialog { id: filePicker; title: "选择 " + root.parameter.name; onAccepted: root.commit(JSON.stringify(root.pathText(selectedFile))) }
     FolderDialog { id: directoryPicker; title: "选择 " + root.parameter.name; onAccepted: root.commit(JSON.stringify(root.pathText(selectedFolder))) }
     WorkbenchDialog {

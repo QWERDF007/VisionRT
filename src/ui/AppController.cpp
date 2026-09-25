@@ -376,7 +376,10 @@ QVariantList AppController::parameters() const {
             literal = found->second.literal; mode = found->second.mode == BindingMode::Literal ? "literal" : "upstream";
             if (found->second.source) {
                 const auto* parent = impl_->findNode(found->second.source->node);
-                source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + " → " + q(found->second.source->port);
+                const auto* parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
+                const auto* portDef = parentDef ? workbench::port(parentDef->outputs, found->second.source->port) : nullptr;
+                const QString portName = portDef ? q(portDef->name) : q(found->second.source->port);
+                source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
             }
         }
         QString text;
@@ -384,9 +387,13 @@ QVariantList AppController::parameters() const {
         QVariantList options;
         if (declaration) for (const auto& value : declaration->options) options.push_back(valueText(value, type));
         const auto* string = std::get_if<Utf8>(&literal);
+        const auto inputFound = node->inputs.find(id);
+        const bool hasSource = (inputFound != node->inputs.end() && inputFound->second.source.has_value());
         QVariantMap row{{"id", q(id)}, {"name", declaration ? q(declaration->name) : q(id)}, {"type", workbench::typeName(type.type)},
             {"typeDetail", typeText(type)}, {"init", initialization}, {"mode", mode}, {"literal", text}, {"valueText", string ? q(string->str()) : text},
-            {"source", source}, {"title", q(node->title())}, {"editor", declaration ? q(declaration->editor) : QString{}},
+            {"source", source}, {"sourceNode", hasSource ? QString::number(inputFound->second.source->node) : QString{}},
+            {"sourcePort", hasSource ? q(inputFound->second.source->port) : QString{}},
+            {"title", q(node->title())}, {"editor", declaration ? q(declaration->editor) : QString{}},
             {"tab", declaration ? q(declaration->tab) : QStringLiteral("基本输入")},
             {"group", initialization ? QStringLiteral("初始化配置") : declaration ? q(declaration->group) : QString{}},
             {"options", options}, {"optionsProvider", declaration ? q(declaration->optionsProvider) : QString{}},
