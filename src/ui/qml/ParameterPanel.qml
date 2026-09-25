@@ -10,10 +10,18 @@ QuiSplitView {
     property int currentTab: 0
     readonly property var tabs: ["基本输入", "预处理", "检测", "结果处理"]
     property var collapsedGroups: ({})
+    property real inputsRatio: 0.52
     function resetSplit() {
+        inputsRatio = 0.52
         let w = root.width > 200 ? root.width : 980
-        inputs.SplitView.preferredWidth = Math.round(w * 0.52)
-        outputPanel.SplitView.preferredWidth = Math.round(w * 0.48)
+        inputs.SplitView.preferredWidth = Math.round(w * inputsRatio)
+        outputPanel.SplitView.preferredWidth = Math.round(w * (1.0 - inputsRatio))
+    }
+    onWidthChanged: {
+        if (root.width > 200) {
+            inputs.SplitView.preferredWidth = Math.round(root.width * inputsRatio)
+            outputPanel.SplitView.preferredWidth = Math.round(root.width * (1.0 - inputsRatio))
+        }
     }
     Component.onCompleted: Qt.callLater(resetSplit)
     function groups() {
@@ -40,6 +48,11 @@ QuiSplitView {
         SplitView.fillWidth: true
         SplitView.minimumWidth: 320
         SplitView.preferredWidth: 520
+        onWidthChanged: {
+            if (root.width > 200 && inputs.SplitHandle.pressed) {
+                root.inputsRatio = Math.max(0.30, Math.min(0.70, inputs.width / root.width))
+            }
+        }
         color: QuiColor.Primary
         ColumnLayout {
             anchors.fill: parent; spacing: 0
