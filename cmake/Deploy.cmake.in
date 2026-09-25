@@ -39,7 +39,7 @@ file(COPY ${numpy_metadata} DESTINATION "${DESTINATION}/python/Lib/site-packages
 if(EXISTS "${python_home}/Lib/site-packages/numpy.libs")
     file(COPY "${python_home}/Lib/site-packages/numpy.libs" DESTINATION "${DESTINATION}/python/Lib/site-packages")
 endif()
-file(GLOB python_dlls "${python_home}/python3*.dll")
+file(GLOB python_dlls "${python_home}/python3*.dll" "${python_home}/zlib*.dll")
 file(COPY ${python_dlls} DESTINATION "${DESTINATION}")
 file(GLOB_RECURSE python_extensions "${DESTINATION}/python/*.pyd")
 file(GET_RUNTIME_DEPENDENCIES

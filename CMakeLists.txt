@@ -128,7 +128,7 @@ endif()
 file(REAL_PATH "${OpenCV_DIR}/../bin" VISIONRT_OPENCV_BIN)
 file(GLOB OPENCV_DLLS "${VISIONRT_OPENCV_BIN}/*.dll")
 get_filename_component(VISIONRT_PYTHON_BIN "${Python3_EXECUTABLE}" DIRECTORY)
-file(GLOB PYTHON_DLLS "${VISIONRT_PYTHON_BIN}/python3*.dll")
+file(GLOB PYTHON_DLLS "${VISIONRT_PYTHON_BIN}/python3*.dll" "${VISIONRT_PYTHON_BIN}/zlib*.dll")
 
 add_custom_target(deploy_runtime_dlls ALL
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${OPENCV_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
