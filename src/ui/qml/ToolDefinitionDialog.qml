@@ -6,8 +6,8 @@ import quickui
 
 WorkbenchDialog {
     id: root
-    property real availableWidth: 1000
-    property real availableHeight: 800
+    property real hostWidth: 1000
+    property real hostHeight: 800
     property var draft: ({})
     property var definitions: []
     property var implementations: []
@@ -20,7 +20,7 @@ WorkbenchDialog {
     readonly property bool builtin: draft.builtin === true
     readonly property var kinds: ["python_function", "python_class", "cpp_function", "cpp_class"]
     title: choosing ? "选择工具定义" : builtin ? "内置工具定义（只读）" : newDefinition ? "新建工具定义" : "编辑工具定义"
-    width: Math.min(1040, availableWidth - 40)
+    width: Math.min(1040, hostWidth - 40)
     positiveText: choosing ? "编辑所选" : builtin ? "复制为自定义定义" : "预览影响并保存"
     positiveButtonEnabled: !app.busy && (!choosing || !!draft.id)
     negativeText: "取消"
@@ -61,7 +61,7 @@ WorkbenchDialog {
     }
     contentDelegate: Component {
         ColumnLayout {
-            implicitHeight: Math.min(650, root.availableHeight - 180)
+            implicitHeight: Math.min(650, root.hostHeight - 180)
             spacing: 8
             RowLayout {
                 visible: root.choosing
@@ -153,7 +153,7 @@ WorkbenchDialog {
     }
     WorkbenchDialog {
         id: impactConfirm; title: "确认工具定义变更"
-        width: Math.min(680, root.availableWidth - 60)
+        width: Math.min(680, root.hostWidth - 60)
         message: root.impactText
         positiveText: "保存定义"; positiveButtonEnabled: !app.busy
         onPositiveClickListener: function() {

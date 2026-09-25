@@ -279,7 +279,7 @@ ApplicationWindow {
         useNegativeButton: false; positiveText: "关闭"
         message: window.notices.join("\n\n")
     }
-    ToolDefinitionDialog { id: author; availableWidth: window.width; availableHeight: window.height }
+    ToolDefinitionDialog { id: author; hostWidth: window.width; hostHeight: window.height }
     QuiInfoBar { id: info; root: window.contentItem; maxWidth: Math.min(520, window.width - 40) }
     Timer { id: toastExpiry; interval: 6000; onTriggered: { info.clearAllInfo(); window.toastCount = 0 } }
     Connections {
