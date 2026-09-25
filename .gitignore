@@ -68,5 +68,5 @@ vcpkg_installed/
 Testing/
 .cache/
 
-docs/
 WORKLOG.md
+docs/
