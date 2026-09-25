@@ -339,9 +339,16 @@ QVariantList AppController::nodes() const {
             const auto& value = *snapshot->second;
             if (state != "blue") state = value.status ? "green" : "red";
             timing = QStringLiteral("%1 ms").arg(value.timing.totalMs, 0, 'f', 2);
-            detail = QStringLiteral("prepare %1 · init %2 · execute %3 · convert %4 · GIL %5 ms")
-                .arg(value.timing.prepareMs, 0, 'f', 2).arg(value.timing.initMs, 0, 'f', 2).arg(value.timing.executeMs, 0, 'f', 2)
-                .arg(value.timing.convertMs, 0, 'f', 2).arg(value.timing.waitGilMs, 0, 'f', 2);
+            detail = QStringLiteral("api运行时间:%1ms\n预处理算子运行时间:%2ms\n后处理算子运行时间:%3ms")
+                .arg(value.timing.executeMs, 0, 'f', 2)
+                .arg(value.timing.prepareMs, 0, 'f', 2)
+                .arg(value.timing.convertMs, 0, 'f', 2);
+            if (value.timing.initMs > 0.005) {
+                detail += QStringLiteral("\n初始化运行时间:%1ms").arg(value.timing.initMs, 0, 'f', 2);
+            }
+            if (value.timing.waitGilMs > 0.005) {
+                detail += QStringLiteral("\nGIL等待时间:%1ms").arg(value.timing.waitGilMs, 0, 'f', 2);
+            }
         }
         if (impl_->lifecycleErrors.contains(node.id)) { state = "red"; detail += "\n" + q(impl_->lifecycleErrors.at(node.id).message); }
         const bool missing = impl_->registry.availability(node.toolId).state != ToolAvailability::Available;

@@ -45,5 +45,34 @@ Rectangle {
         onReleased: function(mouse) { root.pointerReleased(mouse, root) }
         onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !app.busy) root.executeRequested() }
     }
-    QuiToolTip { visible: pointer.containsMouse && !pointer.pressed; text: (root.node.title || "") + "\n" + (root.node.timingDetail || root.node.timing || "未运行"); delay: 600 }
+    QuiToolTip {
+        visible: pointer.containsMouse && !pointer.pressed
+        x: {
+            if (!parent) return 0
+            let idealX = parent.width + 4
+            let win = parent.Window.window ? parent.Window.window.contentItem : null
+            if (win) {
+                let pos = parent.mapToItem(win, 0, 0)
+                if (pos.x + idealX + implicitWidth > win.width - 10) {
+                    return -implicitWidth - 4
+                }
+            }
+            return idealX
+        }
+        y: 0
+        text: {
+            let lines = []
+            if (root.node.title) lines.push(root.node.title)
+            if (root.node.timingDetail) {
+                lines.push(root.node.timingDetail)
+            } else if (root.node.timing) {
+                lines.push("运行时间:" + root.node.timing)
+            } else {
+                lines.push("未运行")
+            }
+            if (root.node.missing) lines.push("⚠️ 工具缺失")
+            return lines.join("\n")
+        }
+        delay: 500
+    }
 }
