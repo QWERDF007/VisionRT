@@ -1,3 +1,4 @@
+#include "common/Version.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include <QCommandLineParser>
@@ -15,7 +16,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName("VisionRT");
     QCoreApplication::setOrganizationName("VisionRT");
-    QCoreApplication::setApplicationVersion("0.1.0");
+    QCoreApplication::setApplicationVersion(QString::fromStdString(visionrt::GetVersionString()));
     QQuickStyle::setStyle("Basic");
     QCommandLineParser parser;
     parser.setApplicationDescription("VisionRT visual workflow workbench");
