@@ -23,6 +23,9 @@ ApplicationWindow {
     property bool unsavedSaving: false
     property var notices: []
     property int toastCount: 0
+    property real leftRatio: 0.36
+    property real libraryRatio: 0.38
+    property real resultsRatio: 0.60
     readonly property real leftMinimum: Math.min(320, workbench.width * 0.34)
     readonly property real rightMinimum: Math.min(640, workbench.width * 0.60)
 
@@ -33,13 +36,18 @@ ApplicationWindow {
     function resetLayout() {
         leftExpanded = true
         libraryExpanded = true
-        savedLeftWidth = Math.round(workbench.width > 200 ? workbench.width * 0.36 : window.width * 0.36)
+        leftRatio = 0.36
+        libraryRatio = 0.38
+        resultsRatio = 0.60
+        let w = workbench.width > 200 ? workbench.width : window.width
+        savedLeftWidth = Math.round(w * leftRatio)
         leftHost.SplitView.preferredWidth = savedLeftWidth
-        savedLibraryHeight = Math.round(leftSplit.height > 200 ? leftSplit.height * 0.38 : (window.height - 74) * 0.38)
+        let leftH = leftSplit.height > 200 ? leftSplit.height : (window.height - 74)
+        savedLibraryHeight = Math.round(leftH * libraryRatio)
         library.SplitView.preferredHeight = savedLibraryHeight
         let rightH = rightSplit.height > 200 ? rightSplit.height : (window.height - 74)
-        results.SplitView.preferredHeight = Math.round(rightH * 0.60)
-        parameters.SplitView.preferredHeight = Math.round(rightH * 0.40)
+        results.SplitView.preferredHeight = Math.round(rightH * resultsRatio)
+        parameters.SplitView.preferredHeight = Math.round(rightH * (1.0 - resultsRatio))
         parameters.resetSplit()
     }
     function toggleLeft() {
@@ -51,8 +59,8 @@ ApplicationWindow {
             leftHost.SplitView.preferredWidth = 28
         } else {
             leftExpanded = true
-            leftHost.SplitView.preferredWidth = Math.max(leftMinimum,
-                Math.min(savedLeftWidth || workbench.width * 0.36, workbench.width - rightMinimum - 4))
+            leftHost.SplitView.preferredWidth = Math.max(320,
+                Math.min(savedLeftWidth || Math.round(workbench.width * leftRatio), workbench.width - 500))
         }
     }
     function focusSearch() {
@@ -137,6 +145,11 @@ ApplicationWindow {
         orientation: Qt.Horizontal
         backgroundColor: QuiColor.Border
         handleColor: "#adb8c6"
+        onWidthChanged: {
+            if (window.leftExpanded && !outerHandle.SplitHandle.pressed && workbench.width > 200) {
+                leftHost.SplitView.preferredWidth = Math.round(workbench.width * window.leftRatio)
+            }
+        }
         handle: Rectangle {
             id: outerHandle
             implicitWidth: window.leftExpanded ? 4 : 0
@@ -154,8 +167,13 @@ ApplicationWindow {
             id: leftHost
             SplitView.fillWidth: false
             SplitView.minimumWidth: window.leftExpanded ? 320 : 28
-            SplitView.maximumWidth: window.leftExpanded ? Math.round(window.width * 0.55) : 28
-            SplitView.preferredWidth: Math.round(window.width * 0.36)
+            SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 28
+            SplitView.preferredWidth: Math.round(workbench.width * window.leftRatio)
+            onWidthChanged: {
+                if (window.leftExpanded && outerHandle.SplitHandle.pressed && workbench.width > 200) {
+                    window.leftRatio = Math.max(0.20, Math.min(0.55, leftHost.width / workbench.width))
+                }
+            }
             FocusScope {
                 id: leftContent
                 anchors.fill: parent; anchors.rightMargin: 28
@@ -172,13 +190,23 @@ ApplicationWindow {
                     orientation: Qt.Vertical
                     backgroundColor: QuiColor.Border
                     handleColor: "#adb8c6"
+                    onHeightChanged: {
+                        if (window.libraryExpanded && leftSplit.height > 200) {
+                            library.SplitView.preferredHeight = Math.round(leftSplit.height * window.libraryRatio)
+                        }
+                    }
                     ToolLibrary {
                         id: library
                         expanded: window.libraryExpanded
                         SplitView.fillHeight: false
-                        SplitView.preferredHeight: Math.round((window.height - 74) * 0.38)
+                        SplitView.preferredHeight: Math.round(leftSplit.height * window.libraryRatio)
                         SplitView.minimumHeight: expanded ? 160 : 30
-                        SplitView.maximumHeight: expanded ? Math.round((window.height - 74) * 0.60) : 30
+                        SplitView.maximumHeight: expanded ? Math.round(leftSplit.height * 0.60) : 30
+                        onHeightChanged: {
+                            if (window.libraryExpanded && leftSplit.height > 200 && library.SplitHandle.pressed) {
+                                window.libraryRatio = Math.max(0.20, Math.min(0.60, library.height / leftSplit.height))
+                            }
+                        }
                         onToggleRequested: {
                             if (window.libraryExpanded) {
                                 window.savedLibraryHeight = height
@@ -186,8 +214,8 @@ ApplicationWindow {
                                 SplitView.preferredHeight = 30
                             } else {
                                 window.libraryExpanded = true
-                                SplitView.preferredHeight = Math.min(window.savedLibraryHeight || Math.round((window.height - 74) * 0.38),
-                                    Math.round((window.height - 74) * 0.60))
+                                SplitView.preferredHeight = Math.min(window.savedLibraryHeight || Math.round(leftSplit.height * window.libraryRatio),
+                                    Math.round(leftSplit.height * 0.60))
                             }
                         }
                     }
@@ -220,17 +248,28 @@ ApplicationWindow {
             SplitView.minimumWidth: 500
             backgroundColor: QuiColor.Border
             handleColor: "#adb8c6"
+            onHeightChanged: {
+                if (rightSplit.height > 200) {
+                    results.SplitView.preferredHeight = Math.round(rightSplit.height * window.resultsRatio)
+                    parameters.SplitView.preferredHeight = Math.round(rightSplit.height * (1.0 - window.resultsRatio))
+                }
+            }
             ResultsPanel {
                 id: results
                 SplitView.fillHeight: true
-                SplitView.preferredHeight: Math.round((window.height - 74) * 0.60)
+                SplitView.preferredHeight: Math.round(rightSplit.height * window.resultsRatio)
                 SplitView.minimumHeight: 280
+                onHeightChanged: {
+                    if (rightSplit.height > 200 && results.SplitHandle.pressed) {
+                        window.resultsRatio = Math.max(0.30, Math.min(0.75, results.height / rightSplit.height))
+                    }
+                }
                 onRoiRequested: parameters.focusRoi()
             }
             ParameterPanel {
                 id: parameters
                 SplitView.fillHeight: true
-                SplitView.preferredHeight: Math.round((window.height - 74) * 0.40)
+                SplitView.preferredHeight: Math.round(rightSplit.height * (1.0 - window.resultsRatio))
                 SplitView.minimumHeight: 220
             }
         }
