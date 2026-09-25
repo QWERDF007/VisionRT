@@ -1,0 +1,36 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Windows x64 MSVC Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT};$env{QUICKUI_ROOT};$env{YAML_ROOT}",
+        "Python3_ROOT_DIR": "$env{PYTHON_ROOT}",
+        "OpenCV_DIR": "$env{OpenCV_DIR}",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "gpu-release",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/gpu-release",
+      "cacheVariables": {
+        "VISIONRT_BUILD_INFER": "ON",
+        "InferRT_DIR": "$env{INFERRT_ROOT}/lib/cmake/InferRT"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "release" },
+    { "name": "gpu-release", "configurePreset": "gpu-release" }
+  ],
+  "testPresets": [
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "gpu-release", "configurePreset": "gpu-release", "output": { "outputOnFailure": true } }
+  ]
+}

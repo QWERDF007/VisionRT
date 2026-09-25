@@ -1,0 +1,69 @@
+cmake_minimum_required(VERSION 3.25)
+if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+endif()
+if(NOT DEFINED DESTINATION)
+    set(DESTINATION "@CMAKE_BINARY_DIR@/dist/VisionRT")
+endif()
+file(MAKE_DIRECTORY "${DESTINATION}")
+file(COPY "@CMAKE_BINARY_DIR@/VisionRT.exe" DESTINATION "${DESTINATION}")
+execute_process(COMMAND "@VISIONRT_WINDEPLOYQT@" --release --no-translations
+    --qmldir "@CMAKE_SOURCE_DIR@/src/ui/qml"
+    --qmlimport "@VISIONRT_QUICKUI_QML_ROOT@"
+    --dir "${DESTINATION}" "${DESTINATION}/VisionRT.exe"
+    RESULT_VARIABLE result)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "windeployqt failed: ${result}")
+endif()
+file(COPY "@VISIONRT_QUICKUI_QML_ROOT@/quickui" DESTINATION "${DESTINATION}/qml")
+file(COPY "@CMAKE_SOURCE_DIR@/docs/VisionRT_V3/examples/tools/" DESTINATION "${DESTINATION}/tools"
+    PATTERN "__pycache__" EXCLUDE)
+file(COPY "@CMAKE_SOURCE_DIR@/docs/VisionRT_V3/examples/" DESTINATION "${DESTINATION}/examples"
+    PATTERN "tools" EXCLUDE PATTERN "__pycache__" EXCLUDE)
+
+set(python_home "@VISIONRT_PYTHON_HOME@")
+file(COPY "${python_home}/Lib/" DESTINATION "${DESTINATION}/python/Lib"
+    PATTERN "site-packages" EXCLUDE PATTERN "__pycache__" EXCLUDE PATTERN "test" EXCLUDE)
+file(COPY "${python_home}/DLLs/" DESTINATION "${DESTINATION}/python/DLLs"
+    FILES_MATCHING PATTERN "*.pyd" PATTERN "*.dll")
+file(COPY "${python_home}/Lib/site-packages/numpy" DESTINATION "${DESTINATION}/python/Lib/site-packages"
+    PATTERN "__pycache__" EXCLUDE PATTERN "tests" EXCLUDE PATTERN "*.lib" EXCLUDE)
+file(GLOB numpy_metadata "${python_home}/Lib/site-packages/numpy-*.dist-info")
+file(COPY ${numpy_metadata} DESTINATION "${DESTINATION}/python/Lib/site-packages")
+if(EXISTS "${python_home}/Lib/site-packages/numpy.libs")
+    file(COPY "${python_home}/Lib/site-packages/numpy.libs" DESTINATION "${DESTINATION}/python/Lib/site-packages")
+endif()
+file(GLOB python_dlls "${python_home}/python3*.dll")
+file(COPY ${python_dlls} DESTINATION "${DESTINATION}")
+file(GLOB_RECURSE python_extensions "${DESTINATION}/python/*.pyd")
+file(GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES "${DESTINATION}/VisionRT.exe"
+    LIBRARIES ${python_extensions}
+    DIRECTORIES "${python_home}" "${python_home}/Library/bin" "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
+    RESOLVED_DEPENDENCIES_VAR dependencies UNRESOLVED_DEPENDENCIES_VAR unresolved
+    PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*" "[Pp][Yy][Tt][Hh][Oo][Nn]3.*" "[Vv][Cc][Rr][Uu][Nn][Tt][Ii][Mm][Ee]140.*" "[Mm][Ss][Vv][Cc][Pp]140.*" "[Uu][Cc][Rr][Tt][Bb][Aa][Ss][Ee].*"
+    POST_EXCLUDE_REGEXES ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\\\][Ss][Yy][Ss][Tt][Ee][Mm]32.*")
+if(unresolved)
+    message(FATAL_ERROR "Unresolved portable runtime dependencies: ${unresolved}")
+endif()
+file(COPY ${dependencies} DESTINATION "${DESTINATION}")
+file(GLOB vc_dlls "${python_home}/vcruntime140*.dll" "${python_home}/msvcp140*.dll")
+if(vc_dlls)
+    file(COPY ${vc_dlls} DESTINATION "${DESTINATION}")
+endif()
+file(WRITE "${DESTINATION}/qt.conf" "[Paths]\nPrefix=.\nPlugins=.\nQmlImports=qml\n")
+file(MAKE_DIRECTORY "${DESTINATION}/licenses")
+file(COPY "@CMAKE_SOURCE_DIR@/LICENSE" DESTINATION "${DESTINATION}/licenses/VisionRT")
+file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/QuickUI/LICENSE" DESTINATION "${DESTINATION}/licenses/QuickUI")
+file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/pybind11/LICENSE" DESTINATION "${DESTINATION}/licenses/pybind11")
+file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/taskflow/LICENSE" DESTINATION "${DESTINATION}/licenses/Taskflow")
+file(COPY "${python_home}/LICENSE_PYTHON.txt" DESTINATION "${DESTINATION}/licenses/Python")
+foreach(metadata IN LISTS numpy_metadata)
+    file(COPY "${metadata}/LICENSE.txt" DESTINATION "${DESTINATION}/licenses/NumPy")
+endforeach()
+if(EXISTS "@CMAKE_BINARY_DIR@/VisionRTInfer.dll")
+    file(COPY "@CMAKE_BINARY_DIR@/VisionRTInfer.dll" DESTINATION "${DESTINATION}")
+    # The installed SDK's packaged runtime is the authoritative GPU dependency set.
+    file(COPY "@VISIONRT_INFERRT_ROOT@/bin/" DESTINATION "${DESTINATION}" FILES_MATCHING PATTERN "*.dll")
+endif()
+message(STATUS "Portable directory: ${DESTINATION}")
