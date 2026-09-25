@@ -159,6 +159,9 @@ FocusScope {
                                 }
                                 QuiTabButton {
                                     height: parent.height; text: modelData.name; checked: app.currentFlow === modelData.id
+                                    showIndicator: true
+                                    normalColor: "transparent"; checkedColor: QuiColor.Primary
+                                    normalTextColor: QuiColor.FontPrimary; checkedTextColor: QuiColor.Highlight
                                     onClicked: app.selectFlow(modelData.id)
                                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: { root.contextFlow = modelData.id; flowMenu.popup() } }
                                 }
