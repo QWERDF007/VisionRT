@@ -25,7 +25,17 @@ RowLayout {
         text: root.parameter.name; Layout.preferredWidth: 96
         elide: Text.ElideRight
         MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
-        QuiToolTip { visible: nameHover.containsMouse; text: root.parameter.name + "\n" + (root.parameter.typeDetail || root.parameter.type); delay: 500 }
+        QuiToolTip {
+            visible: nameHover.containsMouse
+            text: {
+                let lines = []
+                lines.push("参数: " + root.parameter.name + (root.parameter.id && root.parameter.id !== root.parameter.name ? " (" + root.parameter.id + ")" : ""))
+                lines.push("类型: " + (root.parameter.typeDetail || root.parameter.type))
+                lines.push("模式: " + (root.upstream ? "上层输入 (" + (root.parameter.source || "未连接") + ")" : "静态输入"))
+                return lines.join("\n")
+            }
+            delay: 500
+        }
     }
     Loader {
         Layout.fillWidth: true; Layout.minimumWidth: 70
@@ -34,7 +44,7 @@ RowLayout {
     }
     QuiTextIconButton {
         visible: !root.parameter.init
-        text: root.upstream ? "切换为用户输入（保留上层草稿）" : "切换为上层输入（保留用户草稿）"
+        text: root.upstream ? "切换为用户输入\n保留上层草稿" : "切换为上层输入\n保留用户草稿"
         iconSource: root.upstream ? QuiFontIcon.Edit : QuiFontIcon.Link
         enabled: !app.busy
         onClicked: app.setParameterMode(root.parameter.id, !root.upstream)

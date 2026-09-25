@@ -59,7 +59,18 @@ RowLayout {
         onEditingFinished: root.commit(text)
         Keys.onUpPressed: root.increment(1)
         Keys.onDownPressed: root.increment(-1)
-        QuiToolTip { visible: field.hovered; text: (root.minimum ? "最小值 " + root.minimum + "  " : "") + (root.maximum ? "最大值 " + root.maximum + "  " : "") + "步长 " + (root.step || "1") + (root.invalid ? "\n输入未保存：请检查格式或范围" : ""); delay: 500 }
+        QuiToolTip {
+            visible: field.hovered
+            text: {
+                let lines = []
+                if (root.minimum !== undefined && root.minimum !== "") lines.push("最小值: " + root.minimum)
+                if (root.maximum !== undefined && root.maximum !== "") lines.push("最大值: " + root.maximum)
+                lines.push("步长: " + (root.step || "1"))
+                if (root.invalid) lines.push("⚠️ 输入未保存：请检查格式或范围")
+                return lines.join("\n")
+            }
+            delay: 500
+        }
     }
     QuiTextIconButton { text: "减小"; iconSource: QuiFontIcon.Remove; implicitWidth: 24; onClicked: root.increment(-1) }
     QuiTextIconButton { text: "增大"; iconSource: QuiFontIcon.Add; implicitWidth: 24; onClicked: root.increment(1) }

@@ -46,7 +46,17 @@ Rectangle {
             externalModel: app.outputModel
             externalCellDelegate: outputCell
             externalCellOptionsProvider: function(row, column, data) {
-                return { row: row, column: column, display: data.display === undefined ? "" : String(data.display), portId: data.portId || "", name: data.name || "", tooltip: data.tooltip || "", count: data.count || 0, system: data.system === true }
+                return {
+                    row: row,
+                    column: column,
+                    display: data.display === undefined ? "" : String(data.display),
+                    portId: data.portId || "",
+                    name: data.name || "",
+                    type: data.type || "",
+                    tooltip: data.tooltip || "",
+                    count: data.count || 0,
+                    system: data.system === true
+                }
             }
             columnSource: [
                 { title: "参数名称", dataIndex: "name", readOnly: true },
@@ -80,7 +90,41 @@ Rectangle {
                 acceptedButtons: Qt.RightButton
                 onClicked: function(mouse) { root.showMenu(cell.options, cell, Qt.point(mouse.x, mouse.y)) }
             }
-            QuiToolTip { visible: cellPointer.containsMouse; text: cell.options.tooltip || cell.options.display || ""; delay: 500 }
+            QuiToolTip {
+                visible: cellPointer.containsMouse
+                text: {
+                    let lines = []
+                    if (cell.options.name) {
+                        let nameLine = "参数: " + cell.options.name
+                        if (cell.options.portId && cell.options.portId !== cell.options.name) {
+                            nameLine += " (" + cell.options.portId + ")"
+                        }
+                        lines.push(nameLine)
+                    }
+                    if (cell.options.type) lines.push("类型: " + cell.options.type)
+                    if (!cell.options.system && cell.options.count !== undefined) lines.push("引用: " + cell.options.count + " 次")
+                    let dataText = cell.options.tooltip || (cell.options.column === 2 ? cell.options.display : "")
+                    if (dataText) {
+                        if (dataText.length > 50 && dataText.indexOf("\n") < 0) {
+                            let tokens = dataText.split(/(?<=[,; /])/)
+                            let parts = [], current = ""
+                            for (let t of tokens) {
+                                if (current.length + t.length > 50) {
+                                    if (current.length > 0) { parts.push(current); current = "" }
+                                    while (t.length > 50) { parts.push(t.slice(0, 50)); t = t.slice(50) }
+                                    current = t
+                                } else { current += t }
+                            }
+                            if (current.length > 0) parts.push(current)
+                            lines.push("数据:\n" + parts.join("\n"))
+                        } else {
+                            lines.push("数据: " + dataText)
+                        }
+                    }
+                    return lines.length > 0 ? lines.join("\n") : (cell.options.display || "")
+                }
+                delay: 500
+            }
         }
     }
     QuiMenu {
