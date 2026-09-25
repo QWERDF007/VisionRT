@@ -111,6 +111,13 @@ ApplicationWindow {
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+            QuiTextIconButton {
+                iconSource: window.leftExpanded ? QuiFontIcon.ChevronLeft : QuiFontIcon.ChevronRight
+                implicitHeight: 26; implicitWidth: 26
+                text: window.leftExpanded ? "收起左侧面板" : "展开左侧面板"
+                focusPolicy: Qt.TabFocus
+                onClicked: window.toggleLeft()
+            }
             QuiButton { text: "文件"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: fileMenu.popup() }
             QuiButton { text: "工具"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: toolsMenu.popup() }
             QuiButton { text: "帮助"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: helpMenu.popup() }
@@ -231,26 +238,6 @@ ApplicationWindow {
                         id: flowCanvas
                         SplitView.fillHeight: true
                         SplitView.minimumHeight: 260
-                    }
-                }
-                Rectangle {
-                    id: floatCollapseBtn
-                    visible: window.leftExpanded
-                    z: 50
-                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    width: 12; height: 48; radius: 3
-                    color: floatMouse.containsMouse ? QuiColor.Highlight : "#d0d7de"
-                    opacity: floatMouse.containsMouse ? 1.0 : 0.6
-                    QuiTextIcon {
-                        anchors.centerIn: parent
-                        iconSource: QuiFontIcon.ChevronLeft
-                        iconSize: 10
-                        iconColor: floatMouse.containsMouse ? "#ffffff" : "#57606a"
-                    }
-                    MouseArea {
-                        id: floatMouse; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: window.toggleLeft()
                     }
                 }
             }
