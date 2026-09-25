@@ -1,0 +1,318 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import quickui
+
+FocusScope {
+    id: root
+    property var selection: []
+    property real zoom: 1
+    property real panX: 0
+    property real panY: 0
+    property var flowViews: ({})
+    property string viewedFlow: ""
+    property real dragX: 0
+    property real dragY: 0
+    property point pressPoint: Qt.point(0, 0)
+    property point lastPoint: Qt.point(0, 0)
+    property string gesture: ""
+    property bool moved: false
+    property string contextNode: ""
+    property string contextFlow: ""
+    property string nameOperation: ""
+    property string nameDraft: ""
+    property int searchIndex: 0
+    readonly property int cellWidth: 192
+    readonly property int cellHeight: 104
+
+    function selected(id) { return selection.indexOf(id) !== -1 }
+    function findNode(id) { for (let n of app.nodes) if (n.id === id) return n; return null }
+    function nodeX(id) { let n = findNode(id); return n ? n.x * cellWidth + (selected(id) ? dragX : 0) : 0 }
+    function nodeY(id) { let n = findNode(id); return n ? n.y * cellHeight + (selected(id) ? dragY : 0) : 0 }
+    function focusSearch() { search.forceActiveFocus(); search.selectAll() }
+    function locate(result) { search.text = ""; app.locateNode(result.flow, result.node); surface.forceActiveFocus() }
+    function centerNode(id) {
+        let n = findNode(id)
+        if (!n) return
+        selection = [id]
+        panX = surface.width / 2 - (n.x * cellWidth + 78) * zoom
+        panY = surface.height / 2 - (n.y * cellHeight + 34) * zoom
+        surface.forceActiveFocus()
+    }
+    function fit() {
+        if (!app.nodes.length) { zoom = 1; panX = surface.width / 2; panY = surface.height / 2; return }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (let n of app.nodes) {
+            minX = Math.min(minX, n.x * cellWidth); minY = Math.min(minY, n.y * cellHeight)
+            maxX = Math.max(maxX, n.x * cellWidth + 156); maxY = Math.max(maxY, n.y * cellHeight + 68)
+        }
+        zoom = Math.max(0.15, Math.min(2, Math.min((surface.width - 64) / (maxX - minX), (surface.height - 64) / (maxY - minY))))
+        panX = surface.width / 2 - (minX + maxX) * zoom / 2
+        panY = surface.height / 2 - (minY + maxY) * zoom / 2
+    }
+    function zoomAt(factor, px, py) {
+        let next = Math.max(0.15, Math.min(3, zoom * factor))
+        panX = px - (px - panX) * next / zoom
+        panY = py - (py - panY) * next / zoom
+        zoom = next
+    }
+    function beginNode(mouse, item) {
+        surface.forceActiveFocus()
+        let p = item.mapToItem(surface, mouse.x, mouse.y)
+        pressPoint = p; lastPoint = p; moved = false
+        if (mouse.button === Qt.MiddleButton || mouse.button === Qt.RightButton) {
+            gesture = "pan"; contextNode = item.node.id; return
+        }
+        if (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) {
+            let ids = selection.slice(), at = ids.indexOf(item.node.id)
+            if (at >= 0) ids.splice(at, 1); else ids.push(item.node.id)
+            selection = ids
+        } else if (!selected(item.node.id)) selection = [item.node.id]
+        app.selectNode(item.node.id)
+        gesture = !app.busy && selected(item.node.id) ? "nodes" : ""
+    }
+    function moveNode(mouse, item) { updateGesture(item.mapToItem(surface, mouse.x, mouse.y)) }
+    function updateGesture(p) {
+        if (Math.abs(p.x - pressPoint.x) + Math.abs(p.y - pressPoint.y) > Qt.styleHints.startDragDistance) moved = true
+        if (gesture === "pan" && moved) { panX += p.x - lastPoint.x; panY += p.y - lastPoint.y }
+        if (gesture === "nodes" && moved) {
+            dragX = Math.round((p.x - pressPoint.x) / zoom / cellWidth) * cellWidth
+            dragY = Math.round((p.y - pressPoint.y) / zoom / cellHeight) * cellHeight
+        }
+        lastPoint = p
+    }
+    function endNode(mouse, item) {
+        if (gesture === "nodes" && moved && (dragX || dragY)) app.moveNodes(selection, Math.round(dragX / cellWidth), Math.round(dragY / cellHeight))
+        if (mouse.button === Qt.RightButton && !moved) {
+            if (!selected(item.node.id)) selection = [item.node.id]
+            app.selectNode(item.node.id); contextNode = item.node.id
+            nodeMenu.popup()
+        }
+        gesture = ""; dragX = 0; dragY = 0
+    }
+    function openName(operation, value) { nameOperation = operation; nameDraft = value || ""; nameDialog.open() }
+    function rememberView() {
+        if (!viewedFlow) return
+        let views = flowViews
+        views[viewedFlow] = { zoom: zoom, x: panX, y: panY, selection: selection }
+        flowViews = views
+    }
+    Component.onCompleted: { viewedFlow = app.currentFlow; Qt.callLater(fit) }
+    Connections {
+        target: app
+        function onSelectionChanged() {
+            if (root.viewedFlow === app.currentFlow) {
+                if (app.selectedNode && !root.selected(app.selectedNode)) root.selection = [app.selectedNode]
+                return
+            }
+            root.rememberView(); root.viewedFlow = app.currentFlow
+            let view = root.flowViews[app.currentFlow]
+            root.zoom = view ? view.zoom : 1
+            root.panX = view ? view.x : surface.width / 2
+            root.panY = view ? view.y : surface.height / 2
+            root.selection = view ? view.selection : []
+        }
+        function onNodeLocated(id) { root.centerNode(id) }
+        function onProjectReplaced() { root.flowViews = ({}); root.selection = []; root.viewedFlow = app.currentFlow; root.fit() }
+        function onNodesChanged() { root.selection = root.selection.filter(function(id) { return root.findNode(id) !== null }) }
+    }
+    ColumnLayout {
+        anchors.fill: parent; spacing: 0
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 34; color: QuiColor.Primary
+            RowLayout {
+                anchors.fill: parent; anchors.margins: 3; spacing: 4
+                QuiText { text: "流程图"; Layout.leftMargin: 5 }
+                QuiTextField {
+                    id: search; objectName: "flowSearch"
+                    Layout.fillWidth: true; implicitHeight: 28; placeholderText: "搜索工具 / 备注 / 序号"
+                    onTextChanged: { app.searchNodes(text); root.searchIndex = 0 }
+                    Keys.onDownPressed: root.searchIndex = Math.min(app.searchResults.length - 1, root.searchIndex + 1)
+                    Keys.onUpPressed: root.searchIndex = Math.max(0, root.searchIndex - 1)
+                    Keys.onReturnPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
+                    Keys.onEnterPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
+                    Keys.onEscapePressed: { text = ""; surface.forceActiveFocus() }
+                }
+                QuiTextIconButton { text: "清空搜索"; iconSource: QuiFontIcon.Clear; visible: search.text.length > 0; onClicked: search.text = "" }
+                QuiTextIconButton { text: "适应全部节点"; iconSource: QuiFontIcon.FullScreen; onClicked: root.fit() }
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 34; color: QuiColor.Primary
+            RowLayout {
+                anchors.fill: parent; spacing: 0
+                QuiTextIconButton { text: "新增流程"; iconSource: QuiFontIcon.Add; enabled: !app.busy; onClicked: root.openName("addFlow", "") }
+                Flickable {
+                    Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                    contentWidth: flowTabs.width; contentHeight: height
+                    Row {
+                        id: flowTabs; height: parent.height
+                        Repeater {
+                            model: app.flows
+                            Row {
+                                required property var modelData
+                                height: flowTabs.height
+                                QuiCheckBox {
+                                    height: parent.height; checked: modelData.selected; enabled: !app.busy
+                                    Accessible.name: "运行 " + modelData.name
+                                    onClicked: app.setFlowSelected(modelData.id, checked)
+                                }
+                                QuiTabButton {
+                                    height: parent.height; text: modelData.name; checked: app.currentFlow === modelData.id
+                                    onClicked: app.selectFlow(modelData.id)
+                                    TapHandler { acceptedButtons: Qt.RightButton; onTapped: { root.contextFlow = modelData.id; flowMenu.popup() } }
+                                }
+                            }
+                        }
+                    }
+                }
+                QuiText { text: Math.round(root.zoom * 100) + "%"; font: QuiFont.Caption; Layout.rightMargin: 6 }
+            }
+        }
+        FocusScope {
+            id: surface; objectName: "flowSurface"
+            Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+            Keys.onPressed: function(event) {
+                if (!surface.activeFocus || app.busy) return
+                if (event.matches(StandardKey.Copy)) { app.copyNodes(root.selection); event.accepted = true }
+                else if (event.matches(StandardKey.Paste)) {
+                    app.pasteNodes(Math.round((width / 2 - root.panX) / root.zoom / root.cellWidth), Math.round((height / 2 - root.panY) / root.zoom / root.cellHeight)); event.accepted = true
+                } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) { app.deleteNodes(root.selection); root.selection = []; event.accepted = true }
+                else if (event.key === Qt.Key_Escape) { root.selection = []; root.gesture = ""; root.dragX = 0; root.dragY = 0; event.accepted = true }
+            }
+            Rectangle { anchors.fill: parent; color: "#f5f7fa" }
+            Canvas {
+                id: grid; anchors.fill: parent
+                onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
+                Connections {
+                    target: root
+                    function onZoomChanged() { grid.requestPaint() }
+                    function onPanXChanged() { grid.requestPaint() }
+                    function onPanYChanged() { grid.requestPaint() }
+                }
+                onPaint: {
+                    let ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); ctx.fillStyle = "#cfd7e2"
+                    let step = 24 * root.zoom
+                    for (let x = ((root.panX % step) + step) % step; x < width; x += step)
+                        for (let y = ((root.panY % step) + step) % step; y < height; y += step) ctx.fillRect(x, y, 1, 1)
+                }
+            }
+            MouseArea {
+                id: backgroundMouse; anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton; preventStealing: true
+                onPressed: function(mouse) {
+                    surface.forceActiveFocus(); root.pressPoint = Qt.point(mouse.x, mouse.y); root.lastPoint = root.pressPoint; root.moved = false
+                    root.gesture = mouse.button === Qt.LeftButton ? "select" : "pan"
+                    if (mouse.button === Qt.LeftButton && !(mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))) { root.selection = []; app.selectNode("") }
+                }
+                onPositionChanged: function(mouse) { if (pressed) root.updateGesture(Qt.point(mouse.x, mouse.y)) }
+                onReleased: function(mouse) {
+                    if (root.gesture === "select" && root.moved) {
+                        let left = (Math.min(root.pressPoint.x, mouse.x) - root.panX) / root.zoom
+                        let top = (Math.min(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
+                        let right = (Math.max(root.pressPoint.x, mouse.x) - root.panX) / root.zoom
+                        let bottom = (Math.max(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
+                        let ids = root.selection.slice()
+                        for (let n of app.nodes)
+                            if (n.x * root.cellWidth + 156 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 68 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
+                        root.selection = ids
+                        if (ids.length) app.selectNode(ids[ids.length - 1])
+                    }
+                    root.gesture = ""
+                }
+                onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton) root.fit() }
+            }
+            WheelHandler {
+                target: null
+                onWheel: function(event) {
+                    root.zoomAt(Math.pow(1.0015, event.angleDelta.y), event.x, event.y)
+                    event.accepted = true
+                }
+            }
+            Item {
+                id: world; x: root.panX; y: root.panY; scale: root.zoom; transformOrigin: Item.TopLeft
+                Repeater {
+                    model: app.wires
+                    WireItem {
+                        required property var modelData
+                        sourceX: root.nodeX(modelData.source) + 78; sourceY: root.nodeY(modelData.source) + 68
+                        targetX: root.nodeX(modelData.target) + 78; targetY: root.nodeY(modelData.target)
+                        lineColor: root.selected(modelData.target) ? "#d8ae28" : root.selected(modelData.source) ? "#2589df" : "#7f8996"
+                    }
+                }
+                Repeater {
+                    model: app.nodes
+                    NodeDelegate {
+                        required property var modelData
+                        node: modelData; selected: root.selected(modelData.id)
+                        x: root.nodeX(modelData.id); y: root.nodeY(modelData.id)
+                        onPointerPressed: function(mouse, item) { root.beginNode(mouse, item) }
+                        onPointerMoved: function(mouse, item) { root.moveNode(mouse, item) }
+                        onPointerReleased: function(mouse, item) { root.endNode(mouse, item) }
+                        onExecuteRequested: { app.selectNode(modelData.id); app.runNode() }
+                    }
+                }
+            }
+            Rectangle {
+                visible: root.gesture === "select" && root.moved
+                x: Math.min(root.pressPoint.x, root.lastPoint.x); y: Math.min(root.pressPoint.y, root.lastPoint.y)
+                width: Math.abs(root.lastPoint.x - root.pressPoint.x); height: Math.abs(root.lastPoint.y - root.pressPoint.y)
+                color: "#251887d8"; border.color: QuiColor.Highlight
+            }
+            DropArea {
+                anchors.fill: parent; keys: ["visionrt/tool"]
+                onEntered: function(drag) { drag.accepted = !app.busy }
+                onDropped: function(drop) {
+                    if (app.busy || !drop.source || !drop.source.toolId) return
+                    app.addNode(drop.source.toolId, Math.round((drop.x - root.panX) / root.zoom / root.cellWidth), Math.round((drop.y - root.panY) / root.zoom / root.cellHeight))
+                    drop.acceptProposedAction(); surface.forceActiveFocus()
+                }
+            }
+        }
+    }
+    Rectangle {
+        visible: search.text.length > 0 && search.activeFocus
+        z: 20; x: 4; y: 34; width: parent.width - 8; height: Math.min(280, searchList.contentHeight + 8)
+        color: QuiColor.Primary; border.color: QuiColor.Border; radius: 4
+        ListView {
+            id: searchList; anchors.fill: parent; anchors.margins: 4; clip: true
+            model: app.searchResults; currentIndex: root.searchIndex
+            section.property: "flowName"; section.criteria: ViewSection.FullString
+            section.delegate: QuiText { required property string section; text: section; height: 26; font: QuiFont.Caption; color: QuiColor.FontCaption }
+            delegate: QuiItemDelegate {
+                required property var modelData; required property int index
+                width: searchList.width; height: 34; text: modelData.title
+                highlighted: index === root.searchIndex
+                onClicked: root.locate(modelData)
+            }
+        }
+    }
+    QuiMenu {
+        id: nodeMenu
+        QuiMenuItem { text: "复制"; enabled: !app.busy; onTriggered: app.copyNodes(root.selection) }
+        QuiMenuItem { text: "删除"; enabled: !app.busy; onTriggered: { app.deleteNodes(root.selection); root.selection = [] } }
+        QuiMenuItem { text: "重命名备注…"; enabled: !app.busy; onTriggered: { let n = root.findNode(root.contextNode); root.openName("node", n ? n.alias : "") } }
+    }
+    QuiMenu {
+        id: flowMenu
+        QuiMenuItem { text: "重命名流程…"; enabled: !app.busy; onTriggered: { for (let f of app.flows) if (f.id === root.contextFlow) root.openName("flow", f.name) } }
+        QuiMenuItem { text: "复制流程"; enabled: !app.busy; onTriggered: app.copyFlow(root.contextFlow) }
+        QuiMenuItem { text: "删除流程…"; enabled: !app.busy && app.flows.length > 1; onTriggered: deleteFlowDialog.open() }
+    }
+    WorkbenchDialog {
+        id: deleteFlowDialog; title: "删除流程"; message: "删除该流程及全部节点？此操作无法撤销。"
+        onPositiveClicked: app.deleteFlow(root.contextFlow)
+    }
+    WorkbenchDialog {
+        id: nameDialog; title: root.nameOperation === "node" ? "节点备注" : "流程名称"
+        positiveButtonEnabled: !app.busy && (root.nameOperation === "node" || root.nameDraft.trim().length > 0)
+        contentDelegate: Component {
+            QuiTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }
+        }
+        onPositiveClicked: {
+            if (root.nameOperation === "node") app.renameNode(root.contextNode, root.nameDraft)
+            else if (root.nameOperation === "flow") app.renameFlow(root.contextFlow, root.nameDraft)
+            else app.addFlow(root.nameDraft)
+        }
+    }
+}
