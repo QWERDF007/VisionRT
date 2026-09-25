@@ -1,0 +1,354 @@
+#include "runtime/RuntimeEngine.h"
+#include "runtime/Receiver.h"
+
+#include <atomic>
+#include <cassert>
+#include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <iostream>
+#include <mutex>
+#include <thread>
+
+using namespace visionrt;
+using namespace std::chrono_literals;
+namespace {
+class Function final : public IToolInstance {
+public:
+    std::function<ToolResult(const Values&)> run;
+    std::function<ToolStatus()> init = [] { return ToolStatus{}; };
+    std::function<ToolStatus()> close = [] { return ToolStatus{}; };
+    ToolStatus initialize(const Values&) override { return init(); }
+    ToolResult execute(const Values& inputs) override { return run(inputs); }
+    ToolStatus release() override { return close(); }
+};
+ToolDefinition definition(std::string id, std::vector<std::string> inputs = {}) {
+    ToolDefinition d;
+    d.id = id; d.registryName = id; d.displayName = id; d.version = "1";
+    d.kind = ToolKind::CppClass;
+    for (auto& input : inputs) d.inputs.push_back({input, input, {Type::Int}});
+    d.outputs.push_back({"value", "Value", {Type::Int}});
+    return d;
+}
+void install(ToolRegistry& registry, const ToolDefinition& d,
+             std::function<ToolResult(const Values&)> run,
+             std::function<ToolStatus()> init = [] { return ToolStatus{}; },
+             std::function<ToolStatus()> close = [] { return ToolStatus{}; }) {
+    registry.registerCpp(d.registryName, d, [=](const ToolServices&) {
+        auto instance = std::make_unique<Function>();
+        instance->run = run; instance->init = init; instance->close = close;
+        return instance;
+    });
+    registry.addDefinition(d);
+}
+NodeDefinition node(NodeId id, const ToolDefinition& d) {
+    NodeDefinition n; n.id = id; n.toolId = d.id; n.toolNameSnapshot = d.displayName;
+    for (auto& port : d.inputs) { n.signatures.inputs.emplace(port.id, port.type); n.inputs[port.id] = {}; }
+    for (auto& port : d.outputs) n.signatures.outputs.emplace(port.id, port.type);
+    n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
+    n.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+    return n;
+}
+void bind(NodeDefinition& n, const std::string& input, NodeId source) {
+    n.inputs[input] = {BindingMode::Upstream, Missing{}, SourcePort{source, "value"}};
+}
+RuntimeUpdate finish(RuntimeEngine& engine) {
+    const auto deadline = std::chrono::steady_clock::now() + 10s;
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto update = engine.pollLatest();
+        if (update.completion) {
+            assert(update.state != RuntimeState::Idle);
+            assert(!engine.acknowledgeCompletion({update.generation + 1, update.completion->token}));
+            assert(engine.acknowledgeCompletion(*update.completion));
+            return update;
+        }
+        std::this_thread::sleep_for(1ms);
+    }
+    throw std::runtime_error("runtime completion deadline exceeded");
+}
+ResultSlot::Snapshot snapshot(const RuntimeUpdate& update, NodeId id) {
+    for (auto& item : update.nodes) if (item.node == id) return item.snapshot;
+    throw std::runtime_error("node update absent");
+}
+void branchesOverlapAndJoin() {
+    RuntimeEngine engine(2);
+    ToolRegistry registry;
+    std::mutex mutex;
+    std::condition_variable arrived;
+    int active = 0;
+    std::atomic<int> visits = 0;
+    auto branch = definition("test.branch");
+    install(registry, branch, [&](const Values&) {
+        std::unique_lock lock(mutex);
+        ++active; ++visits; arrived.notify_all();
+        if (!arrived.wait_for(lock, 2s, [&] { return active == 2; }))
+            return ToolResult{{1, "branches did not overlap"}, {{"value", Missing{}}}};
+        return ToolResult{{}, {{"value", std::int64_t{7}}}};
+    });
+    auto join = definition("test.join", {"a", "a_again", "b"});
+    install(registry, join, [](const Values& in) {
+        return ToolResult{{}, {{"value", std::get<std::int64_t>(in.at("a")) +
+            std::get<std::int64_t>(in.at("a_again")) + std::get<std::int64_t>(in.at("b"))}}};
+    });
+    auto a = node(1, branch), b = node(2, branch), c = node(3, join);
+    bind(c, "a", 1); bind(c, "a_again", 1); bind(c, "b", 2);
+    ProjectDefinition project; project.flows.front().nodes = {a, b, c};
+    assert(engine.start(project, registry, RunMode::Once));
+    auto result = finish(engine);
+    assert(visits == 2);
+    assert(snapshot(result, 3)->status.code == 0);
+    assert(std::get<std::int64_t>(snapshot(result, 3)->outputs.at("value")) == 21);
+    assert(snapshot(result, 1)->round == snapshot(result, 3)->round);
+    assert(result.flows.size() == 1 && result.flows.front().milliseconds > 0);
+}
+void failureReplacesOldValueAndManualUsesCache() {
+    RuntimeEngine engine(2);
+    ToolRegistry registry;
+    int calls = 0;
+    auto source = definition("test.source");
+    install(registry, source, [&](const Values&) {
+        if (++calls == 1) return ToolResult{{}, {{"value", std::int64_t{42}}}};
+        return ToolResult{{}, {}};
+    });
+    auto consumer = definition("test.consumer", {"input"});
+    install(registry, consumer, [](const Values& in) {
+        return ToolResult{{}, {{"value", isMissing(in.at("input")) ? std::int64_t{-99} :
+            std::get<std::int64_t>(in.at("input"))}}};
+    });
+    auto a = node(1, source), b = node(2, consumer);
+    bind(b, "input", 1);
+    ProjectDefinition project; project.flows.front().nodes = {a, b};
+    assert(engine.start(project, registry, RunMode::Once));
+    auto first = finish(engine);
+    assert(std::get<std::int64_t>(snapshot(first, 2)->outputs.at("value")) == 42);
+    assert(engine.start(project, registry, RunMode::Node, 2));
+    auto manual = finish(engine);
+    assert(calls == 1);
+    assert(std::get<std::int64_t>(snapshot(manual, 2)->outputs.at("value")) == 42);
+    assert(snapshot(manual, 2)->session != snapshot(first, 2)->session);
+    assert(engine.start(project, registry, RunMode::Once));
+    auto failed = finish(engine);
+    assert(snapshot(failed, 1)->status.code == -2);
+    assert(std::get<std::int64_t>(snapshot(failed, 1)->outputs.at("__status_code")) == -2);
+    assert(isMissing(snapshot(failed, 1)->outputs.at("value")));
+    assert(snapshot(failed, 2)->status.code == 0);
+    assert(std::get<std::int64_t>(snapshot(failed, 2)->outputs.at("value")) == -99);
+    assert(snapshot(failed, 1)->round == snapshot(failed, 2)->round);
+    assert(snapshot(failed, 1)->session == snapshot(failed, 2)->session);
+}
+void initializationSuppressionRetryAndReset() {
+    RuntimeEngine engine(2);
+    ToolRegistry registry;
+    int initializations = 0, releases = 0, executions = 0, rounds = 0;
+    bool fail = true;
+    auto resource = definition("test.resource");
+    resource.initParams.push_back({"resource", "Resource", {Type::Int}, std::int64_t{1}});
+    install(registry, resource, [&](const Values&) {
+        ++executions;
+        return ToolResult{{}, {{"value", std::int64_t{8}}}};
+    }, [&] {
+        ++initializations;
+        return fail ? ToolStatus{7, "resource initialization failed"} : ToolStatus{};
+    }, [&] { ++releases; return ToolStatus{9, "release diagnostic"}; });
+    auto observer = definition("test.observer", {"input"});
+    install(registry, observer, [&](const Values&) {
+        if (++rounds == 3) engine.requestStop();
+        return ToolResult{{}, {{"value", std::int64_t{rounds}}}};
+    });
+    auto a = node(1, resource), b = node(2, observer);
+    bind(b, "input", 1);
+    ProjectDefinition project; project.dirty = true; project.flows.front().nodes = {a, b};
+    assert(engine.start(project, registry, RunMode::Loop));
+    auto suppressed = finish(engine);
+    assert(initializations == 1 && releases == 1 && executions == 0 && rounds == 3);
+    assert(snapshot(suppressed, 1)->status.code == 7);
+    assert(snapshot(suppressed, 1)->timing.initMs == 0);
+    fail = false;
+    assert(engine.start(project, registry, RunMode::Once));
+    finish(engine);
+    assert(initializations == 2 && executions == 1);
+    assert(engine.start(project, registry, RunMode::Once));
+    auto reused = finish(engine);
+    assert(initializations == 2 && executions == 2);
+    project.flows.front().nodes.front().initParams["resource"] = std::int64_t{2};
+    assert(engine.start(project, registry, RunMode::Once));
+    auto changed = finish(engine);
+    assert(initializations == 3 && executions == 3 && releases == 2);
+    assert(changed.nodes.front().lifecycleDiagnostic->code == -4);
+    const auto generation = changed.generation;
+    assert(engine.requestReset());
+    auto reset = finish(engine);
+    assert(reset.generation == generation + 1 && !snapshot(reset, 1));
+    assert(reset.nodes.front().lifecycleDiagnostic->code == -4);
+    assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at("resource")) == 2);
+    assert(releases == 3);
+}
+void stopDrainsCommittedFlowsAndFreezesConfiguration() {
+    RuntimeEngine engine(2);
+    ToolRegistry registry;
+    std::mutex mutex;
+    std::condition_variable gate;
+    bool entered = false, proceed = false;
+    std::atomic<int> fastCalls{0}, slowCalls{0}, wakeups{0};
+    engine.setCompletionCallback([&](RuntimeCompletion) { ++wakeups; });
+    auto fast = definition("test.fast", {"input"});
+    install(registry, fast, [&](const Values& in) {
+        ++fastCalls;
+        return ToolResult{{}, {{"value", in.at("input")}}};
+    });
+    auto slow = definition("test.slow");
+    install(registry, slow, [&](const Values&) {
+        ++slowCalls;
+        std::unique_lock lock(mutex);
+        entered = true; gate.notify_all();
+        if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
+            return ToolResult{{1, "test gate timeout"}, {{"value", Missing{}}}};
+        return ToolResult{{}, {{"value", std::int64_t{1}}}};
+    });
+    auto a = node(1, fast), b = node(2, slow);
+    a.inputs["input"].literal = std::int64_t{17};
+    ProjectDefinition project;
+    project.flows = {{"fast", "fast", true, {a}}, {"slow", "slow", true, {b}}};
+    assert(engine.start(project, registry, RunMode::Loop));
+    {
+        std::unique_lock lock(mutex);
+        assert(gate.wait_for(lock, 2s, [&] { return entered; }));
+    }
+    project.flows.front().nodes.front().inputs["input"].literal = std::int64_t{99};
+    engine.requestStop();
+    assert(!engine.start(project, registry, RunMode::Once));
+    {
+        std::lock_guard lock(mutex); proceed = true;
+    }
+    gate.notify_all();
+    auto completed = finish(engine);
+    assert(completed.round == 1 && fastCalls == 1 && slowCalls == 1);
+    assert(std::get<std::int64_t>(snapshot(completed, 1)->outputs.at("value")) == 17);
+    assert(completed.flows.size() == 2);
+    const auto deadline = std::chrono::steady_clock::now() + 1s;
+    while (wakeups == 0 && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    assert(wakeups == 1);
+}
+void receiverCapacityAndSessionIsolation(const std::filesystem::path& toolsRoot) {
+    ToolRegistry registry;
+    registry.scan(toolsRoot);
+    registerReceiveTools(registry);
+    auto source = definition("test.sender");
+    install(registry, source, [](const Values&) {
+        return ToolResult{{}, {{"value", std::int64_t{25}}}};
+    });
+    auto sender = node(1, source);
+    const auto* receive = registry.find("visionrt.flow.receive.int");
+    assert(receive);
+    auto receiver = node(2, *receive);
+    receiver.initParams = {{"source_flow_name", Utf8("sender")},
+        {"source_node_name", Utf8(sender.title())}, {"source_port_id", Utf8("value")},
+        {"timeout_ms", std::int64_t{50}}};
+    ProjectDefinition project;
+    project.flows = {{"sender", "sender", true, {sender}}, {"receiver", "receiver", false, {receiver}}};
+    RuntimeEngine single(1);
+    assert(single.start(project, registry, RunMode::Once));
+    finish(single);
+    assert(single.start(project, registry, RunMode::Node, 2));
+    auto capacity = finish(single);
+    assert(snapshot(capacity, 2)->status.code == 5);
+    assert(isMissing(snapshot(capacity, 2)->outputs.at("source_status_code")));
+    project.flows[1].nodes[0].initParams["timeout_ms"] = std::int64_t{0};
+    assert(single.start(project, registry, RunMode::Node, 2));
+    assert(snapshot(finish(single), 2)->status.code == 4);
+    project.flows[0].runSelected = false; project.flows[1].runSelected = true;
+    project.flows[1].nodes[0].initParams["timeout_ms"] = std::int64_t{100};
+    auto second = project.flows[1].nodes.front(); second.id = 3;
+    project.flows.push_back({"receiver2", "receiver2", true, {second}});
+    RuntimeEngine two(2);
+    assert(two.start(project, registry, RunMode::Once));
+    auto limited = finish(two);
+    const auto codeA = snapshot(limited, 2)->status.code, codeB = snapshot(limited, 3)->status.code;
+    assert((codeA == 4 && codeB == 5) || (codeA == 5 && codeB == 4));
+    project.flows[0].runSelected = true; project.flows[2].runSelected = false;
+    assert(two.start(project, registry, RunMode::Once));
+    auto received = finish(two);
+    assert(snapshot(received, 2)->status.code == 0);
+    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 25);
+    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("source_status_code")) == 0);
+}
+void receiverConsumesFailures() {
+    ToolRegistry registry;
+    auto source = definition("test.failed_sender");
+    install(registry, source, [](const Values&) {
+        return ToolResult{{12, "source failed"}, {{"value", Missing{}}}};
+    });
+    auto sender = node(1, source);
+    auto consumer = definition("test.cursor");
+    registry.registerCpp(consumer.registryName, consumer, [name = sender.title()](const ToolServices& services) {
+        auto instance = std::make_unique<Function>();
+        instance->run = [reader = services.results, name](const Values&) {
+            ReceiveCursor cursor;
+            ReceiveRequest request{"sender", name, "value", {Type::Int}, 1000ms};
+            auto failed = reader->receive(request, cursor);
+            request.timeout = 0ms;
+            auto next = reader->receive(request, cursor);
+            const bool consumed = failed.status.code == 3 &&
+                std::get<std::int64_t>(failed.outputs.at("source_status_code")) == 12 &&
+                isMissing(failed.outputs.at("value")) && next.status.code == 4 &&
+                isMissing(next.outputs.at("source_status_code"));
+            return ToolResult{{}, {{"value", std::int64_t{consumed ? 1 : 0}}}};
+        };
+        return instance;
+    });
+    registry.addDefinition(consumer);
+    ProjectDefinition project;
+    project.flows = {{"sender", "sender", true, {sender}},
+        {"receiver", "receiver", true, {node(2, consumer)}}};
+    RuntimeEngine engine(2);
+    assert(engine.start(project, registry, RunMode::Once));
+    auto received = finish(engine);
+    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 1);
+}
+void resetWaitsForActiveInvocation() {
+    RuntimeEngine engine(1);
+    ToolRegistry registry;
+    std::mutex mutex;
+    std::condition_variable gate;
+    bool entered = false, proceed = false, finishedExecution = false;
+    std::atomic<bool> releasedAfterExecution{false};
+    auto resource = definition("test.reset_active");
+    install(registry, resource, [&](const Values&) {
+        std::unique_lock lock(mutex);
+        entered = true; gate.notify_all();
+        if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
+            return ToolResult{{1, "test gate timeout"}, {{"value", Missing{}}}};
+        finishedExecution = true;
+        return ToolResult{{}, {{"value", std::int64_t{1}}}};
+    }, [] { return ToolStatus{}; }, [&] {
+        std::lock_guard lock(mutex);
+        releasedAfterExecution = finishedExecution;
+        return ToolStatus{};
+    });
+    ProjectDefinition project; project.flows.front().nodes = {node(1, resource)};
+    assert(engine.start(project, registry, RunMode::Loop));
+    {
+        std::unique_lock lock(mutex);
+        assert(gate.wait_for(lock, 2s, [&] { return entered; }));
+    }
+    assert(engine.requestReset());
+    assert(engine.pollLatest().state == RuntimeState::Stopping);
+    assert(!releasedAfterExecution);
+    {
+        std::lock_guard lock(mutex); proceed = true;
+    }
+    gate.notify_all();
+    auto reset = finish(engine);
+    assert(releasedAfterExecution && reset.generation == 2 && !snapshot(reset, 1));
+}
+}
+int main(int argc, char** argv) {
+    branchesOverlapAndJoin();
+    failureReplacesOldValueAndManualUsesCache();
+    initializationSuppressionRetryAndReset();
+    stopDrainsCommittedFlowsAndFreezesConfiguration();
+    receiverCapacityAndSessionIsolation(argc > 1 ? argv[1] : "docs/VisionRT_V3/examples/tools");
+    receiverConsumesFailures();
+    resetWaitsForActiveInvocation();
+    std::cout << "runtime contracts passed\n";
+}
