@@ -13,7 +13,13 @@ include(ConfigVersion)
 include(CTest)
 find_package(OpenCV CONFIG REQUIRED COMPONENTS core imgproc imgcodecs)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
-find_package(yaml-cpp CONFIG REQUIRED)
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Disable yaml-cpp tests" FORCE)
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Disable yaml-cpp tools" FORCE)
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "Disable yaml-cpp contrib" FORCE)
+set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "Build static yaml-cpp" FORCE)
+set(YAML_MSVC_SHARED_RT ON CACHE BOOL "MSVC shared runtime" FORCE)
+set(YAML_CPP_INSTALL OFF CACHE BOOL "Disable yaml-cpp install" FORCE)
+add_subdirectory(3rdparty/yaml-cpp EXCLUDE_FROM_ALL)
 if(NOT DEFINED Python3_ROOT_DIR AND NOT DEFINED ENV{PYTHON_ROOT})
     set(Python3_ROOT_DIR "E:/Softwares/Anaconda3/envs/py312")
 endif()
@@ -123,12 +129,10 @@ file(REAL_PATH "${OpenCV_DIR}/../bin" VISIONRT_OPENCV_BIN)
 file(GLOB OPENCV_DLLS "${VISIONRT_OPENCV_BIN}/*.dll")
 get_filename_component(VISIONRT_PYTHON_BIN "${Python3_EXECUTABLE}" DIRECTORY)
 file(GLOB PYTHON_DLLS "${VISIONRT_PYTHON_BIN}/python3*.dll")
-file(GLOB YAML_DLLS "${VISIONRT_PYTHON_BIN}/Library/bin/*yaml*.dll" "E:/Softwares/Anaconda3/Library/bin/*yaml*.dll")
 
 add_custom_target(deploy_runtime_dlls ALL
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${OPENCV_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${PYTHON_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${YAML_DLLS} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     COMMENT "Deploying runtime DLLs to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 

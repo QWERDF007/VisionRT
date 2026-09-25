@@ -10,3 +10,7 @@
 	path = 3rdparty/taskflow
 	url = https://github.com/taskflow/taskflow.git
 	branch = master
+[submodule "3rdparty/yaml-cpp"]
+	path = 3rdparty/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp.git
+	branch = master
