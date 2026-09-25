@@ -21,11 +21,24 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent; spacing: 0
         RowLayout {
-            Layout.fillWidth: true; Layout.preferredHeight: 32; spacing: 0
+            Layout.fillWidth: true; Layout.preferredHeight: 32; spacing: 4
             QuiText { text: "输出参数"; Layout.leftMargin: 8 }
             Item { Layout.fillWidth: true }
-            QuiTabButton { text: "数据"; checked: !root.relations; onClicked: root.relations = false }
-            QuiTabButton { text: "关系"; checked: root.relations; onClicked: root.relations = true }
+            QuiTabButton {
+                text: "数据"; checked: !root.relations
+                implicitWidth: 46; implicitHeight: 24; radius: 3; font: QuiFont.Caption
+                checkedColor: QuiColor.Highlight; checkedTextColor: "#ffffff"
+                normalColor: "transparent"; normalTextColor: QuiColor.FontPrimary
+                onClicked: root.relations = false
+            }
+            QuiTabButton {
+                text: "关系"; checked: root.relations
+                implicitWidth: 46; implicitHeight: 24; radius: 3; font: QuiFont.Caption
+                checkedColor: QuiColor.Highlight; checkedTextColor: "#ffffff"
+                normalColor: "transparent"; normalTextColor: QuiColor.FontPrimary
+                Layout.rightMargin: 8
+                onClicked: root.relations = true
+            }
         }
         QuiTableView {
             id: table; objectName: "outputTable"

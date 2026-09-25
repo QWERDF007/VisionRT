@@ -17,7 +17,7 @@ Item {
         ? [Qt.point(sourceX, sourceY), Qt.point(sourceX, elbowY), Qt.point(targetX, elbowY), Qt.point(targetX, targetY)]
         : [Qt.point(sourceX, sourceY), Qt.point(sourceX, elbowY), Qt.point(detourX, elbowY), Qt.point(detourX, targetY - 20), Qt.point(targetX, targetY - 20), Qt.point(targetX, targetY)]
     Shape {
-        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
         ShapePath {
             strokeColor: root.lineColor; strokeWidth: root.lineWidth; fillColor: "transparent"
             capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin

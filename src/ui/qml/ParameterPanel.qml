@@ -50,7 +50,10 @@ QuiSplitView {
                     QuiTabButton {
                         required property string modelData; required property int index
                         text: modelData; checked: root.currentTab === index; Layout.fillWidth: true
-                        implicitWidth: 50; font: QuiFont.Caption
+                        implicitWidth: 60; implicitHeight: 32; font: QuiFont.Body
+                        showIndicator: true
+                        normalColor: "#f5f7fa"; checkedColor: QuiColor.Primary
+                        normalTextColor: QuiColor.FontPrimary; checkedTextColor: QuiColor.Highlight
                         onClicked: root.currentTab = index
                     }
                 }

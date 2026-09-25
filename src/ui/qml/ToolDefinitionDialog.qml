@@ -129,10 +129,17 @@ WorkbenchDialog {
                         QuiTextField { Layout.fillWidth: true; text: root.draft.symbol || ""; onTextEdited: root.setField("symbol", text) }
                     }
                     RowLayout {
-                        Layout.fillWidth: true; spacing: 0
+                        Layout.fillWidth: true; spacing: 2
                         Repeater {
                             model: ["输入端口", "初始化参数", "输出端口"]
-                            QuiTabButton { required property string modelData; required property int index; text: modelData; checked: root.portTab === index; onClicked: root.portTab = index }
+                            QuiTabButton {
+                                required property string modelData; required property int index
+                                text: modelData; checked: root.portTab === index
+                                implicitHeight: 32; showIndicator: true
+                                normalColor: "#f5f7fa"; checkedColor: QuiColor.Primary
+                                normalTextColor: QuiColor.FontPrimary; checkedTextColor: QuiColor.Highlight
+                                onClicked: root.portTab = index
+                            }
                         }
                         Item { Layout.fillWidth: true }
                     }
