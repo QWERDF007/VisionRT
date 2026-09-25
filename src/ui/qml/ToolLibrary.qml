@@ -87,10 +87,10 @@ Rectangle {
             view.delegate: ToolTreeDelegate {
                 treeView: tree.view
                 selectedTool: root.selectedTool
-                filtering: filter.text.trim().length > 0
+                filtering: filterInput.text.trim().length > 0
                 expandedBranches: root.expandedBranches
                 onBranchToggled: function(key, expanded) {
-                    if (!filter.text.trim().length) {
+                    if (!filterInput.text.trim().length) {
                         let saved = Object.assign({}, root.expandedBranches)
                         saved[key] = expanded
                         root.expandedBranches = saved

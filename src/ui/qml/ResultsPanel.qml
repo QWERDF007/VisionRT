@@ -68,7 +68,9 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
             Rectangle {
-                Layout.preferredWidth: 100; Layout.fillHeight: true; color: "#f6f8fa"
+                visible: app.imageCount > 0
+                Layout.preferredWidth: visible ? 100 : 0
+                Layout.fillHeight: true; color: "#f6f8fa"
                 Rectangle {
                     anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
                     width: 1; color: "#d0d7de"

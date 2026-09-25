@@ -24,7 +24,7 @@ Item {
     signal branchToggled(string key, bool expanded)
     function restoreExpansion() {
         if (!hasChildren) return
-        let wanted = filtering || expandedBranches[stableKey] === true
+        let wanted = filtering || expandedBranches[stableKey] !== false
         if (wanted && !expanded) treeView.expand(row)
         else if (!wanted && expanded) treeView.collapse(row)
     }
