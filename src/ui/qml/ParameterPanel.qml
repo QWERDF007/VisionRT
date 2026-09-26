@@ -137,12 +137,6 @@ QuiSplitView {
             }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                QuiText {
-                    anchors.centerIn: parent
-                    visible: app.selectedNode.length === 0
-                    text: "请在流程图中选择节点以配置参数"
-                    color: "#8c959f"; font: QuiFont.Body
-                }
                 Flickable {
                     id: scroller
                     anchors.fill: parent; visible: app.selectedNode.length > 0

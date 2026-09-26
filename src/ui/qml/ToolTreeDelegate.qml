@@ -40,6 +40,19 @@ Item {
     RowLayout {
         anchors.fill: parent; anchors.leftMargin: 7 + root.depth * 16; anchors.rightMargin: 8; spacing: 6
         QuiText { text: root.hasChildren ? (root.expanded ? "⌄" : "›") : ""; Layout.preferredWidth: 14; color: QuiColor.FontCaption }
+        QuiTextIcon {
+            visible: root.hasChildren
+            iconSource: {
+                let d = (root.model.display || "").toLowerCase()
+                if (d.indexOf("图") >= 0 || d.indexOf("image") >= 0 || d.indexOf("采") >= 0) return QuiFontIcon.Camera
+                if (d.indexOf("流程") >= 0 || d.indexOf("flow") >= 0) return QuiFontIcon.FolderOpen
+                if (d.indexOf("标") >= 0 || d.indexOf("基础") >= 0) return QuiFontIcon.AllApps
+                if (d.indexOf("检") >= 0 || d.indexOf("深") >= 0) return QuiFontIcon.Search
+                return QuiFontIcon.Settings
+            }
+            iconSize: 13
+            iconColor: QuiColor.Highlight
+        }
         QuiText { text: root.model.display || ""; Layout.fillWidth: true; elide: Text.ElideRight; color: root.model.available === false && root.leaf ? "#a34938" : QuiColor.FontPrimary }
         QuiText { text: root.leaf ? root.model.version || "" : ""; font: QuiFont.Caption; color: QuiColor.FontCaption }
     }

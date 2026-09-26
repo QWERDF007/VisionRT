@@ -13,8 +13,8 @@ Rectangle {
     signal executeRequested()
     width: 168; height: 70; radius: 4
     antialiasing: true
-    color: selected ? "#eef6fc" : "#ffffff"
-    border.color: selected ? QuiColor.Highlight : root.stateColor !== "#a5adb8" ? root.stateColor : "#b8c2cc"
+    color: "#ffffff"
+    border.color: selected ? QuiColor.Highlight : root.stateColor !== "#a5adb8" ? root.stateColor : "#d0d7de"
     border.width: selected ? 2 : 1
 
     readonly property color stateColor: node.state === "blue" ? "#1887d8" : node.state === "green" ? "#2da44e" : node.state === "red" ? "#cf222e" : "#a5adb8"
@@ -37,7 +37,7 @@ Rectangle {
         anchors.rightMargin: root.border.width > 1 ? 1 : 0
         height: 20
         radius: 4
-        color: root.selected ? "#c77848" : "#cfd6df"
+        color: root.selected ? "#dceefa" : "#eef0f3"
         Rectangle {
             anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
             height: 4; color: parent.color
@@ -48,7 +48,7 @@ Rectangle {
             QuiText {
                 text: root.node.version ? ("v" + String(root.node.version).replace(/^v/i, "")) : "v1.0"
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10, bold: true })
-                color: root.selected ? "#ffffff" : "#57606a"
+                color: root.selected ? "#1887d8" : "#8c959f"
                 renderType: Text.CurveRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
             }
         }
@@ -71,7 +71,7 @@ Rectangle {
             QuiText {
                 text: root.node.title; Layout.fillWidth: true; elide: Text.ElideRight
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
-                color: QuiColor.FontPrimary
+                color: root.selected ? QuiColor.Highlight : QuiColor.FontPrimary
                 renderType: Text.CurveRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
             }
             RowLayout {
