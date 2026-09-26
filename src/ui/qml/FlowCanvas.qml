@@ -291,10 +291,11 @@ FocusScope {
                                     QuiTextIcon {
                                         iconSource: QuiFontIcon.Cancel; iconSize: 9
                                         iconColor: tabCloseMouse.containsMouse ? "#cf222e" : "#8c959f"
-                                        visible: app.flows.length > 1
+                                        visible: true
+                                        opacity: app.flows.length > 1 ? 1.0 : 0.4
                                         MouseArea {
                                             id: tabCloseMouse; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
-                                            enabled: !app.busy
+                                            enabled: !app.busy && app.flows.length > 1
                                             onClicked: {
                                                 root.contextFlow = flowTabItem.modelData.id
                                                 deleteFlowDialog.open()
@@ -331,7 +332,7 @@ FocusScope {
                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) { app.deleteNodes(root.selection); root.selection = []; event.accepted = true }
                 else if (event.key === Qt.Key_Escape) { root.selection = []; root.gesture = ""; root.dragX = 0; root.dragY = 0; event.accepted = true }
             }
-            Rectangle { anchors.fill: parent; color: "#8c9197" }
+            Rectangle { anchors.fill: parent; color: "#f6f8fa" }
             Canvas {
                 id: grid; anchors.fill: parent
                 onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
@@ -342,7 +343,7 @@ FocusScope {
                     function onPanYChanged() { grid.requestPaint() }
                 }
                 onPaint: {
-                    let ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); ctx.fillStyle = "#7e8389"
+                    let ctx = getContext("2d"); ctx.clearRect(0, 0, width, height); ctx.fillStyle = "#d0d7de"
                     let step = 24 * root.zoom
                     for (let x = ((root.panX % step) + step) % step; x < width; x += step)
                         for (let y = ((root.panY % step) + step) % step; y < height; y += step) ctx.fillRect(x, y, 1, 1)
@@ -388,7 +389,7 @@ FocusScope {
                         required property var modelData
                         sourceX: root.nodeX(modelData.source) + 84; sourceY: root.nodeY(modelData.source) + 70
                         targetX: root.nodeX(modelData.target) + 84; targetY: root.nodeY(modelData.target)
-                        lineColor: root.selected(modelData.target) ? "#e68218" : root.selected(modelData.source) ? "#1887d8" : "#3d444d"
+                        lineColor: root.selected(modelData.target) || root.selected(modelData.source) ? "#1887d8" : "#4a90e2"
                     }
                 }
                 Repeater {
