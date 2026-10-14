@@ -7,8 +7,7 @@ import quickui
 Rectangle {
     id: root
     color: QuiColor.Primary
-    border.color: "#d0d7de"
-    border.width: 1
+    border.width: 0
     property bool relations: false
     property int selectedRow: -1
     property string selectedPort: ""
@@ -21,7 +20,7 @@ Rectangle {
         outputMenu.popup(item, point.x, point.y)
     }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 1; spacing: 0
+        anchors.fill: parent; spacing: 0
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
             Rectangle {
