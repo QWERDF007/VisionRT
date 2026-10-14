@@ -6,7 +6,16 @@ import quickui
 QuiSplitView {
     id: root
     orientation: Qt.Horizontal
-    backgroundColor: QuiColor.Border; handleColor: "#adb8c6"
+    backgroundColor: "#d0d7de"
+    handleColor: "#d0d7de"
+    handle: Rectangle {
+        implicitWidth: 1
+        implicitHeight: root.height
+        color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+        containmentMask: Item {
+            x: -3; width: 7; height: root.height
+        }
+    }
     property int currentTab: 0
     readonly property var tabs: ["基本输入", "预处理", "检测", "结果处理"]
     property var collapsedGroups: ({})
@@ -46,8 +55,7 @@ QuiSplitView {
     Rectangle {
         id: inputs
         color: QuiColor.Primary
-        border.color: "#d0d7de"
-        border.width: 1
+        border.width: 0
         SplitView.fillWidth: true
         SplitView.minimumWidth: 320
         SplitView.preferredWidth: 520
@@ -57,7 +65,7 @@ QuiSplitView {
             }
         }
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 1; spacing: 0
+            anchors.fill: parent; spacing: 0
             Rectangle {
                 Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
                 Rectangle {
@@ -77,6 +85,11 @@ QuiSplitView {
                             Rectangle {
                                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
                                 width: 1; color: "#d0d7de"
+                            }
+                            Rectangle {
+                                visible: !tabItem.isActive
+                                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                height: 1; color: "#d0d7de"
                             }
                             Rectangle {
                                 visible: tabItem.isActive
