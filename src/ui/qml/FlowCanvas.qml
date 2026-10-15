@@ -420,26 +420,6 @@ FocusScope {
                 }
             }
         }
-        Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 22; color: "#ffffff"
-            Rectangle {
-                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                height: 1; color: "#d0d7de"
-            }
-            RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
-                QuiText {
-                    text: {
-                        let name = "流程1"
-                        for (let f of app.flows) if (f.id === app.currentFlow) { name = f.name; break }
-                        return name + "运行时间: " + (app.timingText || "0ms")
-                    }
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
-                    color: "#57606a"
-                }
-                Item { Layout.fillWidth: true }
-            }
-        }
     }
     Rectangle {
         visible: search.text.length > 0 && search.activeFocus
