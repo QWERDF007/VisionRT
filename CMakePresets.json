@@ -9,28 +9,28 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_PREFIX_PATH": "$env{QT_ROOT};$env{QUICKUI_ROOT};$env{YAML_ROOT}",
-        "Python3_ROOT_DIR": "E:/Softwares/Anaconda3/envs/py312",
-        "OpenCV_DIR": "$env{OpenCV_DIR}",
-        "BUILD_TESTING": "ON"
+        "BUILD_TESTING": "ON",
+        "VISIONRT_BUILD_INFER": "ON"
       }
     },
     {
-      "name": "gpu-release",
-      "inherits": "release",
+      "name": "cpu-release",
+      "displayName": "Windows x64 MSVC CPU Release",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "VISIONRT_BUILD_INFER": "ON",
-        "InferRT_DIR": "$env{INFERRT_ROOT}/lib/cmake/InferRT"
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "VISIONRT_BUILD_INFER": "OFF"
       }
     }
   ],
   "buildPresets": [
     { "name": "release", "configurePreset": "release" },
-    { "name": "gpu-release", "configurePreset": "gpu-release" }
+    { "name": "cpu-release", "configurePreset": "cpu-release" }
   ],
   "testPresets": [
     { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
-    { "name": "gpu-release", "configurePreset": "gpu-release", "output": { "outputOnFailure": true } }
+    { "name": "cpu-release", "configurePreset": "cpu-release", "output": { "outputOnFailure": true } }
   ]
 }

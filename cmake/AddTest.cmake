@@ -1,0 +1,30 @@
+include_guard(GLOBAL)
+
+function(visionrt_apply_test_environment TEST_NAME)
+    if(WIN32)
+        file(TO_NATIVE_PATH "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}" _p0)
+        file(TO_NATIVE_PATH "${VISIONRT_QT_BIN}" _p1)
+        file(TO_NATIVE_PATH "${VISIONRT_OPENCV_BIN}" _p2)
+        file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}" _p3)
+        file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}/Library/bin" _p4)
+        file(TO_NATIVE_PATH "${INFERRT_BIN_DIR}" _p5)
+        file(TO_NATIVE_PATH "${CUDAToolkit_BIN_DIR}" _p6)
+        file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}" _pyhome)
+
+        set_tests_properties(${TEST_NAME} PROPERTIES
+            ENVIRONMENT "PATH=${_p0}\;${_p1}\;${_p2}\;${_p3}\;${_p4}\;${_p5}\;${_p6}\;$ENV{PATH};PYTHONHOME=${_pyhome}"
+        )
+    endif()
+endfunction()
+
+function(visionrt_contract name library)
+    add_executable(${name} tests/${name}.cpp)
+    target_link_libraries(${name} PRIVATE ${library})
+    if(MSVC)
+        target_compile_options(${name} PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(${name} PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME ${name} COMMAND ${name} ${ARGN})
+    visionrt_apply_test_environment(${name})
+endfunction()
