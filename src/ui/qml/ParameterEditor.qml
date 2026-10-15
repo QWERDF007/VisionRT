@@ -44,14 +44,20 @@ RowLayout {
     }
     QuiTextIconButton {
         visible: !root.parameter.init
-        text: root.upstream ? "切换为用户输入\n保留上层草稿" : "切换为上层输入\n保留用户草稿"
-        iconSource: root.upstream ? QuiFontIcon.Edit : QuiFontIcon.Link
+        text: root.upstream ? "切换为直接输入" : "绑定上层输入"
+        iconSource: QuiFontIcon.Download
+        iconColor: root.upstream ? QuiColor.Highlight : "#8c959f"
+        implicitWidth: 24; implicitHeight: 24
+        display: AbstractButton.IconOnly
+        ToolTip.visible: hovered
+        ToolTip.text: root.upstream ? "切换为直接输入" : "绑定上层输入"
         enabled: !app.busy
         onClicked: app.setParameterMode(root.parameter.id, !root.upstream)
     }
     QuiTextIconButton {
         visible: root.parameter.type === "RoiBatch"; enabled: !app.busy
         text: "编辑输入 ROI"; iconSource: QuiFontIcon.Crop
+        implicitWidth: 24; implicitHeight: 24
         onClicked: root.startRoi()
     }
 
@@ -148,6 +154,7 @@ RowLayout {
     Component {
         id: choiceEditor
         QuiComboBox {
+            implicitHeight: 26
             model: root.parameter.options
             currentIndex: model.indexOf(root.valueText)
             displayText: currentIndex < 0 ? root.valueText + "（当前不可用）" : currentText
@@ -159,13 +166,13 @@ RowLayout {
         RowLayout {
             spacing: 2
             QuiComboBox {
-                id: gpuChoice; Layout.fillWidth: true
+                id: gpuChoice; Layout.fillWidth: true; implicitHeight: 26
                 model: root.gpuDevices; textRole: "name"; valueRole: "id"
                 currentIndex: { for (let i = 0; i < root.gpuDevices.length; ++i) if (String(root.gpuDevices[i].id) === root.parameter.literal) return i; return -1 }
                 displayText: currentIndex < 0 ? root.parameter.literal + "（当前不可用）" : currentText
                 onActivated: root.commit(String(currentValue))
             }
-            QuiTextIconButton { text: "查询 GPU"; iconSource: QuiFontIcon.Refresh; onClicked: app.queryGpuDevices() }
+            QuiTextIconButton { text: "查询 GPU"; iconSource: QuiFontIcon.Refresh; implicitWidth: 24; implicitHeight: 24; onClicked: app.queryGpuDevices() }
         }
     }
     Component {
@@ -173,18 +180,17 @@ RowLayout {
         RowLayout {
             spacing: 2
             QuiTextField {
-                Layout.fillWidth: true; implicitHeight: 32; text: root.valueText
+                Layout.fillWidth: true; implicitHeight: 26; text: root.valueText
                 property bool rejected: false
                 color: rejected ? "#c9483d" : QuiColor.FontPrimary
                 onEditingFinished: { if (text !== root.valueText) rejected = !root.commit(root.parameter.type === "String" ? JSON.stringify(text) : text) }
             }
             QuiTextIconButton {
-                visible: root.parameter.editor === "file"
-                text: "选择文件"; iconSource: QuiFontIcon.OpenFile; onClicked: filePicker.open()
-            }
-            QuiTextIconButton {
-                visible: root.parameter.editor === "directory" || root.parameter.editor === "file"
-                text: "选择文件夹"; iconSource: QuiFontIcon.FolderOpen; onClicked: directoryPicker.open()
+                visible: root.parameter.editor === "file" || root.parameter.editor === "directory"
+                text: root.parameter.editor === "directory" ? "选择文件夹" : "选择文件"
+                iconSource: QuiFontIcon.FolderOpen
+                implicitWidth: 24; implicitHeight: 24
+                onClicked: root.parameter.editor === "directory" ? directoryPicker.open() : filePicker.open()
             }
         }
     }

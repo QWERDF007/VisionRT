@@ -46,7 +46,7 @@ Rectangle {
                             verticalAlignment: Text.AlignVCenter
                             onTextChanged: { app.filterTools(text); if (text.length) Qt.callLater(tree.allExpand) }
                             Text {
-                                anchors.fill: parent; text: "搜索工具名称"
+                                anchors.fill: parent; text: "搜索工具名"
                                 color: "#8c959f"; font: QuiFont.Body
                                 visible: !filterInput.text && !filterInput.activeFocus
                                 verticalAlignment: Text.AlignVCenter
@@ -83,7 +83,7 @@ Rectangle {
             visible: root.expanded
             Layout.fillWidth: true; Layout.fillHeight: true
             model: app.toolModel; displayRole: "display"
-            radius: 0; border.width: 0; cellHeight: 32
+            radius: 0; border.width: 0; cellHeight: 26
             view.delegate: ToolTreeDelegate {
                 treeView: tree.view
                 selectedTool: root.selectedTool

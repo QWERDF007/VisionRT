@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Shapes
 import quickui
 
 Rectangle {
@@ -11,13 +12,12 @@ Rectangle {
     signal pointerMoved(var mouse, var item)
     signal pointerReleased(var mouse, var item)
     signal executeRequested()
-    width: 168; height: 70; radius: 4
+    width: 156; height: 52; radius: 2
     antialiasing: true
     color: "#ffffff"
-    border.color: selected ? QuiColor.Highlight : root.stateColor !== "#a5adb8" ? root.stateColor : "#d0d7de"
-    border.width: selected ? 2 : 1
-
-    readonly property color stateColor: node.state === "blue" ? "#1887d8" : node.state === "green" ? "#2da44e" : node.state === "red" ? "#cf222e" : "#a5adb8"
+    readonly property bool isError: root.node.missing === true || root.node.state === "red"
+    border.color: root.selected ? "transparent" : (root.isError ? "#e66b37" : "#c0c6cf")
+    border.width: root.selected ? 0 : 1
 
     function getIcon(title, category) {
         let t = (title + " " + category).toLowerCase()
@@ -29,65 +29,72 @@ Rectangle {
         return QuiFontIcon.Settings
     }
 
+    // Top Header
     Rectangle {
         id: nodeHeader
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-        anchors.topMargin: root.border.width > 1 ? 1 : 0
-        anchors.leftMargin: root.border.width > 1 ? 1 : 0
-        anchors.rightMargin: root.border.width > 1 ? 1 : 0
-        height: 20
-        radius: 4
-        color: root.selected ? "#dceefa" : "#eef0f3"
+        anchors.margins: 1
+        height: 18
+        radius: 1
+        color: root.isError ? "#e66b37" : (root.selected ? "#dceefa" : "#dfe4ea")
         Rectangle {
             anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
-            height: 4; color: parent.color
+            height: 3; color: parent.color
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
             Item { Layout.fillWidth: true }
             QuiText {
                 text: root.node.version ? ("v" + String(root.node.version).replace(/^v/i, "")) : "v1.0"
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10, bold: true })
-                color: root.selected ? "#1887d8" : "#8c959f"
-                renderType: Text.CurveRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
+                color: root.isError ? "#ffffff" : (root.selected ? "#1887d8" : "#8c959f")
             }
         }
     }
 
+    // Body content: Icon directly placed on left, Title on top, Timing below
     RowLayout {
         anchors.top: nodeHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-        anchors.margins: 6; spacing: 6
-        Rectangle {
-            Layout.preferredWidth: 26; Layout.preferredHeight: 26; radius: 3
-            color: "#e6f1fb"; border.color: "#bfe0f9"; border.width: 1
-            QuiTextIcon {
-                anchors.centerIn: parent
-                iconSource: root.getIcon(root.node.title, root.node.category || "")
-                iconSize: 14; iconColor: QuiColor.Highlight
-            }
+        anchors.leftMargin: 8; anchors.rightMargin: 8; anchors.topMargin: 2; anchors.bottomMargin: 4
+        spacing: 8
+        QuiTextIcon {
+            Layout.preferredWidth: 16; Layout.preferredHeight: 16
+            Layout.alignment: Qt.AlignVCenter
+            iconSource: root.getIcon(root.node.title, root.node.category || "")
+            iconSize: 15
+            iconColor: root.isError ? "#e66b37" : "#1887d8"
         }
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 2
+            Layout.fillWidth: true; spacing: 1
             QuiText {
                 text: root.node.title; Layout.fillWidth: true; elide: Text.ElideRight
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
-                color: root.selected ? QuiColor.Highlight : QuiColor.FontPrimary
-                renderType: Text.CurveRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                color: QuiColor.FontPrimary
             }
-            RowLayout {
-                Layout.fillWidth: true; spacing: 4
-                QuiText {
-                    text: root.node.timing || "未运行"
-                    font: QuiFont.Caption; color: "#57606a"
-                    renderType: Text.CurveRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
-                }
-                Item { Layout.fillWidth: true }
-                QuiText {
-                    text: "缺失"; visible: root.node.missing === true; color: "#cf222e"
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10, bold: true })
-                    renderType: Text.CurveRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
-                }
+            QuiText {
+                text: root.node.timing || "0.00ms"
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
+                color: "#8c959f"
             }
+        }
+    }
+
+    // Dashed border on selection
+    Shape {
+        anchors.fill: parent
+        visible: root.selected
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            strokeColor: "#1887d8"
+            strokeWidth: 2
+            strokeStyle: ShapePath.DashLine
+            dashPattern: [4, 4]
+            fillColor: "transparent"
+            startX: 1; startY: 1
+            PathLine { x: root.width - 1; y: 1 }
+            PathLine { x: root.width - 1; y: root.height - 1 }
+            PathLine { x: 1; y: root.height - 1 }
+            PathLine { x: 1; y: 1 }
         }
     }
 
