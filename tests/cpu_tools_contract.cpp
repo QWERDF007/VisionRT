@@ -200,7 +200,7 @@ void crop(ToolRegistry& registry) {
     failure(run(Roi::segment({0, 0}, {3, 3})));
     failure(run(Roi::points(triangle)));
     failure(execute(registry, "visionrt.image.crop", {{"images", solid}, {"rois", RoiBatch{}}}));
-    result = execute(registry, "visionrt.image.crop", {{"images", solid}, {"rois", RoiBatch({{}})}});
+    result = execute(registry, "visionrt.image.crop", {{"images", solid}, {"rois", RoiBatch({std::vector<Roi>{}})}});
     success(result);
     assert(std::get<ImageBatch>(result.outputs.at("images")).images().empty());
     const auto shape = std::get<NumericArray>(result.outputs.at("source_indices")).buffers()[0].shape();
