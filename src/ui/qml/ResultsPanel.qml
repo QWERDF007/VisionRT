@@ -36,15 +36,36 @@ Rectangle {
                         anchors.fill: parent; anchors.margins: 4
                         model: app.imageOutputs; textRole: "name"; valueRole: "id"
                         currentIndex: { for (let i = 0; i < app.imageOutputs.length; ++i) if (app.imageOutputs[i].id === app.selectedImageOutput) return i; return -1 }
-                        displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "图像输出" : "图像输入") : currentText
+                        displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "图像输出" : "图像输入") : (currentText === "images" ? "图像输出" : currentText)
                         onActivated: app.setImageOutput(currentValue)
                         Accessible.name: "图像输出"
                     }
                 }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
+                    Rectangle {
+                        visible: app.imageCount === 0
+                        width: parent.width - 16; height: 86
+                        anchors.top: parent.top; anchors.topMargin: 6
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        color: "#ffffff"
+                        border.color: QuiColor.Highlight
+                        border.width: 1
+                        radius: 2
+                        Rectangle {
+                            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+                            anchors.margins: 4; height: 60
+                            color: "#181a1f"
+                        }
+                        QuiText {
+                            anchors.bottom: parent.bottom; anchors.bottomMargin: 3
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "0"; font: QuiFont.Caption; color: "#24292f"
+                        }
+                    }
                     ListView {
                         id: thumbnails
+                        visible: app.imageCount > 0
                         anchors.fill: parent; anchors.margins: 4; clip: true; spacing: 6
                         model: app.imageCount
                         currentIndex: app.imageIndex
@@ -89,28 +110,50 @@ Rectangle {
                 spacing: 4
                 QuiTextIconButton {
                     iconSource: QuiFontIcon.FullScreen; implicitWidth: 26; implicitHeight: 26
-                    text: "适应窗口"; onClicked: viewport.fitContain()
+                    display: AbstractButton.IconOnly
+                    ToolTip.visible: hovered; ToolTip.text: "适应窗口"
+                    onClicked: viewport.fitContain()
                 }
                 QuiTextIconButton {
                     iconSource: QuiFontIcon.ZoomIn; implicitWidth: 26; implicitHeight: 26
-                    text: "放大"; onClicked: viewport.zoomBy(1.25)
+                    display: AbstractButton.IconOnly
+                    ToolTip.visible: hovered; ToolTip.text: "放大"
+                    onClicked: viewport.zoomBy(1.25)
                 }
                 QuiTextIconButton {
                     iconSource: QuiFontIcon.ZoomOut; implicitWidth: 26; implicitHeight: 26
-                    text: "缩小"; onClicked: viewport.zoomBy(0.8)
+                    display: AbstractButton.IconOnly
+                    ToolTip.visible: hovered; ToolTip.text: "缩小"
+                    onClicked: viewport.zoomBy(0.8)
                 }
                 Rectangle {
                     Layout.preferredWidth: 20; Layout.preferredHeight: 1; color: "#d0d7de"
                     Layout.alignment: Qt.AlignHCenter
                 }
-                QuiTextIconButton {
-                    iconSource: QuiFontIcon.Crop; implicitWidth: 26; implicitHeight: 26
-                    text: "编辑输入 ROI"; enabled: !app.busy && app.selectedNode.length > 0
-                    onClicked: root.roiRequested()
+                Rectangle {
+                    Layout.preferredWidth: 26; Layout.preferredHeight: 22; radius: 3
+                    color: roiMouse.containsMouse ? "#f0f2f5" : "#ffffff"
+                    border.color: "#c5ccd5"; border.width: 1
+                    enabled: !app.busy && app.selectedNode.length > 0
+                    opacity: enabled ? 1.0 : 0.5
+                    QuiText {
+                        anchors.centerIn: parent
+                        text: "ROI"
+                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
+                        color: QuiColor.Highlight
+                    }
+                    MouseArea {
+                        id: roiMouse; anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.roiRequested()
+                    }
+                    Accessible.name: "编辑输入 ROI"
                 }
                 QuiTextIconButton {
-                    iconSource: QuiFontIcon.Refresh; implicitWidth: 26; implicitHeight: 26
-                    text: "1:1"; onClicked: viewport.fitOneToOne()
+                    iconSource: QuiFontIcon.Photo2; implicitWidth: 26; implicitHeight: 26
+                    display: AbstractButton.IconOnly
+                    ToolTip.visible: hovered; ToolTip.text: "1:1 像素显示"
+                    onClicked: viewport.fitOneToOne()
                 }
             }
         }

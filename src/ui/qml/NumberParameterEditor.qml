@@ -53,7 +53,7 @@ RowLayout {
     onValueChanged: { field.text = value; invalid = false }
     QuiTextField {
         id: field
-        Layout.fillWidth: true; Layout.minimumWidth: 60; implicitHeight: 32
+        Layout.fillWidth: true; Layout.minimumWidth: 60; implicitHeight: 26
         text: root.value; color: root.invalid ? "#c9483d" : QuiColor.FontPrimary
         selectByMouse: true; inputMethodHints: Qt.ImhFormattedNumbersOnly
         onEditingFinished: root.commit(text)
@@ -72,6 +72,23 @@ RowLayout {
             delay: 500
         }
     }
-    QuiTextIconButton { text: "减小"; iconSource: QuiFontIcon.Remove; implicitWidth: 24; onClicked: root.increment(-1) }
-    QuiTextIconButton { text: "增大"; iconSource: QuiFontIcon.Add; implicitWidth: 24; onClicked: root.increment(1) }
+    Column {
+        Layout.preferredWidth: 16
+        Layout.preferredHeight: 26
+        spacing: 0
+        Rectangle {
+            width: 16; height: 13
+            color: upMouse.containsMouse ? "#eef0f3" : "#ffffff"
+            border.color: "#c5ccd5"; border.width: 1
+            QuiTextIcon { anchors.centerIn: parent; iconSource: QuiFontIcon.ChevronUpSmall; iconSize: 9; iconColor: "#57606a" }
+            MouseArea { id: upMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.increment(1) }
+        }
+        Rectangle {
+            width: 16; height: 13
+            color: downMouse.containsMouse ? "#eef0f3" : "#ffffff"
+            border.color: "#c5ccd5"; border.width: 1
+            QuiTextIcon { anchors.centerIn: parent; iconSource: QuiFontIcon.ChevronDownSmall; iconSize: 9; iconColor: "#57606a" }
+            MouseArea { id: downMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.increment(-1) }
+        }
+    }
 }

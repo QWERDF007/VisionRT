@@ -7,6 +7,11 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QTextStream>
+#include <QTimer>
+#include <QQuickWindow>
+#include <QImage>
+#include <QFileInfo>
+#include <QDir>
 #include <charconv>
 #include <thread>
 #include <algorithm>
@@ -24,6 +29,10 @@ int main(int argc, char* argv[]) {
     parser.addVersionOption();
     parser.addOption({"workers", "Taskflow worker count (positive integer)", "count"});
     parser.addOption({"python-home", "Matching CPython runtime directory", "directory"});
+    parser.addOption({"project", "Project file to open on startup", "file"});
+    parser.addOption({"select-node", "Node to select on startup", "nodeId"});
+    parser.addOption({"screenshot", "Capture UI screenshot to file and exit", "path"});
+    parser.addOption({"screenshot-delay", "Delay before screenshot in ms (default 1000)", "ms"});
     parser.process(application);
     std::size_t workers = std::max(2u, std::thread::hardware_concurrency());
     if (parser.isSet("workers")) {
@@ -38,6 +47,25 @@ int main(int argc, char* argv[]) {
         qputenv("VISIONRT_PYTHON_HOME", parser.value("python-home").toUtf8());
     try {
         visionrt::AppController controller(workers, QCoreApplication::applicationDirPath());
+        if (parser.isSet("project")) {
+            const QString projectPath = parser.value("project");
+            const QString selectNode = parser.value("select-node");
+            QTimer::singleShot(200, [&controller, projectPath, selectNode]() {
+                controller.resolveUnsaved("discard");
+                controller.requestOpen(projectPath);
+                controller.resolveUnsaved("discard");
+                QTimer::singleShot(400, [&controller, selectNode]() {
+                    if (!selectNode.isEmpty()) {
+                        controller.selectNode(selectNode);
+                    } else {
+                        const auto nodes = controller.nodes();
+                        if (!nodes.isEmpty()) {
+                            controller.selectNode(nodes.first().toMap().value("id").toString());
+                        }
+                    }
+                });
+            });
+        }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
         QQmlApplicationEngine engine;
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
@@ -45,6 +73,29 @@ int main(int argc, char* argv[]) {
         QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                          &application, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
         engine.loadFromModule("VisionRT", "Main");
+
+        if (parser.isSet("screenshot")) {
+            const QString screenshotPath = parser.value("screenshot");
+            int delay = 1200;
+            if (parser.isSet("screenshot-delay")) {
+                delay = parser.value("screenshot-delay").toInt();
+                if (delay <= 0) delay = 1200;
+            }
+            QTimer::singleShot(delay, [&engine, screenshotPath]() {
+                const auto roots = engine.rootObjects();
+                if (!roots.isEmpty()) {
+                    if (auto* window = qobject_cast<QQuickWindow*>(roots.first())) {
+                        QImage img = window->grabWindow();
+                        QFileInfo fi(screenshotPath);
+                        QDir().mkpath(fi.absolutePath());
+                        img.save(screenshotPath);
+                        std::exit(0);
+                    }
+                }
+                std::exit(0);
+            });
+        }
+
         return application.exec();
     } catch (const std::exception& error) {
         QTextStream(stderr) << "VisionRT initialization failed: " << error.what() << '\n';

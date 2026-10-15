@@ -111,23 +111,133 @@ ApplicationWindow {
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-            QuiTextIconButton {
-                iconSource: window.leftExpanded ? QuiFontIcon.ChevronLeft : QuiFontIcon.ChevronRight
-                implicitHeight: 26; implicitWidth: 26
-                text: window.leftExpanded ? "收起左侧面板" : "展开左侧面板"
-                focusPolicy: Qt.TabFocus
-                onClicked: window.toggleLeft()
+
+            // Application Brand & Project Path
+            RowLayout {
+                spacing: 6
+                Rectangle {
+                    width: 20; height: 20; radius: 3; color: "#1887d8"
+                    QuiText {
+                        anchors.centerIn: parent; text: "V"
+                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: true })
+                        color: "#ffffff"
+                    }
+                }
+                QuiText {
+                    text: "VisionRT工程端  " + (app.title || "")
+                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                    color: "#57606a"
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 300
+                }
             }
-            QuiButton { text: "文件"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: fileMenu.popup() }
-            QuiButton { text: "工具"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: toolsMenu.popup() }
-            QuiButton { text: "帮助"; implicitHeight: 26; focusPolicy: Qt.TabFocus; onClicked: helpMenu.popup() }
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 20; color: "#d0d7de" }
-            QuiTextIconButton { action: saveAction; iconSource: QuiFontIcon.Save; implicitHeight: 26; display: AbstractButton.TextBesideIcon }
-            QuiTextIconButton { action: runAction; iconSource: QuiFontIcon.Play; implicitHeight: 26; display: AbstractButton.TextBesideIcon }
-            QuiTextIconButton { action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll; implicitHeight: 26; display: AbstractButton.TextBesideIcon }
+
+            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: "#d0d7de"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
+
+            // Menus
+            QuiTextIconButton {
+                text: "文件"; iconSource: QuiFontIcon.FolderOpen
+                implicitHeight: 26; display: AbstractButton.TextBesideIcon
+                onClicked: fileMenu.popup()
+            }
+            QuiTextIconButton {
+                text: "设置"; iconSource: QuiFontIcon.Settings
+                implicitHeight: 26; display: AbstractButton.TextBesideIcon
+                onClicked: settingsMenu.popup()
+            }
+            QuiTextIconButton {
+                text: "工具"; iconSource: QuiFontIcon.AllApps
+                implicitHeight: 26; display: AbstractButton.TextBesideIcon
+                onClicked: toolsMenu.popup()
+            }
+            QuiTextIconButton {
+                text: "帮助"; iconSource: QuiFontIcon.Help
+                implicitHeight: 26; display: AbstractButton.TextBesideIcon
+                onClicked: helpMenu.popup()
+            }
+            QuiTextIconButton {
+                text: "运行"; iconSource: QuiFontIcon.Play
+                implicitHeight: 26; display: AbstractButton.TextBesideIcon
+                onClicked: runMenu.popup()
+            }
+
+            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: "#d0d7de"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
+
+            // Actions & Execution
+            QuiTextIconButton {
+                action: saveAction; iconSource: QuiFontIcon.Save
+                implicitHeight: 26; implicitWidth: 26
+                display: AbstractButton.IconOnly
+                ToolTip.visible: hovered; ToolTip.text: "保存 (Ctrl+S)"
+            }
+            QuiTextIconButton {
+                iconSource: QuiFontIcon.ChromeRestore
+                implicitHeight: 26; implicitWidth: 26
+                display: AbstractButton.IconOnly
+                ToolTip.visible: hovered; ToolTip.text: "单视口布局"
+            }
+            QuiTextIconButton {
+                iconSource: QuiFontIcon.AllApps
+                implicitHeight: 26; implicitWidth: 26
+                display: AbstractButton.IconOnly
+                ToolTip.visible: hovered; ToolTip.text: "多视口布局"
+            }
+            QuiTextIconButton {
+                iconSource: QuiFontIcon.Settings
+                implicitHeight: 26; implicitWidth: 26
+                display: AbstractButton.IconOnly
+                ToolTip.visible: hovered; ToolTip.text: "3D视口模式"
+            }
+            QuiTextIconButton {
+                action: runAction; iconSource: QuiFontIcon.Play
+                implicitHeight: 26; implicitWidth: 26
+                display: AbstractButton.IconOnly
+                iconColor: QuiColor.Highlight
+                ToolTip.visible: hovered; ToolTip.text: "单次执行 (F5)"
+            }
+            QuiTextIconButton {
+                action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
+                implicitHeight: 26; implicitWidth: 26
+                display: AbstractButton.IconOnly
+                iconColor: app.runState === "RunningLoop" ? "#cf222e" : QuiColor.Highlight
+                ToolTip.visible: hovered; ToolTip.text: loopAction.text
+            }
+
             Item { Layout.fillWidth: true }
-            QuiText { text: app.busy ? app.runState : "就绪"; color: app.busy ? QuiColor.Highlight : QuiColor.FontCaption }
-            QuiButton { text: "运行时复位"; implicitHeight: 26; enabled: !app.busy; focusPolicy: Qt.TabFocus; onClicked: resetDialog.open() }
+
+            QuiText {
+                text: app.runState
+                visible: app.busy
+                color: QuiColor.Highlight
+                font: QuiFont.Caption
+            }
+
+            QuiTextIconButton {
+                iconSource: QuiFontIcon.Refresh
+                text: "复位"
+                display: AbstractButton.TextBesideIcon
+                implicitHeight: 26; enabled: !app.busy
+                focusPolicy: Qt.TabFocus
+                onClicked: resetDialog.open()
+            }
+
+            // User Profile
+            Rectangle {
+                implicitHeight: 26; Layout.preferredWidth: userRow.width + 12; radius: 3
+                color: userMouse.containsMouse ? "#f0f2f5" : "#ffffff"
+                border.color: "#d0d7de"; border.width: 1
+                RowLayout {
+                    id: userRow; anchors.centerIn: parent; spacing: 4
+                    QuiTextIcon { iconSource: QuiFontIcon.Contact; iconSize: 13; iconColor: "#57606a" }
+                    QuiText { text: "admin"; font: QuiFont.Caption; color: "#24292f" }
+                    QuiTextIcon { iconSource: QuiFontIcon.ChevronDown; iconSize: 9; iconColor: "#57606a" }
+                }
+                MouseArea {
+                    id: userMouse; anchors.fill: parent; hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: userMenu.popup(userRow, 0, userRow.height + 6)
+                }
+            }
         }
     }
     QuiMenu {
@@ -140,6 +250,11 @@ ApplicationWindow {
         QuiMenuItem { text: "退出"; onTriggered: app.requestClose() }
     }
     QuiMenu {
+        id: settingsMenu
+        QuiMenuItem { text: "重置界面布局"; onTriggered: window.resetLayout() }
+        QuiMenuItem { text: "浅色工业主题"; enabled: false }
+    }
+    QuiMenu {
         id: toolsMenu
         QuiMenuItem { text: "新建工具…"; enabled: !app.busy; onTriggered: author.createDefinition() }
         QuiMenuItem { text: "编辑工具…"; enabled: !app.busy; onTriggered: author.chooseDefinition() }
@@ -149,6 +264,18 @@ ApplicationWindow {
         id: helpMenu
         QuiMenuItem { text: "工具作者说明"; onTriggered: authorHelp.open() }
         QuiMenuItem { text: "关于 VisionRT"; onTriggered: about.open() }
+    }
+    QuiMenu {
+        id: runMenu
+        QuiMenuItem { action: runAction }
+        QuiMenuItem { action: loopAction }
+        MenuSeparator {}
+        QuiMenuItem { text: "运行时复位"; enabled: !app.busy; onTriggered: resetDialog.open() }
+    }
+    QuiMenu {
+        id: userMenu
+        QuiMenuItem { text: "用户: admin"; enabled: false }
+        QuiMenuItem { text: "退出登录"; onTriggered: app.requestClose() }
     }
 
     QuiSplitView {
@@ -301,17 +428,46 @@ ApplicationWindow {
         }
     }
     footer: Rectangle {
-        height: 28; color: "#f6f8fa"
+        height: 26; color: "#f6f8fa"
         Rectangle {
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
             height: 1; color: "#d0d7de"
         }
         RowLayout {
-            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-            QuiText { text: app.timingText; font: QuiFont.Caption; color: "#57606a" }
+            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
+            QuiTextIcon {
+                iconSource: QuiFontIcon.Warning
+                iconSize: 12
+                iconColor: "#d96b27"
+            }
+            QuiText {
+                Layout.maximumWidth: window.width * 0.65
+                elide: Text.ElideRight
+                text: app.diagnostic ? app.diagnostic : "C:14.07/105.52; E:83.08/492.06; F:40.42/439.45; 加密狗授权信息:到期时间:2034-11-23 09:33:34"
+                color: "#d96b27"
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
+            }
             Item { Layout.fillWidth: true }
-            QuiText { Layout.maximumWidth: window.width * 0.48; elide: Text.ElideRight; text: app.diagnostic; color: "#ba641a"; font: QuiFont.Caption }
-            QuiButton { text: "操作提示"; implicitHeight: 20; focusPolicy: Qt.TabFocus; onClicked: noticeDialog.open() }
+            QuiText {
+                text: "说明文档"
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                color: docMouse.containsMouse ? QuiColor.Highlight : "#57606a"
+                MouseArea { id: docMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: authorHelp.open() }
+            }
+            Rectangle {
+                Layout.preferredHeight: 20; Layout.preferredWidth: noticeRow.width + 10; radius: 3
+                color: noticeMouse.containsMouse ? "#feebe9" : "transparent"
+                RowLayout {
+                    id: noticeRow; anchors.centerIn: parent; spacing: 4
+                    QuiTextIcon { iconSource: QuiFontIcon.Warning; iconSize: 11; iconColor: "#cf222e" }
+                    QuiText { text: "提示信息"; font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 }); color: "#cf222e" }
+                }
+                MouseArea {
+                    id: noticeMouse; anchors.fill: parent; hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: noticeDialog.open()
+                }
+            }
         }
     }
     FileDialog {
@@ -369,10 +525,6 @@ ApplicationWindow {
             let list = window.notices.slice()
             if (!list.length || list[0] !== app.diagnostic) list.unshift(app.diagnostic)
             window.notices = list.slice(0, 100)
-            if (window.toastCount >= 3) { info.clearAllInfo(); window.toastCount = 0 }
-            info.showWarning("操作提示", 6000, app.diagnostic)
-            window.toastCount += 1
-            toastExpiry.restart()
         }
     }
 }

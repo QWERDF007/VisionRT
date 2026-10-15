@@ -22,8 +22,8 @@ FocusScope {
     property string nameOperation: ""
     property string nameDraft: ""
     property int searchIndex: 0
-    readonly property int cellWidth: 192
-    readonly property int cellHeight: 104
+    readonly property int cellWidth: 180
+    readonly property int cellHeight: 80
 
     function selected(id) { return selection.indexOf(id) !== -1 }
     function findNode(id) { for (let n of app.nodes) if (n.id === id) return n; return null }
@@ -44,11 +44,11 @@ FocusScope {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         for (let n of app.nodes) {
             minX = Math.min(minX, n.x * cellWidth); minY = Math.min(minY, n.y * cellHeight)
-            maxX = Math.max(maxX, n.x * cellWidth + 156); maxY = Math.max(maxY, n.y * cellHeight + 68)
+            maxX = Math.max(maxX, n.x * cellWidth + 156); maxY = Math.max(maxY, n.y * cellHeight + 52)
         }
-        zoom = Math.max(0.15, Math.min(2, Math.min((surface.width - 64) / (maxX - minX), (surface.height - 64) / (maxY - minY))))
+        zoom = Math.max(0.65, Math.min(1.5, Math.min((surface.width - 64) / Math.max(1, maxX - minX), (surface.height - 64) / Math.max(1, maxY - minY))))
         panX = surface.width / 2 - (minX + maxX) * zoom / 2
-        panY = surface.height / 2 - (minY + maxY) * zoom / 2
+        panY = Math.max(20, surface.height / 2 - (minY + maxY) * zoom / 2)
     }
     function zoomAt(factor, px, py) {
         let next = Math.max(0.15, Math.min(3, zoom * factor))
@@ -163,7 +163,7 @@ FocusScope {
                             Keys.onEnterPressed: { if (app.searchResults.length) root.locate(app.searchResults[root.searchIndex]) }
                             Keys.onEscapePressed: { text = ""; surface.forceActiveFocus() }
                             Text {
-                                anchors.fill: parent; text: "搜索关键字"
+                                anchors.fill: parent; text: "搜索工具名"
                                 color: "#8c959f"; font: QuiFont.Body
                                 visible: !search.text && !search.activeFocus
                                 verticalAlignment: Text.AlignVCenter
@@ -318,7 +318,6 @@ FocusScope {
                         }
                     }
                 }
-                QuiText { text: Math.round(root.zoom * 100) + "%"; font: QuiFont.Caption; color: "#57606a"; Layout.rightMargin: 6 }
             }
         }
         FocusScope {
@@ -366,7 +365,7 @@ FocusScope {
                         let bottom = (Math.max(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
                         let ids = root.selection.slice()
                         for (let n of app.nodes)
-                            if (n.x * root.cellWidth + 168 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 70 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
+                            if (n.x * root.cellWidth + 156 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 52 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
                         root.selection = ids
                         if (ids.length) app.selectNode(ids[ids.length - 1])
                     }
@@ -387,9 +386,9 @@ FocusScope {
                     model: app.wires
                     WireItem {
                         required property var modelData
-                        sourceX: root.nodeX(modelData.source) + 84; sourceY: root.nodeY(modelData.source) + 70
-                        targetX: root.nodeX(modelData.target) + 84; targetY: root.nodeY(modelData.target)
-                        lineColor: root.selected(modelData.target) || root.selected(modelData.source) ? "#1887d8" : "#4a90e2"
+                        sourceX: root.nodeX(modelData.source) + 78; sourceY: root.nodeY(modelData.source) + 52
+                        targetX: root.nodeX(modelData.target) + 78; targetY: root.nodeY(modelData.target)
+                        lineColor: root.selected(modelData.target) || root.selected(modelData.source) ? "#f08800" : "#8c959f"
                     }
                 }
                 Repeater {
@@ -419,6 +418,26 @@ FocusScope {
                     app.addNode(drop.source.toolId, Math.round((drop.x - root.panX) / root.zoom / root.cellWidth), Math.round((drop.y - root.panY) / root.zoom / root.cellHeight))
                     drop.acceptProposedAction(); surface.forceActiveFocus()
                 }
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true; Layout.preferredHeight: 22; color: "#ffffff"
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                height: 1; color: "#d0d7de"
+            }
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+                QuiText {
+                    text: {
+                        let name = "流程1"
+                        for (let f of app.flows) if (f.id === app.currentFlow) { name = f.name; break }
+                        return name + "运行时间: " + (app.timingText || "0ms")
+                    }
+                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
+                    color: "#57606a"
+                }
+                Item { Layout.fillWidth: true }
             }
         }
     }

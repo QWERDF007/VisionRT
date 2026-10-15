@@ -133,21 +133,6 @@ QuiSplitView {
                     }
                 }
             }
-            Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: app.selectedNode.length > 0 ? 26 : 0
-                visible: app.selectedNode.length > 0
-                color: "#f6f8fa"
-                Rectangle {
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                    height: 1; color: "#e1e4e8"
-                }
-                QuiText {
-                    anchors.fill: parent; anchors.leftMargin: 8
-                    verticalAlignment: Text.AlignVCenter
-                    text: app.parameters.length ? (app.parameters[0].title || "") : ""
-                    color: "#57606a"; font: QuiFont.Caption; elide: Text.ElideRight
-                }
-            }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Flickable {

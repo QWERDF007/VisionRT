@@ -32,14 +32,20 @@ Item {
     onStableKeyChanged: Qt.callLater(restoreExpansion)
     onFilteringChanged: Qt.callLater(restoreExpansion)
     implicitWidth: treeView.width
-    implicitHeight: 32
+    implicitHeight: 26
     Rectangle {
         anchors.fill: parent
-        color: root.leaf && root.selectedTool === root.toolId ? "#d9edfc" : pointer.containsMouse ? "#edf4fa" : "transparent"
+        color: root.leaf && root.selectedTool === root.toolId ? "#dceefa" : pointer.containsMouse ? "#edf4fa" : "transparent"
+        Rectangle {
+            anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+            width: 2
+            color: QuiColor.Highlight
+            visible: root.leaf && root.selectedTool === root.toolId
+        }
     }
     RowLayout {
         anchors.fill: parent; anchors.leftMargin: 7 + root.depth * 16; anchors.rightMargin: 8; spacing: 6
-        QuiText { text: root.hasChildren ? (root.expanded ? "⌄" : "›") : ""; Layout.preferredWidth: 14; color: QuiColor.FontCaption }
+        QuiText { text: root.hasChildren ? (root.expanded ? "⌄" : "›") : "◇"; Layout.preferredWidth: 14; color: root.hasChildren ? QuiColor.FontCaption : QuiColor.Highlight }
         QuiTextIcon {
             visible: root.hasChildren
             iconSource: {
@@ -54,7 +60,6 @@ Item {
             iconColor: QuiColor.Highlight
         }
         QuiText { text: root.model.display || ""; Layout.fillWidth: true; elide: Text.ElideRight; color: root.model.available === false && root.leaf ? "#a34938" : QuiColor.FontPrimary }
-        QuiText { text: root.leaf ? root.model.version || "" : ""; font: QuiFont.Caption; color: QuiColor.FontCaption }
     }
     Item {
         id: dragPayload
