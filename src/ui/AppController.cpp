@@ -100,6 +100,7 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
         }
     });
     tools.setRegistry(registry);
+    if (!editor.project().flows.empty()) flow = workbench::q(editor.project().flows.front().id);
     if (std::any_of(registry.definitions().begin(), registry.definitions().end(), [](const auto& tool) {
             return tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass; })) refresh(false);
 }
@@ -341,18 +342,40 @@ QVariantList AppController::nodes() const {
             const auto& value = *snapshot->second;
             if (state != "blue") state = value.status ? "green" : "red";
             timing = QStringLiteral("%1 ms").arg(value.timing.totalMs, 0, 'f', 2);
-            detail = QStringLiteral("算子运行时间:%1ms\n工具节点整体时间:%2ms")
+            detail = QStringLiteral("工具调用(含桥接):%1ms\n工具节点整体时间:%2ms")
                 .arg(value.timing.executeMs, 0, 'f', 2)
                 .arg(value.timing.totalMs, 0, 'f', 2);
+            if (!value.status) {
+                detail += QStringLiteral("\n错误状态码: %1\n%2").arg(value.status.code).arg(q(value.status.message));
+            }
         }
-        if (impl_->lifecycleErrors.contains(node.id)) { state = "red"; detail += "\n" + q(impl_->lifecycleErrors.at(node.id).message); }
+        if (impl_->lifecycleErrors.contains(node.id)) {
+            state = "red";
+            detail += "\n生命周期错误: " + q(impl_->lifecycleErrors.at(node.id).message);
+        }
         const auto* def = impl_->registry.find(node.toolId);
         const QString version = def ? q(def->version) : QStringLiteral("1.0");
         const QString category = def ? q(def->category) : QString();
-        const bool missing = impl_->registry.availability(node.toolId).state != ToolAvailability::Available;
-        result.push_back(QVariantMap{{"id", QString::number(node.id)}, {"title", q(node.title())}, {"alias", q(node.alias)},
-            {"toolId", q(node.toolId)}, {"version", version}, {"category", category},
-            {"x", node.position.x}, {"y", node.position.y}, {"state", state}, {"timing", timing}, {"timingDetail", detail}, {"missing", missing}});
+        const auto avail = impl_->registry.availability(node.toolId);
+        const bool defMissing = (avail.state == ToolAvailability::DefinitionMissing);
+        const bool implUnavailable = (avail.state == ToolAvailability::ImplementationUnavailable);
+        const bool missing = defMissing || implUnavailable;
+        result.push_back(QVariantMap{
+            {"id", QString::number(node.id)},
+            {"title", q(node.title())},
+            {"alias", q(node.alias)},
+            {"toolId", q(node.toolId)},
+            {"version", version},
+            {"category", category},
+            {"x", node.position.x},
+            {"y", node.position.y},
+            {"state", state},
+            {"timing", timing},
+            {"timingDetail", detail},
+            {"missing", missing},
+            {"defMissing", defMissing},
+            {"implUnavailable", implUnavailable}
+        });
     }
     return result;
 }

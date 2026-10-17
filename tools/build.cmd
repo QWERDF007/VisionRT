@@ -40,8 +40,6 @@ set "CHAR1=%FIRST_ARG:~0,1%"
 if "%CHAR1%"=="-" goto :DO_BUILD
 
 popd
-endlocal
-endlocal
 %*
 exit /b %errorlevel%
 

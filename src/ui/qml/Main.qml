@@ -12,8 +12,8 @@ ApplicationWindow {
     title: app.title
     width: Math.min(1600, Screen.desktopAvailableWidth)
     height: Math.min(960, Screen.desktopAvailableHeight)
-    minimumWidth: Math.min(1280, Screen.desktopAvailableWidth)
-    minimumHeight: Math.min(720, Screen.desktopAvailableHeight)
+    minimumWidth: Math.min(960, Screen.desktopAvailableWidth)
+    minimumHeight: Math.min(540, Screen.desktopAvailableHeight)
     color: QuiColor.Background
     property bool leftExpanded: true
     property real savedLeftWidth: 0
@@ -26,8 +26,8 @@ ApplicationWindow {
     property real leftRatio: 0.362
     property real libraryRatio: 0.38
     property real resultsRatio: 0.59
-    readonly property real leftMinimum: Math.min(320, workbench.width * 0.34)
-    readonly property real rightMinimum: Math.min(640, workbench.width * 0.60)
+    readonly property real leftMinimum: Math.min(260, workbench.width * 0.34)
+    readonly property real rightMinimum: Math.min(400, workbench.width * 0.60)
 
     function localPath(url) {
         let text = decodeURIComponent(url.toString())
@@ -52,13 +52,19 @@ ApplicationWindow {
     }
     function toggleLeft() {
         if (leftExpanded) {
+            if (leftContent.containsFocusItem(Window.activeFocusItem)) {
+                drawerButton.forceActiveFocus()
+            }
             savedLeftWidth = leftHost.width
             leftExpanded = false
-            leftHost.SplitView.preferredWidth = 24
+            leftHost.SplitView.preferredWidth = 28
         } else {
             leftExpanded = true
-            leftHost.SplitView.preferredWidth = Math.max(320,
-                Math.min(savedLeftWidth || Math.round(workbench.width * leftRatio), workbench.width - 500))
+            leftHost.SplitView.preferredWidth = Math.max(260,
+                Math.min(savedLeftWidth || Math.round(workbench.width * leftRatio), workbench.width - 400))
+            if (drawerCollapseButton) {
+                drawerCollapseButton.forceActiveFocus()
+            }
         }
     }
     function focusSearch() {
@@ -283,19 +289,24 @@ ApplicationWindow {
             }
         }
         handle: Rectangle {
-            implicitWidth: 1
+            implicitWidth: window.leftExpanded ? 1 : 0
             implicitHeight: workbench.height
+            visible: window.leftExpanded
+            enabled: window.leftExpanded
             color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
             containmentMask: Item {
-                x: -3; width: 7; height: workbench.height
+                x: window.leftExpanded ? -3 : 0
+                width: window.leftExpanded ? 7 : 0
+                height: workbench.height
+                enabled: window.leftExpanded
             }
         }
         Item {
             id: leftHost
             SplitView.fillWidth: false
-            SplitView.minimumWidth: window.leftExpanded ? 320 : 24
-            SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 24
-            SplitView.preferredWidth: Math.round(workbench.width * window.leftRatio)
+            SplitView.minimumWidth: window.leftExpanded ? 260 : 28
+            SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 28
+            SplitView.preferredWidth: window.leftExpanded ? Math.round(workbench.width * window.leftRatio) : 28
             onWidthChanged: {
                 if (window.leftExpanded && leftHost.SplitHandle.pressed && workbench.width > 200) {
                     window.leftRatio = Math.max(0.20, Math.min(0.55, leftHost.width / workbench.width))
@@ -362,6 +373,27 @@ ApplicationWindow {
                 }
             }
             Rectangle {
+                id: drawerCollapseTab
+                visible: window.leftExpanded
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14; height: 52
+                color: Theme.surfaceBg
+                border.color: Theme.border; border.width: 1
+                radius: Theme.radiusSmall
+                z: 20
+                QuiTextIconButton {
+                    id: drawerCollapseButton
+                    objectName: "drawerCollapseButton"
+                    anchors.fill: parent
+                    iconSource: QuiFontIcon.ChevronLeft
+                    text: "收起左侧工作区"
+                    Accessible.name: text
+                    focusPolicy: Qt.TabFocus
+                    onClicked: window.toggleLeft()
+                }
+            }
+            Rectangle {
                 id: collapsedBar
                 anchors.fill: parent
                 visible: !window.leftExpanded
@@ -383,7 +415,7 @@ ApplicationWindow {
             id: rightSplit
             orientation: Qt.Vertical
             SplitView.fillWidth: true
-            SplitView.minimumWidth: 500
+            SplitView.minimumWidth: 380
             backgroundColor: "#d0d7de"
             handleColor: "#d0d7de"
             handle: Rectangle {
@@ -404,7 +436,7 @@ ApplicationWindow {
                 id: results
                 SplitView.fillHeight: true
                 SplitView.preferredHeight: Math.round(rightSplit.height * window.resultsRatio)
-                SplitView.minimumHeight: 280
+                SplitView.minimumHeight: 180
                 onHeightChanged: {
                     if (rightSplit.height > 200 && results.SplitHandle.pressed) {
                         window.resultsRatio = Math.max(0.30, Math.min(0.75, results.height / rightSplit.height))
@@ -416,7 +448,7 @@ ApplicationWindow {
                 id: parameters
                 SplitView.fillHeight: true
                 SplitView.preferredHeight: Math.round(rightSplit.height * (1.0 - window.resultsRatio))
-                SplitView.minimumHeight: 220
+                SplitView.minimumHeight: 140
             }
         }
     }

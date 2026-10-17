@@ -15,8 +15,29 @@ Rectangle {
     width: 156; height: 52; radius: 2
     antialiasing: true
     color: "#ffffff"
-    readonly property bool isError: root.node.missing === true || root.node.state === "red"
-    border.color: root.selected ? "transparent" : (root.isError ? "#e66b37" : "#c0c6cf")
+
+    readonly property string nodeState: root.node.state || "gray"
+    readonly property bool isError: root.nodeState === "red" || root.node.missing === true
+    readonly property color statusDotColor: {
+        if (root.nodeState === "green") return Theme.nodeStateGreen
+        if (root.nodeState === "blue") return Theme.nodeStateBlue
+        if (root.nodeState === "red") return Theme.nodeStateRed
+        return Theme.nodeStateGray
+    }
+    readonly property color headerBg: {
+        if (root.nodeState === "green") return Theme.nodeHeaderGreen
+        if (root.nodeState === "blue") return Theme.nodeHeaderBlue
+        if (root.nodeState === "red") return Theme.nodeHeaderRed
+        return Theme.nodeHeaderGray
+    }
+    readonly property color headerText: {
+        if (root.nodeState === "green") return Theme.nodeHeaderTextGreen
+        if (root.nodeState === "blue") return Theme.nodeHeaderTextBlue
+        if (root.nodeState === "red") return Theme.nodeHeaderTextRed
+        return Theme.nodeHeaderTextGray
+    }
+
+    border.color: root.selected ? "transparent" : (root.isError ? Theme.nodeStateRed : (root.nodeState === "green" ? Theme.nodeStateGreen : "#c0c6cf"))
     border.width: root.selected ? 0 : 1
 
     function getIcon(title, category) {
@@ -29,25 +50,44 @@ Rectangle {
         return QuiFontIcon.Settings
     }
 
-    // Top Header
+    // Top Header with four-state background and status indicator
     Rectangle {
         id: nodeHeader
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
         anchors.margins: 1
         height: 18
         radius: 1
-        color: root.isError ? "#e66b37" : (root.selected ? "#dceefa" : "#dfe4ea")
+        color: root.headerBg
         Rectangle {
             anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
-            height: 3; color: parent.color
+            height: 2; color: parent.color
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+            Rectangle {
+                width: 7; height: 7; radius: 3.5
+                color: root.statusDotColor
+                Layout.alignment: Qt.AlignVCenter
+            }
+            QuiText {
+                visible: root.node.defMissing === true
+                text: "缺定义"
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
+                color: "#d97706"
+                Layout.alignment: Qt.AlignVCenter
+            }
+            QuiText {
+                visible: !root.node.defMissing && root.node.implUnavailable === true
+                text: "缺实现"
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
+                color: Theme.nodeStateOrange
+                Layout.alignment: Qt.AlignVCenter
+            }
             Item { Layout.fillWidth: true }
             QuiText {
                 text: root.node.version ? ("v" + String(root.node.version).replace(/^v/i, "")) : "v1.0"
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
-                color: root.isError ? "#ffffff" : (root.selected ? "#1887d8" : "#8c959f")
+                color: root.headerText
             }
         }
     }
@@ -62,7 +102,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             iconSource: root.getIcon(root.node.title, root.node.category || "")
             iconSize: 15
-            iconColor: root.isError ? "#e66b37" : "#1887d8"
+            iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "green" ? Theme.nodeStateGreen : "#1887d8")
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 1
@@ -125,14 +165,19 @@ Rectangle {
         text: {
             let lines = []
             if (root.node.title) lines.push(root.node.title)
+            if (root.node.toolId) lines.push("工具ID: " + root.node.toolId)
+            let statusText = "状态: " + (root.nodeState === "green" ? "成功" : root.nodeState === "blue" ? "运行中" : root.nodeState === "red" ? "失败" : "未运行")
+            lines.push(statusText)
             if (root.node.timingDetail) {
                 lines.push(root.node.timingDetail)
             } else if (root.node.timing) {
-                lines.push("运行时间:" + root.node.timing)
-            } else {
-                lines.push("未运行")
+                lines.push("运行时间: " + root.node.timing)
             }
-            if (root.node.missing) lines.push("⚠️ 工具缺失")
+            if (root.node.defMissing) {
+                lines.push("⚠️ 算子定义缺失 (未找到 YAML 注册元数据)")
+            } else if (root.node.implUnavailable) {
+                lines.push("⚠️ 算子实现不可用 (未加载或缺失可执行实现)")
+            }
             return lines.join("\n")
         }
         delay: 500
