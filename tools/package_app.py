@@ -139,21 +139,25 @@ def target_architecture(build_dir: Path) -> str:
 
 def clear_install_directory(path: Path, clean: bool, force: bool) -> Path | None:
     """Prepare install directory safely according to marker rules, preserving custom tools."""
-    if not clean:
-        path.mkdir(parents=True, exist_ok=True)
-        return None
-    marker = path / MARKER_FILE
-    if path.is_dir() and any(path.iterdir()) and not marker.exists() and not force:
-        raise RuntimeError(
-            f"install dir exists and has no {MARKER_FILE}: {path}; "
-            "pass --force-clean to remove it or --no-clean to reuse it"
-        )
     custom_backup = None
     target_custom = path / "tools" / "custom"
     if target_custom.is_dir() and any(target_custom.iterdir()):
         import tempfile
         custom_backup = Path(tempfile.mkdtemp(prefix="vrt_custom_backup_"))
         shutil.copytree(target_custom, custom_backup / "custom", dirs_exist_ok=True)
+
+    if not clean:
+        path.mkdir(parents=True, exist_ok=True)
+        return custom_backup
+
+    marker = path / MARKER_FILE
+    if path.is_dir() and any(path.iterdir()) and not marker.exists() and not force:
+        if custom_backup:
+            shutil.rmtree(custom_backup, ignore_errors=True)
+        raise RuntimeError(
+            f"install dir exists and has no {MARKER_FILE}: {path}; "
+            "pass --force-clean to remove it or --no-clean to reuse it"
+        )
 
     if path.exists():
         for child in path.iterdir():
@@ -250,6 +254,15 @@ def copy_tools(install_dir: Path, custom_backup: Path | None = None) -> None:
     if not source.is_dir():
         raise RuntimeError(f"tools directory was not found: {source}")
     target = install_dir / "tools"
+    local_backup = None
+    if custom_backup is None:
+        target_custom = target / "custom"
+        if target_custom.is_dir() and any(target_custom.iterdir()):
+            import tempfile
+            local_backup = Path(tempfile.mkdtemp(prefix="vrt_custom_backup_"))
+            shutil.copytree(target_custom, local_backup / "custom", dirs_exist_ok=True)
+            custom_backup = local_backup
+
     shutil.copytree(source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     if custom_backup and (custom_backup / "custom").is_dir():
         target_custom = target / "custom"
@@ -260,15 +273,26 @@ def copy_tools(install_dir: Path, custom_backup: Path | None = None) -> None:
 
 
 def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path | None = None) -> None:
-    """Merge external tools package tree and verify against manifest if provided."""
+    """Merge external tools package tree into tools-package layout and verify against manifest if provided."""
     if not tools_dir.is_dir():
         raise RuntimeError(f"tools package directory was not found: {tools_dir}")
-    print(f"merging tools package from {tools_dir} into {install_dir}")
+    print(f"merging tools package from {tools_dir} into {install_dir / 'tools-package'}")
 
-    # Copy files while protecting existing user custom directory
+    target_pkg = install_dir / "tools-package"
+    target_pkg.mkdir(parents=True, exist_ok=True)
+
+    # Protect existing custom tools in target_pkg
+    pkg_custom = target_pkg / "tools" / "custom"
+    custom_backup = None
+    if pkg_custom.is_dir() and any(pkg_custom.iterdir()):
+        import tempfile
+        custom_backup = Path(tempfile.mkdtemp(prefix="vrt_pkg_custom_backup_"))
+        shutil.copytree(pkg_custom, custom_backup / "custom", dirs_exist_ok=True)
+
+    # Copy external package tree into tools-package without duplicating into install_dir/tools/builtin
     for item in tools_dir.iterdir():
         if item.name == "tools":
-            target_tools = install_dir / "tools"
+            target_tools = target_pkg / "tools"
             builtin_src = item / "builtin"
             if builtin_src.is_dir():
                 shutil.copytree(builtin_src, target_tools / "builtin", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -289,22 +313,20 @@ def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path
             for root_f in item.glob("*"):
                 if root_f.is_file():
                     copy_file(root_f, target_tools / root_f.name)
-        elif item.name == "assets":
-            target_assets = install_dir / "assets"
-            shutil.copytree(item, target_assets, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-            if (item / "tools" / "builtin").is_dir():
-                target_builtin = install_dir / "tools" / "builtin"
-                shutil.copytree(item / "tools" / "builtin", target_builtin, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         elif item.is_dir():
-            shutil.copytree(item, install_dir / item.name, dirs_exist_ok=True)
+            shutil.copytree(item, target_pkg / item.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         else:
-            copy_file(item, install_dir / item.name)
+            copy_file(item, target_pkg / item.name)
+
+    if custom_backup and (custom_backup / "custom").is_dir():
+        shutil.copytree(custom_backup / "custom", pkg_custom, dirs_exist_ok=True)
+        shutil.rmtree(custom_backup, ignore_errors=True)
 
     if tools_manifest:
         if not tools_manifest.is_file():
             raise RuntimeError(f"tools manifest file was not found: {tools_manifest}")
         manifest_lines = [line.strip() for line in tools_manifest.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")]
-        missing = [rel for rel in manifest_lines if not (install_dir / rel).exists()]
+        missing = [rel for rel in manifest_lines if not (target_pkg / rel).exists() and not (install_dir / rel).exists()]
         if missing:
             raise RuntimeError(f"tools package manifest check failed: missing {len(missing)} files: {', '.join(missing[:5])}")
         print(f"tools package manifest verified: {len(manifest_lines)} entries matched")

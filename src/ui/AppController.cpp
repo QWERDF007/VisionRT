@@ -95,6 +95,12 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
     if (std::filesystem::is_directory(toolsPackageRoot / "assets" / "tools")) {
         candidateRoots.push_back((toolsPackageRoot / "assets" / "tools").lexically_normal());
     }
+    if (std::filesystem::is_directory(toolsPackageRoot / "tools")) {
+        const auto p = (toolsPackageRoot / "tools").lexically_normal();
+        if (std::find(candidateRoots.begin(), candidateRoots.end(), p) == candidateRoots.end()) {
+            candidateRoots.push_back(p);
+        }
+    }
     if (std::filesystem::is_directory(applicationDirectory / "tools")) {
         candidateRoots.push_back((applicationDirectory / "tools").lexically_normal());
     }

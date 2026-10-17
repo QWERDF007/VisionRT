@@ -37,9 +37,6 @@ add_library(visionrt_core
     src/plugins/PluginLoader.cpp)
 target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::yaml-cpp)
 
-# CPU 内置工具组件库
-add_library(visionrt_tools src/tools/CpuTools.cpp)
-target_link_libraries(visionrt_tools PUBLIC visionrt_core)
 
 # Python 运行时及交互桥接库
 add_library(visionrt_python src/python/PythonRuntime.cpp src/python/PythonBridge.cpp)
@@ -108,6 +105,10 @@ endif()
 if(BUILD_TESTING)
     include(CTest)
     include(AddTest)
+
+    # CPU 工具基线库 (test-only 基线，生产目标不编译)
+    add_library(visionrt_tools src/tools/CpuTools.cpp)
+    target_link_libraries(visionrt_tools PUBLIC visionrt_core)
 
     add_executable(version_contract tests/version_contract.cpp)
     target_link_libraries(version_contract PRIVATE visionrt_common)
