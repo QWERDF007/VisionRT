@@ -182,6 +182,14 @@ if(BUILD_TESTING)
     if(MSVC)
         target_compile_options(plugin_contract PRIVATE /UNDEBUG)
     endif()
+
+    add_executable(examples_contract tests/examples_contract.cpp)
+    target_link_libraries(examples_contract PRIVATE visionrt_core visionrt_runtime visionrt_tools visionrt_python Qt6::Core)
+    add_test(NAME examples_contract COMMAND examples_contract "${CMAKE_SOURCE_DIR}")
+    visionrt_apply_test_environment(examples_contract)
+    if(MSVC)
+        target_compile_options(examples_contract PRIVATE /UNDEBUG)
+    endif()
 endif()
 
 # 打印整体配置看板
