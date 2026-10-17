@@ -100,7 +100,7 @@ QuiSplitView {
                             QuiText {
                                 anchors.centerIn: parent
                                 text: tabItem.modelData
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: tabItem.isActive })
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.tabFontSize, bold: tabItem.isActive })
                                 color: tabItem.isActive ? Theme.tabActiveText : (tabItem.isHovered ? Theme.tabHoverText : Theme.tabText)
                             }
                             MouseArea {
@@ -112,8 +112,10 @@ QuiSplitView {
                         }
                     }
                     Rectangle {
-                        Layout.preferredWidth: 68; Layout.preferredHeight: 26; Layout.margins: 4; Layout.rightMargin: 8
-                        radius: 4
+                        Layout.preferredWidth: Theme.executeButtonWidth
+                        Layout.preferredHeight: Theme.executeButtonHeight
+                        Layout.margins: 4; Layout.rightMargin: 8
+                        radius: Theme.radiusBase
                         color: runMouse.pressed ? Theme.executeButtonPressedBg : (runMouse.containsMouse ? Theme.executeButtonHoverBg : Theme.executeButtonNormalBg)
                         enabled: !app.busy && app.selectedNode.length > 0
                         opacity: enabled ? 1.0 : 0.4
@@ -133,7 +135,7 @@ QuiSplitView {
                             }
                             QuiText {
                                 text: "执行"
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.executeButtonFontSize, bold: true })
                                 color: Theme.executeButtonText
                             }
                         }

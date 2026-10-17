@@ -9,8 +9,8 @@ Rectangle {
     border.color: Theme.border
     border.width: 1
     property bool expanded: true
+    property string selectedKey: ""
     property string selectedTool: ""
-    property var expandedBranches: ({})
     signal toggleRequested()
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 1; spacing: 0
@@ -32,12 +32,12 @@ Rectangle {
                     visible: root.expanded
                     Layout.preferredWidth: Math.min(200, root.width - 120)
                     Layout.preferredHeight: 24
-                    color: "#ffffff"; radius: 3
-                    border.color: filterInput.activeFocus ? QuiColor.Highlight : "#c5ccd5"; border.width: 1
+                    color: Theme.paramEditorBg; radius: Theme.radiusSmall
+                    border.color: filterInput.activeFocus ? Theme.paramEditorFocusBorder : Theme.paramEditorBorder; border.width: 1
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Search; iconSize: 12; iconColor: "#8c959f"
+                            iconSource: QuiFontIcon.Search; iconSize: 12; iconColor: Theme.textSecondary
                         }
                         TextInput {
                             id: filterInput
@@ -83,19 +83,19 @@ Rectangle {
             visible: root.expanded
             Layout.fillWidth: true; Layout.fillHeight: true
             model: app.toolModel; displayRole: "display"
-            radius: 0; border.width: 0; cellHeight: 26
+            radius: 0; border.width: 0; cellHeight: Theme.treeRowHeight
+            Component.onCompleted: {
+                Qt.callLater(function() {
+                    tree.allExpand()
+                    if (typeof demoSelect !== "undefined" && demoSelect) {
+                        root.selectedKey = "处理"
+                    }
+                })
+            }
             view.delegate: ToolTreeDelegate {
                 treeView: tree.view
-                selectedTool: root.selectedTool
-                filtering: filterInput.text.trim().length > 0
-                expandedBranches: root.expandedBranches
-                onBranchToggled: function(key, expanded) {
-                    if (!filterInput.text.trim().length) {
-                        let saved = Object.assign({}, root.expandedBranches)
-                        saved[key] = expanded
-                        root.expandedBranches = saved
-                    }
-                }
+                selectedKey: root.selectedKey
+                onSelected: function(key) { root.selectedKey = key }
                 onChosen: function(toolId) { root.selectedTool = toolId }
             }
         }

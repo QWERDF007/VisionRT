@@ -83,6 +83,11 @@ ApplicationWindow {
         QuiFont.Caption = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
         Qt.callLater(resetLayout)
     }
+    Timer {
+        interval: 600
+        running: typeof demoMenu !== "undefined" && demoMenu === true
+        onTriggered: toolsMenu.popup(toolsBtn, 0, toolsBtn.height)
+    }
     onClosing: function(event) {
         if (!closingApproved) { event.accepted = false; app.requestClose() }
     }
@@ -101,7 +106,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+F"; onActivated: window.focusSearch() }
 
     header: ToolBar {
-        height: 38
+        height: Theme.menuBarHeight
         background: Rectangle {
             color: Theme.menuBarBg
             Rectangle {
@@ -110,48 +115,78 @@ ApplicationWindow {
             }
         }
         RowLayout {
-            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 4
+            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: Theme.menuButtonSpacing
 
             // Menus
             QuiTextIconButton {
-                text: "文件"; iconSource: QuiFontIcon.FolderOpen
-                implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
-                onClicked: fileMenu.popup()
+                id: fileBtn
+                text: "文件"; iconSource: QuiFontIcon.GlobalNavButton
+                implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
+                normalColor: fileMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
+                hoverColor: fileMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
+                pressedColor: Theme.menuButtonPressedBg
+                textColor: fileMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
+                iconColor: fileMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                onClicked: {
+                    if (fileMenu.visible) fileMenu.dismiss()
+                    else fileMenu.popup(fileBtn, 0, fileBtn.height)
+                }
             }
             QuiTextIconButton {
+                id: settingsBtn
                 text: "设置"; iconSource: QuiFontIcon.Settings
-                implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
-                onClicked: settingsMenu.popup()
+                implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
+                normalColor: settingsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
+                hoverColor: settingsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
+                pressedColor: Theme.menuButtonPressedBg
+                textColor: settingsMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
+                iconColor: settingsMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                onClicked: {
+                    if (settingsMenu.visible) settingsMenu.dismiss()
+                    else settingsMenu.popup(settingsBtn, 0, settingsBtn.height)
+                }
             }
             QuiTextIconButton {
+                id: toolsBtn
                 text: "工具"; iconSource: QuiFontIcon.AllApps
-                implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
-                onClicked: toolsMenu.popup()
+                implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
+                normalColor: toolsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
+                hoverColor: toolsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
+                pressedColor: Theme.menuButtonPressedBg
+                textColor: toolsMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
+                iconColor: toolsMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                onClicked: {
+                    if (toolsMenu.visible) toolsMenu.dismiss()
+                    else toolsMenu.popup(toolsBtn, 0, toolsBtn.height)
+                }
             }
             QuiTextIconButton {
+                id: helpBtn
                 text: "帮助"; iconSource: QuiFontIcon.Help
-                implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
-                onClicked: helpMenu.popup()
+                implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
+                normalColor: helpMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
+                hoverColor: helpMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
+                pressedColor: Theme.menuButtonPressedBg
+                textColor: helpMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
+                iconColor: helpMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                onClicked: {
+                    if (helpMenu.visible) helpMenu.dismiss()
+                    else helpMenu.popup(helpBtn, 0, helpBtn.height)
+                }
             }
             QuiTextIconButton {
+                id: runBtn
                 text: "运行"; iconSource: QuiFontIcon.Play
-                implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
-                onClicked: runMenu.popup()
+                implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
+                normalColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
+                hoverColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
+                pressedColor: Theme.menuButtonPressedBg
+                textColor: runMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
+                iconColor: runMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                onClicked: {
+                    if (runMenu.visible) runMenu.dismiss()
+                    else runMenu.popup(runBtn, 0, runBtn.height)
+                }
             }
 
             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: Theme.menuSeparator; Layout.leftMargin: 4; Layout.rightMargin: 4 }
@@ -159,26 +194,26 @@ ApplicationWindow {
             // Actions & Execution
             QuiTextIconButton {
                 action: saveAction; iconSource: QuiFontIcon.Save
-                implicitHeight: 26; implicitWidth: 26
+                implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
                 normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
+                iconColor: Theme.menuButtonIcon
                 ToolTip.visible: hovered; ToolTip.text: "保存 (Ctrl+S)"
             }
             QuiTextIconButton {
                 action: runAction; iconSource: QuiFontIcon.Play
-                implicitHeight: 26; implicitWidth: 26
+                implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
-                normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                iconColor: hovered ? Theme.runButtonHoverIcon : Theme.runButtonIcon
+                normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.runButtonPressedBg
+                iconColor: Theme.runButtonIcon
                 ToolTip.visible: hovered; ToolTip.text: "单次执行 (F5)"
             }
             QuiTextIconButton {
                 action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
-                implicitHeight: 26; implicitWidth: 26
+                implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
-                normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                iconColor: app.runState === "RunningLoop" ? Theme.loopRunningIcon : (hovered ? Theme.runButtonHoverIcon : Theme.runButtonIcon)
+                normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.runButtonPressedBg
+                iconColor: app.runState === "RunningLoop" ? Theme.loopRunningIcon : Theme.runButtonIcon
                 ToolTip.visible: hovered; ToolTip.text: loopAction.text
             }
 
@@ -196,9 +231,8 @@ ApplicationWindow {
                 text: "复位"
                 display: AbstractButton.TextBesideIcon
                 normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
-                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
-                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
-                implicitHeight: 26; enabled: !app.busy
+                textColor: Theme.menuButtonText; iconColor: Theme.menuButtonIcon
+                implicitHeight: Theme.menuButtonHeight; enabled: !app.busy
                 focusPolicy: Qt.TabFocus
                 onClicked: resetDialog.open()
             }
