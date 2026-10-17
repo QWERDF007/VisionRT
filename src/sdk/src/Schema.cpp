@@ -21,6 +21,23 @@ void validateIdentifier(const std::string& value, bool isPort) {
     }
 }
 
+void validateNumericPortValue(const PortValue& val, Type type, const std::string& fieldName, const std::string& portId) {
+    if (type == Type::Int) {
+        if (!std::holds_alternative<std::int64_t>(val)) {
+            throw ContractError(fieldName + " type mismatch (expected Int) on port: " + portId);
+        }
+    } else if (type == Type::Float) {
+        if (!std::holds_alternative<double>(val)) {
+            throw ContractError(fieldName + " type mismatch (expected Float) on port: " + portId);
+        }
+        if (!std::isfinite(std::get<double>(val))) {
+            throw ContractError(fieldName + " must be a finite numeric value on port: " + portId);
+        }
+    } else {
+        throw ContractError(fieldName + " requires an Int or Float port: " + portId);
+    }
+}
+
 bool lessNumber(const PortValue& left, const PortValue& right, Type type) {
     if (type == Type::Int) return std::get<std::int64_t>(left) < std::get<std::int64_t>(right);
     return std::get<double>(left) < std::get<double>(right);
@@ -46,9 +63,6 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
         }
 
         validateTypeSpec(port.type);
-        if (!isMissing(port.defaultValue)) {
-            validateValue(port.type, port.defaultValue);
-        }
 
         if (output) {
             if (!port.editor.empty()) throw ContractError("editor is not an output field: " + port.id);
@@ -84,13 +98,23 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
             if (port.minimum.has_value() || port.maximum.has_value() || port.step.has_value() || port.decimals.has_value()) {
                 throw ContractError("Numeric constraints (min, max, step, decimals) require an Int or Float port: " + port.id);
             }
+            if (!isMissing(port.defaultValue)) {
+                validateValue(port.type, port.defaultValue);
+            }
         } else {
+            if (port.minimum.has_value()) {
+                validateNumericPortValue(*port.minimum, port.type.type, "min", port.id);
+            }
+            if (port.maximum.has_value()) {
+                validateNumericPortValue(*port.maximum, port.type.type, "max", port.id);
+            }
             if (port.minimum.has_value() && port.maximum.has_value()) {
                 if (lessNumber(*port.maximum, *port.minimum, port.type.type)) {
                     throw ContractError("min must not exceed max on port: " + port.id);
                 }
             }
             if (port.step.has_value()) {
+                validateNumericPortValue(*port.step, port.type.type, "step", port.id);
                 const PortValue zero = port.type.type == Type::Int ? PortValue{std::int64_t{0}} : PortValue{0.0};
                 if (!lessNumber(zero, *port.step, port.type.type)) {
                     throw ContractError("step must be positive on port: " + port.id);
@@ -100,16 +124,34 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
                 throw ContractError("decimals must be non-negative on port: " + port.id);
             }
             if (!isMissing(port.defaultValue)) {
-                validateValue(port.type, port.defaultValue);
-                if (port.type.type == Type::Float && !std::isfinite(std::get<double>(port.defaultValue))) {
-                    throw ContractError("Numeric default must be finite on port: " + port.id);
-                }
+                validateNumericPortValue(port.defaultValue, port.type.type, "default", port.id);
                 if (port.minimum.has_value() && lessNumber(port.defaultValue, *port.minimum, port.type.type)) {
                     throw ContractError("Default is less than min on port: " + port.id);
                 }
                 if (port.maximum.has_value() && lessNumber(*port.maximum, port.defaultValue, port.type.type)) {
                     throw ContractError("Default exceeds max on port: " + port.id);
                 }
+            }
+        }
+
+        for (const auto& opt : port.options) {
+            if (numeric) {
+                validateNumericPortValue(opt, port.type.type, "option", port.id);
+                if (port.minimum.has_value() && lessNumber(opt, *port.minimum, port.type.type)) {
+                    throw ContractError("Option is less than min on port: " + port.id);
+                }
+                if (port.maximum.has_value() && lessNumber(*port.maximum, opt, port.type.type)) {
+                    throw ContractError("Option exceeds max on port: " + port.id);
+                }
+            } else {
+                validateValue(port.type, opt);
+            }
+        }
+        if (!port.options.empty() && !isMissing(port.defaultValue)) {
+            const bool found = std::any_of(port.options.begin(), port.options.end(),
+                [&](const auto& opt) { return equalValues(opt, port.defaultValue); });
+            if (!found) {
+                throw ContractError("default value is not one of declared options on port: " + port.id);
             }
         }
 
@@ -161,13 +203,18 @@ void validateToolDefinition(const ToolDefinition& def) {
         throw ContractError("Tool version must not be empty: " + def.id);
     }
 
+    const int kindInt = static_cast<int>(def.kind);
+    if (kindInt < 0 || kindInt > 3) {
+        throw ContractError("Unknown tool kind on: " + def.id);
+    }
+
     if (def.kind == ToolKind::CppFunction || def.kind == ToolKind::CppClass) {
         if (def.registryName.empty()) {
             throw ContractError("C++ tool requires entry.registry_name: " + def.id);
         }
     } else if (def.kind == ToolKind::PythonFunction || def.kind == ToolKind::PythonClass) {
-        if (!def.script.empty() && def.symbol.empty()) {
-            throw ContractError("Python tool with script requires entry.symbol: " + def.id);
+        if (def.script.empty() || def.symbol.empty()) {
+            throw ContractError("Python tool requires non-empty entry.file and entry.symbol: " + def.id);
         }
     }
 
@@ -175,7 +222,6 @@ void validateToolDefinition(const ToolDefinition& def) {
     validatePorts(def.inputs, "inputs");
     validatePorts(def.outputs, "outputs");
 
-    // Cross-port references validation
     for (const auto& port : def.initParams) {
         if (findPort(def.inputs, port.id)) {
             throw ContractError("init_params and inputs share ID: " + port.id);

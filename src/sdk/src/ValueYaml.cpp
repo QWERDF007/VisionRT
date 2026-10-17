@@ -1,4 +1,4 @@
-#include "core/ValueYaml.h"
+#include "visionrt/sdk/ValueYaml.h"
 
 #include <array>
 #include <cmath>
@@ -66,7 +66,6 @@ std::vector<std::int64_t> shape(const YAML::Node& node, int rank) {
 template<class T> NumericBuffer numericBuffer(const YAML::Node& node, DType dtype, int rank) {
     auto dimensions = shape(node, rank);
     (void)checkedByteCount(dimensions, sizeof(T));
-    // unique_ptr also supports bool storage without vector<bool>'s packed representation.
     const auto count = node["data"].size();
     auto values = std::make_unique_for_overwrite<T[]>(count);
     for (std::size_t i = 0; i < count; ++i) values[i] = number<T>(node["data"][i]);
