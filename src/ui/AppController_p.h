@@ -8,6 +8,7 @@
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
 #include "infer/InferLoader.h"
+#include "plugins/PluginLoader.h"
 #include <QPointer>
 #include <QTimer>
 #include <deque>
@@ -30,6 +31,7 @@ struct AppController::Impl {
     ~Impl();
     AppController* q;
     std::filesystem::path applicationDirectory;
+    std::shared_ptr<PluginLoader> pluginLoader;
     ToolRegistry registry;
     ProjectEditor editor;
     std::unique_ptr<PythonRuntime> python;

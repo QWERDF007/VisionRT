@@ -37,11 +37,19 @@ public:
 
     std::size_t loadedModuleCount() const;
 
+    struct IndexDiagnostic {
+        std::filesystem::path path;
+        std::string message;
+    };
+    const std::vector<IndexDiagnostic>& diagnostics() const noexcept { return diagnostics_; }
+    void clearDiagnostics() { diagnostics_.clear(); }
+
 private:
     std::filesystem::path baseDirectory_;
     mutable std::mutex mutex_;
     std::map<std::string, std::filesystem::path, std::less<>> index_;
     std::map<std::filesystem::path, std::shared_ptr<LoadedModule>> loadedModules_;
+    std::vector<IndexDiagnostic> diagnostics_;
 };
 
 class DomainToolAdapter final : public IToolInstance {
