@@ -143,6 +143,21 @@ public:
     THEME_COLOR_PROP(success)
     THEME_COLOR_PROP(warning)
 
+    // 流程画布节点四态色彩
+    THEME_COLOR_PROP(nodeStateGray)
+    THEME_COLOR_PROP(nodeStateBlue)
+    THEME_COLOR_PROP(nodeStateGreen)
+    THEME_COLOR_PROP(nodeStateRed)
+    THEME_COLOR_PROP(nodeStateOrange)
+    THEME_COLOR_PROP(nodeHeaderGray)
+    THEME_COLOR_PROP(nodeHeaderBlue)
+    THEME_COLOR_PROP(nodeHeaderGreen)
+    THEME_COLOR_PROP(nodeHeaderRed)
+    THEME_COLOR_PROP(nodeHeaderTextGray)
+    THEME_COLOR_PROP(nodeHeaderTextBlue)
+    THEME_COLOR_PROP(nodeHeaderTextGreen)
+    THEME_COLOR_PROP(nodeHeaderTextRed)
+
     // 顶部工具栏尺寸与间距
     THEME_INT_PROP(menuBarHeight)
     THEME_INT_PROP(menuButtonHeight)
