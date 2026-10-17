@@ -80,6 +80,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
     ToolResult result;
     const char* phase = "prepare";
     bool frameworkFailure = false;
+    bool enteredExecute = false;
     try {
         if (!definition) throw RegistryError(ToolAvailability::DefinitionMissing, "tool definition missing");
         Values inputs;
@@ -167,6 +168,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
         }
         phase = "execute";
         if (instance) {
+            enteredExecute = true;
             {
                 ScopeTimer execTimer(snapshot->timing.executeMs);
                 result = instance->execute(inputs);
@@ -230,7 +232,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
     }
     snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
     snapshot->timing.validateMs = snapshot->timing.convertMs;
-    if (instance) {
+    if (enteredExecute && instance) {
         if (auto* py = dynamic_cast<IPythonExecutionMetrics*>(instance.get())) {
             const auto m = py->pythonMetrics();
             snapshot->timing.waitGilMs = m.waitGilMs;

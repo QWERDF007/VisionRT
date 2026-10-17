@@ -83,6 +83,7 @@ public:
     Q_INVOKABLE void runNode();
     Q_INVOKABLE void resetRuntime();
     Q_INVOKABLE void refreshPython();
+    Q_INVOKABLE void rescanTools();
     Q_INVOKABLE void requestNew();
     Q_INVOKABLE void requestOpen(const QString& path);
     Q_INVOKABLE void requestClose();

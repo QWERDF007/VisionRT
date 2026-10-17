@@ -419,6 +419,77 @@ void timingRecordedOnFailure() {
     assert(snap->timing.pythonCallMs == 12.0);
     assert(snap->timing.totalMs >= snap->timing.adapterExecuteMs);
 }
+void crossRoundPythonMetricIsolation() {
+    RuntimeEngine engine(1);
+    ToolRegistry registry;
+    auto mockDef = definition("test.isolated.metrics", {"in"});
+    std::atomic<bool> shouldFailInExecute{false};
+    struct PersistentMetricsTool final : public IToolInstance, public IPythonExecutionMetrics {
+        std::atomic<bool>& failExecute;
+        explicit PersistentMetricsTool(std::atomic<bool>& flag) : failExecute(flag) {}
+        ToolStatus initialize(const Values&) override { return {}; }
+        ToolResult execute(const Values&) override {
+            std::this_thread::sleep_for(15ms);
+            if (failExecute.load()) {
+                throw std::runtime_error("simulated failure after delay in execute");
+            }
+            return ToolResult{{}, {{"value", std::int64_t{42}}}};
+        }
+        ToolStatus release() override { return {}; }
+        ExecutionMetrics pythonMetrics() const override {
+            ExecutionMetrics m;
+            m.waitGilMs = 3.5;
+            m.pythonInputMs = 1.2;
+            m.pythonCallMs = 15.0;
+            m.pythonOutputMs = 0.8;
+            return m;
+        }
+    };
+    registry.registerCpp(mockDef.registryName, mockDef, [&](const PlatformToolServices&) {
+        return std::make_unique<PersistentMetricsTool>(shouldFailInExecute);
+    });
+    registry.addDefinition(mockDef);
+
+    auto n = node(1, mockDef);
+    n.inputs["in"].mode = BindingMode::Literal;
+    n.inputs["in"].literal = std::int64_t{10};
+
+    ProjectDefinition project; project.dirty = true; project.flows.front().nodes = {n};
+
+    assert(engine.start(project, registry, RunMode::Once));
+    auto r1 = finish(engine);
+    auto snap1 = snapshot(r1, 1);
+    assert(snap1 != nullptr);
+    assert(snap1->status.code == 0);
+    assert(snap1->timing.adapterExecuteMs >= 10.0);
+    assert(snap1->timing.pythonCallMs == 15.0);
+
+    project.flows.front().nodes.front().inputs["in"].literal = Utf8("not_an_int");
+    assert(engine.start(project, registry, RunMode::Once));
+    auto r2 = finish(engine);
+    auto snap2 = snapshot(r2, 1);
+    assert(snap2 != nullptr);
+    assert(snap2->status.code == -2);
+    assert(snap2->timing.prepareMs > 0);
+    assert(snap2->timing.executeMs == 0.0);
+    assert(snap2->timing.adapterExecuteMs == 0.0);
+    assert(snap2->timing.waitGilMs == 0.0);
+    assert(snap2->timing.pythonInputMs == 0.0);
+    assert(snap2->timing.pythonCallMs == 0.0);
+    assert(snap2->timing.pythonOutputMs == 0.0);
+
+    shouldFailInExecute.store(true);
+    project.flows.front().nodes.front().inputs["in"].literal = std::int64_t{20};
+    assert(engine.start(project, registry, RunMode::Once));
+    auto r3 = finish(engine);
+    auto snap3 = snapshot(r3, 1);
+    assert(snap3 != nullptr);
+    assert(snap3->status.code == -1);
+    assert(snap3->timing.adapterExecuteMs >= 10.0);
+    assert(snap3->timing.waitGilMs == 3.5);
+    assert(snap3->timing.pythonCallMs == 15.0);
+    assert(snap3->timing.totalMs >= snap3->timing.adapterExecuteMs);
+}
 }
 int main(int argc, char** argv) {
     branchesOverlapAndJoin();
@@ -430,6 +501,7 @@ int main(int argc, char** argv) {
     resetWaitsForActiveInvocation();
     executionMetricsAndTimingSeparation();
     timingRecordedOnFailure();
+    crossRoundPythonMetricIsolation();
     std::cout << "runtime contracts passed\n";
 }
 

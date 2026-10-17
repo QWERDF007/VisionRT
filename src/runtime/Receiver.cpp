@@ -41,6 +41,7 @@ void registerReceiveTools(ToolRegistry& registry) {
         const auto id = std::string("visionrt.flow.receive.") + suffix;
         const auto* definition = registry.find(id);
         if (!definition) continue;
+        if (registry.availability(id).state == ToolAvailability::Available) continue;
         const auto output = std::find_if(definition->outputs.begin(), definition->outputs.end(),
             [](const auto& port) { return port.id == "value"; });
         if (output == definition->outputs.end()) throw ContractError("receiver value output is missing: " + id);
