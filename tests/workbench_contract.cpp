@@ -277,11 +277,223 @@ void mainQmlContract() {
     std::filesystem::create_directories("build/evidence");
     frame.save("build/evidence/main_window_verified.png");
 }
+
+void multiRootCoexistenceAndRefreshContract() {
+    QTemporaryDir directory;
+    const auto dirPath = directory.path();
+
+    QDir(dirPath).mkpath("tools-package/bin");
+    const QString dllSrc = QCoreApplication::applicationDirPath() + "/test_plugin_module.dll";
+    const QString dllDst = dirPath + "/tools-package/bin/test_plugin_module.dll";
+    if (QFile::exists(dllSrc)) {
+        QFile::copy(dllSrc, dllDst);
+    }
+
+    QFile indexFile(dirPath + "/tools-package/module_index.json");
+    if (indexFile.open(QIODevice::WriteOnly)) {
+        indexFile.write(
+            "{\n"
+            "  \"schema_version\": 1,\n"
+            "  \"modules\": [\n"
+            "    {\n"
+            "      \"registry_name\": \"test.plugin.counter\",\n"
+            "      \"path\": \"bin/test_plugin_module.dll\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"registry_name\": \"test.plugin.function\",\n"
+            "      \"path\": \"bin/test_plugin_module.dll\"\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+        );
+        indexFile.close();
+    }
+
+    QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
+    QFile root1Yaml(dirPath + "/assets/tools/builtin/flow/func/platform_func.yaml");
+    if (root1Yaml.open(QIODevice::WriteOnly)) {
+        root1Yaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.platform.func\n"
+            "display_name: 平台函数\n"
+            "version: 1.0.0\n"
+            "kind: cpp_function\n"
+            "entry:\n"
+            "  registry_name: test.plugin.function\n"
+            "init_params: []\n"
+            "inputs:\n"
+            "- id: x\n"
+            "  name: 输入\n"
+            "  type: Int\n"
+            "  default: 5\n"
+            "outputs:\n"
+            "- id: y\n"
+            "  name: 输出\n"
+            "  type: Int\n"
+        );
+        root1Yaml.close();
+    }
+
+    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/counter");
+    QFile root2Yaml(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.yaml");
+    if (root2Yaml.open(QIODevice::WriteOnly)) {
+        root2Yaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.pkg.counter\n"
+            "display_name: 计数器插件\n"
+            "version: 1.0.0\n"
+            "kind: cpp_class\n"
+            "entry:\n"
+            "  registry_name: test.plugin.counter\n"
+            "init_params:\n"
+            "- id: initial\n"
+            "  name: 初始值\n"
+            "  type: Int\n"
+            "  default: 10\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "- id: count\n"
+            "  name: 计数值\n"
+            "  type: Int\n"
+        );
+        root2Yaml.close();
+    }
+
+    QDir(dirPath).mkpath("tools/custom/user/py");
+    QFile pyScript(dirPath + "/tools/custom/user/py/user_node.py");
+    if (pyScript.open(QIODevice::WriteOnly)) {
+        pyScript.write(
+            "def run(inputs):\n"
+            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 999}\n"
+        );
+        pyScript.close();
+    }
+    QFile root3Yaml(dirPath + "/tools/custom/user/py/user_node.yaml");
+    if (root3Yaml.open(QIODevice::WriteOnly)) {
+        root3Yaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.user.python\n"
+            "display_name: 用户脚本\n"
+            "version: 1.0.0\n"
+            "kind: python_function\n"
+            "entry:\n"
+            "  file: user_node.py\n"
+            "  symbol: run\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "- id: result\n"
+            "  name: 结果\n"
+            "  type: Int\n"
+        );
+        root3Yaml.close();
+    }
+
+    QFile dupYaml(dirPath + "/tools/custom/user/py/duplicate.yaml");
+    if (dupYaml.open(QIODevice::WriteOnly)) {
+        dupYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.platform.func\n"
+            "display_name: 重复平台函数\n"
+            "version: 1.0.0\n"
+            "kind: cpp_function\n"
+            "entry:\n"
+            "  registry_name: test.plugin.function\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs: []\n"
+        );
+        dupYaml.close();
+    }
+
+    AppController app(1, dirPath);
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    const auto diag = app.diagnostic();
+    require(diag.contains("Duplicate tool_id test.platform.func"), "duplicate diagnostic missing");
+
+    const auto defs = app.toolDefinitions();
+    bool hasRoot1 = false, hasRoot2 = false, hasRoot3 = false;
+    for (const auto& item : defs) {
+        const auto map = item.toMap();
+        const auto id = map.value("id").toString();
+        if (id == "test.platform.func") hasRoot1 = true;
+        if (id == "test.pkg.counter") hasRoot2 = true;
+        if (id == "test.user.python") hasRoot3 = true;
+    }
+    require(hasRoot1, "missing platform root tool definition");
+    require(hasRoot2, "missing package root tool definition");
+    require(hasRoot3, "missing custom root tool definition");
+
+    app.addNode("test.platform.func", 100, 100);
+    app.addNode("test.pkg.counter", 200, 100);
+    app.addNode("test.user.python", 300, 100);
+
+    const auto nodesBefore = app.nodes();
+    require(nodesBefore.size() == 3, "expected 3 nodes added");
+
+    app.runOnce();
+    for (int i = 0; i < 50; ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    const auto nodesAfter = app.nodes();
+    require(nodesAfter.size() == 3, "node count changed after run");
+
+    app.refreshPython();
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    const auto defsAfterRefresh = app.toolDefinitions();
+    require(defsAfterRefresh.size() == defs.size(), "definitions count changed after refreshPython");
+
+    const QString projectFile = dirPath + "/test_project.vrt";
+    require(app.save(projectFile), "save project failed");
+
+    QFile::remove(dirPath + "/tools/custom/user/py/user_node.yaml");
+    app.rescanTools();
+
+    const auto defsAfterDelete = app.toolDefinitions();
+    bool foundDeleted = false, foundPlatform = false, foundPkg = false;
+    for (const auto& item : defsAfterDelete) {
+        const auto id = item.toMap().value("id").toString();
+        if (id == "test.user.python") foundDeleted = true;
+        if (id == "test.platform.func") foundPlatform = true;
+        if (id == "test.pkg.counter") foundPkg = true;
+    }
+    require(!foundDeleted, "deleted tool YAML still in toolDefinitions");
+    require(foundPlatform, "platform tool lost after rescan");
+    require(foundPkg, "package tool lost after rescan");
+
+    const auto nodesAfterDelete = app.nodes();
+    require(nodesAfterDelete.size() == 3, "project node was deleted instead of marked defMissing");
+    bool node3DefMissing = false;
+    for (const auto& n : nodesAfterDelete) {
+        const auto map = n.toMap();
+        if (map.value("toolId").toString() == "test.user.python") {
+            node3DefMissing = map.value("defMissing").toBool();
+        }
+    }
+    require(node3DefMissing, "node for deleted tool definition is not marked defMissing");
+
+    app.requestOpen(projectFile);
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    const auto reopenedNodes = app.nodes();
+    require(reopenedNodes.size() == 3, "reopened project node count differs");
+}
 }
 int main(int argc, char** argv) {
     QGuiApplication qt(argc, argv);
     try {
         treeContract(); outputContract(); pendingContract(); nodeDiagnosticsContract();
+        multiRootCoexistenceAndRefreshContract();
         mainQmlContract();
         std::cout << "workbench contract passed\n";
     } catch (const std::exception& error) {

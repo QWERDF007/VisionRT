@@ -276,12 +276,31 @@ ToolDefinition parseDefinition(const std::filesystem::path& path, bool builtin) 
 }
 
 void ToolRegistry::scan(const std::filesystem::path& toolsRoot) {
-    scanDefinitions(toolsRoot, false);
+    scanRoots({toolsRoot});
+}
+void ToolRegistry::scanRoots(const std::vector<std::filesystem::path>& roots) {
+    std::vector<std::filesystem::path> normalized;
+    for (const auto& r : roots) {
+        if (r.empty()) continue;
+        const auto normal = r.lexically_normal();
+        if (std::find(normalized.begin(), normalized.end(), normal) == normalized.end()) {
+            normalized.push_back(normal);
+        }
+    }
+    managedRoots_ = std::move(normalized);
+    scanDefinitions(managedRoots_, false);
 }
 void ToolRegistry::scanPython(const std::filesystem::path& toolsRoot) {
-    scanDefinitions(toolsRoot, true);
+    const auto normal = toolsRoot.lexically_normal();
+    if (std::find(managedRoots_.begin(), managedRoots_.end(), normal) == managedRoots_.end()) {
+        managedRoots_.push_back(normal);
+    }
+    scanDefinitions(managedRoots_, true);
 }
-void ToolRegistry::scanDefinitions(const std::filesystem::path& toolsRoot, bool pythonOnly) {
+void ToolRegistry::scanPythonRoots() {
+    scanDefinitions(managedRoots_, true);
+}
+void ToolRegistry::scanDefinitions(const std::vector<std::filesystem::path>& roots, bool pythonOnly) {
     std::set<std::filesystem::path> cppPaths;
     std::map<std::filesystem::path, std::string> oldPython;
     if (pythonOnly) {
@@ -300,32 +319,62 @@ void ToolRegistry::scanDefinitions(const std::filesystem::path& toolsRoot, bool 
     for (std::size_t i = 0; i < definitions_.size(); ++i) index_.emplace(definitions_[i].id, i);
     diagnostics_.clear();
     python_.clear();
-    for (const bool builtin : {true, false}) {
-        std::vector<OrderedPath> paths;
-        const auto root = (toolsRoot / (builtin ? "builtin" : "custom")).lexically_normal();
-        collect(root, 0, paths, diagnostics_);
-        // The common root prefix preserves normalized relative-path ordering.
-        std::sort(paths.begin(), paths.end(), [](const auto& left, const auto& right) {
-            return left.first < right.first;
-        });
-        for (const auto& candidate : paths) {
-            const auto& path = candidate.second;
-            if (pythonOnly && cppPaths.contains(path)) continue;
-            oldPython.erase(path);
-            try {
-                auto definition = parseDefinition(path, builtin);
-                if (pythonOnly && cppKind(definition.kind)) {
-                    diagnostics_.push_back({path, "New C++ definitions require application restart", {}});
-                    continue;
+
+    struct Candidate {
+        bool builtin;
+        std::size_t rootIndex;
+        std::filesystem::path path;
+        std::u8string sortKey;
+    };
+    std::vector<Candidate> candidates;
+
+    for (std::size_t r = 0; r < roots.size(); ++r) {
+        const auto& toolsRoot = roots[r];
+        std::error_code ec;
+        if (!std::filesystem::exists(toolsRoot, ec)) continue;
+        const bool hasBuiltin = std::filesystem::is_directory(toolsRoot / "builtin", ec);
+        const bool hasCustom = std::filesystem::is_directory(toolsRoot / "custom", ec);
+        if (hasBuiltin || hasCustom) {
+            for (const bool builtin : {true, false}) {
+                std::vector<OrderedPath> paths;
+                const auto root = (toolsRoot / (builtin ? "builtin" : "custom")).lexically_normal();
+                collect(root, 0, paths, diagnostics_);
+                for (auto& item : paths) {
+                    candidates.push_back({builtin, r, std::move(item.second), std::move(item.first)});
                 }
-                if (const auto* previous = find(definition.id)) {
-                    diagnostics_.push_back({path, "Duplicate tool_id " + definition.id + "; first definition: " + pathText(previous->definitionPath), previous->definitionPath});
-                    continue;
-                }
-                addDefinition(std::move(definition));
-            } catch (const std::exception& error) {
-                diagnostics_.push_back({path, error.what(), {}});
             }
+        } else if (std::filesystem::is_directory(toolsRoot, ec)) {
+            std::vector<OrderedPath> paths;
+            collect(toolsRoot.lexically_normal(), 0, paths, diagnostics_);
+            for (auto& item : paths) {
+                candidates.push_back({false, r, std::move(item.second), std::move(item.first)});
+            }
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+        if (a.builtin != b.builtin) return a.builtin > b.builtin;
+        if (a.rootIndex != b.rootIndex) return a.rootIndex < b.rootIndex;
+        return a.sortKey < b.sortKey;
+    });
+
+    for (const auto& candidate : candidates) {
+        const auto& path = candidate.path;
+        if (pythonOnly && cppPaths.contains(path)) continue;
+        oldPython.erase(path);
+        try {
+            auto definition = parseDefinition(path, candidate.builtin);
+            if (pythonOnly && cppKind(definition.kind)) {
+                diagnostics_.push_back({path, "New C++ definitions require application restart", {}});
+                continue;
+            }
+            if (const auto* previous = find(definition.id)) {
+                diagnostics_.push_back({path, "Duplicate tool_id " + definition.id + "; first definition: " + pathText(previous->definitionPath), previous->definitionPath});
+                continue;
+            }
+            addDefinition(std::move(definition));
+        } catch (const std::exception& error) {
+            diagnostics_.push_back({path, error.what(), {}});
         }
     }
     for (const auto& [path, id] : oldPython)

@@ -35,7 +35,10 @@ class PluginLoader;
 class ToolRegistry {
 public:
     void scan(const std::filesystem::path& toolsRoot);
+    void scanRoots(const std::vector<std::filesystem::path>& roots);
     void scanPython(const std::filesystem::path& toolsRoot);
+    void scanPythonRoots();
+    const std::vector<std::filesystem::path>& managedRoots() const noexcept { return managedRoots_; }
     void addDefinition(ToolDefinition definition);
     void replaceDefinition(ToolDefinition definition);
     void validateContract(const ToolDefinition& definition) const;
@@ -52,7 +55,8 @@ public:
     const std::shared_ptr<PluginLoader>& pluginLoader() const noexcept { return pluginLoader_; }
 
 private:
-    void scanDefinitions(const std::filesystem::path& toolsRoot, bool pythonOnly);
+    void scanDefinitions(const std::vector<std::filesystem::path>& roots, bool pythonOnly);
+    std::vector<std::filesystem::path> managedRoots_;
     struct CppImplementation {
         ToolDefinition contract;
         ToolFactory factory;

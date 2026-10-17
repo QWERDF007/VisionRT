@@ -108,6 +108,7 @@ struct AppController::Impl {
     void advancePending();
     void clearResults();
     void refresh(bool rescan);
+    void rescanTools();
     void refreshFinished();
     void updateResults(bool newSnapshot = false);
     void updateDisplay();
