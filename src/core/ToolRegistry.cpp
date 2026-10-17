@@ -1,5 +1,6 @@
 #include "core/ToolRegistry.h"
 #include "core/ValueYaml.h"
+#include "plugins/PluginLoader.h"
 
 #include <algorithm>
 #include <cmath>
@@ -415,6 +416,7 @@ Availability ToolRegistry::availability(std::string_view id) const {
     if (!definition) return {ToolAvailability::DefinitionMissing, "Tool definition missing: " + std::string(id)};
     if (cppKind(definition->kind)) {
         if (cpp_.contains(definition->registryName)) return {ToolAvailability::Available, {}};
+        if (pluginLoader_ && pluginLoader_->hasModule(definition->registryName)) return {ToolAvailability::Available, {}};
         return {ToolAvailability::ImplementationUnavailable, "C++ implementation unavailable: " + definition->registryName + " (" + pathText(definition->definitionPath) + ")"};
     }
     const auto implementation = python_.find(id);
@@ -427,7 +429,20 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const P
     const auto state = availability(id);
     if (state.state != ToolAvailability::Available) throw RegistryError(state.state, state.message);
     const auto& definition = *find(id);
-    const auto& factory = cppKind(definition.kind) ? cpp_.at(definition.registryName).factory : python_.find(id)->second.factory;
+    if (cppKind(definition.kind)) {
+        const auto it = cpp_.find(definition.registryName);
+        if (it != cpp_.end() && it->second.factory) {
+            auto instance = it->second.factory(services);
+            if (!instance) throw RegistryError(ToolAvailability::ImplementationUnavailable, "Tool factory returned no instance: " + std::string(id));
+            return instance;
+        }
+        if (pluginLoader_ && pluginLoader_->hasModule(definition.registryName)) {
+            auto instance = pluginLoader_->createAdapter(definition.registryName, services);
+            if (!instance) throw RegistryError(ToolAvailability::ImplementationUnavailable, "Plugin loader returned no adapter: " + std::string(id));
+            return instance;
+        }
+    }
+    const auto& factory = python_.find(id)->second.factory;
     auto instance = factory(services);
     if (!instance) throw RegistryError(ToolAvailability::ImplementationUnavailable, "Tool factory returned no instance: " + std::string(id));
     return instance;

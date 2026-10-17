@@ -34,7 +34,8 @@ add_library(visionrt_core
     src/core/ValueYaml.cpp
     src/core/ToolRegistry.cpp
     src/core/ProjectEditor.cpp
-    src/core/ProjectStorage.cpp)
+    src/core/ProjectStorage.cpp
+    src/plugins/PluginLoader.cpp)
 target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::yaml-cpp)
 
 # CPU 内置工具组件库
@@ -166,6 +167,20 @@ if(BUILD_TESTING)
     if(VISIONRT_BUILD_APP)
         visionrt_contract(viewport_contract visionrt_ui)
         visionrt_contract(workbench_contract visionrt_ui)
+    endif()
+
+    # RT-09: 通用插件模块加载测试动态库与契约测试
+    add_library(test_plugin_module SHARED tests/test_plugin_module.cpp)
+    target_link_libraries(test_plugin_module PRIVATE VisionRT::ToolSDK)
+    target_compile_definitions(test_plugin_module PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    set_target_properties(test_plugin_module PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_module)
+
+    add_executable(plugin_contract tests/plugin_contract.cpp)
+    target_link_libraries(plugin_contract PRIVATE visionrt_core)
+    add_test(NAME plugin_contract COMMAND plugin_contract "$<TARGET_FILE:test_plugin_module>")
+    visionrt_apply_test_environment(plugin_contract)
+    if(MSVC)
+        target_compile_options(plugin_contract PRIVATE /UNDEBUG)
     endif()
 endif()
 
