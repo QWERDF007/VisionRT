@@ -143,6 +143,9 @@ if(BUILD_TESTING)
     if(VISIONRT_BUILD_APP)
         visionrt_contract(viewport_contract visionrt_ui)
         visionrt_contract(workbench_contract visionrt_ui)
+        target_compile_definitions(workbench_contract PRIVATE
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
 
         add_executable(performance_contract tests/performance_contract.cpp)
         target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_tools visionrt_python opencv_core Qt6::Quick)
@@ -169,6 +172,8 @@ if(BUILD_TESTING)
 
     add_executable(examples_contract tests/examples_contract.cpp)
     target_link_libraries(examples_contract PRIVATE visionrt_core visionrt_runtime visionrt_tools visionrt_python Qt6::Core)
+    add_dependencies(examples_contract test_plugin_module)
+    target_compile_definitions(examples_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME examples_contract COMMAND examples_contract "${CMAKE_SOURCE_DIR}")
     visionrt_apply_test_environment(examples_contract)
     if(MSVC)

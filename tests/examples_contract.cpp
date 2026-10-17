@@ -3,6 +3,7 @@
 #include "runtime/RuntimeEngine.h"
 #include "tools/CpuTools.h"
 #include "python/PythonRuntime.h"
+#include "plugins/PluginLoader.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -200,6 +201,124 @@ void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime
     assert(missingStartStatus.code == 1);
 }
 
+void testRealPluginModulePipeline(const std::filesystem::path& repoRoot, PythonRuntime& python) {
+    const auto appDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+    auto pluginDll = appDir / "test_plugin_module.dll";
+    if (!std::filesystem::exists(pluginDll)) {
+        pluginDll = appDir / "bin" / "test_plugin_module.dll";
+    }
+    assert(std::filesystem::exists(pluginDll));
+
+    auto loader = std::make_shared<PluginLoader>();
+    loader->registerModule("test.plugin.counter", pluginDll);
+    loader->registerModule("test.plugin.function", pluginDll);
+    loader->registerModule("test.plugin.fail_init", pluginDll);
+
+    ToolRegistry registry;
+    registry.setPluginLoader(loader);
+    registry.scan(repoRoot / "assets" / "tools");
+    setupPython(registry, python);
+
+    // Register plugin counter tool
+    ToolDefinition counterDef;
+    counterDef.id = "test.plugin.counter";
+    counterDef.displayName = "Plugin Counter";
+    counterDef.version = "1.0.0";
+    counterDef.kind = ToolKind::CppClass;
+    counterDef.registryName = "test.plugin.counter";
+    PortDefinition initParam;
+    initParam.id = "initial"; initParam.name = "Initial"; initParam.type = {Type::Int}; initParam.defaultValue = std::int64_t{10};
+    counterDef.initParams.push_back(initParam);
+    PortDefinition outCount;
+    outCount.id = "count"; outCount.name = "Count"; outCount.type = {Type::Int};
+    counterDef.outputs.push_back(outCount);
+    registry.addDefinition(counterDef);
+
+    // Register plugin function tool
+    ToolDefinition funcDef;
+    funcDef.id = "test.plugin.function";
+    funcDef.displayName = "Plugin Function";
+    funcDef.version = "1.0.0";
+    funcDef.kind = ToolKind::CppFunction;
+    funcDef.registryName = "test.plugin.function";
+    PortDefinition inX;
+    inX.id = "x"; inX.name = "X"; inX.type = {Type::Int}; inX.defaultValue = std::int64_t{25};
+    funcDef.inputs.push_back(inX);
+    PortDefinition outY;
+    outY.id = "y"; outY.name = "Y"; outY.type = {Type::Int};
+    funcDef.outputs.push_back(outY);
+    registry.addDefinition(funcDef);
+
+    // Build test pipeline: Node 1 (function, x=25 -> y=50), Node 2 (counter, initial=10 -> count=11)
+    ProjectDefinition project;
+    FlowDefinition flow;
+    flow.id = "flow_1";
+    flow.name = "Real Plugin Flow";
+
+    NodeDefinition n1;
+    n1.id = 1;
+    n1.toolId = "test.plugin.function";
+    n1.toolNameSnapshot = "Plugin Function";
+    n1.position = {100, 100};
+    InputBinding b1;
+    b1.mode = BindingMode::Literal;
+    b1.literal = std::int64_t{25};
+    n1.inputs.emplace("x", b1);
+    n1.signatures.inputs["x"] = {Type::Int};
+    n1.signatures.outputs["y"] = {Type::Int};
+    flow.nodes.push_back(n1);
+
+    NodeDefinition n2;
+    n2.id = 2;
+    n2.toolId = "test.plugin.counter";
+    n2.toolNameSnapshot = "Plugin Counter";
+    n2.position = {300, 100};
+    n2.initParams.emplace("initial", std::int64_t{10});
+    n2.signatures.initParams["initial"] = {Type::Int};
+    n2.signatures.outputs["count"] = {Type::Int};
+    flow.nodes.push_back(n2);
+
+    project.flows.clear();
+    project.flows.push_back(flow);
+    project.nextNodeId = 3;
+
+    RuntimeEngine engine(2);
+    const auto startRes = engine.start(project, registry, RunMode::Once);
+    if (startRes.code != 0) {
+        std::cerr << "engine.start failed: code=" << startRes.code << " msg=" << startRes.message << std::endl;
+    }
+    assert(startRes.code == 0);
+    const auto update = finish(engine);
+
+    auto s1 = snapshot(update, 1);
+    assert(s1 && s1->status.code == 0);
+    assert(std::get<std::int64_t>(s1->outputs.at("y")) == 50);
+
+    auto s2 = snapshot(update, 2);
+    assert(s2 && s2->status.code == 0);
+    assert(std::get<std::int64_t>(s2->outputs.at("count")) == 11);
+
+    // Test Save / Reopen consistency
+    QTemporaryDir tmpDir;
+    assert(tmpDir.isValid());
+    const auto savePath = std::filesystem::path(tmpDir.path().toStdString()) / "plugin_project.vrt";
+    ProjectStorage storage(registry);
+    auto reconciled = storage.reconcile(project);
+    assert(reconciled.diagnostics.empty());
+    project = std::move(reconciled.project);
+    storage.save(project, savePath);
+    const auto reloaded = storage.load(savePath);
+    assert(reloaded.diagnostics.empty());
+    assert(engine.start(reloaded.project, registry, RunMode::Once).code == 0);
+    const auto reloadedUpdate = finish(engine);
+    auto rs1 = snapshot(reloadedUpdate, 1);
+    assert(rs1 && std::get<std::int64_t>(rs1->outputs.at("y")) == std::get<std::int64_t>(s1->outputs.at("y")));
+    auto rs2 = snapshot(reloadedUpdate, 2);
+    assert(rs2 && std::get<std::int64_t>(rs2->outputs.at("count")) == std::get<std::int64_t>(s2->outputs.at("count")));
+
+    std::cout << "[INFO] GPU execution: unverified (host environment has no CUDA/TensorRT)" << std::endl;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -216,6 +335,15 @@ int main(int argc, char** argv) {
     std::cout << "[TEST] Running error diagnostic pipeline example..." << std::endl;
     testDiagnosticPipeline(repoRoot, python);
     std::cout << "[PASS] Error diagnostic pipeline passed." << std::endl;
+
+    std::cout << "[TEST] Running real plugin module pipeline (VR2-07)..." << std::endl;
+    try {
+        testRealPluginModulePipeline(repoRoot, python);
+    } catch (const std::exception& e) {
+        std::cerr << "FAILED testRealPluginModulePipeline with exception: " << e.what() << std::endl;
+        throw;
+    }
+    std::cout << "[PASS] Real plugin module pipeline passed." << std::endl;
 
     std::cout << "All example contract tests passed successfully!" << std::endl;
     return 0;
