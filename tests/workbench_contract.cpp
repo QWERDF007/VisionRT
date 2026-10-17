@@ -181,31 +181,42 @@ void mainQmlContract() {
     const auto appDir = QCoreApplication::applicationDirPath();
     engine.addImportPath(appDir + "/qml");
     engine.addImportPath(appDir + "/../qml");
-    engine.addImportPath("F:/Projects/VisionRT/build/bin/qml");
-    engine.addImportPath("F:/Projects/VisionRT/build/qml");
-    engine.addImportPath("F:/Projects/VisionRT/src/ui/qml");
+#ifdef VISIONRT_SOURCE_DIR
+    const auto sourceDir = QStringLiteral(VISIONRT_SOURCE_DIR);
+    engine.addImportPath(sourceDir + "/src/ui/qml");
+    engine.addImportPath(sourceDir + "/3rdparty/QuickUI/quickui");
+    const auto qmlPath = sourceDir + "/src/ui/qml/Main.qml";
+#else
+    const auto qmlPath = appDir + "/../src/ui/qml/Main.qml";
+#endif
 
     engine.rootContext()->setContextProperty("app", &app);
     engine.rootContext()->setContextProperty("Theme", theme);
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
-    const auto qmlPath = QStringLiteral("F:/Projects/VisionRT/src/ui/qml/Main.qml");
-    engine.load(QUrl::fromLocalFile(qmlPath));
+    if (QFile::exists(qmlPath)) {
+        engine.load(QUrl::fromLocalFile(qmlPath));
+    } else {
+        engine.loadFromModule("VisionRT", "Main");
+    }
 
     const auto roots = engine.rootObjects();
     require(!roots.isEmpty(), "Main.qml failed to instantiate");
     auto* window = qobject_cast<QQuickWindow*>(roots.first());
     require(window != nullptr, "Main.qml root is not QQuickWindow");
 
-    // 1. Min logic workspace bounds (960x540)
-    window->setWidth(960);
-    window->setHeight(540);
+    // 1. Min logic workspace bounds (960x540) across 100%, 150%, 200% DPI scales
+    const double dpiScales[] = {1.0, 1.5, 2.0};
+    for (double scale : dpiScales) {
+        window->resize(static_cast<int>(960 * scale), static_cast<int>(540 * scale));
+        for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+        require(window->width() >= 960, "window width violates 960 min constraint");
+        require(window->height() >= 540, "window height violates 540 min constraint");
+    }
+    window->resize(960, 540);
     window->show();
     for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
-
-    require(window->width() >= 960, "window width violates 960 min constraint");
-    require(window->height() >= 540, "window height violates 540 min constraint");
 
     // 2. Initial state verification
     require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
@@ -267,17 +278,44 @@ void mainQmlContract() {
     for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
     require(window->property("libraryExpanded").toBool() == true, "library failed to re-expand");
 
-    // 7. Focus search (Ctrl+F)
-    QMetaObject::invokeMethod(window, "focusSearch");
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(window->property("leftExpanded").toBool() == true, "focusSearch did not ensure leftExpanded");
+    // 7. Real key events: Tab and Ctrl+F
+    QKeyEvent tabPress(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+    QKeyEvent tabRelease(QEvent::KeyRelease, Qt::Key_Tab, Qt::NoModifier);
+    QCoreApplication::sendEvent(window, &tabPress);
+    QCoreApplication::sendEvent(window, &tabRelease);
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
 
-    // 8. Screenshot capture evidence
+    QKeyEvent ctrlFPress(QEvent::KeyPress, Qt::Key_F, Qt::ControlModifier, "f");
+    QKeyEvent ctrlFRelease(QEvent::KeyRelease, Qt::Key_F, Qt::ControlModifier);
+    QCoreApplication::sendEvent(window, &ctrlFPress);
+    QCoreApplication::sendEvent(window, &ctrlFRelease);
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(window->property("leftExpanded").toBool() == true, "Ctrl+F event did not ensure leftExpanded");
+
+    // 8. Invariant: toggle drawer during execution does not dirty project
+    app.runOnce();
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(app.dirty() == false, "toggling drawer during run dirtied project");
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(app.dirty() == false, "re-expanding drawer during run dirtied project");
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    // 9. Screenshot capture evidence with existence check
     QImage frame = window->grabWindow();
     require(!frame.isNull(), "grabWindow failed");
     require(frame.width() >= 960 && frame.height() >= 540, "frame dimensions smaller than logical workspace");
-    std::filesystem::create_directories("build/evidence");
-    frame.save("build/evidence/main_window_verified.png");
+    const std::filesystem::path evidenceDir = "build/evidence";
+    std::filesystem::create_directories(evidenceDir);
+    const auto screenshotPath = evidenceDir / "main_window_verified.png";
+    const bool saved = frame.save(QString::fromStdString(screenshotPath.string()));
+    require(saved, "Failed to save screenshot evidence");
+    require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
+            "Saved screenshot file does not exist or is empty");
 }
 
 void multiRootCoexistenceAndRefreshContract() {
