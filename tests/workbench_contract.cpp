@@ -72,57 +72,72 @@ void pendingContract() {
 
 void nodeDiagnosticsContract() {
     QTemporaryDir directory;
-    QDir(directory.path()).mkpath("tools/builtin/read/images");
-    QFile yamlFile(directory.path() + "/tools/builtin/read/images/read.yaml");
+    QDir(directory.path()).mkpath("tools/custom/test_category/test_diag");
+    QFile pyFile(directory.path() + "/tools/custom/test_category/test_diag/test_diag.py");
+    if (pyFile.open(QIODevice::WriteOnly)) {
+        pyFile.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'value': 42}\n");
+        pyFile.close();
+    }
+    QFile yamlFile(directory.path() + "/tools/custom/test_category/test_diag/test_diag.yaml");
     if (yamlFile.open(QIODevice::WriteOnly)) {
         yamlFile.write(
             "schema_version: 1\n"
-            "tool_id: visionrt.image.read\n"
-            "display_name: 图像读取\n"
+            "tool_id: test.diag.python\n"
+            "display_name: 诊断测试\n"
             "version: 1.0.0\n"
-            "kind: cpp_function\n"
+            "kind: python_function\n"
             "entry:\n"
-            "  registry_name: visionrt.image.read\n"
+            "  file: test_diag.py\n"
+            "  symbol: run\n"
             "init_params: []\n"
-            "inputs:\n"
-            "- id: mode\n"
-            "  name: 读取模式\n"
-            "  type: String\n"
-            "  default: file\n"
-            "- id: path\n"
-            "  name: 文件或目录路径\n"
-            "  type: String\n"
-            "  default: ''\n"
-            "- id: color\n"
-            "  name: 色彩模式\n"
-            "  type: String\n"
-            "  default: bgr\n"
-            "- id: limit\n"
-            "  name: 最大数量\n"
-            "  type: Int\n"
-            "  default: 0\n"
+            "inputs: []\n"
             "outputs:\n"
-            "- id: images\n"
-            "  name: 图像\n"
-            "  type: ImageBatch\n"
+            "- id: value\n"
+            "  name: 输出\n"
+            "  type: Int\n"
         );
         yamlFile.close();
     }
-    AppController app(1, directory.path());
-    app.addNode("visionrt.image.read", 100, 100);
-    const auto nodes = app.nodes();
-    if (nodes.isEmpty()) {
-        std::cerr << "Diagnostic: " << app.diagnostic().toStdString() << "\n";
+    QFile unfulfilledYaml(directory.path() + "/tools/custom/test_category/test_diag/unfulfilled.yaml");
+    if (unfulfilledYaml.open(QIODevice::WriteOnly)) {
+        unfulfilledYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.diag.unfulfilled\n"
+            "display_name: 未提供实现测试\n"
+            "version: 1.0.0\n"
+            "kind: cpp_function\n"
+            "entry:\n"
+            "  registry_name: test.diag.missing_symbol\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs: []\n"
+        );
+        unfulfilledYaml.close();
     }
-    require(!nodes.isEmpty(), "added node not found in nodes()");
-    const auto map = nodes.first().toMap();
-    require(map.contains("state"), "node missing state");
-    require(map.value("state").toString() == "gray", "initial node state is not gray");
-    require(map.contains("defMissing"), "node missing defMissing");
-    require(map.value("defMissing").toBool() == false, "registered node marked defMissing");
-    require(map.contains("implUnavailable"), "node missing implUnavailable");
-    require(map.value("implUnavailable").toBool() == false, "CPU node marked implUnavailable");
-    require(map.contains("timingDetail"), "node missing timingDetail");
+
+    AppController app(1, directory.path());
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    app.addNode("test.diag.python", 100, 100);
+    app.addNode("test.diag.unfulfilled", 200, 200);
+
+    const auto nodes = app.nodes();
+    require(nodes.size() == 2, "expected 2 nodes in nodes()");
+
+    const auto map0 = nodes.at(0).toMap();
+    require(map0.contains("state"), "node missing state");
+    require(map0.value("state").toString() == "gray", "initial node state is not gray");
+    require(map0.contains("defMissing"), "node missing defMissing");
+    require(map0.value("defMissing").toBool() == false, "registered node marked defMissing");
+    require(map0.contains("implUnavailable"), "node missing implUnavailable");
+    require(map0.value("implUnavailable").toBool() == false, "available node marked implUnavailable");
+    require(map0.contains("timingDetail"), "node missing timingDetail");
+
+    const auto map1 = nodes.at(1).toMap();
+    require(map1.value("defMissing").toBool() == false, "unfulfilled node marked defMissing");
+    require(map1.value("implUnavailable").toBool() == true, "unfulfilled node not marked implUnavailable");
 
     app.runOnce();
     for (int i = 0; i < 50; ++i) {

@@ -7,7 +7,6 @@
 #include "core/ProjectStorage.h"
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
-#include "infer/InferLoader.h"
 #include "plugins/PluginLoader.h"
 #include <QPointer>
 #include <QTimer>
@@ -89,8 +88,6 @@ struct AppController::Impl {
     std::future<TextResult> textTask;
     std::optional<OutputModel::Captured> approvedText;
     bool approvedCopy = false;
-    std::future<GpuQueryResult> gpuTask;
-    QString gpuInfo = QStringLiteral("InferRT 延迟加载；尚未查询 GPU");
     const FlowDefinition* currentFlow() const;
     const NodeDefinition* currentNode() const;
     const NodeDefinition* findNode(NodeId id) const;

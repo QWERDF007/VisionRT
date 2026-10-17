@@ -41,7 +41,7 @@ from dependency_utils import (
     warn,
 )
 
-LOCAL_BIN_DLL_NAMES = {"quickui.dll", "visionrtinfer.dll"}
+LOCAL_BIN_DLL_NAMES = {"quickui.dll"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -208,13 +208,7 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
     if not bin_dir.is_dir():
         bin_dir = build_dir
 
-    # 1. VisionRTInfer.dll
-    for dll in (bin_dir / "VisionRTInfer.dll", build_dir / "VisionRTInfer.dll"):
-        if dll.is_file():
-            copy_file(dll, install_dir / dll.name)
-            break
-
-    # 2. quickui.dll
+    # 1. quickui.dll
     quickui_dll = None
     for candidate in (
         bin_dir / "quickui.dll",
@@ -657,14 +651,6 @@ def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None =
         python_dlls = list((install_dir / "python").glob("python3*.dll"))
     if not python_dlls:
         raise RuntimeError(f"package verification failed: missing Python DLL (python3*.dll) in {install_dir}")
-
-    # Check whether build_dir had VISIONRT_BUILD_INFER=ON
-    if build_dir:
-        val = read_cmake_cache_value(build_dir / "CMakeCache.txt", "VISIONRT_BUILD_INFER")
-        if val and val.upper() in {"ON", "1", "TRUE"}:
-            required_files.append(install_dir / "VisionRTInfer.dll")
-    elif (install_dir / "VisionRTInfer.dll").exists():
-        required_files.append(install_dir / "VisionRTInfer.dll")
 
     if require_qt:
         required_files.extend([

@@ -98,7 +98,6 @@ public:
     Q_INVOKABLE QVariantList cppImplementations() const;
     Q_INVOKABLE QVariantMap previewToolImpact(const QVariantMap& metadata) const;
     Q_INVOKABLE bool saveToolMetadata(const QVariantMap& metadata);
-    Q_INVOKABLE void queryGpuDevices();
 signals:
     void projectChanged();
     void nodesChanged();
@@ -114,7 +113,6 @@ signals:
     void projectReplaced();
     void nodeLocated(const QString& node);
     void outputTextReady(const QString& text);
-    void gpuDevicesReady(const QVariantList& devices);
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
