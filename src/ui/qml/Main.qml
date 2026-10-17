@@ -52,16 +52,19 @@ ApplicationWindow {
     }
     function toggleLeft() {
         if (leftExpanded) {
-            if (leftContent.containsFocusItem(Window.activeFocusItem)) {
-                drawerButton.forceActiveFocus()
-            }
             savedLeftWidth = leftHost.width
             leftExpanded = false
+            leftHost.width = 28
             leftHost.SplitView.preferredWidth = 28
+            if (drawerButton) {
+                drawerButton.forceActiveFocus()
+            }
         } else {
             leftExpanded = true
-            leftHost.SplitView.preferredWidth = Math.max(260,
+            let targetW = Math.max(260,
                 Math.min(savedLeftWidth || Math.round(workbench.width * leftRatio), workbench.width - 400))
+            leftHost.width = targetW
+            leftHost.SplitView.preferredWidth = targetW
             if (drawerCollapseButton) {
                 drawerCollapseButton.forceActiveFocus()
             }
@@ -289,12 +292,16 @@ ApplicationWindow {
             }
         }
         handle: Rectangle {
+            id: leftHandleItem
+            objectName: "leftHandle"
             implicitWidth: window.leftExpanded ? 1 : 0
+            width: window.leftExpanded ? 1 : 0
             implicitHeight: workbench.height
             visible: window.leftExpanded
             enabled: window.leftExpanded
             color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
             containmentMask: Item {
+                objectName: "leftHandleMask"
                 x: window.leftExpanded ? -3 : 0
                 width: window.leftExpanded ? 7 : 0
                 height: workbench.height
@@ -303,6 +310,7 @@ ApplicationWindow {
         }
         Item {
             id: leftHost
+            objectName: "leftHost"
             SplitView.fillWidth: false
             SplitView.minimumWidth: window.leftExpanded ? 260 : 28
             SplitView.maximumWidth: window.leftExpanded ? Math.round(workbench.width * 0.55) : 28
@@ -314,6 +322,7 @@ ApplicationWindow {
             }
             FocusScope {
                 id: leftContent
+                objectName: "leftContent"
                 anchors.fill: parent
                 visible: window.leftExpanded
                 enabled: window.leftExpanded
@@ -343,6 +352,7 @@ ApplicationWindow {
                     }
                     ToolLibrary {
                         id: library
+                        objectName: "library"
                         expanded: window.libraryExpanded
                         SplitView.fillHeight: false
                         SplitView.preferredHeight: Math.round(leftSplit.height * window.libraryRatio)
