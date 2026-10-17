@@ -63,6 +63,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build", action="store_true", help="Build the configured CMake tree before packaging.")
     parser.add_argument("--parallel", type=int, default=4, help="Build parallelism (default: 4).")
     parser.add_argument("--skip-verify", action="store_true", help="Skip post-package verification.")
+    parser.add_argument("--tools-dir", default=None, help="External VisionTools package directory to merge into install_dir.")
+    parser.add_argument("--tools-manifest", default=None, help="Manifest list of relative files from VisionTools package.")
+    parser.add_argument("--test-verify", action="store_true", help="Run automated negative tests for package verification.")
     return parser.parse_args()
 
 
@@ -134,17 +137,24 @@ def target_architecture(build_dir: Path) -> str:
     return "x86"
 
 
-def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
-    """Prepare install directory safely according to marker rules."""
+def clear_install_directory(path: Path, clean: bool, force: bool) -> Path | None:
+    """Prepare install directory safely according to marker rules, preserving custom tools."""
     if not clean:
         path.mkdir(parents=True, exist_ok=True)
-        return
+        return None
     marker = path / MARKER_FILE
     if path.is_dir() and any(path.iterdir()) and not marker.exists() and not force:
         raise RuntimeError(
             f"install dir exists and has no {MARKER_FILE}: {path}; "
             "pass --force-clean to remove it or --no-clean to reuse it"
         )
+    custom_backup = None
+    target_custom = path / "tools" / "custom"
+    if target_custom.is_dir() and any(target_custom.iterdir()):
+        import tempfile
+        custom_backup = Path(tempfile.mkdtemp(prefix="vrt_custom_backup_"))
+        shutil.copytree(target_custom, custom_backup / "custom", dirs_exist_ok=True)
+
     if path.exists():
         for child in path.iterdir():
             if child.is_dir() and not child.is_symlink():
@@ -153,6 +163,7 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
                 child.unlink()
     else:
         path.mkdir(parents=True)
+    return custom_backup
 
 
 def write_package_marker(
@@ -239,14 +250,53 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
             copy_file(pdb, install_dir / pdb.name)
 
 
-def copy_tools(install_dir: Path) -> None:
-    """Copy assets/tools into install_dir/tools."""
+def copy_tools(install_dir: Path, custom_backup: Path | None = None) -> None:
+    """Copy assets/tools into install_dir/tools, preserving custom tools."""
     source = REPO_ROOT / "assets" / "tools"
     if not source.is_dir():
         raise RuntimeError(f"tools directory was not found: {source}")
     target = install_dir / "tools"
     shutil.copytree(source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    if custom_backup and (custom_backup / "custom").is_dir():
+        target_custom = target / "custom"
+        shutil.copytree(custom_backup / "custom", target_custom, dirs_exist_ok=True)
+        shutil.rmtree(custom_backup, ignore_errors=True)
+        print("restored preserved custom tools")
     print(f"copy {source} -> {target}")
+
+
+def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path | None = None) -> None:
+    """Merge external tools package tree and verify against manifest if provided."""
+    if not tools_dir.is_dir():
+        raise RuntimeError(f"tools package directory was not found: {tools_dir}")
+    print(f"merging tools package from {tools_dir} into {install_dir}")
+
+    # Copy files while protecting existing user custom directory
+    for item in tools_dir.iterdir():
+        if item.name == "tools":
+            target_tools = install_dir / "tools"
+            builtin_src = item / "builtin"
+            if builtin_src.is_dir():
+                shutil.copytree(builtin_src, target_tools / "builtin", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            custom_src = item / "custom"
+            if custom_src.is_dir():
+                shutil.copytree(custom_src, target_tools / "custom", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            for root_f in item.glob("*"):
+                if root_f.is_file():
+                    copy_file(root_f, target_tools / root_f.name)
+        elif item.is_dir():
+            shutil.copytree(item, install_dir / item.name, dirs_exist_ok=True)
+        else:
+            copy_file(item, install_dir / item.name)
+
+    if tools_manifest:
+        if not tools_manifest.is_file():
+            raise RuntimeError(f"tools manifest file was not found: {tools_manifest}")
+        manifest_lines = [line.strip() for line in tools_manifest.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")]
+        missing = [rel for rel in manifest_lines if not (install_dir / rel).exists()]
+        if missing:
+            raise RuntimeError(f"tools package manifest check failed: missing {len(missing)} files: {', '.join(missing[:5])}")
+        print(f"tools package manifest verified: {len(manifest_lines)} entries matched")
 
 
 def resolve_python_home(build_dir: Path, repo_root: Path = REPO_ROOT) -> Path:
@@ -576,15 +626,27 @@ def is_reparse_point(path: Path) -> bool:
         return False
 
 
-def verify_package(install_dir: Path, require_qt: bool) -> None:
-    """Verify package completeness."""
+def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None = None) -> None:
+    """Verify package completeness strictly according to RS-06 and RT-04."""
     required_files = [
         install_dir / f"{PROJECT_NAME}.exe",
         install_dir / MARKER_FILE,
+        install_dir / "quickui.dll",
     ]
-    if (install_dir / "quickui.dll").exists():
-        required_files.append(install_dir / "quickui.dll")
-    if (install_dir / "VisionRTInfer.dll").exists():
+
+    # Verify Python DLL (python3*.dll must exist)
+    python_dlls = list(install_dir.glob("python3*.dll"))
+    if not python_dlls:
+        python_dlls = list((install_dir / "python").glob("python3*.dll"))
+    if not python_dlls:
+        raise RuntimeError(f"package verification failed: missing Python DLL (python3*.dll) in {install_dir}")
+
+    # Check whether build_dir had VISIONRT_BUILD_INFER=ON
+    if build_dir:
+        val = read_cmake_cache_value(build_dir / "CMakeCache.txt", "VISIONRT_BUILD_INFER")
+        if val and val.upper() in {"ON", "1", "TRUE"}:
+            required_files.append(install_dir / "VisionRTInfer.dll")
+    elif (install_dir / "VisionRTInfer.dll").exists():
         required_files.append(install_dir / "VisionRTInfer.dll")
 
     if require_qt:
@@ -599,6 +661,7 @@ def verify_package(install_dir: Path, require_qt: bool) -> None:
     required_dirs = [
         install_dir / "python" / "Lib",
         install_dir / "python" / "DLLs",
+        install_dir / "python" / "Lib" / "site-packages" / "numpy",
         install_dir / "tools",
     ]
     if (install_dir / "qml" / "quickui").is_dir():
@@ -624,9 +687,60 @@ def verify_package(install_dir: Path, require_qt: bool) -> None:
     print(f"package verification complete: {count} files")
 
 
+def test_verify_package_negatives() -> None:
+    """Run automated negative tests for RT-04 resource verification."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="vrt_verify_neg_") as tmp:
+        root = Path(tmp)
+        # Create baseline valid mock package
+        (root / f"{PROJECT_NAME}.exe").touch()
+        (root / MARKER_FILE).touch()
+        (root / "quickui.dll").touch()
+        (root / "python312.dll").touch()
+        (root / "tools").mkdir()
+        (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
+        (root / "python" / "DLLs").mkdir(parents=True)
+
+        # Baseline check (without Qt)
+        verify_package(root, require_qt=False)
+
+        # Case 1: Missing quickui.dll
+        (root / "quickui.dll").unlink()
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when quickui.dll is missing")
+        except RuntimeError as e:
+            assert "quickui.dll" in str(e), f"Unexpected error: {e}"
+        (root / "quickui.dll").touch()
+
+        # Case 2: Missing Python DLL
+        (root / "python312.dll").unlink()
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when python3*.dll is missing")
+        except RuntimeError as e:
+            assert "missing Python DLL" in str(e), f"Unexpected error: {e}"
+        (root / "python312.dll").touch()
+
+        # Case 3: Missing NumPy
+        shutil.rmtree(root / "python" / "Lib" / "site-packages" / "numpy")
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when numpy directory is missing")
+        except RuntimeError as e:
+            assert "numpy" in str(e), f"Unexpected error: {e}"
+        (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
+
+        print("all RT-04 negative verification tests passed successfully!")
+
+
 def main() -> int:
     """Main package entry point."""
     args = parse_args()
+    if args.test_verify:
+        test_verify_package_negatives()
+        return 0
+
     build_dir = resolve_project_path(args.build_dir)
     raw_install_dir = resolve_project_path(args.install_dir) if args.install_dir else default_install_dir()
 
@@ -646,14 +760,18 @@ def main() -> int:
 
     source_exe = find_executable(build_dir)
     version = project_version()
-    clear_install_directory(install_dir, not args.no_clean, args.force_clean)
+    custom_backup = clear_install_directory(install_dir, not args.no_clean, args.force_clean)
     write_package_marker(install_dir, build_dir, version, ("state=incomplete",))
 
     packaged_exe = install_dir / source_exe.name
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb)
-    copy_tools(install_dir)
+    copy_tools(install_dir, custom_backup)
     copy_python_runtime(build_dir, install_dir)
+
+    if args.tools_dir:
+        merge_tools_package(install_dir, resolve_project_path(args.tools_dir),
+                            resolve_project_path(args.tools_manifest) if args.tools_manifest else None)
 
     if args.skip_dependencies:
         print("skip manifest dependencies")
@@ -678,14 +796,14 @@ def main() -> int:
         write_qt_conf(install_dir)
         write_windows_marker(install_dir, build_dir, arch, version, args.skip_dependencies)
         if not args.skip_verify:
-            verify_package(install_dir, not args.skip_windeployqt)
+            verify_package(install_dir, not args.skip_windeployqt, build_dir)
         print(f"\npackage complete: {install_dir}")
         print(f"double-click to run: {packaged_exe}")
     else:
         write_qt_conf(install_dir)
         write_package_marker(install_dir, build_dir, version)
         if not args.skip_verify:
-            verify_package(install_dir, not args.skip_windeployqt)
+            verify_package(install_dir, not args.skip_windeployqt, build_dir)
         print(f"\npackage complete: {install_dir}")
 
     return 0
