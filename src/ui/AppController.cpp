@@ -338,6 +338,8 @@ QVariantList AppController::nodes() const {
         QString state = "gray", timing, detail;
         if (impl_->active.contains(node.id)) state = "blue";
         const auto snapshot = impl_->snapshots.find(node.id);
+        std::int64_t statusCode = 0;
+        QString statusMessage;
         if (snapshot != impl_->snapshots.end()) {
             const auto& value = *snapshot->second;
             if (state != "blue") state = value.status ? "green" : "red";
@@ -353,12 +355,16 @@ QVariantList AppController::nodes() const {
                     .arg(value.timing.pythonOutputMs, 0, 'f', 2);
             }
             if (!value.status) {
-                detail += QStringLiteral("\n错误状态码: %1\n%2").arg(value.status.code).arg(q(value.status.message));
+                statusCode = value.status.code;
+                statusMessage = q(value.status.message);
+                detail += QStringLiteral("\n错误状态码: %1\n%2").arg(value.status.code).arg(statusMessage);
             }
         }
         if (impl_->lifecycleErrors.contains(node.id)) {
             state = "red";
-            detail += "\n生命周期错误: " + q(impl_->lifecycleErrors.at(node.id).message);
+            statusCode = impl_->lifecycleErrors.at(node.id).code;
+            statusMessage = q(impl_->lifecycleErrors.at(node.id).message);
+            detail += "\n生命周期错误: " + statusMessage;
         }
         const auto* def = impl_->registry.find(node.toolId);
         const QString version = def ? q(def->version) : QStringLiteral("1.0");
@@ -381,7 +387,9 @@ QVariantList AppController::nodes() const {
             {"timingDetail", detail},
             {"missing", missing},
             {"defMissing", defMissing},
-            {"implUnavailable", implUnavailable}
+            {"implUnavailable", implUnavailable},
+            {"statusCode", statusCode},
+            {"statusMessage", statusMessage}
         });
     }
     return result;
