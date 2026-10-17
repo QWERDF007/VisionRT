@@ -1,5 +1,6 @@
 #include "ui/AppController_p.h"
 #include "core/ValueYaml.h"
+#include "runtime/Receiver.h"
 #include "tools/CpuTools.h"
 #include <QClipboard>
 #include <QCoreApplication>
@@ -74,6 +75,7 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
     registry.scan(applicationDirectory / "tools");
     registerCpuTools(registry);
     registerInferTools(registry);
+    registerReceiveTools(registry);
     for (const auto& item : registry.diagnostics()) report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
     // Interpreter lifetime encloses the worker pool and all Python instances.
     try { python = std::make_unique<PythonRuntime>(pythonHome(applicationDirectory)); }

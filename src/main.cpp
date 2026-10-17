@@ -34,6 +34,8 @@ int main(int argc, char* argv[]) {
     parser.addOption({"select-node", "Node to select on startup", "nodeId"});
     parser.addOption({"screenshot", "Capture UI screenshot to file and exit", "path"});
     parser.addOption({"screenshot-delay", "Delay before screenshot in ms (default 1000)", "ms"});
+    parser.addOption({"demo-menu", "Open tools menu on startup for verification"});
+    parser.addOption({"demo-select", "Select first category on startup for verification"});
     parser.process(application);
     std::size_t workers = std::max(2u, std::thread::hardware_concurrency());
     if (parser.isSet("workers")) {
@@ -74,6 +76,8 @@ int main(int argc, char* argv[]) {
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);
         engine.rootContext()->setContextProperty("Theme", theme);
+        engine.rootContext()->setContextProperty("demoMenu", parser.isSet("demo-menu"));
+        engine.rootContext()->setContextProperty("demoSelect", parser.isSet("demo-select"));
         QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                          &application, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
         engine.loadFromModule("VisionRT", "Main");

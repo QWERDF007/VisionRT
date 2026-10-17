@@ -6,8 +6,8 @@ import VisionRT.View 1.0
 
 Rectangle {
     id: root
-    color: "#eaebef"
-    border.color: "#d0d7de"
+    color: Theme.windowBg
+    border.color: Theme.border
     border.width: 1
     signal roiRequested()
 
@@ -18,51 +18,31 @@ Rectangle {
         Rectangle {
             Layout.preferredWidth: 116
             Layout.fillHeight: true
-            color: "#ffffff"
+            color: Theme.surfaceBg
             Rectangle {
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                width: 1; color: "#d0d7de"
+                width: 1; color: Theme.border
             }
             ColumnLayout {
                 anchors.fill: parent; spacing: 0
                 Rectangle {
-                    Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+                    Layout.fillWidth: true; Layout.preferredHeight: 34; color: Theme.tabBarBg
                     Rectangle {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                        height: 1; color: "#d0d7de"
+                        height: 1; color: Theme.tabBorder
                     }
                     QuiComboBox {
                         id: outputChoice
                         anchors.fill: parent; anchors.margins: 4
                         model: app.imageOutputs; textRole: "name"; valueRole: "id"
                         currentIndex: { for (let i = 0; i < app.imageOutputs.length; ++i) if (app.imageOutputs[i].id === app.selectedImageOutput) return i; return -1 }
-                        displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "图像输出" : "图像输入") : (currentText === "images" ? "图像输出" : currentText)
+                        displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "图像输出" : "") : (currentText === "images" ? "图像输出" : currentText)
                         onActivated: app.setImageOutput(currentValue)
                         Accessible.name: "图像输出"
                     }
                 }
                 Item {
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    Rectangle {
-                        visible: app.imageCount === 0
-                        width: parent.width - 16; height: 86
-                        anchors.top: parent.top; anchors.topMargin: 6
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        color: "#ffffff"
-                        border.color: QuiColor.Highlight
-                        border.width: 1
-                        radius: 2
-                        Rectangle {
-                            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-                            anchors.margins: 4; height: 60
-                            color: "#181a1f"
-                        }
-                        QuiText {
-                            anchors.bottom: parent.bottom; anchors.bottomMargin: 3
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "0"; font: QuiFont.Caption; color: "#24292f"
-                        }
-                    }
                     ListView {
                         id: thumbnails
                         visible: app.imageCount > 0
@@ -74,10 +54,10 @@ Rectangle {
                             required property int index
                             width: thumbnails.width - 8; height: 86
                             anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                            color: index === app.imageIndex ? "#dbeefe" : "#ffffff"
-                            border.color: index === app.imageIndex ? QuiColor.Highlight : "#d0d7de"
+                            color: index === app.imageIndex ? Theme.treeItemSelectedBg : Theme.surfaceBg
+                            border.color: index === app.imageIndex ? Theme.highlight : Theme.border
                             border.width: index === app.imageIndex ? 2 : 1
-                            radius: 3
+                            radius: Theme.radiusSmall
                             ImageViewport {
                                 id: thumbnail
                                 property int thumbnailIndex: index
@@ -87,7 +67,7 @@ Rectangle {
                                 Component.onCompleted: app.attachViewport(thumbnail)
                                 onThumbnailIndexChanged: app.attachViewport(thumbnail)
                             }
-                            QuiText { anchors.bottom: parent.bottom; anchors.bottomMargin: 3; anchors.horizontalCenter: parent.horizontalCenter; text: index; font: QuiFont.Caption; color: "#24292f" }
+                            QuiText { anchors.bottom: parent.bottom; anchors.bottomMargin: 3; anchors.horizontalCenter: parent.horizontalCenter; text: index; font: QuiFont.Caption; color: Theme.textPrimary }
                             MouseArea { anchors.fill: parent; onClicked: app.setImageIndex(index) }
                         }
                     }
@@ -99,10 +79,10 @@ Rectangle {
         Rectangle {
             Layout.preferredWidth: 32
             Layout.fillHeight: true
-            color: "#ffffff"
+            color: Theme.surfaceBg
             Rectangle {
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                width: 1; color: "#d0d7de"
+                width: 1; color: Theme.border
             }
             ColumnLayout {
                 anchors.top: parent.top; anchors.topMargin: 4
@@ -127,20 +107,20 @@ Rectangle {
                     onClicked: viewport.zoomBy(0.8)
                 }
                 Rectangle {
-                    Layout.preferredWidth: 20; Layout.preferredHeight: 1; color: "#d0d7de"
+                    Layout.preferredWidth: 20; Layout.preferredHeight: 1; color: Theme.border
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Rectangle {
-                    Layout.preferredWidth: 26; Layout.preferredHeight: 22; radius: 3
-                    color: roiMouse.containsMouse ? "#f0f2f5" : "#ffffff"
-                    border.color: "#c5ccd5"; border.width: 1
+                    Layout.preferredWidth: 26; Layout.preferredHeight: 22; radius: Theme.radiusSmall
+                    color: roiMouse.containsMouse ? Theme.menuButtonHoverBg : Theme.surfaceBg
+                    border.color: Theme.border; border.width: 1
                     enabled: !app.busy && app.selectedNode.length > 0
                     opacity: enabled ? 1.0 : 0.5
                     QuiText {
                         anchors.centerIn: parent
                         text: "ROI"
                         font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                        color: QuiColor.Highlight
+                        color: Theme.highlight
                     }
                     MouseArea {
                         id: roiMouse; anchors.fill: parent; hoverEnabled: true

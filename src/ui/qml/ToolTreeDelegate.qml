@@ -14,38 +14,66 @@ Item {
     required property bool hasChildren
     required property int depth
     property var treeView
-    property string selectedTool: ""
-    property bool filtering: false
-    property var expandedBranches: ({})
+    property string selectedKey: ""
     readonly property string stableKey: model.stableKey || ""
     readonly property string toolId: model.toolId || ""
     readonly property bool leaf: model.leaf === true
+    readonly property bool isSelected: root.selectedKey.length > 0 && root.selectedKey === root.stableKey
     signal chosen(string toolId)
-    signal branchToggled(string key, bool expanded)
-    function restoreExpansion() {
-        if (!hasChildren) return
-        let wanted = filtering || expandedBranches[stableKey] !== false
-        if (wanted && !expanded) treeView.expand(row)
-        else if (!wanted && expanded) treeView.collapse(row)
-    }
-    Component.onCompleted: Qt.callLater(restoreExpansion)
-    onStableKeyChanged: Qt.callLater(restoreExpansion)
-    onFilteringChanged: Qt.callLater(restoreExpansion)
+    signal selected(string key)
+
     implicitWidth: treeView.width
-    implicitHeight: 26
+    implicitHeight: Theme.treeRowHeight
+
+    HoverHandler {
+        id: hoverHandler
+    }
+
     Rectangle {
         anchors.fill: parent
-        color: root.leaf && root.selectedTool === root.toolId ? "#dceefa" : pointer.containsMouse ? "#edf4fa" : "transparent"
+        color: root.isSelected
+               ? Theme.treeItemSelectedBg
+               : hoverHandler.hovered
+                 ? Theme.treeItemHoverBg
+                 : "transparent"
         Rectangle {
             anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
             width: 2
-            color: QuiColor.Highlight
-            visible: root.leaf && root.selectedTool === root.toolId
+            color: Theme.treeItemSelectedIndicator
+            visible: root.isSelected && Theme.treeItemSelectedIndicator.a > 0
         }
     }
+
     RowLayout {
-        anchors.fill: parent; anchors.leftMargin: 7 + root.depth * 16; anchors.rightMargin: 8; spacing: 6
-        QuiText { text: root.hasChildren ? (root.expanded ? "⌄" : "›") : "◇"; Layout.preferredWidth: 14; color: root.hasChildren ? QuiColor.FontCaption : QuiColor.Highlight }
+        anchors.fill: parent
+        anchors.leftMargin: 7 + root.depth * Theme.treeIndent
+        anchors.rightMargin: 8
+        spacing: 6
+
+        Item {
+            Layout.preferredWidth: Theme.treeArrowWidth
+            Layout.preferredHeight: Theme.treeRowHeight
+            visible: root.hasChildren
+            QuiTextIcon {
+                anchors.centerIn: parent
+                iconSource: root.expanded ? QuiFontIcon.ChevronDownSmall : QuiFontIcon.ChevronRightSmall
+                iconSize: Theme.treeArrowSize
+                iconColor: root.isSelected
+                           ? Theme.treeItemSelectedText
+                           : hoverHandler.hovered
+                             ? Theme.treeArrowHoverColor
+                             : Theme.treeArrowColor
+            }
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: function(mouse) {
+                    root.treeView.toggleExpanded(root.row)
+                    mouse.accepted = true
+                }
+            }
+        }
+
         QuiTextIcon {
             visible: root.hasChildren
             iconSource: {
@@ -56,11 +84,32 @@ Item {
                 if (d.indexOf("检") >= 0 || d.indexOf("深") >= 0) return QuiFontIcon.Search
                 return QuiFontIcon.Settings
             }
-            iconSize: 13
-            iconColor: QuiColor.Highlight
+            iconSize: Theme.treeFolderIconSize
+            iconColor: root.isSelected ? Theme.treeItemSelectedIcon : Theme.treeFolderIconColor
         }
-        QuiText { text: root.model.display || ""; Layout.fillWidth: true; elide: Text.ElideRight; color: root.model.available === false && root.leaf ? "#a34938" : QuiColor.FontPrimary }
+
+        QuiText {
+            visible: !root.hasChildren
+            text: "◇"
+            Layout.preferredWidth: Theme.treeArrowWidth
+            horizontalAlignment: Text.AlignHCenter
+            font.pixelSize: Theme.treeLeafIconSize
+            color: root.isSelected ? Theme.treeItemSelectedIcon : Theme.treeLeafIconColor
+        }
+
+        QuiText {
+            text: root.model.display || ""
+            Layout.fillWidth: true
+            elide: Text.ElideRight
+            font.pixelSize: Theme.treeItemFontSize
+            color: root.isSelected
+                   ? Theme.treeItemSelectedText
+                   : root.model.available === false && root.leaf
+                     ? Theme.treeItemUnavailableText
+                     : Theme.treeItemText
+        }
     }
+
     Item {
         id: dragPayload
         parent: root.Window.window ? root.Window.window.contentItem : root
@@ -71,12 +120,25 @@ Item {
         Drag.keys: ["visionrt/tool"]
         Drag.source: dragPayload
         Drag.hotSpot.x: 12; Drag.hotSpot.y: 16
-        Rectangle { anchors.fill: parent; radius: 4; color: "#deeffd"; border.color: QuiColor.Highlight; opacity: 0.95 }
-        QuiText { anchors.centerIn: parent; text: root.model.display || "" }
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.radiusSmall
+            color: Theme.treeItemSelectedBg
+            border.color: Theme.highlight
+            opacity: 0.95
+        }
+        QuiText {
+            anchors.centerIn: parent
+            text: root.model.display || ""
+            font.pixelSize: Theme.treeItemFontSize
+            color: Theme.treeItemSelectedText
+        }
     }
+
     MouseArea {
         id: pointer
-        anchors.fill: parent; hoverEnabled: true
+        anchors.fill: parent
+        hoverEnabled: false
         acceptedButtons: Qt.LeftButton
         preventStealing: root.leaf
         drag.target: root.leaf && !app.busy ? dragPayload : null
@@ -87,11 +149,12 @@ Item {
         }
         onReleased: { if (root.leaf) dragPayload.Drag.drop() }
         onClicked: {
+            root.selected(root.stableKey)
             if (root.hasChildren) {
-                root.branchToggled(root.stableKey, !root.expanded)
                 root.treeView.toggleExpanded(root.row)
+            } else {
+                root.chosen(root.toolId)
             }
-            else root.chosen(root.toolId)
         }
         onDoubleClicked: function(mouse) { mouse.accepted = true }
     }
