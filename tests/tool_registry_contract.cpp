@@ -1,5 +1,6 @@
 #include "core/ToolRegistry.h"
 #include "core/ValueYaml.h"
+#include "visionrt/sdk/SchemaYaml.h"
 
 #include <algorithm>
 #include <cassert>
@@ -208,6 +209,52 @@ int main(int argc, char** argv) {
     invalid = definition("bad.array"); invalid["outputs"][1]["type"] = "NumericArray"; rejectDefinition(invalid);
     invalid = definition("bad.function"); invalid["init_params"].push_back(YAML::Load("{id: count, name: Count, type: Int}")); rejectDefinition(invalid);
     invalid = definition("bad.fields"); invalid["run_params"] = YAML::Node(YAML::NodeType::Sequence); rejectDefinition(invalid);
+    invalid = definition("bad.kind"); invalid["kind"] = "unsupported_kind"; rejectDefinition(invalid);
+    invalid = definition("bad.py_empty_file"); invalid["kind"] = "python_function"; invalid["entry"] = YAML::Load("{file: '', symbol: run}"); rejectDefinition(invalid);
+    invalid = definition("bad.py_empty_sym"); invalid["kind"] = "python_function"; invalid["entry"] = YAML::Load("{file: run.py, symbol: ''}"); rejectDefinition(invalid);
+    invalid = definition("bad.unknown_port_field"); invalid["inputs"][2]["unsupported_prop"] = 42; rejectDefinition(invalid);
+    invalid = definition("bad.unknown_entry_field"); invalid["entry"]["extra"] = "val"; rejectDefinition(invalid);
+    invalid = definition("bad.unknown_display_field"); invalid["outputs"][0]["display"]["extra"] = "val"; rejectDefinition(invalid);
+    invalid = definition("bad.min_type"); invalid["inputs"][2]["min"] = "wrong_type"; rejectDefinition(invalid);
+    invalid = definition("bad.max_type"); invalid["inputs"][2]["max"] = "wrong_type"; rejectDefinition(invalid);
+    invalid = definition("bad.step_type"); invalid["inputs"][2]["step"] = "wrong_type"; rejectDefinition(invalid);
+    invalid = definition("bad.nan_min"); invalid["inputs"][2]["type"] = "Float"; invalid["inputs"][2]["default"] = 1.0; invalid["inputs"][2]["min"] = ".nan"; rejectDefinition(invalid);
+    invalid = definition("bad.inf_max"); invalid["inputs"][2]["type"] = "Float"; invalid["inputs"][2]["default"] = 1.0; invalid["inputs"][2]["max"] = ".inf"; rejectDefinition(invalid);
+    invalid = definition("bad.default_less_min"); invalid["inputs"][2]["default"] = -1; rejectDefinition(invalid);
+    invalid = definition("bad.options_out_of_range"); invalid["inputs"][2]["options"] = YAML::Load("[0, 5, 20]"); rejectDefinition(invalid);
+    invalid = definition("bad.default_not_in_options"); invalid["inputs"][2]["options"] = YAML::Load("[0, 2, 4]"); invalid["inputs"][2]["default"] = 3; rejectDefinition(invalid);
+
+    // Positive case: valid tool YAML with options and bounds
+    auto validWithOptions = definition("valid.options");
+    validWithOptions["inputs"][2]["options"] = YAML::Load("[0, 4, 8]");
+    validWithOptions["inputs"][2]["default"] = 4;
+    const auto validPath = temporary.put("valid/Image/Basic/options.yaml", YAML::Dump(validWithOptions));
+    const auto parsedOptionsTool = parseDefinition(validPath, false);
+    assert(parsedOptionsTool.id == "valid.options");
+    assert(parsedOptionsTool.inputs[2].options.size() == 3);
+
+    // Direct SchemaYaml SDK tests
+    const std::string validYamlText = YAML::Dump(definition("sdk.direct"));
+    const auto directDef = parseToolDefinitionYaml(validYamlText);
+    assert(directDef.id == "sdk.direct");
+    validateToolYaml(validYamlText);
+    validateToolDefinition(directDef);
+    rejects([&] { parseToolDefinitionYaml("unknown_top_field: 123"); });
+
+    // Validate CLI executable smoke test if present
+    std::filesystem::path validatorExe = std::filesystem::exists("bin/visionrt_validate_tool.exe")
+        ? std::filesystem::path("bin/visionrt_validate_tool.exe")
+        : (std::filesystem::exists("bin/visionrt_validate_tool") ? std::filesystem::path("bin/visionrt_validate_tool") : std::filesystem::path());
+    if (!validatorExe.empty()) {
+        validatorExe = std::filesystem::absolute(validatorExe).make_preferred();
+        const auto validCommand = "\"\"" + validatorExe.string() + "\" \"" + std::filesystem::absolute(validPath).make_preferred().string() + "\"\"";
+        const auto codeValid = std::system(validCommand.c_str());
+        assert(codeValid == 0);
+        const auto invalidFile = temporary.put("invalid/bad.yaml", "unknown_field: 123\n");
+        const auto invalidCommand = "\"\"" + validatorExe.string() + "\" \"" + std::filesystem::absolute(invalidFile).make_preferred().string() + "\"\"";
+        const auto codeInvalid = std::system(invalidCommand.c_str());
+        assert(codeInvalid != 0);
+    }
 
     TemporaryTools refreshTools;
     refreshTools.put("builtin/Image/Basic/cpp.yaml", YAML::Dump(definition("refresh.cpp")));

@@ -13,6 +13,8 @@ add_library(VisionRTToolSDK STATIC
     src/Value.cpp
     src/Contract.cpp
     src/Schema.cpp
+    src/ValueYaml.cpp
+    src/SchemaYaml.cpp
 )
 add_library(VisionRT::ToolSDK ALIAS VisionRTToolSDK)
 set_target_properties(VisionRTToolSDK PROPERTIES EXPORT_NAME ToolSDK)
@@ -23,12 +25,15 @@ target_include_directories(VisionRTToolSDK
         $<INSTALL_INTERFACE:include>
         ${OpenCV_INCLUDE_DIRS}
 )
-target_link_libraries(VisionRTToolSDK PUBLIC opencv_core)
+target_link_libraries(VisionRTToolSDK PUBLIC opencv_core yaml-cpp::yaml-cpp)
+
+add_executable(visionrt_validate_tool tools/visionrt_validate_tool.cpp)
+target_link_libraries(visionrt_validate_tool PRIVATE VisionRTToolSDK)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-install(TARGETS VisionRTToolSDK
+install(TARGETS VisionRTToolSDK yaml-cpp visionrt_validate_tool
     EXPORT VisionRTToolSDKTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -37,6 +42,7 @@ install(TARGETS VisionRTToolSDK
 )
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/yaml-cpp/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(EXPORT VisionRTToolSDKTargets
     FILE VisionRTToolSDKTargets.cmake

@@ -31,7 +31,6 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 核心业务逻辑库
 add_library(visionrt_core
-    src/core/ValueYaml.cpp
     src/core/ToolRegistry.cpp
     src/core/ProjectEditor.cpp
     src/core/ProjectStorage.cpp

@@ -26,6 +26,8 @@ void treeContract() {
     tool.displayName = "精确整数";
     tool.version = "1.0";
     tool.kind = ToolKind::PythonFunction;
+    tool.script = "precise.py";
+    tool.symbol = "execute";
     tool.category = "数据";
     tool.subcategory = "整数";
     registry.addDefinition(tool);
