@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Package VisionRT release runtime.")
     parser.add_argument("--build-dir", "-BuildDir", default="build", help="CMake build directory.")
     parser.add_argument("--install-dir", "-InstallDir", default=None, help="Installation output directory.")
-    parser.add_argument("--config", "-Config", choices=["release"], default="release", help="Build configuration.")
+    parser.add_argument("--config", "-Config", type=str.lower, choices=["release", "debug"], default="release", help="Build configuration.")
     parser.add_argument("--dependencies", default="tools/dependencies.yaml", help="Path to dependencies.yaml.")
     parser.add_argument("--windeployqt", "-WinDeployQt", default="", help="Explicit path to windeployqt.exe.")
     parser.add_argument("--qt-root", "-QtRoot", default="", help="Explicit Qt root directory.")
