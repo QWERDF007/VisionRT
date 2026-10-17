@@ -149,6 +149,9 @@ if(BUILD_TESTING)
 
         add_executable(performance_contract tests/performance_contract.cpp)
         target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_tools visionrt_python opencv_core Qt6::Quick)
+        target_compile_definitions(performance_contract PRIVATE
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         add_test(NAME performance_contract COMMAND performance_contract)
         visionrt_apply_test_environment(performance_contract)
         if(MSVC)
