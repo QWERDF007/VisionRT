@@ -184,7 +184,7 @@ if(BUILD_TESTING)
     set_target_properties(test_plugin_module PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_module)
 
     add_executable(plugin_contract tests/plugin_contract.cpp)
-    target_link_libraries(plugin_contract PRIVATE visionrt_core)
+    target_link_libraries(plugin_contract PRIVATE visionrt_ui)
     add_test(NAME plugin_contract COMMAND plugin_contract "$<TARGET_FILE:test_plugin_module>")
     visionrt_apply_test_environment(plugin_contract)
     if(MSVC)

@@ -72,7 +72,37 @@ QString stateName(RuntimeState state) {
 }
 AppController::Impl::Impl(AppController* owner, std::size_t workers, const QString& directory)
     : q(owner), applicationDirectory(workbench::localPath(directory)), tools(owner), outputs(owner), converter(owner) {
-    registry.scan(applicationDirectory / "tools");
+    pluginLoader = std::make_shared<PluginLoader>();
+    std::filesystem::path toolsPackageRoot;
+    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.json")) {
+        toolsPackageRoot = (applicationDirectory / "tools-package").lexically_normal();
+    } else if (std::filesystem::exists(applicationDirectory / "module_index.json")) {
+        toolsPackageRoot = applicationDirectory;
+    } else {
+        toolsPackageRoot = (applicationDirectory / "tools").lexically_normal();
+    }
+    pluginLoader->setBaseDirectory(toolsPackageRoot);
+
+    const auto indexFile = toolsPackageRoot / "module_index.json";
+    if (std::filesystem::exists(indexFile)) {
+        pluginLoader->loadIndexFile(indexFile);
+    }
+    for (const auto& diag : pluginLoader->diagnostics()) {
+        report(workbench::pathText(diag.path) + ": " + workbench::q(diag.message));
+    }
+    registry.setPluginLoader(pluginLoader);
+
+    if (std::filesystem::is_directory(toolsPackageRoot / "assets" / "tools")) {
+        registry.scan(toolsPackageRoot / "assets" / "tools");
+    }
+    if (std::filesystem::is_directory(applicationDirectory / "tools")) {
+        registry.scan(applicationDirectory / "tools");
+    }
+    if (std::filesystem::is_directory(applicationDirectory / "assets" / "tools") &&
+        (applicationDirectory / "assets" / "tools") != (toolsPackageRoot / "assets" / "tools")) {
+        registry.scan(applicationDirectory / "assets" / "tools");
+    }
+
     registerCpuTools(registry);
     registerInferTools(registry);
     registerReceiveTools(registry);

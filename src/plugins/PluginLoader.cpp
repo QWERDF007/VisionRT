@@ -19,51 +19,136 @@ void PluginLoader::setBaseDirectory(std::filesystem::path baseDirectory) {
 }
 
 void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
-    if (!std::filesystem::exists(indexFilePath)) return;
+    std::lock_guard lock(mutex_);
+    if (!std::filesystem::exists(indexFilePath)) {
+        diagnostics_.push_back({indexFilePath, "Module index file does not exist: " + indexFilePath.string()});
+        return;
+    }
     const auto ext = indexFilePath.extension().string();
     if (ext == ".json") {
         QFile file(QString::fromStdString(indexFilePath.string()));
-        if (!file.open(QIODevice::ReadOnly)) return;
-        const auto doc = QJsonDocument::fromJson(file.readAll());
-        if (doc.isObject()) {
-            const auto obj = doc.object();
-            if (obj.contains("modules") && obj["modules"].isArray()) {
-                const auto arr = obj["modules"].toArray();
-                for (const auto& item : arr) {
-                    if (item.isObject()) {
-                        const auto m = item.toObject();
-                        const auto name = m.value("registry_name").toString().toStdString();
-                        const auto path = std::filesystem::u8path(m.value("path").toString().toStdString());
-                        if (!name.empty() && !path.empty()) registerModule(name, path);
-                    }
+        if (!file.open(QIODevice::ReadOnly)) {
+            diagnostics_.push_back({indexFilePath, "Cannot open module index file: " + indexFilePath.string()});
+            return;
+        }
+        QJsonParseError parseError;
+        const auto doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            diagnostics_.push_back({indexFilePath, "Failed to parse module index JSON: " + parseError.errorString().toStdString()});
+            return;
+        }
+        const auto obj = doc.object();
+        if (obj.contains("schema_version") && obj["schema_version"].toInt() != 1) {
+            diagnostics_.push_back({indexFilePath, "Unsupported module index schema_version: " + std::to_string(obj["schema_version"].toInt())});
+            return;
+        }
+
+        if (obj.contains("modules") && obj["modules"].isArray()) {
+            const auto arr = obj["modules"].toArray();
+            for (const auto& item : arr) {
+                if (!item.isObject()) {
+                    diagnostics_.push_back({indexFilePath, "Module item in array must be an object"});
+                    continue;
                 }
-            } else {
-                for (auto it = obj.begin(); it != obj.end(); ++it) {
-                    if (it.value().isString()) {
-                        registerModule(it.key().toStdString(), std::filesystem::u8path(it.value().toString().toStdString()));
-                    }
+                const auto m = item.toObject();
+                const auto name = m.value("registry_name").toString().toStdString();
+                const auto pathStr = m.value("path").toString().toStdString();
+                if (name.empty()) {
+                    diagnostics_.push_back({indexFilePath, "Module registry_name must not be empty"});
+                    continue;
                 }
+                if (pathStr.empty()) {
+                    diagnostics_.push_back({indexFilePath, "Module path must not be empty for registry_name: " + name});
+                    continue;
+                }
+                if (index_.contains(name)) {
+                    diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
+                    continue;
+                }
+                const auto relPath = std::filesystem::u8path(pathStr);
+                if (relPath.is_absolute()) {
+                    diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
+                    continue;
+                }
+                auto norm = relPath.lexically_normal();
+                if (!norm.empty() && norm.begin()->string() == "..") {
+                    diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
+                    continue;
+                }
+                index_[name] = relPath;
             }
+        } else if (obj.contains("modules") && obj["modules"].isObject()) {
+            const auto mods = obj["modules"].toObject();
+            for (auto it = mods.begin(); it != mods.end(); ++it) {
+                const auto name = it.key().toStdString();
+                const auto pathStr = it.value().toString().toStdString();
+                if (name.empty() || pathStr.empty()) continue;
+                if (index_.contains(name)) {
+                    diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
+                    continue;
+                }
+                const auto relPath = std::filesystem::u8path(pathStr);
+                if (relPath.is_absolute()) {
+                    diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
+                    continue;
+                }
+                auto norm = relPath.lexically_normal();
+                if (!norm.empty() && norm.begin()->string() == "..") {
+                    diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
+                    continue;
+                }
+                index_[name] = relPath;
+            }
+        } else {
+            diagnostics_.push_back({indexFilePath, "Module index must contain 'modules' array or object"});
         }
     } else if (ext == ".yaml" || ext == ".yml") {
         try {
             const auto node = YAML::LoadFile(indexFilePath.string());
-            if (node.IsMap()) {
-                if (node["modules"] && node["modules"].IsSequence()) {
-                    for (const auto& item : node["modules"]) {
-                        if (item["registry_name"] && item["path"]) {
-                            registerModule(item["registry_name"].as<std::string>(),
-                                           std::filesystem::u8path(item["path"].as<std::string>()));
-                        }
+            if (!node.IsMap()) {
+                diagnostics_.push_back({indexFilePath, "Module index YAML root must be a map"});
+                return;
+            }
+            if (node["schema_version"] && node["schema_version"].as<int>() != 1) {
+                diagnostics_.push_back({indexFilePath, "Unsupported module index schema_version: " + node["schema_version"].as<std::string>()});
+                return;
+            }
+            if (node["modules"] && node["modules"].IsSequence()) {
+                for (const auto& item : node["modules"]) {
+                    if (!item.IsMap()) {
+                        diagnostics_.push_back({indexFilePath, "Module item in YAML sequence must be a map"});
+                        continue;
                     }
-                } else {
-                    for (const auto& kv : node) {
-                        registerModule(kv.first.as<std::string>(),
-                                       std::filesystem::u8path(kv.second.as<std::string>()));
+                    const auto name = item["registry_name"] ? item["registry_name"].as<std::string>() : "";
+                    const auto pathStr = item["path"] ? item["path"].as<std::string>() : "";
+                    if (name.empty()) {
+                        diagnostics_.push_back({indexFilePath, "Module registry_name must not be empty"});
+                        continue;
                     }
+                    if (pathStr.empty()) {
+                        diagnostics_.push_back({indexFilePath, "Module path must not be empty for registry_name: " + name});
+                        continue;
+                    }
+                    if (index_.contains(name)) {
+                        diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
+                        continue;
+                    }
+                    const auto relPath = std::filesystem::u8path(pathStr);
+                    if (relPath.is_absolute()) {
+                        diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
+                        continue;
+                    }
+                    auto norm = relPath.lexically_normal();
+                    if (!norm.empty() && norm.begin()->string() == "..") {
+                        diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
+                        continue;
+                    }
+                    index_[name] = relPath;
                 }
             }
-        } catch (...) {}
+        } catch (const std::exception& error) {
+            diagnostics_.push_back({indexFilePath, "Failed to parse module index YAML: " + std::string(error.what())});
+        }
     }
 }
 
@@ -203,6 +288,13 @@ ToolStatus DomainToolAdapter::initialize(const Values& initParams) {
         return failureStatus_;
     }
 
+    if (createStatus.code != 0) {
+        try { module_->api->destroy(raw_); } catch (...) {}
+        raw_ = nullptr;
+        failureStatus_ = createStatus;
+        return failureStatus_;
+    }
+
     try {
         status = raw_->initialize(initParams);
     } catch (const std::exception& error) {
@@ -223,6 +315,14 @@ ToolStatus DomainToolAdapter::initialize(const Values& initParams) {
 }
 
 ToolResult DomainToolAdapter::execute(const Values& inputs) {
+    if (!raw_) {
+        if (failureStatus_.code == 0) {
+            auto s = initialize({});
+            if (s.code != 0) {
+                return ToolResult{s, {}};
+            }
+        }
+    }
     if (!raw_) {
         const auto s = (failureStatus_.code != 0 ? failureStatus_ : ToolStatus{-3, "Tool instance unavailable: " + registryName_});
         return ToolResult{s, {}};
