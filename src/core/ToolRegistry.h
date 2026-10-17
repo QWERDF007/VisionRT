@@ -29,6 +29,8 @@ public:
     ToolAvailability reason;
 };
 
+class PluginLoader;
+
 // Mutate only between runs; definitions and their factories form a runtime snapshot.
 class ToolRegistry {
 public:
@@ -46,6 +48,9 @@ public:
     const std::vector<ToolDefinition>& definitions() const noexcept { return definitions_; }
     const std::vector<RegistryDiagnostic>& diagnostics() const noexcept { return diagnostics_; }
 
+    void setPluginLoader(std::shared_ptr<PluginLoader> loader) { pluginLoader_ = std::move(loader); }
+    const std::shared_ptr<PluginLoader>& pluginLoader() const noexcept { return pluginLoader_; }
+
 private:
     void scanDefinitions(const std::filesystem::path& toolsRoot, bool pythonOnly);
     struct CppImplementation {
@@ -56,6 +61,7 @@ private:
         ToolFactory factory;
         ToolStatus status;
     };
+    std::shared_ptr<PluginLoader> pluginLoader_;
     std::vector<ToolDefinition> definitions_;
     std::map<std::string, std::size_t, std::less<>> index_;
     std::vector<RegistryDiagnostic> diagnostics_;
