@@ -287,6 +287,7 @@ void testWorkbenchBrowsingLatency() {
         d.displayName = "Performance Tool " + std::to_string(i);
         d.version = "1.0.0";
         d.kind = ToolKind::CppFunction;
+        d.registryName = d.id;
         d.category = "Category_" + std::to_string(i % 10);
         d.subcategory = "Subcategory_" + std::to_string(i % 5);
         registry.addDefinition(d);

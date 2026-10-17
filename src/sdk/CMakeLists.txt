@@ -12,6 +12,7 @@ endif()
 add_library(VisionRTToolSDK STATIC
     src/Value.cpp
     src/Contract.cpp
+    src/Schema.cpp
 )
 add_library(VisionRT::ToolSDK ALIAS VisionRTToolSDK)
 set_target_properties(VisionRTToolSDK PROPERTIES EXPORT_NAME ToolSDK)

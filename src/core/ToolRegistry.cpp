@@ -154,23 +154,6 @@ const PortDefinition* portById(const std::vector<PortDefinition>& ports, std::st
     const auto found = std::find_if(ports.begin(), ports.end(), [&](const auto& port) { return port.id == id; });
     return found == ports.end() ? nullptr : &*found;
 }
-void checkReferences(const ToolDefinition& definition) {
-    for (const auto& port : definition.initParams)
-        if (portById(definition.inputs, port.id)) throw ContractError("init_params and inputs share ID: " + port.id);
-    const auto image = [](const std::vector<PortDefinition>& ports, const std::string& id, const char* context) {
-        if (id.empty()) return;
-        const auto* target = portById(ports, id);
-        if (!target || target->type.type != Type::ImageBatch)
-            throw ContractError(std::string(context) + " must reference an ImageBatch port: " + id);
-    };
-    for (const auto& port : definition.inputs) image(definition.inputs, port.imageInput, "image_input");
-    for (const auto& port : definition.outputs) {
-        image(definition.outputs, port.imagePort, "image_port");
-        image(definition.inputs, port.sameGeometryAsInput, "same_geometry_as_input");
-    }
-    if ((definition.kind == ToolKind::CppFunction || definition.kind == ToolKind::PythonFunction) && !definition.initParams.empty())
-        throw ContractError("Function tools must have empty init_params");
-}
 void systemOutputs(ToolDefinition& definition) {
     const auto* code = portById(definition.outputs, "__status_code");
     const auto* message = portById(definition.outputs, "__status_message");
@@ -191,19 +174,8 @@ void systemOutputs(ToolDefinition& definition) {
     definition.outputs.insert(definition.outputs.begin(), {std::move(statusCode), std::move(statusMessage)});
 }
 void validateDefinition(ToolDefinition& definition) {
-    identifier(definition.id, false);
     systemOutputs(definition);
-    for (const auto* ports : {&definition.initParams, &definition.inputs, &definition.outputs}) {
-        std::set<std::string> ids;
-        for (const auto& port : *ports) {
-            const bool status = ports == &definition.outputs && (port.id == "__status_code" || port.id == "__status_message");
-            identifier(port.id, !status);
-            if (!ids.insert(port.id).second) throw ContractError("Duplicate port ID: " + port.id);
-            validateTypeSpec(port.type);
-            validateValue(port.type, port.defaultValue);
-        }
-    }
-    checkReferences(definition);
+    validateToolDefinition(definition);
 }
 void align(const ToolDefinition& definition, const ToolDefinition& contract) {
     if (definition.kind != contract.kind || definition.registryName != contract.registryName)

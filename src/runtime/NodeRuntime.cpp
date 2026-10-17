@@ -57,8 +57,16 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
         std::atomic<bool>& active;
         ~Activity() { active.store(false, std::memory_order_release); }
     } activity{active};
+    struct ScopeTimer {
+        Clock::time_point start = Clock::now();
+        double& target;
+        bool active = true;
+        explicit ScopeTimer(double& destination) : target(destination) { target = 0.0; }
+        ~ScopeTimer() { if (active) target = milliseconds(Clock::now() - start); }
+        void stop() { if (active) { target = milliseconds(Clock::now() - start); active = false; } }
+    };
+
     const auto started = Clock::now();
-    auto phaseStarted = started;
     auto snapshot = std::make_shared<NodeSnapshot>();
     snapshot->node = id;
     snapshot->generation = context->generation;
@@ -71,38 +79,40 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
     snapshot->executionRevision = config.executionRevision;
     ToolResult result;
     const char* phase = "prepare";
-    double* elapsed = &snapshot->timing.prepareMs;
     bool frameworkFailure = false;
     try {
         if (!definition) throw RegistryError(ToolAvailability::DefinitionMissing, "tool definition missing");
         Values inputs;
-        for (const auto& port : definition->inputs) {
-            PortValue value = port.defaultValue;
-            const auto binding = config.inputs.find(port.id);
-            if (binding != config.inputs.end()) {
-                const auto& input = binding->second;
-                if (input.mode == BindingMode::Literal) value = input.literal;
-                else if (!input.source) value = Missing{};
-                else {
-                    const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
-                    if (frozen.mode != RunMode::Node && (!upstream ||
-                        upstream->generation != context->generation || upstream->session != context->session ||
-                        upstream->round != context->round)) {
-                        throw ContractError("predecessor is not from this session/round");
-                    }
-                    if (!upstream) value = Missing{};
+        {
+            ScopeTimer prepareTimer(snapshot->timing.prepareMs);
+            for (const auto& port : definition->inputs) {
+                PortValue value = port.defaultValue;
+                const auto binding = config.inputs.find(port.id);
+                if (binding != config.inputs.end()) {
+                    const auto& input = binding->second;
+                    if (input.mode == BindingMode::Literal) value = input.literal;
+                    else if (!input.source) value = Missing{};
                     else {
-                        const auto found = upstream->outputs.find(input.source->port);
-                        if (found == upstream->outputs.end()) throw ContractError("predecessor output is absent");
-                        value = found->second;
+                        const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
+                        if (frozen.mode != RunMode::Node && (!upstream ||
+                            upstream->generation != context->generation || upstream->session != context->session ||
+                            upstream->round != context->round)) {
+                            throw ContractError("predecessor is not from this session/round");
+                        }
+                        if (!upstream) value = Missing{};
+                        else {
+                            const auto found = upstream->outputs.find(input.source->port);
+                            if (found == upstream->outputs.end()) throw ContractError("predecessor output is absent");
+                            value = found->second;
+                        }
                     }
                 }
+                validateValue(port.type, value);
+                inputs.emplace(port.id, std::move(value));
             }
-            validateValue(port.type, value);
-            inputs.emplace(port.id, std::move(value));
+            prepareTimer.stop();
         }
-        snapshot->timing.prepareMs = milliseconds(Clock::now() - phaseStarted);
-        phase = "initialize"; elapsed = &snapshot->timing.initMs; phaseStarted = Clock::now();
+        phase = "initialize";
         reader->bind(context);
         const auto& parameters = frozen.initParameters.at(id);
         if (configurationSession != context->session) {
@@ -125,20 +135,28 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
         if (!instance && !suppressed) {
             initializationFailure.reset();
             ToolStatus status;
-            try {
-                PlatformToolServices services{PathResolver(frozen.project.path.parent_path()), reader};
-                instance = frozen.registry.create(toolId, services);
-                if (!instance) throw RegistryError(ToolAvailability::ImplementationUnavailable, "factory returned no instance");
-                if (kind == ToolKind::CppClass || kind == ToolKind::PythonClass)
-                    status = instance->initialize(parameters);
-            } catch (const RegistryError& error) {
-                status = {-3, error.what()};
-            } catch (const ContractError& error) {
-                status = {-2, error.what()};
-            } catch (const std::exception& error) {
-                status = {-1, error.what()};
-            } catch (...) {
-                status = {-1, "unknown initialization exception"};
+            {
+                ScopeTimer initTimer(snapshot->timing.initMs);
+                try {
+                    PlatformToolServices services{PathResolver(frozen.project.path.parent_path()), reader};
+                    instance = frozen.registry.create(toolId, services);
+                    if (!instance) throw RegistryError(ToolAvailability::ImplementationUnavailable, "factory returned no instance");
+                    if (kind == ToolKind::CppClass)
+                        status = instance->initialize(parameters);
+                    else if (kind == ToolKind::CppFunction)
+                        status = instance->initialize({});
+                    else if (kind == ToolKind::PythonClass)
+                        status = instance->initialize(parameters);
+                } catch (const RegistryError& error) {
+                    status = {-3, error.what()};
+                } catch (const ContractError& error) {
+                    status = {-2, error.what()};
+                } catch (const std::exception& error) {
+                    status = {-1, error.what()};
+                } catch (...) {
+                    status = {-1, "unknown initialization exception"};
+                }
+                initTimer.stop();
             }
             if (!status) {
                 status.message = location(id, toolId, "initialize", status.message);
@@ -147,10 +165,14 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
                 failureSession = context->session;
             }
         }
-        snapshot->timing.initMs = suppressed ? 0 : milliseconds(Clock::now() - phaseStarted);
-        phase = "execute"; elapsed = &snapshot->timing.executeMs; phaseStarted = Clock::now();
+        phase = "execute";
         if (instance) {
-            result = instance->execute(inputs);
+            {
+                ScopeTimer execTimer(snapshot->timing.executeMs);
+                result = instance->execute(inputs);
+                execTimer.stop();
+            }
+            snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
             if (auto* py = dynamic_cast<IPythonExecutionMetrics*>(instance.get())) {
                 const auto m = py->pythonMetrics();
                 snapshot->timing.waitGilMs = m.waitGilMs;
@@ -162,14 +184,14 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
             result.status = *initializationFailure;
             frameworkFailure = true;
         }
-        snapshot->timing.executeMs = instance ? milliseconds(Clock::now() - phaseStarted) : 0;
         snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
         if (result.status.code < 0) {
             frameworkFailure = true;
             if (instance) result.status.message = location(id, config.toolId, "execute", result.status.message);
         }
-        phase = "convert"; elapsed = &snapshot->timing.convertMs; phaseStarted = Clock::now();
+        phase = "convert";
         if (!frameworkFailure) {
+            ScopeTimer convertTimer(snapshot->timing.convertMs);
             validateUtf8(result.status.message);
             const auto businessCount = std::count_if(definition->outputs.begin(), definition->outputs.end(),
                 [](const auto& port) { return port.id != "__status_code" && port.id != "__status_message"; });
@@ -190,25 +212,32 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
                         snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
                 }
             }
+            convertTimer.stop();
         }
-        snapshot->timing.convertMs = milliseconds(Clock::now() - phaseStarted);
         snapshot->timing.validateMs = snapshot->timing.convertMs;
     } catch (const RegistryError& error) {
-        *elapsed = milliseconds(Clock::now() - phaseStarted);
         result.status = {-3, location(id, config.toolId, phase, error.what())};
         frameworkFailure = true;
     } catch (const ContractError& error) {
-        *elapsed = milliseconds(Clock::now() - phaseStarted);
         result.status = {-2, location(id, config.toolId, phase, error.what())};
         frameworkFailure = true;
     } catch (const std::exception& error) {
-        *elapsed = milliseconds(Clock::now() - phaseStarted);
         result.status = {-1, location(id, config.toolId, phase, error.what())};
         frameworkFailure = true;
     } catch (...) {
-        *elapsed = milliseconds(Clock::now() - phaseStarted);
         result.status = {-1, location(id, config.toolId, phase, "unknown exception")};
         frameworkFailure = true;
+    }
+    snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
+    snapshot->timing.validateMs = snapshot->timing.convertMs;
+    if (instance) {
+        if (auto* py = dynamic_cast<IPythonExecutionMetrics*>(instance.get())) {
+            const auto m = py->pythonMetrics();
+            snapshot->timing.waitGilMs = m.waitGilMs;
+            snapshot->timing.pythonInputMs = m.pythonInputMs;
+            snapshot->timing.pythonCallMs = m.pythonCallMs;
+            snapshot->timing.pythonOutputMs = m.pythonOutputMs;
+        }
     }
     if (frameworkFailure) {
         result.outputs.clear();

@@ -209,23 +209,33 @@ public:
         };
         if (!unavailable_) return fail(unavailable_);
         if (released_) return fail(errorStatus(definition_, -1, "execute", "Instance was released"));
+        struct ScopeTimer {
+            using Clock = std::chrono::steady_clock;
+            Clock::time_point start = Clock::now();
+            double& target;
+            bool active = true;
+            explicit ScopeTimer(double& destination) : target(destination) { target = 0.0; }
+            ~ScopeTimer() { if (active) target = std::chrono::duration<double, std::milli>(Clock::now() - start).count(); }
+            void stop() { if (active) { target = std::chrono::duration<double, std::milli>(Clock::now() - start).count(); active = false; } }
+        };
         py::object returned;
         try {
-            const auto inputStart = std::chrono::steady_clock::now();
-            auto parameters = inputDictionary(inputs, definition_.inputs, services_);
-            metrics_.pythonInputMs = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - inputStart).count();
-            const auto callStart = std::chrono::steady_clock::now();
-            returned = objects_->execute(parameters);
-            metrics_.pythonCallMs = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - callStart).count();
+            {
+                ScopeTimer inputTimer(metrics_.pythonInputMs);
+                auto parameters = inputDictionary(inputs, definition_.inputs, services_);
+                inputTimer.stop();
+
+                ScopeTimer callTimer(metrics_.pythonCallMs);
+                returned = objects_->execute(parameters);
+                callTimer.stop();
+            }
         } catch (const py::error_already_set& error) {
             return fail(errorStatus(definition_, -1, "execute", error.what()));
         } catch (const std::exception& error) {
             return fail(errorStatus(definition_, -1, "execute", error.what()));
         }
         try {
-            const auto outputStart = std::chrono::steady_clock::now();
+            ScopeTimer outputTimer(metrics_.pythonOutputMs);
             auto dictionary = resultDictionary(returned);
             result.status = parseStatus(dictionary);
             if (dictionary.size() != businessOutputCount_ + 2)
@@ -243,8 +253,7 @@ public:
                     throw ContractError("Output " + output.id + ": " + error.what());
                 }
             }
-            metrics_.pythonOutputMs = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - outputStart).count();
+            outputTimer.stop();
         } catch (const py::error_already_set& error) {
             return fail(errorStatus(definition_, -2, "convert", error.what()));
         } catch (const std::exception& error) {
