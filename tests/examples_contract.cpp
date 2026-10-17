@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <cassert>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <thread>
 
@@ -51,30 +52,26 @@ void setupPython(ToolRegistry& registry, PythonRuntime& runtime) {
 }
 
 void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime& python) {
+    QTemporaryDir tmpDir;
+    assert(tmpDir.isValid());
+    const auto tmpPath = std::filesystem::path(tmpDir.path().toStdString());
+    const auto tempProjectFile = tmpPath / "pipeline_cpu_python.vrt";
+    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", tempProjectFile);
+    std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images", std::filesystem::copy_options::recursive);
+
     ToolRegistry registry;
     registry.scan(repoRoot / "assets" / "tools");
     registerCpuTools(registry);
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
-    const auto projectFile = repoRoot / "examples" / "pipeline_cpu_python.vrt";
-    auto loaded = storage.load(projectFile);
-    if (!loaded.diagnostics.empty()) {
-        storage.save(loaded.project, projectFile);
-        loaded = storage.load(projectFile);
-    }
-    for (const auto& d : loaded.diagnostics) {
-        std::cerr << "Diagnostic: node=" << (d.node ? std::to_string(*d.node) : "null")
-                  << " code=" << static_cast<int>(d.code)
-                  << " field=" << d.field
-                  << " msg=" << d.message << std::endl;
-    }
+    auto loaded = storage.load(tempProjectFile);
     assert(loaded.diagnostics.empty());
     assert(loaded.project.flows.size() == 1);
     assert(loaded.project.flows[0].nodes.size() == 5);
 
     RuntimeEngine engine(4);
-    assert(engine.start(loaded.project, registry, RunMode::Once));
+    assert(engine.start(loaded.project, registry, RunMode::Once).code == 0);
     auto update = finish(engine);
 
     // Node 1: image read
@@ -111,9 +108,7 @@ void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime&
     assert(values[0] > 0.0);
     assert(values[1] > 0.0);
 
-    // Test Save As / Reopen consistency
-    QTemporaryDir tmpDir;
-    assert(tmpDir.isValid());
+    // Test Save As / Reopen consistency & re-execution output equality
     const auto saveTarget = std::filesystem::path(tmpDir.path().toStdString()) / "reopened.vrt";
     storage.save(loaded.project, saveTarget);
     auto reloaded = storage.load(saveTarget);
@@ -122,17 +117,49 @@ void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime&
     for (size_t i = 0; i < 5; ++i) {
         assert(reloaded.project.flows[0].nodes[i].toolId == loaded.project.flows[0].nodes[i].toolId);
     }
+    assert(engine.start(reloaded.project, registry, RunMode::Once).code == 0);
+    auto reloadedUpdate = finish(engine);
+    auto reloadedS5 = snapshot(reloadedUpdate, 5);
+    assert(reloadedS5 && reloadedS5->status.code == 0);
+    const auto& reloadedMeans = std::get<NumericArray>(reloadedS5->outputs.at("means"));
+    const auto reloadedValues = reloadedMeans.buffers()[0].values<double>();
+    assert(reloadedValues[0] == values[0]);
+    assert(reloadedValues[1] == values[1]);
+
+    // Test corrupted input on a temp copy: must fail (exception or diagnostics) and not corrupt source file
+    const auto corruptTarget = std::filesystem::path(tmpDir.path().toStdString()) / "corrupted.vrt";
+    std::filesystem::copy_file(tempProjectFile, corruptTarget);
+    {
+        std::ofstream corruptOut(corruptTarget, std::ios::app);
+        corruptOut << "\n!@#$%^&*()INVALID_YAML_TAIL:\n";
+    }
+    bool corruptFailed = false;
+    try {
+        auto corruptLoaded = storage.load(corruptTarget);
+        corruptFailed = !corruptLoaded.diagnostics.empty();
+    } catch (const std::exception& e) {
+        std::cout << "Corrupted project loading correctly rejected with exception: " << e.what() << std::endl;
+        corruptFailed = true;
+    }
+    assert(corruptFailed);
+    std::cout << "Corrupted input failure test passed." << std::endl;
 }
 
 void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime& python) {
+    QTemporaryDir tmpDir;
+    assert(tmpDir.isValid());
+    const auto tmpPath = std::filesystem::path(tmpDir.path().toStdString());
+    const auto tempProjectFile = tmpPath / "pipeline_error_diagnostic.vrt";
+    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt", tempProjectFile);
+    std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images", std::filesystem::copy_options::recursive);
+
     ToolRegistry registry;
     registry.scan(repoRoot / "assets" / "tools");
     registerCpuTools(registry);
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
-    const auto projectFile = repoRoot / "examples" / "pipeline_error_diagnostic.vrt";
-    auto loaded = storage.load(projectFile);
+    auto loaded = storage.load(tempProjectFile);
     // Node 4 is DefinitionMissing
     bool foundMissingDef = false;
     for (const auto& d : loaded.diagnostics) {

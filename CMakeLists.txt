@@ -145,7 +145,7 @@ if(BUILD_TESTING)
         visionrt_contract(workbench_contract visionrt_ui)
 
         add_executable(performance_contract tests/performance_contract.cpp)
-        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_tools opencv_core)
+        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_tools visionrt_python opencv_core Qt6::Quick)
         add_test(NAME performance_contract COMMAND performance_contract)
         visionrt_apply_test_environment(performance_contract)
         if(MSVC)
