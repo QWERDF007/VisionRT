@@ -96,90 +96,64 @@ F:\Projects\VisionTools\
 - `visiontools_infer.dll`
 - `visiontools_flow.dll`
 
-### 4.2 C++ 算子 ABI 稳定接口契约
-在 `VisionTools/src/sdk/` 中定义无 STL 穿透的标准接口：
+### 4.2 C++ 算子 ABI 稳定接口契约（单一真相源 SSOT）
+VisionRT 在 `src/sdk/include/visionrt/sdk/Tool.h` 提供统一定义并导出 `VisionRT::ToolSDK`，VisionTools 直接引用此 SDK，绝不维护第二套冲突接口：
 
 ```cpp
-namespace visiontools {
+#include <visionrt/sdk/Tool.h>
 
-// 状态结构体（C-ABI 兼容）
-struct Status {
-    int64_t code = 0;
-    const char* message = "";
-    static Status OK() noexcept { return {0, ""}; }
-    static Status Error(int64_t c, const char* msg) noexcept { return {c, msg}; }
-    explicit operator bool() const noexcept { return code == 0; }
-};
+namespace visionrt {
 
-// 抽象上下文句柄：数据读写通过纯虚接口，隐藏底层容器
-class IToolContext {
-public:
-    virtual ~IToolContext() = default;
-
-    // 强类型安全读取（基于语义 PortId 字符串，杜绝魔术数字）
-    virtual bool getBool(const char* portId, bool fallback = false) const = 0;
-    virtual int64_t getInt(const char* portId, int64_t fallback = 0) const = 0;
-    virtual double getDouble(const char* portId, double fallback = 0.0) const = 0;
-    virtual const char* getString(const char* portId, const char* fallback = "") const = 0;
-    virtual cv::Mat getImage(const char* portId, int index = 0) const = 0; // 零拷贝共享视图
-    virtual size_t getImageBatchSize(const char* portId) const = 0;
-
-    // 强类型安全写入
-    virtual void setBool(const char* portId, bool value) = 0;
-    virtual void setInt(const char* portId, int64_t value) = 0;
-    virtual void setDouble(const char* portId, double value) = 0;
-    virtual void setString(const char* portId, const char* value) = 0;
-    virtual void setImage(const char* portId, const cv::Mat& image) = 0;
-};
-
-// 算子实例纯虚基类
+// 算子实例生命周期纯虚接口
 class IToolInstance {
 public:
     virtual ~IToolInstance() = default;
-    virtual Status initialize(IToolContext& ctx) { return Status::OK(); }
-    virtual Status execute(IToolContext& ctx) = 0;
-    virtual Status release() { return Status::OK(); }
+    virtual ToolStatus initialize(const Values& initParams) { return {}; }
+    virtual ToolResult execute(const Values& inputs) = 0;
+    virtual ToolStatus release() { return {}; }
 };
 
-// 算子注册工厂回调接口
-class IToolRegistryApi {
-public:
-    virtual ~IToolRegistryApi() = default;
-    virtual void registerTool(const char* toolId, std::unique_ptr<IToolInstance> (*creator)()) = 0;
-};
+// 动态库导出注册入口
+extern "C" VISIONRT_TOOL_EXPORT int item_register(ToolRegisterContext* context);
 
-} // namespace visiontools
+} // namespace visionrt
 ```
 
 ### 4.3 算子实现示例
-算子开发者无需关注跨进程/跨 DLL 内存管理，直接面向类型安全接口编码：
+算子开发者面向强类型值系统编码，通过 `PlatformToolServices` 解析路径与读取资源：
 
 ```cpp
-#include "sdk/IToolInstance.h"
+#include <visionrt/sdk/Tool.h>
 #include <opencv2/imgproc.hpp>
 
-class AdaptiveBinaryTool : public visiontools::IToolInstance {
+class AdaptiveBinaryTool final : public visionrt::IToolInstance {
 public:
-    visiontools::Status execute(visiontools::IToolContext& ctx) override {
-        cv::Mat src = ctx.getImage("image");
-        if (src.empty()) {
-            return visiontools::Status::Error(1, "输入图像为空");
+    visionrt::ToolResult execute(const visionrt::Values& inputs) override {
+        const auto& batch = std::get<visionrt::ImageBatch>(inputs.at("image"));
+        if (batch.images().empty()) {
+            return visionrt::ToolResult{visionrt::ToolStatus{1, "输入图像为空"}, {}};
         }
-        int blockSize = static_cast<int>(ctx.getInt("block_size", 3)) | 1;
-        double offset = ctx.getDouble("constant_offset", 5.0);
+        const cv::Mat& src = batch.images()[0].readOnlyMat();
+        int blockSize = static_cast<int>(std::get<int64_t>(inputs.at("block_size"))) | 1;
+        double offset = std::get<double>(inputs.at("constant_offset"));
 
         cv::Mat dst;
         cv::adaptiveThreshold(src, dst, 255, cv::ADAPTIVE_THRESH_MEAN_C, 
                               cv::THRESH_BINARY, blockSize, offset);
 
-        ctx.setImage("binary_image", dst);
-        return visiontools::Status::OK();
+        std::vector<visionrt::OwnedImage> outImages;
+        outImages.push_back(visionrt::OwnedImage::copyOf(dst));
+        return visionrt::ToolResult{
+            visionrt::ToolStatus{},
+            {{"binary_image", visionrt::ImageBatch(std::move(outImages))}}
+        };
     }
 };
 
-// 领域库导出入口
-extern "C" VISIONTOOLS_EXPORT int VisionTools_Register(visiontools::IToolRegistryApi* registry) {
-    registry->registerTool("visiontools.preprocess.adaptive_binary", []() -> std::unique_ptr<visiontools::IToolInstance> {
+// 领域库导出入口：通过 module_index.json 映射，启动时由 DomainLoader 统一加载
+extern "C" VISIONRT_TOOL_EXPORT int item_register(visionrt::ToolRegisterContext* context) {
+    if (!context) return -1;
+    context->registerTool("visiontools.preprocess.adaptive_binary", [](const visionrt::ToolServices&) {
         return std::make_unique<AdaptiveBinaryTool>();
     });
     return 0;
