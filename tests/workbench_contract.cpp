@@ -67,6 +67,9 @@ void pendingContract() {
     app.resolveUnsaved("discard");
     require(closes == 1, "discard does not finish pending close exactly once");
 }
+#include <chrono>
+#include <thread>
+
 void nodeDiagnosticsContract() {
     QTemporaryDir directory;
     QDir(directory.path()).mkpath("tools/builtin/read/images");
@@ -120,6 +123,18 @@ void nodeDiagnosticsContract() {
     require(map.contains("implUnavailable"), "node missing implUnavailable");
     require(map.value("implUnavailable").toBool() == false, "CPU node marked implUnavailable");
     require(map.contains("timingDetail"), "node missing timingDetail");
+
+    app.runOnce();
+    for (int i = 0; i < 50; ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    const auto executedNodes = app.nodes();
+    require(!executedNodes.isEmpty(), "executed node empty");
+    const auto executedMap = executedNodes.first().toMap();
+    const auto detail = executedMap.value("timingDetail").toString();
+    require(detail.contains(QStringLiteral("工具调用(含桥接):")), "timingDetail missing bridge disclaimer");
+    require(!detail.contains(QStringLiteral("纯算法")), "timingDetail falsely claims pure algorithm");
 }
 }
 int main(int argc, char** argv) {

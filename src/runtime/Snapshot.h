@@ -8,13 +8,27 @@
 #include <mutex>
 
 namespace visionrt {
-struct Timing {
-    double prepareMs = 0;
-    double initMs = 0;
+struct ExecutionMetrics {
+    double totalMs = 0;              // 总墙钟
+    double prepareMs = 0;            // 参数准备墙钟
+    double initMs = 0;               // 初始化墙钟
+    double adapterExecuteMs = 0;     // 工具Adapter整次execute墙钟（含Python桥接）
+    double validateMs = 0;           // 结果统一检查与格式验证墙钟
+    // Python 包含项（已包含在 adapterExecuteMs 中，不能再累加到 totalMs）
+    double waitGilMs = 0;            // Python 获取 GIL 等待时间
+    double pythonInputMs = 0;        // Python 输入映射耗时
+    double pythonCallMs = 0;         // Python 函数/类执行耗时
+    double pythonOutputMs = 0;       // Python 输出复制与转换耗时
+    // 兼容别名
     double executeMs = 0;
     double convertMs = 0;
-    double totalMs = 0;
-    double waitGilMs = 0;
+};
+using Timing = ExecutionMetrics;
+
+class IPythonExecutionMetrics {
+public:
+    virtual ~IPythonExecutionMetrics() = default;
+    virtual ExecutionMetrics pythonMetrics() const = 0;
 };
 struct NodeSnapshot {
     NodeId node = 0;

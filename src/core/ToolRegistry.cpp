@@ -423,7 +423,7 @@ Availability ToolRegistry::availability(std::string_view id) const {
     return {ToolAvailability::ImplementationUnavailable, "Python implementation unavailable: " + std::string(id) +
         (implementation != python_.end() && !implementation->second.status.message.empty() ? ": " + implementation->second.status.message : " (not loaded)")};
 }
-std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const ToolServices& services) const {
+std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const PlatformToolServices& services) const {
     const auto state = availability(id);
     if (state.state != ToolAvailability::Available) throw RegistryError(state.state, state.message);
     const auto& definition = *find(id);
