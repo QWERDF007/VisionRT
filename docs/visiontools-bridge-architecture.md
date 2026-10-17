@@ -97,10 +97,11 @@ F:\Projects\VisionTools\
 - `visiontools_flow.dll`
 
 ### 4.2 C++ 算子 ABI 稳定接口契约（单一真相源 SSOT）
-VisionRT 在 `src/sdk/include/visionrt/sdk/Tool.h` 提供统一定义并导出 `VisionRT::ToolSDK`，VisionTools 直接引用此 SDK，绝不维护第二套冲突接口：
+VisionRT 在 `src/sdk/include/visionrt/sdk/Tool.h` 与 `src/sdk/include/visionrt/sdk/Module.h` 提供统一定义并导出 `VisionRT::ToolSDK`，VisionTools 直接引用此 SDK，绝不维护第二套冲突接口：
 
 ```cpp
 #include <visionrt/sdk/Tool.h>
+#include <visionrt/sdk/Module.h>
 
 namespace visionrt {
 
@@ -113,18 +114,29 @@ public:
     virtual ToolStatus release() { return {}; }
 };
 
-// 动态库导出注册入口
-extern "C" VISIONRT_TOOL_EXPORT int item_register(ToolRegisterContext* context);
+// 动态库导出 API 结构体
+struct ModuleApi {
+    std::uint32_t abi_major;
+    std::uint32_t struct_bytes;
+    IToolInstance* (VT_CALL *create)(const char* registry_name,
+                                   const ToolServices* services,
+                                   ToolStatus* status) noexcept;
+    void (VT_CALL *destroy)(IToolInstance*) noexcept;
+};
+
+// 动态库统一导出入口
+extern "C" VT_EXPORT const ModuleApi* VT_CALL visiontoolsModuleApi() noexcept;
 
 } // namespace visionrt
 ```
 
-### 4.3 算子实现示例
-算子开发者面向强类型值系统编码，通过 `PlatformToolServices` 解析路径与读取资源：
+### 4.3 算子实现与导出示例
+算子开发者面向强类型值系统编码，通过 `ToolServices` 解析路径与读取资源：
 
 ```cpp
-#include <visionrt/sdk/Tool.h>
+#include <visionrt/sdk/Module.h>
 #include <opencv2/imgproc.hpp>
+#include <cstring>
 
 class AdaptiveBinaryTool final : public visionrt::IToolInstance {
 public:
@@ -150,13 +162,32 @@ public:
     }
 };
 
-// 领域库导出入口：通过 module_index.json 映射，启动时由 DomainLoader 统一加载
-extern "C" VISIONRT_TOOL_EXPORT int item_register(visionrt::ToolRegisterContext* context) {
-    if (!context) return -1;
-    context->registerTool("visiontools.preprocess.adaptive_binary", [](const visionrt::ToolServices&) {
-        return std::make_unique<AdaptiveBinaryTool>();
-    });
-    return 0;
+// 领域库工厂创建与销毁
+static visionrt::IToolInstance* VT_CALL pluginCreate(const char* registry_name,
+                                                   const visionrt::ToolServices* services,
+                                                   visionrt::ToolStatus* status) noexcept {
+    if (std::strcmp(registry_name, "visiontools.preprocess.adaptive_binary") == 0) {
+        if (status) *status = {};
+        return new AdaptiveBinaryTool();
+    }
+    if (status) *status = {-3, "Unknown registry name"};
+    return nullptr;
+}
+
+static void VT_CALL pluginDestroy(visionrt::IToolInstance* instance) noexcept {
+    delete instance;
+}
+
+static const visionrt::ModuleApi g_moduleApi{
+    visionrt::MODULE_ABI_MAJOR,
+    sizeof(visionrt::ModuleApi),
+    pluginCreate,
+    pluginDestroy
+};
+
+// 领域库唯一导出函数：由宿主 PluginLoader 统一动态加载
+extern "C" VT_EXPORT const visionrt::ModuleApi* VT_CALL visiontoolsModuleApi() noexcept {
+    return &g_moduleApi;
 }
 ```
 

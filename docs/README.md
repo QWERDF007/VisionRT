@@ -5,7 +5,7 @@
 VisionRT 是基于 C++20 与 Qt 6.6 Quick 构建的现代化工业视觉低代码运行平台。平台遵循以下工程设计原则：
 - **单一真相源（SSOT）**：算子元数据 YAML 与统一 SDK 是系统行为与 UI 呈现的唯一契约源，写入口唯一，其他皆派生、复用。
 - **深度解耦与面向维护**：宿主平台核心不嵌入特定算法厂商的深度学习推理后端（如 TensorRT/CUDA 私有实现），所有图像处理与深度学习算法均由独立的算子库（`VisionTools`）或标准动态插件提供。
-- **ABI 强稳定性与零拷贝**：模块间边界严格封装，杜绝跨 DLL 传递裸 STL 容器；图像（OpenCV `cv::Mat`）与多维数值张量（NumPy `ndarray`）在 DAG 数据流及 Python 桥接中实现只读零拷贝共享。
+- **受控 C++ ABI 与数据模型**：模块间边界严格通过 `visionrt::ModuleApi` C-ABI 抽象，算子实现继承 `IToolInstance` 纯虚接口；图像（OpenCV `cv::Mat`）与多维数值张量在 DAG 数据流按边共享指针，实现只读零拷贝；Python 桥接在输入端以只读 NumPy 视图包裹底层内存（零拷贝），在输出端于叶子节点执行单次内存规整拷贝。
 - **严谨的错误诊断与四态规范**：未运行、运行中、成功、错误四态与选中态彻底解耦，错误路径保留已发生阶段耗时与原始状态码。
 
 ---
@@ -16,11 +16,12 @@ VisionRT 是基于 C++20 与 Qt 6.6 Quick 构建的现代化工业视觉低代�
 VisionRT/
 ├── src/
 │   ├── sdk/                 # 统一算子开发 SDK（单一真相源，导出为 VisionRT::ToolSDK）
-│   │   ├── include/visionrt/sdk/Tool.h      # 核心值类型、IToolInstance、ToolRegisterContext
-│   │   └── include/visionrt/sdk/Contract.h  # 统一元数据校验规则
+│   │   ├── include/visionrt/sdk/Tool.h      # 核心值类型与 IToolInstance 纯虚接口
+│   │   ├── include/visionrt/sdk/Module.h    # 动态库导出协议 ModuleApi 与 visiontoolsModuleApi
+│   │   └── include/visionrt/sdk/Schema.h    # 统一元数据校验规则与 CLI 验证器
 │   ├── core/                # 平台核心对象（ToolRegistry, ProjectDefinition, ProjectStorage）
 │   ├── runtime/             # 基于 Taskflow 的拓扑 DAG 并行调度与快照发布引擎
-│   ├── plugins/             # 基于 QLibrary 的动态插件加载与生命周期管理
+│   ├── plugins/             # 基于 QLibrary 的动态插件加载与生命周期管理（PluginLoader）
 │   ├── python/              # pybind11 单解释器嵌入、GIL 作用域与 NumPy 零拷贝桥接
 │   ├── tools/               # 宿主内置基础工具（图像读取、ROI 投影、裁剪等）
 │   └── ui/                  # Qt Quick / QML 工作台交互、四态画布、视口与参数表
@@ -34,17 +35,46 @@ VisionRT/
 ## 3. 插件与算子扩展规范
 
 ### 3.1 C++ 动态插件扩展
-外部工具库（如 `VisionTools`）输出独立的领域动态库（如 `visiontools_preprocess.dll`），通过统一接口导出：
+外部工具库（如 `VisionTools`）输出独立的领域动态库（如 `visiontools_preprocess.dll`），通过统一模块接口导出：
 
 ```cpp
-#include <visionrt/sdk/Tool.h>
+#include <visionrt/sdk/Module.h>
+#include <cstring>
 
-extern "C" VISIONRT_TOOL_EXPORT int item_register(visionrt::ToolRegisterContext* context) {
-    if (!context) return -1;
-    context->registerTool("my.custom.tool", [](const visionrt::ToolServices& services) {
-        return std::make_unique<MyCustomTool>();
-    });
-    return 0;
+class MyCustomTool final : public visionrt::IToolInstance {
+public:
+    visionrt::ToolStatus initialize(const visionrt::Values& params) override { return {}; }
+    visionrt::ToolResult execute(const visionrt::Values& inputs) override {
+        // 算法业务逻辑...
+        return {{0, "ok"}, {}};
+    }
+    visionrt::ToolStatus release() override { return {}; }
+};
+
+static visionrt::IToolInstance* VT_CALL pluginCreate(const char* registry_name,
+                                                   const visionrt::ToolServices* services,
+                                                   visionrt::ToolStatus* status) noexcept {
+    if (std::strcmp(registry_name, "my.custom.tool") == 0) {
+        if (status) *status = {};
+        return new MyCustomTool();
+    }
+    if (status) *status = {-3, "Unknown registry name"};
+    return nullptr;
+}
+
+static void VT_CALL pluginDestroy(visionrt::IToolInstance* instance) noexcept {
+    delete instance;
+}
+
+static const visionrt::ModuleApi g_api{
+    visionrt::MODULE_ABI_MAJOR,
+    sizeof(visionrt::ModuleApi),
+    pluginCreate,
+    pluginDestroy
+};
+
+extern "C" VT_EXPORT const visionrt::ModuleApi* VT_CALL visiontoolsModuleApi() noexcept {
+    return &g_api;
 }
 ```
 
