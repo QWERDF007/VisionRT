@@ -1,5 +1,6 @@
 #include "python/PythonRuntime.h"
 #include "python/PythonBridge.h"
+#include "runtime/Snapshot.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/stl.h>
@@ -141,7 +142,7 @@ ToolStatus lifecycleStatus(py::handle returned) {
     return status;
 }
 
-class PythonTool final : public IToolInstance {
+class PythonTool final : public IToolInstance, public IPythonExecutionMetrics {
 public:
     PythonTool(std::shared_ptr<RuntimeState> state, std::shared_ptr<const ToolDefinition> definition,
                ToolServices services, const Implementation& implementation)
@@ -171,6 +172,10 @@ public:
         --state_->instances;
     }
 
+    ExecutionMetrics pythonMetrics() const override {
+        return metrics_;
+    }
+
     ToolStatus initialize(const Values& parameters) override {
         py::gil_scoped_acquire gil;
         if (!unavailable_) return unavailable_;
@@ -189,12 +194,12 @@ public:
     }
 
     ToolResult execute(const Values& inputs) override {
+        metrics_ = {};
         const auto waiting = std::chrono::steady_clock::now();
         py::gil_scoped_acquire gil;
-        const auto waitMs = std::chrono::duration<double, std::milli>(
+        metrics_.waitGilMs = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - waiting).count();
         ToolResult result;
-        result.waitGilMs = waitMs;
         const auto fail = [&](ToolStatus status) {
             result.status = std::move(status);
             result.outputs.clear();
@@ -206,14 +211,21 @@ public:
         if (released_) return fail(errorStatus(definition_, -1, "execute", "Instance was released"));
         py::object returned;
         try {
+            const auto inputStart = std::chrono::steady_clock::now();
             auto parameters = inputDictionary(inputs, definition_.inputs, services_);
+            metrics_.pythonInputMs = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - inputStart).count();
+            const auto callStart = std::chrono::steady_clock::now();
             returned = objects_->execute(parameters);
+            metrics_.pythonCallMs = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - callStart).count();
         } catch (const py::error_already_set& error) {
             return fail(errorStatus(definition_, -1, "execute", error.what()));
         } catch (const std::exception& error) {
             return fail(errorStatus(definition_, -1, "execute", error.what()));
         }
         try {
+            const auto outputStart = std::chrono::steady_clock::now();
             auto dictionary = resultDictionary(returned);
             result.status = parseStatus(dictionary);
             if (dictionary.size() != businessOutputCount_ + 2)
@@ -231,6 +243,8 @@ public:
                     throw ContractError("Output " + output.id + ": " + error.what());
                 }
             }
+            metrics_.pythonOutputMs = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - outputStart).count();
         } catch (const py::error_already_set& error) {
             return fail(errorStatus(definition_, -2, "convert", error.what()));
         } catch (const std::exception& error) {
@@ -274,6 +288,7 @@ private:
     ToolServices services_;
     ToolStatus unavailable_;
     std::unique_ptr<Objects> objects_;
+    ExecutionMetrics metrics_;
     bool released_ = false;
 };
 

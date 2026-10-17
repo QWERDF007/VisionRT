@@ -343,8 +343,15 @@ QVariantList AppController::nodes() const {
             if (state != "blue") state = value.status ? "green" : "red";
             timing = QStringLiteral("%1 ms").arg(value.timing.totalMs, 0, 'f', 2);
             detail = QStringLiteral("工具调用(含桥接):%1ms\n工具节点整体时间:%2ms")
-                .arg(value.timing.executeMs, 0, 'f', 2)
+                .arg(value.timing.adapterExecuteMs > 0 ? value.timing.adapterExecuteMs : value.timing.executeMs, 0, 'f', 2)
                 .arg(value.timing.totalMs, 0, 'f', 2);
+            if (value.timing.waitGilMs > 0 || value.timing.pythonCallMs > 0 || value.timing.pythonOutputMs > 0) {
+                detail += QStringLiteral("\n  - 等待GIL: %1ms\n  - 输入映射: %2ms\n  - 执行: %3ms\n  - 输出转换: %4ms")
+                    .arg(value.timing.waitGilMs, 0, 'f', 2)
+                    .arg(value.timing.pythonInputMs, 0, 'f', 2)
+                    .arg(value.timing.pythonCallMs, 0, 'f', 2)
+                    .arg(value.timing.pythonOutputMs, 0, 'f', 2);
+            }
             if (!value.status) {
                 detail += QStringLiteral("\n错误状态码: %1\n%2").arg(value.status.code).arg(q(value.status.message));
             }

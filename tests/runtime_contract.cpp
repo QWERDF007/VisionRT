@@ -280,7 +280,7 @@ void receiverConsumesFailures() {
     });
     auto sender = node(1, source);
     auto consumer = definition("test.cursor");
-    registry.registerCpp(consumer.registryName, consumer, [name = sender.title()](const ToolServices& services) {
+    registry.registerCpp(consumer.registryName, consumer, [name = sender.title()](const PlatformToolServices& services) {
         auto instance = std::make_unique<Function>();
         instance->run = [reader = services.results, name](const Values&) {
             ReceiveCursor cursor;
@@ -341,6 +341,46 @@ void resetWaitsForActiveInvocation() {
     auto reset = finish(engine);
     assert(releasedAfterExecution && reset.generation == 2 && !snapshot(reset, 1));
 }
+
+void executionMetricsAndTimingSeparation() {
+    RuntimeEngine engine(1);
+    ToolRegistry registry;
+    auto mockDef = definition("test.metrics");
+    struct MetricsTool final : public IToolInstance, public IPythonExecutionMetrics {
+        ToolStatus initialize(const Values&) override { return {}; }
+        ToolResult execute(const Values&) override {
+            std::this_thread::sleep_for(10ms);
+            return ToolResult{{}, {{"value", std::int64_t{42}}}};
+        }
+        ToolStatus release() override { return {}; }
+        ExecutionMetrics pythonMetrics() const override {
+            ExecutionMetrics m;
+            m.waitGilMs = 3.5;
+            m.pythonInputMs = 1.2;
+            m.pythonCallMs = 5.0;
+            m.pythonOutputMs = 0.8;
+            return m;
+        }
+    };
+    registry.registerCpp(mockDef.registryName, mockDef, [](const PlatformToolServices&) {
+        return std::make_unique<MetricsTool>();
+    });
+    registry.addDefinition(mockDef);
+    auto n = node(1, mockDef);
+    ProjectDefinition project; project.dirty = true; project.flows.front().nodes = {n};
+    assert(engine.start(project, registry, RunMode::Once));
+    auto completed = finish(engine);
+    auto snap = snapshot(completed, 1);
+    assert(snap != nullptr);
+    assert(snap->timing.adapterExecuteMs >= 5.0);
+    assert(snap->timing.executeMs == snap->timing.adapterExecuteMs);
+    assert(snap->timing.waitGilMs == 3.5);
+    assert(snap->timing.pythonInputMs == 1.2);
+    assert(snap->timing.pythonCallMs == 5.0);
+    assert(snap->timing.pythonOutputMs == 0.8);
+    // Python sub-items must not be duplicated into totalMs
+    assert(snap->timing.totalMs >= snap->timing.adapterExecuteMs);
+}
 }
 int main(int argc, char** argv) {
     branchesOverlapAndJoin();
@@ -350,5 +390,6 @@ int main(int argc, char** argv) {
     receiverCapacityAndSessionIsolation(argc > 1 ? argv[1] : "assets/tools");
     receiverConsumesFailures();
     resetWaitsForActiveInvocation();
+    executionMetricsAndTimingSeparation();
     std::cout << "runtime contracts passed\n";
 }

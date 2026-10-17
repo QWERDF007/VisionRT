@@ -19,17 +19,18 @@ include(Config3rdparty)
 include(ConfigPython)
 include(ConfigQuickUI)
 
+# 独立通用工具 SDK
+add_subdirectory(src/sdk)
+
 # 核心通用库
 add_library(visionrt_common
-    src/common/Value.cpp
     src/common/Version.cpp)
-target_include_directories(visionrt_common PUBLIC src ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(visionrt_common PUBLIC ${OpenCV_LIBS})
+target_include_directories(visionrt_common PUBLIC src)
+target_link_libraries(visionrt_common PUBLIC VisionRT::ToolSDK)
 configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 核心业务逻辑库
 add_library(visionrt_core
-    src/core/Tool.cpp
     src/core/ValueYaml.cpp
     src/core/ToolRegistry.cpp
     src/core/ProjectEditor.cpp

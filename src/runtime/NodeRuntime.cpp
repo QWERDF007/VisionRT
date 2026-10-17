@@ -126,7 +126,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
             initializationFailure.reset();
             ToolStatus status;
             try {
-                ToolServices services{PathResolver(frozen.project.path.parent_path()), reader};
+                PlatformToolServices services{PathResolver(frozen.project.path.parent_path()), reader};
                 instance = frozen.registry.create(toolId, services);
                 if (!instance) throw RegistryError(ToolAvailability::ImplementationUnavailable, "factory returned no instance");
                 if (kind == ToolKind::CppClass || kind == ToolKind::PythonClass)
@@ -149,13 +149,21 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
         }
         snapshot->timing.initMs = suppressed ? 0 : milliseconds(Clock::now() - phaseStarted);
         phase = "execute"; elapsed = &snapshot->timing.executeMs; phaseStarted = Clock::now();
-        if (instance) result = instance->execute(inputs);
-        else {
+        if (instance) {
+            result = instance->execute(inputs);
+            if (auto* py = dynamic_cast<IPythonExecutionMetrics*>(instance.get())) {
+                const auto m = py->pythonMetrics();
+                snapshot->timing.waitGilMs = m.waitGilMs;
+                snapshot->timing.pythonInputMs = m.pythonInputMs;
+                snapshot->timing.pythonCallMs = m.pythonCallMs;
+                snapshot->timing.pythonOutputMs = m.pythonOutputMs;
+            }
+        } else {
             result.status = *initializationFailure;
             frameworkFailure = true;
         }
         snapshot->timing.executeMs = instance ? milliseconds(Clock::now() - phaseStarted) : 0;
-        snapshot->timing.waitGilMs = result.waitGilMs;
+        snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
         if (result.status.code < 0) {
             frameworkFailure = true;
             if (instance) result.status.message = location(id, config.toolId, "execute", result.status.message);
@@ -184,6 +192,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext>& context) {
             }
         }
         snapshot->timing.convertMs = milliseconds(Clock::now() - phaseStarted);
+        snapshot->timing.validateMs = snapshot->timing.convertMs;
     } catch (const RegistryError& error) {
         *elapsed = milliseconds(Clock::now() - phaseStarted);
         result.status = {-3, location(id, config.toolId, phase, error.what())};

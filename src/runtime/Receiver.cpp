@@ -45,7 +45,7 @@ void registerReceiveTools(ToolRegistry& registry) {
             [](const auto& port) { return port.id == "value"; });
         if (output == definition->outputs.end()) throw ContractError("receiver value output is missing: " + id);
         const auto type = output->type;
-        registry.registerCpp(definition->registryName, *definition, [type](const ToolServices& services) {
+        registry.registerCpp(definition->registryName, *definition, [type](const PlatformToolServices& services) {
             return std::make_unique<ReceiveTool>(type, services.results);
         });
     }

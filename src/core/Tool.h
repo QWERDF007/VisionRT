@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/Value.h"
+#include "visionrt/sdk/Tool.h"
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -10,25 +10,6 @@
 #include <vector>
 
 namespace visionrt {
-using Values = std::map<std::string, PortValue, std::less<>>;
-
-struct ToolStatus {
-    std::int64_t code = 0;
-    std::string message;
-    explicit operator bool() const noexcept { return code == 0; }
-};
-struct ToolResult {
-    ToolStatus status;
-    Values outputs;
-    double waitGilMs = 0;
-};
-class IToolInstance {
-public:
-    virtual ~IToolInstance() = default;
-    virtual ToolStatus initialize(const Values& parameters) = 0;
-    virtual ToolResult execute(const Values& inputs) = 0;
-    virtual ToolStatus release() = 0;
-};
 
 enum class ToolKind { CppFunction, CppClass, PythonFunction, PythonClass };
 struct PortDefinition {
@@ -67,19 +48,16 @@ struct ToolDefinition {
     std::vector<PortDefinition> outputs;
 };
 
-class PathResolver {
-public:
-    PathResolver() = default;
-    explicit PathResolver(std::filesystem::path projectDirectory)
-        : directory_(std::move(projectDirectory)) {}
-    std::filesystem::path resolve(const std::string& utf8) const;
-private:
-    std::filesystem::path directory_;
-};
 class IResultReader;
-struct ToolServices {
-    PathResolver paths;
+struct PlatformToolServices : ToolServices {
+    using ToolServices::ToolServices;
+    PlatformToolServices() = default;
+    PlatformToolServices(const ToolServices& base) : ToolServices(base) {}
+    PlatformToolServices(PathResolver p, std::shared_ptr<IResultReader> r = {})
+        : ToolServices{std::move(p)}, results(std::move(r)) {}
+
     std::shared_ptr<IResultReader> results;
 };
-using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const ToolServices&)>;
+
+using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices&)>;
 }

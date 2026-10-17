@@ -42,7 +42,7 @@ public:
     void setPythonImplementation(std::string toolId, ToolFactory factory, ToolStatus status = {});
     const ToolDefinition* find(std::string_view id) const;
     Availability availability(std::string_view id) const;
-    std::unique_ptr<IToolInstance> create(std::string_view id, const ToolServices& services) const;
+    std::unique_ptr<IToolInstance> create(std::string_view id, const PlatformToolServices& services) const;
     const std::vector<ToolDefinition>& definitions() const noexcept { return definitions_; }
     const std::vector<RegistryDiagnostic>& diagnostics() const noexcept { return diagnostics_; }
 
