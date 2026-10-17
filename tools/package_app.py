@@ -280,10 +280,27 @@ def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path
                 shutil.copytree(builtin_src, target_tools / "builtin", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             custom_src = item / "custom"
             if custom_src.is_dir():
-                shutil.copytree(custom_src, target_tools / "custom", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+                target_custom = target_tools / "custom"
+                target_custom.mkdir(parents=True, exist_ok=True)
+                for root_dir, _, files in os.walk(custom_src):
+                    for file_name in files:
+                        if file_name.endswith((".pyc", ".pyo")) or file_name == "__pycache__":
+                            continue
+                        src_file = Path(root_dir) / file_name
+                        rel_path = src_file.relative_to(custom_src)
+                        dest_file = target_custom / rel_path
+                        if not dest_file.exists():
+                            dest_file.parent.mkdir(parents=True, exist_ok=True)
+                            copy_file(src_file, dest_file)
             for root_f in item.glob("*"):
                 if root_f.is_file():
                     copy_file(root_f, target_tools / root_f.name)
+        elif item.name == "assets":
+            target_assets = install_dir / "assets"
+            shutil.copytree(item, target_assets, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            if (item / "tools" / "builtin").is_dir():
+                target_builtin = install_dir / "tools" / "builtin"
+                shutil.copytree(item / "tools" / "builtin", target_builtin, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         elif item.is_dir():
             shutil.copytree(item, install_dir / item.name, dirs_exist_ok=True)
         else:
@@ -663,10 +680,12 @@ def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None =
         install_dir / "python" / "DLLs",
         install_dir / "python" / "Lib" / "site-packages" / "numpy",
         install_dir / "tools",
+        install_dir / "qml" / "quickui",
     ]
-    if (install_dir / "qml" / "quickui").is_dir():
-        required_files.append(install_dir / "qml" / "quickui" / "qmldir")
-        required_files.append(install_dir / "qml" / "quickui" / "quickui.dll")
+    required_files.extend([
+        install_dir / "qml" / "quickui" / "qmldir",
+        install_dir / "qml" / "quickui" / "quickui.dll",
+    ])
 
     missing_files = [str(p) for p in required_files if not p.is_file()]
     missing_dirs = [str(p) for p in required_dirs if not p.is_dir()]
@@ -700,9 +719,23 @@ def test_verify_package_negatives() -> None:
         (root / "tools").mkdir()
         (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
         (root / "python" / "DLLs").mkdir(parents=True)
+        (root / "qml" / "quickui").mkdir(parents=True)
+        (root / "qml" / "quickui" / "qmldir").touch()
+        (root / "qml" / "quickui" / "quickui.dll").touch()
 
         # Baseline check (without Qt)
         verify_package(root, require_qt=False)
+
+        # Case 0: Missing qml/quickui
+        shutil.rmtree(root / "qml" / "quickui")
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when qml/quickui is missing")
+        except RuntimeError as e:
+            assert "quickui" in str(e), f"Unexpected error: {e}"
+        (root / "qml" / "quickui").mkdir(parents=True)
+        (root / "qml" / "quickui" / "qmldir").touch()
+        (root / "qml" / "quickui" / "quickui.dll").touch()
 
         # Case 1: Missing quickui.dll
         (root / "quickui.dll").unlink()
