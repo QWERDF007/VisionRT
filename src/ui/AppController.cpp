@@ -1,7 +1,6 @@
 #include "ui/AppController_p.h"
 #include "core/ValueYaml.h"
 #include "runtime/Receiver.h"
-#include "tools/CpuTools.h"
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
@@ -103,8 +102,6 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
         registry.scan(applicationDirectory / "assets" / "tools");
     }
 
-    registerCpuTools(registry);
-    registerInferTools(registry);
     registerReceiveTools(registry);
     for (const auto& item : registry.diagnostics()) report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
     // Interpreter lifetime encloses the worker pool and all Python instances.
@@ -139,7 +136,6 @@ AppController::Impl::~Impl() {
     runtime->setCompletionCallback({});
     runtime.reset();
     if (textTask.valid()) textTask.wait();
-    if (gpuTask.valid()) gpuTask.wait();
     refreshResult.reset();
     for (const auto& tool : registry.definitions())
         if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
@@ -236,17 +232,6 @@ void AppController::Impl::poll() {
                 emit q->outputTextReady(result.text);
             }
         } catch (const std::exception& error) { report(workbench::q(error.what())); }
-    }
-    if (gpuTask.valid() && gpuTask.wait_for(0ms) == std::future_status::ready) {
-        QVariantList devices;
-        try {
-            auto result = gpuTask.get();
-            gpuInfo = workbench::q(result.status.message);
-            if (!result.status) report(gpuInfo);
-            for (const auto& device : result.devices)
-                devices.push_back(QVariantMap{{"id", QString::number(device.index)}, {"index", device.index}, {"name", workbench::q(device.name)}});
-        } catch (const std::exception& error) { report(workbench::q(error.what())); }
-        emit q->gpuDevicesReady(devices);
     }
 }
 void AppController::Impl::start(RunMode mode) {
@@ -351,8 +336,8 @@ QString AppController::selectedNode() const { return impl_->selected; }
 QString AppController::timingText() const { return impl_->timing; }
 bool AppController::dirty() const { return impl_->editor.project().dirty; }
 QString AppController::aboutText() const {
-    return QStringLiteral("VisionRT V3\nCopyright © VisionRT contributors\nQt %1\nPython: %2\nInferRT: 按需加载 VisionRTInfer.dll\n%3")
-        .arg(QString::fromLatin1(qVersion()), impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"), impl_->gpuInfo);
+    return QStringLiteral("VisionRT V3\nCopyright © VisionRT contributors\nQt %1\nPython: %2")
+        .arg(QString::fromLatin1(qVersion()), impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"));
 }
 QAbstractItemModel* AppController::toolModel() const { return &impl_->tools; }
 QAbstractItemModel* AppController::outputModel() const { return &impl_->outputs; }
@@ -663,9 +648,5 @@ void AppController::requestOutputText(int row, bool copy) {
     impl_->textTask = std::async(std::launch::async, [captured = std::move(*captured), copy, generation] {
         return Impl::TextResult{OutputModel::fullText(captured), copy, generation};
     });
-}
-void AppController::queryGpuDevices() {
-    if (impl_->gpuTask.valid()) return;
-    impl_->gpuTask = std::async(std::launch::async, [] { return visionrt::queryGpuDevices(); });
 }
 }

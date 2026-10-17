@@ -7,7 +7,6 @@ import quickui
 RowLayout {
     id: root
     required property var parameter
-    property var gpuDevices: []
     property string structureDraft: ""
     property string structureError: ""
     readonly property bool upstream: parameter.mode === "upstream" && !parameter.init
@@ -41,7 +40,7 @@ RowLayout {
     Loader {
         Layout.fillWidth: true; Layout.minimumWidth: 70
         enabled: !app.busy
-        sourceComponent: root.upstream ? upstreamEditor : root.parameter.optionsProvider === "platform.gpu_devices" ? gpuEditor : (root.parameter.options || []).length > 0 ? choiceEditor : root.parameter.type === "Bool" ? boolEditor : root.parameter.type === "Int" || root.parameter.type === "Float" ? numberEditor : root.structured ? structureEditor : root.parameter.type === "ImageBatch" ? imageEditor : textEditor
+        sourceComponent: root.upstream ? upstreamEditor : (root.parameter.options || []).length > 0 ? choiceEditor : root.parameter.type === "Bool" ? boolEditor : root.parameter.type === "Int" || root.parameter.type === "Float" ? numberEditor : root.structured ? structureEditor : root.parameter.type === "ImageBatch" ? imageEditor : textEditor
     }
     QuiTextIconButton {
         visible: !root.parameter.init
@@ -163,20 +162,6 @@ RowLayout {
         }
     }
     Component {
-        id: gpuEditor
-        RowLayout {
-            spacing: 2
-            QuiComboBox {
-                id: gpuChoice; Layout.fillWidth: true; implicitHeight: 26
-                model: root.gpuDevices; textRole: "name"; valueRole: "id"
-                currentIndex: { for (let i = 0; i < root.gpuDevices.length; ++i) if (String(root.gpuDevices[i].id) === root.parameter.literal) return i; return -1 }
-                displayText: currentIndex < 0 ? root.parameter.literal + "（当前不可用）" : currentText
-                onActivated: root.commit(String(currentValue))
-            }
-            QuiTextIconButton { text: "查询 GPU"; iconSource: QuiFontIcon.Refresh; implicitWidth: 24; implicitHeight: 24; onClicked: app.queryGpuDevices() }
-        }
-    }
-    Component {
         id: textEditor
         RowLayout {
             spacing: 2
@@ -234,5 +219,4 @@ RowLayout {
             else root.structureError = app.diagnostic
         }
     }
-    Connections { target: app; function onGpuDevicesReady(devices) { root.gpuDevices = devices } }
 }

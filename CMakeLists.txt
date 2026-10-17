@@ -56,23 +56,6 @@ add_library(visionrt_runtime
     src/runtime/Receiver.cpp)
 target_link_libraries(visionrt_runtime PUBLIC visionrt_core visionrt_taskflow)
 
-# InferRT GPU 推理插件模块 (可选)
-option(VISIONRT_BUILD_INFER "Build the fixed InferRT GPU module" ON)
-if(VISIONRT_BUILD_INFER)
-    include(ConfigCUDA)
-    include(ConfigInferRT)
-    add_library(VisionRTInfer SHARED
-        src/infer/InferModule.cpp
-        src/infer/YoloModel.cpp
-        src/infer/YoloPostprocess.cpp)
-    target_compile_definitions(VisionRTInfer PRIVATE VISIONRT_INFER_EXPORTS)
-    if(DEFINED InferRT_VERSION)
-        target_compile_definitions(VisionRTInfer PRIVATE VISIONRT_INFERRT_VERSION="${InferRT_VERSION}")
-    endif()
-    target_link_libraries(VisionRTInfer PRIVATE visionrt_core InferRT::model CUDA::cudart)
-    set_target_properties(VisionRTInfer PROPERTIES PREFIX "" OUTPUT_NAME VisionRTInfer)
-endif()
-
 # 桌面 Workbench 应用程序与发布配置
 option(VISIONRT_BUILD_APP "Build the desktop workbench" ON)
 if(VISIONRT_BUILD_APP)
@@ -90,10 +73,9 @@ if(VISIONRT_BUILD_APP)
         src/ui/ImageViewport.cpp
         src/ui/ImageViewport.h
         src/ui/DisplayConverter.cpp
-        src/ui/DisplayConverter.h
-        src/infer/InferLoader.cpp)
+        src/ui/DisplayConverter.h)
     target_link_libraries(visionrt_ui PUBLIC
-        visionrt_runtime visionrt_python visionrt_tools
+        visionrt_runtime visionrt_python
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)
     target_compile_definitions(visionrt_ui PRIVATE VISIONRT_PYTHON_HOME="${VISIONRT_PYTHON_HOME}")
 
@@ -112,16 +94,10 @@ if(VISIONRT_BUILD_APP)
         COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_BINARY_DIR}/Deploy.cmake"
         DEPENDS VisionRT
         USES_TERMINAL)
-    if(VISIONRT_BUILD_INFER)
-        add_dependencies(deploy VisionRTInfer)
-    endif()
 endif()
 
 # 开发与本地调试动态库拷贝目标
 set(_visionrt_runtime_dlls ${OPENCV_DLLS} ${PYTHON_DLLS})
-if(VISIONRT_BUILD_INFER AND INFERRT_DLLS)
-    list(APPEND _visionrt_runtime_dlls ${INFERRT_DLLS})
-endif()
 if(_visionrt_runtime_dlls)
     add_custom_target(deploy_runtime_dlls ALL
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${_visionrt_runtime_dlls} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
