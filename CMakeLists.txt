@@ -167,6 +167,14 @@ if(BUILD_TESTING)
     if(VISIONRT_BUILD_APP)
         visionrt_contract(viewport_contract visionrt_ui)
         visionrt_contract(workbench_contract visionrt_ui)
+
+        add_executable(performance_contract tests/performance_contract.cpp)
+        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_tools opencv_core)
+        add_test(NAME performance_contract COMMAND performance_contract)
+        visionrt_apply_test_environment(performance_contract)
+        if(MSVC)
+            target_compile_options(performance_contract PRIVATE /UNDEBUG)
+        endif()
     endif()
 
     # RT-09: 通用插件模块加载测试动态库与契约测试
