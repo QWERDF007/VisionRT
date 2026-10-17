@@ -23,6 +23,7 @@ RowLayout {
 
     QuiText {
         text: root.parameter.name; Layout.preferredWidth: 96
+        color: Theme.paramLabelText
         elide: Text.ElideRight
         MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
         QuiToolTip {
@@ -46,7 +47,7 @@ RowLayout {
         visible: !root.parameter.init
         text: root.upstream ? "切换为直接输入" : "绑定上层输入"
         iconSource: QuiFontIcon.Download
-        iconColor: root.upstream ? QuiColor.Highlight : "#8c959f"
+        iconColor: root.upstream ? Theme.bindingActiveColor : Theme.bindingInactiveColor
         implicitWidth: 24; implicitHeight: 24
         display: AbstractButton.IconOnly
         ToolTip.visible: hovered
@@ -182,7 +183,7 @@ RowLayout {
             QuiTextField {
                 Layout.fillWidth: true; implicitHeight: 26; text: root.valueText
                 property bool rejected: false
-                color: rejected ? "#c9483d" : QuiColor.FontPrimary
+                color: rejected ? Theme.error : Theme.textPrimary
                 onEditingFinished: { if (text !== root.valueText) rejected = !root.commit(root.parameter.type === "String" ? JSON.stringify(text) : text) }
             }
             QuiTextIconButton {
@@ -225,7 +226,7 @@ RowLayout {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     QuiTextArea { text: root.structureDraft; selectByMouse: true; wrapMode: TextEdit.NoWrap; onTextChanged: root.structureDraft = text; font.family: "Consolas" }
                 }
-                QuiText { text: root.structureError; color: "#c9483d"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                QuiText { text: root.structureError; color: Theme.error; Layout.fillWidth: true; wrapMode: Text.Wrap }
             }
         }
         onPositiveClickListener: function() {

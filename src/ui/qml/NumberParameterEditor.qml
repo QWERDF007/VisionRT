@@ -54,7 +54,7 @@ RowLayout {
     QuiTextField {
         id: field
         Layout.fillWidth: true; Layout.minimumWidth: 60; implicitHeight: 26
-        text: root.value; color: root.invalid ? "#c9483d" : QuiColor.FontPrimary
+        text: root.value; color: root.invalid ? Theme.error : Theme.textPrimary
         selectByMouse: true; inputMethodHints: Qt.ImhFormattedNumbersOnly
         onEditingFinished: root.commit(text)
         Keys.onUpPressed: root.increment(1)
@@ -78,16 +78,16 @@ RowLayout {
         spacing: 0
         Rectangle {
             width: 16; height: 13
-            color: upMouse.containsMouse ? "#eef0f3" : "#ffffff"
-            border.color: "#c5ccd5"; border.width: 1
-            QuiTextIcon { anchors.centerIn: parent; iconSource: QuiFontIcon.ChevronUpSmall; iconSize: 9; iconColor: "#57606a" }
+            color: upMouse.containsMouse ? Theme.spinButtonHoverBg : Theme.spinButtonBg
+            border.color: Theme.spinButtonBorder; border.width: 1
+            QuiTextIcon { anchors.centerIn: parent; iconSource: QuiFontIcon.ChevronUpSmall; iconSize: 9; iconColor: Theme.spinButtonIcon }
             MouseArea { id: upMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.increment(1) }
         }
         Rectangle {
             width: 16; height: 13
-            color: downMouse.containsMouse ? "#eef0f3" : "#ffffff"
-            border.color: "#c5ccd5"; border.width: 1
-            QuiTextIcon { anchors.centerIn: parent; iconSource: QuiFontIcon.ChevronDownSmall; iconSize: 9; iconColor: "#57606a" }
+            color: downMouse.containsMouse ? Theme.spinButtonHoverBg : Theme.spinButtonBg
+            border.color: Theme.spinButtonBorder; border.width: 1
+            QuiTextIcon { anchors.centerIn: parent; iconSource: QuiFontIcon.ChevronDownSmall; iconSize: 9; iconColor: Theme.spinButtonIcon }
             MouseArea { id: downMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.increment(-1) }
         }
     }

@@ -67,10 +67,10 @@ QuiSplitView {
         ColumnLayout {
             anchors.fill: parent; spacing: 0
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+                Layout.fillWidth: true; Layout.preferredHeight: 34; color: Theme.tabBarBg
                 Rectangle {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                    height: 1; color: "#d0d7de"
+                    height: 1; color: Theme.tabBorder
                 }
                 RowLayout {
                     anchors.fill: parent; spacing: 0
@@ -80,49 +80,61 @@ QuiSplitView {
                             id: tabItem
                             required property string modelData; required property int index
                             readonly property bool isActive: root.currentTab === index
+                            readonly property bool isHovered: tabMouse.containsMouse
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            color: isActive ? "#ffffff" : "#f6f8fa"
+                            color: isActive ? Theme.tabActiveBg : (isHovered ? Theme.paramRowHoverBg : Theme.tabBg)
                             Rectangle {
                                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                                width: 1; color: "#d0d7de"
+                                width: 1; color: Theme.tabBorder
                             }
                             Rectangle {
                                 visible: !tabItem.isActive
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                height: 1; color: "#d0d7de"
+                                height: 1; color: Theme.tabBorder
                             }
                             Rectangle {
                                 visible: tabItem.isActive
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                height: 2; color: QuiColor.Highlight
+                                height: 2; color: Theme.tabActiveIndicator
                             }
                             QuiText {
                                 anchors.centerIn: parent
                                 text: tabItem.modelData
                                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: tabItem.isActive })
-                                color: tabItem.isActive ? QuiColor.Highlight : "#57606a"
+                                color: tabItem.isActive ? Theme.tabActiveText : (tabItem.isHovered ? Theme.tabHoverText : Theme.tabText)
                             }
                             MouseArea {
+                                id: tabMouse
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
                                 onClicked: root.currentTab = tabItem.index
                             }
                         }
                     }
                     Rectangle {
-                        Layout.preferredWidth: 70; Layout.preferredHeight: 24; Layout.margins: 5
-                        radius: 3; color: runMouse.containsMouse ? "#f0f2f5" : "#ffffff"
-                        border.color: "#c5ccd5"; border.width: 1
+                        Layout.preferredWidth: 68; Layout.preferredHeight: 26; Layout.margins: 4; Layout.rightMargin: 8
+                        radius: 4
+                        color: runMouse.pressed ? Theme.executeButtonPressedBg : (runMouse.containsMouse ? Theme.executeButtonHoverBg : Theme.executeButtonNormalBg)
                         enabled: !app.busy && app.selectedNode.length > 0
-                        opacity: enabled ? 1.0 : 0.5
+                        opacity: enabled ? 1.0 : 0.4
                         RowLayout {
-                            anchors.centerIn: parent; spacing: 4
-                            QuiTextIcon {
-                                iconSource: QuiFontIcon.Play; iconSize: 12; iconColor: QuiColor.Highlight
+                            anchors.centerIn: parent; spacing: 5
+                            Rectangle {
+                                width: 16; height: 16; radius: 8
+                                color: "transparent"
+                                border.color: Theme.executeButtonIcon; border.width: 1.5
+                                QuiTextIcon {
+                                    anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: 0.8
+                                    iconSource: QuiFontIcon.Play
+                                    iconSize: 8
+                                    iconColor: Theme.executeButtonIcon
+                                }
                             }
                             QuiText {
                                 text: "执行"
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: true })
-                                color: QuiColor.FontPrimary
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                                color: Theme.executeButtonText
                             }
                         }
                         MouseArea {
@@ -148,13 +160,13 @@ QuiSplitView {
                             QuiExpander {
                                 required property var modelData
                                 width: groupColumn.width
-                                headerText: modelData.name; headerHeight: 30
+                                headerText: modelData.name; headerHeight: 28
                                 expand: root.collapsedGroups[headerText] !== true
-                                contentHeight: groupBody.implicitHeight + 10
+                                contentHeight: groupBody.implicitHeight + 8
                                 onExpandChanged: { let values = root.collapsedGroups; values[headerText] = !expand; root.collapsedGroups = values }
                                 ColumnLayout {
                                     id: groupBody; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; spacing: 4
-                                    QuiText { text: "下次执行重建资源"; visible: modelData.init; font: QuiFont.Caption; color: "#ab751d" }
+                                    QuiText { text: "下次执行重建资源"; visible: modelData.init; font: QuiFont.Caption; color: Theme.warning }
                                     Repeater {
                                         model: modelData.parameters
                                         ParameterEditor { required property var modelData; parameter: modelData; Layout.fillWidth: true }

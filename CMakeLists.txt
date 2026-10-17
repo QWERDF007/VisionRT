@@ -75,6 +75,8 @@ endif()
 option(VISIONRT_BUILD_APP "Build the desktop workbench" ON)
 if(VISIONRT_BUILD_APP)
     add_library(visionrt_ui
+        src/ui/Theme.cpp
+        src/ui/Theme.h
         src/ui/AppController.cpp
         src/ui/AppControllerDisplay.cpp
         src/ui/AppControllerMetadata.cpp
@@ -95,11 +97,6 @@ if(VISIONRT_BUILD_APP)
 
     qt_add_executable(VisionRT src/main.cpp)
     target_link_libraries(VisionRT PRIVATE visionrt_ui)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
-        add_custom_command(TARGET VisionRT POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different
-                "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools" "$<TARGET_FILE_DIR:VisionRT>/tools")
-    endif()
 
     file(GLOB visionrt_qml CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/ui/qml/*.qml")
     foreach(qml_file IN LISTS visionrt_qml)
@@ -150,12 +147,12 @@ if(BUILD_TESTING)
     add_test(NAME path_contract COMMAND path_contract)
     visionrt_apply_test_environment(path_contract)
 
-    visionrt_contract(tool_registry_contract visionrt_core "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
+    visionrt_contract(tool_registry_contract visionrt_core "${CMAKE_SOURCE_DIR}/assets/tools")
     visionrt_contract(project_editor_contract visionrt_core)
-    visionrt_contract(project_storage_contract visionrt_core "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
-    visionrt_contract(cpu_tools_contract visionrt_tools "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
-    visionrt_contract(python_contract visionrt_python "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
-    visionrt_contract(runtime_contract visionrt_runtime "${CMAKE_SOURCE_DIR}/docs/VisionRT_V3/examples/tools")
+    visionrt_contract(project_storage_contract visionrt_core "${CMAKE_SOURCE_DIR}/assets/tools")
+    visionrt_contract(cpu_tools_contract visionrt_tools "${CMAKE_SOURCE_DIR}/assets/tools")
+    visionrt_contract(python_contract visionrt_python "${CMAKE_SOURCE_DIR}/assets/tools")
+    visionrt_contract(runtime_contract visionrt_runtime "${CMAKE_SOURCE_DIR}/assets/tools")
 
     add_executable(infer_contract tests/infer_contract.cpp src/infer/YoloPostprocess.cpp)
     target_link_libraries(infer_contract PRIVATE visionrt_common)

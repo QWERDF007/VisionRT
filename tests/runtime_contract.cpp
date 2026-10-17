@@ -347,7 +347,7 @@ int main(int argc, char** argv) {
     failureReplacesOldValueAndManualUsesCache();
     initializationSuppressionRetryAndReset();
     stopDrainsCommittedFlowsAndFreezesConfiguration();
-    receiverCapacityAndSessionIsolation(argc > 1 ? argv[1] : "docs/VisionRT_V3/examples/tools");
+    receiverCapacityAndSessionIsolation(argc > 1 ? argv[1] : "assets/tools");
     receiverConsumesFailures();
     resetWaitsForActiveInvocation();
     std::cout << "runtime contracts passed\n";
