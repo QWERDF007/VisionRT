@@ -344,11 +344,14 @@ QVariantList AppController::nodes() const {
             const auto& value = *snapshot->second;
             if (state != "blue") state = value.status ? "green" : "red";
             timing = QStringLiteral("%1 ms").arg(value.timing.totalMs, 0, 'f', 2);
-            detail = QStringLiteral("工具调用(含桥接):%1ms\n工具节点整体时间:%2ms")
+            detail = QStringLiteral("总耗时: %1ms\n阶段细分:\n  - 参数准备: %2ms\n  - 初始化: %3ms\n  - 工具调用(含桥接): %4ms\n  - 结果校验: %5ms")
+                .arg(value.timing.totalMs, 0, 'f', 2)
+                .arg(value.timing.prepareMs, 0, 'f', 2)
+                .arg(value.timing.initMs, 0, 'f', 2)
                 .arg(value.timing.adapterExecuteMs > 0 ? value.timing.adapterExecuteMs : value.timing.executeMs, 0, 'f', 2)
-                .arg(value.timing.totalMs, 0, 'f', 2);
-            if (value.timing.waitGilMs > 0 || value.timing.pythonCallMs > 0 || value.timing.pythonOutputMs > 0) {
-                detail += QStringLiteral("\n  - 等待GIL: %1ms\n  - 输入映射: %2ms\n  - 执行: %3ms\n  - 输出转换: %4ms")
+                .arg(value.timing.validateMs > 0 ? value.timing.validateMs : value.timing.convertMs, 0, 'f', 2);
+            if (value.timing.waitGilMs > 0 || value.timing.pythonInputMs > 0 || value.timing.pythonCallMs > 0 || value.timing.pythonOutputMs > 0) {
+                detail += QStringLiteral("\nPython 内部阶段 (已计入工具调用):\n  - 等待GIL: %1ms\n  - 输入映射: %2ms\n  - Python调用: %3ms\n  - 输出转换: %4ms")
                     .arg(value.timing.waitGilMs, 0, 'f', 2)
                     .arg(value.timing.pythonInputMs, 0, 'f', 2)
                     .arg(value.timing.pythonCallMs, 0, 'f', 2)

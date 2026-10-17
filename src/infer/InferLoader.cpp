@@ -83,12 +83,15 @@ private:
 PortDefinition port(const char* id, TypeSpec type) {
     PortDefinition value;
     value.id = id;
+    value.name = id;
     value.type = type;
     return value;
 }
 ToolDefinition contract() {
     ToolDefinition definition;
     definition.id = definition.registryName = "visionrt.dl.yolo";
+    definition.displayName = "YOLO目标检测";
+    definition.version = "1.0.0";
     definition.kind = ToolKind::CppClass;
     for (const auto* id : {"model_name", "load_mode", "model_path", "engine_output_path", "labels_path", "precision"})
         definition.initParams.push_back(port(id, {Type::String}));

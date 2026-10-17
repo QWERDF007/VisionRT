@@ -381,6 +381,44 @@ void executionMetricsAndTimingSeparation() {
     // Python sub-items must not be duplicated into totalMs
     assert(snap->timing.totalMs >= snap->timing.adapterExecuteMs);
 }
+
+void timingRecordedOnFailure() {
+    RuntimeEngine engine(1);
+    ToolRegistry registry;
+    auto mockDef = definition("test.failure.metrics");
+    struct FailingMetricsTool final : public IToolInstance, public IPythonExecutionMetrics {
+        ToolStatus initialize(const Values&) override { return {}; }
+        ToolResult execute(const Values&) override {
+            std::this_thread::sleep_for(15ms);
+            throw std::runtime_error("simulated failure after delay");
+        }
+        ToolStatus release() override { return {}; }
+        ExecutionMetrics pythonMetrics() const override {
+            ExecutionMetrics m;
+            m.waitGilMs = 2.0;
+            m.pythonInputMs = 1.0;
+            m.pythonCallMs = 12.0;
+            m.pythonOutputMs = 0.0;
+            return m;
+        }
+    };
+    registry.registerCpp(mockDef.registryName, mockDef, [](const PlatformToolServices&) {
+        return std::make_unique<FailingMetricsTool>();
+    });
+    registry.addDefinition(mockDef);
+    auto n = node(1, mockDef);
+    ProjectDefinition project; project.dirty = true; project.flows.front().nodes = {n};
+    assert(engine.start(project, registry, RunMode::Once));
+    auto completed = finish(engine);
+    auto snap = snapshot(completed, 1);
+    assert(snap != nullptr);
+    assert(snap->status.code != 0); // Must be an error status
+    // VR-07 check: timings were preserved even though execute failed
+    assert(snap->timing.adapterExecuteMs >= 10.0);
+    assert(snap->timing.waitGilMs == 2.0);
+    assert(snap->timing.pythonCallMs == 12.0);
+    assert(snap->timing.totalMs >= snap->timing.adapterExecuteMs);
+}
 }
 int main(int argc, char** argv) {
     branchesOverlapAndJoin();
@@ -391,5 +429,7 @@ int main(int argc, char** argv) {
     receiverConsumesFailures();
     resetWaitsForActiveInvocation();
     executionMetricsAndTimingSeparation();
+    timingRecordedOnFailure();
     std::cout << "runtime contracts passed\n";
 }
+

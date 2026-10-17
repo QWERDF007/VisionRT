@@ -3,6 +3,7 @@
 #endif
 
 #include "common/Value.h"
+#include "visionrt/sdk/Schema.h"
 
 #include <array>
 #include <cassert>
@@ -171,5 +172,108 @@ int main() {
     for (const auto* bad : {"", "+1", " 1", "1 ", "1.0", "1e2", "--1",
                             "9223372036854775808", "-9223372036854775809"}) {
         rejects([&] { parseInt64(bad); });
+    }
+
+    // VR-01: SSOT Schema validation tests
+    ToolDefinition valid;
+    valid.schemaVersion = 1;
+    valid.id = "valid.tool";
+    valid.displayName = "Valid Tool";
+    valid.version = "1.0.0";
+    valid.kind = ToolKind::CppFunction;
+    valid.registryName = "valid.tool.cpp";
+    valid.inputs.push_back({"in_img", "Input Image", {Type::ImageBatch}});
+    valid.inputs.push_back({"threshold", "Threshold", {Type::Int}, std::int64_t{5}, "number", "基本输入", "",
+                            std::int64_t{0}, std::int64_t{10}, std::int64_t{1}, 0});
+    valid.outputs.push_back({"out_img", "Output Image", {Type::ImageBatch}, Missing{}, "", "", "",
+                             std::nullopt, std::nullopt, std::nullopt, std::nullopt, {}, "", "", "", "BGR", "in_img"});
+    validateToolDefinition(valid);
+
+    // Negative tests
+    // 1. bad schemaVersion
+    {
+        auto bad = valid;
+        bad.schemaVersion = 2;
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 2. empty tool id
+    {
+        auto bad = valid;
+        bad.id = "";
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 3. invalid tool id
+    {
+        auto bad = valid;
+        bad.id = "bad id with space";
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 4. missing registryName on C++ tool
+    {
+        auto bad = valid;
+        bad.registryName = "";
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 5. CppFunction having non-empty init_params
+    {
+        auto bad = valid;
+        bad.initParams.push_back({"param1", "Param 1", {Type::Int}});
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 6. duplicate port id
+    {
+        auto bad = valid;
+        bad.inputs.push_back({"in_img", "Duplicate", {Type::Int}});
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 7. reserved port prefix __
+    {
+        auto bad = valid;
+        bad.inputs.push_back({"__custom", "Reserved", {Type::Int}});
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 8. min > max
+    {
+        auto bad = valid;
+        bad.inputs[1].minimum = std::int64_t{20};
+        bad.inputs[1].maximum = std::int64_t{10};
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 9. step <= 0
+    {
+        auto bad = valid;
+        bad.inputs[1].step = std::int64_t{0};
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 10. output with editor
+    {
+        auto bad = valid;
+        bad.outputs[0].editor = "number";
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 10b. default exceeds max
+    {
+        auto bad = valid;
+        bad.inputs[1].defaultValue = std::int64_t{999};
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 11. input with display
+    {
+        auto bad = valid;
+        bad.inputs[0].colorOrder = "BGR";
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 12. invalid color order
+    {
+        auto bad = valid;
+        bad.outputs[0].colorOrder = "INVALID_COLOR";
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 13. image_input reference mismatch
+    {
+        auto bad = valid;
+        bad.inputs.push_back({"rois", "ROIs", {Type::RoiBatch}, Missing{}, "", "", "",
+                              std::nullopt, std::nullopt, std::nullopt, std::nullopt, {}, "", "non_existent_img"});
+        rejects([&] { validateToolDefinition(bad); });
     }
 }
