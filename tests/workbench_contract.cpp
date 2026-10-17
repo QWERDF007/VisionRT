@@ -1,8 +1,18 @@
 #include "ui/ToolTreeModel.h"
 #include "ui/OutputModel.h"
 #include "ui/AppController.h"
+#include "ui/Theme.h"
+#include "ui/ImageViewport.h"
 #include <QGuiApplication>
 #include <QTemporaryDir>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQuickWindow>
+#include <QQuickItem>
+#include <QQuickStyle>
+#include <QImage>
+#include <QUrl>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 
@@ -151,11 +161,128 @@ void nodeDiagnosticsContract() {
     require(detail.contains(QStringLiteral("工具调用(含桥接):")), "timingDetail missing bridge disclaimer");
     require(!detail.contains(QStringLiteral("纯算法")), "timingDetail falsely claims pure algorithm");
 }
+
+void mainQmlContract() {
+    QQuickStyle::setStyle("Basic");
+    QTemporaryDir directory;
+    AppController app(1, directory.path());
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
+    auto* theme = visionrt::Theme::instance();
+    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+
+    QQmlApplicationEngine engine;
+    const auto appDir = QCoreApplication::applicationDirPath();
+    engine.addImportPath(appDir + "/qml");
+    engine.addImportPath(appDir + "/../qml");
+    engine.addImportPath("F:/Projects/VisionRT/build/bin/qml");
+    engine.addImportPath("F:/Projects/VisionRT/build/qml");
+    engine.addImportPath("F:/Projects/VisionRT/src/ui/qml");
+
+    engine.rootContext()->setContextProperty("app", &app);
+    engine.rootContext()->setContextProperty("Theme", theme);
+    engine.rootContext()->setContextProperty("demoMenu", false);
+    engine.rootContext()->setContextProperty("demoSelect", false);
+
+    const auto qmlPath = QStringLiteral("F:/Projects/VisionRT/src/ui/qml/Main.qml");
+    engine.load(QUrl::fromLocalFile(qmlPath));
+
+    const auto roots = engine.rootObjects();
+    require(!roots.isEmpty(), "Main.qml failed to instantiate");
+    auto* window = qobject_cast<QQuickWindow*>(roots.first());
+    require(window != nullptr, "Main.qml root is not QQuickWindow");
+
+    // 1. Min logic workspace bounds (960x540)
+    window->setWidth(960);
+    window->setHeight(540);
+    window->show();
+    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
+
+    require(window->width() >= 960, "window width violates 960 min constraint");
+    require(window->height() >= 540, "window height violates 540 min constraint");
+
+    // 2. Initial state verification
+    require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
+    app.save(directory.path() + "/test.vrt");
+    require(app.dirty() == false, "project initially dirty after save");
+    auto* leftHandle = window->findChild<QQuickItem*>("leftHandle");
+    auto* leftHandleMask = window->findChild<QQuickItem*>("leftHandleMask");
+    auto* leftHost = window->findChild<QQuickItem*>("leftHost");
+    auto* leftContent = window->findChild<QQuickItem*>("leftContent");
+    require(leftHandle != nullptr, "missing leftHandle");
+    require(leftHandleMask != nullptr, "missing leftHandleMask");
+    require(leftHost != nullptr, "missing leftHost");
+    require(leftContent != nullptr, "missing leftContent");
+    require(leftContent->isVisible(), "leftContent initially not visible");
+    require(leftHandle->width() == 1, "initial handle width != 1");
+
+    // 3. Drawer Collapse (toggleLeft)
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
+
+    require(window->property("leftExpanded").toBool() == false, "drawer did not collapse");
+    require(leftHost->width() == 28, "collapsed leftHost width != 28");
+    require(leftHandle->implicitWidth() == 0, "collapsed leftHandle implicitWidth != 0");
+    require(leftHandleMask->width() == 0, "collapsed leftHandleMask width != 0");
+    require(!leftHandle->isVisible(), "collapsed leftHandle should be invisible");
+    require(!leftHandle->isEnabled(), "collapsed leftHandle should be disabled");
+    require(!leftContent->isVisible(), "collapsed leftContent should be hidden");
+
+    auto* drawerToggle = window->findChild<QQuickItem*>("drawerToggle");
+    require(drawerToggle != nullptr && drawerToggle->isVisible(), "drawerToggle missing or invisible");
+    require(window->activeFocusItem() == drawerToggle, "focus did not switch to drawerToggle upon collapse");
+
+    // 4. Invariant: running or browsing/folding does not dirty project or mutate graph
+    require(app.dirty() == false, "collapsing drawer dirtied the project");
+
+    // 5. Drawer Expand (toggleLeft)
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
+
+    require(window->property("leftExpanded").toBool() == true, "drawer did not expand");
+    require(leftHost->width() >= 260, "expanded leftHost width < 260");
+    require(leftHandle->implicitWidth() == 1, "expanded leftHandle implicitWidth != 1");
+    require(leftHandleMask->width() == 7, "expanded leftHandleMask width != 7");
+    require(leftHandle->isVisible(), "expanded leftHandle should be visible");
+    require(leftHandle->isEnabled(), "expanded leftHandle should be enabled");
+    require(leftContent->isVisible(), "expanded leftContent not visible");
+
+    auto* drawerCollapseButton = window->findChild<QQuickItem*>("drawerCollapseButton");
+    require(drawerCollapseButton != nullptr && drawerCollapseButton->isVisible(), "drawerCollapseButton missing or invisible");
+    require(window->activeFocusItem() == drawerCollapseButton, "focus did not switch to drawerCollapseButton upon expand");
+
+    // 6. Independent ToolLibrary collapse & expand
+    require(window->property("libraryExpanded").toBool() == true, "library initially not expanded");
+    window->setProperty("libraryExpanded", false);
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(window->property("libraryExpanded").toBool() == false, "library failed to collapse");
+
+    window->setProperty("libraryExpanded", true);
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(window->property("libraryExpanded").toBool() == true, "library failed to re-expand");
+
+    // 7. Focus search (Ctrl+F)
+    QMetaObject::invokeMethod(window, "focusSearch");
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(window->property("leftExpanded").toBool() == true, "focusSearch did not ensure leftExpanded");
+
+    // 8. Screenshot capture evidence
+    QImage frame = window->grabWindow();
+    require(!frame.isNull(), "grabWindow failed");
+    require(frame.width() >= 960 && frame.height() >= 540, "frame dimensions smaller than logical workspace");
+    std::filesystem::create_directories("build/evidence");
+    frame.save("build/evidence/main_window_verified.png");
+}
 }
 int main(int argc, char** argv) {
     QGuiApplication qt(argc, argv);
     try {
         treeContract(); outputContract(); pendingContract(); nodeDiagnosticsContract();
+        mainQmlContract();
         std::cout << "workbench contract passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;
