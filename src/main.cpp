@@ -1,6 +1,7 @@
 #include "common/Version.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
+#include "ui/Theme.h"
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -67,9 +68,12 @@ int main(int argc, char* argv[]) {
             });
         }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
+        auto* theme = visionrt::Theme::instance();
+        qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
         QQmlApplicationEngine engine;
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);
+        engine.rootContext()->setContextProperty("Theme", theme);
         QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                          &application, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
         engine.loadFromModule("VisionRT", "Main");

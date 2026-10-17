@@ -5,8 +5,8 @@ import quickui
 
 Rectangle {
     id: root
-    color: QuiColor.Primary
-    border.color: "#d0d7de"
+    color: Theme.surfaceBg
+    border.color: Theme.border
     border.width: 1
     property bool expanded: true
     property string selectedTool: ""
@@ -15,17 +15,17 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 1; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+            Layout.fillWidth: true; Layout.preferredHeight: 34; color: Theme.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: "#d0d7de"
+                height: 1; color: Theme.tabBorder
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
                     text: "工具库"
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
-                    color: "#24292f"
+                    color: Theme.textPrimary
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {

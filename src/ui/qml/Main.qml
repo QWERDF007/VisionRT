@@ -72,13 +72,13 @@ ApplicationWindow {
     }
     Component.onCompleted: {
         QuiColor.themeMode = QuiColor.Light
-        QuiColor.Background = "#f5f7fa"
-        QuiColor.Primary = "#ffffff"
-        QuiColor.Border = "#d0d7de"
-        QuiColor.Highlight = "#1887d8"
-        QuiColor.FontPrimary = "#24292f"
-        QuiColor.FontCaption = "#57606a"
-        QuiColor.Button = "#f6f8fa"
+        QuiColor.Background = Theme.windowBg
+        QuiColor.Primary = Theme.surfaceBg
+        QuiColor.Border = Theme.border
+        QuiColor.Highlight = Theme.highlight
+        QuiColor.FontPrimary = Theme.textPrimary
+        QuiColor.FontCaption = Theme.textSecondary
+        QuiColor.Button = Theme.menuButtonBg
         QuiFont.Body = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12 })
         QuiFont.Caption = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
         Qt.callLater(resetLayout)
@@ -103,10 +103,10 @@ ApplicationWindow {
     header: ToolBar {
         height: 38
         background: Rectangle {
-            color: "#ffffff"
+            color: Theme.menuBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: "#d0d7de"
+                height: 1; color: Theme.menuBarBorder
             }
         }
         RowLayout {
@@ -116,64 +116,69 @@ ApplicationWindow {
             QuiTextIconButton {
                 text: "文件"; iconSource: QuiFontIcon.FolderOpen
                 implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                textColor: "#24292f"; iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 onClicked: fileMenu.popup()
             }
             QuiTextIconButton {
                 text: "设置"; iconSource: QuiFontIcon.Settings
                 implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                textColor: "#24292f"; iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 onClicked: settingsMenu.popup()
             }
             QuiTextIconButton {
                 text: "工具"; iconSource: QuiFontIcon.AllApps
                 implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                textColor: "#24292f"; iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 onClicked: toolsMenu.popup()
             }
             QuiTextIconButton {
                 text: "帮助"; iconSource: QuiFontIcon.Help
                 implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                textColor: "#24292f"; iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 onClicked: helpMenu.popup()
             }
             QuiTextIconButton {
                 text: "运行"; iconSource: QuiFontIcon.Play
                 implicitHeight: 26; display: AbstractButton.TextBesideIcon
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                textColor: "#24292f"; iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 onClicked: runMenu.popup()
             }
 
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: "#d0d7de"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: Theme.menuSeparator; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
             // Actions & Execution
             QuiTextIconButton {
                 action: saveAction; iconSource: QuiFontIcon.Save
                 implicitHeight: 26; implicitWidth: 26
                 display: AbstractButton.IconOnly
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 ToolTip.visible: hovered; ToolTip.text: "保存 (Ctrl+S)"
             }
             QuiTextIconButton {
                 action: runAction; iconSource: QuiFontIcon.Play
                 implicitHeight: 26; implicitWidth: 26
                 display: AbstractButton.IconOnly
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                iconColor: QuiColor.Highlight
+                normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                iconColor: hovered ? Theme.runButtonHoverIcon : Theme.runButtonIcon
                 ToolTip.visible: hovered; ToolTip.text: "单次执行 (F5)"
             }
             QuiTextIconButton {
                 action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
                 implicitHeight: 26; implicitWidth: 26
                 display: AbstractButton.IconOnly
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                iconColor: app.runState === "RunningLoop" ? "#cf222e" : QuiColor.Highlight
+                normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                iconColor: app.runState === "RunningLoop" ? Theme.loopRunningIcon : (hovered ? Theme.runButtonHoverIcon : Theme.runButtonIcon)
                 ToolTip.visible: hovered; ToolTip.text: loopAction.text
             }
 
@@ -182,7 +187,7 @@ ApplicationWindow {
             QuiText {
                 text: app.runState
                 visible: app.busy
-                color: QuiColor.Highlight
+                color: Theme.highlight
                 font: QuiFont.Caption
             }
 
@@ -190,8 +195,9 @@ ApplicationWindow {
                 iconSource: QuiFontIcon.Refresh
                 text: "复位"
                 display: AbstractButton.TextBesideIcon
-                normalColor: "transparent"; hoverColor: "#f0f2f5"; pressedColor: "#e4e7eb"
-                textColor: "#24292f"; iconColor: "#57606a"
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                textColor: hovered ? Theme.menuButtonHoverText : Theme.menuButtonText
+                iconColor: hovered ? Theme.menuButtonHoverIcon : Theme.menuButtonIcon
                 implicitHeight: 26; enabled: !app.busy
                 focusPolicy: Qt.TabFocus
                 onClicked: resetDialog.open()

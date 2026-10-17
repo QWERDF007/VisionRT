@@ -22,13 +22,13 @@ if(NOT result EQUAL 0)
     message(FATAL_ERROR "windeployqt failed: ${result}")
 endif()
 file(COPY "@VISIONRT_QUICKUI_QML_ROOT@/quickui" DESTINATION "${DESTINATION}/qml")
-if(EXISTS "@CMAKE_SOURCE_DIR@/docs/VisionRT_V3/examples/tools")
-    file(COPY "@CMAKE_SOURCE_DIR@/docs/VisionRT_V3/examples/tools/" DESTINATION "${DESTINATION}/tools"
+if(EXISTS "@CMAKE_SOURCE_DIR@/assets/tools")
+    file(COPY "@CMAKE_SOURCE_DIR@/assets/tools/" DESTINATION "${DESTINATION}/tools"
         PATTERN "__pycache__" EXCLUDE)
 endif()
-if(EXISTS "@CMAKE_SOURCE_DIR@/docs/VisionRT_V3/examples")
-    file(COPY "@CMAKE_SOURCE_DIR@/docs/VisionRT_V3/examples/" DESTINATION "${DESTINATION}/examples"
-        PATTERN "tools" EXCLUDE PATTERN "__pycache__" EXCLUDE)
+if(EXISTS "@CMAKE_SOURCE_DIR@/assets/examples")
+    file(COPY "@CMAKE_SOURCE_DIR@/assets/examples/" DESTINATION "${DESTINATION}/examples"
+        PATTERN "__pycache__" EXCLUDE)
 endif()
 
 set(python_home "@VISIONRT_PYTHON_HOME@")
