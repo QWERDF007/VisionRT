@@ -1,5 +1,5 @@
 #include "ui/AppController_p.h"
-#include "core/ValueYaml.h"
+#include <visionrt/sdk/ValueYaml.h>
 #include "runtime/Receiver.h"
 #include <QClipboard>
 #include <QCoreApplication>

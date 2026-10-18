@@ -110,7 +110,7 @@ Python 脚本放置于工具包对应目录，实现 `ToolInstance` 类，包含
 
 ## 5. 文档与规范索引
 
-- **SDK 接口合同与数据契约**：[`src/sdk/include/visionrt/sdk/Tool.h`](../src/sdk/include/visionrt/sdk/Tool.h)
+- **SDK 接口合同与数据契约**：[`3rdparty/VisionRTToolSDK/include/visionrt/sdk/Tool.h`](../3rdparty/VisionRTToolSDK/include/visionrt/sdk/Tool.h)
 - **节点错误诊断与四态视觉记录**：[`RT-05_节点错误诊断记录.md`](RT-05_节点错误诊断记录.md)
 - **VisionRT 与 VisionTools 桥接架构**：[`visiontools-bridge-architecture.md`](visiontools-bridge-architecture.md)
 - **重构交付与验收矩阵报告**：[`RT-15_重构交付与验收矩阵.md`](RT-15_重构交付与验收矩阵.md)

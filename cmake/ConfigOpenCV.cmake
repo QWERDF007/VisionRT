@@ -7,7 +7,7 @@ visionrt_resolve_path(_visionrt_opencv_home
     ENVIRONMENT_VARIABLES OpenCV_DIR OpenCV_HOME OpenCV_ROOT
     PATHS ${CMAKE_PREFIX_PATH}
     REQUIRED_FILE "lib/OpenCVConfig.cmake"
-    DEFAULT "D:/Software/dev/opencv-4.8.0/build/x64/vc16"
+    DEPENDENCY opencv
 )
 
 if(_visionrt_opencv_home)

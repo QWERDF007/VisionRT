@@ -7,7 +7,7 @@ visionrt_resolve_path(_visionrt_qt_root
     ENVIRONMENT_VARIABLES Qt6_ROOT QT_ROOT QTDIR
     PATHS ${CMAKE_PREFIX_PATH}
     REQUIRED_FILE "lib/cmake/Qt6/Qt6Config.cmake"
-    DEFAULT "D:/Software/Qt6/6.6.2/msvc2019_64"
+    DEPENDENCY qt
 )
 
 if(_visionrt_qt_root)

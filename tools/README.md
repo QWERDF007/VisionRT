@@ -4,8 +4,8 @@
 
 ## 依赖清单 (`dependencies.yaml`)
 
-`dependencies.yaml` 是外部依赖在项目中的单一真相源（SSOT）。
-定义了 Qt6、OpenCV、Python 3.12、CUDA 11.8、InferRT、TensorRT、Faiss、MKL 等运行时库的根目录和过滤模式。
+`dependencies.yaml` 是外部依赖在项目中的单一真相源（SSOT）：
+记录 Qt6、OpenCV、Python 等依赖的默认基准路径与过滤模式。换机器时只需修改本文件，无需改 cmake/*.cmake（CMake 侧经 cmake/ConfigDependencyDefaults.cmake 消费）。
 
 ## 1. 项目构建与 MSVC 环境脚本 (`build.cmd`)
 
@@ -62,6 +62,7 @@ python tools\package_app.py --build --install-dir F:\tmp\VisionRT
 ```
 
 常用参数说明：
+
 | 参数 | 说明 |
 |------|------|
 | `--build-dir` | CMake 构建目录，默认 `build` |
@@ -77,14 +78,14 @@ python tools\package_app.py --build --install-dir F:\tmp\VisionRT
 | `--parallel` | `--build` 并行线程数，默认 4 |
 | `--skip-verify` | 跳过发布包完整性校验 |
 | `--no-clean` | 不清空输出目录，直接增量复用 |
-| `--force-clean` | 即使输出目录缺少 `.visionrt_package` marker 也强制清理 |
+| `--force-clean` | 即使输出目录缺少 `.visionrt_package` marker 也强制清空 |
 
 ---
 
 ## 3. 开发环境依赖链接 (`link_dependencies.py`)
 
-解决“无法直接启动 `build/bin/VisionRT.exe`”的问题。
-在开发调试阶段，将 Qt 基础 DLL、platform 插件、QuickUI 模块与第三方运行库直接链接到 `build/bin`，并生成 `qt.conf`，使开发者可以直接在终端或双击运行 `build/bin/VisionRT.exe`，无需设置全局 PATH 环境变量。
+解决"无法直接启动 `build/bin/VisionRT.exe`"的问题。
+在开发调试阶段，把 Qt 基础 DLL、platform 插件、QuickUI 模块与第三方运行库直接链接到 `build/bin`，并生成 `qt.conf`，使开发者可以直接在终端或双击运行 `build/bin/VisionRT.exe`，无需设置全局 PATH 环境变量。
 
 ### 常用命令
 
