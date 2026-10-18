@@ -37,32 +37,12 @@ std::string text(const YAML::Node& node, const std::string& context, bool nonemp
     return value;
 }
 
-void oneOf(const std::string& value, std::initializer_list<std::string_view> choices,
-           const std::string& context) {
-    if (std::find(choices.begin(), choices.end(), value) == choices.end())
-        throw ContractError("Unknown " + context + ": " + value);
-}
-
-void identifier(const std::string& value, bool port) {
-    const auto letter = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); };
-    if (value.empty() || (!letter(value.front()) && value.front() != '_') ||
-        !std::all_of(value.begin(), value.end(), [&](char c) {
-            return letter(c) || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-';
-        })) throw ContractError("ID must be a stable English identifier: " + value);
-    if (port && value.starts_with("__")) throw ContractError("Port ID uses reserved __ prefix: " + value);
-}
-
-bool lessNumber(const PortValue& left, const PortValue& right, Type type) {
-    if (type == Type::Int) return std::get<std::int64_t>(left) < std::get<std::int64_t>(right);
-    return std::get<double>(left) < std::get<double>(right);
-}
 
 std::vector<PortDefinition> parsePorts(const YAML::Node& node, const std::string& direction) {
     if (!node.IsSequence()) throw ContractError(direction + " must be a sequence");
     const bool output = direction == "outputs";
     std::vector<PortDefinition> ports;
     ports.reserve(node.size());
-    std::set<std::string> ids;
     for (const auto& item : node) {
         if (output) {
             fields(item, {"id", "name", "type", "dtype", "rank", "layout", "image_port", "display"}, direction);
@@ -71,91 +51,40 @@ std::vector<PortDefinition> parsePorts(const YAML::Node& node, const std::string
                 "step", "decimals", "options", "options_provider", "tab", "group", "image_input"}, direction);
         }
         PortDefinition port;
-        port.id = text(item["id"], direction + ".id", true);
-        identifier(port.id, true);
+        port.id = text(item["id"], direction + ".id", false);
         const auto context = direction + "." + port.id;
-        if (!ids.insert(port.id).second) throw ContractError("Duplicate " + context);
         try {
-            port.name = text(item["name"], "name", true);
+            port.name = text(item["name"], "name", false);
             port.type = decodeTypeSpec(item);
-            if (output) {
-                for (const auto key : {"default", "editor", "min", "max", "step", "decimals", "options", "options_provider", "tab", "group", "image_input"})
-                    if (item[key]) throw ContractError(std::string(key) + " is not an output field");
-            } else if (item["display"] || item["image_port"]) {
-                throw ContractError("display and image_port apply only to outputs");
-            }
             if (item["default"]) port.defaultValue = decodeValue(item["default"], port.type);
-            if (item["editor"]) {
-                port.editor = text(item["editor"], "editor");
-                oneOf(port.editor, {"number", "text", "bool", "file", "directory", "array", "roi"}, "editor");
-            }
+            if (item["editor"]) port.editor = text(item["editor"], "editor");
             if (item["tab"]) port.tab = text(item["tab"], "tab");
-            oneOf(port.tab, {"基本输入", "预处理", "检测", "结果处理"}, "tab");
             if (item["group"]) port.group = text(item["group"], "group");
-            const bool numeric = port.type.type == Type::Int || port.type.type == Type::Float;
-            const auto bound = [&](const char* key) -> std::optional<PortValue> {
-                if (!item[key]) return {};
-                if (!numeric) throw ContractError(std::string(key) + " requires an Int or Float port");
-                auto value = decodeValue(item[key], port.type);
-                if (isMissing(value) || (port.type.type == Type::Float && !std::isfinite(std::get<double>(value))))
-                    throw ContractError(std::string(key) + " must be a finite numeric value");
-                return value;
-            };
-            port.minimum = bound("min");
-            port.maximum = bound("max");
-            port.step = bound("step");
-            if (port.minimum && port.maximum && lessNumber(*port.maximum, *port.minimum, port.type.type))
-                throw ContractError("min must not exceed max");
-            if (port.step) {
-                const PortValue zero = port.type.type == Type::Int ? PortValue{std::int64_t{0}} : PortValue{0.0};
-                if (!lessNumber(zero, *port.step, port.type.type)) throw ContractError("step must be positive");
-            }
+            if (item["min"]) port.minimum = decodeValue(item["min"], port.type);
+            if (item["max"]) port.maximum = decodeValue(item["max"], port.type);
+            if (item["step"]) port.step = decodeValue(item["step"], port.type);
             if (item["decimals"]) {
-                if (!numeric) throw ContractError("decimals requires an Int or Float port");
                 const auto decimals = parseInt64(text(item["decimals"], "decimals"));
-                if (decimals < 0 || decimals > std::numeric_limits<int>::max()) throw ContractError("Invalid decimals");
+                if (decimals < std::numeric_limits<int>::min() || decimals > std::numeric_limits<int>::max())
+                    throw ContractError("Invalid decimals");
                 port.decimals = static_cast<int>(decimals);
-            }
-            if (!isMissing(port.defaultValue) && numeric) {
-                if (port.type.type == Type::Float && !std::isfinite(std::get<double>(port.defaultValue)))
-                    throw ContractError("Numeric default must be finite");
-                if ((port.minimum && lessNumber(port.defaultValue, *port.minimum, port.type.type)) ||
-                    (port.maximum && lessNumber(*port.maximum, port.defaultValue, port.type.type)))
-                    throw ContractError("Default is outside min/max");
             }
             if (item["options"]) {
                 if (!item["options"].IsSequence()) throw ContractError("options must be a sequence");
                 port.options.reserve(item["options"].size());
                 for (const auto& option : item["options"]) {
-                    auto optVal = decodeValue(option, port.type);
-                    if (numeric && port.type.type == Type::Float && !std::isfinite(std::get<double>(optVal)))
-                        throw ContractError("option must be a finite numeric value");
-                    port.options.push_back(std::move(optVal));
+                    port.options.push_back(decodeValue(option, port.type));
                 }
             }
-            if (item["options_provider"]) {
-                port.optionsProvider = text(item["options_provider"], "options_provider");
-                oneOf(port.optionsProvider, {"platform.gpu_devices"}, "options_provider");
-            }
-            if (item["image_input"]) {
-                if (direction != "inputs" || port.type.type != Type::RoiBatch)
-                    throw ContractError("image_input requires a RoiBatch input");
-                port.imageInput = text(item["image_input"], "image_input", true);
-            }
-            if (item["image_port"]) {
-                if (port.type.type != Type::RoiBatch) throw ContractError("image_port requires a RoiBatch output");
-                port.imagePort = text(item["image_port"], "image_port", true);
-            }
+            if (item["options_provider"]) port.optionsProvider = text(item["options_provider"], "options_provider");
+            if (item["image_input"]) port.imageInput = text(item["image_input"], "image_input", false);
+            if (item["image_port"]) port.imagePort = text(item["image_port"], "image_port", false);
             if (item["display"]) {
-                if (port.type.type != Type::ImageBatch) throw ContractError("display requires an ImageBatch output");
                 const auto display = item["display"];
                 fields(display, {"color_order", "same_geometry_as_input"}, "display");
-                if (display["color_order"]) {
-                    port.colorOrder = text(display["color_order"], "color_order");
-                    oneOf(port.colorOrder, {"Gray", "BGR", "BGRA", "RGB", "RGBA"}, "color_order");
-                }
+                if (display["color_order"]) port.colorOrder = text(display["color_order"], "color_order");
                 if (display["same_geometry_as_input"])
-                    port.sameGeometryAsInput = text(display["same_geometry_as_input"], "same_geometry_as_input", true);
+                    port.sameGeometryAsInput = text(display["same_geometry_as_input"], "same_geometry_as_input", false);
             }
         } catch (const std::exception& error) {
             throw ContractError(context + ": " + error.what());

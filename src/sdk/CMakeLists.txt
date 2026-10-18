@@ -9,6 +9,23 @@ if(NOT TARGET opencv_core)
     find_package(OpenCV REQUIRED COMPONENTS core)
 endif()
 
+if(NOT TARGET yaml-cpp::yaml-cpp AND NOT TARGET yaml-cpp)
+    find_package(yaml-cpp QUIET)
+    if(NOT TARGET yaml-cpp::yaml-cpp AND NOT TARGET yaml-cpp)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/yaml-cpp/CMakeLists.txt")
+            set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Disable yaml-cpp tests" FORCE)
+            set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Disable yaml-cpp tools" FORCE)
+            set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "Disable yaml-cpp contrib" FORCE)
+            set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "Build static yaml-cpp" FORCE)
+            set(YAML_MSVC_SHARED_RT ON CACHE BOOL "MSVC shared runtime" FORCE)
+            set(YAML_CPP_INSTALL ON CACHE BOOL "Enable yaml-cpp install" FORCE)
+            add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/yaml-cpp" "${CMAKE_CURRENT_BINARY_DIR}/yaml-cpp")
+        else()
+            message(FATAL_ERROR "yaml-cpp not found and 3rdparty/yaml-cpp submodule missing")
+        endif()
+    endif()
+endif()
+
 add_library(VisionRTToolSDK STATIC
     src/Value.cpp
     src/Contract.cpp
@@ -33,7 +50,7 @@ target_link_libraries(visionrt_validate_tool PRIVATE VisionRTToolSDK)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-install(TARGETS VisionRTToolSDK yaml-cpp visionrt_validate_tool
+install(TARGETS VisionRTToolSDK visionrt_validate_tool
     EXPORT VisionRTToolSDKTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -42,7 +59,6 @@ install(TARGETS VisionRTToolSDK yaml-cpp visionrt_validate_tool
 )
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/yaml-cpp/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(EXPORT VisionRTToolSDKTargets
     FILE VisionRTToolSDKTargets.cmake
