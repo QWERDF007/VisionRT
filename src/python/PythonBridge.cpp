@@ -189,6 +189,11 @@ void validateStorage(const py::array& array, py::ssize_t low, py::ssize_t high) 
         throw ContractError("NumPy shape/strides exceed the backing buffer range");
 }
 
+#if defined(VISIONRT_TEST_PROBES)
+std::atomic<std::size_t> g_leafImageCopyCount{0};
+std::atomic<std::size_t> g_leafNumericCopyCount{0};
+#endif
+
 NumericBuffer numericCopy(py::handle value, DType dtype, int rank) {
     auto array = requireArray(value, rank, true);
     if (!array.dtype().equal(numpyDtype(dtype)))
@@ -196,8 +201,12 @@ NumericBuffer numericCopy(py::handle value, DType dtype, int rank) {
     auto shape = checkedShape(array);
     const auto size = checkedByteCount(shape, dtypeSize(dtype));
     validateStorage(array, 0, static_cast<py::ssize_t>(size));
-    return NumericBuffer::copy(dtype, std::move(shape),
+    auto buffer = NumericBuffer::copy(dtype, std::move(shape),
         {static_cast<const std::byte*>(array.data()), size});
+#if defined(VISIONRT_TEST_PROBES)
+    ++g_leafNumericCopyCount;
+#endif
+    return buffer;
 }
 
 StringBuffer stringCopy(py::handle value, int rank) {
@@ -221,10 +230,7 @@ py::list requireList(py::handle value, const char* description) {
     return py::reinterpret_borrow<py::list>(value);
 }
 
-std::atomic<std::size_t> g_leafImageCopyCount{0};
-
 OwnedImage imageCopy(py::handle value) {
-    ++g_leafImageCopyCount;
     if (!py::isinstance<py::array>(value)) throw ContractError("ImageBatch element requires a NumPy ndarray");
     auto array = py::reinterpret_borrow<py::array>(value);
     if (array.ndim() != 2 && array.ndim() != 3)
@@ -281,6 +287,9 @@ OwnedImage imageCopy(py::handle value) {
                                 input + column * array.strides(1) + channel * channelStride, elementSize);
         }
     }
+#if defined(VISIONRT_TEST_PROBES)
+    ++g_leafImageCopyCount;
+#endif
     return OwnedImage::take(std::move(destination));
 }
 
@@ -388,6 +397,7 @@ PortValue fromPython(const TypeSpec& expected, py::handle value) {
     throw ContractError("Unsupported TypeSpec");
 }
 
+#if defined(VISIONRT_TEST_PROBES)
 std::size_t pythonLeafImageCopyCount() noexcept {
     return g_leafImageCopyCount.load();
 }
@@ -395,5 +405,14 @@ std::size_t pythonLeafImageCopyCount() noexcept {
 void resetPythonLeafImageCopyCount() noexcept {
     g_leafImageCopyCount.store(0);
 }
+
+std::size_t pythonLeafNumericCopyCount() noexcept {
+    return g_leafNumericCopyCount.load();
+}
+
+void resetPythonLeafNumericCopyCount() noexcept {
+    g_leafNumericCopyCount.store(0);
+}
+#endif
 
 } // namespace visionrt

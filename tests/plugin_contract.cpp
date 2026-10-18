@@ -17,6 +17,7 @@ using namespace visionrt;
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
+#include <QLibrary>
 #include <QTemporaryDir>
 #include <thread>
 #include <chrono>
@@ -227,40 +228,77 @@ void moduleIndexDiagnostics() {
     loader->setBaseDirectory(baseDir);
 
     // 1. Non-existent file
-    loader->loadIndexFile(baseDir / "non_existent.json");
+    loader->loadIndexFile(baseDir / "non_existent.yml");
     assert(!loader->diagnostics().empty());
     loader->clearDiagnostics();
 
-    // 2. Bad JSON
+    // 2. Reject JSON and XML formats per single-YML standard
     const auto badJson = baseDir / "bad.json";
     {
         QFile f(toQString(badJson));
         assert(f.open(QIODevice::WriteOnly));
-        f.write("{ invalid json ");
+        f.write("{\"schema_version\": 1, \"modules\": []}");
     }
     loader->loadIndexFile(badJson);
     assert(!loader->diagnostics().empty());
+    assert(loader->diagnostics().back().message.find("only .yml/.yaml is supported") != std::string::npos);
     loader->clearDiagnostics();
 
-    // 3. Duplicate registry_name and escaping path
-    const auto testJson = baseDir / "test.json";
+    const auto badXml = baseDir / "bad.xml";
     {
-        QFile f(toQString(testJson));
+        QFile f(toQString(badXml));
         assert(f.open(QIODevice::WriteOnly));
-        const char* content = R"({
-            "schema_version": 1,
-            "modules": [
-                {"registry_name": "mod.valid", "path": "bin/valid.dll"},
-                {"registry_name": "mod.valid", "path": "bin/dup.dll"},
-                {"registry_name": "mod.escape", "path": "../../evil.dll"},
-                {"registry_name": "mod.abs", "path": "C:/abs/path.dll"}
-            ]
-        })";
+        f.write("<modules></modules>");
+    }
+    loader->loadIndexFile(badXml);
+    assert(!loader->diagnostics().empty());
+    assert(loader->diagnostics().back().message.find("only .yml/.yaml is supported") != std::string::npos);
+    loader->clearDiagnostics();
+
+    // 3. Bad YAML syntax
+    const auto badYaml = baseDir / "bad.yml";
+    {
+        QFile f(toQString(badYaml));
+        assert(f.open(QIODevice::WriteOnly));
+        f.write("modules: [ unclosed");
+    }
+    loader->loadIndexFile(badYaml);
+    assert(!loader->diagnostics().empty());
+    loader->clearDiagnostics();
+
+    // 4. Missing schema_version or invalid schema_version
+    const auto badVersion = baseDir / "bad_version.yml";
+    {
+        QFile f(toQString(badVersion));
+        assert(f.open(QIODevice::WriteOnly));
+        f.write("schema_version: 2\nmodules: []\n");
+    }
+    loader->loadIndexFile(badVersion);
+    assert(!loader->diagnostics().empty());
+    loader->clearDiagnostics();
+
+    // 5. Valid YAML module_index with duplicate registry_name and escaping path
+    const auto testYml = baseDir / "test.yml";
+    {
+        QFile f(toQString(testYml));
+        assert(f.open(QIODevice::WriteOnly));
+        const char* content = R"(schema_version: 1
+modules:
+  - registry_name: mod.valid
+    path: bin/valid.dll
+  - registry_name: mod.valid
+    path: bin/dup.dll
+  - registry_name: mod.escape
+    path: ../../evil.dll
+  - registry_name: mod.abs
+    path: C:/abs/path.dll
+)";
         f.write(content);
     }
-    loader->loadIndexFile(testJson);
+    loader->loadIndexFile(testYml);
     assert(loader->diagnostics().size() == 3); // duplicate, escape, absolute
     assert(loader->hasModule("mod.valid"));
+    assert(loader->resolveModulePath("mod.valid") == (baseDir / "bin/valid.dll").lexically_normal());
     assert(!loader->hasModule("mod.escape"));
     assert(!loader->hasModule("mod.abs"));
 }
@@ -280,16 +318,15 @@ void appControllerToolsPackageIntegration(const std::filesystem::path& modulePat
     // Copy module dll into binDir
     std::filesystem::copy_file(modulePath, binDir / "test_module.dll", std::filesystem::copy_options::overwrite_existing);
 
-    // Create module_index.json
+    // Create module_index.yml
     {
-        QFile f(toQString(pkgDir / "module_index.json"));
+        QFile f(toQString(pkgDir / "module_index.yml"));
         assert(f.open(QIODevice::WriteOnly));
-        const char* indexContent = R"({
-            "schema_version": 1,
-            "modules": [
-                {"registry_name": "test.plugin.counter", "path": "bin/test_module.dll"}
-            ]
-        })";
+        const char* indexContent = R"(schema_version: 1
+modules:
+  - registry_name: test.plugin.counter
+    path: bin/test_module.dll
+)";
         f.write(indexContent);
     }
 
@@ -366,6 +403,93 @@ void registryIntegration(const std::filesystem::path& modulePath) {
     assert(instance->release().code == 0);
 }
 
+void windowsDllLoadingAndConcurrency(const std::filesystem::path& modulePath) {
+#ifdef _WIN32
+    wchar_t initialDllDir[MAX_PATH] = {0};
+    GetDllDirectoryW(MAX_PATH, initialDllDir);
+#endif
+
+    QTemporaryDir temp1;
+    QTemporaryDir temp2;
+    assert(temp1.isValid() && temp2.isValid());
+    const auto dir1 = std::filesystem::u8path(temp1.path().toUtf8().toStdString()) / "dir_one";
+    const auto dir2 = std::filesystem::u8path(temp2.path().toUtf8().toStdString()) / "dir_two";
+    std::filesystem::create_directories(dir1);
+    std::filesystem::create_directories(dir2);
+
+    const auto dll1 = dir1 / "mod1.dll";
+    const auto dll2 = dir2 / "mod2.dll";
+    std::filesystem::copy_file(modulePath, dll1, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(modulePath, dll2, std::filesystem::copy_options::overwrite_existing);
+
+    auto loader1 = std::make_shared<PluginLoader>();
+    auto loader2 = std::make_shared<PluginLoader>();
+
+    ToolStatus status1, status2;
+    std::shared_ptr<const LoadedModule> m1, m2;
+
+    std::thread t1([&] { m1 = loader1->loadModule(dll1, status1); });
+    std::thread t2([&] { m2 = loader2->loadModule(dll2, status2); });
+    t1.join();
+    t2.join();
+
+    assert(status1.code == 0 && m1 != nullptr);
+    assert(status2.code == 0 && m2 != nullptr);
+    assert(m1->api != nullptr && m2->api != nullptr);
+
+#ifdef _WIN32
+    wchar_t afterDllDir[MAX_PATH] = {0};
+    GetDllDirectoryW(MAX_PATH, afterDllDir);
+    assert(wcscmp(initialDllDir, afterDllDir) == 0);
+#endif
+}
+
+void unicodeAndChinesePathLoading(const std::filesystem::path& modulePath) {
+    QTemporaryDir temp;
+    assert(temp.isValid());
+    const auto baseDir = std::filesystem::u8path(temp.path().toUtf8().toStdString());
+    const auto unicodeDir = baseDir / "测试 插件 路径 with space";
+    std::filesystem::create_directories(unicodeDir);
+
+    const auto targetDll = unicodeDir / "插件_counter.dll";
+    std::filesystem::copy_file(modulePath, targetDll, std::filesystem::copy_options::overwrite_existing);
+
+    auto loader = std::make_shared<PluginLoader>();
+    ToolStatus status;
+    auto loaded = loader->loadModule(targetDll, status);
+    assert(status.code == 0 && loaded != nullptr);
+    assert(loaded->api != nullptr);
+
+    loader->registerModule("test.plugin.counter", targetDll);
+    PlatformToolServices services;
+    auto adapter = loader->createAdapter("test.plugin.counter", services);
+    assert(adapter != nullptr);
+    assert(adapter->initialize({}).code == 0);
+    auto res = adapter->execute({});
+    assert(res.status.code == 0);
+    assert(std::get<std::int64_t>(res.outputs.at("count")) == 1);
+    assert(adapter->release().code == 0);
+}
+
+void missingDependencyIsolation(const std::filesystem::path& modulePath) {
+    QTemporaryDir temp;
+    assert(temp.isValid());
+    const auto baseDir = std::filesystem::u8path(temp.path().toUtf8().toStdString());
+    const auto nonExistent = baseDir / "missing_dependency_module.dll";
+
+    auto loader = std::make_shared<PluginLoader>();
+    ToolStatus statusMissing;
+    auto missingMod = loader->loadModule(nonExistent, statusMissing);
+    assert(missingMod == nullptr);
+    assert(statusMissing.code != 0);
+
+    // Ensure loader is not poisoned and can still load valid module
+    ToolStatus statusValid;
+    auto validMod = loader->loadModule(modulePath, statusValid);
+    assert(validMod != nullptr);
+    assert(statusValid.code == 0);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -382,6 +506,9 @@ int main(int argc, char** argv) {
         advancedFaultInjectionAndModuleDestroy(modulePath);
         cppFunctionLifecycleAndNodeRuntime(modulePath);
         moduleIndexDiagnostics();
+        windowsDllLoadingAndConcurrency(modulePath);
+        unicodeAndChinesePathLoading(modulePath);
+        missingDependencyIsolation(modulePath);
         appControllerToolsPackageIntegration(modulePath);
         registryIntegration(modulePath);
         std::cout << "plugin contracts passed\n";

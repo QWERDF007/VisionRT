@@ -103,6 +103,7 @@ endif()
 
 # 测试契约与自动化测试用例
 if(BUILD_TESTING)
+    add_compile_definitions(VISIONRT_TEST_PROBES)
     include(CTest)
     include(AddTest)
 
@@ -182,6 +183,27 @@ if(BUILD_TESTING)
     if(MSVC)
         target_compile_options(examples_contract PRIVATE /UNDEBUG)
     endif()
+
+    add_custom_target(install_sdk
+        COMMAND ${CMAKE_COMMAND} --install "${CMAKE_BINARY_DIR}" --prefix "${CMAKE_BINARY_DIR}/sdk_install"
+        COMMENT "Installing SDK to ${CMAKE_BINARY_DIR}/sdk_install"
+    )
+
+    add_custom_target(test_sdk_consumer
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/tests/sdk_consumer"
+        COMMAND ${CMAKE_COMMAND} -S "${CMAKE_SOURCE_DIR}/tests/sdk_consumer" -B "${CMAKE_BINARY_DIR}/tests/sdk_consumer"
+                -DVisionRTToolSDK_ROOT="${CMAKE_BINARY_DIR}/sdk_install"
+                -DOpenCV_DIR="${OpenCV_DIR}"
+                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                -G "${CMAKE_GENERATOR}"
+                -DCMAKE_MAKE_PROGRAM="${CMAKE_MAKE_PROGRAM}"
+                -DCMAKE_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
+        COMMAND ${CMAKE_COMMAND} --build "${CMAKE_BINARY_DIR}/tests/sdk_consumer" --config ${CMAKE_BUILD_TYPE}
+        COMMAND ${CMAKE_COMMAND} -E env "PATH=${VISIONRT_OPENCV_BIN};${CMAKE_RUNTIME_OUTPUT_DIRECTORY};$ENV{PATH}" "${CMAKE_BINARY_DIR}/tests/sdk_consumer/sdk_consumer"
+        DEPENDS install_sdk
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        COMMENT "Configuring, building, and executing isolated SDK consumer test"
+    )
 endif()
 
 # 打印整体配置看板

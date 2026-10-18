@@ -240,24 +240,32 @@ inputs:
   - id: image
     name: 输入图像
     type: ImageBatch
-    editor: default
   - id: block_size
     name: 核大小(奇数)
     type: Int
-    editor: spinbox
     default: 3
-    minimum: 3
-    maximum: 999
+    min: 3
+    max: 999
+    step: 2
   - id: constant_offset
     name: 偏移常量
     type: Float
-    editor: doublespinbox
     default: 5.0
 
 outputs:
   - id: binary_image
     name: 二值图像
     type: ImageBatch
+```
+
+### 4.6 模块索引契约（`module_index.yml`）
+安装包根目录（`tools-package/module_index.yml`）提供统一的 C++ 动态库映射契约，杜绝 JSON/XML 多格式分叉：
+
+```yaml
+schema_version: 1
+modules:
+  - registry_name: visiontools.preprocess.adaptive_binary
+    path: bin/visiontools_preprocess.dll
 ```
 
 ---

@@ -9,3 +9,6 @@ find_package(VisionRTToolSDK CONFIG REQUIRED)
 
 add_executable(sdk_consumer main.cpp)
 target_link_libraries(sdk_consumer PRIVATE VisionRT::ToolSDK)
+if(MSVC)
+    target_compile_options(sdk_consumer PRIVATE /utf-8)
+endif()
