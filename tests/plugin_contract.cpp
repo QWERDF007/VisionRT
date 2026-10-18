@@ -12,7 +12,9 @@
 using namespace visionrt;
 
 #include "runtime/RuntimeEngine.h"
+#if defined(VISIONRT_BUILD_APP)
 #include "ui/AppController.h"
+#endif
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -307,6 +309,7 @@ tools:
     assert(!loader->hasModule("t1"));
 }
 
+#if defined(VISIONRT_BUILD_APP)
 void appControllerToolsPackageIntegration(const std::filesystem::path& modulePath) {
     QTemporaryDir temp;
     assert(temp.isValid());
@@ -323,8 +326,9 @@ void appControllerToolsPackageIntegration(const std::filesystem::path& modulePat
     std::filesystem::copy_file(modulePath, binDir / "test_module.dll", std::filesystem::copy_options::overwrite_existing);
 
     // Create module_index.yaml
+    const auto indexFile = pkgDir / "module_index.yaml";
     {
-        QFile f(toQString(pkgDir / "module_index.yaml"));
+        QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
         const char* indexContent = R"(variant: cpu
 modules:
@@ -370,11 +374,193 @@ outputs:
     assert(!meta.isEmpty());
     assert(meta.value("displayName").toString() == "实际打包插件");
     assert(meta.value("registryName").toString() == "test.plugin.counter");
-    const auto defs = app.toolDefinitions();
+    auto defs = app.toolDefinitions();
     assert(std::any_of(defs.begin(), defs.end(), [](const QVariant& v) {
         return v.toMap().value("id").toString() == "test.plugin.counter.packaged";
     }));
+
+    auto waitForIdle = [&app]() {
+        const auto deadline = std::chrono::steady_clock::now() + 10s;
+        while (app.busy() && std::chrono::steady_clock::now() < deadline) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(5ms);
+        }
+        assert(!app.busy());
+    };
+
+    // 1. Add node for Tool A, runOnce, verify execution
+    app.addNode("test.plugin.counter.packaged", 100, 100);
+    assert(app.nodes().size() == 1);
+    const auto nodeAId = app.nodes().first().toMap().value("id").toString();
+    app.runOnce();
+    waitForIdle();
+    assert(app.nodes().first().toMap().value("state").toString() == "green");
+
+    // 2. Add Tool B (test.plugin.function) into module_index.yaml & declaration YAML
+    const auto funcYamlFile = yamlDir / "test.plugin.function.yaml";
+    {
+        QFile f(toQString(funcYamlFile));
+        assert(f.open(QIODevice::WriteOnly));
+        const char* funcYamlContent = R"(schema_version: 1
+tool_id: test.plugin.func.packaged
+display_name: 函数插件
+version: 1.0.0
+kind: cpp_function
+entry:
+  registry_name: test.plugin.function
+init_params: []
+inputs:
+  - id: x
+    name: 输入X
+    type: Int
+outputs:
+  - id: y
+    name: 输出Y
+    type: Int
+)";
+        f.write(funcYamlContent);
+    }
+    {
+        QFile f(toQString(indexFile));
+        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const char* indexWithB = R"(variant: cpu
+modules:
+  test_module:
+    library: bin/test_module.dll
+tools:
+  test.plugin.counter:
+    module: test_module
+    definition: assets/tools/builtin/测试/数学/test.plugin.counter.yaml
+  test.plugin.function:
+    module: test_module
+    definition: assets/tools/builtin/测试/数学/test.plugin.function.yaml
+)";
+        f.write(indexWithB);
+    }
+
+    // Call rescanTools() and verify Tool B is discovered
+    app.rescanTools();
+    waitForIdle();
+
+    defs = app.toolDefinitions();
+    bool foundB = false;
+    for (const auto& d : defs) {
+        if (d.toMap().value("id").toString() == "test.plugin.func.packaged") {
+            foundB = true;
+            assert(d.toMap().value("available").toBool());
+        }
+    }
+    assert(foundB);
+
+    // Add node for Tool B, bind x to node A's count, runOnce
+    app.addNode("test.plugin.func.packaged", 300, 100);
+    assert(app.nodes().size() == 2);
+    const auto nodeBId = app.nodes().last().toMap().value("id").toString();
+    assert(app.bindInput("x", nodeAId, "count"));
+    app.runOnce();
+    waitForIdle();
+    for (const auto& n : app.nodes()) {
+        assert(n.toMap().value("state").toString() == "green");
+    }
+
+    // 3. Delete Tool A mapping from module_index.yaml and rescan
+    {
+        QFile f(toQString(indexFile));
+        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const char* indexOnlyB = R"(variant: cpu
+modules:
+  test_module:
+    library: bin/test_module.dll
+tools:
+  test.plugin.function:
+    module: test_module
+    definition: assets/tools/builtin/测试/数学/test.plugin.function.yaml
+)";
+        f.write(indexOnlyB);
+    }
+    app.rescanTools();
+    waitForIdle();
+
+    // Verify Node A is retained but marked unavailable
+    assert(app.nodes().size() == 2);
+    bool nodeAUnavailable = false;
+    bool nodeBAvailable = false;
+    for (const auto& n : app.nodes()) {
+        const auto map = n.toMap();
+        if (map.value("id").toString() == nodeAId) {
+            assert(map.value("missing").toBool());
+            nodeAUnavailable = true;
+        } else if (map.value("id").toString() == nodeBId) {
+            assert(!map.value("missing").toBool());
+            nodeBAvailable = true;
+        }
+    }
+    assert(nodeAUnavailable);
+    assert(nodeBAvailable);
+
+    // 4. Bad index rescan: corrupt module_index.yaml and rescan
+    {
+        QFile f(toQString(indexFile));
+        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const char* badYaml = R"(invalid: [ broken yaml)";
+        f.write(badYaml);
+    }
+    app.rescanTools();
+    // Bad index is rejected immediately; Tool B remains available!
+    defs = app.toolDefinitions();
+    foundB = false;
+    for (const auto& d : defs) {
+        if (d.toMap().value("id").toString() == "test.plugin.func.packaged") {
+            foundB = true;
+            assert(d.toMap().value("available").toBool());
+        }
+    }
+    assert(foundB);
+
+    // 5. Restore valid index, test consecutive rescan idempotency
+    {
+        QFile f(toQString(indexFile));
+        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const char* indexOnlyB = R"(variant: cpu
+modules:
+  test_module:
+    library: bin/test_module.dll
+tools:
+  test.plugin.function:
+    module: test_module
+    definition: assets/tools/builtin/测试/数学/test.plugin.function.yaml
+)";
+        f.write(indexOnlyB);
+    }
+    app.rescanTools();
+    waitForIdle();
+    const auto count1 = app.toolDefinitions().size();
+    app.rescanTools();
+    waitForIdle();
+    const auto count2 = app.toolDefinitions().size();
+    assert(count1 == count2);
+
+    // 6. Running rejection test: rescan request while not Idle is rejected
+    // Delete node A to make the flow runnable, then toggle loop
+    app.deleteNodes(QVariantList{nodeAId});
+    assert(app.nodes().size() == 1);
+    app.toggleLoop();
+    for (int i = 0; i < 20 && !app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(5ms);
+    }
+    assert(app.busy());
+    const auto runningState = app.runState();
+    assert(runningState == "RunningLoop");
+    // Call rescanTools while running; must be rejected and state remains RunningLoop
+    app.rescanTools();
+    assert(app.runState() == "RunningLoop");
+    // Stop loop and wait for idle
+    app.toggleLoop();
+    waitForIdle();
+    assert(app.runState() == "Idle");
 }
+#endif
 
 void registryIntegration(const std::filesystem::path& modulePath) {
     auto loader = std::make_shared<PluginLoader>();
@@ -680,7 +866,9 @@ int main(int argc, char** argv) {
         windowsDllLoadingAndConcurrency(modulePath, pluginAPath, depAPath, pluginBPath, depBPath);
         unicodeAndChinesePathLoading(pluginAPath, depAPath);
         missingDependencyIsolation(appPath, pluginAPath, pluginBPath, depBPath);
+#if defined(VISIONRT_BUILD_APP)
         appControllerToolsPackageIntegration(modulePath);
+#endif
         registryIntegration(modulePath);
         std::cout << "plugin contracts passed\n";
         return 0;

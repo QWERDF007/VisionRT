@@ -48,5 +48,6 @@ VT_EXPORT ModuleIndexData parseModuleIndexYaml(const std::string& yamlContent);
 VT_EXPORT ModuleIndexData parseModuleIndexFile(const std::filesystem::path& path);
 VT_EXPORT void validateModuleIndexYaml(const std::string& yamlContent);
 VT_EXPORT void validateModuleIndexFile(const std::filesystem::path& path);
+VT_EXPORT void validateToolsPackage(const std::filesystem::path& packageRoot);
 
 } // namespace visionrt

@@ -28,3 +28,7 @@
    ```
 2. 保存、关闭并重开工程，确认拓扑、端口绑定与参数完全一致。
 3. 执行“单次运行”或“循环运行”，查看各节点执行时间分项、输出数据及视图预览。
+4. 运行安装态联合集成契约测试：
+   ```cmd
+   build\bin\examples_contract.exe --tools-dir <path/to/VisionTools_package>
+   ```

@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QTemporaryDir>
+#include <QProcess>
 #include <opencv2/core.hpp>
 #include <cassert>
 #include <chrono>
@@ -336,6 +337,165 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
     assert(inst->release().code == 0);
 }
 
+void testAdaptiveBinary(const std::filesystem::path& toolsPkg) {
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(toolsPkg);
+    loader->loadIndexFile(toolsPkg / "module_index.yaml");
+    assert(loader->diagnostics().empty());
+
+    ToolRegistry registry;
+    registry.setPluginLoader(loader);
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(toolsPkg / "assets" / "tools");
+    registry.scanRoots(roots);
+
+    const auto* def = registry.find("visiontools.preprocess.adaptive_binary");
+    assert(def != nullptr);
+    assert(registry.availability("visiontools.preprocess.adaptive_binary").state == ToolAvailability::Available);
+
+    PlatformToolServices services;
+    auto inst = registry.create("visiontools.preprocess.adaptive_binary", services);
+    assert(inst != nullptr);
+    assert(inst->initialize({}).code == 0);
+
+    // Fixed input: a grayscale 10x10 image with half 50 and half 200
+    cv::Mat mat(10, 10, CV_8UC1);
+    mat(cv::Rect(0, 0, 5, 10)).setTo(50);
+    mat(cv::Rect(5, 0, 5, 10)).setTo(200);
+
+    ImageBatch imgBatch({OwnedImage::copyOf(mat)});
+    Values inputs;
+    inputs.emplace("images", std::move(imgBatch));
+    inputs.emplace("block_size", std::int64_t{3});
+    inputs.emplace("constant_offset", 5.0);
+
+    auto res = inst->execute(inputs);
+    assert(res.status.code == 0);
+    const auto* outImages = std::get_if<ImageBatch>(&res.outputs["images"]);
+    assert(outImages && !outImages->images().empty());
+    const auto& outImg = outImages->images()[0];
+    assert(outImg.rows() == 10 && outImg.cols() == 10 && outImg.type() == CV_8UC1);
+
+    assert(inst->release().code == 0);
+}
+
+void testRoiProjection(const std::filesystem::path& toolsPkg) {
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(toolsPkg);
+    loader->loadIndexFile(toolsPkg / "module_index.yaml");
+    assert(loader->diagnostics().empty());
+
+    ToolRegistry registry;
+    registry.setPluginLoader(loader);
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(toolsPkg / "assets" / "tools");
+    registry.scanRoots(roots);
+
+    const auto* def = registry.find("visionrt.roi.projection");
+    assert(def != nullptr);
+    assert(registry.availability("visionrt.roi.projection").state == ToolAvailability::Available);
+
+    PlatformToolServices services;
+    auto inst = registry.create("visionrt.roi.projection", services);
+    assert(inst != nullptr);
+    assert(inst->initialize({}).code == 0);
+
+    // Fixed input: 100x100 black image with a 20x20 bright square (255) from x=40..60, y=30..50
+    cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+    mat(cv::Rect(40, 30, 20, 20)).setTo(cv::Scalar(255, 255, 255));
+    ImageBatch imgBatch({OwnedImage::copyOf(mat)});
+
+    Values inputs;
+    inputs.emplace("images", std::move(imgBatch));
+    inputs.emplace("axis", Utf8{"x"});
+    inputs.emplace("polarity", Utf8{"bright"});
+    inputs.emplace("threshold", std::int64_t{128});
+    inputs.emplace("min_pixels", std::int64_t{1});
+    inputs.emplace("min_extent", std::int64_t{5});
+    inputs.emplace("merge_gap", std::int64_t{0});
+    inputs.emplace("padding", std::int64_t{0});
+
+    auto res = inst->execute(inputs);
+    if (res.status.code != 0) {
+        std::cerr << "ROI projection execute failed: " << res.status.message << std::endl;
+    }
+    assert(res.status.code == 0);
+    const auto* outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
+    assert(outRois && outRois->images().size() == 1 && !outRois->images()[0].empty());
+    const auto& r = outRois->images()[0][0];
+    assert(r.kind() == RoiKind::Rectangle);
+    assert(std::abs(r.encoded()[1] - 40.0f) < 1.0f);
+    assert(std::abs(r.encoded()[3] - 20.0f) < 1.0f);
+
+    assert(inst->release().code == 0);
+}
+
+void testMissingDependencyHandling(const std::filesystem::path& repoRoot, const std::filesystem::path& toolsPkg) {
+    QTemporaryDir temp;
+    assert(temp.isValid());
+    const auto testPkg = std::filesystem::u8path(temp.path().toUtf8().toStdString()) / "package_missing_dep";
+    std::filesystem::create_directories(testPkg / "bin");
+    std::filesystem::create_directories(testPkg / "assets" / "tools");
+    std::filesystem::copy_file(toolsPkg / "module_index.yaml", testPkg / "module_index.yaml");
+    std::filesystem::copy(toolsPkg / "assets" / "tools", testPkg / "assets" / "tools", std::filesystem::copy_options::recursive);
+    for (const auto& entry : std::filesystem::directory_iterator(toolsPkg / "bin")) {
+        std::filesystem::copy_file(entry.path(), testPkg / "bin" / entry.path().filename());
+    }
+
+    const auto appDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+    auto pluginADll = appDir.parent_path() / "fixtures" / "test_plugin_a.dll";
+    auto depADll = appDir.parent_path() / "fixtures" / "test_dep_a.dll";
+    if (!std::filesystem::exists(pluginADll)) {
+        pluginADll = repoRoot / "build" / "fixtures" / "test_plugin_a.dll";
+        depADll = repoRoot / "build" / "fixtures" / "test_dep_a.dll";
+    }
+    if (!std::filesystem::exists(pluginADll)) {
+        std::cout << "[INFO] Skipping plugin missing dependency test (fixtures not found)\n";
+        return;
+    }
+
+    // Copy test_plugin_a.dll to testPkg/bin, but DO NOT copy its required dependency test_dep_a.dll!
+    const auto targetPluginA = testPkg / "bin" / "test_plugin_a.dll";
+    std::filesystem::copy_file(pluginADll, targetPluginA);
+
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(testPkg);
+    loader->loadIndexFile(testPkg / "module_index.yaml");
+
+    // 1. Verify valid real Tools package plugin loads successfully
+    ToolStatus statusOk;
+    const auto cropModPath = loader->resolveModulePath("visionrt.image.crop");
+    assert(!cropModPath.empty());
+    auto cropMod = loader->loadModule(cropModPath, statusOk);
+    assert(cropMod != nullptr);
+    assert(statusOk.code == 0);
+
+    // 2. Loading test_plugin_a.dll must fail because test_dep_a.dll is missing!
+    ToolStatus statusMissing;
+    auto failMod = loader->loadModule(targetPluginA, statusMissing);
+    assert(failMod == nullptr);
+    assert(statusMissing.code != 0);
+    // Diagnostic must contain the module path and the system error
+    assert(statusMissing.message.find("test_plugin_a.dll") != std::string::npos);
+#ifdef _WIN32
+    assert(statusMissing.message.find("126") != std::string::npos ||
+           statusMissing.message.find("Win32 error") != std::string::npos);
+#endif
+
+    // 3. Now copy the missing dependency test_dep_a.dll into testPkg/bin
+    const auto targetDepA = testPkg / "bin" / "test_dep_a.dll";
+    std::filesystem::copy_file(depADll, targetDepA);
+
+    // 4. Create fresh loader simulating restart: now test_plugin_a.dll loads successfully!
+    auto loaderRecovered = std::make_shared<PluginLoader>();
+    loaderRecovered->setBaseDirectory(testPkg);
+    loaderRecovered->loadIndexFile(testPkg / "module_index.yaml");
+    ToolStatus statusRecovered;
+    auto recoveredMod = loaderRecovered->loadModule(targetPluginA, statusRecovered);
+    assert(recoveredMod != nullptr);
+    assert(statusRecovered.code == 0);
+}
+
 void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
@@ -606,8 +766,10 @@ int main(int argc, char** argv) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--install-root" && i + 1 < argc) {
+        if ((arg == "--tools-dir" || arg == "--install-root") && i + 1 < argc) {
             installRoot = std::filesystem::path(argv[++i]);
+        } else if (arg.rfind("--tools-dir=", 0) == 0) {
+            installRoot = std::filesystem::path(arg.substr(12));
         } else if (arg.rfind("--install-root=", 0) == 0) {
             installRoot = std::filesystem::path(arg.substr(15));
         } else if (!arg.starts_with("--")) {
@@ -615,11 +777,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (installRoot.empty() || !std::filesystem::exists(installRoot / "module_index.yaml")) {
-        std::cerr << "FATAL: --install-root is required and must contain module_index.yaml! "
-                     "Specified directory missing or invalid: " << installRoot.string() << std::endl;
-        return 1;
-    }
     if (repoRoot.empty()) {
         repoRoot = std::filesystem::current_path();
     }
@@ -629,26 +786,44 @@ int main(int argc, char** argv) {
     const auto toolsPkg = resolveToolsPackage(repoRoot, installRoot);
     if (toolsPkg.empty()) {
         std::cerr << "FATAL: Real VisionTools package not found! "
-                     "VR5-03 / HS5-03 requires valid tools package." << std::endl;
+                     "RT-S03 requires valid tools package." << std::endl;
         return 1;
     }
     std::cout << "[REAL TOOLS PACKAGE] Verified Tools package at: " << toolsPkg.string() << std::endl;
 
-    std::cout << "[TEST] Running real Tools package CPU + Python pipeline (VR3-03)..." << std::endl;
-    testRealToolsCpuPythonPipeline(toolsPkg, repoRoot, python);
+    // Test in a temporary installation directory with Chinese characters and spaces
+    QTemporaryDir unicodeTemp;
+    assert(unicodeTemp.isValid());
+    const auto unicodePkg = std::filesystem::u8path(unicodeTemp.path().toUtf8().toStdString()) / "测试 工具 目录 with space";
+    std::filesystem::copy(toolsPkg, unicodePkg, std::filesystem::copy_options::recursive);
+
+    std::cout << "[TEST] Running real Tools package CPU + Python pipeline in unicode path (RT-S03)..." << std::endl;
+    testRealToolsCpuPythonPipeline(unicodePkg, repoRoot, python);
     std::cout << "[PASS] Real Tools package CPU + Python pipeline passed." << std::endl;
 
-    std::cout << "[TEST] Running ragged detection filter 0/3 targets test (HS3-03)..." << std::endl;
-    testRaggedDetectionFilter(toolsPkg);
+    std::cout << "[TEST] Running ragged detection filter 0/3 targets test (RT-S03)..." << std::endl;
+    testRaggedDetectionFilter(unicodePkg);
     std::cout << "[PASS] Ragged detection filter 0/3 targets test passed." << std::endl;
 
-    std::cout << "[TEST] Running concurrent execution & lifecycle test (HS3-03)..." << std::endl;
-    testRealToolsConcurrencyAndLifecycle(toolsPkg, repoRoot, python);
+    std::cout << "[TEST] Running adaptive binarization fixed input test (RT-S03)..." << std::endl;
+    testAdaptiveBinary(unicodePkg);
+    std::cout << "[PASS] Adaptive binarization test passed." << std::endl;
+
+    std::cout << "[TEST] Running ROI projection fixed input test (RT-S03)..." << std::endl;
+    testRoiProjection(unicodePkg);
+    std::cout << "[PASS] ROI projection test passed." << std::endl;
+
+    std::cout << "[TEST] Running concurrent execution & lifecycle test (RT-S03)..." << std::endl;
+    testRealToolsConcurrencyAndLifecycle(unicodePkg, repoRoot, python);
     std::cout << "[PASS] Concurrent execution & lifecycle test passed." << std::endl;
 
-    std::cout << "[TEST] Running error diagnostic pipeline example (HS3-03)..." << std::endl;
-    testDiagnosticPipeline(toolsPkg, repoRoot, python);
+    std::cout << "[TEST] Running error diagnostic pipeline example (RT-S03)..." << std::endl;
+    testDiagnosticPipeline(unicodePkg, repoRoot, python);
     std::cout << "[PASS] Error diagnostic pipeline passed." << std::endl;
+
+    std::cout << "[TEST] Running missing transitive dependency handling test (RT-S03)..." << std::endl;
+    testMissingDependencyHandling(repoRoot, toolsPkg);
+    std::cout << "[PASS] Missing transitive dependency handling test passed." << std::endl;
 
     std::cout << "[TEST DLL] Running mock test_plugin_module pipeline..." << std::endl;
     testRealPluginModulePipeline(repoRoot, python);

@@ -26,8 +26,8 @@ VisionRT/
 │   ├── tools/               # 宿主内置基础工具（图像读取、ROI 投影、裁剪等）
 │   └── ui/                  # Qt Quick / QML 工作台交互、四态画布、视口与参数表
 ├── examples/                # 可复现示例工程（临时副本运行，禁止源码树自我改写）
-├── tests/                   # 15 个独立自动化契约测试套件
-└── tools/                   # 构建、打包与运维工具（build.cmd, package_app.py）
+├── tests/                   # 14 个独立自动化契约测试套件 (无 UI 模式下 11 个)
+└── tools/                   # 构建、打包与运维工具 (build.cmd, package_app.py)
 ```
 
 ---
@@ -93,7 +93,7 @@ Python 脚本放置于工具包对应目录，实现 `ToolInstance` 类，包含
   ```cmd
   tools\build.cmd --build
   ```
-- **执行全量自动化契约测试（15 个测试套件，100% 通过）**：
+- **执行全量自动化契约测试（14 个测试套件，100% 通过）**：
   ```cmd
   tools\build.cmd --test
   ```

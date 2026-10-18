@@ -16,29 +16,35 @@
 namespace {
 int runValidation(int argc, const wchar_t* const* argv) {
     if (argc < 2) {
-        std::cerr << "Usage: visionrt_validate_tool [--index] <path_to_file.yaml>\n";
+        std::cerr << "Usage: visionrt_validate_tool [--package <dir> | --index <file> | <file.yaml>]\n";
         return 1;
     }
     bool isIndex = false;
+    bool isPackage = false;
     std::filesystem::path targetPath;
     for (int i = 1; i < argc; ++i) {
         std::wstring_view arg = argv[i];
         if (arg == L"--index") {
             isIndex = true;
+        } else if (arg == L"--package") {
+            isPackage = true;
         } else {
             targetPath = arg;
         }
     }
     if (targetPath.empty()) {
-        std::cerr << "Usage: visionrt_validate_tool [--index] <path_to_file.yaml>\n";
+        std::cerr << "Usage: visionrt_validate_tool [--package <dir> | --index <file> | <file.yaml>]\n";
         return 1;
     }
-    if (targetPath.filename() == "module_index.yaml" || targetPath.filename() == "module_index.yml") {
+    if (!isPackage && (targetPath.filename() == "module_index.yaml" || targetPath.filename() == "module_index.yml")) {
         isIndex = true;
     }
 
     try {
-        if (isIndex) {
+        if (isPackage) {
+            visionrt::validateToolsPackage(targetPath);
+            std::cout << "Valid tools package: " << targetPath.string() << "\n";
+        } else if (isIndex) {
             const auto index = visionrt::parseModuleIndexFile(targetPath);
             std::cout << "Valid module index: " << index.tools.size() << " tools across " << index.modules.size() << " modules\n";
         } else {

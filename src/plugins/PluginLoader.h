@@ -66,6 +66,7 @@ public:
 
     void registerModule(std::string registryName, std::filesystem::path libraryPath);
     void loadIndexFile(const std::filesystem::path& indexFilePath);
+    bool reloadIndexFile(const std::filesystem::path& indexFilePath, std::string* errorOut = nullptr);
     void setBaseDirectory(std::filesystem::path baseDirectory);
     const std::filesystem::path& baseDirectory() const noexcept { return baseDirectory_; }
 
