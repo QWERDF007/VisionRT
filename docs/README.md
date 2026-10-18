@@ -78,7 +78,7 @@ extern "C" VT_EXPORT const visionrt::ModuleApi* VT_CALL visiontoolsModuleApi() n
 }
 ```
 
-插件通过 `module_index.json` 索引进行注册，由宿主 `PluginLoader` 在启动或工具包安装时动态挂载，无需重新编译宿主。
+插件通过 `module_index.yml` 索引进行注册，由宿主 `PluginLoader` 在启动或工具包安装时动态挂载，无需重新编译宿主。
 
 ### 3.2 Python 算子扩展
 Python 脚本放置于工具包对应目录，实现 `ToolInstance` 类，包含 `initialize(params)` 与 `execute(inputs)` 方法。输入图像以只读 NumPy 视图传入（零拷贝），返回字典中的结果张量在叶子输出时完成单次格式规整。

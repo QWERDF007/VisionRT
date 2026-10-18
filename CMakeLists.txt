@@ -153,7 +153,7 @@ if(BUILD_TESTING)
         target_compile_definitions(performance_contract PRIVATE
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
-        add_test(NAME performance_contract COMMAND performance_contract)
+        add_test(NAME performance_contract COMMAND performance_contract --evidence-dir "${CMAKE_BINARY_DIR}/evidence")
         visionrt_apply_test_environment(performance_contract)
         if(MSVC)
             target_compile_options(performance_contract PRIVATE /UNDEBUG)
@@ -166,9 +166,44 @@ if(BUILD_TESTING)
     target_compile_definitions(test_plugin_module PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
     set_target_properties(test_plugin_module PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_module)
 
+    # VR5-02: 真实传递依赖测试动态库
+    add_library(test_dep_a SHARED tests/fixtures/test_dep_a.cpp)
+    set_target_properties(test_dep_a PROPERTIES PREFIX "" OUTPUT_NAME test_dep_a
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
+
+    add_library(test_dep_b SHARED tests/fixtures/test_dep_b.cpp)
+    set_target_properties(test_dep_b PROPERTIES PREFIX "" OUTPUT_NAME test_dep_b
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
+
+    add_library(test_plugin_a SHARED tests/fixtures/test_plugin_a.cpp)
+    target_link_libraries(test_plugin_a PRIVATE VisionRT::ToolSDK test_dep_a)
+    target_compile_definitions(test_plugin_a PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    set_target_properties(test_plugin_a PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_a
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
+
+    add_library(test_plugin_b SHARED tests/fixtures/test_plugin_b.cpp)
+    target_link_libraries(test_plugin_b PRIVATE VisionRT::ToolSDK test_dep_b)
+    target_compile_definitions(test_plugin_b PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    set_target_properties(test_plugin_b PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_b
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
+
     add_executable(plugin_contract tests/plugin_contract.cpp)
     target_link_libraries(plugin_contract PRIVATE visionrt_ui)
-    add_test(NAME plugin_contract COMMAND plugin_contract "$<TARGET_FILE:test_plugin_module>")
+    add_dependencies(plugin_contract test_plugin_module test_plugin_a test_plugin_b test_dep_a test_dep_b)
+    add_test(NAME plugin_contract COMMAND plugin_contract
+        "$<TARGET_FILE:test_plugin_module>"
+        "$<TARGET_FILE:test_plugin_a>"
+        "$<TARGET_FILE:test_dep_a>"
+        "$<TARGET_FILE:test_plugin_b>"
+        "$<TARGET_FILE:test_dep_b>")
     visionrt_apply_test_environment(plugin_contract)
     if(MSVC)
         target_compile_options(plugin_contract PRIVATE /UNDEBUG)
@@ -178,7 +213,7 @@ if(BUILD_TESTING)
     target_link_libraries(examples_contract PRIVATE visionrt_core visionrt_runtime visionrt_tools visionrt_python Qt6::Core)
     add_dependencies(examples_contract test_plugin_module)
     target_compile_definitions(examples_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-    add_test(NAME examples_contract COMMAND examples_contract "${CMAKE_SOURCE_DIR}")
+    add_test(NAME examples_contract COMMAND examples_contract --install-root "${CMAKE_BINARY_DIR}/tools-package" "${CMAKE_SOURCE_DIR}")
     visionrt_apply_test_environment(examples_contract)
     if(MSVC)
         target_compile_options(examples_contract PRIVATE /UNDEBUG)
@@ -186,6 +221,7 @@ if(BUILD_TESTING)
 
     add_custom_target(install_sdk
         COMMAND ${CMAKE_COMMAND} --install "${CMAKE_BINARY_DIR}" --prefix "${CMAKE_BINARY_DIR}/sdk_install"
+        DEPENDS VisionRTToolSDK visionrt_validate_tool
         COMMENT "Installing SDK to ${CMAKE_BINARY_DIR}/sdk_install"
     )
 

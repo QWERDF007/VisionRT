@@ -30,6 +30,36 @@
 - ...
 -->
 
+### 2026-10-18 — 依据 8d4811c 方案完成第五轮全量整改交付 (HS5-01～HS5-06 / VR5-01～VR5-06)
+
+**目标**
+- 严格遵循 `visionrt-next/visionrt-reacceptance-8d4811c/03_SPECS.md`（HS5-01 ~ HS5-06 / VR5-01 ~ VR5-06）完成第五阶段全链路整改交付；
+- 固定 `module_index.yml` 与 SDK 统一校验、真实 DLL 依赖（A->depA, B->depB）并发加载与子进程 Win32 错误 126 隔离、非空预设 DLL 目录保留与中文空格路径支持；
+- 必填 `--install-root` 拦截、ragged 0/3 目标全几何与分数类别字段核验、无边框 strictly 960×540 逻辑视口精准物理尺寸渲染（960×540, 1440×810, 1920×1080）、独立短窗口用例（800×480）、运行态 blue 观察、切抽屉对象身份与 ROI 草稿保持、隐藏把手无焦点零命中；
+- 饱和 DisplayConverter 队列丢弃断言（在途≤1、待办≤1、末帧最新、过期丢弃）、50 帧逐事件 CSV 日志（p95≤100ms, 0 超时 0 丢失）、真实 Python 阶段划分与失败隔离（Round 1 成功，Round 2 prepare 失败执行子阶段全 0，Round 3 异常与 Round 4 转换保留当轮真实耗时且无历史污染）；
+- 测试证据单一输出目录（`--evidence-dir build/evidence`）、独立归档工具 `tools/archive_evidence.py`、干净发布构建安全守卫与自动化负例验证、清理废弃文档与更新架构/验收矩阵。
+
+**当前状态**
+- 已完成 (HS5-01 / VR5-01): `SchemaYaml.h` 增加统一 `ModuleIndexItem` 与 `parseModuleIndexFile`/`parseModuleIndexYaml`；`visionrt_validate_tool` 支持 `--index` 校验；`PluginLoader` 采用局部暂存原子批处理注册，任一项非法立即回滚且不改写现有注册；拒绝旧 JSON/XML；独立 SDK 消费工程 10 组全量正负例语料测试通过；
+- 已完成 (HS5-02 / VR5-02): 真实传递依赖 DLL 夹具（`test_plugin_a`->`test_dep_a`, `test_plugin_b`->`test_dep_b`）构建就绪；双 loader 并发加载执行结果互异正确；子进程真实缺依赖隔离触发 Win32 错误 126（非文件不存在伪造）；预设非空进程 DLL 目录在全流程保留与还原；中文和空格目录完整安装包加载执行成功；输出快照持久读取及析构在卸载前发生；
+- 已完成 (HS5-03 / VR5-03): `examples_contract` 强制校验 `--install-root <dir>`，缺失或非法立即退出码 1 终止；ragged 0/3 目标过滤逐一核验全部 ROI 几何、score、class、name 与矩形顶点；`workbench_contract` 设为无边框窗口严格 960×540 逻辑视口，3 独立进程 DPR 1.0/1.5/2.0 分别获得精准物理尺寸 960×540, 1440×810, 1920×1080；新增独立短窗口用例 `shortWindowContract`（800×480）；运行态精确观察到节点呈现 `"blue"` 态后恢复；抽屉折叠工程不 dirty 且保持宿主/内容对象身份；视口布局改变期间真实 ROI 草稿保留；隐藏把手零命中不可获焦；
+- 已完成 (HS5-04 / VR5-04): `DisplayConverter` 饱和突发提交断言在途≤1、待办≤1，最终帧提交 ID 为 5，过期请求 2/3/4 平滑丢弃；50 帧真实 GUI 动作测量输出逐事件 CSV（`event_id,timestamp_ms,duration_ms,synced,submitted,timeout,dropped`），p95=44.72ms <= 100ms，超时与丢弃为 0；新增 `testRealPythonTimingPhasesAndFailureIsolation` 验证 Round 1 成功耗时、Round 2 prepare 失败所有执行子阶段全为 0.0ms、Round 3 异常保留当轮错误耗时、Round 4 转换错误保留当轮转换耗时且均无历史污染；测试支持 `--evidence-dir` 且不直接写入源码 `docs/`；
+- 已完成 (HS5-05 / VR5-05): `tools/package_app.py` 移除跳过覆盖逻辑，实施直接清空重建与全新复制；增加安全目标目录守卫（拒绝指向源码根、上级或系统根目录）；发布时通过 SDK 严格校验 `module_index.yml` 与依赖 DLL；`--test-verify` 负例全量覆盖；
+- 已完成 (HS5-06 / VR5-06): 创建独立证据归档工具 `tools/archive_evidence.py`，将 `build/evidence/` 中的 7 个证据文件安全归档至 `docs/evidence/`；`docs/visiontools-bridge-architecture.md` 移除 `category`/`subcategory` 并校准单次叶输出机制与单一 SDK 描述；删除历史方案包 `docs/VisionRT_8d4811c_验收与下一阶段方案.zip`；更新 `docs/RT-15_重构交付与验收矩阵.md` 与根目录唯一 `WORKLOG.md`；
+- 未完成/未验证项: GPU 深度学习推理依赖由于当前机器无独立 CUDA GPU 及 TensorRT 权重文件，按规则如实标明为未验证，CPU 阶段全量闭环正式签收。
+
+**验证证据**
+- `tools\build.cmd ctest --test-dir build --output-on-failure` → 15/15 契约测试 100% 全部通过 (总耗时 11.65s)；
+- `tools\build.cmd cmake --build build --target test_sdk_consumer` → 独立 SDK consumer 正负例语料测试 100% 通过；
+- `python tools/package_app.py --test-verify` → 全新重建打包、安全守卫与全量负例校验 100% 通过；
+- `build\bin\performance_contract.exe --evidence-dir build/evidence` → 全部性能、队列、Python 阶段耗时隔离与 50 帧 GUI 测试通过；
+- `python tools/archive_evidence.py` → 7 项证据文件（`gui_events.csv`, `memory_curve.csv`, `workbench_dpi_1.0.png`, `workbench_dpi_1.5.png`, `workbench_dpi_2.0.png`, `workbench_short_window.png`, `main_window_verified.png`）安全复制归档；
+- `git status` 确认无废弃 zip，文档目录干净整洁。
+
+**下一步**
+- 向人类汇报第五阶段 HS5-01 ~ HS5-06 全量闭环与验证证据；
+- 待人类确认后提交并推送到远端仓库。
+
 ### 2026-10-18 — 依据 f69c465 方案完成第四轮全量整改交付 (VR4-01～VR4-06 / HS4-01～HS4-06)
 
 **目标**

@@ -219,6 +219,11 @@ void validateToolDefinition(const ToolDefinition& def) {
     }
 
     validatePorts(def.initParams, "init_params");
+    if (def.kind == ToolKind::CppFunction || def.kind == ToolKind::PythonFunction) {
+        if (!def.initParams.empty()) {
+            throw ContractError("Function tool cannot have init_params: " + def.id);
+        }
+    }
     validatePorts(def.inputs, "inputs");
     validatePorts(def.outputs, "outputs");
 

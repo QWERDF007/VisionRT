@@ -8,6 +8,7 @@
 
 namespace visionrt {
 class ImageViewport;
+class PythonRuntime;
 class AppController : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString title READ title NOTIFY projectChanged)
@@ -53,6 +54,7 @@ public:
     QString timingText() const;
     bool dirty() const;
     QString aboutText() const;
+    PythonRuntime* pythonRuntime() const;
 
     Q_INVOKABLE void attachViewport(QObject* viewport);
     Q_INVOKABLE void selectFlow(const QString& id);

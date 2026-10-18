@@ -3,6 +3,7 @@
 #include "visionrt/sdk/Schema.h"
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace visionrt {
 
@@ -23,5 +24,17 @@ VT_EXPORT void validateToolYaml(
     const std::string& yamlContent,
     const std::filesystem::path& definitionPath = {},
     bool builtin = false);
+
+struct ModuleIndexItem {
+    std::string registryName;
+    std::string path;
+};
+
+using ModuleIndex = std::vector<ModuleIndexItem>;
+
+VT_EXPORT ModuleIndex parseModuleIndexYaml(const std::string& yamlContent);
+VT_EXPORT ModuleIndex parseModuleIndexFile(const std::filesystem::path& path);
+VT_EXPORT void validateModuleIndexYaml(const std::string& yamlContent);
+VT_EXPORT void validateModuleIndexFile(const std::filesystem::path& path);
 
 } // namespace visionrt

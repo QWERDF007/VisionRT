@@ -1,4 +1,5 @@
 #include "plugins/PluginLoader.h"
+#include "visionrt/sdk/SchemaYaml.h"
 
 #include <set>
 #include <yaml-cpp/yaml.h>
@@ -29,6 +30,11 @@ void PluginLoader::setBaseDirectory(std::filesystem::path baseDirectory) {
 
 void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
     std::lock_guard lock(mutex_);
+    const auto fname = indexFilePath.filename().string();
+    if (fname != "module_index.yml") {
+        diagnostics_.push_back({indexFilePath, "Unsupported module index file name: only module_index.yml is supported: " + indexFilePath.string()});
+        return;
+    }
     if (!std::filesystem::exists(indexFilePath)) {
         diagnostics_.push_back({indexFilePath, "Module index file does not exist: " + indexFilePath.string()});
         return;
@@ -36,68 +42,24 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
     if (baseDirectory_.empty()) {
         baseDirectory_ = indexFilePath.parent_path().lexically_normal();
     }
-    const auto ext = indexFilePath.extension().string();
-    if (ext != ".yml" && ext != ".yaml") {
-        diagnostics_.push_back({indexFilePath, "Unsupported module index format: only .yml/.yaml is supported: " + indexFilePath.string()});
+
+    visionrt::ModuleIndex parsedIndex;
+    try {
+        parsedIndex = visionrt::parseModuleIndexFile(indexFilePath);
+    } catch (const std::exception& error) {
+        diagnostics_.push_back({indexFilePath, "Failed to parse module index YAML: " + std::string(error.what())});
         return;
     }
 
-    try {
-        const auto node = YAML::LoadFile(indexFilePath.string());
-        if (!node.IsMap()) {
-            diagnostics_.push_back({indexFilePath, "Module index YAML root must be a map"});
+    for (const auto& item : parsedIndex) {
+        if (index_.contains(item.registryName)) {
+            diagnostics_.push_back({indexFilePath, "Duplicate tool registry_name across loaded module indices: " + item.registryName});
             return;
         }
-        if (!node["schema_version"] || node["schema_version"].as<int>(0) != 1) {
-            const std::string ver = node["schema_version"] ? node["schema_version"].as<std::string>() : "missing";
-            diagnostics_.push_back({indexFilePath, "Unsupported or missing module index schema_version: " + ver});
-            return;
-        }
-        if (!node["modules"] || !node["modules"].IsSequence()) {
-            diagnostics_.push_back({indexFilePath, "Module index must contain a 'modules' sequence"});
-            return;
-        }
+    }
 
-        std::set<std::string> seenInFile;
-        std::map<std::string, std::filesystem::path, std::less<>> nextIndex;
-
-        for (const auto& item : node["modules"]) {
-            if (!item.IsMap()) {
-                diagnostics_.push_back({indexFilePath, "Module item in YAML sequence must be a map"});
-                continue;
-            }
-            const auto name = item["registry_name"] ? item["registry_name"].as<std::string>() : "";
-            const auto pathStr = item["path"] ? item["path"].as<std::string>() : "";
-            if (name.empty()) {
-                diagnostics_.push_back({indexFilePath, "Module registry_name must not be empty"});
-                continue;
-            }
-            if (pathStr.empty()) {
-                diagnostics_.push_back({indexFilePath, "Module path must not be empty for registry_name: " + name});
-                continue;
-            }
-            if (!seenInFile.insert(name).second || index_.contains(name) || nextIndex.contains(name)) {
-                diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
-                continue;
-            }
-            const auto relPath = std::filesystem::u8path(pathStr);
-            if (relPath.is_absolute()) {
-                diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
-                continue;
-            }
-            auto norm = relPath.lexically_normal();
-            if (!norm.empty() && norm.begin()->string() == "..") {
-                diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
-                continue;
-            }
-            nextIndex.emplace(name, relPath);
-        }
-
-        for (auto&& [k, v] : nextIndex) {
-            index_[k] = std::move(v);
-        }
-    } catch (const std::exception& error) {
-        diagnostics_.push_back({indexFilePath, "Failed to parse module index YAML: " + std::string(error.what())});
+    for (const auto& item : parsedIndex) {
+        index_.emplace(item.registryName, std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(item.path.data()), item.path.size())));
     }
 }
 

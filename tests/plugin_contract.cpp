@@ -19,6 +19,7 @@ using namespace visionrt;
 #include <QGuiApplication>
 #include <QLibrary>
 #include <QTemporaryDir>
+#include <QProcess>
 #include <thread>
 #include <chrono>
 
@@ -227,80 +228,81 @@ void moduleIndexDiagnostics() {
     const auto baseDir = std::filesystem::u8path(temp.path().toUtf8().toStdString());
     loader->setBaseDirectory(baseDir);
 
-    // 1. Non-existent file
+    // 1. Filename rejection: only module_index.yml is supported
     loader->loadIndexFile(baseDir / "non_existent.yml");
     assert(!loader->diagnostics().empty());
+    assert(loader->diagnostics().back().message.find("only module_index.yml is supported") != std::string::npos);
     loader->clearDiagnostics();
 
-    // 2. Reject JSON and XML formats per single-YML standard
+    loader->loadIndexFile(baseDir / "other_index.yaml");
+    assert(!loader->diagnostics().empty());
+    assert(loader->diagnostics().back().message.find("only module_index.yml is supported") != std::string::npos);
+    loader->clearDiagnostics();
+
     const auto badJson = baseDir / "bad.json";
     {
         QFile f(toQString(badJson));
         assert(f.open(QIODevice::WriteOnly));
-        f.write("{\"schema_version\": 1, \"modules\": []}");
+        f.write("{\"variant\": \"cpu\"}");
     }
     loader->loadIndexFile(badJson);
     assert(!loader->diagnostics().empty());
-    assert(loader->diagnostics().back().message.find("only .yml/.yaml is supported") != std::string::npos);
+    assert(loader->diagnostics().back().message.find("only module_index.yml is supported") != std::string::npos);
     loader->clearDiagnostics();
 
-    const auto badXml = baseDir / "bad.xml";
-    {
-        QFile f(toQString(badXml));
-        assert(f.open(QIODevice::WriteOnly));
-        f.write("<modules></modules>");
-    }
-    loader->loadIndexFile(badXml);
+    // 2. Non-existent module_index.yml
+    loader->loadIndexFile(baseDir / "module_index.yml");
     assert(!loader->diagnostics().empty());
-    assert(loader->diagnostics().back().message.find("only .yml/.yaml is supported") != std::string::npos);
+    assert(loader->diagnostics().back().message.find("does not exist") != std::string::npos);
     loader->clearDiagnostics();
 
     // 3. Bad YAML syntax
-    const auto badYaml = baseDir / "bad.yml";
+    const auto indexFile = baseDir / "module_index.yml";
     {
-        QFile f(toQString(badYaml));
+        QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
         f.write("modules: [ unclosed");
     }
-    loader->loadIndexFile(badYaml);
+    loader->loadIndexFile(indexFile);
     assert(!loader->diagnostics().empty());
     loader->clearDiagnostics();
 
-    // 4. Missing schema_version or invalid schema_version
-    const auto badVersion = baseDir / "bad_version.yml";
+    // 4. Missing or invalid schema_version
     {
-        QFile f(toQString(badVersion));
+        QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
-        f.write("schema_version: 2\nmodules: []\n");
+        f.write("schema_version: 2\nmodules:\n  - registry_name: a\n    path: bin/a.dll\n");
     }
-    loader->loadIndexFile(badVersion);
+    loader->loadIndexFile(indexFile);
     assert(!loader->diagnostics().empty());
     loader->clearDiagnostics();
 
-    // 5. Valid YAML module_index with duplicate registry_name and escaping path
-    const auto testYml = baseDir / "test.yml";
+    // 5. Atomic rejection: if file contains duplicate registry_name or invalid path, 0 modules are registered!
     {
-        QFile f(toQString(testYml));
+        QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
         const char* content = R"(schema_version: 1
 modules:
-  - registry_name: mod.valid
-    path: bin/valid.dll
-  - registry_name: mod.valid
-    path: bin/dup.dll
-  - registry_name: mod.escape
-    path: ../../evil.dll
-  - registry_name: mod.abs
-    path: C:/abs/path.dll
+  - registry_name: m1
+    path: bin/m1.dll
+  - registry_name: m1
+    path: bin/m1_dup.dll
 )";
         f.write(content);
     }
-    loader->loadIndexFile(testYml);
-    assert(loader->diagnostics().size() == 3); // duplicate, escape, absolute
-    assert(loader->hasModule("mod.valid"));
-    assert(loader->resolveModulePath("mod.valid") == (baseDir / "bin/valid.dll").lexically_normal());
-    assert(!loader->hasModule("mod.escape"));
-    assert(!loader->hasModule("mod.abs"));
+    loader->loadIndexFile(indexFile);
+    assert(!loader->diagnostics().empty());
+    // ATOMIC: no module is registered from the invalid file!
+    assert(!loader->hasModule("m1"));
+    loader->clearDiagnostics();
+
+    // 6. Existing valid registrations are untouched when an invalid index is rejected
+    loader->registerModule("mod.preexisting", "bin/preexisting.dll");
+    assert(loader->hasModule("mod.preexisting"));
+    loader->loadIndexFile(indexFile);
+    assert(!loader->diagnostics().empty());
+    assert(loader->hasModule("mod.preexisting"));
+    assert(!loader->hasModule("m1"));
 }
 
 void appControllerToolsPackageIntegration(const std::filesystem::path& modulePath) {
@@ -403,12 +405,11 @@ void registryIntegration(const std::filesystem::path& modulePath) {
     assert(instance->release().code == 0);
 }
 
-void windowsDllLoadingAndConcurrency(const std::filesystem::path& modulePath) {
-#ifdef _WIN32
-    wchar_t initialDllDir[MAX_PATH] = {0};
-    GetDllDirectoryW(MAX_PATH, initialDllDir);
-#endif
-
+void windowsDllLoadingAndConcurrency(const std::filesystem::path& modulePath,
+                                     const std::filesystem::path& pluginAPath,
+                                     const std::filesystem::path& depAPath,
+                                     const std::filesystem::path& pluginBPath,
+                                     const std::filesystem::path& depBPath) {
     QTemporaryDir temp1;
     QTemporaryDir temp2;
     assert(temp1.isValid() && temp2.isValid());
@@ -417,88 +418,244 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path& modulePath) {
     std::filesystem::create_directories(dir1);
     std::filesystem::create_directories(dir2);
 
-    const auto dll1 = dir1 / "mod1.dll";
-    const auto dll2 = dir2 / "mod2.dll";
-    std::filesystem::copy_file(modulePath, dll1, std::filesystem::copy_options::overwrite_existing);
-    std::filesystem::copy_file(modulePath, dll2, std::filesystem::copy_options::overwrite_existing);
+#ifdef _WIN32
+    wchar_t initialDllDir[MAX_PATH] = {0};
+    GetDllDirectoryW(MAX_PATH, initialDllDir);
+    // Explicitly set a non-empty preset DLL directory before tests
+    const auto presetDir = dir1 / "preset_dll_dir";
+    std::filesystem::create_directories(presetDir);
+    SetDllDirectoryW(presetDir.wstring().c_str());
+    wchar_t currentPreset[MAX_PATH] = {0};
+    GetDllDirectoryW(MAX_PATH, currentPreset);
+    assert(wcscmp(presetDir.wstring().c_str(), currentPreset) == 0);
+#endif
+
+    const auto dll1 = dir1 / pluginAPath.filename();
+    const auto dep1 = dir1 / depAPath.filename();
+    const auto dll2 = dir2 / pluginBPath.filename();
+    const auto dep2 = dir2 / depBPath.filename();
+
+    std::filesystem::copy_file(pluginAPath, dll1, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(depAPath, dep1, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(pluginBPath, dll2, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(depBPath, dep2, std::filesystem::copy_options::overwrite_existing);
 
     auto loader1 = std::make_shared<PluginLoader>();
     auto loader2 = std::make_shared<PluginLoader>();
 
     ToolStatus status1, status2;
     std::shared_ptr<const LoadedModule> m1, m2;
+    std::int64_t val1 = 0, val2 = 0;
 
-    std::thread t1([&] { m1 = loader1->loadModule(dll1, status1); });
-    std::thread t2([&] { m2 = loader2->loadModule(dll2, status2); });
+    std::thread t1([&] {
+        m1 = loader1->loadModule(dll1, status1);
+        if (status1.code == 0 && m1 != nullptr) {
+            loader1->registerModule("test.plugin.a", dll1);
+            PlatformToolServices s;
+            auto ad = loader1->createAdapter("test.plugin.a", s);
+            if (ad && ad->initialize({}).code == 0) {
+                auto r = ad->execute({});
+                if (r.status.code == 0) {
+                    val1 = std::get<std::int64_t>(r.outputs.at("val"));
+                }
+                ad->release();
+            }
+        }
+    });
+
+    std::thread t2([&] {
+        m2 = loader2->loadModule(dll2, status2);
+        if (status2.code == 0 && m2 != nullptr) {
+            loader2->registerModule("test.plugin.b", dll2);
+            PlatformToolServices s;
+            auto ad = loader2->createAdapter("test.plugin.b", s);
+            if (ad && ad->initialize({}).code == 0) {
+                auto r = ad->execute({});
+                if (r.status.code == 0) {
+                    val2 = std::get<std::int64_t>(r.outputs.at("val"));
+                }
+                ad->release();
+            }
+        }
+    });
+
     t1.join();
     t2.join();
 
     assert(status1.code == 0 && m1 != nullptr);
     assert(status2.code == 0 && m2 != nullptr);
-    assert(m1->api != nullptr && m2->api != nullptr);
+    assert(val1 == 111);
+    assert(val2 == 222);
 
 #ifdef _WIN32
     wchar_t afterDllDir[MAX_PATH] = {0};
     GetDllDirectoryW(MAX_PATH, afterDllDir);
-    assert(wcscmp(initialDllDir, afterDllDir) == 0);
+    assert(wcscmp(presetDir.wstring().c_str(), afterDllDir) == 0);
+    SetDllDirectoryW(initialDllDir[0] ? initialDllDir : nullptr);
 #endif
 }
 
-void unicodeAndChinesePathLoading(const std::filesystem::path& modulePath) {
+void unicodeAndChinesePathLoading(const std::filesystem::path& pluginAPath,
+                                  const std::filesystem::path& depAPath) {
     QTemporaryDir temp;
     assert(temp.isValid());
     const auto baseDir = std::filesystem::u8path(temp.path().toUtf8().toStdString());
     const auto unicodeDir = baseDir / "测试 插件 路径 with space";
-    std::filesystem::create_directories(unicodeDir);
+    const auto binDir = unicodeDir / "bin";
+    std::filesystem::create_directories(binDir);
 
-    const auto targetDll = unicodeDir / "插件_counter.dll";
-    std::filesystem::copy_file(modulePath, targetDll, std::filesystem::copy_options::overwrite_existing);
+    const auto targetDll = binDir / "plugin_a.dll";
+    const auto targetDep = binDir / depAPath.filename();
+    std::filesystem::copy_file(pluginAPath, targetDll, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(depAPath, targetDep, std::filesystem::copy_options::overwrite_existing);
+
+    // Create module_index.yml inside unicodeDir
+    const auto indexFile = unicodeDir / "module_index.yml";
+    {
+        QFile f(toQString(indexFile));
+        assert(f.open(QIODevice::WriteOnly));
+        const std::string content = "schema_version: 1\nmodules:\n  - registry_name: test.plugin.a\n    path: bin/plugin_a.dll\n";
+        f.write(content.c_str(), content.size());
+    }
 
     auto loader = std::make_shared<PluginLoader>();
-    ToolStatus status;
-    auto loaded = loader->loadModule(targetDll, status);
-    assert(status.code == 0 && loaded != nullptr);
-    assert(loaded->api != nullptr);
+    loader->setBaseDirectory(unicodeDir);
+    loader->loadIndexFile(indexFile);
+    assert(loader->diagnostics().empty());
+    assert(loader->hasModule("test.plugin.a"));
 
-    loader->registerModule("test.plugin.counter", targetDll);
     PlatformToolServices services;
-    auto adapter = loader->createAdapter("test.plugin.counter", services);
+    auto adapter = loader->createAdapter("test.plugin.a", services);
     assert(adapter != nullptr);
-    assert(adapter->initialize({}).code == 0);
+    auto initStatus = adapter->initialize({});
+    if (initStatus.code != 0) {
+        std::cerr << "Init failed: code=" << initStatus.code << " msg=" << initStatus.message << "\n";
+    }
+    assert(initStatus.code == 0);
     auto res = adapter->execute({});
     assert(res.status.code == 0);
-    assert(std::get<std::int64_t>(res.outputs.at("count")) == 1);
+    assert(std::get<std::int64_t>(res.outputs.at("val")) == 111);
+
+    // Cross-release snapshot check: hold output while releasing adapter and loader
+    const auto retainedVal = res.outputs.at("val");
     assert(adapter->release().code == 0);
+    adapter.reset();
+    loader.reset();
+    assert(std::get<std::int64_t>(retainedVal) == 111);
 }
 
-void missingDependencyIsolation(const std::filesystem::path& modulePath) {
+static int runMissingDepChild(const std::filesystem::path& pluginAPath,
+                               const std::filesystem::path& pluginBPath,
+                               const std::filesystem::path& depBPath) {
     QTemporaryDir temp;
-    assert(temp.isValid());
+    if (!temp.isValid()) return 10;
     const auto baseDir = std::filesystem::u8path(temp.path().toUtf8().toStdString());
-    const auto nonExistent = baseDir / "missing_dependency_module.dll";
+    const auto dirFail = baseDir / "dir_fail";
+    const auto dirOk = baseDir / "dir_ok";
+    std::filesystem::create_directories(dirFail);
+    std::filesystem::create_directories(dirOk);
 
-    auto loader = std::make_shared<PluginLoader>();
+    // Plugin A exists on disk, but its required dependency (test_dep_a.dll) is missing!
+    const auto missingDepDll = dirFail / pluginAPath.filename();
+    std::filesystem::copy_file(pluginAPath, missingDepDll, std::filesystem::copy_options::overwrite_existing);
+
+    // Plugin B has its dependency present
+    const auto okDll = dirOk / pluginBPath.filename();
+    const auto okDep = dirOk / depBPath.filename();
+    std::filesystem::copy_file(pluginBPath, okDll, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(depBPath, okDep, std::filesystem::copy_options::overwrite_existing);
+
+    auto loaderFail = std::make_shared<PluginLoader>();
     ToolStatus statusMissing;
-    auto missingMod = loader->loadModule(nonExistent, statusMissing);
-    assert(missingMod == nullptr);
-    assert(statusMissing.code != 0);
+    auto missingMod = loaderFail->loadModule(missingDepDll, statusMissing);
+    if (missingMod != nullptr) {
+        std::cerr << "Expected missingMod == nullptr, but loaded successfully!\n";
+        return 1;
+    }
+    if (statusMissing.code == 0) {
+        std::cerr << "Expected failure status code, got 0\n";
+        return 2;
+    }
+#ifdef _WIN32
+    // Must fail in the dynamic link loader path (Win32 error 126: ERROR_MOD_NOT_FOUND)
+    if (statusMissing.message.find("126") == std::string::npos &&
+        statusMissing.message.find("Win32 error") == std::string::npos) {
+        std::cerr << "Expected Win32 error in message: " << statusMissing.message << "\n";
+        return 3;
+    }
+#endif
 
-    // Ensure loader is not poisoned and can still load valid module
+    // Ensure loader Ok is not poisoned and can still load and execute valid module B
+    auto loaderOk = std::make_shared<PluginLoader>();
     ToolStatus statusValid;
-    auto validMod = loader->loadModule(modulePath, statusValid);
-    assert(validMod != nullptr);
-    assert(statusValid.code == 0);
+    auto validMod = loaderOk->loadModule(okDll, statusValid);
+    if (validMod == nullptr || statusValid.code != 0) {
+        std::cerr << "Failed to load okDll: " << statusValid.message << "\n";
+        return 4;
+    }
+    loaderOk->registerModule("test.plugin.b", okDll);
+    PlatformToolServices services;
+    auto ad = loaderOk->createAdapter("test.plugin.b", services);
+    if (!ad || ad->initialize({}).code != 0) {
+        std::cerr << "Failed to initialize ok adapter\n";
+        return 5;
+    }
+    auto res = ad->execute({});
+    if (res.status.code != 0) {
+        std::cerr << "Failed to execute ok adapter\n";
+        return 6;
+    }
+    if (std::get<std::int64_t>(res.outputs.at("val")) != 222) {
+        std::cerr << "Expected val 222, got " << std::get<std::int64_t>(res.outputs.at("val")) << "\n";
+        return 7;
+    }
+    ad->release();
+    return 0;
+}
+
+void missingDependencyIsolation(const QString& appPath,
+                                const std::filesystem::path& pluginAPath,
+                                const std::filesystem::path& pluginBPath,
+                                const std::filesystem::path& depBPath) {
+    QProcess proc;
+    QStringList args;
+    args << "--run-missing-dep-child"
+         << toQString(pluginAPath)
+         << toQString(pluginBPath)
+         << toQString(depBPath);
+    proc.start(appPath, args);
+    assert(proc.waitForFinished(10000));
+    if (proc.exitCode() != 0) {
+        std::cerr << "Child process stdout:\n" << proc.readAllStandardOutput().toStdString() << "\n";
+        std::cerr << "Child process stderr:\n" << proc.readAllStandardError().toStdString() << "\n";
+    }
+    assert(proc.exitStatus() == QProcess::NormalExit);
+    assert(proc.exitCode() == 0);
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--run-missing-dep-child") {
+        if (argc < 5) return 11;
+        QGuiApplication qt(argc, argv);
+        return runMissingDepChild(std::filesystem::u8path(argv[2]),
+                                  std::filesystem::u8path(argv[3]),
+                                  std::filesystem::u8path(argv[4]));
+    }
+
     if (argc < 2) {
-        std::cerr << "Usage: plugin_contract <path_to_test_plugin_module.dll>\n";
+        std::cerr << "Usage: plugin_contract <path_to_test_plugin_module.dll> [plugin_a] [dep_a] [plugin_b] [dep_b]\n";
         return 1;
     }
     QGuiApplication qt(argc, argv);
+    const QString appPath = argv[0];
     const auto modulePath = std::filesystem::u8path(argv[1]);
+    const auto pluginAPath = argc > 2 ? std::filesystem::u8path(argv[2]) : modulePath;
+    const auto depAPath = argc > 3 ? std::filesystem::u8path(argv[3]) : modulePath;
+    const auto pluginBPath = argc > 4 ? std::filesystem::u8path(argv[4]) : modulePath;
+    const auto depBPath = argc > 5 ? std::filesystem::u8path(argv[5]) : modulePath;
+
     try {
         lifecycleAndReentrancy(modulePath);
         singleModuleLoadOnlyOnce(modulePath);
@@ -506,9 +663,9 @@ int main(int argc, char** argv) {
         advancedFaultInjectionAndModuleDestroy(modulePath);
         cppFunctionLifecycleAndNodeRuntime(modulePath);
         moduleIndexDiagnostics();
-        windowsDllLoadingAndConcurrency(modulePath);
-        unicodeAndChinesePathLoading(modulePath);
-        missingDependencyIsolation(modulePath);
+        windowsDllLoadingAndConcurrency(modulePath, pluginAPath, depAPath, pluginBPath, depBPath);
+        unicodeAndChinesePathLoading(pluginAPath, depAPath);
+        missingDependencyIsolation(appPath, pluginAPath, pluginBPath, depBPath);
         appControllerToolsPackageIntegration(modulePath);
         registryIntegration(modulePath);
         std::cout << "plugin contracts passed\n";
@@ -518,3 +675,4 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+

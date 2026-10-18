@@ -1,12 +1,28 @@
 #include "visionrt/sdk/Module.h"
 #include <cstring>
 #include <atomic>
+#include <chrono>
+#include <thread>
 
 namespace {
 
 std::atomic<int> g_instanceCount{0};
 std::atomic<int> g_createCalls{0};
 std::atomic<int> g_destroyCalls{0};
+
+class SleepTool final : public visionrt::IToolInstance {
+public:
+    SleepTool() { ++g_instanceCount; }
+    ~SleepTool() override { --g_instanceCount; }
+    visionrt::ToolStatus initialize(const visionrt::Values&) override { return {}; }
+    visionrt::ToolResult execute(const visionrt::Values&) override {
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        visionrt::Values out;
+        out.emplace("y", std::int64_t{42});
+        return {{0, "ok"}, std::move(out)};
+    }
+    visionrt::ToolStatus release() override { return {}; }
+};
 
 class CounterTool final : public visionrt::IToolInstance {
 public:
@@ -124,6 +140,10 @@ visionrt::IToolInstance* VT_CALL pluginCreate(const char* registry_name,
     if (std::strcmp(registry_name, "test.plugin.function") == 0) {
         if (status) *status = {};
         return new FunctionTool();
+    }
+    if (std::strcmp(registry_name, "test.plugin.sleep") == 0) {
+        if (status) *status = {};
+        return new SleepTool();
     }
     if (std::strcmp(registry_name, "test.plugin.create_null_success") == 0) {
         if (status) *status = {};
