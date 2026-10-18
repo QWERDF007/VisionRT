@@ -9,7 +9,7 @@
 ### 1.2 核心目标
 1. **架构对称性**：`VisionTools` 仓库目录架构完全对齐 `VisionRT` 标准工业级工程布局（`3rdparty`、`cmake`、`docs`、`src`、`tests`、`tools`）；
 2. **单一真相源（SSOT）**：算子元数据清单作为唯一契约源，UI 控件自适应呈现、DAG 连线拓扑校验、算子参数映射皆由元数据自动驱动；
-3. **ABI 强稳定性**：DLL 边界绝不穿透复杂的 C++ STL 容器（严禁跨动态库传递裸 `std::any`、`std::string`、`std::map`、`std::vector`），采用纯虚接口（VTable C++ ABI）与上下文深封装；
+3. **受控 C++ ABI 强稳定性**：模块间边界严格通过 `ModuleApi` 导出规范与 `IToolInstance` 纯虚生命周期接口隔离，数据模型使用统一 SDK 强类型值系统（`ToolStatus`、`Values`、`ToolResult`），杜绝裸 `std::any`、魔术数字与无类型转型；
 4. **零拷贝高性能流转**：C++ 与 Python 算子均原生支持与 `VisionRT` 共享图像（OpenCV `cv::Mat`）与数值张量（NumPy `ndarray`）缓冲区，杜绝内存深拷贝与冗余格式转换；
 5. **领域级模块化**：按算法领域划分子工程与动态库（如 `visiontools_preprocess.dll`、`visiontools_measure.dll`），避免 200+ 碎片 DLL 的系统调用灾难，兼顾增量编译效率与包管理整洁度。
 
@@ -214,7 +214,7 @@ class ToolInstance:
         boxes, scores, classes = self.model.predict(images[0])
         return {
             "__status_code": 0,
-            "boxes": boxes,       # 返回 numpy 数组，底层自动 0 拷贝转为 NumericArray
+            "boxes": boxes,       # 返回 numpy 数组，底层经叶子节点单次内存规整转为 NumericArray
             "scores": scores,
             "classes": classes
         }
@@ -232,8 +232,7 @@ subcategory: 色彩转换
 version: 1.0.0
 kind: cpp_class
 entry:
-  module: visiontools_preprocess
-  symbol: VisionTools_Register
+  registry_name: visiontools.preprocess.adaptive_binary
 
 init_params: []
 
@@ -244,14 +243,14 @@ inputs:
     editor: default
   - id: block_size
     name: 核大小(奇数)
-    type: Int64
+    type: Int
     editor: spinbox
     default: 3
     minimum: 3
     maximum: 999
   - id: constant_offset
     name: 偏移常量
-    type: Float64
+    type: Float
     editor: doublespinbox
     default: 5.0
 
