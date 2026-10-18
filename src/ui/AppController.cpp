@@ -72,8 +72,6 @@ QString stateName(RuntimeState state) {
 AppController::Impl::Impl(AppController* owner, std::size_t workers, const QString& directory)
     : q(owner), applicationDirectory(workbench::localPath(directory)), tools(owner), outputs(owner), converter(owner) {
     pluginLoader = std::make_shared<PluginLoader>();
-    std::filesystem::path toolsPackageRoot;
-    std::filesystem::path indexFile;
     if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yaml")) {
         toolsPackageRoot = (applicationDirectory / "tools-package").lexically_normal();
         indexFile = toolsPackageRoot / "module_index.yaml";
@@ -339,7 +337,43 @@ void AppController::Impl::refreshFinished() {
 void AppController::Impl::rescanTools() {
     if (state != RuntimeState::Idle) return;
     finishRoi();
-    registry.scanRoots(registry.managedRoots());
+
+    std::filesystem::path candidatePackageRoot = toolsPackageRoot;
+    std::filesystem::path candidateIndex = indexFile;
+    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yaml")) {
+        candidatePackageRoot = (applicationDirectory / "tools-package").lexically_normal();
+        candidateIndex = candidatePackageRoot / "module_index.yaml";
+    } else if (std::filesystem::exists(applicationDirectory / "module_index.yaml")) {
+        candidatePackageRoot = applicationDirectory;
+        candidateIndex = candidatePackageRoot / "module_index.yaml";
+    }
+
+    if (!candidateIndex.empty()) {
+        std::string errorMsg;
+        if (!pluginLoader->reloadIndexFile(candidateIndex, &errorMsg)) {
+            report(workbench::pathText(candidateIndex) + ": " + workbench::q(errorMsg));
+            return;
+        }
+        toolsPackageRoot = candidatePackageRoot;
+        indexFile = candidateIndex;
+        pluginLoader->setBaseDirectory(toolsPackageRoot);
+    }
+
+    std::vector<std::filesystem::path> candidateRoots;
+    auto addCandidateRoot = [&](const std::filesystem::path& p) {
+        const auto normal = p.lexically_normal();
+        if (std::find(candidateRoots.begin(), candidateRoots.end(), normal) == candidateRoots.end()) {
+            candidateRoots.push_back(normal);
+        }
+    };
+    addCandidateRoot(toolsPackageRoot / "assets" / "tools");
+    addCandidateRoot(toolsPackageRoot / "tools");
+    addCandidateRoot(applicationDirectory / "tools");
+    addCandidateRoot(applicationDirectory / "assets" / "tools");
+    for (const auto& r : registry.managedRoots()) {
+        addCandidateRoot(r);
+    }
+    registry.scanRoots(candidateRoots);
     registerReceiveTools(registry);
     for (const auto& item : registry.diagnostics()) report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
     refreshReconcile = true;

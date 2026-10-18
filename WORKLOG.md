@@ -30,6 +30,36 @@
 - ...
 -->
 
+### 2026-10-18 — 依据 VisionRT_Next_Phase_20261018 完成架构清理与深度解耦交付 (RT-T01 ~ RT-T04 / RT-S01 ~ RT-S04)
+
+**目标**
+- 依据《VisionRT_Next_Phase_20261018》（RT-S01 ~ RT-S04 / RT-T01 ~ RT-T04）完成下一阶段全量开发、跨仓架构解耦与文档清理：
+  1. RT-T01 (RT-S01): 消除宿主打包的校验降级，`visionrt_validate_tool --package <root>` 统一包校验，`package_app.py` 强制要求 `--validator`，消除 Python 内部冗余校验与 PATH 探测；
+  2. RT-T02 (RT-S02): 运行时统一重扫刷新索引与声明（`reloadIndexFile`），Idle 状态原子刷新，坏索引保留上一份有效配置，节点状态优雅标记与实例按需释放；
+  3. RT-T03 (RT-S03): 真实 Tools CPU 包接入宿主验收入口，`examples_contract` 支持 `--tools-dir`，覆盖中文和空格临时安装路径、二值化/ROI 投影等固定数值断言、动态库传递依赖隔离（Win32 126 优雅报错与恢复）与工程保存重开数值恒等；
+  4. RT-T04 (RT-S04): 清理平台中的算法基线与失效入口，彻底移除 `src/infer`、`tests/infer_contract.cpp`、`probes/infer`、`cmake/ConfigCUDA.cmake`、`cmake/ConfigInferRT.cmake` 与 `--tools-manifest`，解耦 `VISIONRT_BUILD_APP=OFF` 构建依赖与测试注册；
+  5. 清理历史方案包 `docs/VisionRT_Next_Phase_20261018.zip` 与临时规格目录，更新架构与验收文档。
+
+**当前状态**
+- 已完成 (RT-T01 / RT-S01): `SchemaYaml` 实现 `validateToolsPackage`，UTF-8 Windows 路径解码，校验 variant 非空、dangling module、definition 存在性、runtime_files 存在性与 entry 匹配；`visionrt_validate_tool --package` 单源入口就绪；`package_app.py` 移除降级校验并传 `--validator`；
+- 已完成 (RT-T02 / RT-S02): `PluginLoader` 实现 `reloadIndexFile`；`AppController` 存储 `toolsPackageRoot` / `indexFile`，`rescanTools()` 在 Idle 状态原子刷新并 reconcile 工程；`RuntimeEngine::manage(Management::Refresh)` 重置活跃算子实例；`plugin_contract` 验证新增/删除/坏索引/连续重扫/运行中拒绝生命周期；
+- 已完成 (RT-T03 / RT-S03): `examples_contract` 接入 `--tools-dir` 与真实 VisionTools CPU 包，在包含中文和空格目录运行通过；固定输入二值化、ROI 投影测试通过；传递依赖隔离与恢复测试通过；脱离开发机 PATH 补偿独立运行通过；
+- 已完成 (RT-T04 / RT-S04): 彻底删除 `src/infer/`、`tests/infer_contract.cpp`、`probes/infer/`、`cmake/ConfigCUDA.cmake`、`cmake/ConfigInferRT.cmake`；移除 `tools/package_app.py` 中的 `--tools-manifest`；`CMakeLists.txt` 在 `VISIONRT_BUILD_APP=OFF` 时自动排除 `visionrt_ui` 依赖并注册 11 项纯后端测试；
+- 已完成 (文档与清理): 删除 `docs/VisionRT_Next_Phase_20261018.zip` 与 `build/next_phase_specs`；更新 `docs/README.md` 与 `docs/RT-15_重构交付与验收矩阵.md` 索引与测试统计；
+- 未完成/未验证项: GPU 模型权重推理由于宿主机无外部独立 NVIDIA GPU 与权重，按规范由 VisionTools 算子库独立隔离并标记为未运行（not_run）。
+
+**验证证据**
+- `tools\build.cmd ctest --test-dir build --output-on-failure -C Release` → 14/14 全量契约测试 100% Passed (耗时 12.85s)；
+- `tools\build.cmd ctest --test-dir build_no_app --output-on-failure -C Release` → 11/11 纯后端契约测试 100% Passed (耗时 1.95s，证明无 UI 构建完全解耦 `visionrt_ui`)；
+- `tools\build.cmd cmake --build build --target test_sdk_consumer` → SDK 独立消费测试 100% Passed；
+- `python tools/package_app.py --test-verify` → 全量负例与安全守卫测试 100% Passed；
+- `build\bin\visionrt_validate_tool.exe --package F:\Projects\VisionTools\dist\VisionTools` → Exit code 0 (包校验通过)；
+- `build\bin\examples_contract.exe --tools-dir F:\Projects\VisionTools\dist\VisionTools F:\Projects\VisionRT` (在干净 PATH 下执行) → Exit code 0 (中文空格路径、固定数值、依赖隔离全部通过)；
+- `git status` 确认 `docs/` 无 zip，无未跟踪文件。
+
+**下一步**
+- 提交并推送代码至远端 `dev` 分支。
+
 ### 2026-10-18 — 依据职责分离方案完成跨仓协议统一与宿主适配交付 (BT-01 ~ BT-02, BT-05 ~ BT-06 / BS-01 ~ BS-02, BS-05 ~ BS-06)
 
 **目标**

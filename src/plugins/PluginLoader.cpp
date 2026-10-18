@@ -64,6 +64,50 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
     }
 }
 
+bool PluginLoader::reloadIndexFile(const std::filesystem::path& indexFilePath, std::string* errorOut) {
+    const auto fname = indexFilePath.filename().string();
+    if (fname != "module_index.yaml") {
+        const std::string msg = "Unsupported module index file name: only module_index.yaml is supported: " + indexFilePath.string();
+        if (errorOut) *errorOut = msg;
+        std::lock_guard lock(mutex_);
+        diagnostics_.push_back({indexFilePath, msg});
+        return false;
+    }
+    if (!std::filesystem::exists(indexFilePath)) {
+        const std::string msg = "Module index file does not exist: " + indexFilePath.string();
+        if (errorOut) *errorOut = msg;
+        std::lock_guard lock(mutex_);
+        diagnostics_.push_back({indexFilePath, msg});
+        return false;
+    }
+
+    visionrt::ModuleIndexData parsedIndex;
+    try {
+        parsedIndex = visionrt::parseModuleIndexFile(indexFilePath);
+    } catch (const std::exception& error) {
+        const std::string msg = "Failed to parse module index YAML: " + std::string(error.what());
+        if (errorOut) *errorOut = msg;
+        std::lock_guard lock(mutex_);
+        diagnostics_.push_back({indexFilePath, msg});
+        return false;
+    }
+
+    std::map<std::string, std::filesystem::path, std::less<>> candidateIndex;
+    for (const auto& [regName, toolEntry] : parsedIndex.tools) {
+        const auto& modEntry = parsedIndex.modules.at(toolEntry.module);
+        candidateIndex.emplace(regName, std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(modEntry.library.data()), modEntry.library.size())));
+    }
+
+    {
+        std::lock_guard lock(mutex_);
+        index_ = std::move(candidateIndex);
+        if (baseDirectory_.empty()) {
+            baseDirectory_ = indexFilePath.parent_path().lexically_normal();
+        }
+    }
+    return true;
+}
+
 std::filesystem::path PluginLoader::resolveModulePath(std::string_view registryName) const {
     std::lock_guard lock(mutex_);
     const auto it = index_.find(registryName);

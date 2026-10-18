@@ -7,6 +7,7 @@
 #include <limits>
 #include <set>
 #include <sstream>
+#include <unordered_set>
 #include <yaml-cpp/parser.h>
 #include <yaml-cpp/eventhandler.h>
 
@@ -288,9 +289,9 @@ ModuleIndexData parseModuleIndexNode(const YAML::Node& node, const std::filesyst
 
     ModuleIndexData result;
 
-    if (node["variant"]) {
-        result.variant = text(node["variant"], "variant", true);
-    }
+    if (!node["variant"]) throw ContractError("Missing required field 'variant'");
+    result.variant = text(node["variant"], "variant", true);
+    if (result.variant.empty()) throw ContractError("variant must not be empty");
 
     if (!node["modules"]) throw ContractError("Missing required field 'modules'");
     if (!node["modules"].IsMap()) throw ContractError("modules must be a mapping");
@@ -354,6 +355,16 @@ ModuleIndexData parseModuleIndexNode(const YAML::Node& node, const std::filesyst
         }
 
         result.tools[regName] = ToolIndexEntry{modRef, defStr};
+    }
+
+    std::unordered_set<std::string> referencedModules;
+    for (const auto& [toolName, toolEntry] : result.tools) {
+        referencedModules.insert(toolEntry.module);
+    }
+    for (const auto& [modName, modEntry] : result.modules) {
+        if (!referencedModules.contains(modName)) {
+            throw ContractError("Module '" + modName + "' is not referenced by any tool");
+        }
     }
 
     if (node["runtime_files"]) {
@@ -421,6 +432,51 @@ void validateModuleIndexYaml(const std::string& yamlContent) {
 
 void validateModuleIndexFile(const std::filesystem::path& path) {
     parseModuleIndexFile(path);
+}
+
+void validateToolsPackage(const std::filesystem::path& packageRoot) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(packageRoot, ec) || ec) {
+        throw ContractError("Package root is not a valid directory: " + pathText(packageRoot));
+    }
+    const auto indexFile = packageRoot / "module_index.yaml";
+    if (!std::filesystem::is_regular_file(indexFile, ec) || ec) {
+        throw ContractError("Missing module_index.yaml in package: " + pathText(packageRoot));
+    }
+
+    const auto index = parseModuleIndexFile(indexFile);
+
+    auto toPath = [](std::string_view utf8Str) {
+        return std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(utf8Str.data()), utf8Str.size()));
+    };
+
+    // Verify module libraries exist
+    for (const auto& [modName, modEntry] : index.modules) {
+        const auto libPath = (packageRoot / toPath(modEntry.library)).lexically_normal();
+        if (!std::filesystem::is_regular_file(libPath, ec) || ec) {
+            throw ContractError("Module '" + modName + "' library file does not exist: " + pathText(libPath));
+        }
+    }
+
+    // Verify tools and definitions exist and match
+    for (const auto& [regName, toolEntry] : index.tools) {
+        const auto defPath = (packageRoot / toPath(toolEntry.definition)).lexically_normal();
+        if (!std::filesystem::is_regular_file(defPath, ec) || ec) {
+            throw ContractError("Tool '" + regName + "' definition file does not exist: " + pathText(defPath));
+        }
+        const auto definition = parseToolDefinitionFile(defPath);
+        if (definition.registryName != regName) {
+            throw ContractError("Tool '" + regName + "' definition registry_name '" + definition.registryName + "' does not match index tool key");
+        }
+    }
+
+    // Verify runtime files exist
+    for (const auto& rf : index.runtimeFiles) {
+        const auto rfPath = (packageRoot / toPath(rf)).lexically_normal();
+        if (!std::filesystem::is_regular_file(rfPath, ec) || ec) {
+            throw ContractError("runtime_files entry does not exist: " + pathText(rfPath));
+        }
+    }
 }
 
 } // namespace visionrt

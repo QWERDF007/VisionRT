@@ -157,9 +157,9 @@ if "%DO_TEST%"=="1" (
 if "%DO_PACKAGE%"=="1" (
     echo [INFO] Packaging application...
     if defined PACKAGE_DIR (
-        python tools\package_app.py --build-dir "%BUILD_DIR%" --config %CONFIG% --install-dir "%PACKAGE_DIR%"
+        python tools\package_app.py --build-dir "%BUILD_DIR%" --config %CONFIG% --validator "%BUILD_DIR%\bin\visionrt_validate_tool.exe" --install-dir "%PACKAGE_DIR%"
     ) else (
-        python tools\package_app.py --build-dir "%BUILD_DIR%" --config %CONFIG%
+        python tools\package_app.py --build-dir "%BUILD_DIR%" --config %CONFIG% --validator "%BUILD_DIR%\bin\visionrt_validate_tool.exe"
     )
     if errorlevel 1 (
         echo [ERROR] Packaging failed.

@@ -1,6 +1,8 @@
 #include <visionrt/sdk/Schema.h>
 #include <visionrt/sdk/SchemaYaml.h>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -362,6 +364,165 @@ tools:
     definition: tools/t1.yaml
 )";
         REQUIRE_THROWS(parseModuleIndexYaml(unknownRootIndex));
+    }
+
+    // 16. Package validation (RT-S01 validateToolsPackage)
+    {
+        const auto tempRoot = std::filesystem::temp_directory_path() / "sdk_consumer_pkg_test";
+        std::error_code ec;
+        std::filesystem::remove_all(tempRoot, ec);
+        std::filesystem::create_directories(tempRoot / "bin", ec);
+        std::filesystem::create_directories(tempRoot / "assets" / "tools", ec);
+
+        // Create library and runtime file
+        {
+            std::ofstream out(tempRoot / "bin" / "mod1.dll");
+            out << "dummy dll";
+        }
+        {
+            std::ofstream out(tempRoot / "bin" / "runtime_dep.dll");
+            out << "dummy runtime dep";
+        }
+
+        // Create tool definition
+        const std::string validToolDef = R"(
+schema_version: 1
+tool_id: test.pkg.tool
+display_name: Package Test Tool
+version: 1.0.0
+kind: cpp_function
+entry:
+  registry_name: test.pkg.tool
+init_params: []
+inputs: []
+outputs: []
+)";
+        {
+            std::ofstream out(tempRoot / "assets" / "tools" / "tool.yaml");
+            out << validToolDef;
+        }
+
+        // Create valid module_index.yaml
+        const std::string validPkgIndex = R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  test.pkg.tool:
+    module: mod1
+    definition: assets/tools/tool.yaml
+runtime_files:
+  - bin/runtime_dep.dll
+)";
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << validPkgIndex;
+        }
+
+        // Baseline: valid package passes
+        validateToolsPackage(tempRoot);
+
+        // Negative: Missing variant
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << R"(
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  test.pkg.tool:
+    module: mod1
+    definition: assets/tools/tool.yaml
+)";
+        }
+        REQUIRE_THROWS(validateToolsPackage(tempRoot));
+
+        // Negative: Missing definition file
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  test.pkg.tool:
+    module: mod1
+    definition: assets/tools/nonexistent.yaml
+)";
+        }
+        REQUIRE_THROWS(validateToolsPackage(tempRoot));
+
+        // Negative: Missing module library file
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/nonexistent.dll
+tools:
+  test.pkg.tool:
+    module: mod1
+    definition: assets/tools/tool.yaml
+)";
+        }
+        REQUIRE_THROWS(validateToolsPackage(tempRoot));
+
+        // Negative: Missing runtime file
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  test.pkg.tool:
+    module: mod1
+    definition: assets/tools/tool.yaml
+runtime_files:
+  - bin/nonexistent_runtime.dll
+)";
+        }
+        REQUIRE_THROWS(validateToolsPackage(tempRoot));
+
+        // Negative: Registry name mismatch
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  other.pkg.tool:
+    module: mod1
+    definition: assets/tools/tool.yaml
+)";
+        }
+        REQUIRE_THROWS(validateToolsPackage(tempRoot));
+
+        // Negative: Dangling module (unreferenced)
+        {
+            std::ofstream out(tempRoot / "module_index.yaml");
+            out << R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/mod1.dll
+  unused_mod:
+    library: bin/mod1.dll
+tools:
+  test.pkg.tool:
+    module: mod1
+    definition: assets/tools/tool.yaml
+)";
+        }
+        REQUIRE_THROWS(validateToolsPackage(tempRoot));
+
+        std::filesystem::remove_all(tempRoot, ec);
     }
 
     std::cout << "[SDK Consumer] All positive and negative validation corpus checks passed successfully!" << std::endl;

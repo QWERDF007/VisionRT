@@ -30,6 +30,8 @@ struct AppController::Impl {
     ~Impl();
     AppController* q;
     std::filesystem::path applicationDirectory;
+    std::filesystem::path toolsPackageRoot;
+    std::filesystem::path indexFile;
     std::shared_ptr<PluginLoader> pluginLoader;
     ToolRegistry registry;
     ProjectEditor editor;

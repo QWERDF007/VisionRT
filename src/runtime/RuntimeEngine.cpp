@@ -220,14 +220,10 @@ struct RuntimeEngine::Impl {
         {
             std::lock_guard lock(control);
             for (auto& [id, runtime] : nodes)
-                if (action == Management::Reset || isPython(runtime->kind)) affected.push_back(runtime);
+                affected.push_back(runtime);
         }
         for (auto& runtime : affected) runtime->reset();
-        if (action == Management::Reset) plans.clear();
-        else std::erase_if(plans, [](const auto& item) {
-            return std::any_of(item.second->contracts.begin(), item.second->contracts.end(),
-                [](const auto& definition) { return isPython(definition.kind); });
-        });
+        plans.clear();
         if (work) {
             auto status = work();
             if (!status) diagnose(status.message);
