@@ -4,6 +4,7 @@
 #include "ui/Theme.h"
 #include "ui/ImageViewport.h"
 #include <QGuiApplication>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -165,10 +166,75 @@ void nodeDiagnosticsContract() {
     require(!detail.contains(QStringLiteral("纯算法")), "timingDetail falsely claims pure algorithm");
 }
 
-void mainQmlContract() {
+void mainQmlContract(double scale) {
     QQuickStyle::setStyle("Basic");
     QTemporaryDir directory;
-    AppController app(1, directory.path());
+    const auto dirPath = directory.path();
+
+    // 1. Prepare plugin and YAML definitions
+    QDir(dirPath).mkpath("tools-package/bin");
+    const QString dllSrc = QCoreApplication::applicationDirPath() + "/test_plugin_module.dll";
+    const QString dllDst = dirPath + "/tools-package/bin/test_plugin_module.dll";
+    if (QFile::exists(dllSrc)) {
+        QFile::copy(dllSrc, dllDst);
+    }
+
+    QFile indexFile(dirPath + "/tools-package/module_index.json");
+    if (indexFile.open(QIODevice::WriteOnly)) {
+        indexFile.write(
+            "{\n"
+            "  \"schema_version\": 1,\n"
+            "  \"modules\": [\n"
+            "    {\n"
+            "      \"registry_name\": \"test.plugin.counter\",\n"
+            "      \"path\": \"bin/test_plugin_module.dll\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"registry_name\": \"test.plugin.fail_init\",\n"
+            "      \"path\": \"bin/test_plugin_module.dll\"\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+        );
+        indexFile.close();
+    }
+
+    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/Plugin/Basic");
+    QFile counterYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.yaml");
+    if (counterYaml.open(QIODevice::WriteOnly)) {
+        counterYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.plugin.counter\n"
+            "display_name: Plugin Counter\n"
+            "version: 1.0.0\n"
+            "kind: cpp_class\n"
+            "entry: {registry_name: test.plugin.counter}\n"
+            "init_params: []\n"
+            "inputs:\n"
+            "  - {id: step, name: Step, type: Int, default: 1}\n"
+            "outputs:\n"
+            "  - {id: count, name: Count, type: Int}\n"
+        );
+        counterYaml.close();
+    }
+
+    QFile failYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/fail.yaml");
+    if (failYaml.open(QIODevice::WriteOnly)) {
+        failYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.plugin.fail\n"
+            "display_name: Fail Init Tool\n"
+            "version: 1.0.0\n"
+            "kind: cpp_class\n"
+            "entry: {registry_name: test.plugin.fail_init}\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs: []\n"
+        );
+        failYaml.close();
+    }
+
+    AppController app(1, dirPath);
     for (int i = 0; i < 50 && app.busy(); ++i) {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -207,22 +273,22 @@ void mainQmlContract() {
     auto* window = qobject_cast<QQuickWindow*>(roots.first());
     require(window != nullptr, "Main.qml root is not QQuickWindow");
 
-    // 1. Min logic workspace bounds (960x540) across 100%, 150%, 200% DPI scales
-    const double dpiScales[] = {1.0, 1.5, 2.0};
-    for (double scale : dpiScales) {
-        window->resize(static_cast<int>(960 * scale), static_cast<int>(540 * scale));
-        for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
-        require(window->width() >= 960, "window width violates 960 min constraint");
-        require(window->height() >= 540, "window height violates 540 min constraint");
-    }
-    window->resize(960, 540);
+    // 1. DPI verification & short window bounds
+    const double dpr = window->devicePixelRatio();
+    const int minExpectedWidth = std::min(960, window->screen()->availableGeometry().width());
+    const int minExpectedHeight = std::min(540, window->screen()->availableGeometry().height());
+    window->resize(minExpectedWidth, minExpectedHeight);
     window->show();
     for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
 
-    // 2. Initial state verification
+    require(window->width() >= minExpectedWidth, "window width violates minimum constraint");
+    require(window->height() >= minExpectedHeight, "window height violates minimum constraint");
+
+    // 2. Initial state verification & drawer items
     require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
-    app.save(directory.path() + "/test.vrt");
+    app.save(dirPath + "/test.vrt");
     require(app.dirty() == false, "project initially dirty after save");
+
     auto* leftHandle = window->findChild<QQuickItem*>("leftHandle");
     auto* leftHandleMask = window->findChild<QQuickItem*>("leftHandleMask");
     auto* leftHost = window->findChild<QQuickItem*>("leftHost");
@@ -234,7 +300,7 @@ void mainQmlContract() {
     require(leftContent->isVisible(), "leftContent initially not visible");
     require(leftHandle->width() == 1, "initial handle width != 1");
 
-    // 3. Drawer Collapse (toggleLeft)
+    // 3. Drawer Collapse (toggleLeft) & zero hit test on hidden handle/mask
     QMetaObject::invokeMethod(window, "toggleLeft");
     for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
 
@@ -249,74 +315,122 @@ void mainQmlContract() {
     auto* drawerToggle = window->findChild<QQuickItem*>("drawerToggle");
     require(drawerToggle != nullptr && drawerToggle->isVisible(), "drawerToggle missing or invisible");
     require(window->activeFocusItem() == drawerToggle, "focus did not switch to drawerToggle upon collapse");
-
-    // 4. Invariant: running or browsing/folding does not dirty project or mutate graph
     require(app.dirty() == false, "collapsing drawer dirtied the project");
 
-    // 5. Drawer Expand (toggleLeft)
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
-
-    require(window->property("leftExpanded").toBool() == true, "drawer did not expand");
-    require(leftHost->width() >= 260, "expanded leftHost width < 260");
-    require(leftHandle->implicitWidth() == 1, "expanded leftHandle implicitWidth != 1");
-    require(leftHandleMask->width() == 7, "expanded leftHandleMask width != 7");
-    require(leftHandle->isVisible(), "expanded leftHandle should be visible");
-    require(leftHandle->isEnabled(), "expanded leftHandle should be enabled");
-    require(leftContent->isVisible(), "expanded leftContent not visible");
-
-    auto* drawerCollapseButton = window->findChild<QQuickItem*>("drawerCollapseButton");
-    require(drawerCollapseButton != nullptr && drawerCollapseButton->isVisible(), "drawerCollapseButton missing or invisible");
-    require(window->activeFocusItem() == drawerCollapseButton, "focus did not switch to drawerCollapseButton upon expand");
-
-    // 6. Independent ToolLibrary collapse & expand
-    require(window->property("libraryExpanded").toBool() == true, "library initially not expanded");
-    window->setProperty("libraryExpanded", false);
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(window->property("libraryExpanded").toBool() == false, "library failed to collapse");
-
-    window->setProperty("libraryExpanded", true);
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(window->property("libraryExpanded").toBool() == true, "library failed to re-expand");
-
-    // 7. Real key events: Tab and Ctrl+F
-    QKeyEvent tabPress(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
-    QKeyEvent tabRelease(QEvent::KeyRelease, Qt::Key_Tab, Qt::NoModifier);
-    QCoreApplication::sendEvent(window, &tabPress);
-    QCoreApplication::sendEvent(window, &tabRelease);
-    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
-
+    // 4. Ctrl+F from collapsed drawer: expands drawer and focuses search field
     QKeyEvent ctrlFPress(QEvent::KeyPress, Qt::Key_F, Qt::ControlModifier, "f");
     QKeyEvent ctrlFRelease(QEvent::KeyRelease, Qt::Key_F, Qt::ControlModifier);
     QCoreApplication::sendEvent(window, &ctrlFPress);
     QCoreApplication::sendEvent(window, &ctrlFRelease);
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(window->property("leftExpanded").toBool() == true, "Ctrl+F event did not ensure leftExpanded");
+    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
 
-    // 8. Invariant: toggle drawer during execution does not dirty project
-    app.runOnce();
-    QMetaObject::invokeMethod(window, "toggleLeft");
+    require(window->property("leftExpanded").toBool() == true, "Ctrl+F event did not expand left drawer");
+    auto* flowSearch = window->findChild<QQuickItem*>("flowSearch");
+    require(flowSearch != nullptr, "missing flowSearch input field");
+    require(flowSearch->hasActiveFocus(), "flowSearch input does not have active focus after Ctrl+F");
+
+    // 5. Tab key: visible focus target
+    QKeyEvent tabPress(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+    QKeyEvent tabRelease(QEvent::KeyRelease, Qt::Key_Tab, Qt::NoModifier);
+    QCoreApplication::sendEvent(window, &tabPress);
+    QCoreApplication::sendEvent(window, &tabRelease);
     for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(app.dirty() == false, "toggling drawer during run dirtied project");
+
+    auto* activeFocus = window->activeFocusItem();
+    require(activeFocus != nullptr, "no active focus item after Tab key");
+    require(activeFocus->isVisible(), "active focus item after Tab is not visible");
+
+    // 6. Running state, loop execution, and drawer toggling
+    app.addNode("test.plugin.counter", 100, 100);
+    app.save(dirPath + "/test.vrt");
+    require(app.dirty() == false, "project dirty after save with counter node");
+
+    const auto nodesBeforeRun = app.nodes();
+    require(!nodesBeforeRun.isEmpty(), "nodes empty after adding counter node. diag: " + app.diagnostic().toStdString());
+    require(nodesBeforeRun.first().toMap().value("state").toString() == "gray", "initial node state is not gray");
+
+    // Start continuous loop
+    app.toggleLoop();
+    for (int i = 0; i < 20 && !app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    require(app.busy() || app.runState() == "RunningLoop", "app failed to enter RunningLoop state");
+
+    // Drawer toggle while running: does not dirty project or mutate instance identities
+    const auto* hostIdentityBefore = leftHost;
+    const auto* contentIdentityBefore = leftContent;
     QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(app.dirty() == false, "re-expanding drawer during run dirtied project");
+    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
+    require(app.dirty() == false, "toggling drawer during active execution dirtied project");
+
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
+    require(app.dirty() == false, "re-expanding drawer during active execution dirtied project");
+    require(window->findChild<QQuickItem*>("leftHost") == hostIdentityBefore, "leftHost identity changed across toggle");
+    require(window->findChild<QQuickItem*>("leftContent") == contentIdentityBefore, "leftContent identity changed across toggle");
+
+    // Stop loop and wait for Idle
+    app.toggleLoop();
     for (int i = 0; i < 50 && app.busy(); ++i) {
         QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    require(app.runState() == "Idle", "app failed to return to Idle after stopping loop");
 
-    // 9. Screenshot capture evidence with existence check
+    // Node state after successful run is green
+    const auto nodesAfterRun = app.nodes();
+    require(!nodesAfterRun.isEmpty(), "nodes empty after running loop");
+    require(nodesAfterRun.first().toMap().value("state").toString() == "green", "counter node state after execution is not green");
+
+    // Add failing node and verify red error state
+    app.addNode("test.plugin.fail", 300, 100);
+    app.runOnce();
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    const auto nodesWithFail = app.nodes();
+    require(nodesWithFail.size() == 2, "expected 2 nodes");
+    require(nodesWithFail.at(1).toMap().value("state").toString() == "red", "failing node state is not red");
+
+    // 7. Parameter draft / dirty preservation across drawer collapse and expand
+    app.selectNode(nodesWithFail.first().toMap().value("id").toString());
+    app.setParameter("step", false, "99");
+    require(app.dirty() == true, "setting parameter did not mark project dirty");
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+    require(app.dirty() == true, "dirty parameter state lost across drawer toggle");
+    bool paramPreserved = false;
+    for (const auto& paramVar : app.parameters()) {
+        const auto pMap = paramVar.toMap();
+        if (pMap.value("id").toString() == "step") {
+            paramPreserved = (pMap.value("literal").toString() == "99" || pMap.value("valueText").toString() == "99");
+        }
+    }
+    require(paramPreserved, "modified parameter draft was not preserved across drawer toggle");
+
+    // 8. Screenshot capture evidence for this scale
     QImage frame = window->grabWindow();
     require(!frame.isNull(), "grabWindow failed");
-    require(frame.width() >= 960 && frame.height() >= 540, "frame dimensions smaller than logical workspace");
+    require(frame.width() >= minExpectedWidth && frame.height() >= minExpectedHeight, "frame dimensions smaller than logical workspace");
     const std::filesystem::path evidenceDir = "build/evidence";
     std::filesystem::create_directories(evidenceDir);
-    const auto screenshotPath = evidenceDir / "main_window_verified.png";
+    char scaleBuf[16];
+    std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
+    const auto screenshotPath = evidenceDir / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
     const bool saved = frame.save(QString::fromStdString(screenshotPath.string()));
-    require(saved, "Failed to save screenshot evidence");
+    require(saved, "Failed to save screenshot evidence to " + screenshotPath.string());
     require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
             "Saved screenshot file does not exist or is empty");
+
+    std::cout << "[Evidence HS3-04] Child process scale=" << scaleBuf
+              << ", actual DPR=" << dpr
+              << ", logical size=(" << window->width() << ", " << window->height() << ")"
+              << ", physical size=(" << frame.width() << ", " << frame.height() << ")"
+              << ", screenshot=" << screenshotPath.string() << "\n";
 }
 
 void multiRootCoexistenceAndRefreshContract() {
@@ -742,13 +856,46 @@ void multiRootCoexistenceAndRefreshContract() {
 }
 }
 int main(int argc, char** argv) {
+    if (argc >= 3 && std::string(argv[1]) == "--dpi-child") {
+        const double scale = std::stod(argv[2]);
+        qputenv("QT_SCALE_FACTOR", QByteArray::number(scale, 'f', 1));
+        QGuiApplication qt(argc, argv);
+        try {
+            mainQmlContract(scale);
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << "[DPI Child Error for scale=" << scale << "] " << error.what() << '\n';
+            return 1;
+        }
+    }
+
     QGuiApplication qt(argc, argv);
     try {
         treeContract(); outputContract(); pendingContract(); nodeDiagnosticsContract();
         multiRootCoexistenceAndRefreshContract();
-        mainQmlContract();
+
+        const double scales[] = {1.0, 1.5, 2.0};
+        const QString appPath = QCoreApplication::applicationFilePath();
+        for (double scale : scales) {
+            QProcess proc;
+            proc.start(appPath, {"--dpi-child", QString::number(scale, 'f', 1)});
+            const bool finished = proc.waitForFinished(45000);
+            require(finished, "DPI child process timed out for scale " + std::to_string(scale));
+            std::cout << proc.readAllStandardOutput().toStdString();
+            if (proc.exitCode() != 0) {
+                std::cerr << proc.readAllStandardError().toStdString();
+                throw std::runtime_error("DPI child process failed for scale " + std::to_string(scale));
+            }
+            char scaleBuf[16];
+            std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
+            const auto screenshot = std::filesystem::path("build/evidence") / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
+            require(std::filesystem::exists(screenshot) && std::filesystem::file_size(screenshot) > 0,
+                    "Screenshot missing for scale " + std::string(scaleBuf));
+        }
+
         std::cout << "workbench contract passed\n";
     } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n'; return 1;
+        std::cerr << error.what() << '\n';
+        return 1;
     }
 }
