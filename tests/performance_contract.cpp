@@ -86,25 +86,34 @@ MemoryProbe getWorkingSetMemory() {
     return probe;
 }
 
-std::string queryGpuVramReport() {
+struct GpuVramProbe {
+    bool supported = false;
+    std::size_t vramMB = 0;
+    std::string report;
+};
+
+GpuVramProbe queryGpuVram() {
+    GpuVramProbe probe;
 #if defined(_WIN32)
     HMODULE hDxgi = LoadLibraryA("dxgi.dll");
-    if (!hDxgi) return "unsupported (dxgi.dll not found)";
+    if (!hDxgi) { probe.report = "unsupported (dxgi.dll not found)"; return probe; }
 
     typedef HRESULT(WINAPI* PFN_CREATE_DXGI_FACTORY1)(REFIID, void**);
     auto pCreate = reinterpret_cast<PFN_CREATE_DXGI_FACTORY1>(GetProcAddress(hDxgi, "CreateDXGIFactory1"));
     if (!pCreate) {
         FreeLibrary(hDxgi);
-        return "unsupported (CreateDXGIFactory1 missing)";
+        probe.report = "unsupported (CreateDXGIFactory1 missing)";
+        return probe;
     }
 
     IDXGIFactory4* pFactory = nullptr;
     if (FAILED(pCreate(__uuidof(IDXGIFactory4), reinterpret_cast<void**>(&pFactory))) || !pFactory) {
         FreeLibrary(hDxgi);
-        return "unsupported (IDXGIFactory4 unavailable)";
+        probe.report = "unsupported (IDXGIFactory4 unavailable)";
+        return probe;
     }
 
-    std::string report = "unsupported (no IDXGIAdapter3)";
+    probe.report = "unsupported (no IDXGIAdapter3)";
     IDXGIAdapter* pAdapter = nullptr;
     for (UINT i = 0; SUCCEEDED(pFactory->EnumAdapters(i, &pAdapter)) && pAdapter; ++i) {
         IDXGIAdapter3* pAdapter3 = nullptr;
@@ -114,12 +123,9 @@ std::string queryGpuVramReport() {
             if ((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) {
                 DXGI_QUERY_VIDEO_MEMORY_INFO memInfo{};
                 if (SUCCEEDED(pAdapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memInfo))) {
-                    if (memInfo.CurrentUsage > 0) {
-                        std::size_t mb = static_cast<std::size_t>(memInfo.CurrentUsage / (1024 * 1024));
-                        report = std::to_string(mb) + " MB";
-                    } else {
-                        report = "0 MB (VRAM idle or integrated GPU)";
-                    }
+                    probe.supported = true;
+                    probe.vramMB = static_cast<std::size_t>(memInfo.CurrentUsage / (1024 * 1024));
+                    probe.report = std::to_string(probe.vramMB) + " MB";
                     pAdapter3->Release();
                     pAdapter->Release();
                     break;
@@ -131,9 +137,10 @@ std::string queryGpuVramReport() {
     }
     pFactory->Release();
     FreeLibrary(hDxgi);
-    return report;
+    return probe;
 #else
-    return "unsupported (non-Windows platform)";
+    probe.report = "unsupported (non-Windows platform)";
+    return probe;
 #endif
 }
 
@@ -411,16 +418,32 @@ void test10x4KZeroCopyAndPythonPassthrough() {
         DisplayConverter converter;
         std::atomic<bool> converted{false};
         std::atomic<int> convertedBatchCount{0};
+        std::size_t maxInFlight = 0;
+        std::size_t maxPending = 0;
+
         QObject::connect(&converter, &DisplayConverter::batchConverted, [&](const std::vector<DisplayFrame>& frames) {
             convertedBatchCount = static_cast<int>(frames.size());
             converted = true;
         });
 
-        std::vector<OwnedImage> displayImages;
-        for (const auto& img : batch.images()) {
-            displayImages.push_back(img);
+        // Saturated burst submission to observe queue high-water marks
+        for (quint64 reqId = 1; reqId <= 5; ++reqId) {
+            std::vector<OwnedImage> displayImages;
+            displayImages.reserve(kImageCount);
+            for (const auto& img : batch.images()) {
+                displayImages.push_back(img);
+            }
+            converter.requestBatch(std::move(displayImages), "BGR", reqId, 1);
+            const std::size_t inFlight = converter.isBusy() ? 1 : 0;
+            const std::size_t pending = converter.hasPending() ? 1 : 0;
+            maxInFlight = std::max(maxInFlight, inFlight);
+            maxPending = std::max(maxPending, pending);
+            require(inFlight <= 1, "Scheduler in-flight invariant violated");
+            require(pending <= 1, "Scheduler pending invariant violated");
         }
-        converter.requestBatch(std::move(displayImages), "BGR", 1, 1);
+
+        require(maxInFlight <= 1, "Scheduler maxInFlight invariant violated");
+        require(maxPending == 1, "Scheduler pending queue did not reach high-water mark of 1 under saturation");
 
         const auto deadline = std::chrono::steady_clock::now() + 5000ms;
         while (!converted && std::chrono::steady_clock::now() < deadline) {
@@ -429,7 +452,8 @@ void test10x4KZeroCopyAndPythonPassthrough() {
         }
         require(converted, "Display conversion timed out");
         require(convertedBatchCount == kImageCount, "Display conversion batch count mismatch");
-        std::cout << "  -> Display conversion verified: in-flight <= 1, pending <= 1 [PASS]\n";
+        std::cout << "  -> Display conversion verified: in-flight high-water=" << maxInFlight
+                  << " <= 1, pending high-water=" << maxPending << " <= 1 [PASS]\n";
     }
 
     // Part C: Python Passthrough & Single-Copy Leaf Output Verification
@@ -447,12 +471,17 @@ void test10x4KZeroCopyAndPythonPassthrough() {
             require(pyArr.data() == originalPointers[k], "Python read-only array data pointer mismatch");
         }
 
-        // Return from Python as leaf output (exactly 1 copy per output leaf counted at the copy point)
+        // Return from Python as leaf output (contiguous input case)
+        resetPythonLeafImageCopyCount();
         PortValue fromPy = fromPython(TypeSpec{Type::ImageBatch}, pyBatch);
         require(std::holds_alternative<ImageBatch>(fromPy), "fromPython failed to produce ImageBatch");
         const auto& leafBatch = std::get<ImageBatch>(fromPy);
         const auto& leafImages = leafBatch.images();
         require(static_cast<int>(leafImages.size()) == kImageCount, "Leaf image batch size mismatch");
+
+        const std::size_t contiguousCopies = pythonLeafImageCopyCount();
+        require(contiguousCopies == static_cast<std::size_t>(kImageCount),
+                "Contiguous input leaf copies must be exactly 1 per image");
 
         // Verify copy point: each leaf image has newly allocated data buffer (1 copy from numpy to Mat)
         // and exactly 1 internal owner holding it (2 when including temporary return value).
@@ -462,7 +491,31 @@ void test10x4KZeroCopyAndPythonPassthrough() {
             require(leafImages[k].data() != originalPointers[k], "Leaf output should have newly allocated buffer");
             require(std::memcmp(leafImages[k].data(), originalPointers[k], kWidth * 3) == 0, "Pixel contents mismatch");
         }
-        std::cout << "  -> Python Passthrough: Read-only zero-copy input and exactly 1 copy per leaf output verified [PASS]\n";
+
+        // Non-contiguous input case: strided / sliced array (step 2)
+        pybind11::list nonContigList;
+        for (int k = 0; k < kImageCount; ++k) {
+            pybind11::object pyArr = pyList[k];
+            pybind11::object sliced = pyArr[pybind11::make_tuple(pybind11::slice(0, kHeight, 2), pybind11::slice(0, kWidth, 2))];
+            nonContigList.append(sliced);
+        }
+
+        resetPythonLeafImageCopyCount();
+        PortValue fromNonContig = fromPython(TypeSpec{Type::ImageBatch}, nonContigList);
+        require(std::holds_alternative<ImageBatch>(fromNonContig), "fromPython failed on non-contiguous array");
+        const auto& nonContigBatch = std::get<ImageBatch>(fromNonContig);
+        const auto& nonContigImages = nonContigBatch.images();
+        require(static_cast<int>(nonContigImages.size()) == kImageCount, "Non-contiguous leaf batch size mismatch");
+
+        const std::size_t nonContigCopies = pythonLeafImageCopyCount();
+        require(nonContigCopies == static_cast<std::size_t>(kImageCount),
+                "Non-contiguous input leaf copies must be exactly 1 per image");
+        require(nonContigImages[0].cols() == kWidth / 2 && nonContigImages[0].rows() == kHeight / 2,
+                "Non-contiguous leaf image dimension mismatch");
+
+        std::cout << "  -> Python Passthrough: Contiguous copy count = " << contiguousCopies
+                  << " (<= 1/leaf), Non-contiguous copy count = " << nonContigCopies
+                  << " (<= 1/leaf) [PASS]\n";
     }
 }
 
@@ -484,13 +537,18 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     genDef.version = "1.0";
     genDef.kind = ToolKind::CppClass;
     genDef.outputs.push_back({"val", "val", {Type::Int}});
+    genDef.outputs.push_back({"image", "image", {Type::ImageBatch}});
 
     class GenTool final : public IToolInstance {
         std::int64_t step_ = 0;
     public:
         ToolStatus initialize(const Values&) override { return {}; }
         ToolResult execute(const Values&) override {
-            return ToolResult{{}, {{"val", ++step_}}};
+            ++step_;
+            cv::Mat mat(720, 1280, CV_8UC3, cv::Scalar(step_ % 256, 120, 200));
+            std::vector<OwnedImage> imgs;
+            imgs.push_back(OwnedImage::copyOf(mat));
+            return ToolResult{{}, {{"val", step_}, {"image", ImageBatch(std::move(imgs))}}};
         }
         ToolStatus release() override { return {}; }
     };
@@ -507,14 +565,22 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     procDef.version = "1.0";
     procDef.kind = ToolKind::CppClass;
     procDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
+    procDef.inputs.push_back({"in_image", "in_image", {Type::ImageBatch}});
     procDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
+    procDef.outputs.push_back({"out_image", "out_image", {Type::ImageBatch}});
 
     class ProcTool final : public IToolInstance {
     public:
         ToolStatus initialize(const Values&) override { return {}; }
         ToolResult execute(const Values& in) override {
             std::int64_t v = std::get<std::int64_t>(in.at("in_val"));
-            return ToolResult{{}, {{"out_val", v * 2}}};
+            const auto& inBatch = std::get<ImageBatch>(in.at("in_image"));
+            // Trigger real display conversion within tool execution pipeline
+            if (!inBatch.images().empty()) {
+                auto frame = DisplayConverter::convert(inBatch.images().front(), "BGR");
+                require(!frame.image.isNull(), "Display conversion in loop returned null image");
+            }
+            return ToolResult{{}, {{"out_val", v * 2}, {"out_image", inBatch}}};
         }
         ToolStatus release() override { return {}; }
     };
@@ -534,6 +600,7 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     n1.id = 1;
     n1.toolId = genDef.id;
     n1.signatures.outputs.emplace("val", TypeSpec{Type::Int});
+    n1.signatures.outputs.emplace("image", TypeSpec{Type::ImageBatch});
     n1.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     n1.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
     flow.nodes.push_back(n1);
@@ -542,10 +609,13 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     n2.id = 2;
     n2.toolId = procDef.id;
     n2.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
+    n2.signatures.inputs.emplace("in_image", TypeSpec{Type::ImageBatch});
     n2.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
+    n2.signatures.outputs.emplace("out_image", TypeSpec{Type::ImageBatch});
     n2.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     n2.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
     n2.inputs["in_val"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "val"}};
+    n2.inputs["in_image"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "image"}};
     flow.nodes.push_back(n2);
     project.flows.push_back(flow);
 
@@ -557,12 +627,13 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
         std::filesystem::create_directories(evidencePath.parent_path());
     }
     std::ofstream curveCsv(evidencePath);
-    if (curveCsv.is_open()) {
-        curveCsv << "iteration,elapsed_ms,working_set_kb,vram,latency_ms\n";
-    }
+    require(curveCsv.is_open(), "Failed to open memory curve CSV for writing");
+    curveCsv << "iteration,elapsed_ms,rss_supported,rss_kb,vram_supported,vram_mb,latency_ms\n";
+    require(curveCsv.good(), "Failed to write CSV header");
 
     auto initialProbe = getWorkingSetMemory();
     std::size_t memAtSteady = 0;
+    std::size_t peakWorkingSetKB = initialProbe.workingSetKB;
     std::vector<double> roundLatencies;
     roundLatencies.reserve(maxRounds);
 
@@ -579,19 +650,26 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
         actualRounds = r + 1;
 
         auto currentProbe = getWorkingSetMemory();
-        if (r == 20) {
+        if (currentProbe.supported) {
+            peakWorkingSetKB = std::max(peakWorkingSetKB, currentProbe.workingSetKB);
+        }
+        if (r == 20 && currentProbe.supported) {
             memAtSteady = currentProbe.workingSetKB;
         }
 
-        if (curveCsv.is_open() && (r % 5 == 0 || r == maxRounds - 1)) {
+        auto vram = queryGpuVram();
+        if (r % 5 == 0 || r == maxRounds - 1) {
             auto elapsedMs = std::chrono::duration<double, std::milli>(t1 - startTime).count();
-            curveCsv << (r + 1) << "," << elapsedMs << "," << currentProbe.workingSetKB << ","
-                     << queryGpuVramReport() << "," << ms << "\n";
+            curveCsv << (r + 1) << "," << elapsedMs << ","
+                     << (currentProbe.supported ? ("1," + std::to_string(currentProbe.workingSetKB)) : "0,NA") << ","
+                     << (vram.supported ? ("1," + std::to_string(vram.vramMB)) : "0,NA") << ","
+                     << ms << "\n";
+            require(curveCsv.good(), "Failed to write to memory curve CSV");
         }
 
         if ((r + 1) % 25 == 0 || r == maxRounds - 1) {
             std::cout << "  -> Round " << (r + 1) << "/" << maxRounds << ": RSS = "
-                      << currentProbe.report << ", VRAM = " << queryGpuVramReport() << "\n";
+                      << currentProbe.report << ", VRAM = " << vram.report << "\n";
         }
 
         if (maxSeconds > 0) {
@@ -609,21 +687,23 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     engine.requestStop();
     require(engine.requestReset().code == 0, "requestReset failed");
     auto probeAfterReset = getWorkingSetMemory();
+    auto vramAfterReset = queryGpuVram();
 
     std::cout << "  -> Loop " << actualRounds << " rounds: p50=" << p50 << " ms, p95=" << p95 << " ms\n";
     std::cout << "  -> Memory curve: Initial=" << initialProbe.report << ", Steady=" << memAtSteady
-              << " KB, Peak=" << probeBeforeReset.report << ", AfterReset=" << probeAfterReset.report
-              << ", VRAM=" << queryGpuVramReport() << "\n";
+              << " KB, Peak=" << peakWorkingSetKB << " KB, AfterReset=" << probeAfterReset.report
+              << ", VRAM=" << vramAfterReset.report << "\n";
 
-    if (curveCsv.is_open()) {
-        curveCsv << "FINAL_RESET,0," << probeAfterReset.workingSetKB << "," << queryGpuVramReport() << ",0\n";
-        curveCsv.close();
-        std::cout << "  -> Raw memory curve persisted to " << evidencePath.string() << " [PASS]\n";
-    }
+    curveCsv << "FINAL_RESET,0,"
+             << (probeAfterReset.supported ? ("1," + std::to_string(probeAfterReset.workingSetKB)) : "0,NA") << ","
+             << (vramAfterReset.supported ? ("1," + std::to_string(vramAfterReset.vramMB)) : "0,NA") << ",0\n";
+    curveCsv.close();
+    require(!curveCsv.bad(), "CSV stream error during close");
+    std::cout << "  -> Raw memory curve persisted to " << evidencePath.string() << " [PASS]\n";
 
     if (memAtSteady > 0 && probeBeforeReset.supported) {
         long long steadyDrift = static_cast<long long>(probeBeforeReset.workingSetKB) - static_cast<long long>(memAtSteady);
-        require(steadyDrift < 10000, "Excessive memory growth detected after steady state");
+        require(steadyDrift < 10240, "Excessive memory growth detected (> 10MB) after steady state");
     }
 }
 
@@ -633,7 +713,7 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
 void testGuiEventToPresentationLatency(AppController& app) {
     std::cout << "[Test 4] Product GUI Event-to-Frame-Submission Latency (Real Product UI & frameSwapped)...\n";
     std::cout << "  -> System hardware: " << std::thread::hardware_concurrency() << " logical threads, "
-              << "VRAM: " << queryGpuVramReport() << "\n";
+              << "VRAM: " << queryGpuVram().report << "\n";
 
     QQuickStyle::setStyle("Basic");
     for (int i = 0; i < 50 && app.busy(); ++i) {
@@ -694,9 +774,13 @@ void testGuiEventToPresentationLatency(AppController& app) {
     int unswappedCount = 0;
 
     for (int i = 0; i < kSamples; ++i) {
+        const int eventId = i + 1;
         std::atomic<bool> frameSubmitted{false};
-        auto conn = QObject::connect(window, &QQuickWindow::frameSwapped, [&frameSubmitted]() {
-            frameSubmitted = true;
+        window->setProperty("lastEventSerial", eventId);
+        auto conn = QObject::connect(window, &QQuickWindow::frameSwapped, [&frameSubmitted, window, eventId]() {
+            if (window->property("lastEventSerial").toInt() == eventId) {
+                frameSubmitted = true;
+            }
         });
 
         auto t0 = std::chrono::high_resolution_clock::now();
@@ -720,6 +804,8 @@ void testGuiEventToPresentationLatency(AppController& app) {
         }
         eventLatencies.push_back(ms);
     }
+
+    require(unswappedCount == 0, "Frames timed out or unswapped during GUI event test");
 
     if (unswappedCount > 0) {
         std::cout << "  -> Note: " << unswappedCount << "/" << kSamples

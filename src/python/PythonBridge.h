@@ -11,4 +11,7 @@ namespace visionrt {
 pybind11::object toPythonReadonly(const PortValue& value);
 PortValue fromPython(const TypeSpec& expected, pybind11::handle value);
 
+std::size_t pythonLeafImageCopyCount() noexcept;
+void resetPythonLeafImageCopyCount() noexcept;
+
 } // namespace visionrt

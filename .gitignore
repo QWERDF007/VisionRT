@@ -72,9 +72,10 @@ Testing/
 __pycache__/
 *.pyc
 
-WORKLOG.md
 *VisionRT_VisionTools_分仓库方案包*
 *VisionRT_验收与改进方案*
 *VisionRT_67c4f93*
+*VisionRT_9e99572*
 *acceptance*
+*.zip
 visionrt-next/

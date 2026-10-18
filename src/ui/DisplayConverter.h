@@ -33,6 +33,8 @@ public:
     void request(OwnedImage image, QString colorOrder, quint64 requestId, quint64 generation);
     void invalidate(quint64 generation);
     static DisplayFrame convert(const OwnedImage& image, const QString& colorOrder = {});
+    bool isBusy() const noexcept { return busy_; }
+    bool hasPending() const noexcept { return pending_.has_value(); }
 
 signals:
     void converted(const visionrt::DisplayFrame& frame);

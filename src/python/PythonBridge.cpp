@@ -221,7 +221,10 @@ py::list requireList(py::handle value, const char* description) {
     return py::reinterpret_borrow<py::list>(value);
 }
 
+std::atomic<std::size_t> g_leafImageCopyCount{0};
+
 OwnedImage imageCopy(py::handle value) {
+    ++g_leafImageCopyCount;
     if (!py::isinstance<py::array>(value)) throw ContractError("ImageBatch element requires a NumPy ndarray");
     auto array = py::reinterpret_borrow<py::array>(value);
     if (array.ndim() != 2 && array.ndim() != 3)
@@ -370,8 +373,8 @@ PortValue fromPython(const TypeSpec& expected, py::handle value) {
         std::vector<std::vector<Roi>> images;
         for (auto image : requireList(value, "RoiBatch")) {
             std::vector<Roi> rois;
-            for (auto value : requireList(image, "RoiBatch image")) {
-                auto array = requireArray(value, 1, true);
+            for (auto roiItem : requireList(image, "RoiBatch image")) {
+                auto array = requireArray(roiItem, 1, true);
                 if (!array.dtype().equal(py::dtype::of<float>())) throw ContractError("ROI dtype must be float32");
                 auto shape = checkedShape(array);
                 validateStorage(array, 0, static_cast<py::ssize_t>(checkedByteCount(shape, sizeof(float))));
@@ -383,6 +386,14 @@ PortValue fromPython(const TypeSpec& expected, py::handle value) {
     }
     }
     throw ContractError("Unsupported TypeSpec");
+}
+
+std::size_t pythonLeafImageCopyCount() noexcept {
+    return g_leafImageCopyCount.load();
+}
+
+void resetPythonLeafImageCopyCount() noexcept {
+    g_leafImageCopyCount.store(0);
 }
 
 } // namespace visionrt
