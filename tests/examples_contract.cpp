@@ -54,23 +54,23 @@ void setupPython(ToolRegistry& registry, PythonRuntime& runtime) {
 }
 
 std::filesystem::path resolveToolsPackage(const std::filesystem::path& repoRoot, const std::filesystem::path& installRoot = {}) {
-    if (!installRoot.empty() && std::filesystem::exists(installRoot / "module_index.yml")) {
+    if (!installRoot.empty() && std::filesystem::exists(installRoot / "module_index.yaml")) {
         return std::filesystem::canonical(installRoot);
     }
     const char* env = std::getenv("VISIONTOOLS_PACKAGE_DIR");
     if (env) {
         auto p = std::filesystem::path(env);
-        if (std::filesystem::exists(p / "module_index.yml")) {
+        if (std::filesystem::exists(p / "module_index.yaml")) {
             return std::filesystem::canonical(p);
         }
         return {};
     }
     const auto buildPkg = repoRoot / "build" / "tools-package";
-    if (std::filesystem::exists(buildPkg / "module_index.yml")) {
+    if (std::filesystem::exists(buildPkg / "module_index.yaml")) {
         return std::filesystem::canonical(buildPkg);
     }
     const auto installed = repoRoot / "install" / "VisionRT-0.1.0" / "tools-package";
-    if (std::filesystem::exists(installed / "module_index.yml")) {
+    if (std::filesystem::exists(installed / "module_index.yaml")) {
         return std::filesystem::canonical(installed);
     }
     return {};
@@ -86,7 +86,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const
 
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.yml");
+    loader->loadIndexFile(toolsPkg / "module_index.yaml");
     if (!loader->diagnostics().empty()) {
         for (const auto& d : loader->diagnostics()) {
             std::cerr << "Module index diagnostic: " << d.message << std::endl;
@@ -194,7 +194,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const
 void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.yml");
+    loader->loadIndexFile(toolsPkg / "module_index.yaml");
     assert(loader->diagnostics().empty());
 
     PlatformToolServices services{PathResolver(toolsPkg), nullptr};
@@ -339,7 +339,7 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
 void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.yml");
+    loader->loadIndexFile(toolsPkg / "module_index.yaml");
     assert(loader->diagnostics().empty());
 
     ToolRegistry registry;
@@ -429,7 +429,7 @@ void testDiagnosticPipeline(const std::filesystem::path& toolsPkg, const std::fi
 
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.yml");
+    loader->loadIndexFile(toolsPkg / "module_index.yaml");
 
     ToolRegistry registry;
     registry.setPluginLoader(loader);
@@ -615,8 +615,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (installRoot.empty() || !std::filesystem::exists(installRoot / "module_index.yml")) {
-        std::cerr << "FATAL: --install-root is required and must contain module_index.yml! "
+    if (installRoot.empty() || !std::filesystem::exists(installRoot / "module_index.yaml")) {
+        std::cerr << "FATAL: --install-root is required and must contain module_index.yaml! "
                      "Specified directory missing or invalid: " << installRoot.string() << std::endl;
         return 1;
     }

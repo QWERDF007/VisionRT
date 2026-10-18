@@ -179,17 +179,23 @@ void mainQmlContract(double scale) {
         QFile::copy(dllSrc, dllDst);
     }
 
-    QFile indexFile(dirPath + "/tools-package/module_index.yml");
+    QFile indexFile(dirPath + "/tools-package/module_index.yaml");
     if (indexFile.open(QIODevice::WriteOnly)) {
         indexFile.write(
-            "schema_version: 1\n"
+            "variant: cpu\n"
             "modules:\n"
-            "  - registry_name: test.plugin.counter\n"
-            "    path: bin/test_plugin_module.dll\n"
-            "  - registry_name: test.plugin.sleep\n"
-            "    path: bin/test_plugin_module.dll\n"
-            "  - registry_name: test.plugin.fail_init\n"
-            "    path: bin/test_plugin_module.dll\n"
+            "  test_module:\n"
+            "    library: bin/test_plugin_module.dll\n"
+            "tools:\n"
+            "  test.plugin.counter:\n"
+            "    module: test_module\n"
+            "    definition: tools/counter.yaml\n"
+            "  test.plugin.sleep:\n"
+            "    module: test_module\n"
+            "    definition: tools/sleep.yaml\n"
+            "  test.plugin.fail_init:\n"
+            "    module: test_module\n"
+            "    definition: tools/fail_init.yaml\n"
         );
         indexFile.close();
     }
@@ -515,15 +521,20 @@ void multiRootCoexistenceAndRefreshContract() {
         QFile::copy(dllSrc, dllDst);
     }
 
-    QFile indexFile(dirPath + "/tools-package/module_index.yml");
+    QFile indexFile(dirPath + "/tools-package/module_index.yaml");
     if (indexFile.open(QIODevice::WriteOnly)) {
         indexFile.write(
-            "schema_version: 1\n"
+            "variant: cpu\n"
             "modules:\n"
-            "  - registry_name: test.plugin.counter\n"
-            "    path: bin/test_plugin_module.dll\n"
-            "  - registry_name: test.plugin.function\n"
-            "    path: bin/test_plugin_module.dll\n"
+            "  test_module:\n"
+            "    library: bin/test_plugin_module.dll\n"
+            "tools:\n"
+            "  test.plugin.counter:\n"
+            "    module: test_module\n"
+            "    definition: tools/counter.yaml\n"
+            "  test.plugin.function:\n"
+            "    module: test_module\n"
+            "    definition: tools/function.yaml\n"
         );
         indexFile.close();
     }

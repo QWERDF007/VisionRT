@@ -30,6 +30,33 @@
 - ...
 -->
 
+### 2026-10-18 — 依据职责分离方案完成跨仓协议统一与宿主适配交付 (BT-01 ~ BT-02, BT-05 ~ BT-06 / BS-01 ~ BS-02, BS-05 ~ BS-06)
+
+**目标**
+- 依据《VisionTools_VisionRT_职责分离_重新验收与方案_Specs_Tickets》完成宿主与跨仓协议统一；
+- 统一 `module_index.yaml` mapping Schema（`variant`, `modules`, `tools`, `runtime_files`），实现 `DuplicateKeyDetector` 重复键严格拒绝与未引用 module（dangling module）拦截；
+- 升级 SDK `visionrt_validate_tool --index` 校验器为唯一真相源；
+- 适配 `PluginLoader`、`AppController` 与 `package_app.py` 对 mapping 模型的解析与严格打包校验；
+- 更新 `sdk_consumer`、`plugin_contract`、`examples_contract`、`workbench_contract` 测试夹具；
+- 清理废弃方案包 `.zip`，更新 `RT-15_重构交付与验收矩阵.md` 与根目录任务账本。
+
+**当前状态**
+- 已完成 (BT-01 / BS-01): `SchemaYaml.h` 与 `SchemaYaml.cpp` 实现 mapping 结构解析、`DuplicateKeyDetector` 递归深度拦截重复键、dangling module 拦截、`parseModuleIndexFile` / `parseModuleIndexYaml` 单源解析；`visionrt_validate_tool --index` 单源校验就绪；
+- 已完成 (BT-02 / BS-02): `PluginLoader.cpp` 适配 mapping 结构；`package_app.py` 严格校验 `module_index.yaml` 与依赖；`tests/sdk_consumer/main.cpp`、`tests/plugin_contract.cpp`、`tests/examples_contract.cpp`、`tests/workbench_contract.cpp` 全部适配并通过断言；
+- 已完成 (BT-05 / BS-05): 覆盖反例 C01（映射格式）、C02（重复键）、C03（未引用模块拦截），全量 15 个 CTest 契约测试集全绿通过；
+- 已完成 (BT-06 / BS-06): 删除 `docs/VisionTools_VisionRT_职责分离_重新验收与方案_Specs_Tickets.zip`；更新 `RT-15_重构交付与验收矩阵.md` 补齐 BS-01~BS-06 矩阵与 host_contract (Passed)、tools_cpu (Passed)、tools_infer (not_run) 范围声明；维护 `WORKLOG.md`；
+- 未完成/未验证项: tools_infer GPU 模型权重推理由于宿主机无外部独立 NVIDIA GPU 与权重，按规范独立隔离并标记为未运行（not_run）。
+
+**验证证据**
+- `tools\build.cmd ctest --test-dir build --output-on-failure` → 15/15 契约测试 100% 全部通过 (总耗时 12.01s)；
+- `tools\build.cmd cmake --build build --target test_sdk_consumer` → SDK 独立消费测试 10/10 语料断言 100% 通过；
+- `python tools/package_app.py --test-verify` → 全新重建打包、安全守卫与全量负例拦截 100% 通过；
+- `cmake --install build --prefix build/sdk_install` → 安装成功，并将最新 SDK 闭包同步至 `C:\dev\visionrt-sdk`；
+- `git status` 确认 `docs/` 下已无 `.zip` 文件。
+
+**下一步**
+- 提交并推送代码至远端分支。
+
 ### 2026-10-18 — 依据 8d4811c 方案完成第五轮全量整改交付 (HS5-01～HS5-06 / VR5-01～VR5-06)
 
 **目标**

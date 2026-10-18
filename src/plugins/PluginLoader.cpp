@@ -31,8 +31,8 @@ void PluginLoader::setBaseDirectory(std::filesystem::path baseDirectory) {
 void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
     std::lock_guard lock(mutex_);
     const auto fname = indexFilePath.filename().string();
-    if (fname != "module_index.yml") {
-        diagnostics_.push_back({indexFilePath, "Unsupported module index file name: only module_index.yml is supported: " + indexFilePath.string()});
+    if (fname != "module_index.yaml") {
+        diagnostics_.push_back({indexFilePath, "Unsupported module index file name: only module_index.yaml is supported: " + indexFilePath.string()});
         return;
     }
     if (!std::filesystem::exists(indexFilePath)) {
@@ -43,7 +43,7 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
         baseDirectory_ = indexFilePath.parent_path().lexically_normal();
     }
 
-    visionrt::ModuleIndex parsedIndex;
+    visionrt::ModuleIndexData parsedIndex;
     try {
         parsedIndex = visionrt::parseModuleIndexFile(indexFilePath);
     } catch (const std::exception& error) {
@@ -51,15 +51,16 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
         return;
     }
 
-    for (const auto& item : parsedIndex) {
-        if (index_.contains(item.registryName)) {
-            diagnostics_.push_back({indexFilePath, "Duplicate tool registry_name across loaded module indices: " + item.registryName});
+    for (const auto& [regName, toolEntry] : parsedIndex.tools) {
+        if (index_.contains(regName)) {
+            diagnostics_.push_back({indexFilePath, "Duplicate tool registry_name across loaded module indices: " + regName});
             return;
         }
     }
 
-    for (const auto& item : parsedIndex) {
-        index_.emplace(item.registryName, std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(item.path.data()), item.path.size())));
+    for (const auto& [regName, toolEntry] : parsedIndex.tools) {
+        const auto& modEntry = parsedIndex.modules.at(toolEntry.module);
+        index_.emplace(regName, std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(modEntry.library.data()), modEntry.library.size())));
     }
 }
 

@@ -74,12 +74,12 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
     pluginLoader = std::make_shared<PluginLoader>();
     std::filesystem::path toolsPackageRoot;
     std::filesystem::path indexFile;
-    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yml")) {
+    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yaml")) {
         toolsPackageRoot = (applicationDirectory / "tools-package").lexically_normal();
-        indexFile = toolsPackageRoot / "module_index.yml";
-    } else if (std::filesystem::exists(applicationDirectory / "module_index.yml")) {
+        indexFile = toolsPackageRoot / "module_index.yaml";
+    } else if (std::filesystem::exists(applicationDirectory / "module_index.yaml")) {
         toolsPackageRoot = applicationDirectory;
-        indexFile = toolsPackageRoot / "module_index.yml";
+        indexFile = toolsPackageRoot / "module_index.yaml";
     } else {
         toolsPackageRoot = (applicationDirectory / "tools").lexically_normal();
     }
