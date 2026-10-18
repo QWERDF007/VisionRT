@@ -6,10 +6,76 @@
 #include <fstream>
 #include <limits>
 #include <set>
+#include <sstream>
+#include <yaml-cpp/parser.h>
+#include <yaml-cpp/eventhandler.h>
 
 namespace visionrt {
 
 namespace {
+
+class DuplicateKeyDetector : public YAML::EventHandler {
+public:
+    enum class ContainerType { Sequence, Map };
+    struct Frame {
+        ContainerType type;
+        bool isKey{true};
+        std::set<std::string> keys;
+    };
+    std::vector<Frame> stack;
+
+    void OnDocumentStart(const YAML::Mark&) override {}
+    void OnDocumentEnd() override {}
+    void OnNull(const YAML::Mark&, YAML::anchor_t) override { advance(); }
+    void OnAlias(const YAML::Mark&, YAML::anchor_t) override { advance(); }
+
+    void OnScalar(const YAML::Mark&, const std::string&, YAML::anchor_t, const std::string& value) override {
+        if (!stack.empty() && stack.back().type == ContainerType::Map && stack.back().isKey) {
+            if (stack.back().keys.contains(value)) {
+                throw ContractError("Duplicate key detected in YAML: " + value);
+            }
+            stack.back().keys.insert(value);
+            stack.back().isKey = false;
+        } else {
+            advance();
+        }
+    }
+
+    void OnSequenceStart(const YAML::Mark&, const std::string&, YAML::anchor_t, YAML::EmitterStyle::value) override {
+        stack.push_back({ContainerType::Sequence, false, {}});
+    }
+    void OnSequenceEnd() override {
+        if (!stack.empty()) stack.pop_back();
+        advance();
+    }
+
+    void OnMapStart(const YAML::Mark&, const std::string&, YAML::anchor_t, YAML::EmitterStyle::value) override {
+        stack.push_back({ContainerType::Map, true, {}});
+    }
+    void OnMapEnd() override {
+        if (!stack.empty()) stack.pop_back();
+        advance();
+    }
+
+private:
+    void advance() {
+        if (!stack.empty() && stack.back().type == ContainerType::Map && !stack.back().isKey) {
+            stack.back().isKey = true;
+        }
+    }
+};
+
+void checkDuplicateKeys(std::istream& stream) {
+    try {
+        YAML::Parser parser(stream);
+        DuplicateKeyDetector detector;
+        while (parser.HandleNextDocument(detector)) {}
+    } catch (const ContractError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ContractError("YAML parse error: " + std::string(error.what()));
+    }
+}
 
 std::string pathText(const std::filesystem::path& path) {
     const auto text = path.generic_u8string();
@@ -175,6 +241,10 @@ ToolDefinition parseDefinitionNode(const YAML::Node& node, const std::filesystem
 ToolDefinition parseToolDefinitionYaml(const std::string& yamlContent,
                                        const std::filesystem::path& definitionPath,
                                        bool builtin) {
+    {
+        std::istringstream stream(yamlContent);
+        checkDuplicateKeys(stream);
+    }
     YAML::Node node;
     try {
         node = YAML::Load(yamlContent);
@@ -185,11 +255,21 @@ ToolDefinition parseToolDefinitionYaml(const std::string& yamlContent,
 }
 
 ToolDefinition parseToolDefinitionFile(const std::filesystem::path& path, bool builtin) {
-    YAML::Node node;
-    try {
+    std::string content;
+    {
         std::ifstream input(path, std::ios::binary);
         if (!input) throw ContractError("Cannot open tool definition");
-        node = YAML::Load(input);
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        content = buffer.str();
+    }
+    {
+        std::istringstream stream(content);
+        checkDuplicateKeys(stream);
+    }
+    YAML::Node node;
+    try {
+        node = YAML::Load(content);
     } catch (const std::exception& error) {
         throw ContractError(pathText(path) + ": " + error.what());
     }
@@ -202,65 +282,108 @@ void validateToolYaml(const std::string& yamlContent,
     parseToolDefinitionYaml(yamlContent, definitionPath, builtin);
 }
 
-namespace {
-
-ModuleIndex parseModuleIndexNode(const YAML::Node& node, const std::filesystem::path& path = {}) {
+ModuleIndexData parseModuleIndexNode(const YAML::Node& node, const std::filesystem::path& path = {}) {
     if (!node.IsMap()) throw ContractError("Module index YAML root must be a mapping");
-    fields(node, {"schema_version", "modules"}, "module index root");
+    fields(node, {"variant", "modules", "tools", "runtime_files"}, "module index root");
 
-    if (!node["schema_version"]) throw ContractError("Missing required field 'schema_version'");
-    if (!node["schema_version"].IsScalar()) throw ContractError("schema_version must be a scalar integer");
-    int version = 0;
-    try {
-        version = node["schema_version"].as<int>();
-    } catch (...) {
-        throw ContractError("schema_version must be an integer");
-    }
-    if (version != 1) {
-        throw ContractError("schema_version must be 1, got: " + std::to_string(version));
+    ModuleIndexData result;
+
+    if (node["variant"]) {
+        result.variant = text(node["variant"], "variant", true);
     }
 
     if (!node["modules"]) throw ContractError("Missing required field 'modules'");
-    if (!node["modules"].IsSequence()) throw ContractError("modules must be a sequence");
+    if (!node["modules"].IsMap()) throw ContractError("modules must be a mapping");
+    if (node["modules"].size() == 0) throw ContractError("modules must not be empty");
 
-    ModuleIndex result;
-    std::set<std::string> seenNames;
+    for (const auto& modField : node["modules"]) {
+        if (!modField.first.IsScalar()) throw ContractError("Module name in 'modules' must be a scalar");
+        const auto modName = modField.first.as<std::string>();
+        if (modName.empty()) throw ContractError("Module name in 'modules' must not be empty");
+        const auto& modNode = modField.second;
+        if (!modNode.IsMap()) throw ContractError("Module '" + modName + "' entry must be a mapping");
+        fields(modNode, {"library"}, "Module '" + modName + "'");
 
-    for (std::size_t i = 0; i < node["modules"].size(); ++i) {
-        const auto& item = node["modules"][i];
-        if (!item.IsMap()) throw ContractError("Module entry at index " + std::to_string(i) + " must be a mapping");
-        fields(item, {"registry_name", "path"}, "module entry at index " + std::to_string(i));
+        if (!modNode["library"]) throw ContractError("Module '" + modName + "' missing required field 'library'");
+        const auto libStr = text(modNode["library"], "library", true);
+        if (libStr.empty()) throw ContractError("Module '" + modName + "' library path must not be empty");
 
-        if (!item["registry_name"]) throw ContractError("Module entry missing registry_name at index " + std::to_string(i));
-        const auto regName = text(item["registry_name"], "registry_name", true);
-        if (regName.empty()) throw ContractError("registry_name must not be empty at index " + std::to_string(i));
-        if (seenNames.contains(regName)) {
-            throw ContractError("Duplicate registry_name in module index: " + regName);
+        const auto libPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(libStr.data()), libStr.size()));
+        if (libPath.is_absolute() || libPath.has_root_name()) {
+            throw ContractError("Module '" + modName + "' library path must be relative: " + libStr);
         }
-        seenNames.insert(regName);
-
-        if (!item["path"]) throw ContractError("Module entry '" + regName + "' missing path");
-        const auto relPathStr = text(item["path"], "path", true);
-        if (relPathStr.empty()) throw ContractError("path must not be empty for module: " + regName);
-
-        const auto relPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(relPathStr.data()), relPathStr.size()));
-        if (relPath.is_absolute() || relPath.has_root_name()) {
-            throw ContractError("Module path must be relative: " + relPathStr);
-        }
-        const auto norm = relPath.lexically_normal();
-        if (!norm.empty() && norm.begin()->string() == "..") {
-            throw ContractError("Module path escapes root directory: " + relPathStr);
+        const auto normLib = libPath.lexically_normal();
+        if (!normLib.empty() && normLib.begin()->string() == "..") {
+            throw ContractError("Module '" + modName + "' library path escapes root: " + libStr);
         }
 
-        result.push_back(ModuleIndexItem{regName, relPathStr});
+        result.modules[modName] = ModuleEntry{libStr};
+    }
+
+    if (!node["tools"]) throw ContractError("Missing required field 'tools'");
+    if (!node["tools"].IsMap()) throw ContractError("tools must be a mapping");
+    if (node["tools"].size() == 0) throw ContractError("tools must not be empty");
+
+    for (const auto& toolField : node["tools"]) {
+        if (!toolField.first.IsScalar()) throw ContractError("Tool registry name in 'tools' must be a scalar");
+        const auto regName = toolField.first.as<std::string>();
+        if (regName.empty()) throw ContractError("Tool registry name in 'tools' must not be empty");
+        const auto& toolNode = toolField.second;
+        if (!toolNode.IsMap()) throw ContractError("Tool '" + regName + "' entry must be a mapping");
+        fields(toolNode, {"module", "definition"}, "Tool '" + regName + "'");
+
+        if (!toolNode["module"]) throw ContractError("Tool '" + regName + "' missing required field 'module'");
+        const auto modRef = text(toolNode["module"], "module", true);
+        if (modRef.empty()) throw ContractError("Tool '" + regName + "' module reference must not be empty");
+
+        if (!result.modules.contains(modRef)) {
+            throw ContractError("Tool '" + regName + "' references undeclared module: '" + modRef + "'");
+        }
+
+        if (!toolNode["definition"]) throw ContractError("Tool '" + regName + "' missing required field 'definition'");
+        const auto defStr = text(toolNode["definition"], "definition", true);
+        if (defStr.empty()) throw ContractError("Tool '" + regName + "' definition path must not be empty");
+
+        const auto defPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(defStr.data()), defStr.size()));
+        if (defPath.is_absolute() || defPath.has_root_name()) {
+            throw ContractError("Tool '" + regName + "' definition path must be relative: " + defStr);
+        }
+        const auto normDef = defPath.lexically_normal();
+        if (!normDef.empty() && normDef.begin()->string() == "..") {
+            throw ContractError("Tool '" + regName + "' definition path escapes root: " + defStr);
+        }
+
+        result.tools[regName] = ToolIndexEntry{modRef, defStr};
+    }
+
+    if (node["runtime_files"]) {
+        if (!node["runtime_files"].IsSequence()) {
+            throw ContractError("runtime_files must be a sequence");
+        }
+        for (std::size_t i = 0; i < node["runtime_files"].size(); ++i) {
+            const auto rfNode = node["runtime_files"][i];
+            const auto rfStr = text(rfNode, "runtime_files[" + std::to_string(i) + "]", true);
+            if (rfStr.empty()) throw ContractError("runtime_files entry must not be empty");
+            const auto rfPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(rfStr.data()), rfStr.size()));
+            if (rfPath.is_absolute() || rfPath.has_root_name()) {
+                throw ContractError("runtime_files entry must be relative: " + rfStr);
+            }
+            const auto normRf = rfPath.lexically_normal();
+            if (!normRf.empty() && normRf.begin()->string() == "..") {
+                throw ContractError("runtime_files entry escapes root: " + rfStr);
+            }
+            result.runtimeFiles.push_back(rfStr);
+        }
     }
 
     return result;
 }
 
-} // namespace
-
-ModuleIndex parseModuleIndexYaml(const std::string& yamlContent) {
+ModuleIndexData parseModuleIndexYaml(const std::string& yamlContent) {
+    {
+        std::istringstream stream(yamlContent);
+        checkDuplicateKeys(stream);
+    }
     YAML::Node node;
     try {
         node = YAML::Load(yamlContent);
@@ -270,12 +393,22 @@ ModuleIndex parseModuleIndexYaml(const std::string& yamlContent) {
     return parseModuleIndexNode(node);
 }
 
-ModuleIndex parseModuleIndexFile(const std::filesystem::path& path) {
-    YAML::Node node;
-    try {
+ModuleIndexData parseModuleIndexFile(const std::filesystem::path& path) {
+    std::string content;
+    {
         std::ifstream input(path, std::ios::binary);
         if (!input) throw ContractError("Cannot open module index file: " + pathText(path));
-        node = YAML::Load(input);
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        content = buffer.str();
+    }
+    {
+        std::istringstream stream(content);
+        checkDuplicateKeys(stream);
+    }
+    YAML::Node node;
+    try {
+        node = YAML::Load(content);
     } catch (const std::exception& error) {
         throw ContractError(pathText(path) + ": " + error.what());
     }

@@ -628,18 +628,18 @@ def verify_tools_package(tools_pkg: Path, build_dir: Path | None = None) -> None
     """Verify external tools package using unified SDK validation and check mapped libraries."""
     import yaml
 
-    # 1. Reject deprecated JSON/XML index files
-    deprecated_names = {"module_index.json", "module_index.xml", "tools.json", "tools.xml"}
+    # 1. Reject deprecated JSON/XML/old index files
+    deprecated_names = {"module_index.json", "module_index.xml", "tools.json", "tools.xml", "module_index.yml"}
     for f in tools_pkg.rglob("*"):
         if f.is_file():
             low = f.name.lower()
             if low in deprecated_names:
-                raise RuntimeError(f"tools package contains deprecated JSON/XML index: {f.relative_to(tools_pkg)}")
+                raise RuntimeError(f"tools package contains deprecated or invalid index format: {f.relative_to(tools_pkg)}")
 
-    # 2. Check module_index.yml exists
-    index_file = tools_pkg / "module_index.yml"
+    # 2. Check module_index.yaml exists
+    index_file = tools_pkg / "module_index.yaml"
     if not index_file.is_file():
-        raise RuntimeError(f"tools package missing module_index.yml in {tools_pkg}")
+        raise RuntimeError(f"tools package missing module_index.yaml in {tools_pkg}")
 
     # 3. Locate visionrt_validate_tool
     validator = None
@@ -670,40 +670,50 @@ def verify_tools_package(tools_pkg: Path, build_dir: Path | None = None) -> None
     try:
         content = yaml.safe_load(index_file.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise RuntimeError(f"module_index.yml syntax error: {exc}")
+        raise RuntimeError(f"module_index.yaml syntax error: {exc}")
 
     if not isinstance(content, dict):
-        raise RuntimeError("module_index.yml root must be a mapping")
-    allowed_keys = {"schema_version", "modules"}
+        raise RuntimeError("module_index.yaml root must be a mapping")
+    allowed_keys = {"variant", "modules", "tools", "runtime_files"}
     unknown = set(content.keys()) - allowed_keys
     if unknown:
-        raise RuntimeError(f"module_index.yml contains unknown keys: {', '.join(sorted(unknown))}")
-    if content.get("schema_version") != 1:
-        raise RuntimeError(f"module_index.yml schema_version must be 1, got {content.get('schema_version')}")
-    modules = content.get("modules")
-    if not isinstance(modules, list):
-        raise RuntimeError("module_index.yml 'modules' must be a list")
+        raise RuntimeError(f"module_index.yaml contains unknown keys: {', '.join(sorted(unknown))}")
 
-    seen_names = set()
-    for mod in modules:
-        if not isinstance(mod, dict):
-            raise RuntimeError("module entry must be a dictionary")
-        mod_allowed = {"registry_name", "path"}
-        mod_unknown = set(mod.keys()) - mod_allowed
+    modules = content.get("modules")
+    if not isinstance(modules, dict) or not modules:
+        raise RuntimeError("module_index.yaml 'modules' must be a non-empty mapping")
+
+    for mod_name, mod_info in modules.items():
+        if not isinstance(mod_info, dict):
+            raise RuntimeError(f"module entry '{mod_name}' must be a dictionary")
+        mod_allowed = {"library"}
+        mod_unknown = set(mod_info.keys()) - mod_allowed
         if mod_unknown:
-            raise RuntimeError(f"module entry contains unknown fields: {', '.join(sorted(mod_unknown))}")
-        name = mod.get("registry_name")
-        rel_path = mod.get("path")
-        if not name or not isinstance(name, str):
-            raise RuntimeError("module entry missing registry_name")
-        if name in seen_names:
-            raise RuntimeError(f"duplicate registry_name: {name}")
-        seen_names.add(name)
+            raise RuntimeError(f"module '{mod_name}' contains unknown fields: {', '.join(sorted(mod_unknown))}")
+        rel_path = mod_info.get("library")
         if not rel_path or not isinstance(rel_path, str):
-            raise RuntimeError(f"module '{name}' missing valid path")
+            raise RuntimeError(f"module '{mod_name}' missing valid library path")
         target_dll = tools_pkg / rel_path
         if not target_dll.is_file():
-            raise RuntimeError(f"module '{name}' mapped library file not found: {target_dll}")
+            raise RuntimeError(f"module '{mod_name}' mapped library file not found: {target_dll}")
+
+    tools = content.get("tools")
+    if not isinstance(tools, dict) or not tools:
+        raise RuntimeError("module_index.yaml 'tools' must be a non-empty mapping")
+
+    for tool_name, tool_info in tools.items():
+        if not isinstance(tool_info, dict):
+            raise RuntimeError(f"tool entry '{tool_name}' must be a dictionary")
+        tool_allowed = {"module", "definition"}
+        tool_unknown = set(tool_info.keys()) - tool_allowed
+        if tool_unknown:
+            raise RuntimeError(f"tool '{tool_name}' contains unknown fields: {', '.join(sorted(tool_unknown))}")
+        mod_ref = tool_info.get("module")
+        if not mod_ref or mod_ref not in modules:
+            raise RuntimeError(f"tool '{tool_name}' references undeclared module: '{mod_ref}'")
+        def_path = tool_info.get("definition")
+        if not def_path or not isinstance(def_path, str):
+            raise RuntimeError(f"tool '{tool_name}' missing valid definition path")
 
     # 5. Also validate tool declarations if validator is available
     if validator and (tools_pkg / "tools").is_dir():
@@ -842,8 +852,8 @@ def test_verify_package_negatives() -> None:
         tools_pkg.mkdir(parents=True)
         (tools_pkg / "bin").mkdir(parents=True)
         (tools_pkg / "bin" / "plugin.dll").touch()
-        (tools_pkg / "module_index.yml").write_text(
-            "schema_version: 1\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+        (tools_pkg / "module_index.yaml").write_text(
+            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\n",
             encoding="utf-8"
         )
         # Verify valid tools package passes
@@ -855,42 +865,51 @@ def test_verify_package_negatives() -> None:
             verify_package(root, require_qt=False)
             raise AssertionError("verify_package did not fail when deprecated JSON index is present")
         except RuntimeError as e:
-            assert "deprecated JSON/XML index" in str(e), f"Unexpected error: {e}"
+            assert "deprecated" in str(e).lower(), f"Unexpected error: {e}"
         (tools_pkg / "module_index.json").unlink()
 
-        # Case 5: Missing module_index.yml
-        (tools_pkg / "module_index.yml").unlink()
+        # Case 4b: Old module_index.yml rejected
+        (tools_pkg / "module_index.yml").touch()
         try:
             verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail when module_index.yml is missing")
+            raise AssertionError("verify_package did not fail when old module_index.yml is present")
         except RuntimeError as e:
-            assert "missing module_index.yml" in str(e), f"Unexpected error: {e}"
+            assert "deprecated" in str(e).lower(), f"Unexpected error: {e}"
+        (tools_pkg / "module_index.yml").unlink()
 
-        # Case 6: Unknown field in module_index.yml
-        (tools_pkg / "module_index.yml").write_text(
-            "schema_version: 1\nunknown_key: bad\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+        # Case 5: Missing module_index.yaml
+        (tools_pkg / "module_index.yaml").unlink()
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when module_index.yaml is missing")
+        except RuntimeError as e:
+            assert "missing module_index.yaml" in str(e), f"Unexpected error: {e}"
+
+        # Case 6: Unknown field in module_index.yaml
+        (tools_pkg / "module_index.yaml").write_text(
+            "variant: cpu\nunknown_key: bad\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\n",
             encoding="utf-8"
         )
         try:
             verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail on unknown field in module_index.yml")
+            raise AssertionError("verify_package did not fail on unknown field in module_index.yaml")
         except RuntimeError as e:
             assert "unknown" in str(e).lower(), f"Unexpected error: {e}"
 
-        # Case 7: Invalid schema_version in module_index.yml
-        (tools_pkg / "module_index.yml").write_text(
-            "schema_version: 2\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+        # Case 7: Dangling module reference in module_index.yaml
+        (tools_pkg / "module_index.yaml").write_text(
+            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: nonexistent_module\n    definition: assets/tools/test.yaml\n",
             encoding="utf-8"
         )
         try:
             verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail on invalid schema_version in module_index.yml")
+            raise AssertionError("verify_package did not fail on dangling module reference in module_index.yaml")
         except RuntimeError as e:
-            assert "schema_version" in str(e).lower(), f"Unexpected error: {e}"
+            assert "undeclared module" in str(e).lower(), f"Unexpected error: {e}"
 
         # Case 8: Missing mapped DLL
-        (tools_pkg / "module_index.yml").write_text(
-            "schema_version: 1\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+        (tools_pkg / "module_index.yaml").write_text(
+            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\n",
             encoding="utf-8"
         )
         (tools_pkg / "bin" / "plugin.dll").unlink()

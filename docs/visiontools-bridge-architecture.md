@@ -251,14 +251,19 @@ outputs:
     type: ImageBatch
 ```
 
-### 4.6 模块索引契约（`module_index.yml`）
-安装包根目录（`tools-package/module_index.yml`）提供统一的 C++ 动态库映射契约，杜绝 JSON/XML 多格式分叉：
+### 4.6 模块索引契约（`module_index.yaml`）
+安装包根目录（`tools-package/module_index.yaml`）提供统一的 C++ 动态库映射契约，杜绝 JSON/XML 多格式分叉与重复键：
 
 ```yaml
-schema_version: 1
+variant: cpu
 modules:
-  - registry_name: visiontools.preprocess.adaptive_binary
+  visiontools.preprocess:
     path: bin/visiontools_preprocess.dll
+tools:
+  visiontools.preprocess.adaptive_binary:
+    module: visiontools.preprocess
+runtime_files:
+  - bin/visiontools_preprocess.dll
 ```
 
 ---

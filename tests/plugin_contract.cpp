@@ -228,15 +228,15 @@ void moduleIndexDiagnostics() {
     const auto baseDir = std::filesystem::u8path(temp.path().toUtf8().toStdString());
     loader->setBaseDirectory(baseDir);
 
-    // 1. Filename rejection: only module_index.yml is supported
+    // 1. Filename rejection: only module_index.yaml is supported
     loader->loadIndexFile(baseDir / "non_existent.yml");
     assert(!loader->diagnostics().empty());
-    assert(loader->diagnostics().back().message.find("only module_index.yml is supported") != std::string::npos);
+    assert(loader->diagnostics().back().message.find("only module_index.yaml is supported") != std::string::npos);
     loader->clearDiagnostics();
 
     loader->loadIndexFile(baseDir / "other_index.yaml");
     assert(!loader->diagnostics().empty());
-    assert(loader->diagnostics().back().message.find("only module_index.yml is supported") != std::string::npos);
+    assert(loader->diagnostics().back().message.find("only module_index.yaml is supported") != std::string::npos);
     loader->clearDiagnostics();
 
     const auto badJson = baseDir / "bad.json";
@@ -247,17 +247,17 @@ void moduleIndexDiagnostics() {
     }
     loader->loadIndexFile(badJson);
     assert(!loader->diagnostics().empty());
-    assert(loader->diagnostics().back().message.find("only module_index.yml is supported") != std::string::npos);
+    assert(loader->diagnostics().back().message.find("only module_index.yaml is supported") != std::string::npos);
     loader->clearDiagnostics();
 
-    // 2. Non-existent module_index.yml
-    loader->loadIndexFile(baseDir / "module_index.yml");
+    // 2. Non-existent module_index.yaml
+    loader->loadIndexFile(baseDir / "module_index.yaml");
     assert(!loader->diagnostics().empty());
     assert(loader->diagnostics().back().message.find("does not exist") != std::string::npos);
     loader->clearDiagnostics();
 
     // 3. Bad YAML syntax
-    const auto indexFile = baseDir / "module_index.yml";
+    const auto indexFile = baseDir / "module_index.yaml";
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
@@ -267,33 +267,35 @@ void moduleIndexDiagnostics() {
     assert(!loader->diagnostics().empty());
     loader->clearDiagnostics();
 
-    // 4. Missing or invalid schema_version
+    // 4. Missing required fields / empty modules
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
-        f.write("schema_version: 2\nmodules:\n  - registry_name: a\n    path: bin/a.dll\n");
+        f.write("variant: cpu\nmodules: {}\ntools: {}\n");
     }
     loader->loadIndexFile(indexFile);
     assert(!loader->diagnostics().empty());
     loader->clearDiagnostics();
 
-    // 5. Atomic rejection: if file contains duplicate registry_name or invalid path, 0 modules are registered!
+    // 5. Atomic rejection: if file contains dangling module reference or duplicate key, 0 tools are registered!
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
-        const char* content = R"(schema_version: 1
+        const char* content = R"(variant: cpu
 modules:
-  - registry_name: m1
-    path: bin/m1.dll
-  - registry_name: m1
-    path: bin/m1_dup.dll
+  m1:
+    library: bin/m1.dll
+tools:
+  t1:
+    module: nonexistent_module
+    definition: tools/t1.yaml
 )";
         f.write(content);
     }
     loader->loadIndexFile(indexFile);
     assert(!loader->diagnostics().empty());
-    // ATOMIC: no module is registered from the invalid file!
-    assert(!loader->hasModule("m1"));
+    // ATOMIC: no tool is registered from the invalid file!
+    assert(!loader->hasModule("t1"));
     loader->clearDiagnostics();
 
     // 6. Existing valid registrations are untouched when an invalid index is rejected
@@ -302,7 +304,7 @@ modules:
     loader->loadIndexFile(indexFile);
     assert(!loader->diagnostics().empty());
     assert(loader->hasModule("mod.preexisting"));
-    assert(!loader->hasModule("m1"));
+    assert(!loader->hasModule("t1"));
 }
 
 void appControllerToolsPackageIntegration(const std::filesystem::path& modulePath) {
@@ -320,14 +322,18 @@ void appControllerToolsPackageIntegration(const std::filesystem::path& modulePat
     // Copy module dll into binDir
     std::filesystem::copy_file(modulePath, binDir / "test_module.dll", std::filesystem::copy_options::overwrite_existing);
 
-    // Create module_index.yml
+    // Create module_index.yaml
     {
-        QFile f(toQString(pkgDir / "module_index.yml"));
+        QFile f(toQString(pkgDir / "module_index.yaml"));
         assert(f.open(QIODevice::WriteOnly));
-        const char* indexContent = R"(schema_version: 1
+        const char* indexContent = R"(variant: cpu
 modules:
-  - registry_name: test.plugin.counter
-    path: bin/test_module.dll
+  test_module:
+    library: bin/test_module.dll
+tools:
+  test.plugin.counter:
+    module: test_module
+    definition: assets/tools/builtin/测试/数学/test.plugin.counter.yaml
 )";
         f.write(indexContent);
     }
@@ -509,12 +515,20 @@ void unicodeAndChinesePathLoading(const std::filesystem::path& pluginAPath,
     std::filesystem::copy_file(pluginAPath, targetDll, std::filesystem::copy_options::overwrite_existing);
     std::filesystem::copy_file(depAPath, targetDep, std::filesystem::copy_options::overwrite_existing);
 
-    // Create module_index.yml inside unicodeDir
-    const auto indexFile = unicodeDir / "module_index.yml";
+    // Create module_index.yaml inside unicodeDir
+    const auto indexFile = unicodeDir / "module_index.yaml";
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
-        const std::string content = "schema_version: 1\nmodules:\n  - registry_name: test.plugin.a\n    path: bin/plugin_a.dll\n";
+        const std::string content =
+            "variant: cpu\n"
+            "modules:\n"
+            "  mod_a:\n"
+            "    library: bin/plugin_a.dll\n"
+            "tools:\n"
+            "  test.plugin.a:\n"
+            "    module: mod_a\n"
+            "    definition: assets/tools/a.yaml\n";
         f.write(content.c_str(), content.size());
     }
 

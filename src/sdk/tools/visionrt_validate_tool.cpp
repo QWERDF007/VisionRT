@@ -33,14 +33,14 @@ int runValidation(int argc, const wchar_t* const* argv) {
         std::cerr << "Usage: visionrt_validate_tool [--index] <path_to_file.yaml>\n";
         return 1;
     }
-    if (targetPath.filename() == "module_index.yml") {
+    if (targetPath.filename() == "module_index.yaml" || targetPath.filename() == "module_index.yml") {
         isIndex = true;
     }
 
     try {
         if (isIndex) {
             const auto index = visionrt::parseModuleIndexFile(targetPath);
-            std::cout << "Valid module index: " << index.size() << " modules\n";
+            std::cout << "Valid module index: " << index.tools.size() << " tools across " << index.modules.size() << " modules\n";
         } else {
             const auto definition = visionrt::parseToolDefinitionFile(targetPath);
             std::cout << "Valid tool definition: " << definition.id << " (" << definition.displayName << ")\n";

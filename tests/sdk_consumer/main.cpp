@@ -277,6 +277,93 @@ outputs: []
         REQUIRE_THROWS(validateToolDefinition(directDef));
     }
 
+    // 11. Positive Module Index: Unified module_index.yaml contract
+    {
+        const std::string validIndexYaml = R"(
+variant: cpu
+modules:
+  preprocess:
+    library: bin/visiontools_preprocess.dll
+tools:
+  visionrt.image.read:
+    module: preprocess
+    definition: assets/tools/read.yaml
+runtime_files:
+  - bin/opencv_world480.dll
+)";
+        ModuleIndexData idx = parseModuleIndexYaml(validIndexYaml);
+        REQUIRE(idx.variant == "cpu");
+        REQUIRE(idx.modules.size() == 1);
+        REQUIRE(idx.modules.at("preprocess").library == "bin/visiontools_preprocess.dll");
+        REQUIRE(idx.tools.size() == 1);
+        REQUIRE(idx.tools.at("visionrt.image.read").module == "preprocess");
+        REQUIRE(idx.tools.at("visionrt.image.read").definition == "assets/tools/read.yaml");
+        REQUIRE(idx.runtimeFiles.size() == 1);
+        REQUIRE(idx.runtimeFiles[0] == "bin/opencv_world480.dll");
+    }
+
+    // 12. Negative Module Index: Duplicate key detection
+    {
+        const std::string dupKeyIndex = R"(
+variant: cpu
+variant: gpu
+modules:
+  mod:
+    library: bin/mod.dll
+tools:
+  t1:
+    module: mod
+    definition: tools/t1.yaml
+)";
+        REQUIRE_THROWS(parseModuleIndexYaml(dupKeyIndex));
+    }
+
+    // 13. Negative Module Index: Dangling module reference
+    {
+        const std::string danglingIndex = R"(
+variant: cpu
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  t1:
+    module: nonexistent_mod
+    definition: tools/t1.yaml
+)";
+        REQUIRE_THROWS(parseModuleIndexYaml(danglingIndex));
+    }
+
+    // 14. Negative Module Index: Path escaping root
+    {
+        const std::string escapingIndex = R"(
+variant: cpu
+modules:
+  mod1:
+    library: ../escaping.dll
+tools:
+  t1:
+    module: mod1
+    definition: tools/t1.yaml
+)";
+        REQUIRE_THROWS(parseModuleIndexYaml(escapingIndex));
+    }
+
+    // 15. Negative Module Index: Unknown root field
+    {
+        const std::string unknownRootIndex = R"(
+variant: cpu
+unknown_key: true
+modules:
+  mod1:
+    library: bin/mod1.dll
+tools:
+  t1:
+    module: mod1
+    definition: tools/t1.yaml
+)";
+        REQUIRE_THROWS(parseModuleIndexYaml(unknownRootIndex));
+    }
+
     std::cout << "[SDK Consumer] All positive and negative validation corpus checks passed successfully!" << std::endl;
     return 0;
 }
