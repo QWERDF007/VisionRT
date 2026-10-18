@@ -1,16 +1,17 @@
 #include "core/ProjectStorage.h"
 #include "core/ToolRegistry.h"
 #include "runtime/RuntimeEngine.h"
-#include "tools/CpuTools.h"
 #include "python/PythonRuntime.h"
 #include "plugins/PluginLoader.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QTemporaryDir>
+#include <opencv2/core.hpp>
 #include <cassert>
 #include <chrono>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <thread>
 
@@ -52,7 +53,35 @@ void setupPython(ToolRegistry& registry, PythonRuntime& runtime) {
     }
 }
 
-void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime& python) {
+std::filesystem::path resolveToolsPackage(const std::filesystem::path& repoRoot) {
+    const char* env = std::getenv("VISIONTOOLS_PACKAGE_DIR");
+    if (env && std::filesystem::exists(std::filesystem::path(env) / "module_index.json")) {
+        return std::filesystem::canonical(std::filesystem::path(env));
+    }
+    const auto buildPkg = repoRoot / "build" / "tools-package";
+    if (std::filesystem::exists(buildPkg / "module_index.json")) {
+        return std::filesystem::canonical(buildPkg);
+    }
+    const auto localPkg = repoRoot / "tools-package";
+    if (std::filesystem::exists(localPkg / "module_index.json")) {
+        return std::filesystem::canonical(localPkg);
+    }
+    const auto siblingDist = repoRoot.parent_path() / "VisionTools" / "dist-cpu";
+    if (std::filesystem::exists(siblingDist / "module_index.json")) {
+        return std::filesystem::canonical(siblingDist);
+    }
+    const auto siblingDistGpu = repoRoot.parent_path() / "VisionTools" / "dist-gpu";
+    if (std::filesystem::exists(siblingDistGpu / "module_index.json")) {
+        return std::filesystem::canonical(siblingDistGpu);
+    }
+    const auto installed = repoRoot / "install" / "VisionRT-0.1.0" / "tools-package";
+    if (std::filesystem::exists(installed / "module_index.json")) {
+        return std::filesystem::canonical(installed);
+    }
+    return {};
+}
+
+void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
     const auto tmpPath = std::filesystem::path(tmpDir.path().toStdString());
@@ -60,13 +89,33 @@ void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime&
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", tempProjectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images", std::filesystem::copy_options::recursive);
 
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(toolsPkg);
+    loader->loadIndexFile(toolsPkg / "module_index.json");
+    if (!loader->diagnostics().empty()) {
+        for (const auto& d : loader->diagnostics()) {
+            std::cerr << "Module index diagnostic: " << d.message << std::endl;
+        }
+        throw std::runtime_error("Module index loading reported diagnostics");
+    }
+
     ToolRegistry registry;
-    registry.scan(repoRoot / "assets" / "tools");
-    registerCpuTools(registry);
+    registry.setPluginLoader(loader);
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(toolsPkg / "assets" / "tools");
+    if (std::filesystem::exists(toolsPkg / "examples" / "Python")) {
+        roots.push_back(toolsPkg / "examples" / "Python");
+    }
+    roots.push_back(repoRoot / "assets" / "tools" / "custom");
+    registry.scanRoots(roots);
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
     auto loaded = storage.load(tempProjectFile);
+    for (const auto& d : loaded.diagnostics) {
+        std::cerr << "LOAD DIAGNOSTIC: node=" << (d.node ? *d.node : 0) << " code=" << static_cast<int>(d.code)
+                  << " field=" << d.field << " msg=" << d.message << std::endl;
+    }
     assert(loaded.diagnostics.empty());
     assert(loaded.project.flows.size() == 1);
     assert(loaded.project.flows[0].nodes.size() == 5);
@@ -75,25 +124,25 @@ void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime&
     assert(engine.start(loaded.project, registry, RunMode::Once).code == 0);
     auto update = finish(engine);
 
-    // Node 1: image read
+    // Node 1: image read (executed via visiontools_preprocess.dll)
     auto s1 = snapshot(update, 1);
     assert(s1 && s1->status.code == 0);
     const auto& images1 = std::get<ImageBatch>(s1->outputs.at("images"));
     assert(images1.images().size() >= 2);
 
-    // Node 2: roi projection
+    // Node 2: roi projection (executed via visiontools_preprocess.dll)
     auto s2 = snapshot(update, 2);
     assert(s2 && s2->status.code == 0);
     const auto& rois2 = std::get<RoiBatch>(s2->outputs.at("rois"));
     assert(rois2.images().size() == images1.images().size());
 
-    // Node 3: crop
+    // Node 3: crop (executed via visiontools_preprocess.dll)
     auto s3 = snapshot(update, 3);
     assert(s3 && s3->status.code == 0);
     const auto& croppedImages = std::get<ImageBatch>(s3->outputs.at("images"));
     assert(!croppedImages.images().empty());
 
-    // Node 4: preprocess (threshold)
+    // Node 4: preprocess (executed via visiontools_preprocess.dll)
     auto s4 = snapshot(update, 4);
     assert(s4 && s4->status.code == 0);
     const auto& preprocessed = std::get<ImageBatch>(s4->outputs.at("images"));
@@ -143,10 +192,146 @@ void testCpuPythonPipeline(const std::filesystem::path& repoRoot, PythonRuntime&
         corruptFailed = true;
     }
     assert(corruptFailed);
-    std::cout << "Corrupted input failure test passed." << std::endl;
 }
 
-void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime& python) {
+void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(toolsPkg);
+    loader->loadIndexFile(toolsPkg / "module_index.json");
+    assert(loader->diagnostics().empty());
+
+    PlatformToolServices services{PathResolver(toolsPkg), nullptr};
+    auto inst = loader->createAdapter("visionrt.detection.filter", services);
+    assert(inst != nullptr);
+    assert(inst->initialize({}).code == 0);
+
+    // 1. Scenario: 0 targets (empty rois/scores/classes)
+    {
+        cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        ImageBatch imgBatch({OwnedImage::copyOf(mat)});
+        RoiBatch emptyRois(std::vector<std::vector<Roi>>{{}});
+        NumericArray emptyScores(DType::Float32, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Float32, {0}, {})});
+        NumericArray emptyClasses(DType::Int64, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Int64, {0}, {})});
+        StringArray emptyNames(2, Layout::BatchRagged, {StringBuffer(std::vector<std::int64_t>{0}, std::vector<std::string>{})});
+        NumericArray allowed(DType::Int64, 1, Layout::Dense, {NumericBuffer::copy(DType::Int64, {0}, {})});
+
+        Values inputs;
+        inputs.emplace("images", std::move(imgBatch));
+        inputs.emplace("rois", std::move(emptyRois));
+        inputs.emplace("scores", std::move(emptyScores));
+        inputs.emplace("classes", std::move(emptyClasses));
+        inputs.emplace("class_names", std::move(emptyNames));
+        inputs.emplace("allowed_classes", std::move(allowed));
+        inputs.emplace("min_score", 0.5);
+        inputs.emplace("min_area", 0.0);
+
+        auto res = inst->execute(inputs);
+        assert(res.status.code == 0);
+        const auto* outCounts = std::get_if<NumericArray>(&res.outputs["counts"]);
+        assert(outCounts && !outCounts->buffers().empty());
+        assert(outCounts->buffers()[0].values<std::int64_t>()[0] == 0);
+
+        const auto* outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
+        assert(outRois && outRois->images().size() == 1 && outRois->images()[0].empty());
+    }
+
+    // 2. Scenario: 3 targets (scores: 0.2, 0.7, 0.95), min_score = 0.5 -> 2 pass
+    {
+        cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        ImageBatch imgBatch({OwnedImage::copyOf(mat)});
+        std::vector<Roi> rois3;
+        rois3.push_back(Roi::rectangle(10.0f, 10.0f, 20.0f, 20.0f, 0.0f));
+        rois3.push_back(Roi::rectangle(30.0f, 30.0f, 40.0f, 40.0f, 0.0f));
+        rois3.push_back(Roi::rectangle(50.0f, 50.0f, 60.0f, 60.0f, 0.0f));
+        RoiBatch roiBatch({rois3});
+
+        std::vector<float> scoreVals = {0.2f, 0.7f, 0.95f};
+        std::vector<std::int64_t> classVals = {1, 1, 1};
+        std::vector<std::string> nameVals = {"defect", "defect", "defect"};
+
+        NumericArray scores(DType::Float32, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Float32, {3}, std::as_bytes(std::span(scoreVals)))});
+        NumericArray classes(DType::Int64, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Int64, {3}, std::as_bytes(std::span(classVals)))});
+        StringArray names(2, Layout::BatchRagged, {StringBuffer(std::vector<std::int64_t>{3}, nameVals)});
+        NumericArray allowed(DType::Int64, 1, Layout::Dense, {NumericBuffer::copy(DType::Int64, {0}, {})});
+
+        Values inputs;
+        inputs.emplace("images", std::move(imgBatch));
+        inputs.emplace("rois", std::move(roiBatch));
+        inputs.emplace("scores", std::move(scores));
+        inputs.emplace("classes", std::move(classes));
+        inputs.emplace("class_names", std::move(names));
+        inputs.emplace("allowed_classes", std::move(allowed));
+        inputs.emplace("min_score", 0.5);
+        inputs.emplace("min_area", 0.0);
+
+        auto res = inst->execute(inputs);
+        assert(res.status.code == 0);
+        const auto* outCounts = std::get_if<NumericArray>(&res.outputs["counts"]);
+        assert(outCounts && !outCounts->buffers().empty());
+        assert(outCounts->buffers()[0].values<std::int64_t>()[0] == 2);
+
+        const auto* outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
+        assert(outRois && outRois->images().size() == 1 && outRois->images()[0].size() == 2);
+    }
+
+    assert(inst->release().code == 0);
+}
+
+void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(toolsPkg);
+    loader->loadIndexFile(toolsPkg / "module_index.json");
+    assert(loader->diagnostics().empty());
+
+    ToolRegistry registry;
+    registry.setPluginLoader(loader);
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(toolsPkg / "assets" / "tools");
+    if (std::filesystem::exists(toolsPkg / "examples" / "Python")) {
+        roots.push_back(toolsPkg / "examples" / "Python");
+    }
+    roots.push_back(repoRoot / "assets" / "tools" / "custom");
+    registry.scanRoots(roots);
+    setupPython(registry, python);
+
+    QTemporaryDir tmpDir;
+    assert(tmpDir.isValid());
+    const auto tmpPath = std::filesystem::path(tmpDir.path().toStdString());
+    const auto projectFile = tmpPath / "pipeline_cpu_python.vrt";
+    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", projectFile);
+    std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images", std::filesystem::copy_options::recursive);
+
+    ProjectStorage storage(registry);
+    auto loaded = storage.load(projectFile);
+    assert(loaded.diagnostics.empty());
+
+    // Concurrent execution of 2 independent engines sharing registry & plugin loader
+    RuntimeEngine engine1(2);
+    RuntimeEngine engine2(2);
+
+    auto f1 = std::async(std::launch::async, [&] {
+        assert(engine1.start(loaded.project, registry, RunMode::Once).code == 0);
+        return finish(engine1);
+    });
+    auto f2 = std::async(std::launch::async, [&] {
+        assert(engine2.start(loaded.project, registry, RunMode::Once).code == 0);
+        return finish(engine2);
+    });
+
+    auto u1 = f1.get();
+    auto u2 = f2.get();
+
+    auto s1_node5 = snapshot(u1, 5);
+    auto s2_node5 = snapshot(u2, 5);
+    assert(s1_node5 && s1_node5->status.code == 0);
+    assert(s2_node5 && s2_node5->status.code == 0);
+
+    // Cross-release snapshot check: engine resets, snapshot retains historical output
+    assert(engine1.requestReset().code == 0);
+    assert(s1_node5->status.code == 0);
+}
+
+void testDiagnosticPipeline(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
     const auto tmpPath = std::filesystem::path(tmpDir.path().toStdString());
@@ -154,9 +339,17 @@ void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt", tempProjectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images", std::filesystem::copy_options::recursive);
 
+    auto loader = std::make_shared<PluginLoader>();
+    loader->setBaseDirectory(toolsPkg);
+    loader->loadIndexFile(toolsPkg / "module_index.json");
+
     ToolRegistry registry;
-    registry.scan(repoRoot / "assets" / "tools");
-    registerCpuTools(registry);
+    registry.setPluginLoader(loader);
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(toolsPkg / "assets" / "tools");
+    roots.push_back(repoRoot / "assets" / "tools");
+    roots.push_back(repoRoot / "assets" / "tools" / "custom");
+    registry.scanRoots(roots);
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
@@ -172,7 +365,11 @@ void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime
     assert(foundMissingDef);
 
     RuntimeEngine engine(2);
-    assert(engine.start(loaded.project, registry, RunMode::Once));
+    const auto startRes = engine.start(loaded.project, registry, RunMode::Once);
+    if (startRes.code != 0) {
+        std::cerr << "Diagnostic pipeline engine.start failed: code=" << startRes.code << " msg=" << startRes.message << std::endl;
+    }
+    assert(startRes.code == 0);
     auto update = finish(engine);
 
     // Node 1: read succeeds
@@ -182,7 +379,6 @@ void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime
     // Node 2: crop fails because rois input is Missing
     auto s2 = snapshot(update, 2);
     assert(s2);
-    std::cout << "s2 status: code=" << s2->status.code << " msg=" << s2->status.message << std::endl;
     assert(!s2->status);
     assert(isMissing(s2->outputs.at("images")));
 
@@ -196,7 +392,6 @@ void testDiagnosticPipeline(const std::filesystem::path& repoRoot, PythonRuntime
     loaded.project.flows[0].runSelected = false;
     loaded.project.flows[1].runSelected = true;
     const auto missingStartStatus = engine.start(loaded.project, registry, RunMode::Once);
-    std::cout << "missingStartStatus: code=" << missingStartStatus.code << " msg=" << missingStartStatus.message << std::endl;
     assert(!missingStartStatus);
     assert(missingStartStatus.code == 1);
 }
@@ -284,9 +479,6 @@ void testRealPluginModulePipeline(const std::filesystem::path& repoRoot, PythonR
 
     RuntimeEngine engine(2);
     const auto startRes = engine.start(project, registry, RunMode::Once);
-    if (startRes.code != 0) {
-        std::cerr << "engine.start failed: code=" << startRes.code << " msg=" << startRes.message << std::endl;
-    }
     assert(startRes.code == 0);
     const auto update = finish(engine);
 
@@ -315,8 +507,6 @@ void testRealPluginModulePipeline(const std::filesystem::path& repoRoot, PythonR
     assert(rs1 && std::get<std::int64_t>(rs1->outputs.at("y")) == std::get<std::int64_t>(s1->outputs.at("y")));
     auto rs2 = snapshot(reloadedUpdate, 2);
     assert(rs2 && std::get<std::int64_t>(rs2->outputs.at("count")) == std::get<std::int64_t>(s2->outputs.at("count")));
-
-    std::cout << "[INFO] GPU execution: unverified (host environment has no CUDA/TensorRT)" << std::endl;
 }
 
 } // namespace
@@ -328,23 +518,35 @@ int main(int argc, char** argv) {
 
     PythonRuntime python;
 
-    std::cout << "[TEST] Running CPU + Python pipeline example..." << std::endl;
-    testCpuPythonPipeline(repoRoot, python);
-    std::cout << "[PASS] CPU + Python pipeline passed." << std::endl;
+    const auto toolsPkg = resolveToolsPackage(repoRoot);
+    if (toolsPkg.empty()) {
+        std::cerr << "FATAL: Real VisionTools package not found! "
+                     "VR3-03 / HS3-03 requires real tools package consumption." << std::endl;
+        return 1;
+    }
+    std::cout << "[REAL TOOLS PACKAGE] Verified Tools package at: " << toolsPkg.string() << std::endl;
 
-    std::cout << "[TEST] Running error diagnostic pipeline example..." << std::endl;
-    testDiagnosticPipeline(repoRoot, python);
+    std::cout << "[TEST] Running real Tools package CPU + Python pipeline (VR3-03)..." << std::endl;
+    testRealToolsCpuPythonPipeline(toolsPkg, repoRoot, python);
+    std::cout << "[PASS] Real Tools package CPU + Python pipeline passed." << std::endl;
+
+    std::cout << "[TEST] Running ragged detection filter 0/3 targets test (HS3-03)..." << std::endl;
+    testRaggedDetectionFilter(toolsPkg);
+    std::cout << "[PASS] Ragged detection filter 0/3 targets test passed." << std::endl;
+
+    std::cout << "[TEST] Running concurrent execution & lifecycle test (HS3-03)..." << std::endl;
+    testRealToolsConcurrencyAndLifecycle(toolsPkg, repoRoot, python);
+    std::cout << "[PASS] Concurrent execution & lifecycle test passed." << std::endl;
+
+    std::cout << "[TEST] Running error diagnostic pipeline example (HS3-03)..." << std::endl;
+    testDiagnosticPipeline(toolsPkg, repoRoot, python);
     std::cout << "[PASS] Error diagnostic pipeline passed." << std::endl;
 
-    std::cout << "[TEST] Running real plugin module pipeline (VR2-07)..." << std::endl;
-    try {
-        testRealPluginModulePipeline(repoRoot, python);
-    } catch (const std::exception& e) {
-        std::cerr << "FAILED testRealPluginModulePipeline with exception: " << e.what() << std::endl;
-        throw;
-    }
-    std::cout << "[PASS] Real plugin module pipeline passed." << std::endl;
+    std::cout << "[TEST DLL] Running mock test_plugin_module pipeline..." << std::endl;
+    testRealPluginModulePipeline(repoRoot, python);
+    std::cout << "[PASS] Mock test_plugin_module pipeline passed." << std::endl;
 
+    std::cout << "[INFO] GPU execution: unverified (host environment has no CUDA/TensorRT weights)" << std::endl;
     std::cout << "All example contract tests passed successfully!" << std::endl;
     return 0;
 }

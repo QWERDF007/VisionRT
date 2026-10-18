@@ -6,6 +6,10 @@
 #include <QJsonObject>
 #include <yaml-cpp/yaml.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace visionrt {
 
 void PluginLoader::registerModule(std::string registryName, std::filesystem::path libraryPath) {
@@ -23,6 +27,9 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
     if (!std::filesystem::exists(indexFilePath)) {
         diagnostics_.push_back({indexFilePath, "Module index file does not exist: " + indexFilePath.string()});
         return;
+    }
+    if (baseDirectory_.empty()) {
+        baseDirectory_ = indexFilePath.parent_path().lexically_normal();
     }
     const auto ext = indexFilePath.extension().string();
     if (ext == ".json") {
@@ -99,8 +106,37 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
                 }
                 index_[name] = relPath;
             }
+        } else if (obj.contains("tools") && obj["tools"].isObject()) {
+            const auto tools = obj["tools"].toObject();
+            for (auto it = tools.begin(); it != tools.end(); ++it) {
+                if (!it.value().isObject()) continue;
+                const auto t = it.value().toObject();
+                std::string name = it.key().toStdString();
+                if (t.contains("entry") && t["entry"].isObject()) {
+                    const auto entry = t["entry"].toObject();
+                    if (entry.contains("registry_name") && !entry["registry_name"].toString().isEmpty()) {
+                        name = entry["registry_name"].toString().toStdString();
+                    }
+                }
+                const auto pathStr = t.value("module_dll").toString().toStdString();
+                if (name.empty() || pathStr.empty()) continue;
+                if (index_.contains(name)) {
+                    continue;
+                }
+                const auto relPath = std::filesystem::u8path(pathStr);
+                if (relPath.is_absolute()) {
+                    diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
+                    continue;
+                }
+                auto norm = relPath.lexically_normal();
+                if (!norm.empty() && norm.begin()->string() == "..") {
+                    diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
+                    continue;
+                }
+                index_[name] = relPath;
+            }
         } else {
-            diagnostics_.push_back({indexFilePath, "Module index must contain 'modules' array or object"});
+            diagnostics_.push_back({indexFilePath, "Module index must contain 'modules' or 'tools'"});
         }
     } else if (ext == ".yaml" || ext == ".yml") {
         try {
@@ -133,6 +169,32 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
                         diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
                         continue;
                     }
+                    const auto relPath = std::filesystem::u8path(pathStr);
+                    if (relPath.is_absolute()) {
+                        diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
+                        continue;
+                    }
+                    auto norm = relPath.lexically_normal();
+                    if (!norm.empty() && norm.begin()->string() == "..") {
+                        diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
+                        continue;
+                    }
+                }
+            } else if (node["tools"] && node["tools"].IsMap()) {
+                for (const auto& it : node["tools"]) {
+                    std::string name = it.first.as<std::string>();
+                    const auto& val = it.second;
+                    if (val["entry"] && val["entry"]["registry_name"]) {
+                        name = val["entry"]["registry_name"].as<std::string>();
+                    }
+                    std::string pathStr;
+                    if (val["module_dll"]) {
+                        pathStr = val["module_dll"].as<std::string>();
+                    } else if (val["path"]) {
+                        pathStr = val["path"].as<std::string>();
+                    }
+                    if (name.empty() || pathStr.empty()) continue;
+                    if (index_.contains(name)) continue;
                     const auto relPath = std::filesystem::u8path(pathStr);
                     if (relPath.is_absolute()) {
                         diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
@@ -189,8 +251,15 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
         return nullptr;
     }
 
+#ifdef _WIN32
+    SetDllDirectoryW(libraryPath.parent_path().c_str());
+#endif
     auto lib = std::make_shared<QLibrary>(QString::fromStdString(libraryPath.string()));
-    if (!lib->load()) {
+    const bool loadedOk = lib->load();
+#ifdef _WIN32
+    SetDllDirectoryW(nullptr);
+#endif
+    if (!loadedOk) {
         status = {-3, "Failed to load dynamic library " + libraryPath.string() + ": " + lib->errorString().toStdString()};
         return nullptr;
     }
