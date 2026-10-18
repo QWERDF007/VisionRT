@@ -92,24 +92,16 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
     registry.setPluginLoader(pluginLoader);
 
     std::vector<std::filesystem::path> candidateRoots;
-    if (std::filesystem::is_directory(toolsPackageRoot / "assets" / "tools")) {
-        candidateRoots.push_back((toolsPackageRoot / "assets" / "tools").lexically_normal());
-    }
-    if (std::filesystem::is_directory(toolsPackageRoot / "tools")) {
-        const auto p = (toolsPackageRoot / "tools").lexically_normal();
-        if (std::find(candidateRoots.begin(), candidateRoots.end(), p) == candidateRoots.end()) {
-            candidateRoots.push_back(p);
+    auto addCandidateRoot = [&](const std::filesystem::path& p) {
+        const auto normal = p.lexically_normal();
+        if (std::find(candidateRoots.begin(), candidateRoots.end(), normal) == candidateRoots.end()) {
+            candidateRoots.push_back(normal);
         }
-    }
-    if (std::filesystem::is_directory(applicationDirectory / "tools")) {
-        candidateRoots.push_back((applicationDirectory / "tools").lexically_normal());
-    }
-    if (std::filesystem::is_directory(applicationDirectory / "assets" / "tools")) {
-        const auto p = (applicationDirectory / "assets" / "tools").lexically_normal();
-        if (std::find(candidateRoots.begin(), candidateRoots.end(), p) == candidateRoots.end()) {
-            candidateRoots.push_back(p);
-        }
-    }
+    };
+    addCandidateRoot(toolsPackageRoot / "assets" / "tools");
+    addCandidateRoot(toolsPackageRoot / "tools");
+    addCandidateRoot(applicationDirectory / "tools");
+    addCandidateRoot(applicationDirectory / "assets" / "tools");
     registry.scanRoots(candidateRoots);
 
     registerReceiveTools(registry);
@@ -315,8 +307,16 @@ void AppController::Impl::refresh(bool rescan) {
             result->implementations.push_back({tool.id, {-3, "Python interpreter unavailable"}});
         return ToolStatus{};
     });
-    if (!accepted) { report(workbench::q(accepted.message)); return; }
-    refreshResult = std::move(result); refreshReconcile = rescan; setState(RuntimeState::Refreshing);
+    if (!accepted) {
+        refreshReconcile = false;
+        tools.setRegistry(registry);
+        changed(true);
+        report(workbench::q(accepted.message));
+        return;
+    }
+    refreshResult = std::move(result);
+    refreshReconcile = refreshReconcile || rescan;
+    setState(RuntimeState::Refreshing);
 }
 void AppController::Impl::refreshFinished() {
     auto result = std::move(refreshResult);
@@ -340,13 +340,8 @@ void AppController::Impl::rescanTools() {
     registry.scanRoots(registry.managedRoots());
     registerReceiveTools(registry);
     for (const auto& item : registry.diagnostics()) report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
-    try {
-        auto reconciled = ProjectStorage(registry).reconcile(editor.project());
-        storageDiagnostics(reconciled.diagnostics);
-        editor.replaceProject(std::move(reconciled.project));
-    } catch (const std::exception& error) { report(workbench::q(error.what())); }
-    tools.setRegistry(registry);
-    changed(true);
+    refreshReconcile = true;
+    refresh(false);
 }
 AppController::AppController(std::size_t workers, const QString& applicationDirectory, QObject* parent)
     : QObject(parent), impl_(std::make_unique<Impl>(this, workers, applicationDirectory)) {}
