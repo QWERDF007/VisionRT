@@ -21,7 +21,7 @@ outputs:
     const auto def = parseToolDefinitionYaml(yaml);
     assert(def.id == "external.test");
     assert(def.inputs.size() == 1);
-    assert(def.outputs.size() == 1);
+    assert(def.outputs.size() == 3);
     validateToolDefinition(def);
     std::cout << "[SDK Consumer] Successfully validated external tool definition: " << def.id << std::endl;
     return 0;
