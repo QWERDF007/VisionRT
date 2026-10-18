@@ -191,10 +191,13 @@ int main(int argc, char** argv) {
     assert(registry.definitions()[1].id == "test.other");
     assert(registry.availability("test.pass").state == ToolAvailability::Available);
 
+    std::vector<std::filesystem::path> invalidYamlPaths;
+    int invalidSeq = 0;
     const auto rejectDefinition = [&](YAML::Node yaml) {
-        const auto path = temporary.put("invalid/Image/Basic/tool.yaml", YAML::Dump(yaml));
+        const auto path = temporary.put("invalid/Image/Basic/tool_" + std::to_string(++invalidSeq) + ".yaml", YAML::Dump(yaml));
+        invalidYamlPaths.push_back(path);
         const auto message = rejects([&] { parseDefinition(path, false); });
-        assert(message.find("tool.yaml") != std::string::npos);
+        assert(message.find("tool_") != std::string::npos);
     };
     auto invalid = definition("bad.duplicate");
     invalid["inputs"].push_back(YAML::Clone(invalid["inputs"][0]));
@@ -241,7 +244,101 @@ int main(int argc, char** argv) {
     validateToolDefinition(directDef);
     rejects([&] { parseToolDefinitionYaml("unknown_top_field: 123"); });
 
-    // Validate CLI executable smoke test if present
+    // Direct C++ semantic negative tests on validateToolDefinition
+    {
+        ToolDefinition bad = directDef;
+        bad.id = "bad ID with spaces";
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.displayName = "";
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.version = "";
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.kind = static_cast<ToolKind>(99);
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.kind = ToolKind::PythonFunction;
+        bad.script = "";
+        bad.symbol = "run";
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.kind = ToolKind::PythonFunction;
+        bad.script = "tool.py";
+        bad.symbol = "";
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].minimum = PortValue{"wrong_type"};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].maximum = PortValue{"wrong_type"};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].step = PortValue{"wrong_type"};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].minimum = PortValue{std::int64_t{10}};
+        bad.inputs[2].maximum = PortValue{std::int64_t{5}};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].step = PortValue{std::int64_t{0}};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].step = PortValue{std::int64_t{-1}};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].defaultValue = PortValue{std::int64_t{20}};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].defaultValue = PortValue{std::int64_t{-5}};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].options = {PortValue{std::int64_t{1}}, PortValue{std::int64_t{2}}};
+        bad.inputs[2].defaultValue = PortValue{std::int64_t{4}};
+        rejects([&] { validateToolDefinition(bad); });
+
+        bad = directDef;
+        bad.inputs[2].options = {PortValue{std::int64_t{100}}}; // exceeds max=10
+        rejects([&] { validateToolDefinition(bad); });
+
+        // Float NaN and Inf in C++
+        ToolDefinition floatDef = directDef;
+        floatDef.inputs[2].type = {Type::Float};
+        floatDef.inputs[2].defaultValue = PortValue{std::numeric_limits<double>::quiet_NaN()};
+        rejects([&] { validateToolDefinition(floatDef); });
+
+        floatDef.inputs[2].defaultValue = PortValue{std::numeric_limits<double>::infinity()};
+        rejects([&] { validateToolDefinition(floatDef); });
+
+        floatDef.inputs[2].defaultValue = PortValue{1.0};
+        floatDef.inputs[2].minimum = PortValue{std::numeric_limits<double>::quiet_NaN()};
+        rejects([&] { validateToolDefinition(floatDef); });
+
+        floatDef.inputs[2].minimum = PortValue{0.0};
+        floatDef.inputs[2].maximum = PortValue{std::numeric_limits<double>::infinity()};
+        rejects([&] { validateToolDefinition(floatDef); });
+
+        floatDef.inputs[2].maximum = PortValue{10.0};
+        floatDef.inputs[2].step = PortValue{std::numeric_limits<double>::quiet_NaN()};
+        rejects([&] { validateToolDefinition(floatDef); });
+    }
+
+    // Validate CLI executable tests across valid definition and all negative corpus files
     std::filesystem::path validatorExe = std::filesystem::exists("bin/visionrt_validate_tool.exe")
         ? std::filesystem::path("bin/visionrt_validate_tool.exe")
         : (std::filesystem::exists("bin/visionrt_validate_tool") ? std::filesystem::path("bin/visionrt_validate_tool") : std::filesystem::path());
@@ -251,9 +348,12 @@ int main(int argc, char** argv) {
         const auto codeValid = std::system(validCommand.c_str());
         assert(codeValid == 0);
         const auto invalidFile = temporary.put("invalid/bad.yaml", "unknown_field: 123\n");
-        const auto invalidCommand = "\"\"" + validatorExe.string() + "\" \"" + std::filesystem::absolute(invalidFile).make_preferred().string() + "\"\"";
-        const auto codeInvalid = std::system(invalidCommand.c_str());
-        assert(codeInvalid != 0);
+        invalidYamlPaths.push_back(invalidFile);
+        for (const auto& path : invalidYamlPaths) {
+            const auto invalidCommand = "\"\"" + validatorExe.string() + "\" \"" + std::filesystem::absolute(path).make_preferred().string() + "\"\"";
+            const auto codeInvalid = std::system(invalidCommand.c_str());
+            assert(codeInvalid != 0);
+        }
     }
 
     TemporaryTools refreshTools;
