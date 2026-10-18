@@ -139,6 +139,15 @@ def target_architecture(build_dir: Path) -> str:
 
 def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
     """Prepare install directory safely according to marker rules."""
+    resolved = path.resolve()
+    repo_resolved = REPO_ROOT.resolve()
+    if resolved == repo_resolved:
+        raise RuntimeError(f"refusing to clean repository root: {path}")
+    if resolved in (repo_resolved / "src", repo_resolved / "tools", repo_resolved / "cmake", repo_resolved / "assets", repo_resolved / "docs"):
+        raise RuntimeError(f"refusing to clean repository source directory: {path}")
+    if resolved.parent == resolved:
+        raise RuntimeError(f"refusing to clean drive root: {path}")
+
     if not clean:
         path.mkdir(parents=True, exist_ok=True)
         return
@@ -255,34 +264,26 @@ def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path
     print(f"merging tools package from {tools_dir} into {install_dir / 'tools-package'}")
 
     target_pkg = install_dir / "tools-package"
+    if target_pkg.is_dir():
+        shutil.rmtree(target_pkg)
     target_pkg.mkdir(parents=True, exist_ok=True)
 
-    # Copy external package tree into tools-package
+    # Copy external package tree into tools-package (direct clean overwrite, no custom/stale protection)
     for item in tools_dir.iterdir():
         if item.name == "tools":
             target_tools = target_pkg / "tools"
             builtin_src = item / "builtin"
             if builtin_src.is_dir():
-                shutil.copytree(builtin_src, target_tools / "builtin", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+                shutil.copytree(builtin_src, target_tools / "builtin", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
             custom_src = item / "custom"
             if custom_src.is_dir():
                 target_custom = target_tools / "custom"
-                target_custom.mkdir(parents=True, exist_ok=True)
-                for root_dir, _, files in os.walk(custom_src):
-                    for file_name in files:
-                        if file_name.endswith((".pyc", ".pyo")) or file_name == "__pycache__":
-                            continue
-                        src_file = Path(root_dir) / file_name
-                        rel_path = src_file.relative_to(custom_src)
-                        dest_file = target_custom / rel_path
-                        if not dest_file.exists():
-                            dest_file.parent.mkdir(parents=True, exist_ok=True)
-                            copy_file(src_file, dest_file)
+                shutil.copytree(custom_src, target_custom, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
             for root_f in item.glob("*"):
                 if root_f.is_file():
                     copy_file(root_f, target_tools / root_f.name)
         elif item.is_dir():
-            shutil.copytree(item, target_pkg / item.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            shutil.copytree(item, target_pkg / item.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
         else:
             copy_file(item, target_pkg / item.name)
 
@@ -623,6 +624,100 @@ def is_reparse_point(path: Path) -> bool:
         return False
 
 
+def verify_tools_package(tools_pkg: Path, build_dir: Path | None = None) -> None:
+    """Verify external tools package using unified SDK validation and check mapped libraries."""
+    import yaml
+
+    # 1. Reject deprecated JSON/XML index files
+    deprecated_names = {"module_index.json", "module_index.xml", "tools.json", "tools.xml"}
+    for f in tools_pkg.rglob("*"):
+        if f.is_file():
+            low = f.name.lower()
+            if low in deprecated_names:
+                raise RuntimeError(f"tools package contains deprecated JSON/XML index: {f.relative_to(tools_pkg)}")
+
+    # 2. Check module_index.yml exists
+    index_file = tools_pkg / "module_index.yml"
+    if not index_file.is_file():
+        raise RuntimeError(f"tools package missing module_index.yml in {tools_pkg}")
+
+    # 3. Locate visionrt_validate_tool
+    validator = None
+    candidates = []
+    if build_dir:
+        candidates.extend([
+            build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+            build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+        ])
+    candidates.append(REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"))
+    for c in candidates:
+        if c and c.is_file():
+            validator = c
+            break
+    if not validator:
+        which_val = shutil.which("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool")
+        if which_val:
+            validator = Path(which_val)
+
+    if validator:
+        cmd = [str(validator), "--index", str(index_file)]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            err = res.stderr.strip() or res.stdout.strip()
+            raise RuntimeError(f"SDK index validation failed: {err}")
+
+    # 4. In Python, parse YAML to verify structure and mapped DLLs
+    try:
+        content = yaml.safe_load(index_file.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"module_index.yml syntax error: {exc}")
+
+    if not isinstance(content, dict):
+        raise RuntimeError("module_index.yml root must be a mapping")
+    allowed_keys = {"schema_version", "modules"}
+    unknown = set(content.keys()) - allowed_keys
+    if unknown:
+        raise RuntimeError(f"module_index.yml contains unknown keys: {', '.join(sorted(unknown))}")
+    if content.get("schema_version") != 1:
+        raise RuntimeError(f"module_index.yml schema_version must be 1, got {content.get('schema_version')}")
+    modules = content.get("modules")
+    if not isinstance(modules, list):
+        raise RuntimeError("module_index.yml 'modules' must be a list")
+
+    seen_names = set()
+    for mod in modules:
+        if not isinstance(mod, dict):
+            raise RuntimeError("module entry must be a dictionary")
+        mod_allowed = {"registry_name", "path"}
+        mod_unknown = set(mod.keys()) - mod_allowed
+        if mod_unknown:
+            raise RuntimeError(f"module entry contains unknown fields: {', '.join(sorted(mod_unknown))}")
+        name = mod.get("registry_name")
+        rel_path = mod.get("path")
+        if not name or not isinstance(name, str):
+            raise RuntimeError("module entry missing registry_name")
+        if name in seen_names:
+            raise RuntimeError(f"duplicate registry_name: {name}")
+        seen_names.add(name)
+        if not rel_path or not isinstance(rel_path, str):
+            raise RuntimeError(f"module '{name}' missing valid path")
+        target_dll = tools_pkg / rel_path
+        if not target_dll.is_file():
+            raise RuntimeError(f"module '{name}' mapped library file not found: {target_dll}")
+
+    # 5. Also validate tool declarations if validator is available
+    if validator and (tools_pkg / "tools").is_dir():
+        for yml in (tools_pkg / "tools").rglob("*.yaml"):
+            r = subprocess.run([str(validator), str(yml)], capture_output=True, text=True)
+            if r.returncode != 0:
+                raise RuntimeError(f"SDK tool declaration validation failed for {yml.name}: {r.stderr.strip() or r.stdout.strip()}")
+        for yml in (tools_pkg / "tools").rglob("*.yml"):
+            if yml.name != "module_index.yml":
+                r = subprocess.run([str(validator), str(yml)], capture_output=True, text=True)
+                if r.returncode != 0:
+                    raise RuntimeError(f"SDK tool declaration validation failed for {yml.name}: {r.stderr.strip() or r.stdout.strip()}")
+
+
 def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None = None) -> None:
     """Verify package completeness strictly according to RS-06 and RT-04."""
     required_files = [
@@ -673,6 +768,12 @@ def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None =
 
     if problems:
         raise RuntimeError("package verification failed: " + "; ".join(problems))
+
+    # Verify tools package if merged
+    tools_pkg_dir = install_dir / "tools-package"
+    if tools_pkg_dir.is_dir():
+        verify_tools_package(tools_pkg_dir, build_dir)
+        print("tools package verification passed successfully")
 
     count = sum(1 for p in install_dir.rglob("*") if p.is_file())
     print(f"package verification complete: {count} files")
@@ -735,6 +836,92 @@ def test_verify_package_negatives() -> None:
         except RuntimeError as e:
             assert "numpy" in str(e), f"Unexpected error: {e}"
         (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
+
+        # External Tools Package Negatives & Coverage
+        tools_pkg = root / "tools-package"
+        tools_pkg.mkdir(parents=True)
+        (tools_pkg / "bin").mkdir(parents=True)
+        (tools_pkg / "bin" / "plugin.dll").touch()
+        (tools_pkg / "module_index.yml").write_text(
+            "schema_version: 1\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+            encoding="utf-8"
+        )
+        # Verify valid tools package passes
+        verify_package(root, require_qt=False)
+
+        # Case 4: Deprecated JSON index file
+        (tools_pkg / "module_index.json").touch()
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when deprecated JSON index is present")
+        except RuntimeError as e:
+            assert "deprecated JSON/XML index" in str(e), f"Unexpected error: {e}"
+        (tools_pkg / "module_index.json").unlink()
+
+        # Case 5: Missing module_index.yml
+        (tools_pkg / "module_index.yml").unlink()
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when module_index.yml is missing")
+        except RuntimeError as e:
+            assert "missing module_index.yml" in str(e), f"Unexpected error: {e}"
+
+        # Case 6: Unknown field in module_index.yml
+        (tools_pkg / "module_index.yml").write_text(
+            "schema_version: 1\nunknown_key: bad\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+            encoding="utf-8"
+        )
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail on unknown field in module_index.yml")
+        except RuntimeError as e:
+            assert "unknown" in str(e).lower(), f"Unexpected error: {e}"
+
+        # Case 7: Invalid schema_version in module_index.yml
+        (tools_pkg / "module_index.yml").write_text(
+            "schema_version: 2\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+            encoding="utf-8"
+        )
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail on invalid schema_version in module_index.yml")
+        except RuntimeError as e:
+            assert "schema_version" in str(e).lower(), f"Unexpected error: {e}"
+
+        # Case 8: Missing mapped DLL
+        (tools_pkg / "module_index.yml").write_text(
+            "schema_version: 1\nmodules:\n  - registry_name: test.plugin\n    path: bin/plugin.dll\n",
+            encoding="utf-8"
+        )
+        (tools_pkg / "bin" / "plugin.dll").unlink()
+        try:
+            verify_package(root, require_qt=False)
+            raise AssertionError("verify_package did not fail when mapped library is missing")
+        except RuntimeError as e:
+            assert "mapped library" in str(e).lower(), f"Unexpected error: {e}"
+        (tools_pkg / "bin" / "plugin.dll").touch()
+
+        # Case 9: Clean overwrite test
+        tools_src = root / "tools_source"
+        tools_src.mkdir()
+        (tools_src / "tools" / "custom").mkdir(parents=True)
+        (tools_src / "tools" / "custom" / "new_tool.txt").write_text("NEW", encoding="utf-8")
+
+        # Pre-populate tools-package with an old file that should disappear
+        (tools_pkg / "tools" / "custom").mkdir(parents=True, exist_ok=True)
+        (tools_pkg / "tools" / "custom" / "old_stale_tool.txt").write_text("OLD", encoding="utf-8")
+        (tools_pkg / "tools" / "custom" / "new_tool.txt").write_text("OLD_VERSION", encoding="utf-8")
+
+        merge_tools_package(root, tools_src)
+        assert not (tools_pkg / "tools" / "custom" / "old_stale_tool.txt").exists(), "Old stale file did not disappear after merge!"
+        assert (tools_pkg / "tools" / "custom" / "new_tool.txt").read_text(encoding="utf-8") == "NEW", "File was not cleanly overwritten with NEW content!"
+
+        # Case 10: Refuse cleaning repository root / source dirs
+        try:
+            clear_install_directory(REPO_ROOT, clean=True, force=True)
+            raise AssertionError("clear_install_directory did not fail when pointing to REPO_ROOT")
+        except RuntimeError as e:
+            assert "refusing to clean" in str(e), f"Unexpected error: {e}"
 
         print("all RT-04 negative verification tests passed successfully!")
 

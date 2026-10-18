@@ -10,7 +10,7 @@
 1. **架构对称性**：`VisionTools` 仓库目录架构完全对齐 `VisionRT` 标准工业级工程布局（`3rdparty`、`cmake`、`docs`、`src`、`tests`、`tools`）；
 2. **单一真相源（SSOT）**：算子元数据清单作为唯一契约源，UI 控件自适应呈现、DAG 连线拓扑校验、算子参数映射皆由元数据自动驱动；
 3. **受控 C++ ABI 强稳定性**：模块间边界严格通过 `ModuleApi` 导出规范与 `IToolInstance` 纯虚生命周期接口隔离，数据模型使用统一 SDK 强类型值系统（`ToolStatus`、`Values`、`ToolResult`），杜绝裸 `std::any`、魔术数字与无类型转型；
-4. **零拷贝高性能流转**：C++ 与 Python 算子均原生支持与 `VisionRT` 共享图像（OpenCV `cv::Mat`）与数值张量（NumPy `ndarray`）缓冲区，杜绝内存深拷贝与冗余格式转换；
+4. **高性能受控流转**：C++ 节点间数据流转严格零拷贝共享（`ImageBatch`/`NumericArray` 引用计数共享所有权）；Python 边界输入只读零拷贝包装（NumPy `ndarray`），Python 叶子输出经受控单次规整复制（Single-Copy Leaf Output）进入 C++ 生命周期，兼顾高性能与所有权隔离；
 5. **领域级模块化**：按算法领域划分子工程与动态库（如 `visiontools_preprocess.dll`、`visiontools_measure.dll`），避免 200+ 碎片 DLL 的系统调用灾难，兼顾增量编译效率与包管理整洁度。
 
 ---
@@ -31,13 +31,13 @@
 
 ---
 
-## 三、 VisionTools 仓库目录架构设计
+## 三、 VisionTools 仓库工程结构与 SDK 依赖
 
-`VisionTools` 与 `VisionRT` 保持完全统一的工程组织规范：
+`VisionTools` 与 `VisionRT` 保持完全统一的工程组织规范，且**直接依赖 VisionRT 安装导出的 `VisionRT::ToolSDK`，绝不自建或维护第二套 SDK 头文件**：
 
 ```
 F:\Projects\VisionTools\
-├── 3rdparty/                 # 第三方开发依赖 (yaml-cpp, pybind11, Eigen, faiss 等)
+├── 3rdparty/                 # 第三方开发依赖 (yaml-cpp, pybind11, Eigen 等)
 ├── cmake/                    # 模块化 CMake 构建逻辑 (与 VisionRT 统一)
 │   ├── ConfigCompiler.cmake  # MSVC C++20 统一编译器配置 (/utf-8, /permissive-, /W4)
 │   ├── ConfigVersion.cmake   # 语义化版本号管理
@@ -48,12 +48,7 @@ F:\Projects\VisionTools\
 │   ├── AddTest.cmake        # 契约测试自动化注册
 │   └── PrintConfig.cmake    # 构建环境配置摘要
 ├── docs/                     # 架构文档、算子开发规范与开发手册
-├── src/                      # 算子库核心源码
-│   ├── sdk/                 # 算子 SDK 与跨 DLL 稳定 C-ABI 抽象层
-│   │   ├── ToolContext.h    # 强类型数据输入输出上下文
-│   │   ├── IToolInstance.h  # 算子生命周期纯虚接口
-│   │   ├── ToolExport.h     # 动态库导出/导入宏
-│   │   └── Types.h          # 跨模块通用几何基元与状态枚举
+├── src/                      # 算子库核心源码（直接 include <visionrt/sdk/Tool.h> 等）
 │   ├── preprocess/          # 预处理领域模块 (滤波、二值化、形态学、色彩空间)
 │   ├── matching/            # 匹配领域模块 (ShapeMatch 形状匹配、灰度模板匹配)
 │   ├── measure/             # 测量与几何 (亚像素找边/圆、拟合、几何计算、九点标定)
@@ -227,8 +222,6 @@ class ToolInstance:
 schema_version: 1
 tool_id: visiontools.preprocess.adaptive_binary
 display_name: 自适应二值化
-category: 预处理
-subcategory: 色彩转换
 version: 1.0.0
 kind: cpp_class
 entry:

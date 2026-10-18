@@ -73,22 +73,19 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
     : q(owner), applicationDirectory(workbench::localPath(directory)), tools(owner), outputs(owner), converter(owner) {
     pluginLoader = std::make_shared<PluginLoader>();
     std::filesystem::path toolsPackageRoot;
-    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yml") ||
-        std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yaml")) {
+    std::filesystem::path indexFile;
+    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yml")) {
         toolsPackageRoot = (applicationDirectory / "tools-package").lexically_normal();
-    } else if (std::filesystem::exists(applicationDirectory / "module_index.yml") ||
-               std::filesystem::exists(applicationDirectory / "module_index.yaml")) {
+        indexFile = toolsPackageRoot / "module_index.yml";
+    } else if (std::filesystem::exists(applicationDirectory / "module_index.yml")) {
         toolsPackageRoot = applicationDirectory;
+        indexFile = toolsPackageRoot / "module_index.yml";
     } else {
         toolsPackageRoot = (applicationDirectory / "tools").lexically_normal();
     }
     pluginLoader->setBaseDirectory(toolsPackageRoot);
 
-    auto indexFile = toolsPackageRoot / "module_index.yml";
-    if (!std::filesystem::exists(indexFile)) {
-        indexFile = toolsPackageRoot / "module_index.yaml";
-    }
-    if (std::filesystem::exists(indexFile)) {
+    if (!indexFile.empty() && std::filesystem::exists(indexFile)) {
         pluginLoader->loadIndexFile(indexFile);
     }
     for (const auto& diag : pluginLoader->diagnostics()) {
@@ -365,6 +362,7 @@ QString AppController::aboutText() const {
 }
 QAbstractItemModel* AppController::toolModel() const { return &impl_->tools; }
 QAbstractItemModel* AppController::outputModel() const { return &impl_->outputs; }
+PythonRuntime* AppController::pythonRuntime() const { return impl_ ? impl_->python.get() : nullptr; }
 QVariantList AppController::flows() const {
     QVariantList result;
     for (const auto& flow : impl_->editor.project().flows)

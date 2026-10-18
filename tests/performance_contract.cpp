@@ -62,6 +62,9 @@ namespace {
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
+void require(bool condition, const std::string& message) {
+    if (!condition) throw std::runtime_error(message);
+}
 
 struct MemoryProbe {
     bool supported = false;
@@ -418,10 +421,14 @@ void test10x4KZeroCopyAndPythonPassthrough() {
         DisplayConverter converter;
         std::atomic<bool> converted{false};
         std::atomic<int> convertedBatchCount{0};
+        std::vector<quint64> completedRequestIds;
         std::size_t maxInFlight = 0;
         std::size_t maxPending = 0;
 
         QObject::connect(&converter, &DisplayConverter::batchConverted, [&](const std::vector<DisplayFrame>& frames) {
+            if (!frames.empty()) {
+                completedRequestIds.push_back(frames.front().requestId);
+            }
             convertedBatchCount = static_cast<int>(frames.size());
             converted = true;
         });
@@ -446,14 +453,26 @@ void test10x4KZeroCopyAndPythonPassthrough() {
         require(maxPending == 1, "Scheduler pending queue did not reach high-water mark of 1 under saturation");
 
         const auto deadline = std::chrono::steady_clock::now() + 5000ms;
-        while (!converted && std::chrono::steady_clock::now() < deadline) {
+        while ((converter.isBusy() || converter.hasPending() || !converted) && std::chrono::steady_clock::now() < deadline) {
             QCoreApplication::processEvents();
             std::this_thread::sleep_for(1ms);
         }
         require(converted, "Display conversion timed out");
         require(convertedBatchCount == kImageCount, "Display conversion batch count mismatch");
+
+        // HS5-04 Spec verification: final displayed frame is the latest request (5), and expired requests (2, 3, 4) were replaced and not committed
+        require(!completedRequestIds.empty(), "No completed requests recorded");
+        require(completedRequestIds.back() == 5, "Final displayed frame must be the latest request (reqId 5)");
+        require(std::find(completedRequestIds.begin(), completedRequestIds.end(), 2) == completedRequestIds.end(),
+                "Expired request 2 must not be submitted");
+        require(std::find(completedRequestIds.begin(), completedRequestIds.end(), 3) == completedRequestIds.end(),
+                "Expired request 3 must not be submitted");
+        require(std::find(completedRequestIds.begin(), completedRequestIds.end(), 4) == completedRequestIds.end(),
+                "Expired request 4 must not be submitted");
+
         std::cout << "  -> Display conversion verified: in-flight high-water=" << maxInFlight
-                  << " <= 1, pending high-water=" << maxPending << " <= 1 [PASS]\n";
+                  << " <= 1, pending high-water=" << maxPending << " <= 1, finalReq=" << completedRequestIds.back()
+                  << " [PASS]\n";
     }
 
     // Part C: Python Passthrough & Single-Copy Leaf Output Verification
@@ -559,12 +578,12 @@ void test10x4KZeroCopyAndPythonPassthrough() {
 // -------------------------------------------------------------
 // 3. 循环压力测试与内存/队列稳定性监测 (HS2-05 / RS-07 / RT-07)
 // -------------------------------------------------------------
-void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
+void testMemoryAndQueueStabilityInLoop(const std::filesystem::path& evidenceDir, int maxRounds, int maxSeconds, PythonRuntime* pyRuntime) {
     std::cout << "[Test 3] Continuous Real-Graph Loop Execution & Memory Stability ("
               << (maxSeconds > 0 ? (std::to_string(maxSeconds) + "s limit / ") : "")
               << maxRounds << " rounds)...\n";
 
-    RuntimeEngine engine(2);
+    auto engine = std::make_unique<RuntimeEngine>(2);
     ToolRegistry registry;
 
     ToolDefinition genDef;
@@ -654,35 +673,58 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     n2.inputs["in_val"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "val"}};
     n2.inputs["in_image"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "image"}};
     flow.nodes.push_back(n2);
+
+    QTemporaryDir tempPyDir;
+    if (pyRuntime && tempPyDir.isValid()) {
+        const auto scriptPath = std::filesystem::path(tempPyDir.path().toStdString()) / "loop_tool.py";
+        std::ofstream ofs(scriptPath);
+        ofs << "def execute(inputs):\n"
+            << "    v = inputs.get('in_val', 0)\n"
+            << "    return {'__status_code': 0, '__status_message': '', 'out_val': v + 1}\n";
+        ofs.close();
+
+        ToolDefinition pyToolDef;
+        pyToolDef.id = "perf.py_loop";
+        pyToolDef.displayName = "Loop Python Tool";
+        pyToolDef.version = "1.0.0";
+        pyToolDef.kind = ToolKind::PythonFunction;
+        pyToolDef.script = scriptPath.string();
+        pyToolDef.definitionPath = scriptPath.parent_path() / "loop_tool.yaml";
+        pyToolDef.symbol = "execute";
+        pyToolDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
+        pyToolDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
+
+        auto st = pyRuntime->refresh(std::vector<ToolDefinition>{pyToolDef});
+        if (!st.empty() && st[0].status.code == 0) {
+            registry.addDefinition(pyToolDef);
+            registry.setPythonImplementation(pyToolDef.id, pyRuntime->factory(pyToolDef));
+
+            NodeDefinition n3;
+            n3.id = 3;
+            n3.toolId = pyToolDef.id;
+            n3.toolNameSnapshot = pyToolDef.displayName;
+            n3.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
+            n3.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
+            n3.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
+            n3.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+            n3.inputs["in_val"] = {BindingMode::Upstream, Missing{}, SourcePort{2, "out_val"}};
+            flow.nodes.push_back(n3);
+        }
+    }
     project.flows.push_back(flow);
 
-    std::vector<std::filesystem::path> evidencePaths;
-    evidencePaths.push_back("build/evidence/memory_curve.csv");
-#ifdef VISIONRT_SOURCE_DIR
-    evidencePaths.push_back(std::filesystem::path(VISIONRT_SOURCE_DIR) / "docs" / "evidence" / "memory_curve.csv");
-#endif
-    if (std::filesystem::exists("docs")) {
-        evidencePaths.push_back("docs/evidence/memory_curve.csv");
+    const auto csvPath = evidenceDir / "memory_curve.csv";
+    if (csvPath.has_parent_path()) {
+        std::filesystem::create_directories(csvPath.parent_path());
     }
-
-    std::vector<std::shared_ptr<std::ofstream>> curveStreams;
-    for (const auto& p : evidencePaths) {
-        if (p.has_parent_path()) {
-            std::filesystem::create_directories(p.parent_path());
-        }
-        auto stream = std::make_shared<std::ofstream>(p);
-        if (stream->is_open()) {
-            *stream << "iteration,elapsed_ms,rss_supported,rss_kb,vram_supported,vram_mb,latency_ms\n";
-            curveStreams.push_back(stream);
-        }
-    }
-    require(!curveStreams.empty(), "Failed to open any memory curve CSV for writing");
+    std::ofstream curveStream(csvPath);
+    require(curveStream.is_open(), "Failed to open memory curve CSV for writing: " + csvPath.string());
+    curveStream << "iteration,elapsed_ms,rss_supported,rss_kb,vram_supported,vram_mb,latency_ms\n";
 
     auto writeCurveLine = [&](const std::string& line) {
-        for (auto& s : curveStreams) {
-            *s << line;
-            s->flush();
-        }
+        curveStream << line;
+        curveStream.flush();
+        require(!curveStream.bad(), "CSV stream error during write");
     };
 
     auto initialProbe = getWorkingSetMemory();
@@ -696,8 +738,8 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
 
     for (int r = 0; r < maxRounds; ++r) {
         auto t0 = std::chrono::high_resolution_clock::now();
-        require(engine.start(project, registry, RunMode::Once).code == 0, "round start failed");
-        waitCompletion(engine);
+        require(engine->start(project, registry, RunMode::Once).code == 0, "round start failed");
+        waitCompletion(*engine);
         auto t1 = std::chrono::high_resolution_clock::now();
         double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         roundLatencies.push_back(ms);
@@ -739,8 +781,8 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     double p50 = calculatePercentile(roundLatencies, 50.0);
     double p95 = calculatePercentile(roundLatencies, 95.0);
 
-    engine.requestStop();
-    require(engine.requestReset().code == 0, "requestReset failed");
+    engine->requestStop();
+    require(engine->requestReset().code == 0, "requestReset failed");
     auto probeAfterReset = getWorkingSetMemory();
     auto vramAfterReset = queryGpuVram();
 
@@ -754,11 +796,14 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
                << (probeAfterReset.supported ? ("1," + std::to_string(probeAfterReset.workingSetKB)) : "0,NA") << ","
                << (vramAfterReset.supported ? ("1," + std::to_string(vramAfterReset.vramMB)) : "0,NA") << ",0\n";
     writeCurveLine(finalReset.str());
-    for (auto& s : curveStreams) {
-        s->close();
-        require(!s->bad(), "CSV stream error during close");
+    curveStream.close();
+    require(!curveStream.bad() && !curveStream.fail(), "CSV stream error during close of memory_curve.csv");
+    std::cout << "  -> Raw memory curve persisted to " << csvPath.string() << " [PASS]\n";
+
+    engine.reset();
+    if (pyRuntime) {
+        pyRuntime->refresh({});
     }
-    std::cout << "  -> Raw memory curve persisted to " << evidencePaths[0].string() << " [PASS]\n";
 
     if (memAtSteady > 0 && probeBeforeReset.supported) {
         long long steadyDrift = static_cast<long long>(probeBeforeReset.workingSetKB) - static_cast<long long>(memAtSteady);
@@ -767,12 +812,156 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
 }
 
 // -------------------------------------------------------------
+// 3.5 真实 Python 耗时阶段划分与失败隔离 (HS5-04 / item 5)
+// -------------------------------------------------------------
+void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime& pyRuntime) {
+    std::cout << "[Test 3.5] Real Python Timing Phases & Failure Isolation (HS5-04 Spec)...\n";
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "Failed to create temp directory for Python timing test");
+    const auto tempPath = std::filesystem::path(tempDir.path().toStdString());
+
+    const auto scriptPath = tempPath / "timing_test.py";
+    {
+        std::ofstream ofs(scriptPath);
+        ofs << "def execute(inputs):\n"
+            << "    val = inputs.get('val', 0)\n"
+            << "    if val == 666:\n"
+            << "        raise RuntimeError('simulated python execution failure')\n"
+            << "    if val == 777:\n"
+            << "        return {'__status_code': 0, '__status_message': '', 'out': 'wrong_type_string'}\n"
+            << "    return {'__status_code': 0, '__status_message': '', 'out': val * 2}\n";
+        ofs.close();
+    }
+
+    ToolDefinition pyDef;
+    pyDef.id = "perf.py_timing";
+    pyDef.displayName = "Python Timing Test Tool";
+    pyDef.version = "1.0.0";
+    pyDef.kind = ToolKind::PythonFunction;
+    pyDef.script = scriptPath.string();
+    pyDef.definitionPath = tempPath / "timing_test.yaml";
+    pyDef.symbol = "execute";
+    pyDef.inputs.push_back({"val", "val", {Type::Int}});
+    pyDef.outputs.push_back({"out", "out", {Type::Int}});
+
+    auto statuses = pyRuntime.refresh(std::vector<ToolDefinition>{pyDef});
+    require(!statuses.empty() && statuses[0].status.code == 0, "Python tool refresh failed");
+
+    ToolRegistry registry;
+    registry.addDefinition(pyDef);
+    registry.setPythonImplementation(pyDef.id, pyRuntime.factory(pyDef));
+
+    ProjectDefinition project;
+    FlowDefinition flow;
+    flow.id = "timing_flow";
+    flow.name = "timing_flow";
+    flow.runSelected = true;
+
+    NodeDefinition n;
+    n.id = 1;
+    n.toolId = pyDef.id;
+    n.toolNameSnapshot = pyDef.displayName;
+    n.signatures.inputs.emplace("val", TypeSpec{Type::Int});
+    n.signatures.outputs.emplace("out", TypeSpec{Type::Int});
+    n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
+    n.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+
+    {
+        auto engine = std::make_unique<RuntimeEngine>(1);
+
+        // Round 1: Success
+        n.inputs["val"] = {BindingMode::Literal, std::int64_t{10}, std::nullopt};
+        flow.nodes = {n};
+        project.flows = {flow};
+
+        require(engine->start(project, registry, RunMode::Once).code == 0, "Round 1 start failed");
+        auto u1 = waitCompletion(*engine);
+        require(u1.nodes.size() == 1 && u1.nodes[0].snapshot != nullptr, "Round 1 snapshot missing");
+        const auto& s1 = *u1.nodes[0].snapshot;
+        require(s1.status.code == 0, "Round 1 status must be 0");
+        require(std::get<std::int64_t>(s1.outputs.at("out")) == 20, "Round 1 output value mismatch");
+        require(s1.timing.pythonCallMs > 0.0, "Round 1 pythonCallMs must be > 0");
+        require(s1.timing.adapterExecuteMs > 0.0, "Round 1 adapterExecuteMs must be > 0");
+        std::cout << "  -> Round 1 Success: pythonCallMs=" << s1.timing.pythonCallMs
+                  << " ms, adapterExecuteMs=" << s1.timing.adapterExecuteMs << " ms [PASS]\n";
+
+        // Round 2: Prepare failure (Wrong input type: float 3.14 where int is expected)
+        // HS5-04 requirement: All execution subphases must be strictly 0; no history contamination.
+        n.inputs["val"] = {BindingMode::Literal, 3.14, std::nullopt};
+        flow.nodes = {n};
+        project.flows = {flow};
+
+        require(engine->start(project, registry, RunMode::Once).code == 0, "Round 2 start failed");
+        auto u2 = waitCompletion(*engine);
+        require(u2.nodes.size() == 1 && u2.nodes[0].snapshot != nullptr, "Round 2 snapshot missing");
+        const auto& s2 = *u2.nodes[0].snapshot;
+        require(s2.status.code < 0, "Round 2 must fail in prepare");
+        require(isMissing(s2.outputs.at("out")), "Round 2 failed outputs must be Missing");
+        require(s2.timing.executeMs == 0.0, "Round 2 executeMs must be strictly 0");
+        require(s2.timing.adapterExecuteMs == 0.0, "Round 2 adapterExecuteMs must be strictly 0");
+        require(s2.timing.waitGilMs == 0.0, "Round 2 waitGilMs must be strictly 0");
+        require(s2.timing.pythonInputMs == 0.0, "Round 2 pythonInputMs must be strictly 0");
+        require(s2.timing.pythonCallMs == 0.0, "Round 2 pythonCallMs must be strictly 0");
+        require(s2.timing.pythonOutputMs == 0.0, "Round 2 pythonOutputMs must be strictly 0");
+        std::cout << "  -> Round 2 Prepare Failure Isolation: all execution subphases == 0.0 ms [PASS]\n";
+
+        // Round 3: Python exception (val == 666 raises RuntimeError)
+        // HS5-04 requirement: Retains current round's error timing, no history pollution.
+        n.inputs["val"] = {BindingMode::Literal, std::int64_t{666}, std::nullopt};
+        flow.nodes = {n};
+        project.flows = {flow};
+
+        require(engine->start(project, registry, RunMode::Once).code == 0, "Round 3 start failed");
+        auto u3 = waitCompletion(*engine);
+        require(u3.nodes.size() == 1 && u3.nodes[0].snapshot != nullptr, "Round 3 snapshot missing");
+        const auto& s3 = *u3.nodes[0].snapshot;
+        require(s3.status.code < 0, "Round 3 must fail with exception");
+        require(s3.status.message.find("simulated python execution failure") != std::string::npos,
+                "Round 3 message mismatch");
+        require(isMissing(s3.outputs.at("out")), "Round 3 output must be Missing");
+        require(s3.timing.pythonCallMs > 0.0, "Round 3 pythonCallMs must retain real error timing");
+        require(s3.timing.adapterExecuteMs > 0.0, "Round 3 adapterExecuteMs must be > 0");
+        std::cout << "  -> Round 3 Exception Timing: pythonCallMs=" << s3.timing.pythonCallMs
+                  << " ms retained actual error round timing [PASS]\n";
+
+        // Round 4: Output conversion error (val == 777 returns string instead of int)
+        // HS5-04 requirement: Retains pythonOutputMs timing, no history pollution.
+        n.inputs["val"] = {BindingMode::Literal, std::int64_t{777}, std::nullopt};
+        flow.nodes = {n};
+        project.flows = {flow};
+
+        require(engine->start(project, registry, RunMode::Once).code == 0, "Round 4 start failed");
+        auto u4 = waitCompletion(*engine);
+        require(u4.nodes.size() == 1 && u4.nodes[0].snapshot != nullptr, "Round 4 snapshot missing");
+        const auto& s4 = *u4.nodes[0].snapshot;
+        require(s4.status.code < 0, "Round 4 must fail with output conversion error");
+        require(isMissing(s4.outputs.at("out")), "Round 4 output must be Missing");
+        require(s4.timing.pythonCallMs > 0.0, "Round 4 pythonCallMs must be > 0");
+        require(s4.timing.pythonOutputMs > 0.0, "Round 4 pythonOutputMs must retain actual conversion error timing");
+        std::cout << "  -> Round 4 Output Conversion Error Timing: pythonOutputMs=" << s4.timing.pythonOutputMs
+                  << " ms retained actual conversion timing [PASS]\n";
+
+        engine->requestStop();
+        engine.reset();
+    }
+    pyRuntime.refresh({});
+}
+
+// -------------------------------------------------------------
 // 4. GUI 事件到对应帧提交延迟 (HS2-05 / frameSwapped: p95 <= 100ms)
 // -------------------------------------------------------------
-void testGuiEventToPresentationLatency(AppController& app) {
+void testGuiEventToPresentationLatency(AppController& app, const std::filesystem::path& evidenceDir) {
     std::cout << "[Test 4] Product GUI Event-to-Frame-Submission Latency (Real Product UI & frameSwapped)...\n";
     std::cout << "  -> System hardware: " << std::thread::hardware_concurrency() << " logical threads, "
               << "VRAM: " << queryGpuVram().report << "\n";
+
+    const auto guiCsvPath = evidenceDir / "gui_events.csv";
+    if (guiCsvPath.has_parent_path()) {
+        std::filesystem::create_directories(guiCsvPath.parent_path());
+    }
+    std::ofstream guiCsv(guiCsvPath);
+    require(guiCsv.is_open(), "Failed to open gui_events.csv for writing: " + guiCsvPath.string());
+    guiCsv << "event_id,timestamp_ms,duration_ms,synced,submitted,timeout,dropped\n";
 
     QQuickStyle::setStyle("Basic");
     for (int i = 0; i < 50 && app.busy(); ++i) {
@@ -831,6 +1020,7 @@ void testGuiEventToPresentationLatency(AppController& app) {
     std::vector<double> eventLatencies;
     eventLatencies.reserve(kSamples);
     int unswappedCount = 0;
+    const auto eventStart = std::chrono::steady_clock::now();
 
     for (int i = 0; i < kSamples; ++i) {
         const int eventId = i + 1;
@@ -869,7 +1059,21 @@ void testGuiEventToPresentationLatency(AppController& app) {
             unswappedCount++;
         }
         eventLatencies.push_back(ms);
+
+        const double timestampMs = std::chrono::duration<double, std::milli>(t0 - eventStart).count();
+        const int syncedVal = synced ? 1 : 0;
+        const int submittedVal = frameSubmitted ? 1 : 0;
+        const int timeoutVal = frameSubmitted ? 0 : 1;
+        const int droppedVal = 0;
+        guiCsv << eventId << "," << timestampMs << "," << ms << ","
+               << syncedVal << "," << submittedVal << "," << timeoutVal << "," << droppedVal << "\n";
+        guiCsv.flush();
+        require(!guiCsv.bad(), "Error writing to gui_events.csv");
     }
+
+    guiCsv.close();
+    require(!guiCsv.bad() && !guiCsv.fail(), "CSV stream error during close of gui_events.csv");
+    std::cout << "  -> GUI event log persisted to " << guiCsvPath.string() << " [PASS]\n";
 
     require(unswappedCount == 0, "Frames timed out or unswapped during GUI event test");
 
@@ -936,6 +1140,7 @@ int main(int argc, char** argv) {
 
     int maxRounds = 50;
     int maxSeconds = 0;
+    std::filesystem::path evidenceDir = "build/evidence";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -945,6 +1150,10 @@ int main(int argc, char** argv) {
         } else if (arg.rfind("--duration=", 0) == 0) {
             maxSeconds = std::stoi(arg.substr(11));
             maxRounds = 1000000;
+        } else if (arg == "--evidence-dir" && i + 1 < argc) {
+            evidenceDir = argv[++i];
+        } else if (arg.rfind("--evidence-dir=", 0) == 0) {
+            evidenceDir = arg.substr(15);
         }
     }
     const char* envDuration = std::getenv("VISIONRT_PERF_DURATION");
@@ -953,11 +1162,16 @@ int main(int argc, char** argv) {
         maxRounds = 1000000;
     }
 
+    std::filesystem::create_directories(evidenceDir);
+
     try {
         test200NodesExecution();
         test10x4KZeroCopyAndPythonPassthrough();
-        testMemoryAndQueueStabilityInLoop(maxRounds, maxSeconds);
-        testGuiEventToPresentationLatency(app);
+        if (app.pythonRuntime()) {
+            testRealPythonTimingPhasesAndFailureIsolation(*app.pythonRuntime());
+        }
+        testMemoryAndQueueStabilityInLoop(evidenceDir, maxRounds, maxSeconds, app.pythonRuntime());
+        testGuiEventToPresentationLatency(app, evidenceDir);
         testWorkbenchBrowsingLatency();
         std::cout << "\n>>> ALL RT-07 PERFORMANCE CONTRACT TESTS PASSED <<<\n";
         return 0;

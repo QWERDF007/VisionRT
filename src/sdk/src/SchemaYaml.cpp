@@ -202,4 +202,92 @@ void validateToolYaml(const std::string& yamlContent,
     parseToolDefinitionYaml(yamlContent, definitionPath, builtin);
 }
 
+namespace {
+
+ModuleIndex parseModuleIndexNode(const YAML::Node& node, const std::filesystem::path& path = {}) {
+    if (!node.IsMap()) throw ContractError("Module index YAML root must be a mapping");
+    fields(node, {"schema_version", "modules"}, "module index root");
+
+    if (!node["schema_version"]) throw ContractError("Missing required field 'schema_version'");
+    if (!node["schema_version"].IsScalar()) throw ContractError("schema_version must be a scalar integer");
+    int version = 0;
+    try {
+        version = node["schema_version"].as<int>();
+    } catch (...) {
+        throw ContractError("schema_version must be an integer");
+    }
+    if (version != 1) {
+        throw ContractError("schema_version must be 1, got: " + std::to_string(version));
+    }
+
+    if (!node["modules"]) throw ContractError("Missing required field 'modules'");
+    if (!node["modules"].IsSequence()) throw ContractError("modules must be a sequence");
+
+    ModuleIndex result;
+    std::set<std::string> seenNames;
+
+    for (std::size_t i = 0; i < node["modules"].size(); ++i) {
+        const auto& item = node["modules"][i];
+        if (!item.IsMap()) throw ContractError("Module entry at index " + std::to_string(i) + " must be a mapping");
+        fields(item, {"registry_name", "path"}, "module entry at index " + std::to_string(i));
+
+        if (!item["registry_name"]) throw ContractError("Module entry missing registry_name at index " + std::to_string(i));
+        const auto regName = text(item["registry_name"], "registry_name", true);
+        if (regName.empty()) throw ContractError("registry_name must not be empty at index " + std::to_string(i));
+        if (seenNames.contains(regName)) {
+            throw ContractError("Duplicate registry_name in module index: " + regName);
+        }
+        seenNames.insert(regName);
+
+        if (!item["path"]) throw ContractError("Module entry '" + regName + "' missing path");
+        const auto relPathStr = text(item["path"], "path", true);
+        if (relPathStr.empty()) throw ContractError("path must not be empty for module: " + regName);
+
+        const auto relPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(relPathStr.data()), relPathStr.size()));
+        if (relPath.is_absolute() || relPath.has_root_name()) {
+            throw ContractError("Module path must be relative: " + relPathStr);
+        }
+        const auto norm = relPath.lexically_normal();
+        if (!norm.empty() && norm.begin()->string() == "..") {
+            throw ContractError("Module path escapes root directory: " + relPathStr);
+        }
+
+        result.push_back(ModuleIndexItem{regName, relPathStr});
+    }
+
+    return result;
+}
+
+} // namespace
+
+ModuleIndex parseModuleIndexYaml(const std::string& yamlContent) {
+    YAML::Node node;
+    try {
+        node = YAML::Load(yamlContent);
+    } catch (const std::exception& error) {
+        throw ContractError("Invalid YAML: " + std::string(error.what()));
+    }
+    return parseModuleIndexNode(node);
+}
+
+ModuleIndex parseModuleIndexFile(const std::filesystem::path& path) {
+    YAML::Node node;
+    try {
+        std::ifstream input(path, std::ios::binary);
+        if (!input) throw ContractError("Cannot open module index file: " + pathText(path));
+        node = YAML::Load(input);
+    } catch (const std::exception& error) {
+        throw ContractError(pathText(path) + ": " + error.what());
+    }
+    return parseModuleIndexNode(node, path);
+}
+
+void validateModuleIndexYaml(const std::string& yamlContent) {
+    parseModuleIndexYaml(yamlContent);
+}
+
+void validateModuleIndexFile(const std::filesystem::path& path) {
+    parseModuleIndexFile(path);
+}
+
 } // namespace visionrt

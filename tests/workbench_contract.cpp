@@ -186,6 +186,8 @@ void mainQmlContract(double scale) {
             "modules:\n"
             "  - registry_name: test.plugin.counter\n"
             "    path: bin/test_plugin_module.dll\n"
+            "  - registry_name: test.plugin.sleep\n"
+            "    path: bin/test_plugin_module.dll\n"
             "  - registry_name: test.plugin.fail_init\n"
             "    path: bin/test_plugin_module.dll\n"
         );
@@ -193,6 +195,23 @@ void mainQmlContract(double scale) {
     }
 
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/Plugin/Basic");
+    QFile sleepYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/sleep.yaml");
+    if (sleepYaml.open(QIODevice::WriteOnly)) {
+        sleepYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.plugin.sleep\n"
+            "display_name: Plugin Sleep\n"
+            "version: 1.0.0\n"
+            "kind: cpp_class\n"
+            "entry: {registry_name: test.plugin.sleep}\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "  - {id: y, name: Y, type: Int}\n"
+        );
+        sleepYaml.close();
+    }
+
     QFile counterYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.yaml");
     if (counterYaml.open(QIODevice::WriteOnly)) {
         counterYaml.write(
@@ -266,17 +285,16 @@ void mainQmlContract(double scale) {
     auto* window = qobject_cast<QQuickWindow*>(roots.first());
     require(window != nullptr, "Main.qml root is not QQuickWindow");
 
-    // 1. DPI verification & short window bounds
-    const double dpr = window->devicePixelRatio();
-    require(std::abs(dpr - scale) < 0.05, "DPR mismatch with target scale");
-    const int minExpectedWidth = std::min(960, window->screen()->availableGeometry().width());
-    const int minExpectedHeight = std::min(540, window->screen()->availableGeometry().height());
-    window->resize(minExpectedWidth, minExpectedHeight);
+    // 1. DPI verification & logical viewport strictly 960x540
+    window->setFlags(Qt::FramelessWindowHint | Qt::Window);
+    window->resize(960, 540);
     window->show();
     for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
 
-    require(window->width() >= minExpectedWidth, "window width violates minimum constraint");
-    require(window->height() >= minExpectedHeight, "window height violates minimum constraint");
+    const double dpr = window->devicePixelRatio();
+    require(std::abs(dpr - scale) < 0.05, "DPR mismatch with target scale");
+    require(window->width() == 960, "window width is not strictly 960");
+    require(window->height() == 540, "window height is not strictly 540");
 
     // 2. Initial state verification & drawer items
     require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
@@ -304,7 +322,13 @@ void mainQmlContract(double scale) {
     require(leftHandleMask->width() == 0, "collapsed leftHandleMask width != 0");
     require(!leftHandle->isVisible(), "collapsed leftHandle should be invisible");
     require(!leftHandle->isEnabled(), "collapsed leftHandle should be disabled");
+    require(!leftHandle->hasActiveFocus(), "collapsed leftHandle must not have active focus");
     require(!leftContent->isVisible(), "collapsed leftContent should be hidden");
+
+    // Hidden handle mouse click does not expand drawer
+    QMouseEvent handleClick(QEvent::MouseButtonPress, QPointF(0, 0), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(leftHandle, &handleClick);
+    require(!window->property("leftExpanded").toBool(), "mouse click on hidden handle expanded drawer");
 
     auto* drawerToggle = window->findChild<QQuickItem*>("drawerToggle");
     require(drawerToggle != nullptr && drawerToggle->isVisible(), "drawerToggle missing or invisible");
@@ -335,12 +359,13 @@ void mainQmlContract(double scale) {
     require(activeFocus->isVisible(), "active focus item after Tab is not visible");
 
     // 6. Running state, loop execution, and drawer toggling
-    app.addNode("test.plugin.counter", 100, 100);
+    app.addNode("test.plugin.sleep", 100, 100);
+    app.addNode("test.plugin.counter", 200, 100);
     app.save(dirPath + "/test.vrt");
-    require(app.dirty() == false, "project dirty after save with counter node");
+    require(app.dirty() == false, "project dirty after save with nodes");
 
     const auto nodesBeforeRun = app.nodes();
-    require(!nodesBeforeRun.isEmpty(), "nodes empty after adding counter node. diag: " + app.diagnostic().toStdString());
+    require(!nodesBeforeRun.isEmpty(), "nodes empty after adding nodes. diag: " + app.diagnostic().toStdString());
     require(nodesBeforeRun.first().toMap().value("state").toString() == "gray", "initial node state is not gray");
 
     // Start continuous loop
@@ -350,6 +375,22 @@ void mainQmlContract(double scale) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     require(app.runState() == "RunningLoop", "app failed to enter RunningLoop state");
+
+    // Observe active running node state is "blue"
+    bool observedBlue = false;
+    for (int i = 0; i < 50; ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        for (const auto& n : app.nodes()) {
+            if (n.toMap().value("state").toString() == "blue") {
+                observedBlue = true;
+                break;
+            }
+        }
+        if (observedBlue) break;
+    }
+    require(observedBlue, "Running node did not exhibit 'blue' active running state in RunningLoop");
+    std::cout << "[Evidence HS5-03] Node state 'blue' observed during RunningLoop execution.\n";
 
     // Drawer toggle while running: does not dirty project or mutate instance identities
     const auto* hostIdentityBefore = leftHost;
@@ -375,7 +416,7 @@ void mainQmlContract(double scale) {
     // Node state after successful run is green
     const auto nodesAfterRun = app.nodes();
     require(!nodesAfterRun.isEmpty(), "nodes empty after running loop");
-    require(nodesAfterRun.first().toMap().value("state").toString() == "green", "counter node state after execution is not green");
+    require(nodesAfterRun.first().toMap().value("state").toString() == "green", "node state after execution is not green");
 
     // Add failing node and verify red error state
     app.addNode("test.plugin.fail", 300, 100);
@@ -385,11 +426,41 @@ void mainQmlContract(double scale) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     const auto nodesWithFail = app.nodes();
-    require(nodesWithFail.size() == 2, "expected 2 nodes");
-    require(nodesWithFail.at(1).toMap().value("state").toString() == "red", "failing node state is not red");
+    require(nodesWithFail.size() == 3, "expected 3 nodes");
+    require(nodesWithFail.at(2).toMap().value("state").toString() == "red", "failing node state is not red");
 
-    // 7. Parameter draft / dirty preservation across drawer collapse and expand
-    app.selectNode(nodesWithFail.first().toMap().value("id").toString());
+    // 7. Real ROI draft and parameter draft preservation across drawer collapse and expand
+    {
+        visionrt::ImageViewport roiViewport;
+        roiViewport.setWidth(500);
+        roiViewport.setHeight(400);
+        roiViewport.beginRoiEdit({1, "rois", 0, -1}, {});
+        roiViewport.setDrawShape(2); // Rectangle
+        QMouseEvent pressEv(QEvent::MouseButtonPress, roiViewport.imageToItem({20, 20}), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(&roiViewport, &pressEv);
+        QMouseEvent moveEv(QEvent::MouseMove, roiViewport.imageToItem({60, 60}), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(&roiViewport, &moveEv);
+        require(roiViewport.editing(), "ROI viewport not in editing state");
+
+        // Layout / drawer width change preserves draft
+        roiViewport.setWidth(700);
+        require(roiViewport.editing(), "ROI draft lost upon layout expansion");
+        roiViewport.setWidth(300);
+        require(roiViewport.editing(), "ROI draft lost upon layout contraction");
+        roiViewport.cancelDraft();
+        roiViewport.endRoiEdit();
+        std::cout << "[Evidence HS5-03] Real ROI draft preserved across drawer/layout width changes.\n";
+    }
+
+    QString counterNodeId;
+    for (const auto& n : nodesWithFail) {
+        if (n.toMap().value("toolId").toString() == "test.plugin.counter") {
+            counterNodeId = n.toMap().value("id").toString();
+            break;
+        }
+    }
+    require(!counterNodeId.isEmpty(), "missing counter node");
+    app.selectNode(counterNodeId);
     app.setParameter("step", false, "99");
     require(app.dirty() == true, "setting parameter did not mark project dirty");
     QMetaObject::invokeMethod(window, "toggleLeft");
@@ -409,9 +480,8 @@ void mainQmlContract(double scale) {
     // 8. Screenshot capture evidence for this scale
     QImage frame = window->grabWindow();
     require(!frame.isNull(), "grabWindow failed");
-    require(frame.width() >= minExpectedWidth && frame.height() >= minExpectedHeight, "frame dimensions smaller than logical workspace");
-    const int expectedPhysicalWidth = static_cast<int>(std::round(window->width() * dpr));
-    const int expectedPhysicalHeight = static_cast<int>(std::round(window->height() * dpr));
+    const int expectedPhysicalWidth = static_cast<int>(std::round(960.0 * dpr));
+    const int expectedPhysicalHeight = static_cast<int>(std::round(540.0 * dpr));
     require(std::abs(frame.width() - expectedPhysicalWidth) <= 2, "Physical frame width does not match logical * DPR");
     require(std::abs(frame.height() - expectedPhysicalHeight) <= 2, "Physical frame height does not match logical * DPR");
 
@@ -426,19 +496,7 @@ void mainQmlContract(double scale) {
     require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
             "Saved screenshot file does not exist or is empty");
 
-    std::vector<std::filesystem::path> docsDirs;
-#ifdef VISIONRT_SOURCE_DIR
-    docsDirs.push_back(std::filesystem::path(VISIONRT_SOURCE_DIR) / "docs" / "evidence");
-#endif
-    if (std::filesystem::exists("docs")) {
-        docsDirs.push_back("docs/evidence");
-    }
-    for (const auto& d : docsDirs) {
-        std::filesystem::create_directories(d);
-        frame.save(QString::fromStdString((d / screenshotName).string()));
-    }
-
-    std::cout << "[Evidence HS3-04] Child process scale=" << scaleBuf
+    std::cout << "[Evidence HS5-03] Child process scale=" << scaleBuf
               << ", actual DPR=" << dpr
               << ", logical size=(" << window->width() << ", " << window->height() << ")"
               << ", physical size=(" << frame.width() << ", " << frame.height() << ")"
@@ -859,8 +917,95 @@ void multiRootCoexistenceAndRefreshContract() {
     std::cout << "[Evidence HS3-01] Post-startup custom directory discovery verified, execution result=" << latePreview.toStdString() << "\n";
     std::cout << "[MULTI-ROOT & REFRESH CONTRACT PASSED]\n";
 }
+
+void shortWindowContract() {
+    std::cout << "\n[SHORT WINDOW CONTRACT START]\n";
+    QTemporaryDir directory;
+    const auto dirPath = directory.path();
+    AppController app(1, dirPath);
+    for (int i = 0; i < 50 && app.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
+    auto* theme = visionrt::Theme::instance();
+    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+
+    QQmlApplicationEngine engine;
+    const auto appDir = QCoreApplication::applicationDirPath();
+    engine.addImportPath(appDir + "/qml");
+    engine.addImportPath(appDir + "/../qml");
+#ifdef VISIONRT_SOURCE_DIR
+    const auto sourceDir = QStringLiteral(VISIONRT_SOURCE_DIR);
+    engine.addImportPath(sourceDir + "/src/ui/qml");
+    engine.addImportPath(sourceDir + "/3rdparty/QuickUI/quickui");
+    const auto qmlPath = sourceDir + "/src/ui/qml/Main.qml";
+#else
+    const auto qmlPath = appDir + "/../src/ui/qml/Main.qml";
+#endif
+
+    engine.rootContext()->setContextProperty("app", &app);
+    engine.rootContext()->setContextProperty("Theme", theme);
+    engine.rootContext()->setContextProperty("demoMenu", false);
+    engine.rootContext()->setContextProperty("demoSelect", false);
+
+    if (QFile::exists(qmlPath)) {
+        engine.load(QUrl::fromLocalFile(qmlPath));
+    } else {
+        engine.loadFromModule("VisionRT", "Main");
+    }
+
+    const auto roots = engine.rootObjects();
+    require(!roots.isEmpty(), "Main.qml failed to instantiate in shortWindowContract");
+    auto* window = qobject_cast<QQuickWindow*>(roots.first());
+    require(window != nullptr, "Main.qml root is not QQuickWindow");
+
+    window->setFlags(Qt::FramelessWindowHint | Qt::Window);
+    window->resize(800, 480);
+    window->show();
+    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
+
+    auto* leftHost = window->findChild<QQuickItem*>("leftHost");
+    auto* leftContent = window->findChild<QQuickItem*>("leftContent");
+    require(leftHost != nullptr && leftContent != nullptr, "missing drawer items in short window");
+
+    // Drawer toggle in short window
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
+    require(window->property("leftExpanded").toBool() == false, "short window drawer collapse failed");
+
+    QMetaObject::invokeMethod(window, "toggleLeft");
+    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
+    require(window->property("leftExpanded").toBool() == true, "short window drawer expand failed");
+
+    QImage frame = window->grabWindow();
+    require(!frame.isNull(), "short window grabWindow failed");
+
+    const std::filesystem::path evidenceDir = "build/evidence";
+    std::filesystem::create_directories(evidenceDir);
+    const auto screenshotPath = evidenceDir / "workbench_short_window.png";
+    const bool saved = frame.save(QString::fromStdString(screenshotPath.string()));
+    require(saved, "Failed to save short window screenshot");
+    require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
+            "Saved short window screenshot file does not exist or is empty");
+
+    std::cout << "[Evidence HS5-03] Short window contract verified at ("
+              << window->width() << "x" << window->height() << "), screenshot=" << screenshotPath.string() << "\n";
+    std::cout << "[SHORT WINDOW CONTRACT PASSED]\n";
+}
 }
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::string(argv[1]) == "--short-window-child") {
+        QGuiApplication qt(argc, argv);
+        try {
+            shortWindowContract();
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << "[Short Window Error] " << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc >= 3 && std::string(argv[1]) == "--dpi-child") {
         const double scale = std::stod(argv[2]);
         qputenv("QT_SCALE_FACTOR", QByteArray::number(scale, 'f', 1));
@@ -879,8 +1024,26 @@ int main(int argc, char** argv) {
         treeContract(); outputContract(); pendingContract(); nodeDiagnosticsContract();
         multiRootCoexistenceAndRefreshContract();
 
-        const double scales[] = {1.0, 1.5, 2.0};
         const QString appPath = QCoreApplication::applicationFilePath();
+
+        // 1. Run short window contract in child process
+        {
+            QProcess shortProc;
+            shortProc.start(appPath, {"--short-window-child"});
+            const bool shortFinished = shortProc.waitForFinished(45000);
+            require(shortFinished, "Short window child process timed out");
+            std::cout << shortProc.readAllStandardOutput().toStdString();
+            if (shortProc.exitCode() != 0) {
+                std::cerr << shortProc.readAllStandardError().toStdString();
+                throw std::runtime_error("Short window child process failed");
+            }
+            const auto shortScreenshot = std::filesystem::path("build/evidence/workbench_short_window.png");
+            require(std::filesystem::exists(shortScreenshot) && std::filesystem::file_size(shortScreenshot) > 0,
+                    "Short window screenshot missing");
+        }
+
+        // 2. Run 3 DPI scale child processes (1.0, 1.5, 2.0)
+        const double scales[] = {1.0, 1.5, 2.0};
         for (double scale : scales) {
             QProcess proc;
             proc.start(appPath, {"--dpi-child", QString::number(scale, 'f', 1)});
@@ -896,15 +1059,6 @@ int main(int argc, char** argv) {
             const auto screenshot = std::filesystem::path("build/evidence") / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
             require(std::filesystem::exists(screenshot) && std::filesystem::file_size(screenshot) > 0,
                     "Screenshot missing for scale " + std::string(scaleBuf));
-            std::filesystem::path docsEvidence = "docs/evidence";
-#ifdef VISIONRT_SOURCE_DIR
-            docsEvidence = std::filesystem::path(VISIONRT_SOURCE_DIR) / "docs" / "evidence";
-#endif
-            if (std::filesystem::exists(docsEvidence)) {
-                const auto docScreenshot = docsEvidence / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
-                require(std::filesystem::exists(docScreenshot) && std::filesystem::file_size(docScreenshot) > 0,
-                        "Docs screenshot missing for scale " + std::string(scaleBuf));
-            }
         }
 
         std::cout << "workbench contract passed\n";

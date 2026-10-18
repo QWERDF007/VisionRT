@@ -53,7 +53,10 @@ void setupPython(ToolRegistry& registry, PythonRuntime& runtime) {
     }
 }
 
-std::filesystem::path resolveToolsPackage(const std::filesystem::path& repoRoot) {
+std::filesystem::path resolveToolsPackage(const std::filesystem::path& repoRoot, const std::filesystem::path& installRoot = {}) {
+    if (!installRoot.empty() && std::filesystem::exists(installRoot / "module_index.yml")) {
+        return std::filesystem::canonical(installRoot);
+    }
     const char* env = std::getenv("VISIONTOOLS_PACKAGE_DIR");
     if (env) {
         auto p = std::filesystem::path(env);
@@ -227,19 +230,31 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
 
         const auto* outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
         assert(outRois && outRois->images().size() == 1 && outRois->images()[0].empty());
+
+        const auto* outScores = std::get_if<NumericArray>(&res.outputs["scores"]);
+        assert(outScores && !outScores->buffers().empty());
+        assert(outScores->buffers()[0].shape().size() == 1 && outScores->buffers()[0].shape()[0] == 0);
+
+        const auto* outClasses = std::get_if<NumericArray>(&res.outputs["classes"]);
+        assert(outClasses && !outClasses->buffers().empty());
+        assert(outClasses->buffers()[0].shape().size() == 1 && outClasses->buffers()[0].shape()[0] == 0);
+
+        const auto* outNames = std::get_if<StringArray>(&res.outputs["class_names"]);
+        assert(outNames && !outNames->buffers().empty());
+        assert(outNames->buffers()[0].values().empty());
     }
 
-    // 2. Scenario: 3 distinct targets (different class, name, score, coords)
-    // Target 0: (10, 10, 20, 20), score=0.20, class=10, name="scratch" -> filtered out (< 0.5)
-    // Target 1: (30, 30, 40, 40), score=0.70, class=20, name="crack"   -> passes
-    // Target 2: (50, 50, 60, 60), score=0.95, class=30, name="dent"    -> passes
+    // 2. Scenario: 3 distinct targets (different class, name, score, coords, angle)
+    // Target 0: (10, 10, 20, 20, 5),  score=0.20, class=10, name="scratch" -> filtered out (< 0.5)
+    // Target 1: (30, 30, 40, 40, 15), score=0.70, class=20, name="crack"   -> passes
+    // Target 2: (50, 50, 60, 60, 30), score=0.95, class=30, name="dent"    -> passes
     {
         cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
         ImageBatch imgBatch({OwnedImage::copyOf(mat)});
         std::vector<Roi> rois3;
-        rois3.push_back(Roi::rectangle(10.0f, 10.0f, 20.0f, 20.0f, 0.0f));
-        rois3.push_back(Roi::rectangle(30.0f, 30.0f, 40.0f, 40.0f, 0.0f));
-        rois3.push_back(Roi::rectangle(50.0f, 50.0f, 60.0f, 60.0f, 0.0f));
+        rois3.push_back(Roi::rectangle(10.0f, 10.0f, 20.0f, 20.0f, 5.0f));
+        rois3.push_back(Roi::rectangle(30.0f, 30.0f, 40.0f, 40.0f, 15.0f));
+        rois3.push_back(Roi::rectangle(50.0f, 50.0f, 60.0f, 60.0f, 30.0f));
         RoiBatch roiBatch({rois3});
 
         std::vector<float> scoreVals = {0.20f, 0.70f, 0.95f};
@@ -269,8 +284,32 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
 
         const auto* outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
         assert(outRois && outRois->images().size() == 1 && outRois->images()[0].size() == 2);
-        assert(outRois->images()[0][0].encoded()[1] == 30.0f);
-        assert(outRois->images()[0][1].encoded()[1] == 50.0f);
+
+        // Target 1 ROI geometric fields
+        const auto& r1 = outRois->images()[0][0];
+        assert(r1.kind() == RoiKind::Rectangle);
+        assert(r1.encoded().size() == 6);
+        assert(r1.encoded()[0] == static_cast<float>(RoiKind::Rectangle));
+        assert(std::abs(r1.encoded()[1] - 30.0f) < 1e-4f); // x
+        assert(std::abs(r1.encoded()[2] - 30.0f) < 1e-4f); // y
+        assert(std::abs(r1.encoded()[3] - 40.0f) < 1e-4f); // width
+        assert(std::abs(r1.encoded()[4] - 40.0f) < 1e-4f); // height
+        assert(std::abs(r1.encoded()[5] - 15.0f) < 1e-4f); // angle
+        const auto corners1 = r1.rectangleCorners();
+        assert(corners1.size() == 4);
+
+        // Target 2 ROI geometric fields
+        const auto& r2 = outRois->images()[0][1];
+        assert(r2.kind() == RoiKind::Rectangle);
+        assert(r2.encoded().size() == 6);
+        assert(r2.encoded()[0] == static_cast<float>(RoiKind::Rectangle));
+        assert(std::abs(r2.encoded()[1] - 50.0f) < 1e-4f); // x
+        assert(std::abs(r2.encoded()[2] - 50.0f) < 1e-4f); // y
+        assert(std::abs(r2.encoded()[3] - 60.0f) < 1e-4f); // width
+        assert(std::abs(r2.encoded()[4] - 60.0f) < 1e-4f); // height
+        assert(std::abs(r2.encoded()[5] - 30.0f) < 1e-4f); // angle
+        const auto corners2 = r2.rectangleCorners();
+        assert(corners2.size() == 4);
 
         const auto* outScores = std::get_if<NumericArray>(&res.outputs["scores"]);
         assert(outScores && !outScores->buffers().empty());
@@ -562,15 +601,35 @@ void testRealPluginModulePipeline(const std::filesystem::path& repoRoot, PythonR
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
-    assert(argc >= 2);
-    const std::filesystem::path repoRoot = std::filesystem::path(argv[1]);
+    std::filesystem::path installRoot;
+    std::filesystem::path repoRoot;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--install-root" && i + 1 < argc) {
+            installRoot = std::filesystem::path(argv[++i]);
+        } else if (arg.rfind("--install-root=", 0) == 0) {
+            installRoot = std::filesystem::path(arg.substr(15));
+        } else if (!arg.starts_with("--")) {
+            repoRoot = std::filesystem::path(arg);
+        }
+    }
+
+    if (installRoot.empty() || !std::filesystem::exists(installRoot / "module_index.yml")) {
+        std::cerr << "FATAL: --install-root is required and must contain module_index.yml! "
+                     "Specified directory missing or invalid: " << installRoot.string() << std::endl;
+        return 1;
+    }
+    if (repoRoot.empty()) {
+        repoRoot = std::filesystem::current_path();
+    }
 
     PythonRuntime python;
 
-    const auto toolsPkg = resolveToolsPackage(repoRoot);
+    const auto toolsPkg = resolveToolsPackage(repoRoot, installRoot);
     if (toolsPkg.empty()) {
         std::cerr << "FATAL: Real VisionTools package not found! "
-                     "VR3-03 / HS3-03 requires real tools package consumption." << std::endl;
+                     "VR5-03 / HS5-03 requires valid tools package." << std::endl;
         return 1;
     }
     std::cout << "[REAL TOOLS PACKAGE] Verified Tools package at: " << toolsPkg.string() << std::endl;
