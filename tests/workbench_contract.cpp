@@ -179,22 +179,15 @@ void mainQmlContract(double scale) {
         QFile::copy(dllSrc, dllDst);
     }
 
-    QFile indexFile(dirPath + "/tools-package/module_index.json");
+    QFile indexFile(dirPath + "/tools-package/module_index.yml");
     if (indexFile.open(QIODevice::WriteOnly)) {
         indexFile.write(
-            "{\n"
-            "  \"schema_version\": 1,\n"
-            "  \"modules\": [\n"
-            "    {\n"
-            "      \"registry_name\": \"test.plugin.counter\",\n"
-            "      \"path\": \"bin/test_plugin_module.dll\"\n"
-            "    },\n"
-            "    {\n"
-            "      \"registry_name\": \"test.plugin.fail_init\",\n"
-            "      \"path\": \"bin/test_plugin_module.dll\"\n"
-            "    }\n"
-            "  ]\n"
-            "}\n"
+            "schema_version: 1\n"
+            "modules:\n"
+            "  - registry_name: test.plugin.counter\n"
+            "    path: bin/test_plugin_module.dll\n"
+            "  - registry_name: test.plugin.fail_init\n"
+            "    path: bin/test_plugin_module.dll\n"
         );
         indexFile.close();
     }
@@ -275,6 +268,7 @@ void mainQmlContract(double scale) {
 
     // 1. DPI verification & short window bounds
     const double dpr = window->devicePixelRatio();
+    require(std::abs(dpr - scale) < 0.05, "DPR mismatch with target scale");
     const int minExpectedWidth = std::min(960, window->screen()->availableGeometry().width());
     const int minExpectedHeight = std::min(540, window->screen()->availableGeometry().height());
     window->resize(minExpectedWidth, minExpectedHeight);
@@ -351,11 +345,11 @@ void mainQmlContract(double scale) {
 
     // Start continuous loop
     app.toggleLoop();
-    for (int i = 0; i < 20 && !app.busy(); ++i) {
+    for (int i = 0; i < 50 && app.runState() != "RunningLoop"; ++i) {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    require(app.busy() || app.runState() == "RunningLoop", "app failed to enter RunningLoop state");
+    require(app.runState() == "RunningLoop", "app failed to enter RunningLoop state");
 
     // Drawer toggle while running: does not dirty project or mutate instance identities
     const auto* hostIdentityBefore = leftHost;
@@ -416,15 +410,33 @@ void mainQmlContract(double scale) {
     QImage frame = window->grabWindow();
     require(!frame.isNull(), "grabWindow failed");
     require(frame.width() >= minExpectedWidth && frame.height() >= minExpectedHeight, "frame dimensions smaller than logical workspace");
+    const int expectedPhysicalWidth = static_cast<int>(std::round(window->width() * dpr));
+    const int expectedPhysicalHeight = static_cast<int>(std::round(window->height() * dpr));
+    require(std::abs(frame.width() - expectedPhysicalWidth) <= 2, "Physical frame width does not match logical * DPR");
+    require(std::abs(frame.height() - expectedPhysicalHeight) <= 2, "Physical frame height does not match logical * DPR");
+
     const std::filesystem::path evidenceDir = "build/evidence";
     std::filesystem::create_directories(evidenceDir);
     char scaleBuf[16];
     std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
-    const auto screenshotPath = evidenceDir / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
+    const auto screenshotName = "workbench_dpi_" + std::string(scaleBuf) + ".png";
+    const auto screenshotPath = evidenceDir / screenshotName;
     const bool saved = frame.save(QString::fromStdString(screenshotPath.string()));
     require(saved, "Failed to save screenshot evidence to " + screenshotPath.string());
     require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
             "Saved screenshot file does not exist or is empty");
+
+    std::vector<std::filesystem::path> docsDirs;
+#ifdef VISIONRT_SOURCE_DIR
+    docsDirs.push_back(std::filesystem::path(VISIONRT_SOURCE_DIR) / "docs" / "evidence");
+#endif
+    if (std::filesystem::exists("docs")) {
+        docsDirs.push_back("docs/evidence");
+    }
+    for (const auto& d : docsDirs) {
+        std::filesystem::create_directories(d);
+        frame.save(QString::fromStdString((d / screenshotName).string()));
+    }
 
     std::cout << "[Evidence HS3-04] Child process scale=" << scaleBuf
               << ", actual DPR=" << dpr
@@ -445,22 +457,15 @@ void multiRootCoexistenceAndRefreshContract() {
         QFile::copy(dllSrc, dllDst);
     }
 
-    QFile indexFile(dirPath + "/tools-package/module_index.json");
+    QFile indexFile(dirPath + "/tools-package/module_index.yml");
     if (indexFile.open(QIODevice::WriteOnly)) {
         indexFile.write(
-            "{\n"
-            "  \"schema_version\": 1,\n"
-            "  \"modules\": [\n"
-            "    {\n"
-            "      \"registry_name\": \"test.plugin.counter\",\n"
-            "      \"path\": \"bin/test_plugin_module.dll\"\n"
-            "    },\n"
-            "    {\n"
-            "      \"registry_name\": \"test.plugin.function\",\n"
-            "      \"path\": \"bin/test_plugin_module.dll\"\n"
-            "    }\n"
-            "  ]\n"
-            "}\n"
+            "schema_version: 1\n"
+            "modules:\n"
+            "  - registry_name: test.plugin.counter\n"
+            "    path: bin/test_plugin_module.dll\n"
+            "  - registry_name: test.plugin.function\n"
+            "    path: bin/test_plugin_module.dll\n"
         );
         indexFile.close();
     }
@@ -891,6 +896,15 @@ int main(int argc, char** argv) {
             const auto screenshot = std::filesystem::path("build/evidence") / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
             require(std::filesystem::exists(screenshot) && std::filesystem::file_size(screenshot) > 0,
                     "Screenshot missing for scale " + std::string(scaleBuf));
+            std::filesystem::path docsEvidence = "docs/evidence";
+#ifdef VISIONRT_SOURCE_DIR
+            docsEvidence = std::filesystem::path(VISIONRT_SOURCE_DIR) / "docs" / "evidence";
+#endif
+            if (std::filesystem::exists(docsEvidence)) {
+                const auto docScreenshot = docsEvidence / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
+                require(std::filesystem::exists(docScreenshot) && std::filesystem::file_size(docScreenshot) > 0,
+                        "Docs screenshot missing for scale " + std::string(scaleBuf));
+            }
         }
 
         std::cout << "workbench contract passed\n";

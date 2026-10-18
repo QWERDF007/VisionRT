@@ -55,27 +55,19 @@ void setupPython(ToolRegistry& registry, PythonRuntime& runtime) {
 
 std::filesystem::path resolveToolsPackage(const std::filesystem::path& repoRoot) {
     const char* env = std::getenv("VISIONTOOLS_PACKAGE_DIR");
-    if (env && std::filesystem::exists(std::filesystem::path(env) / "module_index.json")) {
-        return std::filesystem::canonical(std::filesystem::path(env));
+    if (env) {
+        auto p = std::filesystem::path(env);
+        if (std::filesystem::exists(p / "module_index.yml")) {
+            return std::filesystem::canonical(p);
+        }
+        return {};
     }
     const auto buildPkg = repoRoot / "build" / "tools-package";
-    if (std::filesystem::exists(buildPkg / "module_index.json")) {
+    if (std::filesystem::exists(buildPkg / "module_index.yml")) {
         return std::filesystem::canonical(buildPkg);
     }
-    const auto localPkg = repoRoot / "tools-package";
-    if (std::filesystem::exists(localPkg / "module_index.json")) {
-        return std::filesystem::canonical(localPkg);
-    }
-    const auto siblingDist = repoRoot.parent_path() / "VisionTools" / "dist-cpu";
-    if (std::filesystem::exists(siblingDist / "module_index.json")) {
-        return std::filesystem::canonical(siblingDist);
-    }
-    const auto siblingDistGpu = repoRoot.parent_path() / "VisionTools" / "dist-gpu";
-    if (std::filesystem::exists(siblingDistGpu / "module_index.json")) {
-        return std::filesystem::canonical(siblingDistGpu);
-    }
     const auto installed = repoRoot / "install" / "VisionRT-0.1.0" / "tools-package";
-    if (std::filesystem::exists(installed / "module_index.json")) {
+    if (std::filesystem::exists(installed / "module_index.yml")) {
         return std::filesystem::canonical(installed);
     }
     return {};
@@ -91,7 +83,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const
 
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.json");
+    loader->loadIndexFile(toolsPkg / "module_index.yml");
     if (!loader->diagnostics().empty()) {
         for (const auto& d : loader->diagnostics()) {
             std::cerr << "Module index diagnostic: " << d.message << std::endl;
@@ -155,8 +147,9 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const
     assert(means.buffers().size() == 1);
     assert(means.buffers()[0].shape()[0] == static_cast<std::int64_t>(images1.images().size()));
     const auto values = means.buffers()[0].values<double>();
-    assert(values[0] > 0.0);
-    assert(values[1] > 0.0);
+    assert(values.size() == 2);
+    assert(std::abs(values[0] - 51.0) < 0.5);
+    assert(std::abs(values[1] - 22.95) < 0.5);
 
     // Test Save As / Reopen consistency & re-execution output equality
     const auto saveTarget = std::filesystem::path(tmpDir.path().toStdString()) / "reopened.vrt";
@@ -173,8 +166,9 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const
     assert(reloadedS5 && reloadedS5->status.code == 0);
     const auto& reloadedMeans = std::get<NumericArray>(reloadedS5->outputs.at("means"));
     const auto reloadedValues = reloadedMeans.buffers()[0].values<double>();
-    assert(reloadedValues[0] == values[0]);
-    assert(reloadedValues[1] == values[1]);
+    assert(reloadedValues.size() == 2);
+    assert(std::abs(reloadedValues[0] - values[0]) < 1e-6);
+    assert(std::abs(reloadedValues[1] - values[1]) < 1e-6);
 
     // Test corrupted input on a temp copy: must fail (exception or diagnostics) and not corrupt source file
     const auto corruptTarget = std::filesystem::path(tmpDir.path().toStdString()) / "corrupted.vrt";
@@ -197,7 +191,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path& toolsPkg, const
 void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.json");
+    loader->loadIndexFile(toolsPkg / "module_index.yml");
     assert(loader->diagnostics().empty());
 
     PlatformToolServices services{PathResolver(toolsPkg), nullptr};
@@ -235,7 +229,10 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
         assert(outRois && outRois->images().size() == 1 && outRois->images()[0].empty());
     }
 
-    // 2. Scenario: 3 targets (scores: 0.2, 0.7, 0.95), min_score = 0.5 -> 2 pass
+    // 2. Scenario: 3 distinct targets (different class, name, score, coords)
+    // Target 0: (10, 10, 20, 20), score=0.20, class=10, name="scratch" -> filtered out (< 0.5)
+    // Target 1: (30, 30, 40, 40), score=0.70, class=20, name="crack"   -> passes
+    // Target 2: (50, 50, 60, 60), score=0.95, class=30, name="dent"    -> passes
     {
         cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
         ImageBatch imgBatch({OwnedImage::copyOf(mat)});
@@ -245,9 +242,9 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
         rois3.push_back(Roi::rectangle(50.0f, 50.0f, 60.0f, 60.0f, 0.0f));
         RoiBatch roiBatch({rois3});
 
-        std::vector<float> scoreVals = {0.2f, 0.7f, 0.95f};
-        std::vector<std::int64_t> classVals = {1, 1, 1};
-        std::vector<std::string> nameVals = {"defect", "defect", "defect"};
+        std::vector<float> scoreVals = {0.20f, 0.70f, 0.95f};
+        std::vector<std::int64_t> classVals = {10, 20, 30};
+        std::vector<std::string> nameVals = {"scratch", "crack", "dent"};
 
         NumericArray scores(DType::Float32, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Float32, {3}, std::as_bytes(std::span(scoreVals)))});
         NumericArray classes(DType::Int64, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Int64, {3}, std::as_bytes(std::span(classVals)))});
@@ -272,6 +269,29 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
 
         const auto* outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
         assert(outRois && outRois->images().size() == 1 && outRois->images()[0].size() == 2);
+        assert(outRois->images()[0][0].encoded()[1] == 30.0f);
+        assert(outRois->images()[0][1].encoded()[1] == 50.0f);
+
+        const auto* outScores = std::get_if<NumericArray>(&res.outputs["scores"]);
+        assert(outScores && !outScores->buffers().empty());
+        const auto outScoreVals = outScores->buffers()[0].values<float>();
+        assert(outScoreVals.size() == 2);
+        assert(std::abs(outScoreVals[0] - 0.70f) < 1e-4f);
+        assert(std::abs(outScoreVals[1] - 0.95f) < 1e-4f);
+
+        const auto* outClasses = std::get_if<NumericArray>(&res.outputs["classes"]);
+        assert(outClasses && !outClasses->buffers().empty());
+        const auto outClassVals = outClasses->buffers()[0].values<std::int64_t>();
+        assert(outClassVals.size() == 2);
+        assert(outClassVals[0] == 20);
+        assert(outClassVals[1] == 30);
+
+        const auto* outNames = std::get_if<StringArray>(&res.outputs["class_names"]);
+        assert(outNames && !outNames->buffers().empty());
+        const auto& outNameVals = outNames->buffers()[0].values();
+        assert(outNameVals.size() == 2);
+        assert(outNameVals[0] == "crack");
+        assert(outNameVals[1] == "dent");
     }
 
     assert(inst->release().code == 0);
@@ -280,7 +300,7 @@ void testRaggedDetectionFilter(const std::filesystem::path& toolsPkg) {
 void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.json");
+    loader->loadIndexFile(toolsPkg / "module_index.yml");
     assert(loader->diagnostics().empty());
 
     ToolRegistry registry;
@@ -305,16 +325,21 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path& toolsPkg,
     auto loaded = storage.load(projectFile);
     assert(loaded.diagnostics.empty());
 
+    // Prepare 2 projects with different inputs (Engine 1: 2 images; Engine 2: 1 image via limit=1)
+    ProjectDefinition project1 = loaded.project;
+    ProjectDefinition project2 = loaded.project;
+    project2.flows[0].nodes[0].inputs["limit"] = {BindingMode::Literal, std::int64_t{1}, {}};
+
     // Concurrent execution of 2 independent engines sharing registry & plugin loader
     RuntimeEngine engine1(2);
     RuntimeEngine engine2(2);
 
     auto f1 = std::async(std::launch::async, [&] {
-        assert(engine1.start(loaded.project, registry, RunMode::Once).code == 0);
+        assert(engine1.start(project1, registry, RunMode::Once).code == 0);
         return finish(engine1);
     });
     auto f2 = std::async(std::launch::async, [&] {
-        assert(engine2.start(loaded.project, registry, RunMode::Once).code == 0);
+        assert(engine2.start(project2, registry, RunMode::Once).code == 0);
         return finish(engine2);
     });
 
@@ -326,9 +351,33 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path& toolsPkg,
     assert(s1_node5 && s1_node5->status.code == 0);
     assert(s2_node5 && s2_node5->status.code == 0);
 
-    // Cross-release snapshot check: engine resets, snapshot retains historical output
+    // Verify output isolation: Engine 1 produced 2 mean values, Engine 2 produced 1 mean value
+    const auto v1 = std::get<NumericArray>(s1_node5->outputs.at("means")).buffers()[0].values<double>();
+    const auto v2 = std::get<NumericArray>(s2_node5->outputs.at("means")).buffers()[0].values<double>();
+    assert(v1.size() == 2);
+    assert(v2.size() == 1);
+    assert(std::abs(v1[0] - v2[0]) < 1e-6);
+
+    // Cross-release snapshot check: engine resets, snapshot retains historical output & pixel memory
+    auto s1_node1 = snapshot(u1, 1);
+    assert(s1_node1 && s1_node1->status.code == 0);
     assert(engine1.requestReset().code == 0);
+    finish(engine1);
     assert(s1_node5->status.code == 0);
+    const auto& retainedImg = std::get<ImageBatch>(s1_node1->outputs.at("images")).images()[0];
+    assert(retainedImg.cols() > 0 && retainedImg.rows() > 0);
+    const auto* pxPtr = retainedImg.data();
+    assert(pxPtr != nullptr);
+    volatile std::uint8_t pxVal = *pxPtr;
+    assert(pxVal == *pxPtr);
+
+    // Success-then-failure isolation: 2nd run with invalid path outputs Missing, not stale value
+    project1.flows[0].nodes[0].inputs["path"] = {BindingMode::Literal, Utf8{"nonexistent_images_dir"}, {}};
+    assert(engine1.start(project1, registry, RunMode::Once).code == 0);
+    auto u1_fail = finish(engine1);
+    auto s1_fail_node1 = snapshot(u1_fail, 1);
+    assert(s1_fail_node1 && s1_fail_node1->status.code != 0);
+    assert(isMissing(s1_fail_node1->outputs.at("images")));
 }
 
 void testDiagnosticPipeline(const std::filesystem::path& toolsPkg, const std::filesystem::path& repoRoot, PythonRuntime& python) {
@@ -341,7 +390,7 @@ void testDiagnosticPipeline(const std::filesystem::path& toolsPkg, const std::fi
 
     auto loader = std::make_shared<PluginLoader>();
     loader->setBaseDirectory(toolsPkg);
-    loader->loadIndexFile(toolsPkg / "module_index.json");
+    loader->loadIndexFile(toolsPkg / "module_index.yml");
 
     ToolRegistry registry;
     registry.setPluginLoader(loader);

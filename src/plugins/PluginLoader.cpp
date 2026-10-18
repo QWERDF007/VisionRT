@@ -1,13 +1,18 @@
 #include "plugins/PluginLoader.h"
 
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
+#include <set>
 #include <yaml-cpp/yaml.h>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
+#else
+#include <QLibrary>
 #endif
 
 namespace visionrt {
@@ -32,185 +37,67 @@ void PluginLoader::loadIndexFile(const std::filesystem::path& indexFilePath) {
         baseDirectory_ = indexFilePath.parent_path().lexically_normal();
     }
     const auto ext = indexFilePath.extension().string();
-    if (ext == ".json") {
-        QFile file(QString::fromStdString(indexFilePath.string()));
-        if (!file.open(QIODevice::ReadOnly)) {
-            diagnostics_.push_back({indexFilePath, "Cannot open module index file: " + indexFilePath.string()});
+    if (ext != ".yml" && ext != ".yaml") {
+        diagnostics_.push_back({indexFilePath, "Unsupported module index format: only .yml/.yaml is supported: " + indexFilePath.string()});
+        return;
+    }
+
+    try {
+        const auto node = YAML::LoadFile(indexFilePath.string());
+        if (!node.IsMap()) {
+            diagnostics_.push_back({indexFilePath, "Module index YAML root must be a map"});
             return;
         }
-        QJsonParseError parseError;
-        const auto doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            diagnostics_.push_back({indexFilePath, "Failed to parse module index JSON: " + parseError.errorString().toStdString()});
+        if (!node["schema_version"] || node["schema_version"].as<int>(0) != 1) {
+            const std::string ver = node["schema_version"] ? node["schema_version"].as<std::string>() : "missing";
+            diagnostics_.push_back({indexFilePath, "Unsupported or missing module index schema_version: " + ver});
             return;
         }
-        const auto obj = doc.object();
-        if (obj.contains("schema_version") && obj["schema_version"].toInt() != 1) {
-            diagnostics_.push_back({indexFilePath, "Unsupported module index schema_version: " + std::to_string(obj["schema_version"].toInt())});
+        if (!node["modules"] || !node["modules"].IsSequence()) {
+            diagnostics_.push_back({indexFilePath, "Module index must contain a 'modules' sequence"});
             return;
         }
 
-        if (obj.contains("modules") && obj["modules"].isArray()) {
-            const auto arr = obj["modules"].toArray();
-            for (const auto& item : arr) {
-                if (!item.isObject()) {
-                    diagnostics_.push_back({indexFilePath, "Module item in array must be an object"});
-                    continue;
-                }
-                const auto m = item.toObject();
-                const auto name = m.value("registry_name").toString().toStdString();
-                const auto pathStr = m.value("path").toString().toStdString();
-                if (name.empty()) {
-                    diagnostics_.push_back({indexFilePath, "Module registry_name must not be empty"});
-                    continue;
-                }
-                if (pathStr.empty()) {
-                    diagnostics_.push_back({indexFilePath, "Module path must not be empty for registry_name: " + name});
-                    continue;
-                }
-                if (index_.contains(name)) {
-                    diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
-                    continue;
-                }
-                const auto relPath = std::filesystem::u8path(pathStr);
-                if (relPath.is_absolute()) {
-                    diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
-                    continue;
-                }
-                auto norm = relPath.lexically_normal();
-                if (!norm.empty() && norm.begin()->string() == "..") {
-                    diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
-                    continue;
-                }
-                index_[name] = relPath;
+        std::set<std::string> seenInFile;
+        std::map<std::string, std::filesystem::path, std::less<>> nextIndex;
+
+        for (const auto& item : node["modules"]) {
+            if (!item.IsMap()) {
+                diagnostics_.push_back({indexFilePath, "Module item in YAML sequence must be a map"});
+                continue;
             }
-        } else if (obj.contains("modules") && obj["modules"].isObject()) {
-            const auto mods = obj["modules"].toObject();
-            for (auto it = mods.begin(); it != mods.end(); ++it) {
-                const auto name = it.key().toStdString();
-                const auto pathStr = it.value().toString().toStdString();
-                if (name.empty() || pathStr.empty()) continue;
-                if (index_.contains(name)) {
-                    diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
-                    continue;
-                }
-                const auto relPath = std::filesystem::u8path(pathStr);
-                if (relPath.is_absolute()) {
-                    diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
-                    continue;
-                }
-                auto norm = relPath.lexically_normal();
-                if (!norm.empty() && norm.begin()->string() == "..") {
-                    diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
-                    continue;
-                }
-                index_[name] = relPath;
+            const auto name = item["registry_name"] ? item["registry_name"].as<std::string>() : "";
+            const auto pathStr = item["path"] ? item["path"].as<std::string>() : "";
+            if (name.empty()) {
+                diagnostics_.push_back({indexFilePath, "Module registry_name must not be empty"});
+                continue;
             }
-        } else if (obj.contains("tools") && obj["tools"].isObject()) {
-            const auto tools = obj["tools"].toObject();
-            for (auto it = tools.begin(); it != tools.end(); ++it) {
-                if (!it.value().isObject()) continue;
-                const auto t = it.value().toObject();
-                std::string name = it.key().toStdString();
-                if (t.contains("entry") && t["entry"].isObject()) {
-                    const auto entry = t["entry"].toObject();
-                    if (entry.contains("registry_name") && !entry["registry_name"].toString().isEmpty()) {
-                        name = entry["registry_name"].toString().toStdString();
-                    }
-                }
-                const auto pathStr = t.value("module_dll").toString().toStdString();
-                if (name.empty() || pathStr.empty()) continue;
-                if (index_.contains(name)) {
-                    continue;
-                }
-                const auto relPath = std::filesystem::u8path(pathStr);
-                if (relPath.is_absolute()) {
-                    diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
-                    continue;
-                }
-                auto norm = relPath.lexically_normal();
-                if (!norm.empty() && norm.begin()->string() == "..") {
-                    diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
-                    continue;
-                }
-                index_[name] = relPath;
+            if (pathStr.empty()) {
+                diagnostics_.push_back({indexFilePath, "Module path must not be empty for registry_name: " + name});
+                continue;
             }
-        } else {
-            diagnostics_.push_back({indexFilePath, "Module index must contain 'modules' or 'tools'"});
+            if (!seenInFile.insert(name).second || index_.contains(name) || nextIndex.contains(name)) {
+                diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
+                continue;
+            }
+            const auto relPath = std::filesystem::u8path(pathStr);
+            if (relPath.is_absolute()) {
+                diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
+                continue;
+            }
+            auto norm = relPath.lexically_normal();
+            if (!norm.empty() && norm.begin()->string() == "..") {
+                diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
+                continue;
+            }
+            nextIndex.emplace(name, relPath);
         }
-    } else if (ext == ".yaml" || ext == ".yml") {
-        try {
-            const auto node = YAML::LoadFile(indexFilePath.string());
-            if (!node.IsMap()) {
-                diagnostics_.push_back({indexFilePath, "Module index YAML root must be a map"});
-                return;
-            }
-            if (node["schema_version"] && node["schema_version"].as<int>() != 1) {
-                diagnostics_.push_back({indexFilePath, "Unsupported module index schema_version: " + node["schema_version"].as<std::string>()});
-                return;
-            }
-            if (node["modules"] && node["modules"].IsSequence()) {
-                for (const auto& item : node["modules"]) {
-                    if (!item.IsMap()) {
-                        diagnostics_.push_back({indexFilePath, "Module item in YAML sequence must be a map"});
-                        continue;
-                    }
-                    const auto name = item["registry_name"] ? item["registry_name"].as<std::string>() : "";
-                    const auto pathStr = item["path"] ? item["path"].as<std::string>() : "";
-                    if (name.empty()) {
-                        diagnostics_.push_back({indexFilePath, "Module registry_name must not be empty"});
-                        continue;
-                    }
-                    if (pathStr.empty()) {
-                        diagnostics_.push_back({indexFilePath, "Module path must not be empty for registry_name: " + name});
-                        continue;
-                    }
-                    if (index_.contains(name)) {
-                        diagnostics_.push_back({indexFilePath, "Duplicate registry_name in module index: " + name});
-                        continue;
-                    }
-                    const auto relPath = std::filesystem::u8path(pathStr);
-                    if (relPath.is_absolute()) {
-                        diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
-                        continue;
-                    }
-                    auto norm = relPath.lexically_normal();
-                    if (!norm.empty() && norm.begin()->string() == "..") {
-                        diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
-                        continue;
-                    }
-                }
-            } else if (node["tools"] && node["tools"].IsMap()) {
-                for (const auto& it : node["tools"]) {
-                    std::string name = it.first.as<std::string>();
-                    const auto& val = it.second;
-                    if (val["entry"] && val["entry"]["registry_name"]) {
-                        name = val["entry"]["registry_name"].as<std::string>();
-                    }
-                    std::string pathStr;
-                    if (val["module_dll"]) {
-                        pathStr = val["module_dll"].as<std::string>();
-                    } else if (val["path"]) {
-                        pathStr = val["path"].as<std::string>();
-                    }
-                    if (name.empty() || pathStr.empty()) continue;
-                    if (index_.contains(name)) continue;
-                    const auto relPath = std::filesystem::u8path(pathStr);
-                    if (relPath.is_absolute()) {
-                        diagnostics_.push_back({indexFilePath, "Module path must be relative: " + pathStr});
-                        continue;
-                    }
-                    auto norm = relPath.lexically_normal();
-                    if (!norm.empty() && norm.begin()->string() == "..") {
-                        diagnostics_.push_back({indexFilePath, "Module path escapes package root: " + pathStr});
-                        continue;
-                    }
-                    index_[name] = relPath;
-                }
-            }
-        } catch (const std::exception& error) {
-            diagnostics_.push_back({indexFilePath, "Failed to parse module index YAML: " + std::string(error.what())});
+
+        for (auto&& [k, v] : nextIndex) {
+            index_[k] = std::move(v);
         }
+    } catch (const std::exception& error) {
+        diagnostics_.push_back({indexFilePath, "Failed to parse module index YAML: " + std::string(error.what())});
     }
 }
 
@@ -252,13 +139,58 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     }
 
 #ifdef _WIN32
-    SetDllDirectoryW(libraryPath.parent_path().c_str());
-#endif
+    const auto absPath = std::filesystem::absolute(libraryPath).lexically_normal();
+    HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!handle) {
+        const DWORD err = GetLastError();
+        status = {-3, "Failed to load dynamic library " + libraryPath.string() + " (Win32 error: " + std::to_string(err) + ")"};
+        return nullptr;
+    }
+
+    auto proc = GetProcAddress(handle, "visiontoolsModuleApi");
+    if (!proc) {
+        FreeLibrary(handle);
+        status = {-3, "Entry symbol 'visiontoolsModuleApi' not found in " + libraryPath.string()};
+        return nullptr;
+    }
+
+    auto apiFunc = reinterpret_cast<const ModuleApi* (VT_CALL *)() noexcept>(proc);
+    const auto* api = apiFunc();
+    if (!api) {
+        FreeLibrary(handle);
+        status = {-3, "visiontoolsModuleApi() returned null in " + libraryPath.string()};
+        return nullptr;
+    }
+
+    if (api->abi_major != MODULE_ABI_MAJOR) {
+        FreeLibrary(handle);
+        status = {-3, "Module ABI major mismatch (expected " + std::to_string(MODULE_ABI_MAJOR) +
+                      ", got " + std::to_string(api->abi_major) + ")"};
+        return nullptr;
+    }
+
+    if (api->struct_bytes < sizeof(ModuleApi)) {
+        FreeLibrary(handle);
+        status = {-3, "ModuleApi struct size mismatch"};
+        return nullptr;
+    }
+
+    if (!api->create || !api->destroy) {
+        FreeLibrary(handle);
+        status = {-3, "ModuleApi function pointers are incomplete"};
+        return nullptr;
+    }
+
+    auto loaded = std::make_shared<LoadedModule>();
+    loaded->path = libraryPath;
+    loaded->handle = handle;
+    loaded->api = api;
+    loadedModules_.emplace(libraryPath, loaded);
+    status = {};
+    return loaded;
+#else
     auto lib = std::make_shared<QLibrary>(QString::fromStdString(libraryPath.string()));
     const bool loadedOk = lib->load();
-#ifdef _WIN32
-    SetDllDirectoryW(nullptr);
-#endif
     if (!loadedOk) {
         status = {-3, "Failed to load dynamic library " + libraryPath.string() + ": " + lib->errorString().toStdString()};
         return nullptr;
@@ -299,6 +231,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     loadedModules_.emplace(libraryPath, loaded);
     status = {};
     return loaded;
+#endif
 }
 
 std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view registryName, const PlatformToolServices& services) {

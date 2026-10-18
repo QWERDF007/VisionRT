@@ -3,19 +3,59 @@
 #include "core/Tool.h"
 #include "visionrt/sdk/Module.h"
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <QLibrary>
+#endif
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace visionrt {
 
 struct LoadedModule {
     std::filesystem::path path;
+#ifdef _WIN32
+    HMODULE handle = nullptr;
+    LoadedModule() = default;
+    ~LoadedModule() {
+        if (handle) {
+            FreeLibrary(handle);
+            handle = nullptr;
+        }
+    }
+    LoadedModule(const LoadedModule&) = delete;
+    LoadedModule& operator=(const LoadedModule&) = delete;
+    LoadedModule(LoadedModule&& other) noexcept
+        : path(std::move(other.path)), handle(other.handle), api(other.api) {
+        other.handle = nullptr;
+        other.api = nullptr;
+    }
+    LoadedModule& operator=(LoadedModule&& other) noexcept {
+        if (this != &other) {
+            path = std::move(other.path);
+            if (handle) FreeLibrary(handle);
+            handle = other.handle;
+            other.handle = nullptr;
+            api = other.api;
+            other.api = nullptr;
+        }
+        return *this;
+    }
+#else
     std::shared_ptr<QLibrary> library;
+#endif
     const ModuleApi* api = nullptr;
 };
 

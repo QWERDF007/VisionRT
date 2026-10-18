@@ -30,6 +30,32 @@
 - ...
 -->
 
+### 2026-10-18 — 依据 f69c465 方案完成第四轮全量整改交付 (VR4-01～VR4-06 / HS4-01～HS4-06)
+
+**目标**
+- 严格遵循 `VisionRT_f69c465_验收与下一阶段方案.zip` (Tickets VR4-01 ~ VR4-06 与 Specs HS4-01 ~ HS4-06) 完成全链路整改交付；
+- 统一 `module_index.yml` 标准（消除 JSON/XML 架构分叉）、消除进程级 DLL 目录切换并替换为 `LOAD_WITH_ALTERED_SEARCH_PATH`、补齐 SDK 独立消费测试靶场（正反例 10 组语料严格断言）、增强真实安装态工具包覆盖与 DPI 像素对齐、性能探针双向隔离与 50 帧 GUI 采样、直接构建全新发布与清理废弃文档。
+- 保持 15/15 契约测试 100% 通过，GPU 深度学习未验证边界透明披露。
+
+**当前状态**
+- 已完成 (VR4-01): `PluginLoader` 实现严格 `module_index.yml` YAML 解析标准（校验 `schema_version: 1`、非空 `registry_name` 与相对 `path`、拒绝重复注册），彻底剔除 JSON/XML 格式分叉；
+- 已完成 (VR4-02): 废弃 Windows 进程级 `SetDllDirectoryW` 全局目录污染，统一改用 Windows 原生 `LoadLibraryExW(..., LOAD_WITH_ALTERED_SEARCH_PATH)` 安全加载与同级依赖解析；
+- 已完成 (VR4-03): 根 CMake 暴露 `install_sdk` 与 `test_sdk_consumer` 独立测试目标，`tests/sdk_consumer` 编写 10 组涵盖正反例语料的严格 `REQUIRE` 契约断言，验证消费工程与主工程完全隔离解耦；
+- 已完成 (VR4-04): `examples_contract` 补齐浮点数值容差 (51.0, 22.95)、ragged 3 目标过滤、双引擎并发快照隔离与 reset 异步完成等待、失败替换 Missing；`workbench_contract` 补齐物理 DPI 尺寸与逻辑尺寸严格像素匹配 (`abs(physical - logical * DPR) <= 2`) 及持续 `RunningLoop` 状态；
+- 已完成 (VR4-05): `PythonBridge` 植入 `VISIONRT_TEST_PROBES` 隔离开关，新增 `NumericArray` 叶输出原子复制探针，确保探针只在内存拷贝成功后递增；`performance_contract` 拓展为 50 组 GUI 样本测试，以 `afterSynchronizing` 挂载单次队列并关联 `frameSwapped`，内存曲线同时输出至 `build/evidence/` 与 `docs/evidence/`；
+- 已完成 (VR4-06): 清理 `tools/package_app.py` 中 `custom_backup` 历史包袱，采用直接构建全新生成；删除废弃方案包 `docs/VisionRT_f69c465_验收与下一阶段方案.zip`，更新 `docs/visiontools-bridge-architecture.md` 与 `docs/RT-15_重构交付与验收矩阵.md`。
+- 未完成/未验证项: GPU 深度学习推理依赖由于宿主机缺少独立 NVIDIA GPU 与 TensorRT 权重文件，按规范诚实记录为未验证。
+
+**验证证据**
+- `tools\build.cmd ctest --test-dir build --output-on-failure` → 15/15 契约测试 100% 全部通过 (总耗时 10.20s)；
+- `tools\build.cmd cmake --build build --target test_sdk_consumer` → SDK consumer 10 组正负例校验语料全量通过；
+- `python tools\package_app.py --test-verify` → 发布包自检 6 组负例测试全部通过；
+- `docs/evidence/` 与 `build/evidence/` → 完整生成并归档 `memory_curve.csv`、`workbench_dpi_1.0.png`、`workbench_dpi_1.5.png`、`workbench_dpi_2.0.png`。
+
+**下一步**
+- 提交并推送代码至远程仓库（`git push origin dev`）；
+- 交付用户进行最终阶段验收。
+
 ### 2026-10-18 — 依据 9e99572 方案完成第三轮全量整改交付 (VR3-01～VR3-06 / HS3-01～HS3-06)
 
 **目标**

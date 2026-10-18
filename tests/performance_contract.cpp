@@ -516,6 +516,43 @@ void test10x4KZeroCopyAndPythonPassthrough() {
         std::cout << "  -> Python Passthrough: Contiguous copy count = " << contiguousCopies
                   << " (<= 1/leaf), Non-contiguous copy count = " << nonContigCopies
                   << " (<= 1/leaf) [PASS]\n";
+
+        // NumericArray leaf output copy count and invalid input probe isolation
+        {
+            resetPythonLeafNumericCopyCount();
+            pybind11::module_ np = pybind11::module_::import("numpy");
+            pybind11::object validArr = np.attr("zeros")(pybind11::make_tuple(10, 20), "float32");
+            TypeSpec numSpec{Type::NumericArray, DType::Float32, 2, Layout::Dense};
+            PortValue validNumVal = fromPython(numSpec, validArr);
+            require(std::holds_alternative<NumericArray>(validNumVal), "fromPython failed to produce NumericArray");
+            require(pythonLeafNumericCopyCount() == 1, "NumericArray leaf copy count must be exactly 1");
+
+            // Invalid input probe isolation: invalid dtype must throw and NOT increment probe
+            bool badThrew = false;
+            try {
+                pybind11::object badArr = np.attr("zeros")(pybind11::make_tuple(10, 20), "int32");
+                fromPython(numSpec, badArr);
+            } catch (const ContractError&) {
+                badThrew = true;
+            }
+            require(badThrew, "fromPython with mismatched dtype should throw ContractError");
+            require(pythonLeafNumericCopyCount() == 1, "Invalid NumericArray input must not increment copy probe");
+
+            // Invalid ImageBatch input probe isolation: invalid shape must throw and NOT increment probe
+            resetPythonLeafImageCopyCount();
+            bool imgBadThrew = false;
+            try {
+                pybind11::object badImg = np.attr("zeros")(pybind11::make_tuple(10), "uint8");
+                pybind11::list badList;
+                badList.append(badImg);
+                fromPython(TypeSpec{Type::ImageBatch}, badList);
+            } catch (const ContractError&) {
+                imgBadThrew = true;
+            }
+            require(imgBadThrew, "fromPython with 1D image must throw ContractError");
+            require(pythonLeafImageCopyCount() == 0, "Invalid ImageBatch input must not increment copy probe");
+            std::cout << "  -> Python NumericArray leaf copy & invalid input probe isolation [PASS]\n";
+        }
     }
 }
 
@@ -619,17 +656,34 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
     flow.nodes.push_back(n2);
     project.flows.push_back(flow);
 
-    std::filesystem::path evidencePath = "evidence/memory_curve.csv";
-    if (std::filesystem::exists("build") && !std::filesystem::exists("CMakeCache.txt")) {
-        evidencePath = "build/evidence/memory_curve.csv";
+    std::vector<std::filesystem::path> evidencePaths;
+    evidencePaths.push_back("build/evidence/memory_curve.csv");
+#ifdef VISIONRT_SOURCE_DIR
+    evidencePaths.push_back(std::filesystem::path(VISIONRT_SOURCE_DIR) / "docs" / "evidence" / "memory_curve.csv");
+#endif
+    if (std::filesystem::exists("docs")) {
+        evidencePaths.push_back("docs/evidence/memory_curve.csv");
     }
-    if (evidencePath.has_parent_path()) {
-        std::filesystem::create_directories(evidencePath.parent_path());
+
+    std::vector<std::shared_ptr<std::ofstream>> curveStreams;
+    for (const auto& p : evidencePaths) {
+        if (p.has_parent_path()) {
+            std::filesystem::create_directories(p.parent_path());
+        }
+        auto stream = std::make_shared<std::ofstream>(p);
+        if (stream->is_open()) {
+            *stream << "iteration,elapsed_ms,rss_supported,rss_kb,vram_supported,vram_mb,latency_ms\n";
+            curveStreams.push_back(stream);
+        }
     }
-    std::ofstream curveCsv(evidencePath);
-    require(curveCsv.is_open(), "Failed to open memory curve CSV for writing");
-    curveCsv << "iteration,elapsed_ms,rss_supported,rss_kb,vram_supported,vram_mb,latency_ms\n";
-    require(curveCsv.good(), "Failed to write CSV header");
+    require(!curveStreams.empty(), "Failed to open any memory curve CSV for writing");
+
+    auto writeCurveLine = [&](const std::string& line) {
+        for (auto& s : curveStreams) {
+            *s << line;
+            s->flush();
+        }
+    };
 
     auto initialProbe = getWorkingSetMemory();
     std::size_t memAtSteady = 0;
@@ -660,11 +714,12 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
         auto vram = queryGpuVram();
         if (r % 5 == 0 || r == maxRounds - 1) {
             auto elapsedMs = std::chrono::duration<double, std::milli>(t1 - startTime).count();
-            curveCsv << (r + 1) << "," << elapsedMs << ","
-                     << (currentProbe.supported ? ("1," + std::to_string(currentProbe.workingSetKB)) : "0,NA") << ","
-                     << (vram.supported ? ("1," + std::to_string(vram.vramMB)) : "0,NA") << ","
-                     << ms << "\n";
-            require(curveCsv.good(), "Failed to write to memory curve CSV");
+            std::ostringstream ss;
+            ss << (r + 1) << "," << elapsedMs << ","
+               << (currentProbe.supported ? ("1," + std::to_string(currentProbe.workingSetKB)) : "0,NA") << ","
+               << (vram.supported ? ("1," + std::to_string(vram.vramMB)) : "0,NA") << ","
+               << ms << "\n";
+            writeCurveLine(ss.str());
         }
 
         if ((r + 1) % 25 == 0 || r == maxRounds - 1) {
@@ -694,12 +749,16 @@ void testMemoryAndQueueStabilityInLoop(int maxRounds, int maxSeconds) {
               << " KB, Peak=" << peakWorkingSetKB << " KB, AfterReset=" << probeAfterReset.report
               << ", VRAM=" << vramAfterReset.report << "\n";
 
-    curveCsv << "FINAL_RESET,0,"
-             << (probeAfterReset.supported ? ("1," + std::to_string(probeAfterReset.workingSetKB)) : "0,NA") << ","
-             << (vramAfterReset.supported ? ("1," + std::to_string(vramAfterReset.vramMB)) : "0,NA") << ",0\n";
-    curveCsv.close();
-    require(!curveCsv.bad(), "CSV stream error during close");
-    std::cout << "  -> Raw memory curve persisted to " << evidencePath.string() << " [PASS]\n";
+    std::ostringstream finalReset;
+    finalReset << "FINAL_RESET,0,"
+               << (probeAfterReset.supported ? ("1," + std::to_string(probeAfterReset.workingSetKB)) : "0,NA") << ","
+               << (vramAfterReset.supported ? ("1," + std::to_string(vramAfterReset.vramMB)) : "0,NA") << ",0\n";
+    writeCurveLine(finalReset.str());
+    for (auto& s : curveStreams) {
+        s->close();
+        require(!s->bad(), "CSV stream error during close");
+    }
+    std::cout << "  -> Raw memory curve persisted to " << evidencePaths[0].string() << " [PASS]\n";
 
     if (memAtSteady > 0 && probeBeforeReset.supported) {
         long long steadyDrift = static_cast<long long>(probeBeforeReset.workingSetKB) - static_cast<long long>(memAtSteady);
@@ -768,17 +827,23 @@ void testGuiEventToPresentationLatency(AppController& app) {
         for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
     }
 
-    const int kSamples = 30;
+    const int kSamples = 50;
     std::vector<double> eventLatencies;
     eventLatencies.reserve(kSamples);
     int unswappedCount = 0;
 
     for (int i = 0; i < kSamples; ++i) {
         const int eventId = i + 1;
+        std::atomic<bool> synced{false};
         std::atomic<bool> frameSubmitted{false};
         window->setProperty("lastEventSerial", eventId);
-        auto conn = QObject::connect(window, &QQuickWindow::frameSwapped, [&frameSubmitted, window, eventId]() {
-            if (window->property("lastEventSerial").toInt() == eventId) {
+
+        auto syncConn = QObject::connect(window, &QQuickWindow::afterSynchronizing, [&synced]() {
+            synced = true;
+        });
+
+        auto swapConn = QObject::connect(window, &QQuickWindow::frameSwapped, [&frameSubmitted, &synced]() {
+            if (synced) {
                 frameSubmitted = true;
             }
         });
@@ -796,7 +861,8 @@ void testGuiEventToPresentationLatency(AppController& app) {
             std::this_thread::sleep_for(1ms);
         }
         auto t1 = std::chrono::high_resolution_clock::now();
-        QObject::disconnect(conn);
+        QObject::disconnect(syncConn);
+        QObject::disconnect(swapConn);
 
         double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         if (!frameSubmitted) {

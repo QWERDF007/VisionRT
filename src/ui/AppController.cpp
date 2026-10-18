@@ -73,16 +73,21 @@ AppController::Impl::Impl(AppController* owner, std::size_t workers, const QStri
     : q(owner), applicationDirectory(workbench::localPath(directory)), tools(owner), outputs(owner), converter(owner) {
     pluginLoader = std::make_shared<PluginLoader>();
     std::filesystem::path toolsPackageRoot;
-    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.json")) {
+    if (std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yml") ||
+        std::filesystem::exists(applicationDirectory / "tools-package" / "module_index.yaml")) {
         toolsPackageRoot = (applicationDirectory / "tools-package").lexically_normal();
-    } else if (std::filesystem::exists(applicationDirectory / "module_index.json")) {
+    } else if (std::filesystem::exists(applicationDirectory / "module_index.yml") ||
+               std::filesystem::exists(applicationDirectory / "module_index.yaml")) {
         toolsPackageRoot = applicationDirectory;
     } else {
         toolsPackageRoot = (applicationDirectory / "tools").lexically_normal();
     }
     pluginLoader->setBaseDirectory(toolsPackageRoot);
 
-    const auto indexFile = toolsPackageRoot / "module_index.json";
+    auto indexFile = toolsPackageRoot / "module_index.yml";
+    if (!std::filesystem::exists(indexFile)) {
+        indexFile = toolsPackageRoot / "module_index.yaml";
+    }
     if (std::filesystem::exists(indexFile)) {
         pluginLoader->loadIndexFile(indexFile);
     }

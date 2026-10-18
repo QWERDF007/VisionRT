@@ -137,23 +137,14 @@ def target_architecture(build_dir: Path) -> str:
     return "x86"
 
 
-def clear_install_directory(path: Path, clean: bool, force: bool) -> Path | None:
-    """Prepare install directory safely according to marker rules, preserving custom tools."""
-    custom_backup = None
-    target_custom = path / "tools" / "custom"
-    if target_custom.is_dir() and any(target_custom.iterdir()):
-        import tempfile
-        custom_backup = Path(tempfile.mkdtemp(prefix="vrt_custom_backup_"))
-        shutil.copytree(target_custom, custom_backup / "custom", dirs_exist_ok=True)
-
+def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
+    """Prepare install directory safely according to marker rules."""
     if not clean:
         path.mkdir(parents=True, exist_ok=True)
-        return custom_backup
+        return
 
     marker = path / MARKER_FILE
     if path.is_dir() and any(path.iterdir()) and not marker.exists() and not force:
-        if custom_backup:
-            shutil.rmtree(custom_backup, ignore_errors=True)
         raise RuntimeError(
             f"install dir exists and has no {MARKER_FILE}: {path}; "
             "pass --force-clean to remove it or --no-clean to reuse it"
@@ -167,7 +158,6 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> Path | None
                 child.unlink()
     else:
         path.mkdir(parents=True)
-    return custom_backup
 
 
 def write_package_marker(
@@ -248,27 +238,13 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
             copy_file(pdb, install_dir / pdb.name)
 
 
-def copy_tools(install_dir: Path, custom_backup: Path | None = None) -> None:
-    """Copy assets/tools into install_dir/tools, preserving custom tools."""
+def copy_tools(install_dir: Path) -> None:
+    """Copy assets/tools into install_dir/tools."""
     source = REPO_ROOT / "assets" / "tools"
     if not source.is_dir():
         raise RuntimeError(f"tools directory was not found: {source}")
     target = install_dir / "tools"
-    local_backup = None
-    if custom_backup is None:
-        target_custom = target / "custom"
-        if target_custom.is_dir() and any(target_custom.iterdir()):
-            import tempfile
-            local_backup = Path(tempfile.mkdtemp(prefix="vrt_custom_backup_"))
-            shutil.copytree(target_custom, local_backup / "custom", dirs_exist_ok=True)
-            custom_backup = local_backup
-
     shutil.copytree(source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    if custom_backup and (custom_backup / "custom").is_dir():
-        target_custom = target / "custom"
-        shutil.copytree(custom_backup / "custom", target_custom, dirs_exist_ok=True)
-        shutil.rmtree(custom_backup, ignore_errors=True)
-        print("restored preserved custom tools")
     print(f"copy {source} -> {target}")
 
 
@@ -281,15 +257,7 @@ def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path
     target_pkg = install_dir / "tools-package"
     target_pkg.mkdir(parents=True, exist_ok=True)
 
-    # Protect existing custom tools in target_pkg
-    pkg_custom = target_pkg / "tools" / "custom"
-    custom_backup = None
-    if pkg_custom.is_dir() and any(pkg_custom.iterdir()):
-        import tempfile
-        custom_backup = Path(tempfile.mkdtemp(prefix="vrt_pkg_custom_backup_"))
-        shutil.copytree(pkg_custom, custom_backup / "custom", dirs_exist_ok=True)
-
-    # Copy external package tree into tools-package without duplicating into install_dir/tools/builtin
+    # Copy external package tree into tools-package
     for item in tools_dir.iterdir():
         if item.name == "tools":
             target_tools = target_pkg / "tools"
@@ -317,10 +285,6 @@ def merge_tools_package(install_dir: Path, tools_dir: Path, tools_manifest: Path
             shutil.copytree(item, target_pkg / item.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         else:
             copy_file(item, target_pkg / item.name)
-
-    if custom_backup and (custom_backup / "custom").is_dir():
-        shutil.copytree(custom_backup / "custom", pkg_custom, dirs_exist_ok=True)
-        shutil.rmtree(custom_backup, ignore_errors=True)
 
     if tools_manifest:
         if not tools_manifest.is_file():
@@ -801,13 +765,13 @@ def main() -> int:
 
     source_exe = find_executable(build_dir)
     version = project_version()
-    custom_backup = clear_install_directory(install_dir, not args.no_clean, args.force_clean)
+    clear_install_directory(install_dir, not args.no_clean, args.force_clean)
     write_package_marker(install_dir, build_dir, version, ("state=incomplete",))
 
     packaged_exe = install_dir / source_exe.name
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb)
-    copy_tools(install_dir, custom_backup)
+    copy_tools(install_dir)
     copy_python_runtime(build_dir, install_dir)
 
     if args.tools_dir:
