@@ -2,7 +2,8 @@
 #undef NDEBUG
 #endif
 
-#include "common/Value.h"
+#include <visionrt/sdk/Value.h>
+#include <visionrt/sdk/ValueYaml.h>
 #include "visionrt/sdk/Schema.h"
 
 #include <array>

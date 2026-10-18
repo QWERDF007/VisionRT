@@ -112,6 +112,16 @@ shift
 goto :PARSE_ARGS
 
 :START_BUILD
+rem Ninja 定位：优先 PATH，其次 Visual Studio 自带（避免机器相关硬编码）
+where ninja >nul 2>nul
+if errorlevel 1 (
+    if exist "%VSINSTALLDIR%Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe" (
+        set "PATH=%VSINSTALLDIR%Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%"
+    ) else (
+        echo [WARN] ninja not found on PATH or in Visual Studio; CMake configure will likely fail.
+    )
+)
+
 if "%DO_CLEAN%"=="1" (
     echo [INFO] Cleaning build directory: %BUILD_DIR% ...
     if exist "%BUILD_DIR%" (

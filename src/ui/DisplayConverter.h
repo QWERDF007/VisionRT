@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/Value.h"
+#include <visionrt/sdk/Value.h>
 
 #include <QImage>
 #include <QObject>

@@ -1,5 +1,5 @@
 #include "core/ToolRegistry.h"
-#include "core/ValueYaml.h"
+#include <visionrt/sdk/ValueYaml.h>
 #include "visionrt/sdk/SchemaYaml.h"
 
 #include <algorithm>

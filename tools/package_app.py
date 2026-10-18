@@ -35,7 +35,6 @@ from dependency_utils import (
     load_dependencies,
     platform_key,
     read_cmake_cache_value,
-    read_cmake_set_expanded,
     resolve_dependency_root,
     resolve_project_path,
     warn,
@@ -288,36 +287,27 @@ def merge_tools_package(install_dir: Path, tools_dir: Path) -> None:
             copy_file(item, target_pkg / item.name)
 
 
-def resolve_python_home(build_dir: Path, repo_root: Path = REPO_ROOT) -> Path:
-    """Resolve Python home directory."""
+def resolve_python_home(build_dir: Path, dependency_file: Path, repo_root: Path = REPO_ROOT) -> Path:
+    """Resolve Python home directory (env override > tools/dependencies.yaml manifest)."""
     env_home = os.environ.get("VISIONRT_PYTHON_HOME") or os.environ.get("PYTHONHOME")
     if env_home:
         cand = Path(env_home).resolve()
         if cand.is_dir():
             return cand
 
-    cache_val = read_cmake_cache_value(build_dir / "CMakeCache.txt", "VISIONRT_PYTHON_HOME")
-    if cache_val:
-        cand = Path(cache_val).resolve()
-        if cand.is_dir():
-            return cand
-
-    cmake_val = read_cmake_set_expanded(repo_root / "cmake" / "ConfigPython.cmake", "VISIONRT_PYTHON_HOME")
-    if cmake_val:
-        cand = Path(cmake_val).resolve()
-        if cand.is_dir():
-            return cand
-
-    fallback = Path("D:/Software/anaconda3/envs/py312")
-    if fallback.is_dir():
-        return fallback
+    for dep in load_dependencies(dependency_file):
+        if str(dep.get("name", "")).lower() == "python":
+            root = resolve_dependency_root(dep, build_dir, repo_root)
+            if root and (root / "python.exe").is_file():
+                return root
+            break
 
     raise RuntimeError("Python home directory could not be resolved.")
 
 
-def copy_python_runtime(build_dir: Path, install_dir: Path) -> None:
+def copy_python_runtime(build_dir: Path, install_dir: Path, dependency_file: Path) -> None:
     """Deploy embedded Python 3.12 environment."""
-    python_home = resolve_python_home(build_dir)
+    python_home = resolve_python_home(build_dir, dependency_file)
     print(f"deploying python runtime from {python_home}")
 
     # Copy python3*.dll and zlib*.dll to install root
@@ -508,10 +498,6 @@ def qt_roots(build_dir: Path) -> list[Path]:
         except Exception:
             pass
 
-    config_root = read_cmake_set_expanded(REPO_ROOT / "cmake" / "ConfigQT.cmake", "Qt6_ROOT")
-    if config_root:
-        roots.append(Path(config_root))
-
     for key in ("Qt6Core_DIR", "Qt6_DIR"):
         value = read_cmake_cache_value(build_dir / "CMakeCache.txt", key)
         if value:
@@ -566,9 +552,7 @@ def invoke_windeployqt(build_dir: Path, install_dir: Path, exe: Path, explicit: 
         "--qmldir",
         str(REPO_ROOT / "src" / "ui" / "qml"),
         "--qmlimport",
-        str(REPO_ROOT / "3rdparty" / "QuickUI"),
-        "--qmlimport",
-        str(build_dir / "qml"),
+        str(build_dir / "bin" / "qml"),
         str(exe),
     ]
     print("run " + " ".join(command))
@@ -984,7 +968,7 @@ def main() -> int:
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb)
     copy_tools(install_dir)
-    copy_python_runtime(build_dir, install_dir)
+    copy_python_runtime(build_dir, install_dir, dependency_file)
 
     if args.tools_dir:
         merge_tools_package(install_dir, resolve_project_path(args.tools_dir))

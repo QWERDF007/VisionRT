@@ -6,7 +6,7 @@ visionrt_resolve_path(_visionrt_python_root
     VARIABLES Python3_ROOT_DIR PYTHON_ROOT
     ENVIRONMENT_VARIABLES Python3_ROOT_DIR PYTHON_ROOT
     REQUIRED_FILE "include/Python.h"
-    DEFAULT "D:/Software/anaconda3/envs/py312"
+    DEPENDENCY python
 )
 
 if(_visionrt_python_root)

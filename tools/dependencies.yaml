@@ -1,17 +1,19 @@
 # Runtime dependency manifest for VisionRT
+# 机器相关依赖默认路径的唯一真相源（SSOT）：换机器只需改本文件，无需改 cmake/*.cmake。
 # root may be a path or a variable read from CMakeCache.txt / the listed CMake file.
-# default defines the local default path (Single Source of Truth).
+# default defines the local default path; <platform>_default (windows/linux/macos) 优先于 default。
+# CMake 侧消费入口：cmake/ConfigDependencyDefaults.cmake（visionrt_dependency_default / DEPENDENCY 参数）。
 dependencies:
   - name: qt
     cmake: cmake/ConfigQT.cmake
     root: Qt6_ROOT
-    default: D:/Software/Qt6/6.6.2/msvc2019_64
+    default: E:/Softwares/Qt/6.11.0/msvc2022_64
 
   - name: opencv
     cmake: cmake/ConfigOpenCV.cmake
     root: OpenCV_HOME
     windows_root: OpenCV_BIN_DIR
-    default: D:/Software/dev/opencv-4.8.0/build/x64/vc16
+    default: D:/Software/opencv/build/x64/vc16
     destinations:
       - build/bin
     windows:
@@ -21,7 +23,7 @@ dependencies:
   - name: python
     cmake: cmake/ConfigPython.cmake
     root: PYTHON_HOME
-    default: D:/Software/anaconda3/envs/py312
+    default: E:/Softwares/Anaconda3/envs/py312
     destinations:
       - build/bin
     windows:

@@ -1,6 +1,6 @@
 #include "core/ProjectStorage.h"
 #include "core/ToolRegistry.h"
-#include "core/ValueYaml.h"
+#include <visionrt/sdk/ValueYaml.h>
 
 #include <QFile>
 #include <QSaveFile>
