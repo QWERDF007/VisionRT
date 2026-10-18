@@ -19,6 +19,7 @@
 using namespace visionrt;
 namespace {
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
+void require(bool value, const std::string& message) { if (!value) throw std::runtime_error(message); }
 void treeContract() {
     ToolRegistry registry;
     ToolDefinition tool;
@@ -319,6 +320,7 @@ void mainQmlContract() {
 }
 
 void multiRootCoexistenceAndRefreshContract() {
+    std::cout << "\n[MULTI-ROOT & REFRESH CONTRACT START]\n";
     QTemporaryDir directory;
     const auto dirPath = directory.path();
 
@@ -349,6 +351,7 @@ void multiRootCoexistenceAndRefreshContract() {
         indexFile.close();
     }
 
+    // Root 1: Platform builtin (cpp_function)
     QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
     QFile root1Yaml(dirPath + "/assets/tools/builtin/flow/func/platform_func.yaml");
     if (root1Yaml.open(QIODevice::WriteOnly)) {
@@ -374,6 +377,7 @@ void multiRootCoexistenceAndRefreshContract() {
         root1Yaml.close();
     }
 
+    // Root 2: Package builtin (cpp_class)
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/counter");
     QFile root2Yaml(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.yaml");
     if (root2Yaml.open(QIODevice::WriteOnly)) {
@@ -399,25 +403,26 @@ void multiRootCoexistenceAndRefreshContract() {
         root2Yaml.close();
     }
 
+    // Root 3: Custom Python tool A (valid)
     QDir(dirPath).mkpath("tools/custom/user/py");
-    QFile pyScript(dirPath + "/tools/custom/user/py/user_node.py");
-    if (pyScript.open(QIODevice::WriteOnly)) {
-        pyScript.write(
+    QFile pyScriptA(dirPath + "/tools/custom/user/py/user_node_a.py");
+    if (pyScriptA.open(QIODevice::WriteOnly)) {
+        pyScriptA.write(
             "def run(inputs):\n"
-            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 999}\n"
+            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111}\n"
         );
-        pyScript.close();
+        pyScriptA.close();
     }
-    QFile root3Yaml(dirPath + "/tools/custom/user/py/user_node.yaml");
-    if (root3Yaml.open(QIODevice::WriteOnly)) {
-        root3Yaml.write(
+    QFile root3YamlA(dirPath + "/tools/custom/user/py/user_node_a.yaml");
+    if (root3YamlA.open(QIODevice::WriteOnly)) {
+        root3YamlA.write(
             "schema_version: 1\n"
-            "tool_id: test.user.python\n"
-            "display_name: 用户脚本\n"
+            "tool_id: test.user.pythonA\n"
+            "display_name: 用户脚本A\n"
             "version: 1.0.0\n"
             "kind: python_function\n"
             "entry:\n"
-            "  file: user_node.py\n"
+            "  file: user_node_a.py\n"
             "  symbol: run\n"
             "init_params: []\n"
             "inputs: []\n"
@@ -426,9 +431,67 @@ void multiRootCoexistenceAndRefreshContract() {
             "  name: 结果\n"
             "  type: Int\n"
         );
-        root3Yaml.close();
+        root3YamlA.close();
     }
 
+    // Root 3: Custom Python tool B (valid)
+    QFile pyScriptB(dirPath + "/tools/custom/user/py/user_node_b.py");
+    if (pyScriptB.open(QIODevice::WriteOnly)) {
+        pyScriptB.write(
+            "def run(inputs):\n"
+            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 222}\n"
+        );
+        pyScriptB.close();
+    }
+    QFile root3YamlB(dirPath + "/tools/custom/user/py/user_node_b.yaml");
+    if (root3YamlB.open(QIODevice::WriteOnly)) {
+        root3YamlB.write(
+            "schema_version: 1\n"
+            "tool_id: test.user.pythonB\n"
+            "display_name: 用户脚本B\n"
+            "version: 1.0.0\n"
+            "kind: python_function\n"
+            "entry:\n"
+            "  file: user_node_b.py\n"
+            "  symbol: run\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "- id: result\n"
+            "  name: 结果\n"
+            "  type: Int\n"
+        );
+        root3YamlB.close();
+    }
+
+    // Root 3: Custom Python tool C (broken syntax script)
+    QFile pyScriptC(dirPath + "/tools/custom/user/py/broken_node.py");
+    if (pyScriptC.open(QIODevice::WriteOnly)) {
+        pyScriptC.write("def invalid_syntax(\n  bad syntax !!\n");
+        pyScriptC.close();
+    }
+    QFile root3YamlC(dirPath + "/tools/custom/user/py/broken_node.yaml");
+    if (root3YamlC.open(QIODevice::WriteOnly)) {
+        root3YamlC.write(
+            "schema_version: 1\n"
+            "tool_id: test.user.broken\n"
+            "display_name: 损坏脚本\n"
+            "version: 1.0.0\n"
+            "kind: python_function\n"
+            "entry:\n"
+            "  file: broken_node.py\n"
+            "  symbol: invalid_syntax\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "- id: result\n"
+            "  name: 结果\n"
+            "  type: Int\n"
+        );
+        root3YamlC.close();
+    }
+
+    // Duplicate YAML
     QFile dupYaml(dirPath + "/tools/custom/user/py/duplicate.yaml");
     if (dupYaml.open(QIODevice::WriteOnly)) {
         dupYaml.write(
@@ -446,87 +509,236 @@ void multiRootCoexistenceAndRefreshContract() {
         dupYaml.close();
     }
 
-    AppController app(1, dirPath);
-    for (int i = 0; i < 50 && app.busy(); ++i) {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    const auto diag = app.diagnostic();
-    require(diag.contains("Duplicate tool_id test.platform.func"), "duplicate diagnostic missing");
-
-    const auto defs = app.toolDefinitions();
-    bool hasRoot1 = false, hasRoot2 = false, hasRoot3 = false;
-    for (const auto& item : defs) {
-        const auto map = item.toMap();
-        const auto id = map.value("id").toString();
-        if (id == "test.platform.func") hasRoot1 = true;
-        if (id == "test.pkg.counter") hasRoot2 = true;
-        if (id == "test.user.python") hasRoot3 = true;
-    }
-    require(hasRoot1, "missing platform root tool definition");
-    require(hasRoot2, "missing package root tool definition");
-    require(hasRoot3, "missing custom root tool definition");
-
-    app.addNode("test.platform.func", 100, 100);
-    app.addNode("test.pkg.counter", 200, 100);
-    app.addNode("test.user.python", 300, 100);
-
-    const auto nodesBefore = app.nodes();
-    require(nodesBefore.size() == 3, "expected 3 nodes added");
-
-    app.runOnce();
-    for (int i = 0; i < 50; ++i) {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    const auto nodesAfter = app.nodes();
-    require(nodesAfter.size() == 3, "node count changed after run");
-
-    app.refreshPython();
-    for (int i = 0; i < 50 && app.busy(); ++i) {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    const auto defsAfterRefresh = app.toolDefinitions();
-    require(defsAfterRefresh.size() == defs.size(), "definitions count changed after refreshPython");
-
     const QString projectFile = dirPath + "/test_project.vrt";
-    require(app.save(projectFile), "save project failed");
+    {
+        AppController app(1, dirPath);
+        for (int i = 0; i < 50 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
 
-    QFile::remove(dirPath + "/tools/custom/user/py/user_node.yaml");
-    app.rescanTools();
+        const auto diag = app.diagnostic();
+        require(diag.contains("Duplicate tool_id test.platform.func"), "duplicate diagnostic missing");
+        std::cout << "[Evidence HS3-01] Duplicate diagnosis detected: " << diag.toStdString() << "\n";
 
-    const auto defsAfterDelete = app.toolDefinitions();
-    bool foundDeleted = false, foundPlatform = false, foundPkg = false;
-    for (const auto& item : defsAfterDelete) {
-        const auto id = item.toMap().value("id").toString();
-        if (id == "test.user.python") foundDeleted = true;
-        if (id == "test.platform.func") foundPlatform = true;
-        if (id == "test.pkg.counter") foundPkg = true;
+        const auto defs = app.toolDefinitions();
+        bool hasPlatform = false, hasPkg = false, hasPyA = false, hasPyB = false, hasBroken = false;
+        for (const auto& item : defs) {
+            const auto map = item.toMap();
+            const auto id = map.value("id").toString();
+            const bool avail = map.value("available").toBool();
+            if (id == "test.platform.func") { hasPlatform = true; require(avail, "platform tool not available"); }
+            if (id == "test.pkg.counter") { hasPkg = true; require(avail, "package tool not available"); }
+            if (id == "test.user.pythonA") { hasPyA = true; require(avail, "pythonA tool not available"); }
+            if (id == "test.user.pythonB") { hasPyB = true; require(avail, "pythonB tool not available"); }
+            if (id == "test.user.broken") { hasBroken = true; require(!avail, "broken python script must not be available"); }
+        }
+        require(hasPlatform && hasPkg && hasPyA && hasPyB && hasBroken, "definitions missing expected tools");
+        std::cout << "[Evidence HS3-01] Coexistence verified: platform, pkg, pythonA, pythonB available; broken script isolated.\n";
+
+        // Add nodes
+        app.addNode("test.platform.func", 100, 100);
+        app.addNode("test.pkg.counter", 200, 100);
+        app.addNode("test.user.pythonA", 300, 100);
+        app.addNode("test.user.pythonB", 400, 100);
+
+        const auto nodesBefore = app.nodes();
+        require(nodesBefore.size() == 4, "expected 4 nodes added");
+
+        app.runOnce();
+        for (int i = 0; i < 100 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        auto* outModel = qobject_cast<OutputModel*>(app.outputModel());
+        require(outModel != nullptr, "outputModel is null");
+
+        // Check node statuses and output values
+        for (const auto& n : app.nodes()) {
+            const auto m = n.toMap();
+            const auto id = m.value("id").toString();
+            const auto toolId = m.value("toolId").toString();
+            const auto state = m.value("state").toString();
+            require(state == "green", "node execution failed: " + toolId.toStdString());
+            app.selectNode(id);
+            const auto preview = outModel->get(2).value("preview").toString();
+            std::cout << "[Evidence HS3-01] Node " << id.toStdString() << " (" << toolId.toStdString() << ") state=" << state.toStdString() << ", result=" << preview.toStdString() << "\n";
+            if (toolId == "test.platform.func") require(preview == "10", "unexpected platform.func output: " + preview.toStdString());
+            if (toolId == "test.pkg.counter") require(preview == "11", "unexpected pkg.counter output: " + preview.toStdString());
+            if (toolId == "test.user.pythonA") require(preview == "111", "unexpected pythonA output: " + preview.toStdString());
+            if (toolId == "test.user.pythonB") require(preview == "222", "unexpected pythonB output: " + preview.toStdString());
+        }
+
+        // Save project
+        require(app.save(projectFile), "save project failed");
+        std::cout << "[Evidence HS3-01] Project saved successfully to: " << projectFile.toStdString() << "\n";
+
+        // Reopen and verify equality
+        app.requestOpen(projectFile);
+        for (int i = 0; i < 50 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        const auto reopenedNodes = app.nodes();
+        require(reopenedNodes.size() == 4, "reopened project node count differs");
+        app.runOnce();
+        for (int i = 0; i < 100 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        for (const auto& n : app.nodes()) {
+            const auto m = n.toMap();
+            const auto id = m.value("id").toString();
+            const auto toolId = m.value("toolId").toString();
+            require(m.value("state").toString() == "green", "reopened node run failed");
+            app.selectNode(id);
+            const auto preview = outModel->get(2).value("preview").toString();
+            if (toolId == "test.platform.func") require(preview == "10", "reopened platform.func output mismatch");
+            if (toolId == "test.user.pythonA") require(preview == "111", "reopened pythonA output mismatch");
+            if (toolId == "test.user.pythonB") require(preview == "222", "reopened pythonB output mismatch");
+        }
+        std::cout << "[Evidence HS3-01] Save/reopen numerical equality confirmed.\n";
+
+        // Delete Python A YAML and rescan
+        std::cout << "[Evidence HS3-01] Deleting Python A and executing rescanTools()...\n";
+        QFile::remove(dirPath + "/tools/custom/user/py/user_node_a.yaml");
+        app.rescanTools();
+        for (int i = 0; i < 100 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        std::cout << "[Evidence HS3-01] rescan completed. Busy=" << app.busy() << ", runState=" << app.runState().toStdString() << "\n";
+
+        const auto defsAfterDelete = app.toolDefinitions();
+        bool foundDeletedA = false, foundB = false, bAvailable = false;
+        for (const auto& item : defsAfterDelete) {
+            const auto map = item.toMap();
+            const auto id = map.value("id").toString();
+            if (id == "test.user.pythonA") foundDeletedA = true;
+            if (id == "test.user.pythonB") {
+                foundB = true;
+                bAvailable = map.value("available").toBool();
+            }
+        }
+        require(!foundDeletedA, "deleted Python A YAML still in toolDefinitions");
+        require(foundB && bAvailable, "Python B lost or unavailable after rescan");
+        std::cout << "[Evidence HS3-01] Tool B remains Available after Tool A deleted and rescan.\n";
+
+        // Verify existing node for Python A is marked defMissing
+        bool nodeADefMissing = false;
+        for (const auto& n : app.nodes()) {
+            const auto map = n.toMap();
+            if (map.value("toolId").toString() == "test.user.pythonA") {
+                nodeADefMissing = map.value("defMissing").toBool();
+            }
+        }
+        require(nodeADefMissing, "node for deleted tool definition is not marked defMissing");
+
+        // Add a NEW node with Python B and run it
+        app.addNode("test.user.pythonB", 500, 100);
+        const auto nodesAfterAddB = app.nodes();
+        require(nodesAfterAddB.size() == 5, "failed to add new Python B node");
+        const auto newBNodeId = nodesAfterAddB.last().toMap().value("id").toString();
+
+        // Run the new Python B node via runNode()
+        app.selectNode(newBNodeId);
+        app.runNode();
+        for (int i = 0; i < 100 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        const auto newBPreview = outModel->get(2).value("preview").toString();
+        require(newBPreview == "222", "new Python B node failed to run after rescan: " + newBPreview.toStdString());
+        std::cout << "[Evidence HS3-01] New Python B node ran successfully via runNode with result=" << newBPreview.toStdString() << "\n";
+
+        // Clean up the defMissing node and run the entire flow once
+        QString nodeAId;
+        for (const auto& n : app.nodes()) {
+            const auto map = n.toMap();
+            if (map.value("toolId").toString() == "test.user.pythonA") {
+                nodeAId = map.value("id").toString();
+                break;
+            }
+        }
+        require(!nodeAId.isEmpty(), "missing node A");
+        app.deleteNodes({nodeAId});
+        app.runOnce();
+        for (int i = 0; i < 100 && app.busy(); ++i) {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        app.selectNode(newBNodeId);
+        require(outModel->get(2).value("preview").toString() == "222", "runOnce after deleting missing node failed");
+        std::cout << "[Evidence HS3-01] Entire flow ran successfully after removing missing node, new B result=222\n";
     }
-    require(!foundDeleted, "deleted tool YAML still in toolDefinitions");
-    require(foundPlatform, "platform tool lost after rescan");
-    require(foundPkg, "package tool lost after rescan");
 
-    const auto nodesAfterDelete = app.nodes();
-    require(nodesAfterDelete.size() == 3, "project node was deleted instead of marked defMissing");
-    bool node3DefMissing = false;
-    for (const auto& n : nodesAfterDelete) {
-        const auto map = n.toMap();
-        if (map.value("toolId").toString() == "test.user.python") {
-            node3DefMissing = map.value("defMissing").toBool();
+    // Verify: Start without custom directory, create directory afterwards, then refresh/rescan discovers it
+    QTemporaryDir emptyDir;
+    AppController lateApp(1, emptyDir.path());
+    for (int i = 0; i < 50 && lateApp.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    require(lateApp.toolDefinitions().isEmpty(), "lateApp expected empty toolDefinitions initially");
+
+    // Create custom directory and tool dynamically after startup
+    QDir(emptyDir.path()).mkpath("tools/custom/late_cat/late_tool");
+    QFile latePy(emptyDir.path() + "/tools/custom/late_cat/late_tool/late.py");
+    if (latePy.open(QIODevice::WriteOnly)) {
+        latePy.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'val': 888}\n");
+        latePy.close();
+    }
+    QFile lateYaml(emptyDir.path() + "/tools/custom/late_cat/late_tool/late.yaml");
+    if (lateYaml.open(QIODevice::WriteOnly)) {
+        lateYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.late.python\n"
+            "display_name: 启动后动态脚本\n"
+            "version: 1.0.0\n"
+            "kind: python_function\n"
+            "entry:\n"
+            "  file: late.py\n"
+            "  symbol: run\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "- id: val\n"
+            "  name: 输出\n"
+            "  type: Int\n"
+        );
+        lateYaml.close();
+    }
+
+    lateApp.refreshPython();
+    for (int i = 0; i < 100 && lateApp.busy(); ++i) {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::cout << "[Evidence HS3-01] lateApp busy=" << lateApp.busy() << ", diagnostic: " << lateApp.diagnostic().toStdString() << "\n";
+    bool foundLate = false;
+    for (const auto& item : lateApp.toolDefinitions()) {
+        const auto map = item.toMap();
+        if (map.value("id").toString() == "test.late.python") {
+            foundLate = true;
+            std::cout << "[Evidence HS3-01] Late tool available=" << map.value("available").toBool()
+                      << ", message=" << map.value("message").toString().toStdString() << "\n";
+            require(map.value("available").toBool(), "dynamically discovered tool is not available: " + map.value("message").toString().toStdString());
         }
     }
-    require(node3DefMissing, "node for deleted tool definition is not marked defMissing");
-
-    app.requestOpen(projectFile);
-    for (int i = 0; i < 50 && app.busy(); ++i) {
+    require(foundLate, "dynamic custom directory created after startup not discovered by refresh");
+    lateApp.addNode("test.late.python", 100, 100);
+    lateApp.runOnce();
+    for (int i = 0; i < 50 && lateApp.busy(); ++i) {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    const auto reopenedNodes = app.nodes();
-    require(reopenedNodes.size() == 3, "reopened project node count differs");
+    auto* lateOutModel = qobject_cast<OutputModel*>(lateApp.outputModel());
+    lateApp.selectNode(lateApp.nodes().first().toMap().value("id").toString());
+    const auto latePreview = lateOutModel->get(2).value("preview").toString();
+    require(latePreview == "888", "dynamically discovered tool failed execution: " + latePreview.toStdString());
+    std::cout << "[Evidence HS3-01] Post-startup custom directory discovery verified, execution result=" << latePreview.toStdString() << "\n";
+    std::cout << "[MULTI-ROOT & REFRESH CONTRACT PASSED]\n";
 }
 }
 int main(int argc, char** argv) {
