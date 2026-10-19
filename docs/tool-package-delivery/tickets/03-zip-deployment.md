@@ -4,7 +4,7 @@
 
 **Blocked by:** [01：统一真实工具包读取与消费](01-unified-package-consumption.md)。
 
-**Status:** completed — 已完成并通过验收测试。
+**Status:** completed — 验收范围与证据见[验收报告](../../VisionRT-VisionTools-验收评估报告.md)。
 
 **Specification:** [D-01 至 D-07、D-13；US-01 至 US-12、US-15、US-19；T-01、T-02、T-03、T-09](../spec.md)。
 

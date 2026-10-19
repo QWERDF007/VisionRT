@@ -26,8 +26,15 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
     std::map<std::string, std::filesystem::path, std::less<>> index;
     for (const auto &tool : package.tools)
     {
-        if (!tool.moduleLibrary.empty())
-            index.emplace(tool.registryName, tool.moduleLibrary);
+        if (tool.moduleLibrary.empty())
+            continue;
+        const auto inserted = index.emplace(tool.registryName, tool.moduleLibrary);
+        // Two modules claiming one factory name would make the second tool silently
+        // load the wrong library, so the combination is rejected instead (D-04).
+        if (!inserted.second && inserted.first->second != tool.moduleLibrary)
+            throw ContractError("registry_name '" + tool.registryName
+                                + "' is provided by two different modules: " + inserted.first->second.string() + " and "
+                                + tool.moduleLibrary.string());
     }
     std::lock_guard lock(mutex_);
     index_ = std::move(index);

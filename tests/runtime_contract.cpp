@@ -343,9 +343,8 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
 void receiverCapacityAndSessionIsolation(const std::filesystem::path &toolsRoot)
 {
     ToolRegistry registry;
-    registry.scan(toolsRoot);
+    registry.registerPackage(readToolsPackage(toolsRoot));
     registerReceiveTools(registry);
-    registry.bindHostTool("visionrt.flow.receive.int", "visionrt.receiver");
     auto source = definition("test.sender");
     install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{25}}}}; });
     auto        sender  = node(1, source);
@@ -857,7 +856,8 @@ int main(int argc, char **argv)
     failureReplacesOldValueAndManualUsesCache();
     initializationSuppressionRetryAndReset();
     stopDrainsCommittedFlowsAndFreezesConfiguration();
-    receiverCapacityAndSessionIsolation(argc > 1 ? argv[1] : "assets/tools");
+    assert(argc == 2);
+    receiverCapacityAndSessionIsolation(argv[1]);
     receiverConsumesFailures();
     hostBindingReceiverContract();
     resetWaitsForActiveInvocation();

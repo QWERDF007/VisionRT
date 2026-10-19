@@ -19,5 +19,6 @@ set(PYBIND11_FINDPYTHON ON)
 add_subdirectory(3rdparty/pybind11 EXCLUDE_FROM_ALL)
 
 get_filename_component(VISIONRT_PYTHON_HOME "${Python3_EXECUTABLE}" DIRECTORY)
+set(VISIONRT_PYTHON_HOME "${VISIONRT_PYTHON_HOME}" CACHE PATH "Python runtime selected by the host build" FORCE)
 set(VISIONRT_PYTHON_BIN "${VISIONRT_PYTHON_HOME}")
 file(GLOB PYTHON_DLLS "${VISIONRT_PYTHON_BIN}/python3*.dll" "${VISIONRT_PYTHON_BIN}/zlib*.dll")

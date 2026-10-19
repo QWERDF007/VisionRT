@@ -24,7 +24,6 @@ NodeId                nodeId(const QString &text);
 QString               typeName(Type type);
 const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id);
 QVariantMap           metadata(const ToolDefinition &definition);
-YAML::Node            metadataYaml(const QVariantMap &map);
 } // namespace workbench
 
 struct AppController::Impl

@@ -16,11 +16,11 @@
 | 生成与工具打包 | [生成器](F:/Projects/VisionTools/tools/generate_tool_contracts.py)、[package_tools.py](F:/Projects/VisionTools/tools/package_tools.py) |
 | SDK 包读取与校验 | [SchemaYaml Interface](../3rdparty/VisionRTSDK/include/visionrt/sdk/SchemaYaml.h)、[实现](../3rdparty/VisionRTSDK/src/SchemaYaml.cpp)、[CLI](../3rdparty/VisionRTSDK/tools/visionrt_validate_tool.cpp) |
 | SDK 值与模块契约 | [Value.h](../3rdparty/VisionRTSDK/include/visionrt/sdk/Value.h)、[Tool.h](../3rdparty/VisionRTSDK/include/visionrt/sdk/Tool.h)、[Module.h](../3rdparty/VisionRTSDK/include/visionrt/sdk/Module.h) |
-| 宿主部署 | [package_app.py](../tools/package_app.py)：外部工具目录参数、`copy_tools`、`merge_tools_package` |
+| 宿主部署 | [package_app.py](../tools/package_app.py) 的 deploy_tools_package；[构建所选 Python](../cmake/ConfigPython.cmake) |
 | 宿主工具发现与呈现 | [AppController](../src/ui/AppController.cpp)、[ToolRegistry](../src/core/ToolRegistry.cpp)、[ToolTreeModel](../src/ui/ToolTreeModel.cpp) |
 | 库加载与实例 | [PluginLoader](../src/plugins/PluginLoader.cpp) |
 | 平台接收节点及能力 | [Receiver Interface](../src/runtime/Receiver.h)、[实现](../src/runtime/Receiver.cpp)、[平台工具上下文](../src/core/Tool.h) |
-| Python 转换与运行时 | [PythonBridge](../src/python/PythonBridge.cpp)、[PythonRuntime](../src/python/PythonRuntime.cpp) |
+| Python 转换与运行时 | [SDK PythonInterop](../3rdparty/VisionRTSDK/include/visionrt/sdk/PythonInterop.h)、[实现](../3rdparty/VisionRTSDK/src/PythonInterop.cpp)、[PythonRuntime](../src/python/PythonRuntime.cpp) |
 
 SDK 源仓库为 `F:/Projects/VisionRTSDK`；父工程中的 SDK 是锁定版本的子模块。上述源码位置以当前工程为准，未来重构后只更新这份导航。
 
@@ -28,7 +28,7 @@ SDK 源仓库为 `F:/Projects/VisionRTSDK`；父工程中的 SDK 是锁定版本
 
 | 验证面 | 既有入口 |
 | --- | --- |
-| 工具库声明生成与交付 | [生成测试](F:/Projects/VisionTools/tests/test_generator.py)、[打包测试](F:/Projects/VisionTools/tests/test_package.py)、[真实消费者](F:/Projects/VisionTools/tests/test_installation_consumer.cpp) |
+| 工具库声明生成与交付 | [生成测试](F:/Projects/VisionTools/tests/test_generator.py)、[打包测试](F:/Projects/VisionTools/tests/test_package.py)、[发行链测试](F:/Projects/VisionTools/tests/test_distribution.py)、[真实消费者](F:/Projects/VisionTools/tests/test_installation_consumer.cpp) |
 | SDK 独立消费 | [消费测试](../3rdparty/VisionRTSDK/tests/test_sdk_consumer.cpp)、[隔离安装](../3rdparty/VisionRTSDK/tests/test_isolated_installation.py)、[CLI 测试](../3rdparty/VisionRTSDK/tests/test_cli.py) |
 | 真实工具包到宿主执行 | [examples_contract](../tests/examples_contract.cpp)、[plugin_contract](../tests/plugin_contract.cpp) |
 | 列表与平台接收 | [tool_registry_contract](../tests/tool_registry_contract.cpp)、[runtime_contract](../tests/runtime_contract.cpp)、[workbench_contract](../tests/workbench_contract.cpp) |

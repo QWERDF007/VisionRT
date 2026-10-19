@@ -3,13 +3,9 @@
 #include "plugins/PluginLoader.h"
 #include "visionrt/sdk/SchemaYaml.h"
 
-#include <visionrt/sdk/ValueYaml.h>
+#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
-#include <cmath>
-#include <fstream>
-#include <limits>
-#include <set>
 
 namespace visionrt {
 namespace {
@@ -50,72 +46,6 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
     portsMatch(definition.outputs, contract.outputs, "outputs");
 }
 
-using OrderedPath = std::pair<std::u8string, std::filesystem::path>;
-
-void collect(const std::filesystem::path &directory, int depth, std::vector<OrderedPath> &paths,
-             std::vector<RegistryDiagnostic> &diagnostics)
-{
-    std::error_code                     error;
-    std::filesystem::directory_iterator iterator(directory, error), end;
-    if (error)
-    {
-        if (error != std::errc::no_such_file_or_directory)
-            diagnostics.push_back({directory, error.message(), {}});
-        return;
-    }
-    for (; iterator != end; iterator.increment(error))
-    {
-        if (error)
-        {
-            diagnostics.push_back({directory, error.message(), {}});
-            break;
-        }
-        const auto entry = *iterator;
-        if (entry.is_directory(error))
-        {
-            if (depth < 2 && !entry.is_symlink(error))
-                collect(entry.path(), depth + 1, paths, diagnostics);
-        }
-        else if (!error && entry.is_regular_file(error))
-        {
-            auto extension = entry.path().extension().string();
-            std::transform(
-                extension.begin(), extension.end(), extension.begin(), [](unsigned char c)
-                { return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : static_cast<char>(c); });
-            if (extension == ".yaml" || extension == ".yml")
-            {
-                if (depth == 2)
-                {
-                    auto path = entry.path().lexically_normal();
-                    paths.emplace_back(path.generic_u8string(), std::move(path));
-                }
-                else
-                    diagnostics.push_back({entry.path(), "Tool YAML requires category/subcategory directories", {}});
-            }
-        }
-        if (error)
-        {
-            diagnostics.push_back({entry.path(), error.message(), {}});
-            error.clear();
-        }
-    }
-    if (error)
-        diagnostics.push_back({directory, error.message(), {}});
-}
-
-bool containedIn(const std::filesystem::path &root, const std::filesystem::path &path)
-{
-    if (root.empty())
-        return false;
-    auto rootPart = root.begin();
-    auto pathPart = path.begin();
-    for (; rootPart != root.end(); ++rootPart, ++pathPart)
-    {
-        if (pathPart == path.end() || *pathPart != *rootPart)
-            return false;
-    }
-    return true;
-}
 } // namespace
 
 ToolDefinition parseDefinitionNode(const YAML::Node &node, const std::filesystem::path &path, bool builtin)
@@ -132,187 +62,25 @@ ToolDefinition parseDefinition(const std::filesystem::path &path, bool builtin)
 
 void ToolRegistry::registerPackage(const ToolsPackage &package)
 {
-    hostBindingsMap_.clear();
-    std::vector<ToolDefinition> definitions;
-    definitions.reserve(package.tools.size());
+    std::vector<ToolDefinition>                   definitions;
+    std::map<std::string, std::size_t, std::less<>> index;
+    std::map<std::string, std::string, std::less<>> bindings;
     for (const auto &tool : package.tools)
     {
+        validateToolDefinition(tool.definition);
+        validateContract(tool.definition);
+        if (!index.emplace(tool.toolId, definitions.size()).second)
+            throw ContractError("Duplicate packaged tool_id: " + tool.toolId);
         definitions.push_back(tool.definition);
         if (!tool.hostBinding.empty())
-        {
-            hostBindingsMap_[tool.toolId] = tool.hostBinding;
-        }
+            bindings.emplace(tool.toolId, tool.hostBinding);
     }
-
-    managedRoots_.clear();
-    packageRoot_        = package.root;
-    packageDefinitions_ = std::move(definitions);
     if (pluginLoader_)
         pluginLoader_->registerPackage(package);
-    rebuildDefinitions(false);
-}
-
-void ToolRegistry::scan(const std::filesystem::path &toolsRoot)
-{
-    scanRoots({toolsRoot});
-}
-
-void ToolRegistry::scanRoots(const std::vector<std::filesystem::path> &roots)
-{
-    std::vector<std::filesystem::path> normalized;
-    for (const auto &r : roots)
-    {
-        if (r.empty())
-            continue;
-        const auto normal = r.lexically_normal();
-        if (std::find(normalized.begin(), normalized.end(), normal) == normalized.end())
-        {
-            normalized.push_back(normal);
-        }
-    }
-    managedRoots_ = std::move(normalized);
-    rebuildDefinitions(false);
-}
-
-void ToolRegistry::scanPython(const std::filesystem::path &toolsRoot)
-{
-    const auto normal = toolsRoot.lexically_normal();
-    if (std::find(managedRoots_.begin(), managedRoots_.end(), normal) == managedRoots_.end())
-    {
-        managedRoots_.push_back(normal);
-    }
-    rebuildDefinitions(true);
-}
-
-void ToolRegistry::scanPythonRoots()
-{
-    rebuildDefinitions(true);
-}
-
-// Replaces the tool snapshot: package-indexed declarations, plus declarations discovered
-// under the managed scan roots. Inside a registered package root only the index is a discovery source.
-void ToolRegistry::rebuildDefinitions(bool pythonOnly)
-{
-    std::vector<ToolDefinition>                  next;
-    std::set<std::filesystem::path>              cppPaths;
-    std::map<std::filesystem::path, std::string> oldPython;
-    if (pythonOnly)
-    {
-        for (auto &definition : definitions_)
-        {
-            const bool packageManaged = containedIn(packageRoot_, definition.definitionPath);
-            if (cppKind(definition.kind) || packageManaged)
-            {
-                cppPaths.insert(definition.definitionPath);
-                next.push_back(std::move(definition));
-            }
-            else
-            {
-                oldPython.emplace(definition.definitionPath, definition.id);
-            }
-        }
-    }
-    else
-    {
-        next = packageDefinitions_;
-    }
-
-    struct Candidate
-    {
-        bool                  builtin;
-        std::size_t           rootIndex;
-        std::filesystem::path path;
-        std::u8string         sortKey;
-    };
-
-    std::vector<Candidate>          candidates;
-    std::vector<RegistryDiagnostic> diagnostics;
-
-    for (std::size_t r = 0; r < managedRoots_.size(); ++r)
-    {
-        const auto     &toolsRoot = managedRoots_[r];
-        std::error_code ec;
-        if (!std::filesystem::exists(toolsRoot, ec))
-            continue;
-        const bool hasBuiltin = std::filesystem::is_directory(toolsRoot / "builtin", ec);
-        const bool hasCustom  = std::filesystem::is_directory(toolsRoot / "custom", ec);
-        if (hasBuiltin || hasCustom)
-        {
-            for (const bool builtin : {true, false})
-            {
-                std::vector<OrderedPath> paths;
-                const auto               root = (toolsRoot / (builtin ? "builtin" : "custom")).lexically_normal();
-                collect(root, 0, paths, diagnostics);
-                for (auto &item : paths)
-                {
-                    candidates.push_back({builtin, r, std::move(item.second), std::move(item.first)});
-                }
-            }
-        }
-        else if (std::filesystem::is_directory(toolsRoot, ec))
-        {
-            std::vector<OrderedPath> paths;
-            collect(toolsRoot.lexically_normal(), 0, paths, diagnostics);
-            for (auto &item : paths)
-            {
-                candidates.push_back({false, r, std::move(item.second), std::move(item.first)});
-            }
-        }
-    }
-
-    std::sort(candidates.begin(), candidates.end(),
-              [](const Candidate &a, const Candidate &b)
-              {
-                  if (a.builtin != b.builtin)
-                      return a.builtin > b.builtin;
-                  if (a.rootIndex != b.rootIndex)
-                      return a.rootIndex < b.rootIndex;
-                  return a.sortKey < b.sortKey;
-              });
-
-    for (const auto &candidate : candidates)
-    {
-        const auto &path = candidate.path;
-        if (containedIn(packageRoot_, path))
-            continue;
-        if (pythonOnly && cppPaths.contains(path))
-            continue;
-        oldPython.erase(path);
-        try
-        {
-            auto definition = parseDefinition(path, candidate.builtin);
-            if (pythonOnly && cppKind(definition.kind))
-            {
-                diagnostics.push_back({path, "New C++ definitions require application restart", {}});
-                continue;
-            }
-            const auto previous
-                = std::find_if(next.begin(), next.end(), [&](const auto &value) { return value.id == definition.id; });
-            if (previous != next.end())
-            {
-                diagnostics.push_back(
-                    {path,
-                     "Duplicate tool_id " + definition.id + "; first definition: " + pathText(previous->definitionPath),
-                     previous->definitionPath});
-                continue;
-            }
-            validateToolDefinition(definition);
-            validateContract(definition);
-            next.push_back(std::move(definition));
-        }
-        catch (const std::exception &error)
-        {
-            diagnostics.push_back({path, error.what(), {}});
-        }
-    }
-    for (const auto &[path, id] : oldPython)
-        diagnostics.push_back({path, "Python definition missing after refresh: " + id, {}});
-
-    definitions_ = std::move(next);
-    index_.clear();
-    for (std::size_t i = 0; i < definitions_.size(); ++i) index_.emplace(definitions_[i].id, i);
+    definitions_ = std::move(definitions);
+    index_ = std::move(index);
+    hostBindingsMap_ = std::move(bindings);
     python_.clear();
-    diagnostics_ = std::move(diagnostics);
 }
 
 void ToolRegistry::addDefinition(ToolDefinition definition)
@@ -369,14 +137,6 @@ void ToolRegistry::validateContract(const ToolDefinition &definition) const
     }
 }
 
-std::vector<const ToolDefinition *> ToolRegistry::cppContracts() const
-{
-    std::vector<const ToolDefinition *> contracts;
-    contracts.reserve(cpp_.size());
-    for (const auto &[name, implementation] : cpp_) contracts.push_back(&implementation.contract);
-    return contracts;
-}
-
 void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory factory, ToolStatus status)
 {
     const auto *definition = find(toolId);
@@ -390,20 +150,6 @@ void ToolRegistry::registerHostBinding(std::string bindingName, HostBindingFacto
     if (bindingName.empty() || !factory)
         throw ContractError("Invalid host binding registration");
     hostBindingExecutors_[std::move(bindingName)] = std::move(factory);
-}
-
-void ToolRegistry::bindHostTool(std::string toolId, std::string bindingName)
-{
-    if (toolId.empty())
-        return;
-    if (bindingName.empty())
-    {
-        hostBindingsMap_.erase(toolId);
-    }
-    else
-    {
-        hostBindingsMap_[std::move(toolId)] = std::move(bindingName);
-    }
 }
 
 const ToolDefinition *ToolRegistry::find(std::string_view id) const

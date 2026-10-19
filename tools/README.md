@@ -45,7 +45,7 @@ tools\build.cmd python tools\package_app.py --install-dir F:\tmp\VisionRT
 ## 2. 独立发布包打包 (`package_app.py`)
 
 用于生成独立、便携的 Release 发布包。
-自动收集应用程序可执行文件、项目 DLL、QuickUI QML 模块及插件、Python 3.12 嵌入式环境、第三方依赖运行库、MSVC 运行库以及运行 `windeployqt` 部署 Qt 运行时。
+自动收集应用程序可执行文件、项目 DLL、QuickUI QML 模块及插件、CMake 实际选中的 Python 环境、第三方依赖运行库、MSVC 运行库以及运行 `windeployqt` 部署 Qt 运行时。Python 来源记录在构建缓存的 `VISIONRT_PYTHON_HOME`，部署不另选运行时。
 
 ### 常用命令
 

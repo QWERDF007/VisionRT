@@ -1,6 +1,6 @@
 #include "python/PythonRuntime.h"
 
-#include "python/PythonBridge.h"
+#include <visionrt/sdk/PythonInterop.h>
 #include "runtime/Snapshot.h"
 
 #include <pybind11/embed.h>

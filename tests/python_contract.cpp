@@ -1,5 +1,5 @@
 #include "core/ToolRegistry.h"
-#include "python/PythonBridge.h"
+#include <visionrt/sdk/PythonInterop.h>
 #include "python/PythonRuntime.h"
 
 #include <pybind11/embed.h>
@@ -388,6 +388,27 @@ void exampleTools(PythonRuntime &runtime, const std::filesystem::path &root)
     assert(isMissing(result.outputs.at("means")));
 }
 
+void deployedPurePythonPackage(PythonRuntime &runtime, const std::filesystem::path &root)
+{
+    const auto package = readToolsPackage(root);
+    assert(package.index.modules.empty() && package.tools.size() == 1);
+    ToolRegistry registry;
+    registry.registerPackage(package);
+    for (const auto &loaded : runtime.refresh(registry.definitions()))
+    {
+        assert(loaded.status);
+        registry.setPythonImplementation(loaded.toolId, runtime.factory(*registry.find(loaded.toolId)), loaded.status);
+    }
+    auto instance = registry.create("test.add", {});
+    assert(instance && instance->initialize({}));
+    const auto result = instance->execute({});
+    assert(result.status && std::get<std::int64_t>(result.outputs.at("value")) == 42);
+    assert(instance->release());
+    instance.reset();
+    runtime.refresh({});
+    std::cout << "Pure Python ZIP result: 42\n";
+}
+
 void packagePythonExecutionDemonstration(PythonRuntime &runtime)
 {
     // 1. Setup isolated package root with unicode and spaces (Ticket 04)
@@ -604,16 +625,21 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
 
 int main(int argc, char **argv)
 {
-    assert(argc == 2);
-    const auto    examples = std::filesystem::absolute(std::filesystem::u8path(argv[1]));
+    assert(argc == 2 || (argc == 3 && std::string_view(argv[1]) == "--package"));
+    const auto packageRoot = std::filesystem::absolute(std::filesystem::u8path(argv[argc - 1]));
     PythonRuntime runtime;
     auto          worker = std::async(std::launch::async,
                                       [&]
                                       {
+                                 if (argc == 3)
+                                 {
+                                     deployedPurePythonPackage(runtime, packageRoot);
+                                     return;
+                                 }
                                  readonlyOwners();
                                  strictConversions();
                                  adaptersAndRefresh(runtime);
-                                 exampleTools(runtime, examples);
+                                 exampleTools(runtime, packageRoot / "assets/tools");
                                  packagePythonExecutionDemonstration(runtime);
                                       });
     try
@@ -626,5 +652,6 @@ int main(int argc, char **argv)
         std::cerr << "Python contract failed: " << error.what() << '\n';
         return 1;
     }
-    std::cout << "Python ownership, strict contracts, adapters, fresh-source refresh and package execution passed\n";
+    if (argc == 2)
+        std::cout << "Python ownership, strict contracts, adapters, fresh-source refresh and package execution passed\n";
 }

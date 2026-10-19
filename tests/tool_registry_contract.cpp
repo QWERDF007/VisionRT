@@ -1,5 +1,6 @@
 #include "core/ToolRegistry.h"
 #include "visionrt/sdk/SchemaYaml.h"
+#include "visionrt/sdk/Package.h"
 
 #include <visionrt/sdk/ValueYaml.h>
 
@@ -44,6 +45,28 @@ struct TemporaryTools
         std::filesystem::remove_all(root, error);
     }
 
+    ToolsPackage package(std::initializer_list<std::pair<std::string, std::string>> declarations) const
+    {
+        YAML::Node index;
+        index["schema_version"] = 2;
+        index["variant"] = "registry-fixture";
+        index["modules"] = YAML::Node(YAML::NodeType::Map);
+        index["tools"] = YAML::Node(YAML::NodeType::Map);
+        for (const auto &[id, relative] : declarations)
+        {
+            const auto definition = parseToolDefinitionFile(root / relative);
+            index["tools"][id]["definition"] = relative;
+            if (definition.kind == ToolKind::CppFunction || definition.kind == ToolKind::CppClass)
+            {
+                index["modules"]["fixture"]["library"] = "bin/fixture.dll";
+                index["tools"][id]["module"] = "fixture";
+            }
+        }
+        put("bin/fixture.dll", "registry fixture, never dynamically loaded");
+        put("module_index.yaml", YAML::Dump(index));
+        return readToolsPackage(root);
+    }
+
     std::filesystem::path put(const std::string &relative, const std::string &yaml) const
     {
         const auto path = root / relative;
@@ -60,6 +83,8 @@ YAML::Node definition(const std::string &id)
 {
     return YAML::Load("schema_version: 1\ntool_id: " + id + R"(
 display_name: Contract tool
+category: Image
+subcategory: Basic
 version: v1
 kind: cpp_function
 entry: {registry_name: test.pass}
@@ -179,14 +204,11 @@ int main(int argc, char **argv)
     other["entry"]["registry_name"] = "test.other";
     temporary.put("custom/Image/Basic/valid.yaml", YAML::Dump(other));
     ToolRegistry registry;
-    registry.scan(temporary.root);
-    const auto duplicate = std::find_if(registry.diagnostics().begin(), registry.diagnostics().end(),
-                                        [](const auto &diagnostic) { return !diagnostic.relatedPath.empty(); });
-    assert(duplicate != registry.diagnostics().end());
-    assert(duplicate->relatedPath == builtinPath);
-    assert(duplicate->path.filename() == "duplicate.yaml");
+    registry.registerPackage(temporary.package({
+        {"test.pass", "builtin/Image/Basic/a.yaml"},
+        {"test.other", "custom/Image/Basic/valid.yaml"},
+    }));
     assert(registry.definitions().size() == 2);
-    assert(registry.diagnostics().size() == 2);
     assert(registry.find("test.pass")->definitionPath == builtinPath);
     assert(registry.find("test.pass")->category == "Image");
     assert(registry.find("test.pass")->subcategory == "Basic");
@@ -237,7 +259,7 @@ int main(int argc, char **argv)
     registry.replaceDefinition(std::move(renamed));
     assert(registry.find("test.pass")->displayName == "Saved custom metadata");
     assert(registry.availability("test.pass").state == ToolAvailability::Available);
-    registry.scan(temporary.root);
+    registry.registerPackage(temporary.package({{"test.pass", "builtin/Image/Basic/a.yaml"}, {"test.other", "custom/Image/Basic/valid.yaml"}}));
     assert(registry.definitions()[0].id == "test.pass");
     assert(registry.definitions()[1].id == "test.other");
     assert(registry.availability("test.pass").state == ToolAvailability::Available);
@@ -471,56 +493,30 @@ int main(int argc, char **argv)
     }
 
     TemporaryTools refreshTools;
-    refreshTools.put("builtin/Image/Basic/cpp.yaml", YAML::Dump(definition("refresh.cpp")));
-    auto python             = definition("refresh.python");
-    python["kind"]          = "python_function";
-    python["entry"]         = YAML::Load("{file: tool.py, symbol: execute}");
-    const auto   pythonPath = refreshTools.put("custom/Python/Basic/python.yaml", YAML::Dump(python));
+    auto python = definition("refresh.python");
+    python["kind"] = "python_function";
+    python["entry"] = YAML::Load("{file: tool.py, symbol: execute}");
+    refreshTools.put("Python/python.yaml", YAML::Dump(python));
+    refreshTools.put("Python/tool.py", "def execute(inputs): return {}\n");
     ToolRegistry refreshed;
-    refreshed.scan(refreshTools.root);
-    const auto originalCppName = refreshed.find("refresh.cpp")->displayName;
-    refreshed.setPythonImplementation("refresh.python",
-                                      [](const ToolServices &) { return std::make_unique<PassTool>(); });
+    refreshed.registerPackage(refreshTools.package({{"refresh.python", "Python/python.yaml"}}));
+    refreshed.setPythonImplementation("refresh.python", [](const ToolServices &) { return std::make_unique<PassTool>(); });
     assert(refreshed.availability("refresh.python").state == ToolAvailability::Available);
-    auto otherPython       = YAML::Clone(python);
-    otherPython["tool_id"] = "refresh.other";
-    const auto otherPath   = refreshTools.put("custom/Python/Basic/other.yaml", YAML::Dump(otherPython));
-    refreshed.replaceDefinition(parseDefinition(otherPath, false));
-    refreshed.setPythonImplementation("refresh.other",
-                                      [](const ToolServices &) { return std::make_unique<PassTool>(); });
-    auto replacement        = *refreshed.find("refresh.python");
-    replacement.displayName = "Targeted replacement";
-    refreshed.replaceDefinition(std::move(replacement));
-    assert(refreshed.find("refresh.python")->displayName == "Targeted replacement");
+    python["display_name"] = "Reloaded package metadata";
+    refreshTools.put("Python/python.yaml", YAML::Dump(python));
+    refreshed.registerPackage(readToolsPackage(refreshTools.root));
+    assert(refreshed.find("refresh.python")->displayName == "Reloaded package metadata");
     assert(refreshed.availability("refresh.python").state == ToolAvailability::ImplementationUnavailable);
-    assert(refreshed.availability("refresh.other").state == ToolAvailability::Available);
-    refreshTools.put("builtin/Image/Basic/cpp.yaml", "invalid: [");
-    python["display_name"] = "Updated Python";
-    refreshTools.put("custom/Python/Basic/python.yaml", YAML::Dump(python));
-    refreshed.scanPython(refreshTools.root);
-    assert(refreshed.find("refresh.cpp")->displayName == originalCppName);
-    assert(refreshed.find("refresh.python")->displayName == "Updated Python");
-    assert(refreshed.availability("refresh.python").state == ToolAvailability::ImplementationUnavailable);
-    refreshTools.put("custom/Python/Basic/python.yaml", "invalid: [");
-    refreshed.scanPython(refreshTools.root);
-    assert(refreshed.find("refresh.cpp"));
-    assert(!refreshed.find("refresh.python"));
-    assert(std::any_of(refreshed.diagnostics().begin(), refreshed.diagnostics().end(),
-                       [&](const auto &diagnostic) { return diagnostic.path == pythonPath; }));
-    refreshTools.put("custom/Python/Basic/python.yaml", YAML::Dump(python));
-    refreshed.scanPython(refreshTools.root);
+    std::filesystem::remove(refreshTools.root / "Python/python.yaml");
+    rejects([&] { readToolsPackage(refreshTools.root); });
     assert(refreshed.find("refresh.python"));
-    std::filesystem::remove(pythonPath);
-    refreshed.scanPython(refreshTools.root);
-    assert(!refreshed.find("refresh.python"));
-    assert(std::any_of(refreshed.diagnostics().begin(), refreshed.diagnostics().end(),
-                       [&](const auto &diagnostic) { return diagnostic.path == pythonPath; }));
+    refreshed.registerPackage({});
+    assert(refreshed.definitions().empty());
 
     ToolRegistry examples;
-    examples.scan(std::filesystem::u8path(argv[1]));
-    assert(examples.diagnostics().empty());
-    assert(examples.definitions().size() == 22);
+    examples.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
+    assert(examples.find("custom.image.mean"));
     assert(examples.find("visionrt.image.crop")->outputs[3].type == dense);
-    assert(examples.find("custom.image.mean")->kind == ToolKind::PythonFunction);
+    assert(examples.find("custom.image.mean")->kind == ToolKind::PythonClass);
     assert(examples.availability("custom.image.mean").state == ToolAvailability::ImplementationUnavailable);
 }

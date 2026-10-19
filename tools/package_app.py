@@ -317,36 +317,19 @@ def deploy_tools_package(
     print(f"deployed tools package from {package_zip} into {target_pkg}")
 
 
-def resolve_python_home(build_dir: Path, dependency_file: Path, repo_root: Path = REPO_ROOT) -> Path:
-    """Resolve Python home directory (env override > tools/dependencies.yaml manifest)."""
-    env_home = os.environ.get("VISIONRT_PYTHON_HOME") or os.environ.get("PYTHONHOME")
-    if env_home:
-        cand = Path(env_home).resolve()
-        if cand.is_dir():
-            return cand
-
-    for dep in load_dependencies(dependency_file):
-        if str(dep.get("name", "")).lower() == "python":
-            root = resolve_dependency_root(dep, build_dir, repo_root)
-            if root and (root / "python.exe").is_file():
-                return root
-            break
-
-    cache_file = build_dir / "CMakeCache.txt"
-    for cache_key in ("Python3_ROOT_DIR", "_Python3_EXECUTABLE", "Python3_EXECUTABLE"):
-        val = read_cmake_cache_value(cache_file, cache_key)
-        if val:
-            p = Path(val)
-            cand = p if p.is_dir() else p.parent
-            if (cand / "python.exe").is_file():
-                return cand
-
-    raise RuntimeError("Python home directory could not be resolved.")
+def resolve_python_home(build_dir: Path) -> Path:
+    """Use the same interpreter installation selected by the host build."""
+    selected = read_cmake_cache_value(build_dir / "CMakeCache.txt", "VISIONRT_PYTHON_HOME")
+    if selected:
+        runtime = Path(selected).resolve()
+        if (runtime / "python.exe").is_file():
+            return runtime
+    raise RuntimeError("Built Python runtime not found; configure the VisionRT CMake tree first.")
 
 
-def copy_python_runtime(build_dir: Path, install_dir: Path, dependency_file: Path) -> None:
-    """Deploy embedded Python 3.12 environment."""
-    python_home = resolve_python_home(build_dir, dependency_file)
+def copy_python_runtime(build_dir: Path, install_dir: Path) -> None:
+    """Deploy the matching embedded Python environment."""
+    python_home = resolve_python_home(build_dir)
     print(f"deploying python runtime from {python_home}")
 
     # Copy python3*.dll and zlib*.dll to install root
@@ -414,7 +397,7 @@ def copy_yaml_dependencies(
     for dep in load_dependencies(dependency_file):
         dep_name = str(dep.get("name", "<unnamed>")).lower()
         # qt and python are handled specially by windeployqt and copy_python_runtime
-        if dep_name in {"qt", "qt6"}:
+        if dep_name in {"qt", "qt6", "python"}:
             continue
         if not dependency_matches_config(dep, config):
             continue
@@ -740,6 +723,14 @@ def test_verify_package_negatives() -> None:
     import tempfile
     with tempfile.TemporaryDirectory(prefix="vrt_verify_neg_") as tmp:
         root = Path(tmp)
+        selected_python = root / "selected-python"
+        selected_python.mkdir()
+        (selected_python / "python.exe").touch()
+        build_metadata = root / "build"
+        build_metadata.mkdir()
+        (build_metadata / "CMakeCache.txt").write_text(
+            f"VISIONRT_PYTHON_HOME:PATH={selected_python.as_posix()}\n", encoding="utf-8")
+        assert resolve_python_home(build_metadata) == selected_python
         # Create baseline valid mock package
         (root / f"{PROJECT_NAME}.exe").touch()
         (root / MARKER_FILE).touch()
@@ -1137,7 +1128,7 @@ def main() -> int:
     packaged_exe = install_dir / source_exe.name
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb)
-    copy_python_runtime(build_dir, install_dir, dependency_file)
+    copy_python_runtime(build_dir, install_dir)
 
     # Resolve validator path
     validator_path = resolve_project_path(args.validator) if args.validator else None
