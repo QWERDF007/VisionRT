@@ -225,24 +225,7 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
     if quickui_dll:
         copy_file(quickui_dll, install_dir / "quickui.dll")
 
-    # 3. QuickUI QML module
-    quickui_qml_source = None
-    for candidate in (
-        build_dir / "qml" / "quickui",
-        REPO_ROOT / "3rdparty" / "QuickUI" / "quickui",
-    ):
-        if candidate.is_dir() and (candidate / "qmldir").is_file():
-            quickui_qml_source = candidate
-            break
-
-    if quickui_qml_source:
-        qml_target = install_dir / "qml" / "quickui"
-        shutil.copytree(quickui_qml_source, qml_target, dirs_exist_ok=True)
-        print(f"copy {quickui_qml_source} -> {qml_target}")
-        if quickui_dll:
-            copy_file(quickui_dll, qml_target / "quickui.dll")
-
-    # 4. PDB debug symbols if requested
+    # 2. PDB debug symbols if requested
     if include_pdb and bin_dir.is_dir():
         for pdb in bin_dir.glob("*.pdb"):
             copy_file(pdb, install_dir / pdb.name)
@@ -607,8 +590,8 @@ def invoke_windeployqt(build_dir: Path, install_dir: Path, exe: Path, explicit: 
         str(install_dir),
         "--qmldir",
         str(REPO_ROOT / "src" / "ui" / "qml"),
-        "--qmlimport",
-        str(build_dir / "bin" / "qml"),
+        "--qmldir",
+        str(REPO_ROOT / "3rdparty" / "QuickUI" / "src" / "controls"),
         str(exe),
     ]
     print("run " + " ".join(command))
@@ -616,7 +599,12 @@ def invoke_windeployqt(build_dir: Path, install_dir: Path, exe: Path, explicit: 
 
 
 def cleanup_release_debug_artifacts(install_dir: Path) -> None:
-    """Remove qmldbg_*.dll and empty directories."""
+    """Remove qmldbg_*.dll, embedded qml/quickui source directories, and empty directories."""
+    quickui_qml_dir = install_dir / "qml" / "quickui"
+    if quickui_qml_dir.is_dir():
+        shutil.rmtree(quickui_qml_dir)
+        print(f"remove {quickui_qml_dir}")
+
     for tool_dir in [p for p in install_dir.rglob("qmltooling") if p.is_dir()]:
         for dll in tool_dir.rglob("qmldbg_*.dll"):
             if dll.is_file() or dll.is_symlink():
@@ -720,12 +708,7 @@ def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None =
         install_dir / "python" / "Lib",
         install_dir / "python" / "DLLs",
         install_dir / "python" / "Lib" / "site-packages" / "numpy",
-        install_dir / "qml" / "quickui",
     ]
-    required_files.extend([
-        install_dir / "qml" / "quickui" / "qmldir",
-        install_dir / "qml" / "quickui" / "quickui.dll",
-    ])
 
     missing_files = [str(p) for p in required_files if not p.is_file()]
     missing_dirs = [str(p) for p in required_dirs if not p.is_dir()]
@@ -764,23 +747,9 @@ def test_verify_package_negatives() -> None:
         (root / "python312.dll").touch()
         (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
         (root / "python" / "DLLs").mkdir(parents=True)
-        (root / "qml" / "quickui").mkdir(parents=True)
-        (root / "qml" / "quickui" / "qmldir").touch()
-        (root / "qml" / "quickui" / "quickui.dll").touch()
 
         # Baseline check (without Qt)
         verify_package(root, require_qt=False)
-
-        # Case 0: Missing qml/quickui
-        shutil.rmtree(root / "qml" / "quickui")
-        try:
-            verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail when qml/quickui is missing")
-        except RuntimeError as e:
-            assert "quickui" in str(e), f"Unexpected error: {e}"
-        (root / "qml" / "quickui").mkdir(parents=True)
-        (root / "qml" / "quickui" / "qmldir").touch()
-        (root / "qml" / "quickui" / "quickui.dll").touch()
 
         # Case 1: Missing quickui.dll
         (root / "quickui.dll").unlink()
