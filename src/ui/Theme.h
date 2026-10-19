@@ -7,56 +7,75 @@
 
 namespace visionrt {
 
-#define THEME_COLOR_PROP(Name) \
+#define THEME_COLOR_PROP(Name)                                             \
     Q_PROPERTY(QColor Name READ Name WRITE set##Name NOTIFY Name##Changed) \
-public: \
-    QColor Name() const { return Name##_; } \
-    void set##Name(const QColor& color) { \
-        if (Name##_ != color) { \
-            Name##_ = color; \
-            Q_EMIT Name##Changed(); \
-        } \
-    } \
-    Q_SIGNAL void Name##Changed(); \
-private: \
+public:                                                                    \
+    QColor Name() const                                                    \
+    {                                                                      \
+        return Name##_;                                                    \
+    }                                                                      \
+    void set##Name(const QColor &color)                                    \
+    {                                                                      \
+        if (Name##_ != color)                                              \
+        {                                                                  \
+            Name##_ = color;                                               \
+            Q_EMIT Name##Changed();                                        \
+        }                                                                  \
+    }                                                                      \
+    Q_SIGNAL void Name##Changed();                                         \
+                                                                           \
+private:                                                                   \
     QColor Name##_;
 
-#define THEME_INT_PROP(Name) \
+#define THEME_INT_PROP(Name)                                            \
     Q_PROPERTY(int Name READ Name WRITE set##Name NOTIFY Name##Changed) \
-public: \
-    int Name() const { return Name##_; } \
-    void set##Name(int value) { \
-        if (Name##_ != value) { \
-            Name##_ = value; \
-            Q_EMIT Name##Changed(); \
-        } \
-    } \
-    Q_SIGNAL void Name##Changed(); \
-private: \
+public:                                                                 \
+    int Name() const                                                    \
+    {                                                                   \
+        return Name##_;                                                 \
+    }                                                                   \
+    void set##Name(int value)                                           \
+    {                                                                   \
+        if (Name##_ != value)                                           \
+        {                                                               \
+            Name##_ = value;                                            \
+            Q_EMIT Name##Changed();                                     \
+        }                                                               \
+    }                                                                   \
+    Q_SIGNAL void Name##Changed();                                      \
+                                                                        \
+private:                                                                \
     int Name##_;
 
-#define THEME_REAL_PROP(Name) \
+#define THEME_REAL_PROP(Name)                                             \
     Q_PROPERTY(qreal Name READ Name WRITE set##Name NOTIFY Name##Changed) \
-public: \
-    qreal Name() const { return Name##_; } \
-    void set##Name(qreal value) { \
-        if (!qFuzzyCompare(Name##_, value)) { \
-            Name##_ = value; \
-            Q_EMIT Name##Changed(); \
-        } \
-    } \
-    Q_SIGNAL void Name##Changed(); \
-private: \
+public:                                                                   \
+    qreal Name() const                                                    \
+    {                                                                     \
+        return Name##_;                                                   \
+    }                                                                     \
+    void set##Name(qreal value)                                           \
+    {                                                                     \
+        if (!qFuzzyCompare(Name##_, value))                               \
+        {                                                                 \
+            Name##_ = value;                                              \
+            Q_EMIT Name##Changed();                                       \
+        }                                                                 \
+    }                                                                     \
+    Q_SIGNAL void Name##Changed();                                        \
+                                                                          \
+private:                                                                  \
     qreal Name##_;
 
-class Theme : public QObject {
+class Theme : public QObject
+{
     Q_OBJECT
     QML_NAMED_ELEMENT(Theme)
     QML_SINGLETON
 
 public:
-    explicit Theme(QObject* parent = nullptr);
-    static Theme* instance();
+    explicit Theme(QObject *parent = nullptr);
+    static Theme *instance();
 
     // 顶部菜单栏与工具栏按钮色彩
     THEME_COLOR_PROP(menuBarBg)

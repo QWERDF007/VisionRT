@@ -14,11 +14,9 @@ VisionRT 是基于 C++20 与 Qt 6.6 Quick 构建的现代化工业视觉低代�
 
 ```
 VisionRT/
+├── 3rdparty/
+│   └── VisionRTSDK/         # 共享 SDK 子模块，导出为 VisionRT::ToolSDK
 ├── src/
-│   ├── sdk/                 # 统一算子开发 SDK（单一真相源，导出为 VisionRT::ToolSDK）
-│   │   ├── include/visionrt/sdk/Tool.h      # 核心值类型与 IToolInstance 纯虚接口
-│   │   ├── include/visionrt/sdk/Module.h    # 动态库导出协议 ModuleApi 与 visiontoolsModuleApi
-│   │   └── include/visionrt/sdk/Schema.h    # 统一元数据校验规则与 CLI 验证器
 │   ├── core/                # 平台核心对象（ToolRegistry, ProjectDefinition, ProjectStorage）
 │   ├── runtime/             # 基于 Taskflow 的拓扑 DAG 并行调度与快照发布引擎
 │   ├── plugins/             # 基于 QLibrary 的动态插件加载与生命周期管理（PluginLoader）
@@ -91,7 +89,7 @@ Python 脚本放置于工具包对应目录，实现 `ToolInstance` 类，包含
 
 - **编译工程**：
   ```cmd
-  tools\build.cmd --build
+  tools\build.cmd --release
   ```
 - **执行全量自动化契约测试（14 个测试套件，100% 通过）**：
   ```cmd
@@ -110,7 +108,12 @@ Python 脚本放置于工具包对应目录，实现 `ToolInstance` 类，包含
 
 ## 5. 文档与规范索引
 
-- **SDK 接口合同与数据契约**：[`3rdparty/VisionRTToolSDK/include/visionrt/sdk/Tool.h`](../3rdparty/VisionRTToolSDK/include/visionrt/sdk/Tool.h)
+- **构建与打包入口**：[`tools/README.md`](../tools/README.md)
+- **共享 SDK 独立构建与消费**：[`3rdparty/VisionRTSDK/README.md`](../3rdparty/VisionRTSDK/README.md)
+- **SDK 接口合同与数据契约**：[`3rdparty/VisionRTSDK/include/visionrt/sdk/Tool.h`](../3rdparty/VisionRTSDK/include/visionrt/sdk/Tool.h)
 - **节点错误诊断与四态视觉记录**：[`RT-05_节点错误诊断记录.md`](RT-05_节点错误诊断记录.md)
-- **VisionRT 与 VisionTools 桥接架构**：[`visiontools-bridge-architecture.md`](visiontools-bridge-architecture.md)
+- **工具包交付与 Python 互操作规格**：[`tool-package-delivery/spec.md`](tool-package-delivery/spec.md)
+- **工具包交付工单**：[`tool-package-delivery/README.md`](tool-package-delivery/README.md)
+- **工具包交付实现导航与代码证据**：[`visiontools-bridge-architecture.md`](visiontools-bridge-architecture.md)
+- **Python 互操作开源依据**：[`interop-open-source-research.md`](interop-open-source-research.md)
 - **重构交付与验收矩阵报告**：[`RT-15_重构交付与验收矩阵.md`](RT-15_重构交付与验收矩阵.md)

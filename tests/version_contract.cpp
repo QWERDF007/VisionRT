@@ -1,15 +1,18 @@
 #ifdef NDEBUG
-#undef NDEBUG
+#    undef NDEBUG
 #endif
 
 #include "common/Version.h"
+
 #include <visionrt/common/VersionDef.h>
+
 #include <cassert>
 #include <iostream>
 
 using namespace visionrt;
 
-int main() {
+int main()
+{
     // 1. 验证版本宏
     static_assert(VISIONRT_VERSION_MAJOR == 0, "Major version should be 0");
     static_assert(VISIONRT_VERSION_MINOR == 1, "Minor version should be 1");
