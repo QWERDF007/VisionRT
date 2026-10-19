@@ -101,9 +101,6 @@ public:
     Q_INVOKABLE void         requestOutputText(int row, bool copy);
     Q_INVOKABLE QVariantList toolDefinitions() const;
     Q_INVOKABLE QVariantMap  toolMetadata(const QString &toolId) const;
-    Q_INVOKABLE QVariantList cppImplementations() const;
-    Q_INVOKABLE QVariantMap  previewToolImpact(const QVariantMap &metadata) const;
-    Q_INVOKABLE bool         saveToolMetadata(const QVariantMap &metadata);
 signals:
     void projectChanged();
     void nodesChanged();

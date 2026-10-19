@@ -2,9 +2,9 @@
 
 **What to build:** 真实工具目录包通过 SDK 的同一读取与校验语义进入校验器和宿主，用户仍能看到并运行原有工具。先完成有可观察行为的预重构，让后续 ZIP 和索引变更无需在各端重复改解析逻辑。
 
-**Blocked by:** None (can start immediately after draft approval).
+**Blocked by:** None.
 
-**Status:** completed — 已完成并通过验收测试。
+**Status:** completed — 验收范围与证据见[验收报告](../../VisionRT-VisionTools-验收评估报告.md)。
 
 **Specification:** [D-01、D-03；US-11、US-16、US-24；T-02、T-03](../spec.md)。
 

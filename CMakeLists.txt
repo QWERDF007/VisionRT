@@ -47,7 +47,6 @@ target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::y
 add_library(visionrt_python src/python/PythonRuntime.cpp)
 target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed VisionRT::PythonInterop)
 target_compile_definitions(visionrt_python PUBLIC
-    PYBIND11_DETAILED_ERROR_MESSAGES
     VISIONRT_PYTHON_DEFAULT_HOME="${VISIONRT_PYTHON_HOME}")
 
 # DAG 执行调度引擎库
@@ -111,9 +110,7 @@ if(BUILD_TESTING)
     include(CTest)
     include(AddTest)
 
-    # CPU 工具基线库 (test-only 基线，生产目标不编译)
-    add_library(visionrt_tools src/tools/CpuTools.cpp)
-    target_link_libraries(visionrt_tools PUBLIC visionrt_core)
+    set(VISIONRT_TEST_TOOLS_PACKAGE "${CMAKE_BINARY_DIR}/tools-package" CACHE PATH "Installed tools package used by integration contracts")
 
     add_executable(version_contract tests/version_contract.cpp)
     target_link_libraries(version_contract PRIVATE visionrt_common)
@@ -130,12 +127,13 @@ if(BUILD_TESTING)
     add_test(NAME path_contract COMMAND path_contract)
     visionrt_apply_test_environment(path_contract)
 
-    visionrt_contract(tool_registry_contract visionrt_core "${CMAKE_SOURCE_DIR}/assets/tools")
+    visionrt_contract(tool_registry_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(project_editor_contract visionrt_core)
-    visionrt_contract(project_storage_contract visionrt_core "${CMAKE_SOURCE_DIR}/assets/tools")
-    visionrt_contract(cpu_tools_contract visionrt_tools "${CMAKE_SOURCE_DIR}/assets/tools")
-    visionrt_contract(python_contract visionrt_python "${CMAKE_SOURCE_DIR}/assets/tools")
-    visionrt_contract(runtime_contract visionrt_runtime "${CMAKE_SOURCE_DIR}/assets/tools")
+    visionrt_contract(project_storage_contract visionrt_core)
+    visionrt_contract(cpu_tools_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    target_link_libraries(cpu_tools_contract PRIVATE ${OpenCV_LIBS})
+    visionrt_contract(python_contract visionrt_python "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    visionrt_contract(runtime_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}")
 
     if(VISIONRT_BUILD_APP)
         visionrt_contract(viewport_contract visionrt_ui)
@@ -145,7 +143,7 @@ if(BUILD_TESTING)
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
 
         add_executable(performance_contract tests/performance_contract.cpp)
-        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_tools visionrt_python opencv_core Qt6::Quick)
+        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_python opencv_core Qt6::Quick)
         target_compile_definitions(performance_contract PRIVATE
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
@@ -214,7 +212,7 @@ if(BUILD_TESTING)
     target_link_libraries(examples_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core)
     add_dependencies(examples_contract test_plugin_module)
     target_compile_definitions(examples_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-    add_test(NAME examples_contract COMMAND examples_contract --install-root "${CMAKE_BINARY_DIR}/tools-package" "${CMAKE_SOURCE_DIR}")
+    add_test(NAME examples_contract COMMAND examples_contract --tools-package "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}")
     visionrt_apply_test_environment(examples_contract)
     if(MSVC)
         target_compile_options(examples_contract PRIVATE /UNDEBUG)

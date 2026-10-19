@@ -263,8 +263,6 @@ ApplicationWindow {
     }
     QuiMenu {
         id: toolsMenu
-        QuiMenuItem { text: "新建工具…"; enabled: !app.busy; onTriggered: author.createDefinition() }
-        QuiMenuItem { text: "编辑工具…"; enabled: !app.busy; onTriggered: author.chooseDefinition() }
         QuiMenuItem { text: "刷新 Python 工具"; enabled: !app.busy; onTriggered: app.refreshPython() }
     }
     QuiMenu {
@@ -563,14 +561,13 @@ ApplicationWindow {
     WorkbenchDialog {
         id: authorHelp; title: "工具作者说明"; width: Math.min(700, window.width - 40)
         useNegativeButton: false; positiveText: "关闭"
-        message: "在便携应用的 tools/custom 受管目录准备 Python 脚本或包，再从“工具 → 新建工具”登记入口。包内使用相对 import。输入为只读借用，不得原地修改图像或数组；输出必须包含定义的全部业务字段。Missing 不等于空数组。NumPy 数组必须匹配定义的 dtype、rank 和 dense / batch_ragged 布局。类工具可实现 initialize / execute / release。修改源码后在空闲时手动刷新 Python 工具；刷新会释放实例并清除旧实现结果。内置 C++ 定义只读，可复制为自定义元数据，不能改变注册签名。"
+        message: "工具声明与实现由 VisionTools 维护。通过工具库打包脚本生成 ZIP，再由 VisionRT 部署入口安装。安装元数据只读；修改后重新打包，在退出宿主后更换工具包。"
     }
     WorkbenchDialog {
         id: noticeDialog; title: "应用操作提示"; width: Math.min(800, window.width - 40)
         useNegativeButton: false; positiveText: "关闭"
         message: window.notices.join("\n\n")
     }
-    ToolDefinitionDialog { id: author; hostWidth: window.width; hostHeight: window.height }
     QuiInfoBar { id: info; root: window.contentItem; maxWidth: Math.min(520, window.width - 40) }
     Timer { id: toastExpiry; interval: 6000; onTriggered: { info.clearAllInfo(); window.toastCount = 0 } }
     Connections {

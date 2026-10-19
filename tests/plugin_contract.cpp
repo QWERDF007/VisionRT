@@ -338,13 +338,11 @@ runtime_files:
     assert(registry.find("test.plugin.ghost.packaged") == nullptr);
     assert(loader->hasModule("test.plugin.counter") && loader->hasModule("test.plugin.function"));
 
-    // Scanning the package subtree or the whole package root adds nothing beyond the index.
-    registry.scanRoots({pkgDir / "assets" / "tools", pkgDir});
+    registry.registerPackage(readToolsPackage(pkgDir));
     assert(registry.find("test.plugin.ghost.packaged") == nullptr);
     assert(registry.find("test.plugin.counter.packaged") != nullptr);
     assert(registry.definitions().size() == 2);
 
-    // Legacy directories outside the package keep contributing their declarations.
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
     writeText(legacyDir / "legacy.yaml", R"(schema_version: 1
 tool_id: test.plugin.legacy
@@ -363,12 +361,10 @@ outputs:
     name: 输出Y
     type: Int
 )");
-    registry.scanRoots({base / "legacy-tools"});
+    registry.registerPackage(readToolsPackage(pkgDir));
     const auto *legacy = registry.find("test.plugin.legacy");
-    assert(legacy != nullptr);
-    assert(!legacy->builtin);
+    assert(legacy == nullptr);
 
-    // A scanned declaration that repeats a packaged tool_id loses against the package definition.
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
     writeText(duplicateDir / "counter.yaml", R"(schema_version: 1
 tool_id: test.plugin.counter.packaged
@@ -388,11 +384,7 @@ outputs:
     name: 计数值
     type: Int
 )");
-    registry.scanRoots({base / "duplicate-tools"});
-    const auto duplicates = std::count_if(
-        registry.diagnostics().begin(), registry.diagnostics().end(), [](const RegistryDiagnostic &diagnostic)
-        { return diagnostic.message.find("Duplicate tool_id test.plugin.counter.packaged") != std::string::npos; });
-    assert(duplicates == 1);
+    registry.registerPackage(readToolsPackage(pkgDir));
     const auto *counter = registry.find("test.plugin.counter.packaged");
     assert(counter != nullptr);
     const auto counterRoot = package.root.generic_u8string();
@@ -458,7 +450,7 @@ tools:
     assert(registry.find("test.plugin.counter.packaged") == nullptr);
     assert(registry.find("test.plugin.legacy") == nullptr);
     const auto *relocated = registry.find("test.plugin.func.packaged");
-    assert(!relocated->builtin);
+    assert(relocated->builtin);
     assert(registry.availability("test.plugin.func.packaged").state == ToolAvailability::Available);
 
     // A package that fails validation leaves the registered tool set untouched.

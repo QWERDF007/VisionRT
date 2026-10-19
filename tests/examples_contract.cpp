@@ -67,74 +67,12 @@ void setupPython(ToolRegistry &registry, PythonRuntime &runtime)
     }
 }
 
-std::filesystem::path resolveToolsPackage(const std::filesystem::path &repoRoot,
-                                          const std::filesystem::path &installRoot = {})
+std::filesystem::path resolveToolsPackage(const std::filesystem::path &installRoot)
 {
-    auto handleCandidate = [](const std::filesystem::path &candidate) -> std::filesystem::path
-    {
-        if (candidate.empty())
-            return {};
-        if (candidate.extension() == ".zip" && std::filesystem::is_regular_file(candidate))
-        {
-            static std::unique_ptr<QTemporaryDir> s_zipTemp;
-            s_zipTemp = std::make_unique<QTemporaryDir>();
-            if (s_zipTemp->isValid())
-            {
-                const auto  tempDir = std::filesystem::path(s_zipTemp->path().toStdString());
-                std::string cmd     = "python -c \"import zipfile; zipfile.ZipFile(r'" + candidate.string()
-                                    + "').extractall(r'" + tempDir.string() + "')\"";
-                int         ret     = std::system(cmd.c_str());
-                if (ret == 0 && std::filesystem::exists(tempDir / "module_index.yaml"))
-                {
-                    return std::filesystem::canonical(tempDir);
-                }
-            }
-        }
-        if (std::filesystem::exists(candidate / "module_index.yaml"))
-        {
-            return std::filesystem::canonical(candidate);
-        }
-        return {};
-    };
-
-    if (!installRoot.empty())
-    {
-        auto resolved = handleCandidate(installRoot);
-        if (!resolved.empty())
-            return resolved;
-    }
-    const char *env = std::getenv("VISIONTOOLS_PACKAGE_DIR");
-    if (env)
-    {
-        auto resolved = handleCandidate(std::filesystem::path(env));
-        if (!resolved.empty())
-            return resolved;
-    }
-    const char *envZip = std::getenv("VISIONTOOLS_PACKAGE_ZIP");
-    if (envZip)
-    {
-        auto resolved = handleCandidate(std::filesystem::path(envZip));
-        if (!resolved.empty())
-            return resolved;
-    }
-    const auto buildZip = repoRoot / "build" / "VisionTools.zip";
-    if (std::filesystem::is_regular_file(buildZip))
-    {
-        auto resolved = handleCandidate(buildZip);
-        if (!resolved.empty())
-            return resolved;
-    }
-    const auto buildPkg = repoRoot / "build" / "tools-package";
-    if (std::filesystem::exists(buildPkg / "module_index.yaml"))
-    {
-        return std::filesystem::canonical(buildPkg);
-    }
-    const auto installed = repoRoot / "install" / "VisionRT-0.1.0" / "tools-package";
-    if (std::filesystem::exists(installed / "module_index.yaml"))
-    {
-        return std::filesystem::canonical(installed);
-    }
-    return {};
+    if (installRoot.empty() || !std::filesystem::is_regular_file(installRoot / "module_index.yaml"))
+        throw std::runtime_error("--install-root must name an installed tools package");
+    readToolsPackage(installRoot);
+    return std::filesystem::canonical(installRoot);
 }
 
 void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
@@ -142,7 +80,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
 {
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
-    const auto tmpPath         = std::filesystem::path(tmpDir.path().toStdString());
+    const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
     const auto tempProjectFile = tmpPath / "pipeline_cpu_python.vrt";
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", tempProjectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
@@ -154,7 +92,6 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
-    registry.scanRoots({repoRoot / "assets" / "tools"});
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
@@ -208,7 +145,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert(std::abs(values[1] - 22.95) < 0.5);
 
     // Test Save As / Reopen consistency & re-execution output equality
-    const auto saveTarget = std::filesystem::path(tmpDir.path().toStdString()) / "reopened.vrt";
+    const auto saveTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "reopened.vrt";
     storage.save(loaded.project, saveTarget);
     auto reloaded = storage.load(saveTarget);
     assert(reloaded.diagnostics.empty());
@@ -228,7 +165,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert(std::abs(reloadedValues[1] - values[1]) < 1e-6);
 
     // Test corrupted input on a temp copy: must fail (exception or diagnostics) and not corrupt source file
-    const auto corruptTarget = std::filesystem::path(tmpDir.path().toStdString()) / "corrupted.vrt";
+    const auto corruptTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "corrupted.vrt";
     std::filesystem::copy_file(tempProjectFile, corruptTarget);
     {
         std::ofstream corruptOut(corruptTarget, std::ios::app);
@@ -503,7 +440,7 @@ void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const 
         std::filesystem::copy_file(entry.path(), testPkg / "bin" / entry.path().filename());
     }
 
-    const auto appDir     = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+    const auto appDir     = std::filesystem::u8path(QCoreApplication::applicationDirPath().toUtf8().toStdString());
     auto       pluginADll = appDir.parent_path() / "fixtures" / "test_plugin_a.dll";
     auto       depADll    = appDir.parent_path() / "fixtures" / "test_dep_a.dll";
     if (!std::filesystem::exists(pluginADll))
@@ -567,12 +504,11 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
-    registry.scanRoots({repoRoot / "assets" / "tools"});
     setupPython(registry, python);
 
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
-    const auto tmpPath     = std::filesystem::path(tmpDir.path().toStdString());
+    const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
     const auto projectFile = tmpPath / "pipeline_cpu_python.vrt";
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", projectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
@@ -646,7 +582,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
 {
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
-    const auto tmpPath         = std::filesystem::path(tmpDir.path().toStdString());
+    const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
     const auto tempProjectFile = tmpPath / "pipeline_error_diagnostic.vrt";
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt", tempProjectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
@@ -658,7 +594,6 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
-    registry.scanRoots({repoRoot / "assets" / "tools"});
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
@@ -676,6 +611,15 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     assert(foundMissingDef);
 
     RuntimeEngine engine(2);
+    const bool inferenceIncluded = registry.find("visionrt.dl.yolo") != nullptr;
+    if (!inferenceIncluded)
+    {
+        assert(std::any_of(loaded.diagnostics.begin(), loaded.diagnostics.end(), [](const auto &diagnostic)
+                          { return diagnostic.node == 3 && diagnostic.code == ProjectStorageCode::DefinitionMissing; }));
+        assert(!engine.start(loaded.project, registry, RunMode::Once));
+        std::erase_if(loaded.project.flows[0].nodes, [](const auto &node) { return node.id == 3; });
+        std::cout << "[NOT_RUN] Model-file negative execution: visionrt.dl.yolo is not included in this package.\n";
+    }
     const auto    startRes = engine.start(loaded.project, registry, RunMode::Once);
     if (startRes.code != 0)
     {
@@ -696,10 +640,13 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     assert(isMissing(s2->outputs.at("images")));
 
     // Node 3: yolo fails because nonexistent model weights
-    auto s3 = snapshot(update, 3);
-    assert(s3);
-    assert(s3->status.code != 0); // Not 0! Must not report success!
-    assert(!s3->status.message.empty());
+    if (inferenceIncluded)
+    {
+        auto s3 = snapshot(update, 3);
+        assert(s3);
+        assert(s3->status.code != 0);
+        assert(!s3->status.message.empty());
+    }
 
     // Try starting the flow containing Node 4 (definition missing)
     loaded.project.flows[0].runSelected = false;
@@ -709,9 +656,9 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     assert(missingStartStatus.code == 1);
 }
 
-void testRealPluginModulePipeline(const std::filesystem::path &repoRoot, PythonRuntime &python)
+void testRealPluginModulePipeline(PythonRuntime &python)
 {
-    const auto appDir    = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+    const auto appDir    = std::filesystem::u8path(QCoreApplication::applicationDirPath().toUtf8().toStdString());
     auto       pluginDll = appDir / "test_plugin_module.dll";
     if (!std::filesystem::exists(pluginDll))
     {
@@ -726,7 +673,6 @@ void testRealPluginModulePipeline(const std::filesystem::path &repoRoot, PythonR
 
     ToolRegistry registry;
     registry.setPluginLoader(loader);
-    registry.scan(repoRoot / "assets" / "tools");
     setupPython(registry, python);
 
     // Register plugin counter tool
@@ -818,7 +764,7 @@ void testRealPluginModulePipeline(const std::filesystem::path &repoRoot, PythonR
     // Test Save / Reopen consistency
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
-    const auto     savePath = std::filesystem::path(tmpDir.path().toStdString()) / "plugin_project.vrt";
+    const auto     savePath = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "plugin_project.vrt";
     ProjectStorage storage(registry);
     auto           reconciled = storage.reconcile(project);
     assert(reconciled.diagnostics.empty());
@@ -839,7 +785,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     std::cout << "[TEST] Running offline package replacement and failure protection test (Ticket 06 / T-08 / T-09)..."
               << std::endl;
 
-    const auto appDir    = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+    const auto appDir    = std::filesystem::u8path(QCoreApplication::applicationDirPath().toUtf8().toStdString());
     auto       pluginDll = appDir / "test_plugin_module.dll";
     if (!std::filesystem::exists(pluginDll))
     {
@@ -1081,7 +1027,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     // 3. Test failure protection: Attempt deploying invalid package (corrupt / missing referenced files)
     // Existing installation must not be altered or corrupted!
     QTemporaryDir badPkgTemp;
-    const auto    badPkgDir = std::filesystem::path(badPkgTemp.path().toStdString()) / "bad_pkg";
+    const auto    badPkgDir = std::filesystem::u8path(badPkgTemp.path().toUtf8().toStdString()) / "bad_pkg";
     std::filesystem::create_directories(badPkgDir / "assets" / "tools");
     {
         std::ofstream ofs(badPkgDir / "module_index.yaml");
@@ -1254,21 +1200,13 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
-        if ((arg == "--tools-package" || arg == "--tools-dir" || arg == "--install-root") && i + 1 < argc)
+        if (arg == "--tools-package" && i + 1 < argc)
         {
             installRoot = std::filesystem::path(argv[++i]);
         }
         else if (arg.rfind("--tools-package=", 0) == 0)
         {
             installRoot = std::filesystem::path(arg.substr(16));
-        }
-        else if (arg.rfind("--tools-dir=", 0) == 0)
-        {
-            installRoot = std::filesystem::path(arg.substr(12));
-        }
-        else if (arg.rfind("--install-root=", 0) == 0)
-        {
-            installRoot = std::filesystem::path(arg.substr(15));
         }
         else if (!arg.starts_with("--"))
         {
@@ -1283,7 +1221,7 @@ int main(int argc, char **argv)
 
     PythonRuntime python;
 
-    const auto toolsPkg = resolveToolsPackage(repoRoot, installRoot);
+    const auto toolsPkg = resolveToolsPackage(installRoot);
     if (toolsPkg.empty())
     {
         std::cerr << "FATAL: Real VisionTools package not found! "
@@ -1329,7 +1267,7 @@ int main(int argc, char **argv)
     std::cout << "[PASS] Missing transitive dependency handling test passed." << std::endl;
 
     std::cout << "[TEST DLL] Running mock test_plugin_module pipeline..." << std::endl;
-    testRealPluginModulePipeline(repoRoot, python);
+    testRealPluginModulePipeline(python);
     std::cout << "[PASS] Mock test_plugin_module pipeline passed." << std::endl;
 
     try
@@ -1342,8 +1280,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::cout << "[INFO] GPU execution: not_run (target hardware / weights missing: CUDA / TensorRT not active)"
-              << std::endl;
     std::cout << "All example contract tests passed successfully!" << std::endl;
     return 0;
 }

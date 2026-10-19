@@ -107,13 +107,13 @@ QString stateName(RuntimeState state)
     return {};
 }
 
-// The installed tools package: a deployment package directory takes precedence over the whole application directory.
+// The installed tools package lives at exactly one location; a missing package is an empty
+// workbench with a diagnostic, never a reason to probe other candidate roots (D-07).
 std::filesystem::path toolsPackageDirectory(const std::filesystem::path &application)
 {
-    if (std::filesystem::exists(application / "tools-package" / "module_index.yaml"))
-        return (application / "tools-package").lexically_normal();
-    if (std::filesystem::exists(application / "module_index.yaml"))
-        return application;
+    const auto installed = (application / "tools-package").lexically_normal();
+    if (std::filesystem::exists(installed / "module_index.yaml"))
+        return installed;
     return {};
 }
 } // namespace
@@ -129,8 +129,6 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     registry.setPluginLoader(pluginLoader);
     registerReceiveTools(registry);
     loadToolsPackage();
-    for (const auto &item : registry.diagnostics())
-        report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
     // Interpreter lifetime encloses the worker pool and all Python instances.
     try
     {
@@ -499,7 +497,7 @@ void AppController::Impl::refresh(bool rescan)
         return;
     finishRoi();
     if (rescan)
-        registry.scanPythonRoots();
+        loadToolsPackage();
     auto       result        = std::make_shared<RefreshResult>();
     auto       definitions   = registry.definitions();
     auto      *pythonRuntime = python.get();
@@ -554,8 +552,6 @@ void AppController::Impl::refreshFinished()
         if (!implementation.status)
             report(QStringLiteral("定义已加载，实现不可用：") + workbench::q(implementation.status.message));
     }
-    for (const auto &item : registry.diagnostics())
-        report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
     if (refreshReconcile)
     {
         try
@@ -606,8 +602,6 @@ void AppController::Impl::rescanTools()
     finishRoi();
 
     loadToolsPackage();
-    for (const auto &item : registry.diagnostics())
-        report(workbench::pathText(item.path) + ": " + workbench::q(item.message));
     refreshReconcile = true;
     refresh(false);
 }

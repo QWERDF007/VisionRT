@@ -1,5 +1,6 @@
 #include "core/ToolRegistry.h"
-#include "tools/CpuTools.h"
+#include "plugins/PluginLoader.h"
+#include <visionrt/sdk/Package.h>
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -383,7 +384,8 @@ void filter(ToolRegistry &registry)
     result             = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
     assert(std::get<NumericArray>(result.outputs.at("counts")).buffers()[0].values<std::int64_t>()[1] == 2);
-    inputs.erase("allowed_classes");
+    inputs["allowed_classes"] = NumericArray(DType::Int64, 1, Layout::Dense,
+                                             {buffer(DType::Int64, {0}, std::vector<std::int64_t>{})});
     inputs["min_area"] = 64.0;
     result             = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
@@ -429,7 +431,7 @@ void incompleteInstallation(ToolRegistry &completeRegistry)
 {
     ToolRegistry registry;
     registry.addDefinition(*completeRegistry.find("visionrt.image.preprocess"));
-    registerCpuTools(registry);
+    registry.setPluginLoader(completeRegistry.pluginLoader());
     assert(registry.availability("visionrt.image.read").state == ToolAvailability::DefinitionMissing);
     cv::Mat pixels(1, 2, CV_8UC1);
     pixels.at<unsigned char>(0, 0) = 127;
@@ -449,8 +451,8 @@ int main(int argc, char **argv)
 {
     assert(argc == 2);
     ToolRegistry registry;
-    registry.scan(std::filesystem::u8path(argv[1]));
-    registerCpuTools(registry);
+    registry.setPluginLoader(std::make_shared<PluginLoader>());
+    registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
     readImages(registry);
     projection(registry);
     crop(registry);

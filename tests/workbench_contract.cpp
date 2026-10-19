@@ -1258,6 +1258,8 @@ int main(int argc, char **argv)
     try
     {
         treeContract();
+        require(AppController::staticMetaObject.indexOfMethod("saveToolMetadata(QVariantMap)") < 0,
+                "installed tool metadata must not expose a second authoring entry");
         outputContract();
         pendingContract();
         nodeDiagnosticsContract();

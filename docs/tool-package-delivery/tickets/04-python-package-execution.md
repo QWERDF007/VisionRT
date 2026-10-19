@@ -4,7 +4,7 @@
 
 **Blocked by:** [03：领域 DLL 经工具 ZIP 部署到宿主执行](03-zip-deployment.md)。
 
-**Status:** completed — 已完成并通过验收测试。
+**Status:** completed — 验收范围与证据见[验收报告](../../VisionRT-VisionTools-验收评估报告.md)。
 
 **Specification:** [D-04 至 D-07；US-13、US-14、US-19、US-20；T-04](../spec.md)。
 
