@@ -62,8 +62,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build", action="store_true", help="Build the configured CMake tree before packaging.")
     parser.add_argument("--parallel", type=int, default=4, help="Build parallelism (default: 4).")
     parser.add_argument("--skip-verify", action="store_true", help="Skip post-package verification.")
-    parser.add_argument("--tools-dir", default=None, help="External VisionTools package directory to merge into install_dir.")
+    parser.add_argument("--tools-package", default=None, help="External VisionTools ZIP package to deploy into install_dir/tools-package.")
+    parser.add_argument("--tools-index", default=None, help="Optional external module_index.yaml to assert byte-by-byte consistency with package.")
     parser.add_argument("--validator", default=None, help="Explicit path to visionrt_validate_tool executable.")
+    parser.add_argument("--deploy-tools-only", action="store_true", help="Deploy or replace tools package in existing installation without full repackaging.")
     parser.add_argument("--test-verify", action="store_true", help="Run automated negative tests for package verification.")
     return parser.parse_args()
 
@@ -246,45 +248,90 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
             copy_file(pdb, install_dir / pdb.name)
 
 
-def copy_tools(install_dir: Path) -> None:
-    """Copy assets/tools into install_dir/tools."""
-    source = REPO_ROOT / "assets" / "tools"
-    if not source.is_dir():
-        raise RuntimeError(f"tools directory was not found: {source}")
-    target = install_dir / "tools"
-    shutil.copytree(source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    print(f"copy {source} -> {target}")
+def deploy_tools_package(
+    install_dir: Path,
+    package_zip: Path,
+    validator: Path | None = None,
+    external_index: Path | None = None
+) -> None:
+    """Deploy external tools package ZIP into install_dir/tools-package (D-05 / D-06)."""
+    import zipfile
+    import tempfile
 
-
-def merge_tools_package(install_dir: Path, tools_dir: Path) -> None:
-    """Merge external tools package tree into tools-package layout."""
-    if not tools_dir.is_dir():
-        raise RuntimeError(f"tools package directory was not found: {tools_dir}")
-    print(f"merging tools package from {tools_dir} into {install_dir / 'tools-package'}")
+    package_zip = Path(package_zip).resolve()
+    if not package_zip.is_file():
+        raise RuntimeError(f"tools package ZIP file was not found: {package_zip}")
 
     target_pkg = install_dir / "tools-package"
-    if target_pkg.is_dir():
-        shutil.rmtree(target_pkg)
-    target_pkg.mkdir(parents=True, exist_ok=True)
 
-    # Copy external package tree into tools-package (direct clean overwrite, no custom/stale protection)
-    for item in tools_dir.iterdir():
-        if item.name == "tools":
-            target_tools = target_pkg / "tools"
-            builtin_src = item / "builtin"
-            if builtin_src.is_dir():
-                shutil.copytree(builtin_src, target_tools / "builtin", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
-            custom_src = item / "custom"
-            if custom_src.is_dir():
-                target_custom = target_tools / "custom"
-                shutil.copytree(custom_src, target_custom, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
-            for root_f in item.glob("*"):
-                if root_f.is_file():
-                    copy_file(root_f, target_tools / root_f.name)
-        elif item.is_dir():
-            shutil.copytree(item, target_pkg / item.name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
-        else:
-            copy_file(item, target_pkg / item.name)
+    with tempfile.TemporaryDirectory(prefix="vrt_deploy_") as tmp_str:
+        tmp_dir = Path(tmp_str)
+
+        try:
+            with zipfile.ZipFile(package_zip, "r") as zf:
+                # 1. Zip-slip & safety check: reject absolute paths, .., and symlinks (D-06)
+                for member in zf.infolist():
+                    name = member.filename
+                    p = Path(name)
+                    if p.is_absolute() or name.startswith(("/", "\\")) or ":" in name:
+                        raise RuntimeError(f"tools package ZIP contains illegal absolute path: {name}")
+                    if ".." in p.parts:
+                        raise RuntimeError(f"tools package ZIP contains illegal path traversal: {name}")
+                    if (member.external_attr >> 16) & 0o170000 == 0o120000:
+                        raise RuntimeError(f"tools package ZIP contains illegal symlink entry: {name}")
+
+                zf.extractall(tmp_dir)
+        except zipfile.BadZipFile as e:
+            raise RuntimeError(f"corrupt or invalid ZIP package: {e}")
+
+        # 2. Check external index consistency if provided (D-05, D-06)
+        if external_index is not None:
+            ext_path = Path(external_index).resolve()
+            if not ext_path.is_file():
+                raise RuntimeError(f"external tools index file was not found: {ext_path}")
+            pkg_index = tmp_dir / "module_index.yaml"
+            if not pkg_index.is_file():
+                raise RuntimeError(f"tools package missing module_index.yaml in {tmp_dir}")
+            if ext_path.read_bytes() != pkg_index.read_bytes():
+                raise RuntimeError("external tools index does not match package internal module_index.yaml byte-by-byte")
+
+        # 3. Validate extracted package using unified SDK validator (D-06)
+        verify_tools_package(tmp_dir, validator)
+
+        # 4. Atomic installation: if validation succeeded, cleanly replace target_pkg
+        stage_dir = install_dir / f".tools-package-staging-{os.getpid()}"
+        if stage_dir.is_dir():
+            shutil.rmtree(stage_dir, ignore_errors=True)
+        shutil.copytree(tmp_dir, stage_dir, dirs_exist_ok=True)
+
+        backup_dir = install_dir / f".tools-package-backup-{os.getpid()}"
+        if backup_dir.is_dir():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+        if target_pkg.is_dir():
+            try:
+                target_pkg.rename(backup_dir)
+            except OSError as e:
+                shutil.rmtree(stage_dir, ignore_errors=True)
+                raise RuntimeError(
+                    f"failed to replace tools package (files in target directory may be locked or in use by a running process): {e}"
+                )
+
+        try:
+            stage_dir.rename(target_pkg)
+        except Exception as e:
+            if backup_dir.is_dir() and not target_pkg.is_dir():
+                try:
+                    backup_dir.rename(target_pkg)
+                except Exception:
+                    pass
+            shutil.rmtree(stage_dir, ignore_errors=True)
+            raise RuntimeError(f"failed to move new tools package into place: {e}")
+
+        if backup_dir.is_dir():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+    print(f"deployed tools package from {package_zip} into {target_pkg}")
 
 
 def resolve_python_home(build_dir: Path, dependency_file: Path, repo_root: Path = REPO_ROOT) -> Path:
@@ -301,6 +348,15 @@ def resolve_python_home(build_dir: Path, dependency_file: Path, repo_root: Path 
             if root and (root / "python.exe").is_file():
                 return root
             break
+
+    cache_file = build_dir / "CMakeCache.txt"
+    for cache_key in ("Python3_ROOT_DIR", "_Python3_EXECUTABLE", "Python3_EXECUTABLE"):
+        val = read_cmake_cache_value(cache_file, cache_key)
+        if val:
+            p = Path(val)
+            cand = p if p.is_dir() else p.parent
+            if (cand / "python.exe").is_file():
+                return cand
 
     raise RuntimeError("Python home directory could not be resolved.")
 
@@ -626,7 +682,11 @@ def verify_tools_package(tools_pkg: Path, validator: Path | None = None) -> None
 
     # 4. Invoke SDK validator --package
     cmd = [str(validator), "--package", str(tools_pkg)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    env = os.environ.copy()
+    bin_dir = tools_pkg / "bin"
+    if bin_dir.is_dir():
+        env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+    res = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if res.returncode != 0:
         err = res.stderr.strip() or res.stdout.strip()
         raise RuntimeError(f"SDK tools package validation failed via validator:\n{err}")
@@ -660,7 +720,6 @@ def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None =
         install_dir / "python" / "Lib",
         install_dir / "python" / "DLLs",
         install_dir / "python" / "Lib" / "site-packages" / "numpy",
-        install_dir / "tools",
         install_dir / "qml" / "quickui",
     ]
     required_files.extend([
@@ -703,7 +762,6 @@ def test_verify_package_negatives() -> None:
         (root / MARKER_FILE).touch()
         (root / "quickui.dll").touch()
         (root / "python312.dll").touch()
-        (root / "tools").mkdir()
         (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
         (root / "python" / "DLLs").mkdir(parents=True)
         (root / "qml" / "quickui").mkdir(parents=True)
@@ -763,7 +821,7 @@ def test_verify_package_negatives() -> None:
             encoding="utf-8"
         )
         (tools_pkg / "module_index.yaml").write_text(
-            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
             encoding="utf-8"
         )
 
@@ -815,9 +873,20 @@ def test_verify_package_negatives() -> None:
         except RuntimeError as e:
             assert "missing module_index.yaml" in str(e), f"Unexpected error: {e}"
 
-        # Case 6: RT-F01 counterexample: missing variant
+        # Case 6a: Missing schema_version in module_index.yaml
         (tools_pkg / "module_index.yaml").write_text(
-            "modules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            encoding="utf-8"
+        )
+        try:
+            verify_package(root, require_qt=False, validator=validator)
+            raise AssertionError("verify_package did not fail when schema_version is missing")
+        except RuntimeError as e:
+            assert "schema_version" in str(e).lower(), f"Unexpected error: {e}"
+
+        # Case 6b: Missing variant
+        (tools_pkg / "module_index.yaml").write_text(
+            "schema_version: 2\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
             encoding="utf-8"
         )
         try:
@@ -826,9 +895,9 @@ def test_verify_package_negatives() -> None:
         except RuntimeError as e:
             assert "variant" in str(e).lower(), f"Unexpected error: {e}"
 
-        # Case 6b: Unknown field in module_index.yaml
+        # Case 6c: Unknown field in module_index.yaml
         (tools_pkg / "module_index.yaml").write_text(
-            "variant: cpu\nunknown_key: bad\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            "schema_version: 2\nvariant: cpu\nunknown_key: bad\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
             encoding="utf-8"
         )
         try:
@@ -839,7 +908,7 @@ def test_verify_package_negatives() -> None:
 
         # Case 7: Dangling module reference in module_index.yaml
         (tools_pkg / "module_index.yaml").write_text(
-            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: nonexistent_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: nonexistent_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
             encoding="utf-8"
         )
         try:
@@ -850,7 +919,7 @@ def test_verify_package_negatives() -> None:
 
         # Case 7b: Unreferenced module in modules
         (tools_pkg / "module_index.yaml").write_text(
-            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\n  unused_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\n  unused_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
             encoding="utf-8"
         )
         try:
@@ -861,7 +930,7 @@ def test_verify_package_negatives() -> None:
 
         # Restore valid module_index.yaml
         (tools_pkg / "module_index.yaml").write_text(
-            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
+            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
             encoding="utf-8"
         )
 
@@ -895,14 +964,14 @@ def test_verify_package_negatives() -> None:
             assert "runtime_files entry does not exist" in str(e).lower(), f"Unexpected error: {e}"
         (tools_pkg / "bin" / "runtime_dep.dll").touch()
 
-        # Case 8d: Registry name mismatch
+        # Case 8d: Tool ID mismatch (declaration declares mismatched.id, but index lists test.plugin)
         (tools_pkg / "assets" / "tools" / "test.yaml").write_text(
-            "schema_version: 1\ntool_id: test.plugin\ndisplay_name: Test Tool\nversion: 1.0.0\nkind: cpp_function\nentry:\n  registry_name: mismatched.registry.name\ninit_params: []\ninputs: []\noutputs: []\n",
+            "schema_version: 1\ntool_id: mismatched.tool.id\ndisplay_name: Test Tool\nversion: 1.0.0\nkind: cpp_function\nentry:\n  registry_name: test.plugin\ninit_params: []\ninputs: []\noutputs: []\n",
             encoding="utf-8"
         )
         try:
             verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when registry_name mismatches")
+            raise AssertionError("verify_package did not fail when tool_id mismatches")
         except RuntimeError as e:
             assert "does not match" in str(e).lower(), f"Unexpected error: {e}"
         (tools_pkg / "assets" / "tools" / "test.yaml").write_text(
@@ -910,20 +979,120 @@ def test_verify_package_negatives() -> None:
             encoding="utf-8"
         )
 
-        # Case 9: Clean overwrite test
-        tools_src = root / "tools_source"
-        tools_src.mkdir()
-        (tools_src / "tools" / "custom").mkdir(parents=True)
-        (tools_src / "tools" / "custom" / "new_tool.txt").write_text("NEW", encoding="utf-8")
+        # Case 9: deploy_tools_package ZIP deployment, atomic protection, and zip-slip prevention
+        import zipfile
+        tools_zip = root / "valid_tools.zip"
+        with zipfile.ZipFile(tools_zip, "w") as zf:
+            zf.writestr("module_index.yaml", (tools_pkg / "module_index.yaml").read_bytes())
+            zf.writestr("bin/plugin.dll", b"MOCK_PLUGIN")
+            zf.writestr("bin/runtime_dep.dll", b"MOCK_DEP")
+            zf.writestr("assets/tools/test.yaml", (tools_pkg / "assets" / "tools" / "test.yaml").read_bytes())
 
-        # Pre-populate tools-package with an old file that should disappear
-        (tools_pkg / "tools" / "custom").mkdir(parents=True, exist_ok=True)
-        (tools_pkg / "tools" / "custom" / "old_stale_tool.txt").write_text("OLD", encoding="utf-8")
-        (tools_pkg / "tools" / "custom" / "new_tool.txt").write_text("OLD_VERSION", encoding="utf-8")
+        # Pre-populate tools-package with sentinel file that must be cleanly replaced
+        sentinel_old = tools_pkg / "old_stale.txt"
+        sentinel_old.write_text("OLD", encoding="utf-8")
 
-        merge_tools_package(root, tools_src)
-        assert not (tools_pkg / "tools" / "custom" / "old_stale_tool.txt").exists(), "Old stale file did not disappear after merge!"
-        assert (tools_pkg / "tools" / "custom" / "new_tool.txt").read_text(encoding="utf-8") == "NEW", "File was not cleanly overwritten with NEW content!"
+        ext_idx = root / "external_index.yaml"
+        ext_idx.write_bytes((tools_pkg / "module_index.yaml").read_bytes())
+
+        deploy_tools_package(root, tools_zip, validator=validator, external_index=ext_idx)
+        assert not sentinel_old.exists(), "Old stale file did not disappear after deploy!"
+        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == b"MOCK_PLUGIN"
+
+        # Case 9b: External index mismatch rejected without altering installation
+        bad_ext_idx = root / "bad_ext.yaml"
+        bad_ext_idx.write_text("schema_version: 2\nvariant: cpu\nmodules: {}\ntools: {}\n", encoding="utf-8")
+        marker_before = (tools_pkg / "bin" / "plugin.dll").read_bytes()
+        try:
+            deploy_tools_package(root, tools_zip, validator=validator, external_index=bad_ext_idx)
+            raise AssertionError("deploy_tools_package did not fail on mismatched external index")
+        except RuntimeError as e:
+            assert "byte-by-byte" in str(e).lower(), f"Unexpected error: {e}"
+        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == marker_before, "Target installation altered on failed deploy!"
+
+        # Case 9c: Zip-slip path traversal rejected without altering installation
+        slip_zip = root / "slip.zip"
+        with zipfile.ZipFile(slip_zip, "w") as zf:
+            zf.writestr("../escaped.txt", b"EVIL")
+        try:
+            deploy_tools_package(root, slip_zip, validator=validator)
+            raise AssertionError("deploy_tools_package did not fail on zip-slip traversal")
+        except RuntimeError as e:
+            assert "path traversal" in str(e).lower(), f"Unexpected error: {e}"
+        assert not (root / "escaped.txt").exists(), "Zip-slip created escaped file!"
+        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == marker_before, "Target installation altered on zip-slip failure!"
+
+        # Case 9d: Corrupted ZIP rejected without altering installation
+        bad_bytes_zip = root / "corrupted.zip"
+        bad_bytes_zip.write_bytes(b"PK\x03\x04NOT_A_VALID_ZIP_ARCHIVE_DATA")
+        try:
+            deploy_tools_package(root, bad_bytes_zip, validator=validator)
+            raise AssertionError("deploy_tools_package did not fail on corrupted ZIP")
+        except RuntimeError as e:
+            assert "corrupt" in str(e).lower() or "invalid" in str(e).lower(), f"Unexpected error: {e}"
+        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == marker_before, "Target installation altered on corrupt ZIP failure!"
+
+        # Case 9e: Locked file in target directory prevents replacement without corrupting files or killing process
+        locked_file = tools_pkg / "bin" / "plugin.dll"
+        f_lock = open(locked_file, "rb")
+        try:
+            # Prepare new package V2
+            new_v2_zip = root / "tools_v2.zip"
+            with zipfile.ZipFile(new_v2_zip, "w") as zf:
+                zf.writestr("module_index.yaml", (tools_pkg / "module_index.yaml").read_bytes())
+                zf.writestr("bin/plugin.dll", b"MOCK_PLUGIN_V2")
+                zf.writestr("bin/runtime_dep.dll", b"MOCK_DEP")
+                zf.writestr("assets/tools/test.yaml", (tools_pkg / "assets" / "tools" / "test.yaml").read_bytes())
+
+            try:
+                deploy_tools_package(root, new_v2_zip, validator=validator)
+                raise AssertionError("deploy_tools_package did not fail when target file is locked")
+            except RuntimeError as e:
+                assert "in use" in str(e).lower() or "locked" in str(e).lower(), f"Unexpected error: {e}"
+            # Assert file is still open and untouched!
+            assert locked_file.read_bytes() == marker_before, "Locked installation altered or corrupted!"
+        finally:
+            f_lock.close()
+
+        # After releasing lock, deploying new package V2 succeeds
+        deploy_tools_package(root, new_v2_zip, validator=validator)
+        assert locked_file.read_bytes() == b"MOCK_PLUGIN_V2", "Deployment did not update file after releasing lock!"
+
+        # Case 9f: Clean replacement: deploying Package B cleanly removes files unique to Package A
+        pkg_b_zip = root / "tools_pkg_b.zip"
+        decl_b = (
+            "schema_version: 1\n"
+            "tool_id: tool.pkg_b\n"
+            "display_name: Tool Pkg B\n"
+            "version: 1.0.0\n"
+            "kind: cpp_function\n"
+            "entry:\n  registry_name: tool.pkg_b\n"
+            "init_params: []\ninputs: []\noutputs: []\n"
+        )
+        index_b = (
+            "schema_version: 2\n"
+            "variant: cpu\n"
+            "modules:\n  module_b:\n    library: bin/module_b.dll\n"
+            "tools:\n  tool.pkg_b:\n    module: module_b\n    definition: assets/tools/tool_b.yaml\n"
+            "runtime_files:\n  - bin/runtime_dep_b.dll\n"
+        )
+        with zipfile.ZipFile(pkg_b_zip, "w") as zf:
+            zf.writestr("module_index.yaml", index_b.encode("utf-8"))
+            zf.writestr("bin/module_b.dll", b"MODULE_B_DLL")
+            zf.writestr("bin/runtime_dep_b.dll", b"DEP_B_DLL")
+            zf.writestr("assets/tools/tool_b.yaml", decl_b.encode("utf-8"))
+
+        deploy_tools_package(root, pkg_b_zip, validator=validator)
+
+        # Verify Package B files exist
+        assert (tools_pkg / "bin" / "module_b.dll").read_bytes() == b"MODULE_B_DLL"
+        assert (tools_pkg / "bin" / "runtime_dep_b.dll").read_bytes() == b"DEP_B_DLL"
+        assert (tools_pkg / "assets" / "tools" / "tool_b.yaml").exists()
+
+        # Verify Package A unique files are COMPLETELY ABSENT (no leftovers)
+        assert not (tools_pkg / "bin" / "plugin.dll").exists(), "Old Package A DLL still lingers!"
+        assert not (tools_pkg / "bin" / "runtime_dep.dll").exists(), "Old Package A runtime dep still lingers!"
+        assert not (tools_pkg / "assets" / "tools" / "test.yaml").exists(), "Old Package A declaration still lingers!"
 
         # Case 10: Refuse cleaning repository root / source dirs
         try:
@@ -952,6 +1121,38 @@ def main() -> int:
     else:
         install_dir = raw_install_dir
 
+    if args.deploy_tools_only:
+        if not args.tools_package:
+            raise RuntimeError("--deploy-tools-only requires --tools-package <path_to_zip>")
+        if not install_dir.is_dir():
+            raise RuntimeError(f"installation directory does not exist: {install_dir}")
+        marker = install_dir / MARKER_FILE
+        exe_file = install_dir / f"{PROJECT_NAME}.exe"
+        if not marker.is_file() and not exe_file.is_file():
+            raise RuntimeError(f"specified directory is not a valid VisionRT installation: {install_dir}")
+
+        validator_path = resolve_project_path(args.validator) if args.validator else None
+        if not validator_path:
+            for c in [
+                build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+                build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+                REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+                REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+            ]:
+                if c.is_file():
+                    validator_path = c
+                    break
+
+        ext_index = resolve_project_path(args.tools_index) if args.tools_index else None
+        deploy_tools_package(
+            install_dir,
+            resolve_project_path(args.tools_package),
+            validator=validator_path,
+            external_index=ext_index
+        )
+        print(f"tools package successfully deployed into {install_dir / 'tools-package'}")
+        return 0
+
     dependency_file = resolve_project_path(args.dependencies)
 
     if not build_dir.is_dir():
@@ -967,11 +1168,29 @@ def main() -> int:
     packaged_exe = install_dir / source_exe.name
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb)
-    copy_tools(install_dir)
     copy_python_runtime(build_dir, install_dir, dependency_file)
 
-    if args.tools_dir:
-        merge_tools_package(install_dir, resolve_project_path(args.tools_dir))
+    # Resolve validator path
+    validator_path = resolve_project_path(args.validator) if args.validator else None
+    if not validator_path:
+        for c in [
+            build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+            build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+            REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+            REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
+        ]:
+            if c.is_file():
+                validator_path = c
+                break
+
+    if args.tools_package:
+        ext_index = resolve_project_path(args.tools_index) if args.tools_index else None
+        deploy_tools_package(
+            install_dir,
+            resolve_project_path(args.tools_package),
+            validator=validator_path,
+            external_index=ext_index
+        )
 
     if args.skip_dependencies:
         print("skip manifest dependencies")

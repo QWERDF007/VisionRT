@@ -1,43 +1,56 @@
-#include "ui/ToolTreeModel.h"
-#include "ui/OutputModel.h"
 #include "ui/AppController.h"
-#include "ui/Theme.h"
 #include "ui/ImageViewport.h"
+#include "ui/OutputModel.h"
+#include "ui/Theme.h"
+#include "ui/ToolTreeModel.h"
+
 #include <QGuiApplication>
+#include <QImage>
 #include <QProcess>
-#include <QTemporaryDir>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QQuickWindow>
 #include <QQuickItem>
 #include <QQuickStyle>
-#include <QImage>
+#include <QQuickWindow>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
 
 using namespace visionrt;
+
 namespace {
-void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
-void require(bool value, const std::string& message) { if (!value) throw std::runtime_error(message); }
-void treeContract() {
-    ToolRegistry registry;
+void require(bool value, const char *message)
+{
+    if (!value)
+        throw std::runtime_error(message);
+}
+
+void require(bool value, const std::string &message)
+{
+    if (!value)
+        throw std::runtime_error(message);
+}
+
+void treeContract()
+{
+    ToolRegistry   registry;
     ToolDefinition tool;
-    tool.id = "custom.precise";
+    tool.id          = "custom.precise";
     tool.displayName = "精确整数";
-    tool.version = "1.0";
-    tool.kind = ToolKind::PythonFunction;
-    tool.script = "precise.py";
-    tool.symbol = "execute";
-    tool.category = "数据";
+    tool.version     = "1.0";
+    tool.kind        = ToolKind::PythonFunction;
+    tool.script      = "precise.py";
+    tool.symbol      = "execute";
+    tool.category    = "数据";
     tool.subcategory = "整数";
     registry.addDefinition(tool);
     ToolTreeModel model;
     model.setRegistry(registry);
     auto category = model.index(0, 0);
-    auto group = model.index(0, 0, category);
-    auto leaf = model.index(0, 0, group);
+    auto group    = model.index(0, 0, category);
+    auto leaf     = model.index(0, 0, group);
     require(model.parent(leaf) == group && model.parent(group) == category, "tree loses hierarchy");
     require(model.data(leaf, ToolTreeModel::ToolIdRole).toString() == "custom.precise", "leaf loses stable id");
     model.setFilter("不存在");
@@ -45,16 +58,23 @@ void treeContract() {
     model.setFilter("精确");
     require(model.rowCount() == 1, "filter loses matching descendant");
 }
-void outputContract() {
+
+void outputContract()
+{
     ToolDefinition tool;
     PortDefinition port;
-    port.id = "value"; port.name = "值"; port.type = {Type::String};
+    port.id   = "value";
+    port.name = "值";
+    port.type = {Type::String};
     tool.outputs.push_back(port);
-    auto snapshot = std::make_shared<NodeSnapshot>();
+    auto snapshot    = std::make_shared<NodeSnapshot>();
     snapshot->status = {-2, "conversion failed"};
     snapshot->outputs.emplace("value", Utf8(std::string(10000, 'x')));
     OutputModel model;
-    model.setResult(&tool, snapshot, {{"value", 2}});
+    model.setResult(&tool, snapshot,
+                    {
+                        {"value", 2}
+    });
     require(model.get(0).value("portId").toString() == "__status_code", "status code is not first");
     require(model.get(1).value("portId").toString() == "__status_message", "status message is not second");
     require(model.get(0).value("preview").toString() == "-2", "status not taken from completed snapshot");
@@ -63,12 +83,15 @@ void outputContract() {
     require(model.get(2).value("count").toInt() == 2, "relationship count is not input binding count");
     const auto frozen = model.capture(2);
     model.clear();
-    require(frozen && OutputModel::fullText(*frozen).size() >= 10000, "captured output follows current selection or truncates");
+    require(frozen && OutputModel::fullText(*frozen).size() >= 10000,
+            "captured output follows current selection or truncates");
 }
-void pendingContract() {
+
+void pendingContract()
+{
     QTemporaryDir directory;
     AppController app(1, directory.path());
-    int confirmations = 0, closes = 0;
+    int           confirmations = 0, closes = 0;
     QObject::connect(&app, &AppController::unsavedDecisionRequired, [&] { ++confirmations; });
     QObject::connect(&app, &AppController::closeReady, [&] { ++closes; });
     app.requestClose();
@@ -81,19 +104,23 @@ void pendingContract() {
     app.resolveUnsaved("discard");
     require(closes == 1, "discard does not finish pending close exactly once");
 }
+
 #include <chrono>
 #include <thread>
 
-void nodeDiagnosticsContract() {
+void nodeDiagnosticsContract()
+{
     QTemporaryDir directory;
-    QDir(directory.path()).mkpath("tools/custom/test_category/test_diag");
-    QFile pyFile(directory.path() + "/tools/custom/test_category/test_diag/test_diag.py");
-    if (pyFile.open(QIODevice::WriteOnly)) {
+    QDir(directory.path()).mkpath("tools-package/assets/tools/custom/test_category/test_diag");
+    QFile pyFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.py");
+    if (pyFile.open(QIODevice::WriteOnly))
+    {
         pyFile.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'value': 42}\n");
         pyFile.close();
     }
-    QFile yamlFile(directory.path() + "/tools/custom/test_category/test_diag/test_diag.yaml");
-    if (yamlFile.open(QIODevice::WriteOnly)) {
+    QFile yamlFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.yaml");
+    if (yamlFile.open(QIODevice::WriteOnly))
+    {
         yamlFile.write(
             "schema_version: 1\n"
             "tool_id: test.diag.python\n"
@@ -108,12 +135,13 @@ void nodeDiagnosticsContract() {
             "outputs:\n"
             "- id: value\n"
             "  name: 输出\n"
-            "  type: Int\n"
-        );
+            "  type: Int\n");
         yamlFile.close();
     }
-    QFile unfulfilledYaml(directory.path() + "/tools/custom/test_category/test_diag/unfulfilled.yaml");
-    if (unfulfilledYaml.open(QIODevice::WriteOnly)) {
+    QFile unfulfilledYaml(directory.path()
+                          + "/tools-package/assets/tools/custom/test_category/test_diag/unfulfilled.yaml");
+    if (unfulfilledYaml.open(QIODevice::WriteOnly))
+    {
         unfulfilledYaml.write(
             "schema_version: 1\n"
             "tool_id: test.diag.unfulfilled\n"
@@ -124,13 +152,27 @@ void nodeDiagnosticsContract() {
             "  registry_name: test.diag.missing_symbol\n"
             "init_params: []\n"
             "inputs: []\n"
-            "outputs: []\n"
-        );
+            "outputs: []\n");
         unfulfilledYaml.close();
+    }
+    QFile indexFile(directory.path() + "/tools-package/module_index.yaml");
+    if (indexFile.open(QIODevice::WriteOnly))
+    {
+        indexFile.write(
+            "schema_version: 2\n"
+            "variant: cpu\n"
+            "tools:\n"
+            "  test.diag.python:\n"
+            "    definition: assets/tools/custom/test_category/test_diag/test_diag.yaml\n"
+            "  test.diag.unfulfilled:\n"
+            "    host_binding: nonexistent.binding\n"
+            "    definition: assets/tools/custom/test_category/test_diag/unfulfilled.yaml\n");
+        indexFile.close();
     }
 
     AppController app(1, directory.path());
-    for (int i = 0; i < 50 && app.busy(); ++i) {
+    for (int i = 0; i < 50 && app.busy(); ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -154,34 +196,39 @@ void nodeDiagnosticsContract() {
     require(map1.value("implUnavailable").toBool() == true, "unfulfilled node not marked implUnavailable");
 
     app.runOnce();
-    for (int i = 0; i < 50; ++i) {
+    for (int i = 0; i < 50; ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     const auto executedNodes = app.nodes();
     require(!executedNodes.isEmpty(), "executed node empty");
     const auto executedMap = executedNodes.first().toMap();
-    const auto detail = executedMap.value("timingDetail").toString();
+    const auto detail      = executedMap.value("timingDetail").toString();
     require(detail.contains(QStringLiteral("工具调用(含桥接):")), "timingDetail missing bridge disclaimer");
     require(!detail.contains(QStringLiteral("纯算法")), "timingDetail falsely claims pure algorithm");
 }
 
-void mainQmlContract(double scale) {
+void mainQmlContract(double scale)
+{
     QQuickStyle::setStyle("Basic");
     QTemporaryDir directory;
-    const auto dirPath = directory.path();
+    const auto    dirPath = directory.path();
 
     // 1. Prepare plugin and YAML definitions
     QDir(dirPath).mkpath("tools-package/bin");
     const QString dllSrc = QCoreApplication::applicationDirPath() + "/test_plugin_module.dll";
     const QString dllDst = dirPath + "/tools-package/bin/test_plugin_module.dll";
-    if (QFile::exists(dllSrc)) {
+    if (QFile::exists(dllSrc))
+    {
         QFile::copy(dllSrc, dllDst);
     }
 
     QFile indexFile(dirPath + "/tools-package/module_index.yaml");
-    if (indexFile.open(QIODevice::WriteOnly)) {
+    if (indexFile.open(QIODevice::WriteOnly))
+    {
         indexFile.write(
+            "schema_version: 2\n"
             "variant: cpu\n"
             "modules:\n"
             "  test_module:\n"
@@ -189,20 +236,20 @@ void mainQmlContract(double scale) {
             "tools:\n"
             "  test.plugin.counter:\n"
             "    module: test_module\n"
-            "    definition: tools/counter.yaml\n"
+            "    definition: assets/tools/builtin/Plugin/Basic/counter.yaml\n"
             "  test.plugin.sleep:\n"
             "    module: test_module\n"
-            "    definition: tools/sleep.yaml\n"
-            "  test.plugin.fail_init:\n"
+            "    definition: assets/tools/builtin/Plugin/Basic/sleep.yaml\n"
+            "  test.plugin.fail:\n"
             "    module: test_module\n"
-            "    definition: tools/fail_init.yaml\n"
-        );
+            "    definition: assets/tools/builtin/Plugin/Basic/fail.yaml\n");
         indexFile.close();
     }
 
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/Plugin/Basic");
     QFile sleepYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/sleep.yaml");
-    if (sleepYaml.open(QIODevice::WriteOnly)) {
+    if (sleepYaml.open(QIODevice::WriteOnly))
+    {
         sleepYaml.write(
             "schema_version: 1\n"
             "tool_id: test.plugin.sleep\n"
@@ -213,13 +260,13 @@ void mainQmlContract(double scale) {
             "init_params: []\n"
             "inputs: []\n"
             "outputs:\n"
-            "  - {id: y, name: Y, type: Int}\n"
-        );
+            "  - {id: y, name: Y, type: Int}\n");
         sleepYaml.close();
     }
 
     QFile counterYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.yaml");
-    if (counterYaml.open(QIODevice::WriteOnly)) {
+    if (counterYaml.open(QIODevice::WriteOnly))
+    {
         counterYaml.write(
             "schema_version: 1\n"
             "tool_id: test.plugin.counter\n"
@@ -231,13 +278,13 @@ void mainQmlContract(double scale) {
             "inputs:\n"
             "  - {id: step, name: Step, type: Int, default: 1}\n"
             "outputs:\n"
-            "  - {id: count, name: Count, type: Int}\n"
-        );
+            "  - {id: count, name: Count, type: Int}\n");
         counterYaml.close();
     }
 
     QFile failYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/fail.yaml");
-    if (failYaml.open(QIODevice::WriteOnly)) {
+    if (failYaml.open(QIODevice::WriteOnly))
+    {
         failYaml.write(
             "schema_version: 1\n"
             "tool_id: test.plugin.fail\n"
@@ -247,23 +294,23 @@ void mainQmlContract(double scale) {
             "entry: {registry_name: test.plugin.fail_init}\n"
             "init_params: []\n"
             "inputs: []\n"
-            "outputs: []\n"
-        );
+            "outputs: []\n");
         failYaml.close();
     }
 
     AppController app(1, dirPath);
-    for (int i = 0; i < 50 && app.busy(); ++i) {
+    for (int i = 0; i < 50 && app.busy(); ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto* theme = visionrt::Theme::instance();
+    auto *theme = visionrt::Theme::instance();
     qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
 
     QQmlApplicationEngine engine;
-    const auto appDir = QCoreApplication::applicationDirPath();
+    const auto            appDir = QCoreApplication::applicationDirPath();
     engine.addImportPath(appDir + "/qml");
     engine.addImportPath(appDir + "/../qml");
 #ifdef VISIONRT_SOURCE_DIR
@@ -280,15 +327,18 @@ void mainQmlContract(double scale) {
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
-    if (QFile::exists(qmlPath)) {
+    if (QFile::exists(qmlPath))
+    {
         engine.load(QUrl::fromLocalFile(qmlPath));
-    } else {
+    }
+    else
+    {
         engine.loadFromModule("VisionRT", "Main");
     }
 
     const auto roots = engine.rootObjects();
     require(!roots.isEmpty(), "Main.qml failed to instantiate");
-    auto* window = qobject_cast<QQuickWindow*>(roots.first());
+    auto *window = qobject_cast<QQuickWindow *>(roots.first());
     require(window != nullptr, "Main.qml root is not QQuickWindow");
 
     // 1. DPI verification & logical viewport strictly 960x540
@@ -307,10 +357,10 @@ void mainQmlContract(double scale) {
     app.save(dirPath + "/test.vrt");
     require(app.dirty() == false, "project initially dirty after save");
 
-    auto* leftHandle = window->findChild<QQuickItem*>("leftHandle");
-    auto* leftHandleMask = window->findChild<QQuickItem*>("leftHandleMask");
-    auto* leftHost = window->findChild<QQuickItem*>("leftHost");
-    auto* leftContent = window->findChild<QQuickItem*>("leftContent");
+    auto *leftHandle     = window->findChild<QQuickItem *>("leftHandle");
+    auto *leftHandleMask = window->findChild<QQuickItem *>("leftHandleMask");
+    auto *leftHost       = window->findChild<QQuickItem *>("leftHost");
+    auto *leftContent    = window->findChild<QQuickItem *>("leftContent");
     require(leftHandle != nullptr, "missing leftHandle");
     require(leftHandleMask != nullptr, "missing leftHandleMask");
     require(leftHost != nullptr, "missing leftHost");
@@ -336,7 +386,7 @@ void mainQmlContract(double scale) {
     QCoreApplication::sendEvent(leftHandle, &handleClick);
     require(!window->property("leftExpanded").toBool(), "mouse click on hidden handle expanded drawer");
 
-    auto* drawerToggle = window->findChild<QQuickItem*>("drawerToggle");
+    auto *drawerToggle = window->findChild<QQuickItem *>("drawerToggle");
     require(drawerToggle != nullptr && drawerToggle->isVisible(), "drawerToggle missing or invisible");
     require(window->activeFocusItem() == drawerToggle, "focus did not switch to drawerToggle upon collapse");
     require(app.dirty() == false, "collapsing drawer dirtied the project");
@@ -349,7 +399,7 @@ void mainQmlContract(double scale) {
     for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
 
     require(window->property("leftExpanded").toBool() == true, "Ctrl+F event did not expand left drawer");
-    auto* flowSearch = window->findChild<QQuickItem*>("flowSearch");
+    auto *flowSearch = window->findChild<QQuickItem *>("flowSearch");
     require(flowSearch != nullptr, "missing flowSearch input field");
     require(flowSearch->hasActiveFocus(), "flowSearch input does not have active focus after Ctrl+F");
 
@@ -360,7 +410,7 @@ void mainQmlContract(double scale) {
     QCoreApplication::sendEvent(window, &tabRelease);
     for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
 
-    auto* activeFocus = window->activeFocusItem();
+    auto *activeFocus = window->activeFocusItem();
     require(activeFocus != nullptr, "no active focus item after Tab key");
     require(activeFocus->isVisible(), "active focus item after Tab is not visible");
 
@@ -376,7 +426,8 @@ void mainQmlContract(double scale) {
 
     // Start continuous loop
     app.toggleLoop();
-    for (int i = 0; i < 50 && app.runState() != "RunningLoop"; ++i) {
+    for (int i = 0; i < 50 && app.runState() != "RunningLoop"; ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -384,23 +435,27 @@ void mainQmlContract(double scale) {
 
     // Observe active running node state is "blue"
     bool observedBlue = false;
-    for (int i = 0; i < 50; ++i) {
+    for (int i = 0; i < 50; ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        for (const auto& n : app.nodes()) {
-            if (n.toMap().value("state").toString() == "blue") {
+        for (const auto &n : app.nodes())
+        {
+            if (n.toMap().value("state").toString() == "blue")
+            {
                 observedBlue = true;
                 break;
             }
         }
-        if (observedBlue) break;
+        if (observedBlue)
+            break;
     }
     require(observedBlue, "Running node did not exhibit 'blue' active running state in RunningLoop");
     std::cout << "[Evidence HS5-03] Node state 'blue' observed during RunningLoop execution.\n";
 
     // Drawer toggle while running: does not dirty project or mutate instance identities
-    const auto* hostIdentityBefore = leftHost;
-    const auto* contentIdentityBefore = leftContent;
+    const auto *hostIdentityBefore    = leftHost;
+    const auto *contentIdentityBefore = leftContent;
     QMetaObject::invokeMethod(window, "toggleLeft");
     for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
     require(app.dirty() == false, "toggling drawer during active execution dirtied project");
@@ -408,12 +463,15 @@ void mainQmlContract(double scale) {
     QMetaObject::invokeMethod(window, "toggleLeft");
     for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
     require(app.dirty() == false, "re-expanding drawer during active execution dirtied project");
-    require(window->findChild<QQuickItem*>("leftHost") == hostIdentityBefore, "leftHost identity changed across toggle");
-    require(window->findChild<QQuickItem*>("leftContent") == contentIdentityBefore, "leftContent identity changed across toggle");
+    require(window->findChild<QQuickItem *>("leftHost") == hostIdentityBefore,
+            "leftHost identity changed across toggle");
+    require(window->findChild<QQuickItem *>("leftContent") == contentIdentityBefore,
+            "leftContent identity changed across toggle");
 
     // Stop loop and wait for Idle
     app.toggleLoop();
-    for (int i = 0; i < 50 && app.busy(); ++i) {
+    for (int i = 0; i < 50 && app.busy(); ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -422,12 +480,14 @@ void mainQmlContract(double scale) {
     // Node state after successful run is green
     const auto nodesAfterRun = app.nodes();
     require(!nodesAfterRun.isEmpty(), "nodes empty after running loop");
-    require(nodesAfterRun.first().toMap().value("state").toString() == "green", "node state after execution is not green");
+    require(nodesAfterRun.first().toMap().value("state").toString() == "green",
+            "node state after execution is not green");
 
     // Add failing node and verify red error state
     app.addNode("test.plugin.fail", 300, 100);
     app.runOnce();
-    for (int i = 0; i < 50 && app.busy(); ++i) {
+    for (int i = 0; i < 50 && app.busy(); ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -442,9 +502,11 @@ void mainQmlContract(double scale) {
         roiViewport.setHeight(400);
         roiViewport.beginRoiEdit({1, "rois", 0, -1}, {});
         roiViewport.setDrawShape(2); // Rectangle
-        QMouseEvent pressEv(QEvent::MouseButtonPress, roiViewport.imageToItem({20, 20}), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent pressEv(QEvent::MouseButtonPress, roiViewport.imageToItem({20, 20}), Qt::LeftButton, Qt::LeftButton,
+                            Qt::NoModifier);
         QCoreApplication::sendEvent(&roiViewport, &pressEv);
-        QMouseEvent moveEv(QEvent::MouseMove, roiViewport.imageToItem({60, 60}), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent moveEv(QEvent::MouseMove, roiViewport.imageToItem({60, 60}), Qt::NoButton, Qt::LeftButton,
+                           Qt::NoModifier);
         QCoreApplication::sendEvent(&roiViewport, &moveEv);
         require(roiViewport.editing(), "ROI viewport not in editing state");
 
@@ -459,8 +521,10 @@ void mainQmlContract(double scale) {
     }
 
     QString counterNodeId;
-    for (const auto& n : nodesWithFail) {
-        if (n.toMap().value("toolId").toString() == "test.plugin.counter") {
+    for (const auto &n : nodesWithFail)
+    {
+        if (n.toMap().value("toolId").toString() == "test.plugin.counter")
+        {
             counterNodeId = n.toMap().value("id").toString();
             break;
         }
@@ -475,9 +539,11 @@ void mainQmlContract(double scale) {
     for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
     require(app.dirty() == true, "dirty parameter state lost across drawer toggle");
     bool paramPreserved = false;
-    for (const auto& paramVar : app.parameters()) {
+    for (const auto &paramVar : app.parameters())
+    {
         const auto pMap = paramVar.toMap();
-        if (pMap.value("id").toString() == "step") {
+        if (pMap.value("id").toString() == "step")
+        {
             paramPreserved = (pMap.value("literal").toString() == "99" || pMap.value("valueText").toString() == "99");
         }
     }
@@ -486,10 +552,11 @@ void mainQmlContract(double scale) {
     // 8. Screenshot capture evidence for this scale
     QImage frame = window->grabWindow();
     require(!frame.isNull(), "grabWindow failed");
-    const int expectedPhysicalWidth = static_cast<int>(std::round(960.0 * dpr));
+    const int expectedPhysicalWidth  = static_cast<int>(std::round(960.0 * dpr));
     const int expectedPhysicalHeight = static_cast<int>(std::round(540.0 * dpr));
     require(std::abs(frame.width() - expectedPhysicalWidth) <= 2, "Physical frame width does not match logical * DPR");
-    require(std::abs(frame.height() - expectedPhysicalHeight) <= 2, "Physical frame height does not match logical * DPR");
+    require(std::abs(frame.height() - expectedPhysicalHeight) <= 2,
+            "Physical frame height does not match logical * DPR");
 
     const std::filesystem::path evidenceDir = "build/evidence";
     std::filesystem::create_directories(evidenceDir);
@@ -497,79 +564,104 @@ void mainQmlContract(double scale) {
     std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
     const auto screenshotName = "workbench_dpi_" + std::string(scaleBuf) + ".png";
     const auto screenshotPath = evidenceDir / screenshotName;
-    const bool saved = frame.save(QString::fromStdString(screenshotPath.string()));
+    const bool saved          = frame.save(QString::fromStdString(screenshotPath.string()));
     require(saved, "Failed to save screenshot evidence to " + screenshotPath.string());
     require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
             "Saved screenshot file does not exist or is empty");
 
-    std::cout << "[Evidence HS5-03] Child process scale=" << scaleBuf
-              << ", actual DPR=" << dpr
-              << ", logical size=(" << window->width() << ", " << window->height() << ")"
+    std::cout << "[Evidence HS5-03] Child process scale=" << scaleBuf << ", actual DPR=" << dpr << ", logical size=("
+              << window->width() << ", " << window->height() << ")"
               << ", physical size=(" << frame.width() << ", " << frame.height() << ")"
               << ", screenshot=" << screenshotPath.string() << "\n";
 }
 
-void multiRootCoexistenceAndRefreshContract() {
-    std::cout << "\n[MULTI-ROOT & REFRESH CONTRACT START]\n";
+void packageDrivenCatalogAndRefreshContract()
+{
+    std::cout << "\n[PACKAGE-DRIVEN CATALOG & REFRESH CONTRACT START]\n";
     QTemporaryDir directory;
-    const auto dirPath = directory.path();
+    const auto    dirPath = directory.path();
 
+    // 1. Empty catalog on startup without package
+    {
+        AppController app(1, dirPath);
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        require(app.toolDefinitions().isEmpty(),
+                "workbench must start with empty tool catalog when no package is installed");
+        std::cout << "[Evidence T-05] Empty catalog on startup without package verified.\n";
+
+        // 2. Placing YAML into old host directories without package does NOT populate tools
+        QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
+        QFile legacyYaml(dirPath + "/assets/tools/builtin/flow/func/platform_func.yaml");
+        if (legacyYaml.open(QIODevice::WriteOnly))
+        {
+            legacyYaml.write(
+                "schema_version: 1\n"
+                "tool_id: test.legacy.func\n"
+                "display_name: 遗留函数\n"
+                "version: 1.0.0\n"
+                "kind: cpp_function\n"
+                "entry:\n"
+                "  registry_name: test.plugin.function\n"
+                "init_params: []\n"
+                "inputs: []\n"
+                "outputs: []\n");
+            legacyYaml.close();
+        }
+        QDir(dirPath).mkpath("tools/custom/user/py");
+        QFile legacyPy(dirPath + "/tools/custom/user/py/legacy.py");
+        if (legacyPy.open(QIODevice::WriteOnly))
+        {
+            legacyPy.write("def run(i): return {'val': 1}\n");
+            legacyPy.close();
+        }
+        QFile legacyPyYaml(dirPath + "/tools/custom/user/py/legacy.yaml");
+        if (legacyPyYaml.open(QIODevice::WriteOnly))
+        {
+            legacyPyYaml.write(
+                "schema_version: 1\n"
+                "tool_id: test.legacy.python\n"
+                "display_name: 遗留脚本\n"
+                "version: 1.0.0\n"
+                "kind: python_function\n"
+                "entry:\n"
+                "  file: legacy.py\n"
+                "  symbol: run\n"
+                "init_params: []\n"
+                "inputs: []\n"
+                "outputs: []\n");
+            legacyPyYaml.close();
+        }
+        app.rescanTools();
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        require(app.toolDefinitions().isEmpty(),
+                "putting YAML into old host directories must not populate tools without package");
+        std::cout
+            << "[Evidence T-05] Legacy directory exclusion verified: 0 tools discovered from unindexed legacy paths.\n";
+    }
+
+    // 3. Deploy valid tools-package with plugin C++ tools, Python tool, and platform receiver node
     QDir(dirPath).mkpath("tools-package/bin");
     const QString dllSrc = QCoreApplication::applicationDirPath() + "/test_plugin_module.dll";
     const QString dllDst = dirPath + "/tools-package/bin/test_plugin_module.dll";
-    if (QFile::exists(dllSrc)) {
+    if (QFile::exists(dllSrc))
+    {
         QFile::copy(dllSrc, dllDst);
     }
 
-    QFile indexFile(dirPath + "/tools-package/module_index.yaml");
-    if (indexFile.open(QIODevice::WriteOnly)) {
-        indexFile.write(
-            "variant: cpu\n"
-            "modules:\n"
-            "  test_module:\n"
-            "    library: bin/test_plugin_module.dll\n"
-            "tools:\n"
-            "  test.plugin.counter:\n"
-            "    module: test_module\n"
-            "    definition: tools/counter.yaml\n"
-            "  test.plugin.function:\n"
-            "    module: test_module\n"
-            "    definition: tools/function.yaml\n"
-        );
-        indexFile.close();
-    }
-
-    // Root 1: Platform builtin (cpp_function)
-    QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
-    QFile root1Yaml(dirPath + "/assets/tools/builtin/flow/func/platform_func.yaml");
-    if (root1Yaml.open(QIODevice::WriteOnly)) {
-        root1Yaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.platform.func\n"
-            "display_name: 平台函数\n"
-            "version: 1.0.0\n"
-            "kind: cpp_function\n"
-            "entry:\n"
-            "  registry_name: test.plugin.function\n"
-            "init_params: []\n"
-            "inputs:\n"
-            "- id: x\n"
-            "  name: 输入\n"
-            "  type: Int\n"
-            "  default: 5\n"
-            "outputs:\n"
-            "- id: y\n"
-            "  name: 输出\n"
-            "  type: Int\n"
-        );
-        root1Yaml.close();
-    }
-
-    // Root 2: Package builtin (cpp_class)
+    // Package builtin C++ counter
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/counter");
-    QFile root2Yaml(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.yaml");
-    if (root2Yaml.open(QIODevice::WriteOnly)) {
-        root2Yaml.write(
+    QFile rootCounterYaml(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.yaml");
+    if (rootCounterYaml.open(QIODevice::WriteOnly))
+    {
+        rootCounterYaml.write(
             "schema_version: 1\n"
             "tool_id: test.pkg.counter\n"
             "display_name: 计数器插件\n"
@@ -586,23 +678,49 @@ void multiRootCoexistenceAndRefreshContract() {
             "outputs:\n"
             "- id: count\n"
             "  name: 计数值\n"
-            "  type: Int\n"
-        );
-        root2Yaml.close();
+            "  type: Int\n");
+        rootCounterYaml.close();
     }
 
-    // Root 3: Custom Python tool A (valid)
-    QDir(dirPath).mkpath("tools/custom/user/py");
-    QFile pyScriptA(dirPath + "/tools/custom/user/py/user_node_a.py");
-    if (pyScriptA.open(QIODevice::WriteOnly)) {
+    // Package builtin C++ function
+    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/function");
+    QFile rootFunctionYaml(dirPath + "/tools-package/assets/tools/builtin/pkg/function/function.yaml");
+    if (rootFunctionYaml.open(QIODevice::WriteOnly))
+    {
+        rootFunctionYaml.write(
+            "schema_version: 1\n"
+            "tool_id: test.pkg.function\n"
+            "display_name: 函数插件\n"
+            "version: 1.0.0\n"
+            "kind: cpp_function\n"
+            "entry:\n"
+            "  registry_name: test.plugin.function\n"
+            "init_params: []\n"
+            "inputs:\n"
+            "- id: x\n"
+            "  name: 输入\n"
+            "  type: Int\n"
+            "  default: 5\n"
+            "outputs:\n"
+            "- id: y\n"
+            "  name: 输出\n"
+            "  type: Int\n");
+        rootFunctionYaml.close();
+    }
+
+    // Package Python tool
+    QDir(dirPath).mkpath("tools-package/assets/tools/custom/user/py");
+    QFile pyScriptA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.py");
+    if (pyScriptA.open(QIODevice::WriteOnly))
+    {
         pyScriptA.write(
             "def run(inputs):\n"
-            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111}\n"
-        );
+            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111}\n");
         pyScriptA.close();
     }
-    QFile root3YamlA(dirPath + "/tools/custom/user/py/user_node_a.yaml");
-    if (root3YamlA.open(QIODevice::WriteOnly)) {
+    QFile root3YamlA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.yaml");
+    if (root3YamlA.open(QIODevice::WriteOnly))
+    {
         root3YamlA.write(
             "schema_version: 1\n"
             "tool_id: test.user.pythonA\n"
@@ -617,334 +735,427 @@ void multiRootCoexistenceAndRefreshContract() {
             "outputs:\n"
             "- id: result\n"
             "  name: 结果\n"
-            "  type: Int\n"
-        );
+            "  type: Int\n");
         root3YamlA.close();
     }
 
-    // Root 3: Custom Python tool B (valid)
-    QFile pyScriptB(dirPath + "/tools/custom/user/py/user_node_b.py");
-    if (pyScriptB.open(QIODevice::WriteOnly)) {
-        pyScriptB.write(
-            "def run(inputs):\n"
-            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 222}\n"
-        );
-        pyScriptB.close();
-    }
-    QFile root3YamlB(dirPath + "/tools/custom/user/py/user_node_b.yaml");
-    if (root3YamlB.open(QIODevice::WriteOnly)) {
-        root3YamlB.write(
+    // Platform receiver tool with host_binding
+    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/flow/recv");
+    QFile recvYaml(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.yaml");
+    if (recvYaml.open(QIODevice::WriteOnly))
+    {
+        recvYaml.write(
             "schema_version: 1\n"
-            "tool_id: test.user.pythonB\n"
-            "display_name: 用户脚本B\n"
+            "tool_id: test.custom.receiver\n"
+            "display_name: 动态接收器\n"
             "version: 1.0.0\n"
-            "kind: python_function\n"
+            "kind: cpp_class\n"
             "entry:\n"
-            "  file: user_node_b.py\n"
-            "  symbol: run\n"
-            "init_params: []\n"
+            "  registry_name: test.custom.receiver\n"
+            "init_params:\n"
+            "- id: source_flow_name\n"
+            "  name: 源流程\n"
+            "  type: String\n"
+            "  default: ''\n"
+            "- id: source_node_name\n"
+            "  name: 源节点\n"
+            "  type: String\n"
+            "  default: ''\n"
+            "- id: source_port_id\n"
+            "  name: 源端口\n"
+            "  type: String\n"
+            "  default: ''\n"
+            "- id: timeout_ms\n"
+            "  name: 超时时间(ms)\n"
+            "  type: Int\n"
+            "  default: 500\n"
             "inputs: []\n"
             "outputs:\n"
-            "- id: result\n"
-            "  name: 结果\n"
+            "- id: value\n"
+            "  name: 接收值\n"
             "  type: Int\n"
-        );
-        root3YamlB.close();
+            "- id: source_status_code\n"
+            "  name: 源状态码\n"
+            "  type: Int\n"
+            "- id: source_status_message\n"
+            "  name: 源状态消息\n"
+            "  type: String\n");
+        recvYaml.close();
     }
 
-    // Root 3: Custom Python tool C (broken syntax script)
-    QFile pyScriptC(dirPath + "/tools/custom/user/py/broken_node.py");
-    if (pyScriptC.open(QIODevice::WriteOnly)) {
-        pyScriptC.write("def invalid_syntax(\n  bad syntax !!\n");
-        pyScriptC.close();
-    }
-    QFile root3YamlC(dirPath + "/tools/custom/user/py/broken_node.yaml");
-    if (root3YamlC.open(QIODevice::WriteOnly)) {
-        root3YamlC.write(
+    // Unindexed YAML inside package
+    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/unindexed");
+    QFile unindexedYaml(dirPath + "/tools-package/assets/tools/builtin/unindexed/unindexed.yaml");
+    if (unindexedYaml.open(QIODevice::WriteOnly))
+    {
+        unindexedYaml.write(
             "schema_version: 1\n"
-            "tool_id: test.user.broken\n"
-            "display_name: 损坏脚本\n"
+            "tool_id: test.unindexed.tool\n"
+            "display_name: 未索引工具\n"
             "version: 1.0.0\n"
-            "kind: python_function\n"
+            "kind: cpp_class\n"
             "entry:\n"
-            "  file: broken_node.py\n"
-            "  symbol: invalid_syntax\n"
+            "  registry_name: test.unindexed.tool\n"
             "init_params: []\n"
             "inputs: []\n"
-            "outputs:\n"
-            "- id: result\n"
-            "  name: 结果\n"
-            "  type: Int\n"
-        );
-        root3YamlC.close();
+            "outputs: []\n");
+        unindexedYaml.close();
     }
 
-    // Duplicate YAML
-    QFile dupYaml(dirPath + "/tools/custom/user/py/duplicate.yaml");
-    if (dupYaml.open(QIODevice::WriteOnly)) {
-        dupYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.platform.func\n"
-            "display_name: 重复平台函数\n"
-            "version: 1.0.0\n"
-            "kind: cpp_function\n"
-            "entry:\n"
-            "  registry_name: test.plugin.function\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs: []\n"
-        );
-        dupYaml.close();
+    // module_index.yaml
+    QFile indexFile(dirPath + "/tools-package/module_index.yaml");
+    if (indexFile.open(QIODevice::WriteOnly))
+    {
+        indexFile.write(
+            "schema_version: 2\n"
+            "variant: cpu\n"
+            "modules:\n"
+            "  test_module:\n"
+            "    library: bin/test_plugin_module.dll\n"
+            "tools:\n"
+            "  test.pkg.counter:\n"
+            "    module: test_module\n"
+            "    definition: assets/tools/builtin/pkg/counter/counter.yaml\n"
+            "  test.pkg.function:\n"
+            "    module: test_module\n"
+            "    definition: assets/tools/builtin/pkg/function/function.yaml\n"
+            "  test.user.pythonA:\n"
+            "    definition: assets/tools/custom/user/py/user_node_a.yaml\n"
+            "  test.custom.receiver:\n"
+            "    host_binding: visionrt.receiver\n"
+            "    definition: assets/tools/builtin/flow/recv/receiver.yaml\n");
+        indexFile.close();
     }
 
     const QString projectFile = dirPath + "/test_project.vrt";
     {
         AppController app(1, dirPath);
-        for (int i = 0; i < 50 && app.busy(); ++i) {
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
             QCoreApplication::processEvents();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-
-        const auto diag = app.diagnostic();
-        require(diag.contains("Duplicate tool_id test.platform.func"), "duplicate diagnostic missing");
-        std::cout << "[Evidence HS3-01] Duplicate diagnosis detected: " << diag.toStdString() << "\n";
 
         const auto defs = app.toolDefinitions();
-        bool hasPlatform = false, hasPkg = false, hasPyA = false, hasPyB = false, hasBroken = false;
-        for (const auto& item : defs) {
-            const auto map = item.toMap();
-            const auto id = map.value("id").toString();
-            const bool avail = map.value("available").toBool();
-            if (id == "test.platform.func") { hasPlatform = true; require(avail, "platform tool not available"); }
-            if (id == "test.pkg.counter") { hasPkg = true; require(avail, "package tool not available"); }
-            if (id == "test.user.pythonA") { hasPyA = true; require(avail, "pythonA tool not available"); }
-            if (id == "test.user.pythonB") { hasPyB = true; require(avail, "pythonB tool not available"); }
-            if (id == "test.user.broken") { hasBroken = true; require(!avail, "broken python script must not be available"); }
-        }
-        require(hasPlatform && hasPkg && hasPyA && hasPyB && hasBroken, "definitions missing expected tools");
-        std::cout << "[Evidence HS3-01] Coexistence verified: platform, pkg, pythonA, pythonB available; broken script isolated.\n";
+        require(defs.size() == 4,
+                "expected exactly 4 indexed tools in toolDefinitions, got " + std::to_string(defs.size()));
 
-        // Add nodes
-        app.addNode("test.platform.func", 100, 100);
+        bool hasCounter = false, hasFunction = false, hasPyA = false, hasReceiver = false, hasUnindexed = false;
+        for (const auto &item : defs)
+        {
+            const auto map   = item.toMap();
+            const auto id    = map.value("id").toString();
+            const bool avail = map.value("available").toBool();
+            if (id == "test.pkg.counter")
+            {
+                hasCounter = true;
+                require(avail, "counter tool not available");
+            }
+            if (id == "test.pkg.function")
+            {
+                hasFunction = true;
+                require(avail, "function tool not available");
+            }
+            if (id == "test.user.pythonA")
+            {
+                hasPyA = true;
+                require(avail, "pythonA tool not available");
+            }
+            if (id == "test.custom.receiver")
+            {
+                hasReceiver = true;
+                require(avail, "receiver tool not available");
+                require(map.value("displayName").toString() == QStringLiteral("动态接收器"),
+                        "receiver displayName mismatch");
+            }
+            if (id == "test.unindexed.tool")
+                hasUnindexed = true;
+        }
+        require(hasCounter && hasFunction && hasPyA && hasReceiver, "definitions missing expected tools");
+        require(!hasUnindexed, "unindexed tool must NOT appear in toolDefinitions");
+        std::cout
+            << "[Evidence T-05] Package-driven discovery verified: exactly 4 indexed tools, unindexed excluded.\n";
+
+        // Initial flow 1
+        const auto initialFlows = app.flows();
+        require(!initialFlows.isEmpty(), "flows must not be empty");
+        const auto flow1Name = initialFlows.first().toMap().value("name").toString();
+
+        app.addNode("test.pkg.function", 100, 100);
         app.addNode("test.pkg.counter", 200, 100);
         app.addNode("test.user.pythonA", 300, 100);
-        app.addNode("test.user.pythonB", 400, 100);
 
-        const auto nodesBefore = app.nodes();
-        require(nodesBefore.size() == 4, "expected 4 nodes added");
+        QString funcNodeTitle;
+        for (const auto &n : app.nodes())
+        {
+            const auto m = n.toMap();
+            if (m.value("toolId").toString() == "test.pkg.function")
+            {
+                funcNodeTitle = m.value("title").toString();
+            }
+        }
+        require(!funcNodeTitle.isEmpty(), "missing function node title");
 
+        // Add Flow 2 for cross-flow receiver
+        app.addFlow("flow_2");
+        app.setFlowSelected("flow_2", true);
+        app.addNode("test.custom.receiver", 100, 100);
+
+        QString recvNodeId;
+        for (const auto &n : app.nodes())
+        {
+            const auto m = n.toMap();
+            if (m.value("toolId").toString() == "test.custom.receiver")
+            {
+                recvNodeId = m.value("id").toString();
+            }
+        }
+        require(!recvNodeId.isEmpty(), "missing receiver node in flow_2");
+
+        app.selectNode(recvNodeId);
+        app.setParameter("source_flow_name", true, "\"" + flow1Name + "\"");
+        app.setParameter("source_node_name", true, "\"" + funcNodeTitle + "\"");
+        app.setParameter("source_port_id", true, "\"y\"");
+        app.setParameter("timeout_ms", true, "1000");
+
+        // Run once
         app.runOnce();
-        for (int i = 0; i < 100 && app.busy(); ++i) {
+        for (int i = 0; i < 100 && app.busy(); ++i)
+        {
             QCoreApplication::processEvents();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
-        auto* outModel = qobject_cast<OutputModel*>(app.outputModel());
+        auto *outModel = qobject_cast<OutputModel *>(app.outputModel());
         require(outModel != nullptr, "outputModel is null");
 
-        // Check node statuses and output values
-        for (const auto& n : app.nodes()) {
-            const auto m = n.toMap();
-            const auto id = m.value("id").toString();
-            const auto toolId = m.value("toolId").toString();
-            const auto state = m.value("state").toString();
-            require(state == "green", "node execution failed: " + toolId.toStdString());
-            app.selectNode(id);
-            const auto preview = outModel->get(2).value("preview").toString();
-            std::cout << "[Evidence HS3-01] Node " << id.toStdString() << " (" << toolId.toStdString() << ") state=" << state.toStdString() << ", result=" << preview.toStdString() << "\n";
-            if (toolId == "test.platform.func") require(preview == "10", "unexpected platform.func output: " + preview.toStdString());
-            if (toolId == "test.pkg.counter") require(preview == "11", "unexpected pkg.counter output: " + preview.toStdString());
-            if (toolId == "test.user.pythonA") require(preview == "111", "unexpected pythonA output: " + preview.toStdString());
-            if (toolId == "test.user.pythonB") require(preview == "222", "unexpected pythonB output: " + preview.toStdString());
-        }
+        // Receiver result
+        app.selectNode(recvNodeId);
+        const auto recvPreview = outModel->get(2).value("preview").toString();
+        require(recvPreview == "10", "unexpected receiver output: " + recvPreview.toStdString());
+        std::cout << "[Evidence T-05] Cross-flow receive of dynamic host_binding node verified, value="
+                  << recvPreview.toStdString() << "\n";
 
         // Save project
         require(app.save(projectFile), "save project failed");
-        std::cout << "[Evidence HS3-01] Project saved successfully to: " << projectFile.toStdString() << "\n";
 
-        // Reopen and verify equality
+        // Reopen project
         app.requestOpen(projectFile);
-        for (int i = 0; i < 50 && app.busy(); ++i) {
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
             QCoreApplication::processEvents();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        const auto reopenedNodes = app.nodes();
-        require(reopenedNodes.size() == 4, "reopened project node count differs");
         app.runOnce();
-        for (int i = 0; i < 100 && app.busy(); ++i) {
+        for (int i = 0; i < 100 && app.busy(); ++i)
+        {
             QCoreApplication::processEvents();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        for (const auto& n : app.nodes()) {
-            const auto m = n.toMap();
-            const auto id = m.value("id").toString();
-            const auto toolId = m.value("toolId").toString();
-            require(m.value("state").toString() == "green", "reopened node run failed");
-            app.selectNode(id);
-            const auto preview = outModel->get(2).value("preview").toString();
-            if (toolId == "test.platform.func") require(preview == "10", "reopened platform.func output mismatch");
-            if (toolId == "test.user.pythonA") require(preview == "111", "reopened pythonA output mismatch");
-            if (toolId == "test.user.pythonB") require(preview == "222", "reopened pythonB output mismatch");
-        }
-        std::cout << "[Evidence HS3-01] Save/reopen numerical equality confirmed.\n";
 
-        // Delete Python A YAML and rescan
-        std::cout << "[Evidence HS3-01] Deleting Python A and executing rescanTools()...\n";
-        QFile::remove(dirPath + "/tools/custom/user/py/user_node_a.yaml");
-        app.rescanTools();
-        for (int i = 0; i < 100 && app.busy(); ++i) {
-            QCoreApplication::processEvents();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        std::cout << "[Evidence HS3-01] rescan completed. Busy=" << app.busy() << ", runState=" << app.runState().toStdString() << "\n";
-
-        const auto defsAfterDelete = app.toolDefinitions();
-        bool foundDeletedA = false, foundB = false, bAvailable = false;
-        for (const auto& item : defsAfterDelete) {
-            const auto map = item.toMap();
-            const auto id = map.value("id").toString();
-            if (id == "test.user.pythonA") foundDeletedA = true;
-            if (id == "test.user.pythonB") {
-                foundB = true;
-                bAvailable = map.value("available").toBool();
-            }
-        }
-        require(!foundDeletedA, "deleted Python A YAML still in toolDefinitions");
-        require(foundB && bAvailable, "Python B lost or unavailable after rescan");
-        std::cout << "[Evidence HS3-01] Tool B remains Available after Tool A deleted and rescan.\n";
-
-        // Verify existing node for Python A is marked defMissing
-        bool nodeADefMissing = false;
-        for (const auto& n : app.nodes()) {
-            const auto map = n.toMap();
-            if (map.value("toolId").toString() == "test.user.pythonA") {
-                nodeADefMissing = map.value("defMissing").toBool();
-            }
-        }
-        require(nodeADefMissing, "node for deleted tool definition is not marked defMissing");
-
-        // Add a NEW node with Python B and run it
-        app.addNode("test.user.pythonB", 500, 100);
-        const auto nodesAfterAddB = app.nodes();
-        require(nodesAfterAddB.size() == 5, "failed to add new Python B node");
-        const auto newBNodeId = nodesAfterAddB.last().toMap().value("id").toString();
-
-        // Run the new Python B node via runNode()
-        app.selectNode(newBNodeId);
-        app.runNode();
-        for (int i = 0; i < 100 && app.busy(); ++i) {
-            QCoreApplication::processEvents();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        const auto newBPreview = outModel->get(2).value("preview").toString();
-        require(newBPreview == "222", "new Python B node failed to run after rescan: " + newBPreview.toStdString());
-        std::cout << "[Evidence HS3-01] New Python B node ran successfully via runNode with result=" << newBPreview.toStdString() << "\n";
-
-        // Clean up the defMissing node and run the entire flow once
-        QString nodeAId;
-        for (const auto& n : app.nodes()) {
-            const auto map = n.toMap();
-            if (map.value("toolId").toString() == "test.user.pythonA") {
-                nodeAId = map.value("id").toString();
+        QString flow2Id;
+        for (const auto &f : app.flows())
+        {
+            if (f.toMap().value("name").toString() == "flow_2")
+            {
+                flow2Id = f.toMap().value("id").toString();
                 break;
             }
         }
-        require(!nodeAId.isEmpty(), "missing node A");
-        app.deleteNodes({nodeAId});
-        app.runOnce();
-        for (int i = 0; i < 100 && app.busy(); ++i) {
+        require(!flow2Id.isEmpty(), "flow_2 not found after reopen");
+        app.selectFlow(flow2Id);
+
+        QString reopenedRecvId;
+        for (const auto &n : app.nodes())
+        {
+            const auto m = n.toMap();
+            if (m.value("toolId").toString() == "test.custom.receiver")
+            {
+                reopenedRecvId = m.value("id").toString();
+                break;
+            }
+        }
+        require(!reopenedRecvId.isEmpty(), "receiver node not found in flow_2 after reopen");
+        app.selectNode(reopenedRecvId);
+        require(outModel->get(2).value("preview").toString() == "10", "reopened receiver output mismatch");
+        std::cout << "[Evidence T-05] Save/reopen numerical equality confirmed.\n";
+
+        // 4. Change receiver declaration only (metadata-only identity change)
+        std::cout << "[Evidence T-05] Changing receiver declaration identity and display name...\n";
+        QFile::remove(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.yaml");
+        QFile renamedYaml(dirPath + "/tools-package/assets/tools/builtin/flow/recv/renamed.yaml");
+        if (renamedYaml.open(QIODevice::WriteOnly))
+        {
+            renamedYaml.write(
+                "schema_version: 1\n"
+                "tool_id: test.custom.renamed_recv\n"
+                "display_name: 改名接收器\n"
+                "version: 1.0.0\n"
+                "kind: cpp_class\n"
+                "entry:\n"
+                "  registry_name: test.custom.renamed_recv\n"
+                "init_params:\n"
+                "- id: source_flow_name\n"
+                "  name: 源流程\n"
+                "  type: String\n"
+                "  default: ''\n"
+                "- id: source_node_name\n"
+                "  name: 源节点\n"
+                "  type: String\n"
+                "  default: ''\n"
+                "- id: source_port_id\n"
+                "  name: 源端口\n"
+                "  type: String\n"
+                "  default: ''\n"
+                "- id: timeout_ms\n"
+                "  name: 超时时间(ms)\n"
+                "  type: Int\n"
+                "  default: 500\n"
+                "inputs: []\n"
+                "outputs:\n"
+                "- id: value\n"
+                "  name: 接收值\n"
+                "  type: Int\n"
+                "- id: source_status_code\n"
+                "  name: 源状态码\n"
+                "  type: Int\n"
+                "- id: source_status_message\n"
+                "  name: 源状态消息\n"
+                "  type: String\n");
+            renamedYaml.close();
+        }
+
+        // Update module_index.yaml with renamed tool
+        if (indexFile.open(QIODevice::WriteOnly))
+        {
+            indexFile.write(
+                "schema_version: 2\n"
+                "variant: cpu\n"
+                "modules:\n"
+                "  test_module:\n"
+                "    library: bin/test_plugin_module.dll\n"
+                "tools:\n"
+                "  test.pkg.counter:\n"
+                "    module: test_module\n"
+                "    definition: assets/tools/builtin/pkg/counter/counter.yaml\n"
+                "  test.pkg.function:\n"
+                "    module: test_module\n"
+                "    definition: assets/tools/builtin/pkg/function/function.yaml\n"
+                "  test.user.pythonA:\n"
+                "    definition: assets/tools/custom/user/py/user_node_a.yaml\n"
+                "  test.custom.renamed_recv:\n"
+                "    host_binding: visionrt.receiver\n"
+                "    definition: assets/tools/builtin/flow/recv/renamed.yaml\n");
+            indexFile.close();
+        }
+
+        app.rescanTools();
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
             QCoreApplication::processEvents();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        app.selectNode(newBNodeId);
-        require(outModel->get(2).value("preview").toString() == "222", "runOnce after deleting missing node failed");
-        std::cout << "[Evidence HS3-01] Entire flow ran successfully after removing missing node, new B result=222\n";
-    }
 
-    // Verify: Start without custom directory, create directory afterwards, then refresh/rescan discovers it
-    QTemporaryDir emptyDir;
-    AppController lateApp(1, emptyDir.path());
-    for (int i = 0; i < 50 && lateApp.busy(); ++i) {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    require(lateApp.toolDefinitions().isEmpty(), "lateApp expected empty toolDefinitions initially");
-
-    // Create custom directory and tool dynamically after startup
-    QDir(emptyDir.path()).mkpath("tools/custom/late_cat/late_tool");
-    QFile latePy(emptyDir.path() + "/tools/custom/late_cat/late_tool/late.py");
-    if (latePy.open(QIODevice::WriteOnly)) {
-        latePy.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'val': 888}\n");
-        latePy.close();
-    }
-    QFile lateYaml(emptyDir.path() + "/tools/custom/late_cat/late_tool/late.yaml");
-    if (lateYaml.open(QIODevice::WriteOnly)) {
-        lateYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.late.python\n"
-            "display_name: 启动后动态脚本\n"
-            "version: 1.0.0\n"
-            "kind: python_function\n"
-            "entry:\n"
-            "  file: late.py\n"
-            "  symbol: run\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs:\n"
-            "- id: val\n"
-            "  name: 输出\n"
-            "  type: Int\n"
-        );
-        lateYaml.close();
-    }
-
-    lateApp.refreshPython();
-    for (int i = 0; i < 100 && lateApp.busy(); ++i) {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    std::cout << "[Evidence HS3-01] lateApp busy=" << lateApp.busy() << ", diagnostic: " << lateApp.diagnostic().toStdString() << "\n";
-    bool foundLate = false;
-    for (const auto& item : lateApp.toolDefinitions()) {
-        const auto map = item.toMap();
-        if (map.value("id").toString() == "test.late.python") {
-            foundLate = true;
-            std::cout << "[Evidence HS3-01] Late tool available=" << map.value("available").toBool()
-                      << ", message=" << map.value("message").toString().toStdString() << "\n";
-            require(map.value("available").toBool(), "dynamically discovered tool is not available: " + map.value("message").toString().toStdString());
+        const auto defsAfterRename = app.toolDefinitions();
+        bool       foundOld = false, foundRenamed = false;
+        for (const auto &item : defsAfterRename)
+        {
+            const auto map = item.toMap();
+            const auto id  = map.value("id").toString();
+            if (id == "test.custom.receiver")
+                foundOld = true;
+            if (id == "test.custom.renamed_recv")
+            {
+                foundRenamed = true;
+                require(map.value("available").toBool(), "renamed receiver tool must be available");
+                require(map.value("displayName").toString() == QStringLiteral("改名接收器"),
+                        "renamed receiver displayName mismatch");
+            }
         }
+        require(!foundOld, "old receiver tool ID still present in definitions");
+        require(foundRenamed, "renamed receiver tool ID not found in definitions");
+
+        // Old node in flow 2 must be marked defMissing
+        app.selectFlow(flow2Id);
+        bool nodeDefMissing = false;
+        for (const auto &n : app.nodes())
+        {
+            const auto m = n.toMap();
+            if (m.value("id").toString() == reopenedRecvId || m.value("id").toString() == recvNodeId)
+            {
+                nodeDefMissing = m.value("defMissing").toBool();
+            }
+        }
+        require(nodeDefMissing, "node with obsolete tool ID must be marked defMissing");
+        std::cout << "[Evidence T-05] Metadata-only receiver modification verified: recognized dynamically without "
+                     "host changes.\n";
+
+        // 5. Package removal
+        std::cout << "[Evidence T-05] Removing package and testing empty catalog and defMissing diagnosis...\n";
+        QDir(dirPath + "/tools-package").removeRecursively();
+        app.rescanTools();
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        require(app.toolDefinitions().isEmpty(), "catalog must be empty after package removal");
+        for (const auto &n : app.nodes())
+        {
+            require(n.toMap().value("defMissing").toBool(),
+                    "all nodes must be marked defMissing after package removal");
+        }
+        std::cout
+            << "[Evidence T-05] Package removal verified: catalog is empty and project nodes marked defMissing.\n";
+
+        // 6. Broken package diagnosis
+        QDir(dirPath).mkpath("tools-package");
+        QFile brokenIndex(dirPath + "/tools-package/module_index.yaml");
+        if (brokenIndex.open(QIODevice::WriteOnly))
+        {
+            brokenIndex.write("unclosed_yaml: [invalid");
+            brokenIndex.close();
+        }
+        app.rescanTools();
+        for (int i = 0; i < 50 && app.busy(); ++i)
+        {
+            QCoreApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        require(app.toolDefinitions().isEmpty(), "broken package must result in empty tool catalog");
+        bool hasBrokenDiag = false;
+        for (const auto &d : app.diagnostics())
+        {
+            if (d.contains("tools-package") || d.contains("module_index.yaml"))
+            {
+                hasBrokenDiag = true;
+                break;
+            }
+        }
+        require(hasBrokenDiag, "diagnostic missing error report for broken package");
+        std::cout << "[Evidence T-05] Broken package diagnosis verified.\n";
     }
-    require(foundLate, "dynamic custom directory created after startup not discovered by refresh");
-    lateApp.addNode("test.late.python", 100, 100);
-    lateApp.runOnce();
-    for (int i = 0; i < 50 && lateApp.busy(); ++i) {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    auto* lateOutModel = qobject_cast<OutputModel*>(lateApp.outputModel());
-    lateApp.selectNode(lateApp.nodes().first().toMap().value("id").toString());
-    const auto latePreview = lateOutModel->get(2).value("preview").toString();
-    require(latePreview == "888", "dynamically discovered tool failed execution: " + latePreview.toStdString());
-    std::cout << "[Evidence HS3-01] Post-startup custom directory discovery verified, execution result=" << latePreview.toStdString() << "\n";
-    std::cout << "[MULTI-ROOT & REFRESH CONTRACT PASSED]\n";
+    std::cout << "[PACKAGE-DRIVEN CATALOG & REFRESH CONTRACT PASSED]\n";
 }
 
-void shortWindowContract() {
+void shortWindowContract()
+{
     std::cout << "\n[SHORT WINDOW CONTRACT START]\n";
     QTemporaryDir directory;
-    const auto dirPath = directory.path();
+    const auto    dirPath = directory.path();
     AppController app(1, dirPath);
-    for (int i = 0; i < 50 && app.busy(); ++i) {
+    for (int i = 0; i < 50 && app.busy(); ++i)
+    {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto* theme = visionrt::Theme::instance();
+    auto *theme = visionrt::Theme::instance();
     qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
 
     QQmlApplicationEngine engine;
-    const auto appDir = QCoreApplication::applicationDirPath();
+    const auto            appDir = QCoreApplication::applicationDirPath();
     engine.addImportPath(appDir + "/qml");
     engine.addImportPath(appDir + "/../qml");
 #ifdef VISIONRT_SOURCE_DIR
@@ -961,15 +1172,18 @@ void shortWindowContract() {
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
-    if (QFile::exists(qmlPath)) {
+    if (QFile::exists(qmlPath))
+    {
         engine.load(QUrl::fromLocalFile(qmlPath));
-    } else {
+    }
+    else
+    {
         engine.loadFromModule("VisionRT", "Main");
     }
 
     const auto roots = engine.rootObjects();
     require(!roots.isEmpty(), "Main.qml failed to instantiate in shortWindowContract");
-    auto* window = qobject_cast<QQuickWindow*>(roots.first());
+    auto *window = qobject_cast<QQuickWindow *>(roots.first());
     require(window != nullptr, "Main.qml root is not QQuickWindow");
 
     window->setFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -977,8 +1191,8 @@ void shortWindowContract() {
     window->show();
     for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
 
-    auto* leftHost = window->findChild<QQuickItem*>("leftHost");
-    auto* leftContent = window->findChild<QQuickItem*>("leftContent");
+    auto *leftHost    = window->findChild<QQuickItem *>("leftHost");
+    auto *leftContent = window->findChild<QQuickItem *>("leftContent");
     require(leftHost != nullptr && leftContent != nullptr, "missing drawer items in short window");
 
     // Drawer toggle in short window
@@ -996,44 +1210,58 @@ void shortWindowContract() {
     const std::filesystem::path evidenceDir = "build/evidence";
     std::filesystem::create_directories(evidenceDir);
     const auto screenshotPath = evidenceDir / "workbench_short_window.png";
-    const bool saved = frame.save(QString::fromStdString(screenshotPath.string()));
+    const bool saved          = frame.save(QString::fromStdString(screenshotPath.string()));
     require(saved, "Failed to save short window screenshot");
     require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
             "Saved short window screenshot file does not exist or is empty");
 
-    std::cout << "[Evidence HS5-03] Short window contract verified at ("
-              << window->width() << "x" << window->height() << "), screenshot=" << screenshotPath.string() << "\n";
+    std::cout << "[Evidence HS5-03] Short window contract verified at (" << window->width() << "x" << window->height()
+              << "), screenshot=" << screenshotPath.string() << "\n";
     std::cout << "[SHORT WINDOW CONTRACT PASSED]\n";
 }
-}
-int main(int argc, char** argv) {
-    if (argc >= 2 && std::string(argv[1]) == "--short-window-child") {
+} // namespace
+
+int main(int argc, char **argv)
+{
+    if (argc >= 2 && std::string(argv[1]) == "--short-window-child")
+    {
         QGuiApplication qt(argc, argv);
-        try {
+        try
+        {
             shortWindowContract();
             return 0;
-        } catch (const std::exception& error) {
+        }
+        catch (const std::exception &error)
+        {
             std::cerr << "[Short Window Error] " << error.what() << '\n';
             return 1;
         }
     }
-    if (argc >= 3 && std::string(argv[1]) == "--dpi-child") {
+    if (argc >= 3 && std::string(argv[1]) == "--dpi-child")
+    {
         const double scale = std::stod(argv[2]);
         qputenv("QT_SCALE_FACTOR", QByteArray::number(scale, 'f', 1));
         QGuiApplication qt(argc, argv);
-        try {
+        try
+        {
             mainQmlContract(scale);
             return 0;
-        } catch (const std::exception& error) {
+        }
+        catch (const std::exception &error)
+        {
             std::cerr << "[DPI Child Error for scale=" << scale << "] " << error.what() << '\n';
             return 1;
         }
     }
 
     QGuiApplication qt(argc, argv);
-    try {
-        treeContract(); outputContract(); pendingContract(); nodeDiagnosticsContract();
-        multiRootCoexistenceAndRefreshContract();
+    try
+    {
+        treeContract();
+        outputContract();
+        pendingContract();
+        nodeDiagnosticsContract();
+        packageDrivenCatalogAndRefreshContract();
 
         const QString appPath = QCoreApplication::applicationFilePath();
 
@@ -1044,7 +1272,8 @@ int main(int argc, char** argv) {
             const bool shortFinished = shortProc.waitForFinished(45000);
             require(shortFinished, "Short window child process timed out");
             std::cout << shortProc.readAllStandardOutput().toStdString();
-            if (shortProc.exitCode() != 0) {
+            if (shortProc.exitCode() != 0)
+            {
                 std::cerr << shortProc.readAllStandardError().toStdString();
                 throw std::runtime_error("Short window child process failed");
             }
@@ -1055,25 +1284,30 @@ int main(int argc, char** argv) {
 
         // 2. Run 3 DPI scale child processes (1.0, 1.5, 2.0)
         const double scales[] = {1.0, 1.5, 2.0};
-        for (double scale : scales) {
+        for (double scale : scales)
+        {
             QProcess proc;
             proc.start(appPath, {"--dpi-child", QString::number(scale, 'f', 1)});
             const bool finished = proc.waitForFinished(45000);
             require(finished, "DPI child process timed out for scale " + std::to_string(scale));
             std::cout << proc.readAllStandardOutput().toStdString();
-            if (proc.exitCode() != 0) {
+            if (proc.exitCode() != 0)
+            {
                 std::cerr << proc.readAllStandardError().toStdString();
                 throw std::runtime_error("DPI child process failed for scale " + std::to_string(scale));
             }
             char scaleBuf[16];
             std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
-            const auto screenshot = std::filesystem::path("build/evidence") / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
+            const auto screenshot
+                = std::filesystem::path("build/evidence") / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
             require(std::filesystem::exists(screenshot) && std::filesystem::file_size(screenshot) > 0,
                     "Screenshot missing for scale " + std::string(scaleBuf));
         }
 
         std::cout << "workbench contract passed\n";
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception &error)
+    {
         std::cerr << error.what() << '\n';
         return 1;
     }

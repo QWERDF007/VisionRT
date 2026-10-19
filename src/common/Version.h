@@ -1,15 +1,17 @@
 #pragma once
 
 #include <visionrt/common/VersionDef.h>
+
 #include <string>
 
 namespace visionrt {
 
-struct VersionInfo {
-    int major{VISIONRT_VERSION_MAJOR};
-    int minor{VISIONRT_VERSION_MINOR};
-    int patch{VISIONRT_VERSION_PATCH};
-    int tweak{VISIONRT_VERSION_TWEAK};
+struct VersionInfo
+{
+    int         major{VISIONRT_VERSION_MAJOR};
+    int         minor{VISIONRT_VERSION_MINOR};
+    int         patch{VISIONRT_VERSION_PATCH};
+    int         tweak{VISIONRT_VERSION_TWEAK};
     std::string suffix;
     std::string branch;
     std::string commit;

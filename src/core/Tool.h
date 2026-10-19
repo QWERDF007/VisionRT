@@ -1,7 +1,8 @@
 #pragma once
 
-#include "visionrt/sdk/Tool.h"
 #include "visionrt/sdk/Schema.h"
+#include "visionrt/sdk/Tool.h"
+
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -13,15 +14,25 @@
 namespace visionrt {
 
 class IResultReader;
-struct PlatformToolServices : ToolServices {
+
+struct PlatformToolServices : ToolServices
+{
     using ToolServices::ToolServices;
     PlatformToolServices() = default;
-    PlatformToolServices(const ToolServices& base) : ToolServices(base) {}
+
+    PlatformToolServices(const ToolServices &base)
+        : ToolServices(base)
+    {
+    }
+
     PlatformToolServices(PathResolver p, std::shared_ptr<IResultReader> r = {})
-        : ToolServices{std::move(p)}, results(std::move(r)) {}
+        : ToolServices{std::move(p)}
+        , results(std::move(r))
+    {
+    }
 
     std::shared_ptr<IResultReader> results;
 };
 
-using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices&)>;
-}
+using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)>;
+} // namespace visionrt

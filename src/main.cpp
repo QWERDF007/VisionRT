@@ -2,23 +2,25 @@
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
+
 #include <QCommandLineParser>
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QImage>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QTextStream>
 #include <QTimer>
-#include <QQuickWindow>
-#include <QImage>
-#include <QFileInfo>
-#include <QDir>
-#include <charconv>
-#include <thread>
 #include <algorithm>
+#include <charconv>
 #include <limits>
+#include <thread>
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName("VisionRT");
     QCoreApplication::setOrganizationName("VisionRT");
@@ -38,39 +40,52 @@ int main(int argc, char* argv[]) {
     parser.addOption({"demo-select", "Select first category on startup for verification"});
     parser.process(application);
     std::size_t workers = std::max(2u, std::thread::hardware_concurrency());
-    if (parser.isSet("workers")) {
-        const auto text = parser.value("workers").toLatin1();
+    if (parser.isSet("workers"))
+    {
+        const auto text         = parser.value("workers").toLatin1();
         const auto [end, error] = std::from_chars(text.constData(), text.constData() + text.size(), workers);
-        if (error != std::errc{} || end != text.constData() + text.size() || workers == 0) {
+        if (error != std::errc{} || end != text.constData() + text.size() || workers == 0)
+        {
             QTextStream(stderr) << "--workers requires a positive integer\n";
             return 2;
         }
     }
     if (parser.isSet("python-home"))
         qputenv("VISIONRT_PYTHON_HOME", parser.value("python-home").toUtf8());
-    try {
+    try
+    {
         visionrt::AppController controller(workers, QCoreApplication::applicationDirPath());
-        if (parser.isSet("project")) {
+        if (parser.isSet("project"))
+        {
             const QString projectPath = parser.value("project");
-            const QString selectNode = parser.value("select-node");
-            QTimer::singleShot(200, [&controller, projectPath, selectNode]() {
-                controller.resolveUnsaved("discard");
-                controller.requestOpen(projectPath);
-                controller.resolveUnsaved("discard");
-                QTimer::singleShot(400, [&controller, selectNode]() {
-                    if (!selectNode.isEmpty()) {
-                        controller.selectNode(selectNode);
-                    } else {
-                        const auto nodes = controller.nodes();
-                        if (!nodes.isEmpty()) {
-                            controller.selectNode(nodes.first().toMap().value("id").toString());
-                        }
-                    }
-                });
-            });
+            const QString selectNode  = parser.value("select-node");
+            QTimer::singleShot(200,
+                               [&controller, projectPath, selectNode]()
+                               {
+                                   controller.resolveUnsaved("discard");
+                                   controller.requestOpen(projectPath);
+                                   controller.resolveUnsaved("discard");
+                                   QTimer::singleShot(
+                                       400,
+                                       [&controller, selectNode]()
+                                       {
+                                           if (!selectNode.isEmpty())
+                                           {
+                                               controller.selectNode(selectNode);
+                                           }
+                                           else
+                                           {
+                                               const auto nodes = controller.nodes();
+                                               if (!nodes.isEmpty())
+                                               {
+                                                   controller.selectNode(nodes.first().toMap().value("id").toString());
+                                               }
+                                           }
+                                       });
+                               });
         }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-        auto* theme = visionrt::Theme::instance();
+        auto *theme = visionrt::Theme::instance();
         qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
         QQmlApplicationEngine engine;
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
@@ -78,34 +93,44 @@ int main(int argc, char* argv[]) {
         engine.rootContext()->setContextProperty("Theme", theme);
         engine.rootContext()->setContextProperty("demoMenu", parser.isSet("demo-menu"));
         engine.rootContext()->setContextProperty("demoSelect", parser.isSet("demo-select"));
-        QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
-                         &application, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
+        QObject::connect(
+            &engine, &QQmlApplicationEngine::objectCreationFailed, &application, [] { QCoreApplication::exit(1); },
+            Qt::QueuedConnection);
         engine.loadFromModule("VisionRT", "Main");
 
-        if (parser.isSet("screenshot")) {
+        if (parser.isSet("screenshot"))
+        {
             const QString screenshotPath = parser.value("screenshot");
-            int delay = 1200;
-            if (parser.isSet("screenshot-delay")) {
+            int           delay          = 1200;
+            if (parser.isSet("screenshot-delay"))
+            {
                 delay = parser.value("screenshot-delay").toInt();
-                if (delay <= 0) delay = 1200;
+                if (delay <= 0)
+                    delay = 1200;
             }
-            QTimer::singleShot(delay, [&engine, screenshotPath]() {
-                const auto roots = engine.rootObjects();
-                if (!roots.isEmpty()) {
-                    if (auto* window = qobject_cast<QQuickWindow*>(roots.first())) {
-                        QImage img = window->grabWindow();
-                        QFileInfo fi(screenshotPath);
-                        QDir().mkpath(fi.absolutePath());
-                        img.save(screenshotPath);
-                        std::exit(0);
-                    }
-                }
-                std::exit(0);
-            });
+            QTimer::singleShot(delay,
+                               [&engine, screenshotPath]()
+                               {
+                                   const auto roots = engine.rootObjects();
+                                   if (!roots.isEmpty())
+                                   {
+                                       if (auto *window = qobject_cast<QQuickWindow *>(roots.first()))
+                                       {
+                                           QImage    img = window->grabWindow();
+                                           QFileInfo fi(screenshotPath);
+                                           QDir().mkpath(fi.absolutePath());
+                                           img.save(screenshotPath);
+                                           std::exit(0);
+                                       }
+                                   }
+                                   std::exit(0);
+                               });
         }
 
         return application.exec();
-    } catch (const std::exception& error) {
+    }
+    catch (const std::exception &error)
+    {
         QTextStream(stderr) << "VisionRT initialization failed: " << error.what() << '\n';
         return 1;
     }

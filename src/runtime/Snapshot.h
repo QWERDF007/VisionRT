@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Project.h"
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -8,45 +9,58 @@
 #include <mutex>
 
 namespace visionrt {
-struct ExecutionMetrics {
-    double totalMs = 0;              // 总墙钟
-    double prepareMs = 0;            // 参数准备墙钟
-    double initMs = 0;               // 初始化墙钟
-    double adapterExecuteMs = 0;     // 工具Adapter整次execute墙钟（含Python桥接）
-    double validateMs = 0;           // 结果统一检查与格式验证墙钟
+struct ExecutionMetrics
+{
+    double totalMs          = 0; // 总墙钟
+    double prepareMs        = 0; // 参数准备墙钟
+    double initMs           = 0; // 初始化墙钟
+    double adapterExecuteMs = 0; // 工具Adapter整次execute墙钟（含Python桥接）
+    double validateMs       = 0; // 结果统一检查与格式验证墙钟
     // Python 包含项（已包含在 adapterExecuteMs 中，不能再累加到 totalMs）
-    double waitGilMs = 0;            // Python 获取 GIL 等待时间
-    double pythonInputMs = 0;        // Python 输入映射耗时
-    double pythonCallMs = 0;         // Python 函数/类执行耗时
-    double pythonOutputMs = 0;       // Python 输出复制与转换耗时
+    double waitGilMs      = 0; // Python 获取 GIL 等待时间
+    double pythonInputMs  = 0; // Python 输入映射耗时
+    double pythonCallMs   = 0; // Python 函数/类执行耗时
+    double pythonOutputMs = 0; // Python 输出复制与转换耗时
     // 兼容别名
     double executeMs = 0;
     double convertMs = 0;
 };
+
 using Timing = ExecutionMetrics;
 
-class IPythonExecutionMetrics {
+class IPythonExecutionMetrics
+{
 public:
-    virtual ~IPythonExecutionMetrics() = default;
+    virtual ~IPythonExecutionMetrics()             = default;
     virtual ExecutionMetrics pythonMetrics() const = 0;
 };
-struct NodeSnapshot {
-    NodeId node = 0;
-    std::uint64_t generation = 0;
-    std::uint64_t session = 0;
-    std::uint64_t round = 0;
-    std::uint64_t publication = 0;
+
+struct NodeSnapshot
+{
+    NodeId        node              = 0;
+    std::uint64_t generation        = 0;
+    std::uint64_t session           = 0;
+    std::uint64_t round             = 0;
+    std::uint64_t publication       = 0;
     std::uint64_t executionRevision = 0;
-    ToolStatus status;
-    Values outputs;
-    Timing timing;
-    Values roiInputs;
+    ToolStatus    status;
+    Values        outputs;
+    Timing        timing;
+    Values        roiInputs;
 };
-class ResultSlot {
+
+class ResultSlot
+{
 public:
     using Snapshot = std::shared_ptr<const NodeSnapshot>;
-    Snapshot latest() const noexcept { return latest_.load(std::memory_order_acquire); }
-    void publish(Snapshot value) {
+
+    Snapshot latest() const noexcept
+    {
+        return latest_.load(std::memory_order_acquire);
+    }
+
+    void publish(Snapshot value)
+    {
         Snapshot previous;
         {
             std::lock_guard lock(mutex_);
@@ -54,19 +68,24 @@ public:
         }
         changed_.notify_all();
     }
+
     template<class Predicate>
-    Snapshot waitUntil(std::chrono::steady_clock::time_point deadline, Predicate accepts) {
+    Snapshot waitUntil(std::chrono::steady_clock::time_point deadline, Predicate accepts)
+    {
         std::unique_lock lock(mutex_);
-        Snapshot value;
-        changed_.wait_until(lock, deadline, [&] {
-            value = latest();
-            return value && accepts(*value);
-        });
+        Snapshot         value;
+        changed_.wait_until(lock, deadline,
+                            [&]
+                            {
+                                value = latest();
+                                return value && accepts(*value);
+                            });
         return value && accepts(*value) ? value : Snapshot{};
     }
+
 private:
-    std::atomic<Snapshot> latest_;
-    std::mutex mutex_;
+    std::atomic<Snapshot>   latest_;
+    std::mutex              mutex_;
     std::condition_variable changed_;
 };
-}
+} // namespace visionrt

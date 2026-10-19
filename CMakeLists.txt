@@ -20,7 +20,12 @@ include(ConfigPython)
 include(ConfigQuickUI)
 
 # 独立通用工具 SDK（Git 子模块）
-add_subdirectory(3rdparty/VisionRTToolSDK)
+set(VISIONRT_BUILD_PYTHON_INTEROP ON CACHE BOOL "Build SDK Python interop" FORCE)
+if(BUILD_TESTING)
+    set(VISIONRT_ENABLE_TEST_PROBES ON CACHE BOOL "Enable test probes" FORCE)
+    add_compile_definitions(VISIONRT_TEST_PROBES)
+endif()
+add_subdirectory(3rdparty/VisionRTSDK)
 
 # 核心通用库
 add_library(visionrt_common
@@ -39,8 +44,8 @@ target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::y
 
 
 # Python 运行时及交互桥接库
-add_library(visionrt_python src/python/PythonRuntime.cpp src/python/PythonBridge.cpp)
-target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed)
+add_library(visionrt_python src/python/PythonRuntime.cpp)
+target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed VisionRT::PythonInterop)
 target_compile_definitions(visionrt_python PUBLIC
     PYBIND11_DETAILED_ERROR_MESSAGES
     VISIONRT_PYTHON_DEFAULT_HOME="${VISIONRT_PYTHON_HOME}")
@@ -103,7 +108,6 @@ endif()
 
 # 测试契约与自动化测试用例
 if(BUILD_TESTING)
-    add_compile_definitions(VISIONRT_TEST_PROBES)
     include(CTest)
     include(AddTest)
 
