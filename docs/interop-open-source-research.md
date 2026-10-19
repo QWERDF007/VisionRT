@@ -1,5 +1,9 @@
 # Python 互操作开源方案索引
 
+## 图节点类型参考
+
+- [QtNodes 动态端口示例](https://github.com/paceholder/nodeeditor/blob/master/examples/dynamic_ports/DynamicPortsModel.cpp)、[NodeDelegateModel](https://github.com/paceholder/nodeeditor/blob/master/include/QtNodes/internal/NodeDelegateModel.hpp)：端口类型由节点实例的模型查询，端口变化由模型通知，而不是为每种类型注册工具类。本项目沿用已有 TypeSpec / 节点快照与编辑通知；具体取舍见[规格 D-08](tool-package-delivery/spec.md#d-08宿主平台节点)，实现见[节点类型解析](../src/core/NodeContracts.cpp)。未引入第二个图编辑框架。
+
 核实日期：2026-10-19；仅使用官方文档/源码。版本适用范围以各引用的 tag/文档版本为准；滚动文档与 master 不代表本地锁定版本验证。未做运行验证。
 本地代码证据见 [实现导航](visiontools-bridge-architecture.md)，选型与迁移要求见 [规格](tool-package-delivery/spec.md)；本文件只记录上游事实。
 

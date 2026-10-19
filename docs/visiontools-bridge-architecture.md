@@ -16,6 +16,7 @@
 | 生成与工具打包 | [生成器](F:/Projects/VisionTools/tools/generate_tool_contracts.py)、[package_tools.py](F:/Projects/VisionTools/tools/package_tools.py) |
 | SDK 包读取与校验 | [SchemaYaml Interface](../3rdparty/VisionRTSDK/include/visionrt/sdk/SchemaYaml.h)、[实现](../3rdparty/VisionRTSDK/src/SchemaYaml.cpp)、[CLI](../3rdparty/VisionRTSDK/tools/visionrt_validate_tool.cpp) |
 | SDK 值与模块契约 | [Value.h](../3rdparty/VisionRTSDK/include/visionrt/sdk/Value.h)、[Tool.h](../3rdparty/VisionRTSDK/include/visionrt/sdk/Tool.h)、[Module.h](../3rdparty/VisionRTSDK/include/visionrt/sdk/Module.h) |
+| 节点输出类型 | [NodeContracts](../src/core/NodeContracts.h)、[实现](../src/core/NodeContracts.cpp)：编辑、持久化和执行共用；声明属性来自 SDK Schema |
 | 宿主部署 | [package_app.py](../tools/package_app.py) 的 deploy_tools_package；[构建所选 Python](../cmake/ConfigPython.cmake) |
 | 宿主工具发现与呈现 | [AppController](../src/ui/AppController.cpp)、[ToolRegistry](../src/core/ToolRegistry.cpp)、[ToolTreeModel](../src/ui/ToolTreeModel.cpp) |
 | 库加载与实例 | [PluginLoader](../src/plugins/PluginLoader.cpp) |

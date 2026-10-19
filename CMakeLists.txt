@@ -36,6 +36,7 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 核心业务逻辑库
 add_library(visionrt_core
+    src/core/NodeContracts.cpp
     src/core/ToolRegistry.cpp
     src/core/ProjectEditor.cpp
     src/core/ProjectStorage.cpp
@@ -138,6 +139,7 @@ if(BUILD_TESTING)
     if(VISIONRT_BUILD_APP)
         visionrt_contract(viewport_contract visionrt_ui)
         visionrt_contract(workbench_contract visionrt_ui)
+        add_dependencies(workbench_contract test_plugin_module)
         target_compile_definitions(workbench_contract PRIVATE
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")

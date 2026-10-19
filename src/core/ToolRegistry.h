@@ -61,6 +61,7 @@ public:
     const ToolDefinition          *find(std::string_view id) const;
     Availability                   availability(std::string_view id) const;
     std::unique_ptr<IToolInstance> create(std::string_view id, const PlatformToolServices &services) const;
+    std::unique_ptr<IToolInstance> create(const ToolDefinition &definition, const PlatformToolServices &services) const;
 
     const std::vector<ToolDefinition> &definitions() const noexcept
     {

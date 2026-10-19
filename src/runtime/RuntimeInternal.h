@@ -46,6 +46,7 @@ struct FrozenRun
     std::vector<std::string>                       selected;
     std::map<NodeId, const NodeDefinition *>       nodes;
     std::map<NodeId, Values>                       initParameters;
+    std::map<NodeId, ToolDefinition>               contracts;
     std::map<NodeId, std::shared_ptr<NodeRuntime>> runtimes;
 };
 
@@ -96,6 +97,7 @@ struct NodeRuntime
     std::shared_ptr<NodeReader>                    reader;
     std::unique_ptr<IToolInstance>                 instance;
     Values                                         initializedWith;
+    TypeMap                                        outputTypes;
     std::filesystem::path                          servicesDirectory;
     std::string                                    toolVersion;
     std::optional<ToolStatus>                      initializationFailure;

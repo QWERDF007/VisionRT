@@ -109,25 +109,21 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert(engine.start(loaded.project, registry, RunMode::Once).code == 0);
     auto update = finish(engine);
 
-    // Node 1: image read (executed via visiontools_preprocess.dll)
     auto s1 = snapshot(update, 1);
     assert(s1 && s1->status.code == 0);
     const auto &images1 = std::get<ImageBatch>(s1->outputs.at("images"));
     assert(images1.images().size() >= 2);
 
-    // Node 2: roi projection (executed via visiontools_preprocess.dll)
     auto s2 = snapshot(update, 2);
     assert(s2 && s2->status.code == 0);
     const auto &rois2 = std::get<RoiBatch>(s2->outputs.at("rois"));
     assert(rois2.images().size() == images1.images().size());
 
-    // Node 3: crop (executed via visiontools_preprocess.dll)
     auto s3 = snapshot(update, 3);
     assert(s3 && s3->status.code == 0);
     const auto &croppedImages = std::get<ImageBatch>(s3->outputs.at("images"));
     assert(!croppedImages.images().empty());
 
-    // Node 4: preprocess (executed via visiontools_preprocess.dll)
     auto s4 = snapshot(update, 4);
     assert(s4 && s4->status.code == 0);
     const auto &preprocessed = std::get<ImageBatch>(s4->outputs.at("images"));

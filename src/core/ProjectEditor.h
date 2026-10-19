@@ -77,6 +77,7 @@ public:
     std::vector<InputPort>  compatibleInputs(std::string_view flowId, const SourcePort &source) const;
 
 private:
+    void                  commit(ProjectDefinition project);
     void                  requireIdle() const;
     FlowDefinition       &flow(std::string_view id);
     const FlowDefinition &flow(std::string_view id) const;

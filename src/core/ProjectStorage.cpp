@@ -1,4 +1,5 @@
 #include "core/ProjectStorage.h"
+#include "core/NodeContracts.h"
 
 #include "core/ToolRegistry.h"
 
@@ -120,7 +121,10 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
 {
     auto initTypes   = types(definition.initParams);
     auto inputTypes  = types(definition.inputs);
-    auto outputTypes = types(definition.outputs);
+    const auto savedOutputs = node.signatures.outputs;
+    setOutputDeclarations(node, definition);
+    auto outputTypes = std::move(node.signatures.outputs);
+    node.signatures.outputs = savedOutputs;
     for (const auto &[id, previous] : node.signatures.outputs)
     {
         const auto current = outputTypes.find(id);
@@ -412,8 +416,21 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
                                       {},
                                       "Next identity counters were raised above existing identifiers"});
     }
+    std::map<NodeId, TypeMap> savedOutputs;
+    for (const auto &flow : project.flows)
+        for (const auto &node : flow.nodes)
+            savedOutputs.emplace(node.id, node.signatures.outputs);
+    resolveOutputTypes(project);
     for (auto &flow : project.flows)
     {
+        for (const auto &node : flow.nodes)
+        {
+            for (const auto &[port, type] : savedOutputs.at(node.id))
+                if (!node.signatures.outputs.contains(port) || node.signatures.outputs.at(port) != type)
+                    changedOutputs[node.id].insert(port);
+            for (const auto &[port, message] : node.outputTypeErrors)
+                diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "outputs." + port, message);
+        }
         std::map<NodeId, const NodeDefinition *> nodes;
         for (const auto &node : flow.nodes) nodes.emplace(node.id, &node);
         for (auto &node : flow.nodes)

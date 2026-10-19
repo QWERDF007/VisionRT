@@ -1,5 +1,7 @@
 #include "runtime/Receiver.h"
 #include "runtime/RuntimeEngine.h"
+#include "core/ProjectEditor.h"
+#include "core/ProjectStorage.h"
 #include "visionrt/sdk/Package.h"
 
 #include <atomic>
@@ -10,6 +12,7 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <QTemporaryDir>
 
 using namespace visionrt;
 using namespace std::chrono_literals;
@@ -348,7 +351,7 @@ void receiverCapacityAndSessionIsolation(const std::filesystem::path &toolsRoot)
     auto source = definition("test.sender");
     install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{25}}}}; });
     auto        sender  = node(1, source);
-    const auto *receive = registry.find("visionrt.flow.receive.int");
+    const auto *receive = registry.find("visionrt.flow.receive");
     assert(receive);
     auto receiver       = node(2, *receive);
     receiver.initParams = {
@@ -850,6 +853,90 @@ void hostBindingReceiverContract()
 }
 } // namespace
 
+void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
+{
+    std::vector<std::pair<TypeSpec, PortValue>> cases{
+        {{Type::Int}, std::int64_t{25}},
+        {{Type::Float}, 2.5},
+        {{Type::Bool}, true},
+        {{Type::String}, Utf8("跨流程数据")},
+        {{Type::ImageBatch}, ImageBatch({OwnedImage::copyOf(cv::Mat::ones(2, 3, CV_8UC1))})},
+        {{Type::RoiBatch}, RoiBatch({{Roi::circle(2, 3, 1)}})},
+        {{Type::StringArray, {}, 1}, StringArray(1, Layout::Dense, {StringBuffer({2}, {"中文", "text"})})},
+        {{Type::StringArray, {}, 2, Layout::BatchRagged},
+            StringArray(2, Layout::BatchRagged, {StringBuffer({2}, {"中文", "text"}), StringBuffer({0}, {})})}
+    };
+    for (const auto dtype : {DType::Int64, DType::Float64})
+        for (const auto &[rank, layout] : std::vector<std::pair<int, Layout>>{
+            {1, Layout::Dense}, {2, Layout::Dense}, {2, Layout::BatchRagged}})
+        {
+            const auto shape = rank == 2 && layout == Layout::Dense
+                ? std::vector<std::int64_t>{1, 2} : std::vector<std::int64_t>{2};
+            const std::int64_t integers[]{17, 29};
+            const double floats[]{1.5, 2.5};
+            const auto bytes = dtype == DType::Int64 ? std::as_bytes(std::span(integers)) : std::as_bytes(std::span(floats));
+            cases.emplace_back(TypeSpec{Type::NumericArray, dtype, rank, layout},
+                NumericArray(dtype, rank, layout, {NumericBuffer::copy(dtype, shape, bytes)}));
+        }
+    const float scores[]{0.25f, 0.75f};
+    cases.emplace_back(TypeSpec{Type::NumericArray, DType::Float32, 2, Layout::BatchRagged},
+        NumericArray(DType::Float32, 2, Layout::BatchRagged,
+            {NumericBuffer::copy(DType::Float32, {2}, std::as_bytes(std::span(scores)))}));
+    RuntimeEngine engine(2);
+    for (const auto &[type, value] : cases)
+    {
+        ToolRegistry registry;
+        registry.registerPackage(readToolsPackage(toolsRoot));
+        registerReceiveTools(registry);
+        auto source = definition("test.typed.sender");
+        source.outputs.front().type = type;
+        install(registry, source, [value](const Values &) { return ToolResult{{}, {{"value", value}}}; });
+        ProjectEditor editor;
+        const auto sourceFlow = editor.addFlow("source");
+        const auto sender = editor.addNode(sourceFlow, source, {});
+        const auto receiver = editor.addNode("flow_1", *registry.find("visionrt.flow.receive"), {});
+        assert(!engine.start(editor.project(), registry, RunMode::Once));
+        editor.setInitParam("flow_1", receiver, "source_flow_name", Utf8("source"));
+        editor.setInitParam("flow_1", receiver, "source_node_name", Utf8(source.displayName + "-" + std::to_string(sender)));
+        editor.setInitParam("flow_1", receiver, "source_port_id", Utf8("value"));
+        editor.setInitParam("flow_1", receiver, "timeout_ms", std::int64_t{1000});
+        ProjectStorage storage(registry);
+        QTemporaryDir temporary;
+        assert(temporary.isValid());
+        auto project = editor.project();
+        const auto file = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / std::filesystem::path(u8"工程.yaml");
+        storage.save(project, file);
+        const auto loaded = storage.load(file);
+        assert(loaded.diagnostics.empty());
+        assert(loaded.project.flows.front().nodes.front().signatures.outputs.at("value") == type);
+        assert(engine.start(loaded.project, registry, RunMode::Once));
+        const auto result = snapshot(finish(engine), receiver);
+        assert(result->status.code == 0);
+        assert(equalValues(result->outputs.at("value"), value));
+        if (type == TypeSpec{Type::Int})
+        {
+            auto sinkDefinition = definition("test.integer.sink", {"input"});
+            install(registry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
+            const auto sink = editor.addNode("flow_1", sinkDefinition, {1, 0});
+            editor.setSource("flow_1", sink, "input", SourcePort{receiver, "value"});
+            editor.setMode("flow_1", sink, "input", BindingMode::Upstream);
+            source.outputs.front().type = {Type::String};
+            ToolRegistry changedRegistry;
+            changedRegistry.registerPackage(readToolsPackage(toolsRoot));
+            registerReceiveTools(changedRegistry);
+            install(changedRegistry, source, [](const Values &) { return ToolResult{{}, {{"value", Utf8("changed")}}}; });
+            install(changedRegistry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
+            const auto rejected = engine.start(editor.project(), changedRegistry, RunMode::Once);
+            assert(!rejected && rejected.message.find("Incompatible") != std::string::npos);
+            const auto reconciled = ProjectStorage(changedRegistry).reconcile(editor.project());
+            assert(reconciled.project.flows.front().nodes.front().signatures.outputs.at("value") == TypeSpec{Type::String});
+            assert(std::any_of(reconciled.diagnostics.begin(), reconciled.diagnostics.end(), [](const auto &diagnostic)
+                { return diagnostic.code == ProjectStorageCode::InvalidReference; }));
+        }
+    }
+    std::cout << "Single receiver executed " << cases.size() << " concrete type contracts after save/reopen\n";
+}
+
 int main(int argc, char **argv)
 {
     branchesOverlapAndJoin();
@@ -858,6 +945,7 @@ int main(int argc, char **argv)
     stopDrainsCommittedFlowsAndFreezesConfiguration();
     assert(argc == 2);
     receiverCapacityAndSessionIsolation(argv[1]);
+    singleReceiverResolvesAllValueTypes(argv[1]);
     receiverConsumesFailures();
     hostBindingReceiverContract();
     resetWaitsForActiveInvocation();

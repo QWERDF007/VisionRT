@@ -67,6 +67,7 @@ void NodeRuntime::reset() noexcept
     failureSession       = 0;
     configurationSession = 0;
     initializedWith.clear();
+    outputTypes.clear();
     slot.publish({});
     active.store(false, std::memory_order_release);
 }
@@ -122,7 +123,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->publication       = ++publication;
     const auto &frozen          = *context->frozen;
     const auto &config          = *frozen.nodes.at(id);
-    const auto *definition      = frozen.registry.find(config.toolId);
+    const auto *definition      = &frozen.contracts.at(id);
     snapshot->executionRevision = config.executionRevision;
     ToolResult  result;
     const char *phase            = "prepare";
@@ -130,8 +131,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     bool        enteredExecute   = false;
     try
     {
-        if (!definition)
-            throw RegistryError(ToolAvailability::DefinitionMissing, "tool definition missing");
         Values inputs;
         {
             ScopeTimer prepareTimer(snapshot->timing.prepareMs);
@@ -179,11 +178,13 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             for (const auto &port : definition->initParams) validateValue(port.type, parameters.at(port.id));
             const auto directory = frozen.project.path.parent_path();
             if (toolId != config.toolId || kind != definition->kind || toolVersion != definition->version
-                || servicesDirectory != directory || !sameParameters(initializedWith, parameters))
+                || servicesDirectory != directory || !sameParameters(initializedWith, parameters)
+                || outputTypes != config.signatures.outputs)
             {
                 release();
                 initializationFailure.reset();
                 initializedWith   = parameters;
+                outputTypes       = config.signatures.outputs;
                 servicesDirectory = directory;
                 toolVersion       = definition->version;
             }
@@ -201,7 +202,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 try
                 {
                     PlatformToolServices services{PathResolver(frozen.project.path.parent_path()), reader};
-                    instance = frozen.registry.create(toolId, services);
+                    instance = frozen.registry.create(*definition, services);
                     if (!instance)
                         throw RegistryError(ToolAvailability::ImplementationUnavailable,
                                             "factory returned no instance");

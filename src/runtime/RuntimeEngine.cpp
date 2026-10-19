@@ -1,4 +1,5 @@
 #include "core/ProjectEditor.h"
+#include "core/NodeContracts.h"
 #include "runtime/RuntimeInternal.h"
 
 #include <taskflow/taskflow.hpp>
@@ -159,7 +160,7 @@ struct RuntimeEngine::Impl
                 if (frozen->mode == RunMode::Node && node.id != *frozen->target)
                     continue;
                 ids.push_back(node.id);
-                contracts.push_back(*frozen->registry.find(node.toolId));
+                contracts.push_back(frozen->contracts.at(node.id));
             }
             if (ids.empty())
                 continue;
@@ -439,6 +440,16 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
         frozen->registry = registry;
         frozen->mode     = mode;
         frozen->target   = target;
+        for (auto &flow : frozen->project.flows)
+            for (auto &node : flow.nodes)
+                if (const auto *definition = registry.find(node.toolId))
+                    setOutputDeclarations(node, *definition);
+                else
+                {
+                    node.signatures.outputs.clear();
+                    node.outputTypeSources.clear();
+                }
+        resolveOutputTypes(frozen->project);
         std::set<std::string> flowIds;
         bool                  nonempty    = false;
         bool                  targetFound = false;
@@ -459,8 +470,6 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                 continue;
             frozen->selected.push_back(flow.id);
             nonempty = nonempty || !flow.nodes.empty();
-            if (mode != RunMode::Node && hasDependencyCycle(flow))
-                throw ContractError("selected flow contains a dependency cycle");
             for (const auto &node : flow.nodes)
             {
                 if (mode == RunMode::Node && node.id != *target)
@@ -468,6 +477,7 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                 const auto *definition = frozen->registry.find(node.toolId);
                 if (!definition)
                     throw ContractError("selected node tool definition is missing: " + node.toolId);
+                frozen->contracts.emplace(node.id, nodeContract(node, *definition));
                 auto &parameters = frozen->initParameters[node.id];
                 for (const auto &port : definition->initParams)
                 {
@@ -475,6 +485,8 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                     parameters.emplace(port.id, value == node.initParams.end() ? port.defaultValue : value->second);
                 }
             }
+            if (mode != RunMode::Node && hasDependencyCycle(flow))
+                throw ContractError("selected flow contains a dependency cycle");
         }
         if (mode == RunMode::Node && (!target || !targetFound))
             return {1, "target node does not exist"};
