@@ -3,6 +3,8 @@
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
 
+#include <quickui/Color.h>
+
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFileInfo>
@@ -87,7 +89,9 @@ int main(int argc, char *argv[])
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
         auto *theme = visionrt::Theme::instance();
         qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+        (void)quickui::QuiColor::getInstance();
         QQmlApplicationEngine engine;
+        engine.addImportPath(QCoreApplication::applicationDirPath());
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);
         engine.rootContext()->setContextProperty("Theme", theme);

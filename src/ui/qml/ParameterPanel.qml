@@ -165,7 +165,7 @@ QuiSplitView {
                                 headerText: modelData.name; headerHeight: 28
                                 expand: root.collapsedGroups[headerText] !== true
                                 contentHeight: groupBody.implicitHeight + 8
-                                onExpandChanged: { let values = root.collapsedGroups; values[headerText] = !expand; root.collapsedGroups = values }
+                                onExpandChanged: { root.collapsedGroups[headerText] = !expand }
                                 ColumnLayout {
                                     id: groupBody; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; spacing: 4
                                     QuiText { text: "下次执行重建资源"; visible: modelData.init; font: QuiFont.Caption; color: Theme.warning }

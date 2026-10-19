@@ -81,14 +81,14 @@ if(VISIONRT_BUILD_APP)
     target_compile_definitions(visionrt_ui PRIVATE VISIONRT_PYTHON_HOME="${VISIONRT_PYTHON_HOME}")
 
     qt_add_executable(VisionRT src/main.cpp)
-    target_link_libraries(VisionRT PRIVATE visionrt_ui)
+    target_link_libraries(VisionRT PRIVATE visionrt_ui quickui::quickui)
 
     file(GLOB visionrt_qml CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/ui/qml/*.qml")
     foreach(qml_file IN LISTS visionrt_qml)
         get_filename_component(qml_name "${qml_file}" NAME)
         set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${qml_name}")
     endforeach()
-    qt_add_qml_module(VisionRT URI VisionRT VERSION 1.0 QML_FILES ${visionrt_qml})
+    qt_add_qml_module(VisionRT URI VisionRT VERSION 1.0 DEPENDENCIES quickui QML_FILES ${visionrt_qml})
 
     configure_file(cmake/Deploy.cmake.in "${CMAKE_BINARY_DIR}/Deploy.cmake" @ONLY)
     add_custom_target(deploy
