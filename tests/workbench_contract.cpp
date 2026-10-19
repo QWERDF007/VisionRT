@@ -85,6 +85,14 @@ void outputContract()
     model.clear();
     require(frozen && OutputModel::fullText(*frozen).size() >= 10000,
             "captured output follows current selection or truncates");
+    tool.outputs.front().typeFrom = PortTypeReference{"flow", "node", "port"};
+    model.setResult(&tool, {}, {});
+    require(model.get(2).value("type").toString() == QStringLiteral("未绑定"), "unbound output pretends to have a concrete type");
+    require(!model.capture(2), "unbound output can be captured as a typed value");
+    const TypeSpec resolved{Type::NumericArray, DType::Float32, 2, Layout::BatchRagged};
+    const TypeMap outputs{{"value", resolved}};
+    model.setResult(&tool, {}, {}, &outputs);
+    require(model.get(2).value("type").toString() == typeText(resolved), "resolved dtype/rank/layout not displayed");
 }
 
 void pendingContract()
@@ -715,7 +723,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         pyScriptA.write(
             "def run(inputs):\n"
-            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111}\n");
+            "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111, 'image': []}\n");
         pyScriptA.close();
     }
     QFile root3YamlA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.yaml");
@@ -735,7 +743,10 @@ void packageDrivenCatalogAndRefreshContract()
             "outputs:\n"
             "- id: result\n"
             "  name: 结果\n"
-            "  type: Int\n");
+            "  type: Int\n"
+            "- id: image\n"
+            "  name: 图像\n"
+            "  type: ImageBatch\n");
         root3YamlA.close();
     }
 
@@ -773,7 +784,7 @@ void packageDrivenCatalogAndRefreshContract()
             "outputs:\n"
             "- id: value\n"
             "  name: 接收值\n"
-            "  type: Int\n"
+              "  type_from: {flow: source_flow_name, node: source_node_name, port: source_port_id}\n"
             "- id: source_status_code\n"
             "  name: 源状态码\n"
             "  type: Int\n"
@@ -886,6 +897,7 @@ void packageDrivenCatalogAndRefreshContract()
         app.addNode("test.user.pythonA", 300, 100);
 
         QString funcNodeTitle;
+        QString pythonNodeTitle;
         for (const auto &n : app.nodes())
         {
             const auto m = n.toMap();
@@ -893,6 +905,8 @@ void packageDrivenCatalogAndRefreshContract()
             {
                 funcNodeTitle = m.value("title").toString();
             }
+            if (m.value("toolId").toString() == "test.user.pythonA")
+                pythonNodeTitle = m.value("title").toString();
         }
         require(!funcNodeTitle.isEmpty(), "missing function node title");
 
@@ -913,9 +927,30 @@ void packageDrivenCatalogAndRefreshContract()
         require(!recvNodeId.isEmpty(), "missing receiver node in flow_2");
 
         app.selectNode(recvNodeId);
+        auto *receiverOutputs = qobject_cast<OutputModel *>(app.outputModel());
+        require(receiverOutputs->get(2).value("type").toString() == QStringLiteral("未绑定"), "receiver is typed before source selection");
+        auto choices = [&](const QString &parameter)
+        {
+            for (const auto &item : app.parameters())
+            {
+                const auto row = item.toMap();
+                if (row.value("id").toString() == parameter) return row.value("options").toList();
+            }
+            return QVariantList{};
+        };
+        require(choices("source_flow_name").contains(flow1Name), "source flow choices are missing");
         app.setParameter("source_flow_name", true, "\"" + flow1Name + "\"");
+        require(!pythonNodeTitle.isEmpty(), "missing Python image source");
+        app.setParameter("source_node_name", true, "\"" + pythonNodeTitle + "\"");
+        app.setParameter("source_port_id", true, "\"image\"");
+        require(app.imageOutputs().size() == 1
+                    && app.imageOutputs().first().toMap().value("id").toString() == "value",
+                "source-derived image output is missing from the viewport selector");
+        require(choices("source_node_name").contains(funcNodeTitle), "source node choices are missing");
         app.setParameter("source_node_name", true, "\"" + funcNodeTitle + "\"");
+        require(choices("source_port_id").contains(QStringLiteral("y")), "source output choices are missing");
         app.setParameter("source_port_id", true, "\"y\"");
+        require(receiverOutputs->get(2).value("type").toString() == typeText({Type::Int}), "receiver output not resolved after source selection");
         app.setParameter("timeout_ms", true, "1000");
 
         // Run once
@@ -1015,7 +1050,7 @@ void packageDrivenCatalogAndRefreshContract()
                 "outputs:\n"
                 "- id: value\n"
                 "  name: 接收值\n"
-                "  type: Int\n"
+                "  type_from: {flow: source_flow_name, node: source_node_name, port: source_port_id}\n"
                 "- id: source_status_code\n"
                 "  name: 源状态码\n"
                 "  type: Int\n"

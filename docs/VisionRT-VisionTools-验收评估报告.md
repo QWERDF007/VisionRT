@@ -19,7 +19,8 @@
 | --- | --- |
 | 工具 ZIP | `F:/tmp/VisionTools.zip`；正常构建/打包入口生成 |
 | 外置索引 | `F:/tmp/module_index.yaml`；与 ZIP 内、宿主安装后的索引逐字节相同 |
-| 当前发行配置 | `VisionTools-0.1.0`；6 个领域 C++ 工具共享一个 DLL，2 个 Python 类工具，14 个 host_binding 接收工具 |
+| 当前发行配置 | `VisionTools-0.1.0`；共 9 个工具：6 个领域 C++ 工具共享 `vst_image.dll`，2 个 Python 类工具，1 个 host_binding 接收工具 |
+| 作者声明命名 | `工具名称.yaml`；接收声明为 `assets/tools/builtin/流程控制/跨流程接收.yaml`；工具 ID 独立于文件名 |
 | 缓存检查 | ZIP 不含 `__pycache__`、`.pyc`、`.pyo`；不复制未索引的开发样例目录 |
 | 完整宿主发行目录 | `F:/tmp/VisionRT`；正常 EXE/DLL、Qt、构建所选 Python 及工具 ZIP 部署结果 |
 
@@ -36,6 +37,7 @@
 | R5 分类与来源 | 分类由 YAML 显式属性读取；移动声明不改变分类，安装声明属性不由 builtin/custom 目录名猜测 | SDK 包合同、注册与工作台测试 |
 | R6 发行卫生 | 相邻代码与显式资源正确交付；缓存和无关日志不会随正常包进入 ZIP | 真 ZIP 检查、打包负例 |
 | R7 SDK 独立消费 | OFF 核心安装消费不需要 Python；ON 安装包正确发现嵌入依赖，断言开启的外部消费者可转换图像及字符串数组，释放解释器后 C++ 结果仍有效 | SDK 两种配置的隔离安装测试 |
+| 单一接收合同 | 一个工具根据所选源端口解析完整 TypeSpec；未绑定不展示伪类型，循环、失效引用及不兼容下游明确诊断 | `project_editor_contract`、`runtime_contract`、`workbench_contract` |
 
 pybind11 ABI 相关编译定义由可选 SDK 目标统一传递；宿主部署的 Python 取自实际 CMake 构建结果，不再另选运行时。实现与边界以源码为准。
 
@@ -44,6 +46,7 @@ pybind11 ABI 相关编译定义由可选 SDK 目标统一传递；宿主部署�
 | 验证 | 命令 / 环境 | 结果 |
 | --- | --- | --- |
 | 工具库真实交付入口 | VisionTools `tools/build.cmd --release --no-infer --package F:/tmp/VisionTools` | 构建与包运行验证成功；6 个领域工具实际执行 |
+| 命名与动态声明 | VisionTools `test_distribution`、SDK `test_sdk_package_contract` | 作者文件名与显示名称一致、仅一个接收声明；动态输出不混用具体类型，原生静态工厂不得冒充节点动态合同 |
 | 工具库回归 | VisionTools `tools/build.cmd ctest --test-dir build --output-on-failure` | 7/7 通过；本次设置 `VISIONRT_PYTHON_CONSUMER`、`VISIONRT_DEPLOY_SCRIPT` 启用宿主联调 |
 | 纯 Python ZIP | `test_distribution` 调用正常索引生成函数、真实打包器、宿主 deploy_tools_package 和 python_contract 消费模式 | 删除临时作者源后仍能相对导入、读取显式数据并得到 42；modules 为空 |
 | 宿主整体回归 | `ctest --test-dir build -C Release --output-on-failure` | 14/14 通过；工具输入来自最终 ZIP 部署结果 |
@@ -53,9 +56,10 @@ pybind11 ABI 相关编译定义由可选 SDK 目标统一传递；宿主部署�
 | 部署负例与更换 | `python -B tools/package_app.py --test-verify` | 坏 ZIP、路径逃逸、缺文件、身份冲突、索引不一致及文件占用等检查通过 |
 | 完整发行部署 | package_app.py 输入上述 ZIP 和外置索引；随后用 deploy-tools-only 完整更换同一发行目录的工具包 | 部署及 SDK 校验成功 |
 | 隔离运行 | 中文/空格发行路径；PATH 仅 Windows 系统目录；Python 指向发行环境；测试程序只使用复制的工程/图片数据，无工具源码补偿 | 真实领域 DLL + Python、缺依赖失败/恢复、C++ + Python + 接收数值 25、保存重开与旧包文件清理全部通过 |
+| 安装版单一接收 | 实际 `F:/tmp/VisionRT` 的 DLL 与工具包，PATH 仅系统目录；临时运行 `runtime_contract` | 同一个接收工具覆盖 15 种具体类型，每种保存重开后执行，值精确相等 |
 | 实际 EXE | 发行版 VisionRT.exe 在相同精简环境启动，退出码 0 | 工作台显示包内工具分类；stderr 为空，截图已检查 |
 
-完整发行验证没有把测试 EXE/DLL 留在交付目录。现场截图和测试数据位于 `build/acceptance`；最终交付日志为 `build/tmp-producer-build-package.log`、`build/tmp-host-package.log`、`build/tmp-*-tests.log`、`build/tmp-installed-runtime.log` 与 `build/tmp-gui-*.log`。三处 SDK 工作区使用一致的交付源码。
+完整发行验证没有把测试 EXE/DLL 留在交付目录。现场截图为 `build/acceptance/receiver-installed-workbench.png`，显示单一跨流程接收工具；测试数据位于 `build/acceptance/data`。生产者日志为其 `build/receiver-producer-*.log`；宿主日志为 `build/receiver-final-*.log`、`build/receiver-sdk-*-tests.log`、`build/receiver-installed-types.log`、`build/receiver-installed-runtime.log`、`build/receiver-deploy-negative-tests.log` 与 `build/receiver-gui-*.log`。三处 SDK 工作区使用一致的交付源码。
 
 ## 未运行项
 

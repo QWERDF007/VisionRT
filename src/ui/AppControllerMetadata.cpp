@@ -45,6 +45,15 @@ QVariantMap portMetadata(const PortDefinition &port)
         {"sameGeometryAsInput", q(port.sameGeometryAsInput)},
         {"system", port.id.starts_with("__")}
     };
+    if (port.typeFrom)
+    {
+        row["type"] = QStringLiteral("待解析");
+        row.remove("rank");
+        row.remove("layout");
+        row["default"] = QString{};
+        row["typeFrom"] = QVariantMap{{"flow", q(port.typeFrom->flowParameter)},
+            {"node", q(port.typeFrom->nodeParameter)}, {"port", q(port.typeFrom->portParameter)}};
+    }
     if (port.type.dtype)
     {
         static const char *names[] = {"uint8", "int32", "int64", "float32", "float64", "bool"};
@@ -112,4 +121,137 @@ QVariantMap AppController::toolMetadata(const QString &toolId) const
     const auto *definition = impl_->registry.find(toolId.toStdString());
     return definition ? workbench::metadata(*definition) : QVariantMap{};
 }
+QVariantList AppController::parameters() const
+{
+    using workbench::q;
+    QVariantList result;
+    const auto  *node = impl_->currentNode();
+    if (!node)
+        return result;
+    const auto *tool = impl_->currentTool();
+    auto add = [&](const std::string &id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
+    {
+        PortValue literal = Missing{};
+        QString   mode    = "literal", source;
+        if (initialization)
+        {
+            const auto found = node->initParams.find(id);
+            if (found != node->initParams.end())
+                literal = found->second;
+        }
+        else if (const auto found = node->inputs.find(id); found != node->inputs.end())
+        {
+            literal = found->second.literal;
+            mode    = found->second.mode == BindingMode::Literal ? "literal" : "upstream";
+            if (found->second.source)
+            {
+                const auto *parent    = impl_->findNode(found->second.source->node);
+                const auto *parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
+                const auto *portDef
+                    = parentDef ? workbench::port(parentDef->outputs, found->second.source->port) : nullptr;
+                const QString portName = portDef ? q(portDef->name) : q(found->second.source->port);
+                source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
+            }
+        }
+        QString text;
+        try
+        {
+            text = valueText(literal, type);
+        }
+        catch (const std::exception &error)
+        {
+            text = q(error.what());
+        }
+        QVariantList options;
+        if (declaration)
+            for (const auto &value : declaration->options)
+            {
+                const auto *stringValue = std::get_if<Utf8>(&value);
+                options.push_back(stringValue ? q(stringValue->str()) : valueText(value, type));
+            }
+        if (initialization && tool)
+            for (const auto &output : tool->outputs)
+                if (output.typeFrom)
+                {
+                    const auto &reference = *output.typeFrom;
+                    auto selected = [&](const std::string &parameter)
+                    {
+                        const auto found = node->initParams.find(parameter);
+                        const auto *value = found == node->initParams.end() ? nullptr : std::get_if<Utf8>(&found->second);
+                        return value ? value->str() : std::string{};
+                    };
+                    auto option = [&](const std::string &value)
+                    {
+                        const auto optionText = q(value);
+                        if (!options.contains(optionText)) options.push_back(optionText);
+                    };
+                    for (const auto &sourceFlow : impl_->editor.project().flows)
+                    {
+                        if (sourceFlow.id == impl_->flow.toStdString()) continue;
+                        if (id == reference.flowParameter) option(sourceFlow.name);
+                        if (sourceFlow.name != selected(reference.flowParameter)) continue;
+                        for (const auto &sourceNode : sourceFlow.nodes)
+                        {
+                            if (id == reference.nodeParameter) option(sourceNode.title());
+                            if (sourceNode.title() != selected(reference.nodeParameter)) continue;
+                            if (id == reference.portParameter)
+                                for (const auto &[port, signature] : sourceNode.signatures.outputs) option(port);
+                        }
+                    }
+                }
+        const auto *string     = std::get_if<Utf8>(&literal);
+        const auto  inputFound = node->inputs.find(id);
+        const bool  hasSource  = (inputFound != node->inputs.end() && inputFound->second.source.has_value());
+        QVariantMap row{
+            {             "id",                                                                    q(id)},
+            {           "name",                               declaration ? q(declaration->name) : q(id)},
+            {           "type",                                           workbench::typeName(type.type)},
+            {     "typeDetail",                                                           typeText(type)},
+            {           "init",                                                           initialization},
+            {           "mode",                                                                     mode},
+            {        "literal",                                                                     text},
+            {      "valueText",                                         string ? q(string->str()) : text},
+            {         "source",                                                                   source},
+            {     "sourceNode", hasSource ? QString::number(inputFound->second.source->node) : QString{}},
+            {     "sourcePort",               hasSource ? q(inputFound->second.source->port) : QString{}},
+            {          "title",                                                         q(node->title())},
+            {         "editor",                         declaration ? q(declaration->editor) : QString{}},
+            {            "tab",           declaration ? q(declaration->tab) : QStringLiteral("基本输入")},
+            {          "group",                          initialization ? QStringLiteral("初始化配置")
+                          : declaration  ? q(declaration->group)
+                          : QString{}                                    },
+            {        "options",                                                                  options},
+            {"optionsProvider",                declaration ? q(declaration->optionsProvider) : QString{}},
+            {     "imageInput",                     declaration ? q(declaration->imageInput) : QString{}},
+            {        "minimum",                                                                QString{}},
+            {        "maximum",                                                                QString{}},
+            {           "step",                                                                QString{}},
+            {       "decimals",                                                                       -1}
+        };
+        if (declaration)
+        {
+            if (declaration->minimum)
+                row["minimum"] = valueText(*declaration->minimum, type);
+            if (declaration->maximum)
+                row["maximum"] = valueText(*declaration->maximum, type);
+            if (declaration->step)
+                row["step"] = valueText(*declaration->step, type);
+            if (declaration->decimals)
+                row["decimals"] = *declaration->decimals;
+        }
+        result.push_back(row);
+    };
+    if (tool)
+    {
+        for (const auto &port : tool->initParams) add(port.id, port.type, true, &port);
+        for (const auto &port : tool->inputs) add(port.id, port.type, false, &port);
+    }
+    else
+    {
+        for (const auto &[id, type] : node->signatures.initParams) add(id, type, true, nullptr);
+        for (const auto &[id, type] : node->signatures.inputs) add(id, type, false, nullptr);
+    }
+    return result;
+}
+
 } // namespace visionrt

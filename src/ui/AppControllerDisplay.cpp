@@ -34,22 +34,16 @@ void AppController::Impl::updateResults(bool newSnapshot)
     else
     {
         const auto found    = snapshots.find(node->id);
-        const auto snapshot = found == snapshots.end() ? ResultSlot::Snapshot{} : found->second;
+        const auto snapshot = found == snapshots.end() || found->second->executionRevision != node->executionRevision
+            ? ResultSlot::Snapshot{} : found->second;
         std::map<std::string, std::size_t, std::less<>> references;
         for (const auto &[id, type] : node->signatures.outputs)
             references[id] = editor.referenceCount(flow.toStdString(), {node->id, id});
         outputs.setResult(tool, snapshot, references, &node->signatures.outputs);
         std::vector<std::string> imagePorts;
-        if (tool)
-        {
-            for (const auto &output : tool->outputs)
-                if (output.type.type == Type::ImageBatch)
-                    imagePorts.push_back(output.id);
-        }
-        else
-            for (const auto &[id, type] : node->signatures.outputs)
-                if (type.type == Type::ImageBatch)
-                    imagePorts.push_back(id);
+        for (const auto &[id, type] : node->signatures.outputs)
+            if (type.type == Type::ImageBatch)
+                imagePorts.push_back(id);
         if (std::find(imagePorts.begin(), imagePorts.end(), imageOutput.toStdString()) == imagePorts.end())
             imageOutput = imagePorts.empty() ? QString{} : workbench::q(imagePorts.front());
         const auto *reference = imagePorts.empty() ? nullptr : images(snapshot, imagePorts.front());
@@ -91,7 +85,7 @@ void AppController::Impl::updateDisplay()
     else if (const auto *node = currentNode())
     {
         const auto found = snapshots.find(node->id);
-        if (found != snapshots.end())
+        if (found != snapshots.end() && found->second->executionRevision == node->executionRevision)
             snapshot = found->second;
         batch = images(snapshot, imageOutput.toStdString());
         if (const auto *tool = currentTool())
@@ -302,8 +296,10 @@ QVariantList AppController::imageOutputs() const
     }
     if (const auto *tool = impl_->currentTool())
     {
+        const auto *node = impl_->currentNode();
         for (const auto &output : tool->outputs)
-            if (output.type.type == Type::ImageBatch)
+            if (node && node->signatures.outputs.contains(output.id)
+                && node->signatures.outputs.at(output.id).type == Type::ImageBatch)
                 result.push_back(QVariantMap{
                     {  "id",   workbench::q(output.id)},
                     {"name", workbench::q(output.name)}

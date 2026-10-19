@@ -339,13 +339,13 @@ def execute(inputs):
 
 void exampleTools(PythonRuntime &runtime, const std::filesystem::path &root)
 {
-    const auto meanPath = root / std::filesystem::path(u8"custom/Python/示例/custom.image.mean.yaml");
-    const auto mean     = parseDefinition(std::filesystem::relative(meanPath), false);
-    const auto counter
-        = parseDefinition(root / std::filesystem::path(u8"custom/Python/示例/custom.call.counter.yaml"), false);
     ToolRegistry registry;
-    registry.addDefinition(mean);
-    registry.addDefinition(counter);
+    for (const auto &tool : readToolsPackage(root).tools)
+        if (tool.definition.kind == ToolKind::PythonClass || tool.definition.kind == ToolKind::PythonFunction)
+            registry.addDefinition(tool.definition);
+    assert(registry.find("custom.image.mean") && registry.find("custom.call.counter"));
+    const auto &mean = *registry.find("custom.image.mean");
+    const auto &counter = *registry.find("custom.call.counter");
     for (const auto &loaded : runtime.refresh(registry.definitions()))
     {
         assert(loaded.status.code == 0);
@@ -639,7 +639,7 @@ int main(int argc, char **argv)
                                  readonlyOwners();
                                  strictConversions();
                                  adaptersAndRefresh(runtime);
-                                 exampleTools(runtime, packageRoot / "assets/tools");
+                                 exampleTools(runtime, packageRoot);
                                  packagePythonExecutionDemonstration(runtime);
                                       });
     try

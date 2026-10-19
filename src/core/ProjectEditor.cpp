@@ -1,4 +1,5 @@
 #include "core/ProjectEditor.h"
+#include "core/NodeContracts.h"
 
 #include <algorithm>
 #include <limits>
@@ -100,7 +101,8 @@ std::vector<DependencyEdge> deriveEdges(const FlowDefinition &flow, NodeId repla
                 throw ContractError("Upstream node is not in this flow");
             if (!compatible(signature(found->second->signatures.outputs, source.port),
                             signature(target.signatures.inputs, input)))
-                throw ContractError("Incompatible upstream port signature");
+                throw ContractError("Incompatible upstream port signature: node " + std::to_string(source.node)
+                    + "." + source.port + " -> node " + std::to_string(target.id) + "." + input);
             edges.emplace_back(source.node, target.id);
         }
     }
@@ -380,19 +382,28 @@ void ProjectEditor::replaceProject(ProjectDefinition project)
     requireIdle();
     if (project.flows.empty())
         throw ContractError("A project needs at least one flow");
+    resolveOutputTypes(project);
+    project_ = std::move(project);
+}
+
+void ProjectEditor::commit(ProjectDefinition project)
+{
+    resolveOutputTypes(project);
+    project.dirty = true;
     project_ = std::move(project);
 }
 
 NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &tool, GridPoint preferred)
 {
     requireIdle();
-    auto &target = flow(flowId);
-    requireIncrement(project_.nextNodeId);
+    ProjectEditor edit(project_);
+    auto &target = edit.flow(flowId);
+    requireIncrement(edit.project_.nextNodeId);
     requireIncrement(target.structureRevision);
     if (tool.id.empty())
         throw ContractError("Tool ID is empty");
     NodeDefinition node;
-    node.id               = project_.nextNodeId;
+    node.id               = edit.project_.nextNodeId;
     node.toolId           = tool.id;
     node.toolNameSnapshot = tool.displayName;
     for (const auto &parameter : tool.initParams)
@@ -412,6 +423,8 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     }
     for (const auto &output : tool.outputs)
     {
+        if (output.typeFrom)
+            continue;
         validateTypeSpec(output.type);
         if (!node.signatures.outputs.emplace(output.id, output.type).second)
             throw ContractError("Duplicate output port");
@@ -419,10 +432,12 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     const GridPoint origin{};
     const auto [x, y] = nearestTranslation(std::span(&origin, 1), target, preferred);
     node.position     = translated(origin, x, y);
+    setOutputDeclarations(node, tool);
     target.nodes.push_back(std::move(node));
     ++target.structureRevision;
-    project_.dirty = true;
-    return project_.nextNodeId++;
+    const auto id = edit.project_.nextNodeId++;
+    commit(std::move(edit.project_));
+    return id;
 }
 
 bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_view input, InputBinding binding)
@@ -493,7 +508,8 @@ bool ProjectEditor::setLiteral(std::string_view flowId, NodeId id, std::string_v
 bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string_view parameter, PortValue value)
 {
     requireIdle();
-    auto &node = findNode(flow(flowId), id);
+    ProjectEditor edit(project_);
+    auto &node = findNode(edit.flow(flowId), id);
     requireEditable(node);
     const auto found = node.initParams.find(parameter);
     if (found == node.initParams.end())
@@ -504,7 +520,7 @@ bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string
     requireIncrement(node.executionRevision);
     found->second = std::move(value);
     ++node.executionRevision;
-    project_.dirty = true;
+    commit(std::move(edit.project_));
     return true;
 }
 
@@ -600,14 +616,15 @@ std::string ProjectEditor::addFlow(std::string name)
 bool ProjectEditor::renameFlow(std::string_view flowId, std::string name)
 {
     requireIdle();
-    auto &target = flow(flowId);
+    ProjectEditor edit(project_);
+    auto &target = edit.flow(flowId);
     if (name.empty())
         throw ContractError("Flow name is empty");
     name = flowName(project_, std::move(name), {}, flowId);
     if (target.name == name)
         return false;
     target.name    = std::move(name);
-    project_.dirty = true;
+    commit(std::move(edit.project_));
     return true;
 }
 
@@ -625,24 +642,27 @@ bool ProjectEditor::setRunSelected(std::string_view flowId, bool selected)
 std::string ProjectEditor::removeFlow(std::string_view flowId)
 {
     requireIdle();
-    auto &target = flow(flowId);
-    if (project_.flows.size() == 1)
+    ProjectEditor edit(project_);
+    auto &candidate = edit.project_;
+    auto &target = edit.flow(flowId);
+    if (candidate.flows.size() == 1)
         throw ContractError("Cannot delete the last flow");
-    const auto       index    = static_cast<std::size_t>(&target - project_.flows.data());
-    auto             adjacent = project_.flows[index + 1 < project_.flows.size() ? index + 1 : index - 1].id;
+    const auto       index    = static_cast<std::size_t>(&target - candidate.flows.data());
+    auto             adjacent = candidate.flows[index + 1 < candidate.flows.size() ? index + 1 : index - 1].id;
     std::set<NodeId> removed;
     for (const auto &node : target.nodes) removed.insert(node.id);
-    const auto references = referencesTo(project_, removed);
+    const auto references = referencesTo(candidate, removed);
     references.validate();
     references.apply();
-    project_.flows.erase(project_.flows.begin() + static_cast<std::ptrdiff_t>(index));
-    project_.dirty = true;
+    candidate.flows.erase(candidate.flows.begin() + static_cast<std::ptrdiff_t>(index));
+    commit(std::move(candidate));
     return adjacent;
 }
 
 std::string ProjectEditor::copyFlow(std::string_view flowId, std::string name)
 {
     requireIdle();
+    ProjectEditor edit(project_);
     const auto &source = flow(flowId);
     auto [id, next]    = nextFlowIdentity(project_);
     FlowDefinition candidate;
@@ -662,29 +682,30 @@ std::string ProjectEditor::copyFlow(std::string_view flowId, std::string name)
     auto copied      = duplicateNodes(selected, project_.nextNodeId, 0, 0);
     candidate.nodes  = std::move(copied.nodes);
     const auto count = selected.size();
-    project_.flows.push_back(std::move(candidate));
-    project_.nextFlowId = next;
-    project_.nextNodeId += count;
-    project_.dirty = true;
+    edit.project_.flows.push_back(std::move(candidate));
+    edit.project_.nextFlowId = next;
+    edit.project_.nextNodeId += count;
+    commit(std::move(edit.project_));
     return id;
 }
 
 bool ProjectEditor::removeNodes(std::string_view flowId, std::span<const NodeId> nodes)
 {
     requireIdle();
-    auto      &target   = flow(flowId);
+    ProjectEditor edit(project_);
+    auto      &target   = edit.flow(flowId);
     const auto selected = selection(target, nodes);
     if (selected.empty())
         return false;
     std::set<NodeId> removed;
     for (const auto *node : selected) removed.insert(node->id);
-    auto references = referencesTo(project_, removed);
+    auto references = referencesTo(edit.project_, removed);
     if (std::find(references.structures.begin(), references.structures.end(), &target) == references.structures.end())
         references.structures.push_back(&target);
     references.validate();
     references.apply();
     std::erase_if(target.nodes, [&](const auto &node) { return removed.contains(node.id); });
-    project_.dirty = true;
+    commit(std::move(edit.project_));
     return true;
 }
 
@@ -718,8 +739,9 @@ std::map<NodeId, NodeId> ProjectEditor::copyNodes(std::string_view sourceFlow, s
                                                   std::string_view targetFlow, GridPoint preferredOffset)
 {
     requireIdle();
+    ProjectEditor edit(project_);
     const auto selected = selection(flow(sourceFlow), nodes);
-    auto      &target   = flow(targetFlow);
+    auto      &target   = edit.flow(targetFlow);
     if (selected.empty())
         return {};
     requireIncrement(target.structureRevision);
@@ -730,21 +752,22 @@ std::map<NodeId, NodeId> ProjectEditor::copyNodes(std::string_view sourceFlow, s
     auto copied         = duplicateNodes(selected, project_.nextNodeId, dx, dy);
     target.nodes.reserve(target.nodes.size() + copied.nodes.size());
     for (auto &node : copied.nodes) target.nodes.push_back(std::move(node));
-    project_.nextNodeId += copied.nodes.size();
+    edit.project_.nextNodeId += copied.nodes.size();
     ++target.structureRevision;
-    project_.dirty = true;
+    commit(std::move(edit.project_));
     return std::move(copied.mapping);
 }
 
 bool ProjectEditor::setAlias(std::string_view flowId, NodeId id, std::string alias)
 {
     requireIdle();
-    auto &node = findNode(flow(flowId), id);
+    ProjectEditor edit(project_);
+    auto &node = findNode(edit.flow(flowId), id);
     validateUtf8(alias);
     if (node.alias == alias)
         return false;
     node.alias     = std::move(alias);
-    project_.dirty = true;
+    commit(std::move(edit.project_));
     return true;
 }
 

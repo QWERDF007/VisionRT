@@ -59,6 +59,8 @@ struct NodeDefinition
     Values                                           initParams;
     std::map<std::string, InputBinding, std::less<>> inputs;
     TypeSnapshot                                     signatures;
+    std::map<std::string, PortTypeReference, std::less<>> outputTypeSources;
+    std::map<std::string, std::string, std::less<>> outputTypeErrors;
     std::uint64_t                                    executionRevision = 0;
     YAML::Node                                       unresolved;
     std::string                                      title() const;

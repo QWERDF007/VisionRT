@@ -34,7 +34,7 @@ public:
     void                    clear();
     void                    setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                                       const std::map<std::string, std::size_t, std::less<>> &references,
-                                      const TypeMap                                         *unresolvedOutputs = nullptr);
+                                      const TypeMap                                         *nodeOutputs = nullptr);
     std::optional<Captured> capture(int row) const;
     static QString          fullText(const Captured &captured);
     static std::size_t      estimatedTextBytes(const Captured &captured);
@@ -52,6 +52,7 @@ private:
         std::size_t count  = 0;
         bool        system = false;
         Captured    captured;
+        bool        resolved = true;
     };
 
     std::vector<Row> rows_;

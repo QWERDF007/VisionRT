@@ -241,7 +241,7 @@ void OutputModel::clear()
 
 void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                             const std::map<std::string, std::size_t, std::less<>> &references,
-                            const TypeMap                                         *unresolvedOutputs)
+                            const TypeMap                                         *nodeOutputs)
 {
     beginResetModel();
     rows_.clear();
@@ -277,10 +277,25 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
         for (const auto &port : definition->outputs)
         {
             if (port.id != "__status_code" && port.id != "__status_message")
-                add(port.id, port.name, port.type, false);
+            {
+                if (!port.typeFrom)
+                    add(port.id, port.name, port.type, false);
+                else if (nodeOutputs && nodeOutputs->contains(port.id))
+                    add(port.id, port.name, nodeOutputs->at(port.id), false);
+                else
+                {
+                    Row row;
+                    row.id = q(port.id);
+                    row.name = q(port.name);
+                    row.type = QStringLiteral("未绑定");
+                    row.tooltip = QStringLiteral("请选择源流程、源节点和输出端口");
+                    row.resolved = false;
+                    rows_.push_back(std::move(row));
+                }
+            }
         }
-    else if (unresolvedOutputs)
-        for (const auto &[id, type] : *unresolvedOutputs)
+    else if (nodeOutputs)
+        for (const auto &[id, type] : *nodeOutputs)
         {
             if (id != "__status_code" && id != "__status_message")
                 add(id, id, type, false);
@@ -290,7 +305,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
 
 std::optional<OutputModel::Captured> OutputModel::capture(int row) const
 {
-    if (row < 0 || static_cast<std::size_t>(row) >= rows_.size())
+    if (row < 0 || static_cast<std::size_t>(row) >= rows_.size() || !rows_[row].resolved)
         return {};
     return rows_[row].captured;
 }

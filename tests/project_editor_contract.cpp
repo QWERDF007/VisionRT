@@ -1,9 +1,11 @@
 #include "core/ProjectEditor.h"
+#include "core/ToolRegistry.h"
 
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <limits>
+#include <iostream>
 
 using namespace visionrt;
 
@@ -381,8 +383,93 @@ void compatibilityAndRelationshipMenusUseEffectiveInputs()
 }
 } // namespace
 
+void receiverOutputFollowsItsSource()
+{
+    const auto receiver = parseDefinitionNode(YAML::Load(R"(schema_version: 1
+tool_id: visionrt.flow.receive
+display_name: 跨流程接收
+version: 1.0.0
+kind: cpp_class
+entry: {registry_name: visionrt.flow.receive}
+init_params:
+- {id: source_flow_name, name: 源流程, type: String, default: ''}
+- {id: source_node_name, name: 源节点, type: String, default: ''}
+- {id: source_port_id, name: 源端口, type: String, default: ''}
+inputs: []
+outputs:
+- id: value
+  name: 数据
+  type_from: {flow: source_flow_name, node: source_node_name, port: source_port_id}
+)"), {}, true);
+    ProjectEditor editor;
+    const auto sourceFlow = editor.addFlow("source");
+    const auto sender = editor.addNode(sourceFlow, integerTool(), {});
+    auto arrays = integerTool();
+    arrays.id = "test.arrays";
+    arrays.outputs.front().type = {Type::NumericArray, DType::Float32, 2, Layout::BatchRagged};
+    const auto arraySender = editor.addNode(sourceFlow, arrays, {1, 0});
+    const auto receive = editor.addNode("flow_1", receiver, {});
+    assert(!node(editor, receive).signatures.outputs.contains("value"));
+    editor.setInitParam("flow_1", receive, "source_flow_name", Utf8("source"));
+    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, sender).title()));
+    editor.setInitParam("flow_1", receive, "source_port_id", Utf8("value"));
+    assert(node(editor, receive).signatures.outputs.at("value") == TypeSpec{Type::Int});
+    const auto sink = editor.addNode("flow_1", integerTool(), {1, 0});
+    editor.setSource("flow_1", sink, "first", SourcePort{receive, "value"});
+    editor.setMode("flow_1", sink, "first", BindingMode::Upstream);
+    assert(dependencyEdges(editor.project().flows.front()).size() == 1);
+    const auto revision = node(editor, receive).executionRevision;
+    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, arraySender).title()));
+    assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
+    assert(node(editor, receive).executionRevision > revision);
+    rejects([&] { dependencyEdges(editor.project().flows.front()); });
+    editor.setInitParam("flow_1", receive, "source_port_id", Utf8("missing"));
+    assert(!node(editor, receive).signatures.outputs.contains("value"));
+    editor.setInitParam("flow_1", receive, "source_port_id", Utf8("value"));
+    assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
+    editor.renameFlow(sourceFlow, "renamed");
+    assert(!node(editor, receive).signatures.outputs.contains("value"));
+    editor.setInitParam("flow_1", receive, "source_flow_name", Utf8("renamed"));
+    assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
+    editor.setAlias(sourceFlow, arraySender, "new source");
+    assert(!node(editor, receive).signatures.outputs.contains("value"));
+    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, arraySender).title()));
+    const auto copied = editor.copyNodes("flow_1", std::array{receive}, sourceFlow, {4, 0});
+    assert(!node(editor, copied.at(receive)).signatures.outputs.contains("value"));
+    const auto chainFlow = editor.addFlow("chain");
+    const auto chain = editor.addNode(chainFlow, receiver, {});
+    editor.setInitParam(chainFlow, chain, "source_flow_name", Utf8("流程1"));
+    editor.setInitParam(chainFlow, chain, "source_node_name", Utf8(node(editor, receive).title()));
+    editor.setInitParam(chainFlow, chain, "source_port_id", Utf8("value"));
+    assert(node(editor, chain).signatures.outputs.at("value") == arrays.outputs.front().type);
+    auto exhausted = editor.project();
+    for (auto &flow : exhausted.flows)
+        for (auto &item : flow.nodes)
+            if (item.id == receive) item.executionRevision = std::numeric_limits<std::uint64_t>::max();
+    ProjectEditor atomic(std::move(exhausted));
+    rejects([&] { atomic.removeNodes(sourceFlow, std::array{arraySender}); });
+    assert(node(atomic, arraySender).id == arraySender);
+    assert(node(atomic, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
+    editor.removeNodes(sourceFlow, std::array{arraySender});
+    assert(!node(editor, receive).signatures.outputs.contains("value"));
+    assert(!node(editor, chain).signatures.outputs.contains("value"));
+    editor.setInitParam("flow_1", receive, "source_flow_name", Utf8("chain"));
+    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, chain).title()));
+    assert(!node(editor, receive).signatures.outputs.contains("value"));
+    assert(!node(editor, chain).signatures.outputs.contains("value"));
+}
+
 int main()
 {
+    try
+    {
+        receiverOutputFollowsItsSource();
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << error.what() << std::endl;
+        return 1;
+    }
     cycleRejectionIsAtomic();
     inactiveDraftsOnlyDirty();
     copiesRemapInternalSourcesAndPreserveOriginals();

@@ -195,10 +195,21 @@ Availability ToolRegistry::availability(std::string_view id) const
 
 std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const PlatformToolServices &services) const
 {
+    const auto *definition = find(id);
+    if (!definition)
+        throw RegistryError(ToolAvailability::DefinitionMissing, "Tool definition is missing: " + std::string(id));
+    return create(*definition, services);
+}
+
+std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition &definition, const PlatformToolServices &services) const
+{
+    const std::string_view id = definition.id;
     const auto state = availability(id);
     if (state.state != ToolAvailability::Available)
         throw RegistryError(state.state, state.message);
-    const auto &definition    = *find(id);
+    for (const auto &port : definition.outputs)
+        if (port.typeFrom)
+            throw ContractError("Tool output type has not been resolved: " + definition.id + "." + port.id);
     const auto  hostBindingIt = hostBindingsMap_.find(id);
     if (hostBindingIt != hostBindingsMap_.end())
     {

@@ -115,19 +115,8 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
     }
     if (!source)
         return receiveError(1, "source node does not exist");
-    const auto *definition = context->frozen->registry.find(source->toolId);
-    if (!definition)
-        return receiveError(1, "source tool definition is missing");
-    std::optional<TypeSpec> sourceType;
-    if (request.port == "__status_code")
-        sourceType = TypeSpec{Type::Int};
-    else if (request.port == "__status_message")
-        sourceType = TypeSpec{Type::String};
-    else
-        for (const auto &port : definition->outputs)
-            if (port.id == request.port)
-                sourceType = port.type;
-    if (!sourceType || *sourceType != request.type)
+    const auto sourceType = source->signatures.outputs.find(request.port);
+    if (sourceType == source->signatures.outputs.end() || sourceType->second != request.type)
         return receiveError(2, "source output TypeSpec does not match receiver");
     if (cursor.session != context->session || cursor.source != source->id)
         cursor = {context->session, source->id, 0};
