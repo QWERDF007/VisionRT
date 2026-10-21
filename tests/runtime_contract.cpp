@@ -2,7 +2,7 @@
 #include "runtime/RuntimeEngine.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
-#include "visionrt/sdk/Package.h"
+#include "visionrt/contracts/Package.h"
 
 #include <atomic>
 #include <cassert>

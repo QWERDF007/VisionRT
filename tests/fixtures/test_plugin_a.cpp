@@ -1,4 +1,4 @@
-#include "visionrt/sdk/Module.h"
+#include "visionrt/contracts/Module.h"
 
 #include <cstring>
 

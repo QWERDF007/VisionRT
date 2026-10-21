@@ -3,7 +3,7 @@
 
 #include "core/ToolRegistry.h"
 
-#include <visionrt/sdk/ValueYaml.h>
+#include <visionrt/contracts/ValueYaml.h>
 
 #include <QFile>
 #include <QSaveFile>

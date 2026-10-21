@@ -1,6 +1,6 @@
 #include "ui/AppController_p.h"
 
-#include <visionrt/sdk/ValueYaml.h>
+#include <visionrt/contracts/ValueYaml.h>
 
 #include <limits>
 

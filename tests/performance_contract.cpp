@@ -6,7 +6,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
-#include <visionrt/sdk/PythonInterop.h>
+#include <visionrt/contracts/PythonInterop.h>
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
 #include "runtime/Snapshot.h"

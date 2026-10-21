@@ -1,7 +1,7 @@
 #include "core/ToolRegistry.h"
 
 #include "plugins/PluginLoader.h"
-#include "visionrt/sdk/SchemaYaml.h"
+#include "visionrt/contracts/SchemaYaml.h"
 
 #include <yaml-cpp/yaml.h>
 

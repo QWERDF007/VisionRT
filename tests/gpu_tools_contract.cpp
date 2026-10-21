@@ -1,7 +1,7 @@
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
 #include "runtime/RuntimeEngine.h"
-#include <visionrt/sdk/Package.h>
+#include <visionrt/contracts/Package.h>
 
 #include <QCoreApplication>
 #include <QTemporaryDir>

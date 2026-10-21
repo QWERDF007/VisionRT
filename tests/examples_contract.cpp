@@ -6,7 +6,7 @@
 #include "runtime/RuntimeEngine.h"
 
 #include <opencv2/core.hpp>
-#include <visionrt/sdk/Package.h>
+#include <visionrt/contracts/Package.h>
 
 #include <QCoreApplication>
 #include <QDir>

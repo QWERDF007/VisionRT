@@ -1,7 +1,7 @@
 #pragma once
 
-#include "visionrt/sdk/Schema.h"
-#include "visionrt/sdk/Tool.h"
+#include "visionrt/contracts/Schema.h"
+#include "visionrt/contracts/Tool.h"
 
 #include <filesystem>
 #include <functional>

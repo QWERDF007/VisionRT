@@ -25,13 +25,13 @@ if(BUILD_TESTING)
     set(VISIONRT_ENABLE_TEST_PROBES ON CACHE BOOL "Enable test probes" FORCE)
     add_compile_definitions(VISIONRT_TEST_PROBES)
 endif()
-add_subdirectory(3rdparty/VisionRTSDK)
+add_subdirectory(3rdparty/VisionRTContracts)
 
 # 核心通用库
 add_library(visionrt_common
     src/common/Version.cpp)
 target_include_directories(visionrt_common PUBLIC src)
-target_link_libraries(visionrt_common PUBLIC VisionRT::ToolSDK)
+target_link_libraries(visionrt_common PUBLIC VisionRT::Contracts)
 configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 核心业务逻辑库
@@ -194,8 +194,8 @@ if(BUILD_TESTING)
 
     # RT-09: 通用插件模块加载测试动态库与契约测试
     add_library(test_plugin_module SHARED tests/test_plugin_module.cpp)
-    target_link_libraries(test_plugin_module PRIVATE VisionRT::ToolSDK)
-    target_compile_definitions(test_plugin_module PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    target_link_libraries(test_plugin_module PRIVATE VisionRT::Contracts)
+    target_compile_definitions(test_plugin_module PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     set_target_properties(test_plugin_module PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_module)
 
     # VR5-02: 真实传递依赖测试动态库
@@ -212,24 +212,24 @@ if(BUILD_TESTING)
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
 
     add_library(test_plugin_a SHARED tests/fixtures/test_plugin_a.cpp)
-    target_link_libraries(test_plugin_a PRIVATE VisionRT::ToolSDK test_dep_a)
-    target_compile_definitions(test_plugin_a PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    target_link_libraries(test_plugin_a PRIVATE VisionRT::Contracts test_dep_a)
+    target_compile_definitions(test_plugin_a PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     set_target_properties(test_plugin_a PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_a
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
 
     add_library(test_plugin_b SHARED tests/fixtures/test_plugin_b.cpp)
-    target_link_libraries(test_plugin_b PRIVATE VisionRT::ToolSDK test_dep_b)
-    target_compile_definitions(test_plugin_b PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    target_link_libraries(test_plugin_b PRIVATE VisionRT::Contracts test_dep_b)
+    target_compile_definitions(test_plugin_b PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     set_target_properties(test_plugin_b PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_b
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
 
     add_library(test_plugin_legacy SHARED tests/fixtures/test_plugin_legacy.cpp)
-    target_link_libraries(test_plugin_legacy PRIVATE VisionRT::ToolSDK)
-    target_compile_definitions(test_plugin_legacy PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    target_link_libraries(test_plugin_legacy PRIVATE VisionRT::Contracts)
+    target_compile_definitions(test_plugin_legacy PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     set_target_properties(test_plugin_legacy PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_legacy)
 
     add_executable(plugin_contract tests/plugin_contract.cpp)

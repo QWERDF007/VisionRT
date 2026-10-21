@@ -1,6 +1,6 @@
 #include "ui/OutputModel.h"
 
-#include <visionrt/sdk/ValueYaml.h>
+#include <visionrt/contracts/ValueYaml.h>
 
 #include <algorithm>
 #include <limits>

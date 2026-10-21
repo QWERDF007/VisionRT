@@ -1,4 +1,4 @@
-#include <visionrt/sdk/Module.h>
+#include <visionrt/contracts/Module.h>
 
 extern "C" VT_EXPORT const visionrt::ModuleApi *VT_CALL visiontoolsModuleApi() noexcept
 {

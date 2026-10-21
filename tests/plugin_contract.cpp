@@ -5,7 +5,7 @@
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 
-#include <visionrt/sdk/Package.h>
+#include <visionrt/contracts/Package.h>
 
 #include <cassert>
 #include <filesystem>
