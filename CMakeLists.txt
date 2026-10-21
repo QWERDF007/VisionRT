@@ -60,12 +60,21 @@ target_link_libraries(visionrt_runtime PUBLIC visionrt_core visionrt_taskflow)
 # 桌面 Workbench 应用程序与发布配置
 option(VISIONRT_BUILD_APP "Build the desktop workbench" ON)
 if(VISIONRT_BUILD_APP)
+    include(ConfigLibavoid)
     add_library(visionrt_ui
         src/ui/Theme.cpp
         src/ui/Theme.h
+        src/ui/DurationText.cpp
+        src/ui/DurationText.h
+        src/ui/WireRouter.cpp
+        src/ui/WireRouter.h
         src/ui/AppController.cpp
+        src/ui/AppControllerBindings.cpp
         src/ui/AppControllerDisplay.cpp
+        src/ui/AppControllerRoi.cpp
         src/ui/AppControllerMetadata.cpp
+        src/ui/AppControllerParameters.cpp
+        src/ui/AppControllerRouting.cpp
         src/ui/AppController.h
         src/ui/ToolTreeModel.cpp
         src/ui/ToolTreeModel.h
@@ -79,6 +88,7 @@ if(VISIONRT_BUILD_APP)
         visionrt_runtime visionrt_python
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)
     target_compile_definitions(visionrt_ui PRIVATE VISIONRT_PYTHON_HOME="${VISIONRT_PYTHON_HOME}")
+    target_link_libraries(visionrt_ui PRIVATE visionrt_avoid)
 
     qt_add_executable(VisionRT src/main.cpp)
     target_link_libraries(VisionRT PRIVATE visionrt_ui quickui::quickui)
@@ -110,6 +120,7 @@ endif()
 if(BUILD_TESTING)
     include(CTest)
     include(AddTest)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
     set(VISIONRT_TEST_TOOLS_PACKAGE "${CMAKE_BINARY_DIR}/tools-package" CACHE PATH "Installed tools package used by integration contracts")
 
@@ -133,13 +144,38 @@ if(BUILD_TESTING)
     visionrt_contract(project_storage_contract visionrt_core)
     visionrt_contract(cpu_tools_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
     target_link_libraries(cpu_tools_contract PRIVATE ${OpenCV_LIBS})
+    visionrt_contract(example_metadata_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples")
+    add_executable(gpu_tools_contract tests/gpu_tools_contract.cpp)
+    target_link_libraries(gpu_tools_contract PRIVATE visionrt_runtime)
     visionrt_contract(python_contract visionrt_python "${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(runtime_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}")
 
     if(VISIONRT_BUILD_APP)
+        add_executable(libavoid_contract tests/libavoid_contract.cpp)
+        target_link_libraries(libavoid_contract PRIVATE visionrt_avoid)
+        add_test(NAME libavoid_contract COMMAND libavoid_contract)
+        visionrt_apply_test_environment(libavoid_contract)
+        visionrt_contract(wire_router_contract visionrt_ui)
         visionrt_contract(viewport_contract visionrt_ui)
         visionrt_contract(workbench_contract visionrt_ui)
+        target_sources(workbench_contract PRIVATE
+            tests/workbench_parameters.cpp
+            tests/workbench_parameter_states.cpp
+            tests/workbench_canvas.cpp
+            tests/workbench_startup.cpp
+            tests/workbench_paths.cpp
+            tests/workbench_popups.cpp
+            tests/workbench_roi.cpp)
+        target_link_libraries(workbench_contract PRIVATE Qt6::Test)
         add_dependencies(workbench_contract test_plugin_module)
+        set_tests_properties(workbench_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        set_property(TEST workbench_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
+        foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse)
+            add_test(NAME workbench_${_scenario}_contract COMMAND workbench_contract --${_scenario}-child)
+            visionrt_apply_test_environment(workbench_${_scenario}_contract)
+            set_tests_properties(workbench_${_scenario}_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            set_property(TEST workbench_${_scenario}_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
+        endforeach()
         target_compile_definitions(workbench_contract PRIVATE
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
@@ -191,6 +227,11 @@ if(BUILD_TESTING)
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
 
+    add_library(test_plugin_legacy SHARED tests/fixtures/test_plugin_legacy.cpp)
+    target_link_libraries(test_plugin_legacy PRIVATE VisionRT::ToolSDK)
+    target_compile_definitions(test_plugin_legacy PRIVATE VISIONRT_TOOL_SDK_EXPORTS)
+    set_target_properties(test_plugin_legacy PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_legacy)
+
     add_executable(plugin_contract tests/plugin_contract.cpp)
     if(VISIONRT_BUILD_APP)
         target_link_libraries(plugin_contract PRIVATE visionrt_ui)
@@ -198,7 +239,7 @@ if(BUILD_TESTING)
     else()
         target_link_libraries(plugin_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core Qt6::Gui)
     endif()
-    add_dependencies(plugin_contract test_plugin_module test_plugin_a test_plugin_b test_dep_a test_dep_b)
+    add_dependencies(plugin_contract test_plugin_module test_plugin_a test_plugin_b test_dep_a test_dep_b test_plugin_legacy)
     add_test(NAME plugin_contract COMMAND plugin_contract
         "$<TARGET_FILE:test_plugin_module>"
         "$<TARGET_FILE:test_plugin_a>"
@@ -206,13 +247,20 @@ if(BUILD_TESTING)
         "$<TARGET_FILE:test_plugin_b>"
         "$<TARGET_FILE:test_dep_b>")
     visionrt_apply_test_environment(plugin_contract)
+    add_test(NAME plugin_abi_contract COMMAND plugin_contract --abi-child "$<TARGET_FILE:test_plugin_legacy>")
+    visionrt_apply_test_environment(plugin_abi_contract)
+    if(WIN32)
+        add_test(NAME plugin_late_runtime_contract COMMAND plugin_contract --late-runtime-child
+            "$<TARGET_FILE:test_plugin_a>" "$<TARGET_FILE:test_dep_a>" "$<TARGET_FILE:test_dep_b>")
+        visionrt_apply_test_environment(plugin_late_runtime_contract)
+    endif()
     if(MSVC)
         target_compile_options(plugin_contract PRIVATE /UNDEBUG)
     endif()
 
     add_executable(examples_contract tests/examples_contract.cpp)
     target_link_libraries(examples_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core)
-    add_dependencies(examples_contract test_plugin_module)
+    add_dependencies(examples_contract test_plugin_module test_plugin_a test_dep_a)
     target_compile_definitions(examples_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME examples_contract COMMAND examples_contract --tools-package "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}")
     visionrt_apply_test_environment(examples_contract)

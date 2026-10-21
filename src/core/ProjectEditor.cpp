@@ -76,8 +76,8 @@ bool sameEffectiveValue(const InputBinding &left, const InputBinding &right)
         && (right.mode == BindingMode::Upstream || isMissing(right.literal));
 }
 
-std::vector<DependencyEdge> deriveEdges(const FlowDefinition &flow, NodeId replacedNode = 0,
-                                        std::string_view replacedInput = {}, const InputBinding *replacement = nullptr)
+PortRelations deriveRelations(const FlowDefinition &flow, NodeId replacedNode = 0,
+                              std::string_view replacedInput = {}, const InputBinding *replacement = nullptr)
 {
     std::unordered_map<NodeId, const NodeDefinition *> nodes;
     nodes.reserve(flow.nodes.size());
@@ -86,7 +86,7 @@ std::vector<DependencyEdge> deriveEdges(const FlowDefinition &flow, NodeId repla
         if (!nodes.emplace(node.id, &node).second)
             throw ContractError("Duplicate node ID");
     }
-    std::vector<DependencyEdge> edges;
+    PortRelations result;
     for (const auto &target : flow.nodes)
     {
         for (const auto &[input, stored] : target.inputs)
@@ -96,16 +96,32 @@ std::vector<DependencyEdge> deriveEdges(const FlowDefinition &flow, NodeId repla
             if (!effectiveSource(binding))
                 continue;
             const auto &source = *binding.source;
-            const auto  found  = nodes.find(source.node);
-            if (found == nodes.end())
-                throw ContractError("Upstream node is not in this flow");
-            if (!compatible(signature(found->second->signatures.outputs, source.port),
-                            signature(target.signatures.inputs, input)))
-                throw ContractError("Incompatible upstream port signature: node " + std::to_string(source.node)
-                    + "." + source.port + " -> node " + std::to_string(target.id) + "." + input);
-            edges.emplace_back(source.node, target.id);
+            try
+            {
+                const auto found = nodes.find(source.node);
+                if (found == nodes.end())
+                    throw ContractError("Upstream node is not in this flow");
+                if (!compatible(signature(found->second->signatures.outputs, source.port),
+                                signature(target.signatures.inputs, input)))
+                    throw ContractError("Incompatible upstream port signature");
+                result.active.push_back({source, {target.id, input}});
+            }
+            catch (const ContractError &error)
+            {
+                result.errors.push_back(std::string(error.what()) + ": node " + std::to_string(source.node)
+                                        + "." + source.port + " -> node " + std::to_string(target.id) + "." + input);
+            }
         }
     }
+    return result;
+}
+
+std::vector<DependencyEdge> deriveEdges(const PortRelations &relations)
+{
+    std::vector<DependencyEdge> edges;
+    edges.reserve(relations.active.size());
+    for (const auto &relation : relations.active)
+        edges.emplace_back(relation.source.node, relation.target.node);
     std::sort(edges.begin(), edges.end());
     edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
     return edges;
@@ -339,7 +355,15 @@ ReferencesToClear referencesTo(ProjectDefinition &project, const std::set<NodeId
 
 std::vector<DependencyEdge> dependencyEdges(const FlowDefinition &flow)
 {
-    return deriveEdges(flow);
+    const auto relations = portRelations(flow);
+    if (!relations.errors.empty())
+        throw ContractError(relations.errors.front());
+    return deriveEdges(relations);
+}
+
+PortRelations portRelations(const FlowDefinition &flow)
+{
+    return deriveRelations(flow);
 }
 
 bool hasDependencyCycle(const FlowDefinition &flow)
@@ -419,7 +443,9 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
         if (node.signatures.initParams.contains(input.id)
             || !node.signatures.inputs.emplace(input.id, input.type).second)
             throw ContractError("Duplicate input parameter");
-        node.inputs.emplace(input.id, InputBinding{BindingMode::Literal, input.defaultValue, {}});
+        const bool hasDefault = !isMissing(input.defaultValue);
+        const bool canBeLiteral = input.type.type != Type::ImageBatch && hasDefault;
+        node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream, input.defaultValue, {}});
     }
     for (const auto &output : tool.outputs)
     {
@@ -460,7 +486,8 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
         return false;
     const bool structureChanged = effectiveSource(current) != effectiveSource(binding);
     const bool executionChanged = !sameEffectiveValue(current, binding);
-    if (structureChanged && effectiveSource(binding) && containsCycle(deriveEdges(target, id, input, &binding)))
+    if (structureChanged && effectiveSource(binding)
+        && containsCycle(deriveEdges(deriveRelations(target, id, input, &binding))))
         throw ContractError("Binding would create a dependency cycle");
     if (structureChanged)
         requireIncrement(target.structureRevision);
@@ -478,7 +505,11 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
 bool ProjectEditor::setMode(std::string_view flowId, NodeId id, std::string_view input, BindingMode mode)
 {
     requireIdle();
-    auto binding = inputBinding(findNode(flow(flowId), id), input);
+    const auto &n = findNode(flow(flowId), id);
+    const auto typeIt = n.signatures.inputs.find(std::string(input));
+    if (typeIt != n.signatures.inputs.end() && typeIt->second.type == Type::ImageBatch && mode != BindingMode::Upstream)
+        return false;
+    auto binding = inputBinding(n, input);
     binding.mode = mode;
     return setBinding(flowId, id, input, std::move(binding));
 }
@@ -528,12 +559,9 @@ std::size_t ProjectEditor::referenceCount(std::string_view flowId, const SourceP
 {
     const auto &target = flow(flowId);
     signature(findNode(target, source.node).signatures.outputs, source.port);
-    std::size_t result = 0;
-    for (const auto &node : target.nodes)
-        for (const auto &[id, binding] : node.inputs)
-            if (effectiveSource(binding) == source)
-                ++result;
-    return result;
+    const auto relations = portRelations(target);
+    return static_cast<std::size_t>(std::count_if(relations.active.begin(), relations.active.end(),
+        [&](const auto &relation) { return relation.source == source; }));
 }
 
 std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId, NodeId id,
@@ -555,7 +583,7 @@ std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId
             if (!compatible(output, type))
                 continue;
             candidate.source = SourcePort{source.id, port};
-            if (!containsCycle(deriveEdges(target, id, input, &candidate)))
+            if (!containsCycle(deriveEdges(deriveRelations(target, id, input, &candidate))))
                 result.push_back(*candidate.source);
         }
     }
@@ -580,7 +608,7 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
             auto candidate   = binding;
             candidate.mode   = BindingMode::Upstream;
             candidate.source = source;
-            if (!containsCycle(deriveEdges(target, node.id, input, &candidate)))
+            if (!containsCycle(deriveEdges(deriveRelations(target, node.id, input, &candidate))))
                 result.push_back({node.id, input});
         }
     }

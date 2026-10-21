@@ -1,0 +1,26 @@
+#pragma once
+
+#include <QString>
+
+#include <optional>
+
+namespace visionrt {
+
+struct NodeSnapshot;
+
+struct NodeTimingText
+{
+    QString total;
+    QString toolCall;
+    QString preprocess = QStringLiteral("—");
+    QString postprocess = QStringLiteral("—");
+};
+
+NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running);
+
+// Single display rule shared by node cards and the hover card. A missing,
+// negative or non-finite measurement is reported as unavailable instead of a
+// fabricated zero.
+QString durationText(std::optional<double> milliseconds);
+
+} // namespace visionrt

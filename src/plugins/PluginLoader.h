@@ -30,6 +30,7 @@ struct LoadedModule
     std::filesystem::path path;
 #ifdef _WIN32
     HMODULE handle = nullptr;
+    std::unique_ptr<void, decltype(&RemoveDllDirectory)> directory{nullptr, &RemoveDllDirectory};
     LoadedModule() = default;
 
     ~LoadedModule()
@@ -47,6 +48,7 @@ struct LoadedModule
     LoadedModule(LoadedModule &&other) noexcept
         : path(std::move(other.path))
         , handle(other.handle)
+        , directory(std::move(other.directory))
         , api(other.api)
     {
         other.handle = nullptr;
@@ -60,6 +62,7 @@ struct LoadedModule
             path = std::move(other.path);
             if (handle)
                 FreeLibrary(handle);
+            directory    = std::move(other.directory);
             handle       = other.handle;
             other.handle = nullptr;
             api          = other.api;

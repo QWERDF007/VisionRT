@@ -2,6 +2,7 @@
 #include <QAbstractItemModel>
 #include <QObject>
 #include <QString>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <memory>
@@ -24,6 +25,9 @@ class AppController : public QObject
     Q_PROPERTY(QString selectedNode READ selectedNode NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList parameters READ parameters NOTIFY parametersChanged)
     Q_PROPERTY(QVariantList imageOutputs READ imageOutputs NOTIFY resultsChanged)
+    Q_PROPERTY(QVariantMap roiEditor READ roiEditor NOTIFY resultsChanged)
+    Q_PROPERTY(QString activeRoiParameter READ activeRoiParameter NOTIFY resultsChanged)
+    Q_PROPERTY(int activeRoiShape READ activeRoiShape NOTIFY resultsChanged)
     Q_PROPERTY(int imageIndex READ imageIndex WRITE setImageIndex NOTIFY resultsChanged)
     Q_PROPERTY(int imageCount READ imageCount NOTIFY resultsChanged)
     Q_PROPERTY(QString selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
@@ -48,6 +52,9 @@ public:
     QString             selectedNode() const;
     QVariantList        parameters() const;
     QVariantList        imageOutputs() const;
+    QVariantMap         roiEditor() const;
+    QString             activeRoiParameter() const;
+    int                 activeRoiShape() const;
     int                 imageIndex() const;
     int                 imageCount() const;
     QString             selectedImageOutput() const;
@@ -62,6 +69,7 @@ public:
     Q_INVOKABLE void         attachViewport(QObject *viewport);
     Q_INVOKABLE void         selectFlow(const QString &id);
     Q_INVOKABLE void         selectNode(const QString &id);
+    Q_INVOKABLE QVariantList routeWires(const QVariantList &geometry);
     Q_INVOKABLE void         filterTools(const QString &text);
     Q_INVOKABLE void         searchNodes(const QString &text);
     Q_INVOKABLE void         locateNode(const QString &flow, const QString &node);
@@ -77,12 +85,19 @@ public:
     Q_INVOKABLE void         copyFlow(const QString &id);
     Q_INVOKABLE void         setFlowSelected(const QString &id, bool selected);
     Q_INVOKABLE bool         setParameter(const QString &id, bool initialization, const QString &yamlText);
+    Q_INVOKABLE bool         setRectParameter(const QString &id, bool initialization, double x, double y, double width, double height, double angle = 0.0);
+    Q_INVOKABLE bool         setParameterPath(const QString &id, bool initialization, const QUrl &url);
+    Q_INVOKABLE bool         stepIntegerParameter(const QString &id, bool initialization, int direction,
+                                                  const QString &literal);
     Q_INVOKABLE bool         setParameterMode(const QString &id, bool upstream);
-    Q_INVOKABLE QVariantList bindingCandidates(const QString &input) const;
-    Q_INVOKABLE bool         bindInput(const QString &input, const QString &node, const QString &output);
-    Q_INVOKABLE void         unbindInput(const QString &input);
-    Q_INVOKABLE QVariantList relationTargets(const QString &output) const;
-    Q_INVOKABLE bool         bindOutputTo(const QString &output, const QString &node, const QString &input);
+    Q_INVOKABLE QVariantMap  portContext(const QString &port, bool output = false) const;
+    Q_INVOKABLE bool         portContextCurrent(const QVariantMap &context) const;
+    Q_INVOKABLE QVariantList bindingCandidates(const QVariantMap &context) const;
+    Q_INVOKABLE bool         bindInput(const QVariantMap &context, const QString &node, const QString &output);
+    Q_INVOKABLE bool         unbindInput(const QVariantMap &context);
+    Q_INVOKABLE QVariantList relationTargets(const QVariantMap &context) const;
+    Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, const QString &input);
+    Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, const QString &input);
     Q_INVOKABLE void         runOnce();
     Q_INVOKABLE void         toggleLoop();
     Q_INVOKABLE void         runNode();
@@ -97,8 +112,13 @@ public:
     Q_INVOKABLE void         setImageIndex(int index);
     Q_INVOKABLE void         setImageOutput(const QString &output);
     Q_INVOKABLE bool         editRoi(const QString &parameter, bool copyUpstream);
+    Q_INVOKABLE bool         startRoiDraw(const QString &parameter, int shape = 2);
+    Q_INVOKABLE bool         clearRoi(const QString &parameter);
+    Q_INVOKABLE bool         applyRoi();
+    Q_INVOKABLE bool         setRoiRectangle(const QString &session, const QVariantList &coordinates);
+    Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
     Q_INVOKABLE void         endRoiPreview();
-    Q_INVOKABLE void         requestOutputText(int row, bool copy);
+    Q_INVOKABLE void         requestOutputText(const QVariantMap &context, bool copy);
     Q_INVOKABLE QVariantList toolDefinitions() const;
     Q_INVOKABLE QVariantMap  toolMetadata(const QString &toolId) const;
 signals:
@@ -107,6 +127,7 @@ signals:
     void selectionChanged();
     void parametersChanged();
     void resultsChanged();
+    void roiApplyRequested();
     void runtimeChanged();
     void diagnosticChanged();
     void searchChanged();
@@ -116,6 +137,7 @@ signals:
     void projectReplaced();
     void nodeLocated(const QString &node);
     void outputTextReady(const QString &text);
+    void catalogChanged();
 
 private:
     struct Impl;

@@ -8,13 +8,17 @@ Rectangle {
     id: root
     required property var node
     property bool selected: false
+    property real viewScale: 1
     signal pointerPressed(var mouse, var item)
     signal pointerMoved(var mouse, var item)
     signal pointerReleased(var mouse, var item)
     signal executeRequested()
+    signal hoverEntered()
+    signal hoverExited()
     width: 156; height: 52; radius: 2
     antialiasing: true
     color: "#ffffff"
+    objectName: "flowNode_" + node.id
 
     readonly property string nodeState: root.node.state || "gray"
     readonly property bool isError: root.nodeState === "red" || root.node.missing === true
@@ -72,6 +76,7 @@ Rectangle {
             QuiText {
                 visible: root.node.defMissing === true
                 text: "缺定义"
+                renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
                 color: "#d97706"
                 Layout.alignment: Qt.AlignVCenter
@@ -79,6 +84,7 @@ Rectangle {
             QuiText {
                 visible: !root.node.defMissing && root.node.implUnavailable === true
                 text: "缺实现"
+                renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
                 color: Theme.nodeStateOrange
                 Layout.alignment: Qt.AlignVCenter
@@ -86,6 +92,7 @@ Rectangle {
             QuiText {
                 visible: !root.node.defMissing && !root.node.implUnavailable && root.nodeState === "red"
                 text: "执行错误"
+                renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
                 color: Theme.nodeStateRed
                 Layout.alignment: Qt.AlignVCenter
@@ -93,6 +100,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             QuiText {
                 text: root.node.version ? ("v" + String(root.node.version).replace(/^v/i, "")) : "v1.0"
+                renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
                 color: root.headerText
             }
@@ -108,40 +116,44 @@ Rectangle {
             Layout.preferredWidth: 16; Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
             iconSource: root.getIcon(root.node.title, root.node.category || "")
-            iconSize: 15
-            iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "green" ? Theme.nodeStateGreen : "#1887d8")
+            iconSize: Theme.iconSizeBase
+            iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "green" ? Theme.nodeStateGreen : Theme.nodeStateBlue)
+            renderType: Text.QtRendering
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 1
             QuiText {
                 text: root.node.title; Layout.fillWidth: true; elide: Text.ElideRight
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                renderType: Text.QtRendering
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall })
                 color: QuiColor.FontPrimary
             }
             QuiText {
-                text: root.node.timing || "0.00ms"
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
-                color: "#8c959f"
+                text: root.node.timingText
+                renderType: Text.QtRendering
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeCaption })
+                color: Theme.iconMuted
             }
         }
     }
 
-    // Dashed border on selection
     Shape {
         anchors.fill: parent
         visible: root.selected
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
+            id: selectionPath
+            readonly property real inset: 1 / Math.max(0.01, root.viewScale)
             strokeColor: "#1887d8"
-            strokeWidth: 2
+            strokeWidth: 2 / Math.max(0.01, root.viewScale)
             strokeStyle: ShapePath.DashLine
             dashPattern: [4, 4]
             fillColor: "transparent"
-            startX: 1; startY: 1
-            PathLine { x: root.width - 1; y: 1 }
-            PathLine { x: root.width - 1; y: root.height - 1 }
-            PathLine { x: 1; y: root.height - 1 }
-            PathLine { x: 1; y: 1 }
+            startX: selectionPath.inset; startY: selectionPath.inset
+            PathLine { x: root.width - selectionPath.inset; y: selectionPath.inset }
+            PathLine { x: root.width - selectionPath.inset; y: root.height - selectionPath.inset }
+            PathLine { x: selectionPath.inset; y: root.height - selectionPath.inset }
+            PathLine { x: selectionPath.inset; y: selectionPath.inset }
         }
     }
 
@@ -152,43 +164,7 @@ Rectangle {
         onPositionChanged: function(mouse) { if (pressed) root.pointerMoved(mouse, root) }
         onReleased: function(mouse) { root.pointerReleased(mouse, root) }
         onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !app.busy) root.executeRequested() }
-    }
-
-    QuiToolTip {
-        visible: pointer.containsMouse && !pointer.pressed
-        x: {
-            if (!parent) return 0
-            let idealX = parent.width + 4
-            let win = parent.Window.window ? parent.Window.window.contentItem : null
-            if (win) {
-                let pos = parent.mapToItem(win, 0, 0)
-                if (pos.x + idealX + implicitWidth > win.width - 10) {
-                    return -implicitWidth - 4
-                }
-            }
-            return idealX
-        }
-        y: 0
-        text: {
-            let lines = []
-            if (root.node.title) lines.push(root.node.title)
-            if (root.node.toolId) lines.push("工具ID: " + root.node.toolId)
-            let statusText = "状态: " + (root.nodeState === "green" ? "成功" : root.nodeState === "blue" ? "运行中" : root.nodeState === "red" ? "失败" : "未运行")
-            lines.push(statusText)
-            if (root.node.timingDetail) {
-                lines.push(root.node.timingDetail)
-            } else if (root.node.timing) {
-                lines.push("运行时间: " + root.node.timing)
-            }
-            if (root.node.defMissing) {
-                lines.push("⚠️ 算子定义缺失 (未找到 YAML 注册元数据)")
-            } else if (root.node.implUnavailable) {
-                lines.push("⚠️ 算子实现不可用 (未加载或缺失可执行实现)")
-            } else if (root.node.statusMessage) {
-                lines.push("❌ 错误信息: [" + root.node.statusCode + "] " + root.node.statusMessage)
-            }
-            return lines.join("\n")
-        }
-        delay: 500
+        onEntered: root.hoverEntered()
+        onExited: root.hoverExited()
     }
 }

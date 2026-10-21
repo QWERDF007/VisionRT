@@ -18,6 +18,7 @@ struct RoiEditTarget
     std::string   inputPortId;
     int           imageIndex = 0;
     int           roiIndex   = -1; // -1 appends a new ROI; existing edits/deletion use an index.
+    std::uint64_t session = 0;
     bool          operator==(const RoiEditTarget &) const = default;
 };
 
@@ -29,6 +30,7 @@ class ImageViewport : public QQuickItem
     Q_PROPERTY(double zoom READ zoom NOTIFY transformChanged)
     Q_PROPERTY(ViewMode viewMode READ viewMode NOTIFY transformChanged)
     Q_PROPERTY(bool editing READ editing NOTIFY editingChanged)
+    Q_PROPERTY(bool singleRectangle READ singleRectangle NOTIFY editingChanged)
     Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged)
     Q_PROPERTY(int drawShape READ drawShape WRITE setDrawShape NOTIFY drawShapeChanged)
     Q_PROPERTY(int selectedRoi READ selectedRoi NOTIFY selectedRoiChanged)
@@ -52,8 +54,8 @@ public:
     void setGeneration(quint64 generation);
     void setOverlays(std::vector<Roi> inputs, std::vector<Roi> outputs);
     // Caller freezes the matching background and performs the project edit command.
-    // While editing, targetRois replaces input overlays; outputs remain read-only.
-    void beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRois, bool readOnly = false);
+    void beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRois, bool readOnly = false,
+                      Type type = Type::RoiBatch);
     void endRoiEdit();
 
     bool hasImage() const noexcept
@@ -80,6 +82,8 @@ public:
     {
         return target_.has_value();
     }
+
+    bool singleRectangle() const noexcept { return editType_ == Type::Rect; }
 
     bool readOnly() const noexcept
     {
@@ -137,6 +141,7 @@ signals:
     void imagePresented(quint64 requestId);
     void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::Roi &roi);
     void roiDeleted(const visionrt::RoiEditTarget &target);
+    void roiEditCanceled();
 
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
@@ -148,6 +153,9 @@ protected:
     void     mouseUngrabEvent() override;
     void     wheelEvent(QWheelEvent *event) override;
     void     keyPressEvent(QKeyEvent *event) override;
+    void     hoverEnterEvent(QHoverEvent *event) override;
+    void     hoverMoveEvent(QHoverEvent *event) override;
+    void     hoverLeaveEvent(QHoverEvent *event) override;
     bool     event(QEvent *event) override;
 
 private:
@@ -171,10 +179,13 @@ private:
     std::vector<QPointF> handles(const Roi &roi) const;
     int                  hitRoi(QPointF imagePoint) const;
     void                 commitDraft();
+    void                 clearGesture();
     void                 setStatus(QString text);
+    void                 updateCursor();
     void                 overlaysUpdated();
 
     std::unique_ptr<DisplayConverter> converter_;
+    QMetaObject::Connection           windowActiveConnection_;
     QImage                            display_;
     QSize                             imageSize_;
     QString                           statusText_;
@@ -191,6 +202,7 @@ private:
     std::vector<Roi>                  outputs_;
     std::vector<Roi>                  editable_;
     std::optional<RoiEditTarget>      target_;
+    Type                             editType_ = Type::RoiBatch;
     bool                              readOnly_  = true;
     int                               drawShape_ = 0;
     int                               selected_  = -1;

@@ -76,6 +76,10 @@ void readImages(ToolRegistry &registry)
     assert(images.images()[1].readOnlyMat().at<unsigned char>(0, 0) == 22);
     const auto paths = std::get<StringArray>(result.outputs.at("paths")).buffers()[0].values();
     assert(paths[0].ends_with("/a.png") && paths[1].ends_with("/b.png"));
+    inputs["limit"] = std::int64_t{-1};
+    result = execute(registry, "visionrt.image.read", inputs, services);
+    failure(result);
+    assert(result.status.message.find("limit") != std::string::npos);
     inputs["limit"] = std::int64_t{1};
     result          = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
@@ -201,56 +205,47 @@ void projection(ToolRegistry &registry)
 
 void crop(ToolRegistry &registry)
 {
-    const auto images    = fixtureImages();
-    auto       projected = execute(registry, "visionrt.roi.projection",
-                                   {
-                                       {"images", images}
-    });
-    success(projected);
+    const auto images = fixtureImages();
     auto result = execute(registry, "visionrt.image.crop",
-                          {
-                              {"images",                       images},
-                              {  "rois", projected.outputs.at("rois")}
-    });
+                          {{"images", images}, {"rect", Roi::rectangle(10, 0, 20, 64, 0)}});
     success(result);
     const auto &crops = std::get<ImageBatch>(result.outputs.at("images"));
-    assert(crops.images().size() == 2);
-    for (const auto &image : crops.images())
+    assert(crops.images().size() == images.images().size());
+    for (std::size_t index = 0; index < crops.images().size(); ++index)
     {
+        const auto &image = crops.images()[index];
         assert(image.rows() == 64 && image.cols() == 20);
-        assert(cv::countNonZero(image.readOnlyMat() != 255) == 0);
-        assert(image.owner() != images.images()[1].owner());
+        assert(cv::countNonZero(image.readOnlyMat() != (index == 0 ? 0 : 255)) == 0);
+        assert(image.data() == images.images()[index].data() + 10);
+        assert(image.readOnlyMat().u == images.images()[index].readOnlyMat().u);
+        assert(image.rowStride() == images.images()[index].rowStride());
     }
-    const auto indices
-        = std::get<NumericArray>(result.outputs.at("source_indices")).buffers()[0].values<std::int64_t>();
-    assert((std::vector<std::int64_t>(indices.begin(), indices.end()) == std::vector<std::int64_t>{1, 0, 1, 1}));
+    assert(!result.outputs.contains("source_indices"));
     const auto origins = std::get<NumericArray>(result.outputs.at("origins")).buffers()[0].values<double>();
-    assert((std::vector<double>(origins.begin(), origins.end()) == std::vector<double>{10, 0, 55, 0}));
-    const ImageBatch solid({OwnedImage::take(cv::Mat(5, 5, CV_8UC1, cv::Scalar(17)))});
-    const auto       run = [&](const Roi &roi)
+    assert((std::vector<double>(origins.begin(), origins.end()) == std::vector<double>{10, 0, 10, 0}));
+    const ImageBatch mixed({OwnedImage::take(cv::Mat(8, 10, CV_8UC1, cv::Scalar(11))),
+                            OwnedImage::take(cv::Mat(5, 6, CV_8UC1, cv::Scalar(29)))});
+    result = execute(registry, "visionrt.image.crop",
+                     {{"images", mixed}, {"rect", Roi::rectangle(4, 3, 4, 4, 0)}});
+    success(result);
+    const auto &mixedCrops = std::get<ImageBatch>(result.outputs.at("images")).images();
+    assert(mixedCrops.size() == 2 && mixedCrops[0].rows() == 4 && mixedCrops[0].cols() == 4);
+    assert(mixedCrops[1].rows() == 2 && mixedCrops[1].cols() == 2);
+    for (std::size_t index = 0; index < mixedCrops.size(); ++index)
     {
-        return execute(registry, "visionrt.image.crop",
-                       {
-                           {"images",             solid},
-                           {  "rois", RoiBatch({{roi}})}
-        });
+        assert(cv::countNonZero(mixedCrops[index].readOnlyMat() != (index == 0 ? 11 : 29)) == 0);
+        assert(mixedCrops[index].readOnlyMat().u == mixed.images()[index].readOnlyMat().u);
+        assert(mixedCrops[index].rowStride() == mixed.images()[index].rowStride());
+    }
+    const auto mixedOrigins = std::get<NumericArray>(result.outputs.at("origins")).buffers()[0].values<double>();
+    assert((std::vector<double>(mixedOrigins.begin(), mixedOrigins.end()) == std::vector<double>{4, 3, 4, 3}));
+    failure(execute(registry, "visionrt.image.crop",
+                    {{"images", mixed}, {"rect", Roi::rectangle(7, 6, 2, 2, 0)}}));
+    const ImageBatch solid({OwnedImage::take(cv::Mat(5, 5, CV_8UC1, cv::Scalar(17)))});
+    const auto run = [&](PortValue rectangle)
+    {
+        return execute(registry, "visionrt.image.crop", {{"images", solid}, {"rect", std::move(rectangle)}});
     };
-    result = run(Roi::circle(2.5F, 2.5F, 1));
-    success(result);
-    const auto &circle = std::get<ImageBatch>(result.outputs.at("images")).images()[0].readOnlyMat();
-    assert(circle.rows == 3 && circle.cols == 3);
-    const std::array<unsigned char, 9> cross{0, 17, 0, 17, 17, 17, 0, 17, 0};
-    assert(std::equal(cross.begin(), cross.end(), circle.ptr<unsigned char>()));
-    const std::array triangle{
-        cv::Point2f{0, 0},
-        cv::Point2f{3, 0},
-        cv::Point2f{0, 3}
-    };
-    result = run(Roi::polygon(triangle));
-    success(result);
-    const auto &polygon = std::get<ImageBatch>(result.outputs.at("images")).images()[0].readOnlyMat();
-    const std::array<unsigned char, 9> triangular{17, 17, 17, 17, 17, 0, 17, 0, 0};
-    assert(std::equal(triangular.begin(), triangular.end(), polygon.ptr<unsigned char>()));
     result = run(Roi::rectangle(1, 1, 2, 2, 45));
     success(result);
     const auto &rotated = std::get<ImageBatch>(result.outputs.at("images")).images()[0].readOnlyMat();
@@ -263,22 +258,15 @@ void crop(ToolRegistry &registry)
     assert(clipped.rows() == 2 && clipped.cols() == 2);
     assert(cv::countNonZero(solid.images()[0].readOnlyMat() != 17) == 0);
     failure(run(Roi::rectangle(6, 0, 2, 2, 0)));
-    failure(run(Roi::circle(0.05F, 0.05F, 0.01F)));
+    failure(run(Roi::circle(2.5F, 2.5F, 1)));
     failure(run(Roi::segment({0, 0}, {3, 3})));
-    failure(run(Roi::points(triangle)));
-    failure(execute(registry, "visionrt.image.crop",
-                    {
-                        {"images",      solid},
-                        {  "rois", RoiBatch{}}
-    }));
+    failure(run(Missing{}));
+    failure(run(RoiBatch({{Roi::rectangle(0, 0, 2, 2, 0)}})));
     result = execute(registry, "visionrt.image.crop",
-                     {
-                         {"images",                          solid},
-                         {  "rois", RoiBatch({std::vector<Roi>{}})}
-    });
+                     {{"images", ImageBatch{}}, {"rect", Roi::rectangle(0, 0, 2, 2, 0)}});
     success(result);
     assert(std::get<ImageBatch>(result.outputs.at("images")).images().empty());
-    const auto shape = std::get<NumericArray>(result.outputs.at("source_indices")).buffers()[0].shape();
+    const auto shape = std::get<NumericArray>(result.outputs.at("origins")).buffers()[0].shape();
     assert(shape.size() == 2 && shape[0] == 0 && shape[1] == 2);
 }
 

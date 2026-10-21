@@ -37,7 +37,7 @@ Rectangle {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Search; iconSize: 12; iconColor: Theme.textSecondary
+                            iconSource: QuiFontIcon.Search; iconSize: Theme.iconSizeSmall; iconColor: Theme.textSecondary
                         }
                         TextInput {
                             id: filterInput
@@ -47,13 +47,13 @@ Rectangle {
                             onTextChanged: { app.filterTools(text); if (text.length) Qt.callLater(tree.allExpand) }
                             Text {
                                 anchors.fill: parent; text: "搜索工具名"
-                                color: "#8c959f"; font: QuiFont.Body
+                                color: Theme.iconMuted; font: QuiFont.Body
                                 visible: !filterInput.text && !filterInput.activeFocus
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Clear; iconSize: 11; iconColor: "#8c959f"
+                            iconSource: QuiFontIcon.Clear; iconSize: Theme.iconSizeTiny; iconColor: Theme.iconMuted
                             visible: filterInput.text.length > 0
                             MouseArea {
                                 anchors.fill: parent

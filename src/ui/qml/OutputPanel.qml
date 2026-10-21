@@ -9,15 +9,30 @@ Rectangle {
     color: QuiColor.Primary
     border.width: 0
     property bool relations: false
-    property int selectedRow: -1
-    property string selectedPort: ""
+    property var selectedContext: ({})
+    property var pendingAction: null
     property string selectedName: ""
     property bool selectedSystem: true
     property string fullText: ""
     function showMenu(options, item, point) {
-        selectedRow = options.row; selectedPort = options.portId
+        selectedContext = app.portContext(options.portId, true)
+        if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
-        outputMenu.popup(item, point.x, point.y)
+        pendingAction = null
+        let position = item.mapToItem(root, point.x, point.y)
+        outputMenu.popup(root, position.x, position.y)
+    }
+    function queueAction(action) {
+        if (!app.portContextCurrent(selectedContext)) return
+        pendingAction = { action: action, context: selectedContext, name: selectedName }
+        outputMenu.close()
+    }
+    function invalidateMenu() {
+        pendingAction = null; selectedContext = ({})
+        outputMenu.close(); binding.close()
+    }
+    function validateMenu() {
+        if (app.busy || !app.portContextCurrent(selectedContext)) invalidateMenu()
     }
     ColumnLayout {
         anchors.fill: parent; spacing: 0
@@ -125,37 +140,23 @@ Rectangle {
                 onClicked: function(mouse) { root.showMenu(cell.options, cell, Qt.point(mouse.x, mouse.y)) }
             }
             QuiToolTip {
-                visible: cellPointer.containsMouse
+                visible: cellPointer.containsMouse && text.length > 0
                 text: {
-                    let lines = []
-                    if (cell.options.name) {
-                        let nameLine = "参数: " + cell.options.name
-                        if (cell.options.portId && cell.options.portId !== cell.options.name) {
-                            nameLine += " (" + cell.options.portId + ")"
-                        }
-                        lines.push(nameLine)
+                    if (cell.options.column === 0) {
+                        let t = cell.options.name || ""
+                        if (cell.options.portId && cell.options.portId !== cell.options.name)
+                            t += "(" + cell.options.portId + ")"
+                        if (cell.options.type)
+                            t += "(" + cell.options.type + ")"
+                        return t
                     }
-                    if (cell.options.type) lines.push("类型: " + cell.options.type)
-                    if (!cell.options.system && cell.options.count !== undefined) lines.push("引用: " + cell.options.count + " 次")
-                    let dataText = cell.options.tooltip || (cell.options.column === 2 ? cell.options.display : "")
-                    if (dataText) {
-                        if (dataText.length > 50 && dataText.indexOf("\n") < 0) {
-                            let tokens = dataText.split(/(?<=[,; /])/)
-                            let parts = [], current = ""
-                            for (let t of tokens) {
-                                if (current.length + t.length > 50) {
-                                    if (current.length > 0) { parts.push(current); current = "" }
-                                    while (t.length > 50) { parts.push(t.slice(0, 50)); t = t.slice(50) }
-                                    current = t
-                                } else { current += t }
-                            }
-                            if (current.length > 0) parts.push(current)
-                            lines.push("数据:\n" + parts.join("\n"))
-                        } else {
-                            lines.push("数据: " + dataText)
-                        }
-                    }
-                    return lines.length > 0 ? lines.join("\n") : (cell.options.display || "")
+                    if (cell.options.column === 2)
+                        return cell.options.tooltip || cell.options.display || ""
+                    if (cell.options.column === 1)
+                        return cell.options.type || cell.options.display || ""
+                    if (cell.options.column === 3)
+                        return String(cell.options.count || 0)
+                    return cell.options.display || ""
                 }
                 delay: 500
             }
@@ -163,9 +164,18 @@ Rectangle {
     }
     QuiMenu {
         id: outputMenu
-        QuiMenuItem { text: "查看数据"; enabled: root.selectedRow >= 0; onTriggered: app.requestOutputText(root.selectedRow, false) }
-        QuiMenuItem { text: "复制数据"; enabled: root.selectedRow >= 0; onTriggered: app.requestOutputText(root.selectedRow, true) }
-        QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: binding.openOutput(root.selectedPort, root.selectedName) }
+        objectName: "outputMenu"
+        parent: root
+        onClosed: {
+            let pending = root.pendingAction
+            root.pendingAction = null; root.selectedContext = ({})
+            if (!pending || !app.portContextCurrent(pending.context)) return
+            if (pending.action === "bind") binding.openOutput(pending.context, pending.name)
+            else app.requestOutputText(pending.context, pending.action === "copy")
+        }
+        QuiMenuItem { text: "查看数据"; enabled: app.portContextCurrent(root.selectedContext); onTriggered: root.queueAction("view") }
+        QuiMenuItem { text: "复制数据"; enabled: app.portContextCurrent(root.selectedContext); onTriggered: root.queueAction("copy") }
+        QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: root.queueAction("bind") }
     }
     BindingPopup { id: binding }
     WorkbenchDialog {
@@ -183,5 +193,19 @@ Rectangle {
             }
         }
     }
-    Connections { target: app; function onOutputTextReady(text) { root.fullText = text; dataDialog.open() } }
+    Connections {
+        target: app
+        function onOutputTextReady(text) { root.fullText = text; dataDialog.open() }
+        function onSelectionChanged() { root.validateMenu() }
+        function onNodesChanged() { root.validateMenu() }
+        function onParametersChanged() { root.validateMenu() }
+        function onRuntimeChanged() { root.validateMenu() }
+        function onResultsChanged() { root.validateMenu() }
+        function onProjectReplaced() { root.invalidateMenu() }
+    }
+    Connections { target: app.outputModel; function onModelAboutToBeReset() { root.invalidateMenu() } }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() { if (target && !target.active) root.invalidateMenu() }
+    }
 }

@@ -6,10 +6,12 @@ import quickui
 FocusScope {
     id: root
     property var selection: []
+    property var nodeIds: []
     property real zoom: 1
     property real panX: 0
     property real panY: 0
     property var flowViews: ({})
+    property bool fitRequested: true
     property string viewedFlow: ""
     property real dragX: 0
     property real dragY: 0
@@ -22,11 +24,63 @@ FocusScope {
     property string nameOperation: ""
     property string nameDraft: ""
     property int searchIndex: 0
+    property string hoverNodeId: ""
+    property string selectedWire: ""
+    readonly property var selectedConnection: {
+        for (const wire of routedWires)
+            if (wire.source + ":" + wire.target === selectedWire) return wire
+        return null
+    }
+    property bool hoverCardVisible: false
+    readonly property var hoverNode: hoverNodeId === "" ? null : findNode(hoverNodeId)
     readonly property int cellWidth: 180
     readonly property int cellHeight: 80
+    readonly property var routedWires: {
+        if (app.wires.length === 0) return []
+        const geometry = []
+        for (let index = 0; index < nodeRepeater.count; ++index) {
+            const loader = nodeRepeater.itemAt(index)
+            if (!loader || !loader.item) return []
+            const item = loader.item
+            geometry.push({id: loader.modelData, rectangle: Qt.rect(item.x, item.y, item.width, item.height)})
+        }
+        return app.routeWires(geometry)
+    }
 
     function selected(id) { return selection.indexOf(id) !== -1 }
     function findNode(id) { for (let n of app.nodes) if (n.id === id) return n; return null }
+    function refreshNodeIds() {
+        const ids = app.nodes.map(function(node) { return node.id })
+        if (ids.length !== nodeIds.length || ids.some(function(v, i) { return v !== nodeIds[i] })) nodeIds = ids
+    }
+    function enterNode(id) {
+        if (root.gesture !== "" || root.hoverNodeId === id) return
+        root.hoverNodeId = id
+        root.hoverCardVisible = false
+        hoverTimer.restart()
+    }
+    function leaveNode(id) {
+        if (root.hoverNodeId === id) root.hideHover()
+    }
+    function hideHover() {
+        hoverTimer.stop()
+        root.hoverNodeId = ""
+        root.hoverCardVisible = false
+    }
+    function hoverCardX() {
+        let n = root.hoverNode
+        if (!n) return 4
+        let right = root.nodeX(n.id) * root.zoom + root.panX + 156 * root.zoom + 10
+        let left = root.nodeX(n.id) * root.zoom + root.panX - hoverCard.width - 10
+        let maxX = Math.max(4, surface.width - hoverCard.width - 4)
+        return Math.max(4, Math.min(maxX, right <= maxX ? right : left))
+    }
+    function hoverCardY() {
+        let n = root.hoverNode
+        if (!n) return 4
+        let maxY = Math.max(4, surface.height - hoverCard.height - 4)
+        return Math.max(4, Math.min(maxY, root.nodeY(n.id) * root.zoom + root.panY))
+    }
     function nodeX(id) { let n = findNode(id); return n ? n.x * cellWidth + (selected(id) ? dragX : 0) : 0 }
     function nodeY(id) { let n = findNode(id); return n ? n.y * cellHeight + (selected(id) ? dragY : 0) : 0 }
     function focusSearch() { search.forceActiveFocus(); search.selectAll() }
@@ -40,15 +94,17 @@ FocusScope {
         surface.forceActiveFocus()
     }
     function fit() {
+        if (surface.width <= 0 || surface.height <= 0) return
+        fitRequested = false
         if (!app.nodes.length) { zoom = 1; panX = surface.width / 2; panY = surface.height / 2; return }
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         for (let n of app.nodes) {
             minX = Math.min(minX, n.x * cellWidth); minY = Math.min(minY, n.y * cellHeight)
             maxX = Math.max(maxX, n.x * cellWidth + 156); maxY = Math.max(maxY, n.y * cellHeight + 52)
         }
-        zoom = Math.max(0.65, Math.min(1.5, Math.min((surface.width - 64) / Math.max(1, maxX - minX), (surface.height - 64) / Math.max(1, maxY - minY))))
+        zoom = Math.min(1.5, Math.max(1, surface.width - 64) / Math.max(1, maxX - minX), Math.max(1, surface.height - 64) / Math.max(1, maxY - minY))
         panX = surface.width / 2 - (minX + maxX) * zoom / 2
-        panY = Math.max(20, surface.height / 2 - (minY + maxY) * zoom / 2)
+        panY = surface.height / 2 - (minY + maxY) * zoom / 2
     }
     function zoomAt(factor, px, py) {
         let next = Math.max(0.15, Math.min(3, zoom * factor))
@@ -57,6 +113,8 @@ FocusScope {
         zoom = next
     }
     function beginNode(mouse, item) {
+        root.hideHover()
+        root.selectedWire = ""
         surface.forceActiveFocus()
         let p = item.mapToItem(surface, mouse.x, mouse.y)
         pressPoint = p; lastPoint = p; moved = false
@@ -94,13 +152,21 @@ FocusScope {
     function rememberView() {
         if (!viewedFlow) return
         let views = flowViews
-        views[viewedFlow] = { zoom: zoom, x: panX, y: panY, selection: selection }
+        views[viewedFlow] = { zoom: zoom, centerX: (surface.width / 2 - panX) / zoom,
+                            centerY: (surface.height / 2 - panY) / zoom, selection: selection }
         flowViews = views
     }
-    Component.onCompleted: { viewedFlow = app.currentFlow; Qt.callLater(fit) }
+    Component.onCompleted: { refreshNodeIds(); viewedFlow = app.currentFlow; fitTimer.restart() }
+    Timer {
+        id: fitTimer
+        interval: 1
+        onTriggered: root.fit()
+    }
     Connections {
         target: app
         function onSelectionChanged() {
+            root.hideHover()
+            if (app.selectedNode || root.viewedFlow !== app.currentFlow) root.selectedWire = ""
             if (root.viewedFlow === app.currentFlow) {
                 if (app.selectedNode && !root.selected(app.selectedNode)) root.selection = [app.selectedNode]
                 return
@@ -108,13 +174,35 @@ FocusScope {
             root.rememberView(); root.viewedFlow = app.currentFlow
             let view = root.flowViews[app.currentFlow]
             root.zoom = view ? view.zoom : 1
-            root.panX = view ? view.x : surface.width / 2
-            root.panY = view ? view.y : surface.height / 2
+            root.panX = surface.width / 2 - (view ? view.centerX * root.zoom : 0)
+            root.panY = surface.height / 2 - (view ? view.centerY * root.zoom : 0)
             root.selection = view ? view.selection : []
         }
         function onNodeLocated(id) { root.centerNode(id) }
-        function onProjectReplaced() { root.flowViews = ({}); root.selection = []; root.viewedFlow = app.currentFlow; root.fit() }
-        function onNodesChanged() { root.selection = root.selection.filter(function(id) { return root.findNode(id) !== null }) }
+        function onProjectReplaced() { root.hideHover(); root.selectedWire = ""; root.nodeIds = []; root.refreshNodeIds(); root.flowViews = ({}); root.selection = []; root.viewedFlow = app.currentFlow; root.fitRequested = true; fitTimer.restart() }
+        function onNodesChanged() {
+            root.refreshNodeIds()
+            if (!root.selectedConnection) root.selectedWire = ""
+            root.selection = root.selection.filter(function(id) { return root.findNode(id) !== null })
+            if (root.hoverNodeId !== "" && root.findNode(root.hoverNodeId) === null) root.hideHover()
+        }
+        function onCatalogChanged() { root.hideHover() }
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() {
+            if (root.Window.window && !root.Window.window.active) root.hideHover()
+        }
+    }
+    Timer {
+        id: hoverTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (root.hoverNodeId !== "" && root.hoverNode !== null && root.gesture === ""
+                    && (!root.Window.window || root.Window.window.active))
+                root.hoverCardVisible = true
+        }
     }
     Rectangle {
         anchors.fill: parent; color: QuiColor.Primary; border.color: "#d0d7de"; border.width: 1
@@ -149,7 +237,7 @@ FocusScope {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Search; iconSize: 12; iconColor: "#8c959f"
+                            iconSource: QuiFontIcon.Search; iconSize: Theme.iconSizeSmall; iconColor: Theme.iconMuted
                         }
                         TextInput {
                             id: search; objectName: "flowSearch"
@@ -164,13 +252,13 @@ FocusScope {
                             Keys.onEscapePressed: { text = ""; surface.forceActiveFocus() }
                             Text {
                                 anchors.fill: parent; text: "搜索工具名"
-                                color: "#8c959f"; font: QuiFont.Body
+                                color: Theme.iconMuted; font: QuiFont.Body
                                 visible: !search.text && !search.activeFocus
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Clear; iconSize: 11; iconColor: "#8c959f"
+                            iconSource: QuiFontIcon.Clear; iconSize: Theme.iconSizeTiny; iconColor: Theme.iconMuted
                             visible: search.text.length > 0
                             MouseArea {
                                 anchors.fill: parent
@@ -197,7 +285,7 @@ FocusScope {
                             font: QuiFont.Caption; color: QuiColor.FontPrimary
                         }
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.ChevronDown; iconSize: 10; iconColor: "#57606a"
+                            iconSource: QuiFontIcon.ChevronDown; iconSize: Theme.iconSizeTiny; iconColor: Theme.iconSecondary
                         }
                     }
                     MouseArea {
@@ -239,7 +327,7 @@ FocusScope {
                     enabled: !app.busy
                     QuiTextIcon {
                         anchors.centerIn: parent
-                        iconSource: QuiFontIcon.Add; iconSize: 12; iconColor: "#57606a"
+                        iconSource: QuiFontIcon.Add; iconSize: Theme.iconSizeSmall; iconColor: Theme.iconSecondary
                     }
                     MouseArea {
                         id: addMouse; anchors.fill: parent; hoverEnabled: true
@@ -289,8 +377,8 @@ FocusScope {
                                         color: flowTabItem.isActive ? QuiColor.Highlight : "#57606a"
                                     }
                                     QuiTextIcon {
-                                        iconSource: QuiFontIcon.Cancel; iconSize: 9
-                                        iconColor: tabCloseMouse.containsMouse ? "#cf222e" : "#8c959f"
+                                        iconSource: QuiFontIcon.Cancel; iconSize: Theme.iconSizeTiny
+                                        iconColor: tabCloseMouse.containsMouse ? Theme.error : Theme.iconMuted
                                         visible: true
                                         opacity: app.flows.length > 1 ? 1.0 : 0.4
                                         MouseArea {
@@ -323,13 +411,23 @@ FocusScope {
         FocusScope {
             id: surface; objectName: "flowSurface"
             Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+            property real previousWidth: 0
+            property real previousHeight: 0
+            onWidthChanged: {
+                root.panX += (width - previousWidth) / 2; previousWidth = width
+                if (root.fitRequested) fitTimer.restart()
+            }
+            onHeightChanged: {
+                root.panY += (height - previousHeight) / 2; previousHeight = height
+                if (root.fitRequested) fitTimer.restart()
+            }
             Keys.onPressed: function(event) {
                 if (!surface.activeFocus || app.busy) return
                 if (event.matches(StandardKey.Copy)) { app.copyNodes(root.selection); event.accepted = true }
                 else if (event.matches(StandardKey.Paste)) {
                     app.pasteNodes(Math.round((width / 2 - root.panX) / root.zoom / root.cellWidth), Math.round((height / 2 - root.panY) / root.zoom / root.cellHeight)); event.accepted = true
                 } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) { app.deleteNodes(root.selection); root.selection = []; event.accepted = true }
-                else if (event.key === Qt.Key_Escape) { root.selection = []; root.gesture = ""; root.dragX = 0; root.dragY = 0; event.accepted = true }
+                else if (event.key === Qt.Key_Escape) { root.selection = []; root.selectedWire = ""; root.gesture = ""; root.dragX = 0; root.dragY = 0; event.accepted = true }
             }
             Rectangle { anchors.fill: parent; color: "#f6f8fa" }
             Canvas {
@@ -352,7 +450,9 @@ FocusScope {
                 id: backgroundMouse; anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton; preventStealing: true
                 onPressed: function(mouse) {
-                    surface.forceActiveFocus(); root.pressPoint = Qt.point(mouse.x, mouse.y); root.lastPoint = root.pressPoint; root.moved = false
+                    surface.forceActiveFocus(); root.hideHover()
+                    root.selectedWire = ""
+                    root.pressPoint = Qt.point(mouse.x, mouse.y); root.lastPoint = root.pressPoint; root.moved = false
                     root.gesture = mouse.button === Qt.LeftButton ? "select" : "pan"
                     if (mouse.button === Qt.LeftButton && !(mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))) { root.selection = []; app.selectNode("") }
                 }
@@ -383,24 +483,133 @@ FocusScope {
             Item {
                 id: world; x: root.panX; y: root.panY; scale: root.zoom; transformOrigin: Item.TopLeft
                 Repeater {
-                    model: app.wires
+                    model: root.routedWires
                     WireItem {
                         required property var modelData
-                        sourceX: root.nodeX(modelData.source) + 78; sourceY: root.nodeY(modelData.source) + 52
-                        targetX: root.nodeX(modelData.target) + 78; targetY: root.nodeY(modelData.target)
-                        lineColor: root.selected(modelData.target) || root.selected(modelData.source) ? "#f08800" : "#8c959f"
+                        objectName: "flowWire_" + modelData.source + "_" + modelData.target
+                        route: modelData.points
+                        viewScale: root.zoom
+                        connectionCount: modelData.count
+                        lineColor: root.selectedWire === modelData.source + ":" + modelData.target ? "#0969da"
+                            : root.selected(modelData.target) ? "#f08800"
+                            : root.selected(modelData.source) ? "#1677ff" : "#8c959f"
+                        opacity: root.selection.length && !root.selected(modelData.target) && !root.selected(modelData.source) ? 0.35 : 1
+                        onActivated: {
+                            root.hideHover()
+                            surface.forceActiveFocus()
+                            root.selection = []
+                            app.selectNode("")
+                            root.selectedWire = modelData.source + ":" + modelData.target
+                        }
                     }
                 }
                 Repeater {
-                    model: app.nodes
-                    NodeDelegate {
-                        required property var modelData
-                        node: modelData; selected: root.selected(modelData.id)
-                        x: root.nodeX(modelData.id); y: root.nodeY(modelData.id)
-                        onPointerPressed: function(mouse, item) { root.beginNode(mouse, item) }
-                        onPointerMoved: function(mouse, item) { root.moveNode(mouse, item) }
-                        onPointerReleased: function(mouse, item) { root.endNode(mouse, item) }
-                        onExecuteRequested: { app.selectNode(modelData.id); app.runNode() }
+                    id: nodeRepeater
+                    model: root.nodeIds
+                    Loader {
+                        id: nodeLoader
+                        required property string modelData
+                        readonly property var currentNode: root.findNode(modelData)
+                        active: currentNode !== null
+                        sourceComponent: NodeDelegate {
+                            node: nodeLoader.currentNode; selected: root.selected(nodeLoader.modelData); viewScale: root.zoom
+                            x: root.nodeX(nodeLoader.modelData); y: root.nodeY(nodeLoader.modelData)
+                            onPointerPressed: function(mouse, item) { root.beginNode(mouse, item) }
+                            onPointerMoved: function(mouse, item) { root.moveNode(mouse, item) }
+                            onPointerReleased: function(mouse, item) { root.endNode(mouse, item) }
+                            onExecuteRequested: { app.selectNode(nodeLoader.modelData); app.runNode() }
+                            onHoverEntered: root.enterNode(nodeLoader.modelData)
+                            onHoverExited: root.leaveNode(nodeLoader.modelData)
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                id: wireRelations
+                objectName: "wireRelations"
+                visible: root.selectedConnection !== null
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.margins: 8
+                width: Math.min(420, parent.width - 16)
+                height: relationsColumn.implicitHeight + 16
+                color: "#ffffff"
+                border.color: "#d0d7de"
+                radius: Theme.radiusBase
+                ColumnLayout {
+                    id: relationsColumn
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 4
+                    QuiText {
+                        Layout.fillWidth: true
+                        font: QuiFont.Caption
+                        elide: Text.ElideRight
+                        text: {
+                            const wire = root.selectedConnection
+                            if (!wire) return ""
+                            const source = root.findNode(wire.source)
+                            const target = root.findNode(wire.target)
+                            return (source ? source.title : wire.source) + " → " + (target ? target.title : wire.target)
+                        }
+                    }
+                    Repeater {
+                        model: root.selectedConnection ? root.selectedConnection.ports : []
+                        QuiText {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            font: QuiFont.Caption
+                            elide: Text.ElideRight
+                            text: modelData.output + " → " + modelData.input
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                id: hoverCard
+                objectName: "nodeHoverCard"
+                visible: root.hoverCardVisible && root.hoverNode !== null
+                z: 30
+                width: 232
+                height: hoverColumn.implicitHeight + 16
+                x: root.hoverCardX()
+                y: root.hoverCardY()
+                radius: Theme.radiusBase
+                color: "#ffffff"
+                border.color: Theme.border
+                border.width: 1
+                enabled: false
+                ColumnLayout {
+                    id: hoverColumn
+                    anchors.fill: parent; anchors.margins: 8; spacing: 3
+                    QuiText {
+                        Layout.fillWidth: true
+                        text: root.hoverNode ? root.hoverNode.title : ""
+                        wrapMode: Text.Wrap
+                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                        color: Theme.textPrimary
+                    }
+                    Repeater {
+                        model: [
+                            { label: "算子", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
+                            { label: "预处理", value: root.hoverNode ? root.hoverNode.timingPreprocessText : "" },
+                            { label: "后处理", value: root.hoverNode ? root.hoverNode.timingPostprocessText : "" }
+                        ]
+                        RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            QuiText {
+                                text: modelData.label
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                                color: Theme.textSecondary
+                            }
+                            Item { Layout.fillWidth: true }
+                            QuiText {
+                                text: modelData.value
+                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                                color: Theme.textPrimary
+                            }
+                        }
                     }
                 }
             }

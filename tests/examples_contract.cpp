@@ -122,7 +122,10 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     auto s3 = snapshot(update, 3);
     assert(s3 && s3->status.code == 0);
     const auto &croppedImages = std::get<ImageBatch>(s3->outputs.at("images"));
-    assert(!croppedImages.images().empty());
+    assert(croppedImages.images().size() == images1.images().size());
+    for (const auto &image : croppedImages.images())
+        assert(image.rows() == 40 && image.cols() == 20);
+    assert(!s3->outputs.contains("source_indices"));
 
     auto s4 = snapshot(update, 4);
     assert(s4 && s4->status.code == 0);
@@ -629,7 +632,6 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     auto s1 = snapshot(update, 1);
     assert(s1 && s1->status.code == 0);
 
-    // Node 2: crop fails because rois input is Missing
     auto s2 = snapshot(update, 2);
     assert(s2);
     assert(!s2->status);

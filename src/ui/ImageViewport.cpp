@@ -1,5 +1,7 @@
 #include "ui/ImageViewport.h"
 
+#include <QCursor>
+#include <QHoverEvent>
 #include <QKeyEvent>
 #include <QMatrix4x4>
 #include <QMouseEvent>
@@ -231,17 +233,30 @@ ImageViewport::ImageViewport(QQuickItem *parent)
     setFlag(ItemHasContents, true);
     setClip(true);
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
-    setAcceptHoverEvents(false);
+    setAcceptHoverEvents(true);
+    connect(this, &QQuickItem::enabledChanged, this, [this] { updateCursor(); });
     setActiveFocusOnTab(true);
-    connect(this, &QQuickItem::windowChanged, this,
-            [this](QQuickWindow *)
-            {
-                if (mode_ == OneToOne)
-                {
-                    recalculateFit();
-                    transformUpdated();
-                }
-            });
+    const auto observeWindow = [this](QQuickWindow *window)
+    {
+        QObject::disconnect(windowActiveConnection_);
+        if (editing())
+            emit roiEditCanceled();
+        windowActiveConnection_ = window
+            ? connect(window, &QWindow::activeChanged, this,
+                      [this, window]
+                      {
+                          if (!window->isActive() && editing())
+                              emit roiEditCanceled();
+                      })
+            : QMetaObject::Connection{};
+        if (mode_ == OneToOne)
+        {
+            recalculateFit();
+            transformUpdated();
+        }
+    };
+    connect(this, &QQuickItem::windowChanged, this, observeWindow);
+    observeWindow(window());
 }
 
 ImageViewport::~ImageViewport() = default;
@@ -272,6 +287,7 @@ void ImageViewport::setGeneration(quint64 generation)
     ++textureRevision_;
     overlaysUpdated();
     setStatus({});
+    updateCursor();
     emit imageChanged();
 }
 
@@ -338,6 +354,7 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
             cancelDraft();
         emit imageChanged();
         overlaysUpdated();
+        updateCursor();
     }
     setStatus(!frame.error.isEmpty() ? frame.error : frame.warning);
     if (!hasImage() && editing() && statusText_.isEmpty())
@@ -384,6 +401,8 @@ void ImageViewport::recalculateFit()
 
 void ImageViewport::transformUpdated()
 {
+    if (gesture_ != Gesture::None && gesture_ != Gesture::Pan)
+        cancelDraft();
     overlaysUpdated();
     emit transformChanged();
 }
@@ -461,9 +480,10 @@ bool ImageViewport::event(QEvent *event)
     return QQuickItem::event(event);
 }
 
-void ImageViewport::beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRois, bool readOnly)
+void ImageViewport::beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRois, bool readOnly, Type type)
 {
     cancelDraft();
+    editType_ = type;
     target_   = std::move(target);
     editable_ = std::move(targetRois);
     selectRoi(target_->roiIndex >= 0 && target_->roiIndex < static_cast<int>(editable_.size()) ? target_->roiIndex
@@ -471,6 +491,7 @@ void ImageViewport::beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRo
     setReadOnly(readOnly);
     overlaysUpdated();
     emit editingChanged();
+    updateCursor();
     if (!hasImage())
         setStatus(QStringLiteral("没有输入图像缓存，请先运行读图或上游；仍可在参数区进行数值编辑。"));
 }
@@ -482,9 +503,11 @@ void ImageViewport::endRoiEdit()
         return;
     target_.reset();
     editable_.clear();
+    setDrawShape(0);
     selectRoi(-1);
     overlaysUpdated();
     emit editingChanged();
+    updateCursor();
 }
 
 void ImageViewport::setReadOnly(bool value)
@@ -496,14 +519,16 @@ void ImageViewport::setReadOnly(bool value)
     readOnly_ = value;
     overlaysUpdated();
     emit readOnlyChanged();
+    updateCursor();
 }
 
 void ImageViewport::setDrawShape(int shape)
 {
-    if (shape < 0 || shape > 5 || drawShape_ == shape)
+    if (shape < 0 || shape > 5 || drawShape_ == shape || (editing() && singleRectangle() && shape != 0 && shape != 2))
         return;
-    cancelDraft();
+    clearGesture();
     drawShape_ = shape;
+    updateCursor();
     emit drawShapeChanged();
 }
 
@@ -528,6 +553,18 @@ void ImageViewport::overlaysUpdated()
 }
 
 void ImageViewport::cancelDraft()
+{
+    const bool restoreSelection = gesture_ == Gesture::Create && singleRectangle() && !editable_.empty();
+    clearGesture();
+    if (restoreSelection)
+    {
+        setDrawShape(0);
+        selectRoi(0);
+    }
+    updateCursor();
+}
+
+void ImageViewport::clearGesture()
 {
     gesture_   = Gesture::None;
     panButton_ = Qt::NoButton;
@@ -610,7 +647,8 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
         event->accept();
         return;
     }
-    if (event->button() != Qt::LeftButton || !canEdit())
+    if (event->button() != Qt::LeftButton || !canEdit()
+        || (gesture_ != Gesture::None && gesture_ != Gesture::Vertices))
     {
         event->ignore();
         return;
@@ -628,17 +666,24 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
     }
     anchor_ = point;
     handle_ = -1;
-    if (selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
+    const bool isDrawingNew = drawShape_ >= 1 && drawShape_ <= 5;
+    if (!isDrawingNew && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
     {
         const auto controls = handles(editable_[selected_]);
+        double nearest = std::numeric_limits<double>::infinity();
         for (std::size_t i = 0; i < controls.size(); ++i)
-            if (length(point - controls[i]) * scale_ <= 8)
+        {
+            const double distance = length(point - controls[i]) * scale_;
+            if (distance <= 8 && distance < nearest)
             {
                 handle_ = static_cast<int>(i);
-                break;
+                nearest = distance;
             }
+        }
     }
-    if (handle_ < 0)
+    if (isDrawingNew)
+        selectRoi(-1);
+    else if (handle_ < 0)
         selectRoi(hitRoi(point));
     if (selected_ >= 0)
     {
@@ -836,17 +881,19 @@ void ImageViewport::commitDraft()
 {
     if (!canEdit() || !draftChanged_)
     {
-        cancelDraft();
+        clearGesture();
         return;
     }
     const auto value = completedDraft();
     if (!value)
     {
-        cancelDraft();
+        clearGesture();
         return;
     }
     auto key     = *target_;
     key.roiIndex = (gesture_ == Gesture::Create || gesture_ == Gesture::Vertices) ? -1 : selected_;
+    if (singleRectangle() && !editable_.empty())
+        key.roiIndex = 0;
     if (key.roiIndex < 0)
     {
         editable_.push_back(*value);
@@ -854,7 +901,10 @@ void ImageViewport::commitDraft()
     }
     else
         editable_[key.roiIndex] = *value;
-    cancelDraft();
+    clearGesture();
+    if (singleRectangle())
+        setDrawShape(0);
+    updateCursor();
     emit roiCommitted(key, *value);
 }
 
@@ -889,7 +939,10 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Escape && editing())
     {
-        cancelDraft();
+        if (gesture_ == Gesture::None)
+            emit roiEditCanceled();
+        else
+            cancelDraft();
         event->accept();
     }
     else if ((event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return) && editing())
@@ -904,6 +957,32 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
     }
     else
         QQuickItem::keyPressEvent(event);
+}
+
+void ImageViewport::updateCursor()
+{
+    if (drawShape_ > 0 && canEdit())
+        setCursor(QCursor(Qt::CrossCursor));
+    else
+        unsetCursor();
+}
+
+void ImageViewport::hoverEnterEvent(QHoverEvent *event)
+{
+    updateCursor();
+    QQuickItem::hoverEnterEvent(event);
+}
+
+void ImageViewport::hoverMoveEvent(QHoverEvent *event)
+{
+    updateCursor();
+    QQuickItem::hoverMoveEvent(event);
+}
+
+void ImageViewport::hoverLeaveEvent(QHoverEvent *event)
+{
+    unsetCursor();
+    QQuickItem::hoverLeaveEvent(event);
 }
 
 QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
@@ -939,37 +1018,40 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->overlays->removeChildNode(child);
             delete child;
         }
-        Lines       input(scale_), output(scale_);
-        const auto &inputs = editing() ? editable_ : inputs_;
-        for (std::size_t i = 0; i < inputs.size(); ++i)
+        Lines input(scale_), output(scale_), edit(scale_);
+        for (const auto &roi : inputs_) input.roi(roi);
+        for (const auto &roi : outputs_) output.roi(roi);
+        for (std::size_t i = 0; editing() && i < editable_.size(); ++i)
         {
-            if (editing() && static_cast<int>(i) == selected_ && draft_)
-                input.roi(*draft_);
+            if (static_cast<int>(i) == selected_ && draft_)
+                edit.roi(*draft_);
             else
-                input.roi(inputs[i]);
+                edit.roi(editable_[i]);
         }
         if (gesture_ == Gesture::Create && draft_)
-            input.roi(*draft_);
+            edit.roi(*draft_);
         if (gesture_ == Gesture::Vertices)
         {
             if (drawShape_ == 4)
-                input.path(vertices_, false);
-            for (const auto &point : vertices_) input.square(point, 2.5 / scale_);
+                edit.path(vertices_, false);
+            for (const auto &point : vertices_) edit.square(point, 2.5 / scale_);
         }
         if (editing() && !readOnly_ && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
         {
             const auto &roi      = draft_ ? *draft_ : editable_[selected_];
             const auto  controls = handles(roi);
-            for (const auto &point : controls) input.square(point, 3.5 / scale_);
+            for (const auto &point : controls) edit.square(point, 3.5 / scale_);
             if (roi.kind() == RoiKind::Rectangle)
-                input.segment((controls[0] + controls[1]) / 2, controls[4]);
+                edit.segment((controls[0] + controls[1]) / 2, controls[4]);
         }
-        for (const auto &roi : outputs_) output.roi(roi);
         if (auto *geometry = input.node(window(), QColor(255, 220, 0)))
             node->overlays->appendChildNode(geometry);
         if (auto *geometry = output.node(window(), QColor(0, 120, 255)))
             node->overlays->appendChildNode(geometry);
+        if (auto *geometry = edit.node(window(), QColor(255, 220, 0)))
+            node->overlays->appendChildNode(geometry);
         node->overlayRevision = overlayRevision_;
+        node->markDirty(QSGNode::DirtyMatrix);
     }
     return node;
 }

@@ -623,7 +623,7 @@ tools:
     app.addNode("test.plugin.func.packaged", 300, 100);
     assert(app.nodes().size() == 2);
     const auto nodeBId = app.nodes().last().toMap().value("id").toString();
-    assert(app.bindInput("x", nodeAId, "count"));
+    assert(app.bindInput(app.portContext("x"), nodeAId, "count"));
     app.runOnce();
     waitForIdle();
     for (const auto &n : app.nodes())
@@ -1049,6 +1049,57 @@ void missingDependencyIsolation(const QString &appPath, const std::filesystem::p
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    if (argc == 5 && std::string(argv[1]) == "--late-runtime-child")
+    {
+        QCoreApplication qt(argc, argv);
+        QTemporaryDir temporary;
+        assert(temporary.isValid());
+        const auto directory = std::filesystem::u8path(temporary.path().toUtf8().toStdString())
+                               / std::filesystem::path(u8"延迟运行库");
+        std::filesystem::create_directories(directory);
+        const auto modulePath = directory / "late_module.dll";
+        std::filesystem::copy_file(std::filesystem::u8path(argv[2]), modulePath);
+        std::filesystem::copy_file(std::filesystem::u8path(argv[3]), directory / "test_dep_a.dll");
+        std::filesystem::copy_file(std::filesystem::u8path(argv[4]), directory / "visionrt_late_dependency.dll");
+        std::shared_ptr<const LoadedModule> retained;
+        {
+            PluginLoader loader;
+            ToolStatus status;
+            retained = loader.loadModule(modulePath, status);
+            assert(retained && status);
+        }
+        const auto delayed = LoadLibraryW(L"visionrt_late_dependency.dll");
+        if (!delayed)
+        {
+            std::cerr << "A loaded module lost its late-runtime search directory: " << GetLastError() << '\n';
+            return 1;
+        }
+        const auto value = reinterpret_cast<int (*)()>(GetProcAddress(delayed, "dep_b_val"));
+        assert(value && value() == 222);
+        FreeLibrary(delayed);
+        retained.reset();
+        const auto orphan = LoadLibraryW(L"visionrt_late_dependency.dll");
+        assert(!orphan);
+        std::cout << "Late runtime directory follows loaded-module ownership and is removed after release.\n";
+        return 0;
+    }
+#endif
+    if (argc == 3 && std::string(argv[1]) == "--abi-child")
+    {
+        QCoreApplication qt(argc, argv);
+        PluginLoader loader;
+        for (int attempt = 0; attempt < 2; ++attempt)
+        {
+            ToolStatus status;
+            const auto module = loader.loadModule(std::filesystem::u8path(argv[2]), status);
+            assert(!module && !status);
+            assert(status.message.find("ABI major mismatch") != std::string::npos);
+            assert(status.message.find("got 1") != std::string::npos);
+            assert(loader.loadedModuleCount() == 0);
+        }
+        return 0;
+    }
     if (argc > 1 && std::string(argv[1]) == "--run-missing-dep-child")
     {
         if (argc < 5)

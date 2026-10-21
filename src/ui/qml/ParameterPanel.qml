@@ -19,6 +19,8 @@ QuiSplitView {
     property int currentTab: 0
     readonly property var tabs: ["基本输入", "预处理", "检测", "结果处理"]
     property var collapsedGroups: ({})
+    property var parameterGroups: []
+    property string roiNodeId: ""
     property real inputsRatio: 0.52
     function resetSplit() {
         inputsRatio = 0.52
@@ -32,22 +34,44 @@ QuiSplitView {
             outputPanel.SplitView.preferredWidth = Math.round(root.width * (1.0 - inputsRatio))
         }
     }
-    Component.onCompleted: Qt.callLater(resetSplit)
-    function groups() {
+    Component.onCompleted: { refreshGroups(); Qt.callLater(resetSplit) }
+    onCurrentTabChanged: refreshGroups()
+    Connections {
+        target: app
+        function onParametersChanged() { root.refreshGroups() }
+    }
+    function isSameGroups(a, b) {
+        if (a === b) return true
+        if (!a || !b || a.length !== b.length) return false
+        for (let i = 0; i < a.length; ++i) {
+            let ga = a[i], gb = b[i]
+            if (ga.nodeId !== gb.nodeId || ga.name !== gb.name || ga.init !== gb.init) return false
+            if (!ga.parameters || !gb.parameters || ga.parameters.length !== gb.parameters.length) return false
+            for (let j = 0; j < ga.parameters.length; ++j) {
+                if (ga.parameters[j].id !== gb.parameters[j].id || ga.parameters[j].init !== gb.parameters[j].init) return false
+            }
+        }
+        return true
+    }
+    function refreshGroups() {
         let result = [], byName = ({})
         for (let p of app.parameters) {
             if ((p.tab || "基本输入") !== tabs[currentTab]) continue
             let name = p.init ? "初始化配置" + (p.group ? " · " + p.group : "") : p.group || "输入参数"
-            if (byName[name] === undefined) { byName[name] = result.length; result.push({ name: name, init: p.init, parameters: [] }) }
-            result[byName[name]].parameters.push(p)
+            if (byName[name] === undefined) { byName[name] = result.length; result.push({ nodeId: app.selectedNode, name: name, init: p.init, parameters: [] }) }
+            result[byName[name]].parameters.push({ id: p.id, init: p.init })
         }
-        return result
+        if (!isSameGroups(result, parameterGroups))
+            parameterGroups = result
     }
     function focusRoi() {
+        if (!root.enabled || app.busy) return
+        roiNodeId = app.selectedNode
         for (let p of app.parameters) {
-            if (p.type === "RoiBatch" && !p.init) {
+            if ((p.type === "RoiBatch" || p.type === "Rect") && !p.init) {
                 currentTab = Math.max(0, tabs.indexOf(p.tab || "基本输入"))
-                roiPicker.open(); return
+                app.startRoiDraw(p.id, 2)
+                return
             }
         }
         roiNotice.open()
@@ -158,20 +182,41 @@ QuiSplitView {
                     Column {
                         id: groupColumn; width: scroller.width; spacing: 4
                         Repeater {
-                            model: root.groups()
+                            model: root.parameterGroups
                             QuiExpander {
+                                id: parameterGroup
                                 required property var modelData
                                 width: groupColumn.width
-                                headerText: modelData.name; headerHeight: 28
+                                headerText: modelData.name; headerHeight: Theme.paramGroupHeaderHeight
                                 expand: root.collapsedGroups[headerText] !== true
-                                contentHeight: groupBody.implicitHeight + 8
+                                contentHeight: groupBody.implicitHeight + 16
                                 onExpandChanged: { root.collapsedGroups[headerText] = !expand }
                                 ColumnLayout {
-                                    id: groupBody; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8; spacing: 4
+                                    id: groupBody
+                                    anchors.top: parent.top
+                                    anchors.topMargin: 8
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 8
+                                    spacing: 6
                                     QuiText { text: "下次执行重建资源"; visible: modelData.init; font: QuiFont.Caption; color: Theme.warning }
                                     Repeater {
                                         model: modelData.parameters
-                                        ParameterEditor { required property var modelData; parameter: modelData; Layout.fillWidth: true }
+                                        Loader {
+                                            id: parameterRow
+                                            required property var modelData
+                                            readonly property var currentParameter: parameterGroup.modelData.nodeId === app.selectedNode
+                                                ? app.parameters.find(function(parameter) {
+                                                    return parameter.id === parameterRow.modelData.id && parameter.init === parameterRow.modelData.init
+                                                }) : undefined
+                                            Layout.fillWidth: true
+                                            active: currentParameter !== undefined
+                                            sourceComponent: ParameterEditor {
+                                                nodeId: parameterGroup.modelData.nodeId
+                                                parameter: parameterRow.currentParameter
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -187,31 +232,5 @@ QuiSplitView {
         SplitView.minimumWidth: 280
         SplitView.preferredWidth: 480
     }
-    QuiPopup {
-        id: roiPicker; width: Math.min(420, parent ? parent.width - 32 : 420); height: Math.min(320, roiList.contentHeight + 54)
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        ColumnLayout {
-            anchors.fill: parent; anchors.margins: 12
-            QuiText { text: "选择输入 ROI"; font: QuiFont.BodyStrong }
-            ListView {
-                id: roiList; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                model: app.parameters.filter(function(p) { return p.type === "RoiBatch" && !p.init })
-                delegate: QuiItemDelegate {
-                    required property var modelData
-                    width: roiList.width; text: modelData.name + (modelData.mode === "upstream" ? " · 复制当前值为用户输入" : "")
-                    enabled: !app.busy
-                    onClicked: {
-                        if (modelData.mode === "upstream") { roiConfirm.parameter = modelData.id; roiConfirm.open() }
-                        else if (app.editRoi(modelData.id, false)) roiPicker.close()
-                    }
-                }
-            }
-        }
-    }
-    WorkbenchDialog {
-        id: roiConfirm; property string parameter: ""; title: "复制上层 ROI？"
-        message: "断开此输入绑定，将当前 ROI 复制为用户输入后编辑；源节点保持不变。"
-        onPositiveClickListener: function() { if (app.editRoi(parameter, true)) { roiConfirm.close(); roiPicker.close() } }
-    }
-    WorkbenchDialog { id: roiNotice; title: "输入 ROI 编辑"; message: "请选择具有 RoiBatch 输入的节点，然后选择要编辑的参数。"; useNegativeButton: false; positiveText: "关闭" }
+    WorkbenchDialog { id: roiNotice; title: "输入 ROI 编辑"; message: "请选择具有区域输入的节点，然后选择要编辑的参数。"; useNegativeButton: false; positiveText: "关闭" }
 }

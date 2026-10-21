@@ -13,8 +13,8 @@ flows:
         tool_name_snapshot: 图像读取
         alias: 读图节点
         pos:
-          - 60
-          - 120
+          - 0
+          - 0
         init_params:
           {}
         type_snapshot:
@@ -58,8 +58,8 @@ flows:
         tool_name_snapshot: 投影ROI
         alias: 投影定位
         pos:
-          - 260
-          - 80
+          - 2
+          - 0
         init_params:
           {}
         type_snapshot:
@@ -124,8 +124,8 @@ flows:
         tool_name_snapshot: 图像裁剪
         alias: 区域裁剪
         pos:
-          - 460
-          - 80
+          - 0
+          - 2
         init_params:
           {}
         type_snapshot:
@@ -134,8 +134,8 @@ flows:
           inputs:
             images:
               type: ImageBatch
-            rois:
-              type: RoiBatch
+            rect:
+              type: Rect
           outputs:
             __status_code:
               type: Int
@@ -148,11 +148,6 @@ flows:
               dtype: float64
               rank: 2
               layout: dense
-            source_indices:
-              type: NumericArray
-              dtype: int64
-              rank: 2
-              layout: dense
         inputs:
           images:
             mode: upstream
@@ -160,19 +155,16 @@ flows:
             source:
               node_seq: 1
               port_id: images
-          rois:
-            mode: upstream
-            literal: ~
-            source:
-              node_seq: 2
-              port_id: rois
+          rect:
+            mode: literal
+            literal: [2, 10, 10, 20, 40, 0]
       - node_seq: 4
         tool_id: visionrt.image.preprocess
         tool_name_snapshot: 图像预处理
         alias: 灰度二值化
         pos:
-          - 660
-          - 80
+          - 0
+          - 4
         init_params:
           {}
         type_snapshot:
@@ -215,8 +207,8 @@ flows:
         tool_name_snapshot: 计算图像均值
         alias: Python均值统计
         pos:
-          - 260
-          - 260
+          - 2
+          - 2
         init_params:
           {}
         type_snapshot:
