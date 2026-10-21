@@ -53,6 +53,52 @@ const NodeDefinition &node(const ProjectEditor &editor, NodeId id)
     throw ContractError("Test node absent");
 }
 
+void portProjectionRetainsIdentityAndRejectsInvalidReferences()
+{
+    auto tool = integerTool();
+    tool.outputs.push_back({"other", "另一输出", {Type::Int}});
+    ProjectEditor editor;
+    const auto source = editor.addNode("flow_1", tool, {});
+    const auto target = editor.addNode("flow_1", tool, {1, 0});
+    const auto branch = editor.addNode("flow_1", tool, {2, 0});
+    editor.setBinding("flow_1", target, "first", {BindingMode::Upstream, Missing{}, SourcePort{source, "value"}});
+    editor.setBinding("flow_1", target, "second", {BindingMode::Upstream, Missing{}, SourcePort{source, "other"}});
+    editor.setBinding("flow_1", branch, "first", {BindingMode::Upstream, Missing{}, SourcePort{source, "value"}});
+    editor.setSource("flow_1", branch, "second", SourcePort{target, "value"});
+    const auto projection = portRelations(editor.project().flows.front());
+    assert(projection.errors.empty());
+    assert((projection.active == std::vector<PortRelation>{
+        {{source, "value"}, {target, "first"}},
+        {{source, "other"}, {target, "second"}},
+        {{source, "value"}, {branch, "first"}}
+    }));
+    assert(dependencyEdges(editor.project().flows.front()).size() == 2);
+    assert(editor.referenceCount("flow_1", {source, "value"}) == 2);
+    assert(editor.referenceCount("flow_1", {source, "other"}) == 1);
+
+    auto flow = editor.project().flows.front();
+    flow.nodes[1].inputs.at("first").source = SourcePort{source, "missing"};
+    const auto missingPort = portRelations(flow);
+    assert(missingPort.active.size() == 2 && missingPort.errors.size() == 1);
+    assert(missingPort.errors.front().find(".missing") != std::string::npos);
+    rejects([&] { dependencyEdges(flow); });
+    flow.nodes[1].inputs.at("first").source = SourcePort{999, "value"};
+    assert(portRelations(flow).active.size() == 2 && portRelations(flow).errors.size() == 1);
+    rejects([&] { dependencyEdges(flow); });
+
+    flow = editor.project().flows.front();
+    flow.nodes[0].signatures.outputs.at("value") = {Type::NumericArray, DType::Float32, 2, Layout::Dense};
+    const auto incompatible = portRelations(flow);
+    assert(incompatible.active.size() == 1 && incompatible.errors.size() == 2);
+    assert((incompatible.active.front() == PortRelation{{source, "other"}, {target, "second"}}));
+    rejects([&] { dependencyEdges(flow); });
+    flow.nodes[0].signatures.outputs.erase("value");
+    assert(portRelations(flow).active.size() == 1 && portRelations(flow).errors.size() == 2);
+    flow.nodes.push_back(flow.nodes.front());
+    rejects([&] { portRelations(flow); });
+    assert(portRelations(editor.project().flows.front()).active == projection.active);
+}
+
 void cycleRejectionIsAtomic()
 {
     ProjectEditor editor;
@@ -418,11 +464,30 @@ outputs:
     editor.setSource("flow_1", sink, "first", SourcePort{receive, "value"});
     editor.setMode("flow_1", sink, "first", BindingMode::Upstream);
     assert(dependencyEdges(editor.project().flows.front()).size() == 1);
+    const auto otherSink = editor.addNode("flow_1", integerTool(), {2, 0});
+    const auto replacement = editor.addNode("flow_1", integerTool(), {3, 0});
+    editor.setBinding("flow_1", otherSink, "first",
+                      {BindingMode::Upstream, Missing{}, SourcePort{receive, "value"}});
     const auto revision = node(editor, receive).executionRevision;
     editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, arraySender).title()));
     assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
     assert(node(editor, receive).executionRevision > revision);
     rejects([&] { dependencyEdges(editor.project().flows.front()); });
+    const auto sources = editor.compatibleSources("flow_1", sink, "first");
+    assert(std::find(sources.begin(), sources.end(), SourcePort{replacement, "value"}) != sources.end());
+    const auto inputs = editor.compatibleInputs("flow_1", {replacement, "value"});
+    assert(std::find(inputs.begin(), inputs.end(), InputPort{sink, "second"}) != inputs.end());
+    assert(std::find(inputs.begin(), inputs.end(), InputPort{sink, "first"}) == inputs.end());
+    assert(editor.setSource("flow_1", sink, "first", SourcePort{replacement, "value"}));
+    assert(portRelations(editor.project().flows.front()).errors.size() == 1);
+    rejects([&] { dependencyEdges(editor.project().flows.front()); });
+    const auto beforeCycle = node(editor, replacement).inputs.at("first").source;
+    rejects([&] { editor.setBinding("flow_1", replacement, "first",
+                    {BindingMode::Upstream, Missing{}, SourcePort{sink, "value"}}); });
+    assert(node(editor, replacement).inputs.at("first").source == beforeCycle);
+    assert(editor.unbind("flow_1", otherSink, "first"));
+    assert(portRelations(editor.project().flows.front()).errors.empty());
+    assert(dependencyEdges(editor.project().flows.front()).size() == 1);
     editor.setInitParam("flow_1", receive, "source_port_id", Utf8("missing"));
     assert(!node(editor, receive).signatures.outputs.contains("value"));
     editor.setInitParam("flow_1", receive, "source_port_id", Utf8("value"));
@@ -470,6 +535,7 @@ int main()
         std::cerr << error.what() << std::endl;
         return 1;
     }
+    portProjectionRetainsIdentityAndRejectsInvalidReferences();
     cycleRejectionIsAtomic();
     inactiveDraftsOnlyDirty();
     copiesRemapInternalSourcesAndPreserveOriginals();

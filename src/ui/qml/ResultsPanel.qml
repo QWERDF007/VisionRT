@@ -145,30 +145,6 @@ Rectangle {
             spacing: 0
 
             Rectangle {
-                visible: viewport.editing
-                Layout.fillWidth: true; Layout.preferredHeight: visible ? 34 : 0
-                color: "#fff8e6"
-                Rectangle {
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                    height: 1; color: "#f0d59e"
-                }
-                RowLayout {
-                    anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 5
-                    QuiText { text: "输入预览"; color: "#a27b13"; font: QuiFont.BodyStrong }
-                    QuiComboBox {
-                        model: ["选择 / 调整", "线", "矩形", "圆", "多边形", "点集"]
-                        currentIndex: viewport.drawShape; enabled: !app.busy
-                        Layout.preferredWidth: 130; implicitHeight: 24
-                        onActivated: viewport.drawShape = currentIndex
-                    }
-                    QuiButton { text: "完成绘制"; implicitHeight: 24; enabled: !app.busy; focusPolicy: Qt.TabFocus; onClicked: viewport.finishDraft() }
-                    QuiButton { text: "取消草稿"; implicitHeight: 24; enabled: !app.busy; focusPolicy: Qt.TabFocus; onClicked: viewport.cancelDraft() }
-                    Item { Layout.fillWidth: true }
-                    QuiButton { text: "返回结果"; implicitHeight: 24; focusPolicy: Qt.TabFocus; onClicked: app.endRoiPreview() }
-                }
-            }
-
-            Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; color: "#eaebef"
                 ImageViewport {
                     id: viewport; objectName: "imageViewport"

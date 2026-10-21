@@ -45,8 +45,8 @@ struct Preview
     {
         if (truncated || full())
         {
-            text.truncate(std::max<qsizetype>(0, limit - 4));
-            text += QStringLiteral("…[截断]").left(limit - text.size());
+            text.truncate(std::max<qsizetype>(0, limit - 3));
+            text += QStringLiteral("...");
         }
         return text;
     }
@@ -87,31 +87,12 @@ QString preview(const PortValue &value, const TypeSpec &type, qsizetype limit)
             }
             else if constexpr (std::is_same_v<T, ImageBatch>)
             {
-                out.append(QStringLiteral("ImageBatch B=%1 [").arg(item.images().size()));
-                for (std::size_t i = 0; i < item.images().size() && !out.full(); ++i)
-                {
-                    const auto &image = item.images()[i];
-                    out.append(QStringLiteral("%1%2×%3×%4")
-                                   .arg(i ? ", " : "")
-                                   .arg(image.cols())
-                                   .arg(image.rows())
-                                   .arg(image.channels()));
-                }
-                out.append(QStringLiteral("]"));
+                out.append(QStringLiteral("非显示型数据"));
             }
             else if constexpr (std::is_same_v<T, NumericArray>)
             {
-                out.append(typeText(type) + " [");
-                for (const auto &buffer : item.buffers())
+                auto appendBuffer = [&](const auto &buffer)
                 {
-                    if (out.full())
-                    {
-                        out.truncated = true;
-                        break;
-                    }
-                    out.append(QStringLiteral("shape=("));
-                    numbers(out, buffer.shape());
-                    out.append(QStringLiteral(") ["));
                     switch (buffer.dtype())
                     {
                     case DType::UInt8:
@@ -133,65 +114,125 @@ QString preview(const PortValue &value, const TypeSpec &type, qsizetype limit)
                         numbers(out, buffer.template values<bool>());
                         break;
                     }
-                    out.append(QStringLiteral("]; "));
+                };
+
+                if (item.buffers().empty())
+                {
+                    out.append(QStringLiteral("[]"));
                 }
-                out.append(QStringLiteral("]"));
+                else if (item.buffers().size() == 1)
+                {
+                    out.append(QStringLiteral("["));
+                    appendBuffer(item.buffers().front());
+                    out.append(QStringLiteral("]"));
+                }
+                else
+                {
+                    out.append(QStringLiteral("["));
+                    for (std::size_t b = 0; b < item.buffers().size() && !out.full(); ++b)
+                    {
+                        if (b)
+                            out.append(QStringLiteral(", "));
+                        out.append(QStringLiteral("["));
+                        appendBuffer(item.buffers()[b]);
+                        out.append(QStringLiteral("]"));
+                    }
+                    out.append(QStringLiteral("]"));
+                }
             }
             else if constexpr (std::is_same_v<T, StringArray>)
             {
-                out.append(typeText(type) + " [");
-                for (const auto &buffer : item.buffers())
+                if (item.buffers().empty())
                 {
-                    if (out.full())
+                    out.append(QStringLiteral("[]"));
+                }
+                else if (item.buffers().size() == 1)
+                {
+                    out.append(QStringLiteral("["));
+                    const auto &values = item.buffers().front().values();
+                    for (std::size_t i = 0; i < values.size() && !out.full(); ++i)
                     {
-                        out.truncated = true;
-                        break;
-                    }
-                    out.append(QStringLiteral("shape=("));
-                    numbers(out, buffer.shape());
-                    out.append(QStringLiteral(") ["));
-                    for (const auto &string : buffer.values())
-                    {
-                        if (out.full())
-                        {
-                            out.truncated = true;
-                            break;
-                        }
-                        const auto bytes
+                        if (i)
+                            out.append(QStringLiteral(", "));
+                        const auto &string = values[i];
+                        const auto  bytes
                             = std::min<std::size_t>(string.size(), static_cast<std::size_t>(limit) * 4 + 4);
                         out.append(QString::fromUtf8(string.data(), static_cast<qsizetype>(bytes)));
                         out.truncated |= bytes < string.size();
-                        out.append(QStringLiteral(", "));
                     }
-                    out.append(QStringLiteral("]; "));
+                    out.append(QStringLiteral("]"));
                 }
+                else
+                {
+                    out.append(QStringLiteral("["));
+                    for (std::size_t b = 0; b < item.buffers().size() && !out.full(); ++b)
+                    {
+                        if (b)
+                            out.append(QStringLiteral(", "));
+                        out.append(QStringLiteral("["));
+                        const auto &values = item.buffers()[b].values();
+                        for (std::size_t i = 0; i < values.size() && !out.full(); ++i)
+                        {
+                            if (i)
+                                out.append(QStringLiteral(", "));
+                            const auto &string = values[i];
+                            const auto  bytes
+                                = std::min<std::size_t>(string.size(), static_cast<std::size_t>(limit) * 4 + 4);
+                            out.append(QString::fromUtf8(string.data(), static_cast<qsizetype>(bytes)));
+                            out.truncated |= bytes < string.size();
+                        }
+                        out.append(QStringLiteral("]"));
+                    }
+                    out.append(QStringLiteral("]"));
+                }
+            }
+            else if constexpr (std::is_same_v<T, Roi>)
+            {
+                out.append(QStringLiteral("["));
+                numbers(out, item.encoded());
                 out.append(QStringLiteral("]"));
             }
             else if constexpr (std::is_same_v<T, RoiBatch>)
             {
-                out.append(QStringLiteral("["));
-                for (const auto &image : item.images())
+                if (item.images().empty())
                 {
-                    if (out.full())
-                    {
-                        out.truncated = true;
-                        break;
-                    }
-                    out.append(QStringLiteral("["));
-                    for (const auto &roi : image)
-                    {
-                        if (out.full())
-                        {
-                            out.truncated = true;
-                            break;
-                        }
-                        out.append(QStringLiteral("["));
-                        numbers(out, roi.encoded());
-                        out.append(QStringLiteral("], "));
-                    }
-                    out.append(QStringLiteral("], "));
+                    out.append(QStringLiteral("[]"));
                 }
-                out.append(QStringLiteral("]"));
+                else if (item.images().size() == 1)
+                {
+                    out.append(QStringLiteral("["));
+                    const auto &rois = item.images().front();
+                    for (std::size_t i = 0; i < rois.size() && !out.full(); ++i)
+                    {
+                        if (i)
+                            out.append(QStringLiteral(", "));
+                        out.append(QStringLiteral("["));
+                        numbers(out, rois[i].encoded());
+                        out.append(QStringLiteral("]"));
+                    }
+                    out.append(QStringLiteral("]"));
+                }
+                else
+                {
+                    out.append(QStringLiteral("["));
+                    for (std::size_t img = 0; img < item.images().size() && !out.full(); ++img)
+                    {
+                        if (img)
+                            out.append(QStringLiteral(", "));
+                        out.append(QStringLiteral("["));
+                        const auto &rois = item.images()[img];
+                        for (std::size_t i = 0; i < rois.size() && !out.full(); ++i)
+                        {
+                            if (i)
+                                out.append(QStringLiteral(", "));
+                            out.append(QStringLiteral("["));
+                            numbers(out, rois[i].encoded());
+                            out.append(QStringLiteral("]"));
+                        }
+                        out.append(QStringLiteral("]"));
+                    }
+                    out.append(QStringLiteral("]"));
+                }
             }
             else if constexpr (std::is_same_v<T, bool>)
                 out.append(item ? QStringLiteral("true") : QStringLiteral("false"));
@@ -207,14 +248,11 @@ QString preview(const PortValue &value, const TypeSpec &type, qsizetype limit)
 
 QString typeText(const TypeSpec &type)
 {
-    static const char *names[]
-        = {"Int", "Float", "Bool", "String", "ImageBatch", "NumericArray", "StringArray", "RoiBatch"};
-    QString text = QString::fromLatin1(names[static_cast<int>(type.type)]);
+    QString text = QString::fromLatin1(typeName(type.type));
     if (type.type == Type::NumericArray || type.type == Type::StringArray)
     {
-        static const char *dtypes[] = {"uint8", "int32", "int64", "float32", "float64", "bool"};
         if (type.dtype)
-            text += "<" + QString::fromLatin1(dtypes[static_cast<int>(*type.dtype)]) + ">";
+            text += "<" + QString::fromLatin1(dtypeName(*type.dtype)) + ">";
         text += QStringLiteral(" rank=%1 %2")
                     .arg(type.rank)
                     .arg(type.layout == Layout::Dense ? "dense" : "batch_ragged");
@@ -308,6 +346,14 @@ std::optional<OutputModel::Captured> OutputModel::capture(int row) const
     if (row < 0 || static_cast<std::size_t>(row) >= rows_.size() || !rows_[row].resolved)
         return {};
     return rows_[row].captured;
+}
+
+std::optional<OutputModel::Captured> OutputModel::capture(const QString &port) const
+{
+    for (const auto &row : rows_)
+        if (row.id == port && row.resolved)
+            return row.captured;
+    return {};
 }
 
 QString OutputModel::fullText(const Captured &captured)

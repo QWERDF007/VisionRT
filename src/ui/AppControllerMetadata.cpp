@@ -2,6 +2,8 @@
 
 #include <visionrt/sdk/ValueYaml.h>
 
+#include <limits>
+
 namespace visionrt {
 namespace workbench {
 namespace {
@@ -26,7 +28,7 @@ QVariantMap portMetadata(const PortDefinition &port)
     QVariantMap row{
         {"id", q(port.id)},
         {"name", q(port.name)},
-        {"type", typeName(port.type.type)},
+        {"type", QString::fromLatin1(visionrt::typeName(port.type.type))},
         {"rank", port.type.rank},
         {"layout", port.type.layout == Layout::Dense ? "dense" : "batch_ragged"},
         {"dtype", QString{}},
@@ -56,8 +58,7 @@ QVariantMap portMetadata(const PortDefinition &port)
     }
     if (port.type.dtype)
     {
-        static const char *names[] = {"uint8", "int32", "int64", "float32", "float64", "bool"};
-        row["dtype"]               = QString::fromLatin1(names[static_cast<int>(*port.type.dtype)]);
+        row["dtype"] = QString::fromLatin1(dtypeName(*port.type.dtype));
     }
     if (port.minimum)
         row["minimum"] = valueText(*port.minimum, port.type);
@@ -202,20 +203,92 @@ QVariantList AppController::parameters() const
         const auto *string     = std::get_if<Utf8>(&literal);
         const auto  inputFound = node->inputs.find(id);
         const bool  hasSource  = (inputFound != node->inputs.end() && inputFound->second.source.has_value());
+        QString editorKind = declaration ? q(declaration->editor) : QString{};
+        if (declaration && declaration->editor == "path")
+        {
+            PortValue modeValue = Missing{};
+            if (initialization)
+            {
+                const auto found = node->initParams.find(declaration->pathModeFrom);
+                if (found != node->initParams.end()) modeValue = found->second;
+            }
+            else
+                modeValue = impl_->resolvedInput(*node, declaration->pathModeFrom);
+            const auto *pathMode = std::get_if<Utf8>(&modeValue);
+            editorKind = pathMode && (pathMode->str() == "file" || pathMode->str() == "directory")
+                ? q(pathMode->str()) : QString{};
+        }
+
+        QVariant rectMap;
+        bool hasRect = false;
+        QString rectDisplayText = QStringLiteral("[]");
+        if (type.type == Type::Rect)
+        {
+            if (const auto *roi = std::get_if<Roi>(&literal))
+            {
+                if (roi->kind() == RoiKind::Rectangle)
+                {
+                    const auto enc = roi->encoded();
+                    if (enc.size() >= 6)
+                    {
+                        hasRect = true;
+                        rectMap = QVariantMap{
+                            {"type", 2},
+                            {"x", double(enc[1])},
+                            {"y", double(enc[2])},
+                            {"width", double(enc[3])},
+                            {"height", double(enc[4])},
+                            {"angle", double(enc[5])}
+                        };
+                        rectDisplayText = QString::asprintf("[2, %.6g, %.6g, %.6g, %.6g, %.6g]",
+                                                            enc[1], enc[2], enc[3], enc[4], enc[5]);
+                    }
+                }
+            }
+        }
+
+        int roiCount = 0;
+        bool hasRois = false;
+        if (type.type == Type::RoiBatch)
+        {
+            if (const auto *batch = std::get_if<RoiBatch>(&literal))
+            {
+                for (const auto &imgRois : batch->images())
+                    roiCount += static_cast<int>(imgRois.size());
+                hasRois = roiCount > 0;
+            }
+        }
+
+        QString displayText;
+        if (type.type == Type::Rect)
+            displayText = hasRect ? rectDisplayText : QStringLiteral("[]");
+        else if (type.type == Type::RoiBatch)
+            displayText = hasRois ? QStringLiteral("[%1 个区域]").arg(roiCount) : QStringLiteral("[]");
+        else if (string)
+            displayText = q(string->str());
+        else
+            displayText = text;
+
         QVariantMap row{
             {             "id",                                                                    q(id)},
             {           "name",                               declaration ? q(declaration->name) : q(id)},
-            {           "type",                                           workbench::typeName(type.type)},
+            {           "type",                            QString::fromLatin1(typeName(type.type))},
             {     "typeDetail",                                                           typeText(type)},
             {           "init",                                                           initialization},
             {           "mode",                                                                     mode},
             {        "literal",                                                                     text},
-            {      "valueText",                                         string ? q(string->str()) : text},
+            {      "valueText",                       type.type == Type::Rect && hasRect ? rectDisplayText
+                                                      : string ? q(string->str()) : text},
+            {    "displayText",                                                              displayText},
+            {           "rect",                                                                  rectMap},
+            {        "hasRect",                                                                  hasRect},
+            {       "roiCount",                                                                 roiCount},
+            {        "hasRois",                                                                  hasRois},
             {         "source",                                                                   source},
             {     "sourceNode", hasSource ? QString::number(inputFound->second.source->node) : QString{}},
             {     "sourcePort",               hasSource ? q(inputFound->second.source->port) : QString{}},
             {          "title",                                                         q(node->title())},
-            {         "editor",                         declaration ? q(declaration->editor) : QString{}},
+            {         "editor",                                                               editorKind},
             {            "tab",           declaration ? q(declaration->tab) : QStringLiteral("基本输入")},
             {          "group",                          initialization ? QStringLiteral("初始化配置")
                           : declaration  ? q(declaration->group)
@@ -226,8 +299,39 @@ QVariantList AppController::parameters() const
             {        "minimum",                                                                QString{}},
             {        "maximum",                                                                QString{}},
             {           "step",                                                                QString{}},
-            {       "decimals",                                                                       -1}
+            {       "decimals",                                                                       -1},
+            {   "canIncrement",                                                                    false},
+            {   "canDecrement",                                                                    false}
         };
+        if (type.type == Type::Int && (initialization || mode == "literal"))
+        {
+            if (const auto *value = std::get_if<std::int64_t>(&literal))
+            {
+                std::int64_t stepSize = 1;
+                if (declaration && declaration->step)
+                {
+                    const auto *declared = std::get_if<std::int64_t>(&*declaration->step);
+                    if (declared && *declared > 0)
+                        stepSize = *declared;
+                }
+                auto within = [&](std::int64_t candidate)
+                {
+                    if (declaration && declaration->minimum)
+                        if (const auto *minimum = std::get_if<std::int64_t>(&*declaration->minimum);
+                            minimum && candidate < *minimum)
+                            return false;
+                    if (declaration && declaration->maximum)
+                        if (const auto *maximum = std::get_if<std::int64_t>(&*declaration->maximum);
+                            maximum && candidate > *maximum)
+                            return false;
+                    return true;
+                };
+                row["canIncrement"] = *value <= std::numeric_limits<std::int64_t>::max() - stepSize
+                                   && within(*value + stepSize);
+                row["canDecrement"] = *value >= std::numeric_limits<std::int64_t>::min() + stepSize
+                                   && within(*value - stepSize);
+            }
+        }
         if (declaration)
         {
             if (declaration->minimum)

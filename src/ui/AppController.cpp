@@ -1,5 +1,6 @@
 #include "runtime/Receiver.h"
 #include "ui/AppController_p.h"
+#include "ui/DurationText.h"
 
 #include <visionrt/sdk/Package.h>
 #include <visionrt/sdk/ValueYaml.h>
@@ -41,13 +42,6 @@ NodeId nodeId(const QString &text)
     if (!okay || text.isEmpty() || text.startsWith('-'))
         throw ContractError("Invalid node ID");
     return id;
-}
-
-QString typeName(Type type)
-{
-    static const char *names[]
-        = {"Int", "Float", "Bool", "String", "ImageBatch", "NumericArray", "StringArray", "RoiBatch"};
-    return QString::fromLatin1(names[static_cast<int>(type)]);
 }
 
 const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id)
@@ -154,6 +148,15 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     QObject::connect(&timer, &QTimer::timeout, owner, [this] { poll(); });
     timer.setInterval(34);
     timer.start();
+    QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, owner,
+                     [this](Qt::ApplicationState state)
+                     {
+                         if (state != Qt::ApplicationActive && roi)
+                         {
+                             finishRoi();
+                             updateResults();
+                         }
+                     });
     QObject::connect(&converter, &DisplayConverter::batchConverted, owner,
                      [this](const std::vector<DisplayFrame> &frames)
                      {
@@ -297,7 +300,7 @@ void AppController::Impl::clearResults()
     timing.clear();
     finishRoi();
     converter.invalidate(generation);
-    updateResults(true);
+    updateResults();
     emit q->nodesChanged();
     emit q->runtimeChanged();
 }
@@ -312,7 +315,7 @@ void AppController::Impl::poll()
             generation = update.generation;
             clearResults();
         }
-        bool nodesChanged = false, selectedChanged = false;
+        bool nodesChanged = false, selectedChanged = false, parametersChanged = false;
         for (auto &item : update.nodes)
         {
             nodesChanged = true;
@@ -324,8 +327,18 @@ void AppController::Impl::poll()
                 lifecycleErrors[item.node] = *item.lifecycleDiagnostic;
             if (item.snapshot && item.snapshot->generation == generation)
             {
-                snapshots[item.node] = std::move(item.snapshot);
-                selectedChanged |= QString::number(item.node) == selected;
+                const auto previous = snapshots.find(item.node);
+                if (previous == snapshots.end() || previous->second != item.snapshot)
+                {
+                    snapshots[item.node] = std::move(item.snapshot);
+                    selectedChanged |= QString::number(item.node) == selected;
+                    if (const auto *node = currentNode())
+                        parametersChanged |= std::any_of(node->inputs.begin(), node->inputs.end(), [&](const auto &input)
+                        {
+                            return input.second.mode == BindingMode::Upstream && input.second.source
+                                && input.second.source->node == item.node;
+                        });
+                }
             }
         }
         for (const auto &message : update.diagnostics) report(workbench::q(message));
@@ -339,8 +352,14 @@ void AppController::Impl::poll()
         setState(update.state);
         if (nodesChanged)
             emit q->nodesChanged();
+        if (parametersChanged)
+        {
+            if (roi)
+                updateDisplay();
+            emit q->parametersChanged();
+        }
         if (selectedChanged)
-            updateResults(true);
+            updateResults();
         if (update.completion && runtime->acknowledgeCompletion(*update.completion))
         {
             setState(RuntimeState::Idle);
@@ -355,7 +374,7 @@ void AppController::Impl::poll()
         try
         {
             auto result = textTask.get();
-            if (result.generation == generation)
+            if (result.generation == generation && q->portContextCurrent(result.context))
             {
                 if (result.copy)
                     QGuiApplication::clipboard()->setText(result.text);
@@ -476,6 +495,7 @@ void AppController::Impl::advancePending()
     if (replacement)
     {
         editor.replaceProject(std::move(*replacement));
+        ++projectEpoch;
         replacement.reset();
         flow = editor.project().flows.empty() ? QString{} : workbench::q(editor.project().flows.front().id);
         selected.clear();
@@ -530,6 +550,7 @@ void AppController::Impl::refresh(bool rescan)
         refreshReconcile = false;
         tools.setRegistry(registry);
         changed(true);
+        emit q->catalogChanged();
         report(workbench::q(accepted.message));
         return;
     }
@@ -568,6 +589,7 @@ void AppController::Impl::refreshFinished()
     refreshReconcile = false;
     tools.setRegistry(registry);
     changed(true);
+    emit q->catalogChanged();
 }
 
 // Reads the installed package and replaces the registered tool set; an absent or failing package yields an empty registered tool set.
@@ -700,53 +722,31 @@ QVariantList AppController::nodes() const
     if (const auto *flow = impl_->currentFlow())
         for (const auto &node : flow->nodes)
         {
-            QString state = "gray", timing, detail;
-            if (impl_->active.contains(node.id))
-                state = "blue";
-            const auto   snapshot   = impl_->snapshots.find(node.id);
+            const bool  running = impl_->active.contains(node.id);
+            QString     state   = running ? "blue" : "gray";
+            const auto  found   = impl_->snapshots.find(node.id);
+            const auto *snapshot = found != impl_->snapshots.end()
+                                       && found->second->executionRevision == node.executionRevision
+                                     ? found->second.get()
+                                     : nullptr;
             std::int64_t statusCode = 0;
             QString      statusMessage;
-            if (snapshot != impl_->snapshots.end())
+            if (snapshot)
             {
-                const auto &value = *snapshot->second;
-                if (state != "blue")
-                    state = value.status ? "green" : "red";
-                timing = QStringLiteral("%1 ms").arg(value.timing.totalMs, 0, 'f', 2);
-                detail = QStringLiteral(
-                             "总耗时: %1ms\n阶段细分:\n  - 参数准备: %2ms\n  - 初始化: %3ms\n  - 工具调用(含桥接): "
-                             "%4ms\n  - 结果校验: %5ms")
-                             .arg(value.timing.totalMs, 0, 'f', 2)
-                             .arg(value.timing.prepareMs, 0, 'f', 2)
-                             .arg(value.timing.initMs, 0, 'f', 2)
-                             .arg(value.timing.adapterExecuteMs > 0 ? value.timing.adapterExecuteMs
-                                                                    : value.timing.executeMs,
-                                  0, 'f', 2)
-                             .arg(value.timing.validateMs > 0 ? value.timing.validateMs : value.timing.convertMs, 0,
-                                  'f', 2);
-                if (value.timing.waitGilMs > 0 || value.timing.pythonInputMs > 0 || value.timing.pythonCallMs > 0
-                    || value.timing.pythonOutputMs > 0)
+                if (!running)
+                    state = snapshot->status ? "green" : "red";
+                if (!snapshot->status)
                 {
-                    detail += QStringLiteral(
-                                  "\nPython 内部阶段 (已计入工具调用):\n  - 等待GIL: %1ms\n  - 输入映射: %2ms\n  - "
-                                  "Python调用: %3ms\n  - 输出转换: %4ms")
-                                  .arg(value.timing.waitGilMs, 0, 'f', 2)
-                                  .arg(value.timing.pythonInputMs, 0, 'f', 2)
-                                  .arg(value.timing.pythonCallMs, 0, 'f', 2)
-                                  .arg(value.timing.pythonOutputMs, 0, 'f', 2);
-                }
-                if (!value.status)
-                {
-                    statusCode    = value.status.code;
-                    statusMessage = q(value.status.message);
-                    detail += QStringLiteral("\n错误状态码: %1\n%2").arg(value.status.code).arg(statusMessage);
+                    statusCode    = snapshot->status.code;
+                    statusMessage = q(snapshot->status.message);
                 }
             }
+            const auto timing = nodeTimingText(snapshot, running);
             if (impl_->lifecycleErrors.contains(node.id))
             {
                 state         = "red";
                 statusCode    = impl_->lifecycleErrors.at(node.id).code;
                 statusMessage = q(impl_->lifecycleErrors.at(node.id).message);
-                detail += "\n生命周期错误: " + statusMessage;
             }
             const auto   *def             = impl_->registry.find(node.toolId);
             const QString version         = def ? q(def->version) : QStringLiteral("1.0");
@@ -765,8 +765,10 @@ QVariantList AppController::nodes() const
                 {              "x",          node.position.x},
                 {              "y",          node.position.y},
                 {          "state",                    state},
-                {         "timing",                   timing},
-                {   "timingDetail",                   detail},
+                {      "timingText",                timing.total},
+                {"timingOperatorText",             timing.toolCall},
+                {"timingPreprocessText",         timing.preprocess},
+                {"timingPostprocessText",        timing.postprocess},
                 {        "missing",                  missing},
                 {     "defMissing",               defMissing},
                 {"implUnavailable",          implUnavailable},
@@ -782,16 +784,18 @@ QVariantList AppController::wires() const
     QVariantList result;
     if (const auto *flow = impl_->currentFlow())
     {
-        std::map<std::pair<NodeId, NodeId>, int> counts;
-        for (const auto &node : flow->nodes)
-            for (const auto &[id, binding] : node.inputs)
-                if (binding.mode == BindingMode::Upstream && binding.source)
-                    ++counts[{binding.source->node, node.id}];
-        for (const auto &[edge, count] : counts)
+        std::map<std::pair<NodeId, NodeId>, QVariantList> groups;
+        for (const auto &relation : portRelations(*flow).active)
+            groups[{relation.source.node, relation.target.node}].push_back(QVariantMap{
+                {"output", q(relation.source.port)},
+                {"input", q(relation.target.port)}
+            });
+        for (const auto &[edge, ports] : groups)
             result.push_back(QVariantMap{
                 {"source",  QString::number(edge.first)},
                 {"target", QString::number(edge.second)},
-                { "count",                        count}
+                { "count", static_cast<int>(ports.size())},
+                { "ports",                         ports}
             });
     }
     return result;
@@ -810,7 +814,7 @@ void AppController::selectFlow(const QString &id)
             emit selectionChanged();
             emit nodesChanged();
             emit parametersChanged();
-            impl_->updateResults(true);
+            impl_->updateResults();
             return;
         }
 }
@@ -831,7 +835,7 @@ void AppController::selectNode(const QString &id)
     impl_->selected = id;
     emit selectionChanged();
     emit parametersChanged();
-    impl_->updateResults(true);
+    impl_->updateResults();
 }
 
 void AppController::filterTools(const QString &text)
@@ -1000,42 +1004,6 @@ void AppController::setFlowSelected(const QString &id, bool selected)
     impl_->command([&] { return impl_->editor.setRunSelected(id.toStdString(), selected); });
 }
 
-bool AppController::setParameter(const QString &id, bool initialization, const QString &yamlText)
-{
-    return impl_->command(
-        [&]
-        {
-            const auto *node = impl_->currentNode();
-            if (!node)
-                throw ContractError("No selected node");
-            const auto &signatures = initialization ? node->signatures.initParams : node->signatures.inputs;
-            const auto  signature  = signatures.find(id.toStdString());
-            if (signature == signatures.end())
-                throw ContractError("Unknown parameter");
-            const auto value = decodeValue(YAML::Load(yamlText.toStdString()), signature->second);
-            if (const auto *declaration = impl_->parameter(id.toStdString(), initialization);
-                declaration && !isMissing(value))
-            {
-                auto less = [&](const PortValue &a, const PortValue &b)
-                {
-                    return signature->second.type == Type::Int ? std::get<std::int64_t>(a) < std::get<std::int64_t>(b)
-                                                               : std::get<double>(a) < std::get<double>(b);
-                };
-                if (signature->second.type == Type::Float && !std::isfinite(std::get<double>(value)))
-                    throw ContractError("Numeric parameter must be finite");
-                if ((declaration->minimum && less(value, *declaration->minimum))
-                    || (declaration->maximum && less(*declaration->maximum, value)))
-                    throw ContractError("Value is outside the declared range");
-                if (!declaration->options.empty()
-                    && std::none_of(declaration->options.begin(), declaration->options.end(),
-                                    [&](const auto &option) { return equalValues(value, option); }))
-                    throw ContractError("Value is not a declared option");
-            }
-            return initialization
-                     ? impl_->editor.setInitParam(impl_->flow.toStdString(), node->id, id.toStdString(), value)
-                     : impl_->editor.setLiteral(impl_->flow.toStdString(), node->id, id.toStdString(), value);
-        });
-}
 
 bool AppController::setParameterMode(const QString &id, bool upstream)
 {
@@ -1045,127 +1013,21 @@ bool AppController::setParameterMode(const QString &id, bool upstream)
             const auto *node = impl_->currentNode();
             if (!node)
                 throw ContractError("No selected node");
+            const auto *tool = impl_->currentTool();
+            if (tool)
+            {
+                if (const auto *port = workbench::port(tool->inputs, id.toStdString()))
+                {
+                    if (port->type.type == Type::ImageBatch && !upstream)
+                        return false;
+                }
+            }
             impl_->finishRoi();
             return impl_->editor.setMode(impl_->flow.toStdString(), node->id, id.toStdString(),
                                          upstream ? BindingMode::Upstream : BindingMode::Literal);
         });
 }
 
-QVariantList AppController::bindingCandidates(const QString &input) const
-{
-    QVariantList result;
-    const auto  *node = impl_->currentNode();
-    if (!node)
-        return result;
-    try
-    {
-        for (const auto &source :
-             impl_->editor.compatibleSources(impl_->flow.toStdString(), node->id, input.toStdString()))
-        {
-            const auto *parent = impl_->findNode(source.node);
-            if (!parent)
-                continue;
-            const auto *definition = impl_->registry.find(parent->toolId);
-            const auto *port       = definition ? workbench::port(definition->outputs, source.port) : nullptr;
-            result.push_back(QVariantMap{
-                { "node",            QString::number(source.node)},
-                {"title",                      q(parent->title())},
-                { "port",                          q(source.port)},
-                { "name",   port ? q(port->name) : q(source.port)},
-                { "type", typeText(parent->signatures.outputs.at(source.port))}
-            });
-        }
-    }
-    catch (const std::exception &error)
-    {
-        impl_->report(q(error.what()));
-    }
-    return result;
-}
-
-bool AppController::bindInput(const QString &input, const QString &node, const QString &output)
-{
-    return impl_->command(
-        [&]
-        {
-            const auto *target = impl_->currentNode();
-            if (!target)
-                throw ContractError("No selected node");
-            auto binding   = target->inputs.at(input.toStdString());
-            binding.mode   = BindingMode::Upstream;
-            binding.source = SourcePort{nodeId(node), output.toStdString()};
-            impl_->finishRoi();
-            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input.toStdString(),
-                                            std::move(binding));
-        });
-}
-
-void AppController::unbindInput(const QString &input)
-{
-    impl_->command(
-        [&]
-        {
-            const auto *node = impl_->currentNode();
-            if (!node)
-                throw ContractError("No selected node");
-            impl_->finishRoi();
-            return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input.toStdString());
-        });
-}
-
-QVariantList AppController::relationTargets(const QString &output) const
-{
-    QVariantList result;
-    const auto  *node = impl_->currentNode();
-    if (!node)
-        return result;
-    try
-    {
-        for (const auto &input :
-             impl_->editor.compatibleInputs(impl_->flow.toStdString(), {node->id, output.toStdString()}))
-        {
-            const auto *target = impl_->findNode(input.node);
-            if (!target)
-                continue;
-            const auto *definition = impl_->registry.find(target->toolId);
-            const auto *port       = definition ? workbench::port(definition->inputs, input.port) : nullptr;
-            result.push_back(QVariantMap{
-                { "node",             QString::number(input.node)},
-                {"title",                      q(target->title())},
-                { "port",                           q(input.port)},
-                { "name",    port ? q(port->name) : q(input.port)},
-                { "type", port ? typeText(port->type) : QString{}}
-            });
-        }
-    }
-    catch (const std::exception &error)
-    {
-        impl_->report(q(error.what()));
-    }
-    return result;
-}
-
-bool AppController::bindOutputTo(const QString &output, const QString &node, const QString &input)
-{
-    return impl_->command(
-        [&]
-        {
-            const auto *source = impl_->currentNode();
-            const auto *target = impl_->findNode(nodeId(node));
-            if (!source || !target)
-                throw ContractError("Node not found");
-            const auto candidates
-                = impl_->editor.compatibleInputs(impl_->flow.toStdString(), {source->id, output.toStdString()});
-            if (std::find(candidates.begin(), candidates.end(), InputPort{target->id, input.toStdString()})
-                == candidates.end())
-                throw ContractError("Input is occupied, incompatible or cyclic");
-            auto binding   = target->inputs.at(input.toStdString());
-            binding.mode   = BindingMode::Upstream;
-            binding.source = SourcePort{source->id, output.toStdString()};
-            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input.toStdString(),
-                                            std::move(binding));
-        });
-}
 
 void AppController::runOnce()
 {
@@ -1276,31 +1138,31 @@ bool AppController::save(const QString &path)
     }
 }
 
-void AppController::requestOutputText(int row, bool copy)
+void AppController::requestOutputText(const QVariantMap &context, bool copy)
 {
+    if (!context.value("output").toBool() || !portContextCurrent(context))
+        return;
     if (impl_->textTask.valid())
     {
         impl_->report(QStringLiteral("正在生成完整输出，请稍候"));
         return;
     }
-    auto captured = impl_->outputs.capture(row);
+    auto captured = impl_->outputs.capture(context.value("port").toString());
     if (!captured)
         return;
     const auto estimated = OutputModel::estimatedTextBytes(*captured);
     if (estimated > 16 * 1024 * 1024
-        && (!impl_->approvedText || impl_->approvedCopy != copy
-            || impl_->approvedText->publication != captured->publication
-            || impl_->approvedText->port != captured->port))
+        && (impl_->approvedTextContext != context || impl_->approvedCopy != copy))
     {
-        impl_->approvedText = *captured;
+        impl_->approvedTextContext = context;
         impl_->approvedCopy = copy;
         emit outputTextReady(QStringLiteral("完整数据预计约 %1 MiB。再次点击同一查看/复制操作以确认；不会截断全文。")
                                  .arg(static_cast<double>(estimated) / (1024 * 1024), 0, 'f', 1));
         return;
     }
-    impl_->approvedText.reset();
+    impl_->approvedTextContext.clear();
     const auto generation = impl_->generation;
-    impl_->textTask       = std::async(std::launch::async, [captured = std::move(*captured), copy, generation]
-                                       { return Impl::TextResult{OutputModel::fullText(captured), copy, generation}; });
+    impl_->textTask       = std::async(std::launch::async, [captured = std::move(*captured), copy, generation, context]
+                                       { return Impl::TextResult{OutputModel::fullText(captured), copy, generation, context}; });
 }
 } // namespace visionrt

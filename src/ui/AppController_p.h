@@ -8,6 +8,7 @@
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/ToolTreeModel.h"
+#include "ui/WireRouter.h"
 
 #include <QPointer>
 #include <QTimer>
@@ -21,7 +22,6 @@ QString               q(const std::string &text);
 QString               pathText(const std::filesystem::path &path);
 std::filesystem::path localPath(const QString &text);
 NodeId                nodeId(const QString &text);
-QString               typeName(Type type);
 const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id);
 QVariantMap           metadata(const ToolDefinition &definition);
 } // namespace workbench
@@ -36,14 +36,16 @@ struct AppController::Impl
     std::shared_ptr<PluginLoader>          pluginLoader;
     ToolRegistry                           registry;
     ProjectEditor                          editor;
+    WireRouter                             wireRouter;
     std::unique_ptr<PythonRuntime>         python;
     std::unique_ptr<RuntimeEngine>         runtime;
     ToolTreeModel                          tools;
     OutputModel                            outputs;
     DisplayConverter                       converter;
     QTimer                                 timer;
-    RuntimeState                           state      = RuntimeState::Idle;
-    std::uint64_t                          generation = 1;
+    RuntimeState                           state        = RuntimeState::Idle;
+    std::uint64_t                          generation   = 1;
+    std::uint64_t                          projectEpoch = 1;
     std::map<NodeId, ResultSlot::Snapshot> snapshots;
     std::set<NodeId>                       active;
     std::map<NodeId, ToolStatus>           lifecycleErrors;
@@ -93,26 +95,33 @@ struct AppController::Impl
 
     struct RoiPreview
     {
+        std::uint64_t            id;
         NodeId                   node;
         std::string              input;
-        ImageBatch               images;
-        RoiBatch                 rois;
+        QString                  flow;
+        TypeSpec                 type;
+        InputBinding             original;
+        PortValue                background;
+        PortValue                draft;
         int                      index       = 0;
         int                      resultIndex = 0;
         ImageViewport::ViewState view;
+        bool                     fieldsValid = true;
     };
 
     std::optional<RoiPreview> roi;
+    std::uint64_t            roiSerial = 0;
 
     struct TextResult
     {
         QString       text;
         bool          copy;
         std::uint64_t generation;
+        QVariantMap   context;
     };
 
     std::future<TextResult>              textTask;
-    std::optional<OutputModel::Captured> approvedText;
+    QVariantMap                         approvedTextContext;
     bool                                 approvedCopy = false;
     const FlowDefinition                *currentFlow() const;
     const NodeDefinition                *currentNode() const;
@@ -120,6 +129,7 @@ struct AppController::Impl
     const ToolDefinition                *currentTool() const;
     const PortDefinition                *parameter(const std::string &id, bool initialization) const;
     bool                                 idle();
+    bool                                 applyParameter(const QString &id, bool initialization, PortValue value);
     void                                 report(const QString &text);
     void                                 changed(bool structure = false);
 
@@ -151,9 +161,10 @@ struct AppController::Impl
     void      loadToolsPackage();
     void      rescanTools();
     void      refreshFinished();
-    void      updateResults(bool newSnapshot = false);
+    void      updateResults();
     void      updateDisplay();
     void      applyOverlays();
+    const PortValue *resolvedInputRef(const NodeDefinition &node, const std::string &input) const;
     PortValue resolvedInput(const NodeDefinition &node, const std::string &input) const;
     void      commitRoi(const RoiEditTarget &target, const Roi *value);
     void      finishRoi();

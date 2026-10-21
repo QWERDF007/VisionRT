@@ -36,6 +36,7 @@ public:
                                       const std::map<std::string, std::size_t, std::less<>> &references,
                                       const TypeMap                                         *nodeOutputs = nullptr);
     std::optional<Captured> capture(int row) const;
+    std::optional<Captured> capture(const QString &port) const;
     static QString          fullText(const Captured &captured);
     static std::size_t      estimatedTextBytes(const Captured &captured);
     Q_INVOKABLE QVariantMap get(int row) const;

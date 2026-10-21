@@ -28,6 +28,10 @@ flows:
         limit:
           type: Int
       outputs:
+        __status_code:
+          type: Int
+        __status_message:
+          type: String
         images:
           type: ImageBatch
         paths:
@@ -56,8 +60,8 @@ flows:
     - 100
     init_params:
       model_name: yolov8n
-      load_mode: onnx
-      model_path: models/yolov8n.onnx
+      load_mode: build_wts
+      model_path: models/yolov8n.wts
       engine_output_path: models/yolov8n.engine
       labels_path: ''
       precision: fp16
@@ -97,6 +101,10 @@ flows:
         max_detections:
           type: Int
       outputs:
+        __status_code:
+          type: Int
+        __status_message:
+          type: String
         images:
           type: ImageBatch
         rois:
@@ -118,6 +126,7 @@ flows:
     inputs:
       images:
         mode: upstream
+        literal: ~
         source:
           node_seq: 1
           port_id: images
@@ -169,6 +178,10 @@ flows:
           rank: 1
           layout: dense
       outputs:
+        __status_code:
+          type: Int
+        __status_message:
+          type: String
         images:
           type: ImageBatch
         rois:
@@ -195,26 +208,31 @@ flows:
     inputs:
       images:
         mode: upstream
+        literal: ~
         source:
           node_seq: 2
           port_id: images
       rois:
         mode: upstream
+        literal: ~
         source:
           node_seq: 2
           port_id: rois
       scores:
         mode: upstream
+        literal: ~
         source:
           node_seq: 2
           port_id: scores
       classes:
         mode: upstream
+        literal: ~
         source:
           node_seq: 2
           port_id: classes
       class_names:
         mode: upstream
+        literal: ~
         source:
           node_seq: 2
           port_id: class_names

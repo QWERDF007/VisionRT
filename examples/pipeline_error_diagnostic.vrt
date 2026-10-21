@@ -13,8 +13,8 @@ flows:
     tool_name_snapshot: 图像读取
     alias: 正常读图
     pos:
-    - 60
-    - 80
+    - 0
+    - 0
     init_params: {}
     type_snapshot:
       init_params: {}
@@ -50,26 +50,25 @@ flows:
   - node_seq: 2
     tool_id: visionrt.image.crop
     tool_name_snapshot: 图像裁剪
-    alias: 裁剪(缺ROI输入负例)
+    alias: 裁剪(缺矩形输入负例)
     pos:
-    - 300
-    - 80
+    - 2
+    - 0
     init_params: {}
     type_snapshot:
       init_params: {}
       inputs:
         images:
           type: ImageBatch
-        rois:
-          type: RoiBatch
+        rect:
+          type: Rect
       outputs:
+        __status_code:
+          type: Int
+        __status_message:
+          type: String
         images:
           type: ImageBatch
-        source_indices:
-          type: NumericArray
-          dtype: int64
-          rank: 2
-          layout: dense
         origins:
           type: NumericArray
           dtype: float64
@@ -81,7 +80,7 @@ flows:
         source:
           node_seq: 1
           port_id: images
-      rois:
+      rect:
         mode: literal
         literal: null
   - node_seq: 3
@@ -89,12 +88,12 @@ flows:
     tool_name_snapshot: YOLO目标检测
     alias: YOLO(缺模型文件负例)
     pos:
-    - 300
-    - 240
+    - 2
+    - 2
     init_params:
       model_name: yolov8n
-      load_mode: onnx
-      model_path: nonexistent_weights.onnx
+      load_mode: engine
+      model_path: nonexistent_weights.engine
       engine_output_path: nonexistent_weights.engine
       labels_path: ''
       precision: fp16
@@ -176,8 +175,8 @@ flows:
     tool_name_snapshot: 未定义算子
     alias: 算子缺失负例
     pos:
-    - 540
-    - 240
+    - 4
+    - 2
     init_params: {}
     type_snapshot:
       init_params: {}

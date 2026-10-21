@@ -243,6 +243,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         if (instance)
         {
             enteredExecute = true;
+            snapshot->timing.toolCallMeasured = true;
             {
                 ScopeTimer execTimer(snapshot->timing.executeMs);
                 result = instance->execute(inputs);
@@ -297,7 +298,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     continue;
                 for (const auto &input : definition->inputs)
                 {
-                    if (input.type.type == Type::RoiBatch && input.imageInput == output.sameGeometryAsInput)
+                    if ((input.type.type == Type::RoiBatch || input.type.type == Type::Rect)
+                        && input.imageInput == output.sameGeometryAsInput)
                         snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
                 }
             }

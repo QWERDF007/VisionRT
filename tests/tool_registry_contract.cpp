@@ -516,7 +516,18 @@ int main(int argc, char **argv)
     ToolRegistry examples;
     examples.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
     assert(examples.find("custom.image.mean"));
-    assert(examples.find("visionrt.image.crop")->outputs[3].type == dense);
+    const auto *crop = examples.find("visionrt.image.crop");
+    assert(crop);
+    const auto rectangle = std::find_if(crop->inputs.begin(), crop->inputs.end(),
+                                        [](const auto &port) { return port.id == "rect"; });
+    assert(rectangle != crop->inputs.end() && rectangle->type == TypeSpec{Type::Rect}
+        && rectangle->imageInput == "images");
+    const auto origins = std::find_if(crop->outputs.begin(), crop->outputs.end(),
+                                      [](const auto &port) { return port.id == "origins"; });
+    assert((origins != crop->outputs.end()
+        && origins->type == TypeSpec{Type::NumericArray, DType::Float64, 2, Layout::Dense}));
+    assert(std::none_of(crop->outputs.begin(), crop->outputs.end(),
+                        [](const auto &port) { return port.id == "source_indices"; }));
     assert(examples.find("custom.image.mean")->kind == ToolKind::PythonClass);
     assert(examples.availability("custom.image.mean").state == ToolAvailability::ImplementationUnavailable);
 }

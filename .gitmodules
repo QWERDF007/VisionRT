@@ -17,3 +17,6 @@
 [submodule "3rdparty/VisionRTSDK"]
 	path = 3rdparty/VisionRTSDK
 	url = https://github.com/QWERDF007/VisionRTSDK.git
+[submodule "3rdparty/adaptagrams"]
+	path = 3rdparty/adaptagrams
+	url = https://github.com/mjwybrow/adaptagrams.git

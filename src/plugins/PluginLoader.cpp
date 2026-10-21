@@ -76,8 +76,28 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     }
 
 #ifdef _WIN32
+    static const DWORD directoryPolicyError = []
+    {
+        return SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) ? ERROR_SUCCESS : GetLastError();
+    }();
+    if (directoryPolicyError != ERROR_SUCCESS)
+    {
+        status = {-3, "Failed to configure runtime DLL search (Win32 error: "
+                          + std::to_string(directoryPolicyError) + ")"};
+        return nullptr;
+    }
     const auto absPath = std::filesystem::absolute(libraryPath).lexically_normal();
-    HMODULE    handle  = LoadLibraryExW(absPath.wstring().c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    auto loaded = std::make_shared<LoadedModule>();
+    loaded->directory.reset(AddDllDirectory(absPath.parent_path().wstring().c_str()));
+    if (!loaded->directory)
+    {
+        const DWORD error = GetLastError();
+        status = {-3, "Failed to register runtime DLL directory " + libraryPath.parent_path().string()
+                          + " (Win32 error: " + std::to_string(error) + ")"};
+        return nullptr;
+    }
+    HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr,
+                                    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!handle)
     {
         const DWORD err = GetLastError();
@@ -85,11 +105,11 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
                           + ")"};
         return nullptr;
     }
+    loaded->handle = handle;
 
     auto proc = GetProcAddress(handle, "visiontoolsModuleApi");
     if (!proc)
     {
-        FreeLibrary(handle);
         status = {-3, "Entry symbol 'visiontoolsModuleApi' not found in " + libraryPath.string()};
         return nullptr;
     }
@@ -98,14 +118,12 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     const auto *api     = apiFunc();
     if (!api)
     {
-        FreeLibrary(handle);
         status = {-3, "visiontoolsModuleApi() returned null in " + libraryPath.string()};
         return nullptr;
     }
 
     if (api->abi_major != MODULE_ABI_MAJOR)
     {
-        FreeLibrary(handle);
         status = {-3, "Module ABI major mismatch (expected " + std::to_string(MODULE_ABI_MAJOR) + ", got "
                           + std::to_string(api->abi_major) + ")"};
         return nullptr;
@@ -113,21 +131,17 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
 
     if (api->struct_bytes < sizeof(ModuleApi))
     {
-        FreeLibrary(handle);
         status = {-3, "ModuleApi struct size mismatch"};
         return nullptr;
     }
 
     if (!api->create || !api->destroy)
     {
-        FreeLibrary(handle);
         status = {-3, "ModuleApi function pointers are incomplete"};
         return nullptr;
     }
 
-    auto loaded    = std::make_shared<LoadedModule>();
     loaded->path   = libraryPath;
-    loaded->handle = handle;
     loaded->api    = api;
     loadedModules_.emplace(libraryPath, loaded);
     status = {};

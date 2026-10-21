@@ -1,8 +1,10 @@
 #include "ui/AppController.h"
+#include "ui/DurationText.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
 #include "ui/ToolTreeModel.h"
+#include "runtime/Snapshot.h"
 
 #include <QGuiApplication>
 #include <QImage>
@@ -13,12 +15,25 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QTemporaryDir>
+#include <QTest>
 #include <QUrl>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
+#include <utility>
 
 using namespace visionrt;
+
+void parameterEditorsContract();
+void roiParameterContract();
+void pathEditorsContract();
+void flowCanvasContract();
+void startupProjectContract();
+void popupSessionsContract();
+void outputCellReuseContract();
+void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, double scale);
 
 namespace {
 void require(bool value, const char *message)
@@ -61,6 +76,11 @@ void treeContract()
 
 void outputContract()
 {
+    require(typeText({Type::Rect}) == QStringLiteral("Rect"), "scalar rectangle type must be displayed safely");
+    const auto rectangle = Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F);
+    const OutputModel::Captured rectangleCapture{rectangle, {Type::Rect}};
+    require(OutputModel::fullText(rectangleCapture).contains("1.25"),
+            "scalar rectangle output must retain floating geometry in full text");
     ToolDefinition tool;
     PortDefinition port;
     port.id   = "value";
@@ -116,6 +136,66 @@ void pendingContract()
 #include <chrono>
 #include <thread>
 
+void durationTextContract()
+{
+    require(durationText(std::nullopt) == QStringLiteral("—"), "missing measurement must be unavailable");
+    require(durationText(-1.0) == QStringLiteral("—"), "negative measurement must be unavailable");
+    require(durationText(std::numeric_limits<double>::quiet_NaN()) == QStringLiteral("—"),
+            "NaN measurement must be unavailable");
+    require(durationText(std::numeric_limits<double>::infinity()) == QStringLiteral("—"),
+            "infinite measurement must be unavailable");
+    require(durationText(0.0) == QStringLiteral("0 ms"), "measured zero must stay zero");
+    require(durationText(0.005) == QStringLiteral("<0.01 ms"), "sub-centisecond measurement is not compact");
+    require(durationText(0.01) == QStringLiteral("0.01 ms"), "centisecond measurement lost precision");
+    require(durationText(1.10) == QStringLiteral("1.1 ms"), "trailing zeros are not removed");
+    require(durationText(1234.567) == QStringLiteral("1234.57 ms"), "two-decimal rounding is wrong");
+    const auto absent = nodeTimingText(nullptr, false);
+    require(absent.total == QStringLiteral("未运行") && absent.toolCall == QStringLiteral("未运行")
+                && absent.preprocess == QStringLiteral("—") && absent.postprocess == QStringLiteral("—"),
+            "absent execution snapshot fabricated a measurement");
+    NodeSnapshot snapshot;
+    snapshot.timing.totalMs = 1234.567;
+    snapshot.timing.adapterExecuteMs = 1.1;
+    snapshot.timing.prepareMs = 27;
+    snapshot.timing.initMs = 31;
+    snapshot.timing.validateMs = 43;
+    const auto uncalled = nodeTimingText(&snapshot, false);
+    require(uncalled.total == QStringLiteral("1234.57 ms") && uncalled.toolCall == QStringLiteral("—"),
+            "uncalled tool used an unmeasured adapter duration");
+    require(uncalled.preprocess == QStringLiteral("—") && uncalled.postprocess == QStringLiteral("—"),
+            "framework stages were relabeled as algorithm stages");
+    snapshot.timing.toolCallMeasured = true;
+    const auto called = nodeTimingText(&snapshot, false);
+    require(called.total == QStringLiteral("1234.57 ms") && called.toolCall == QStringLiteral("1.1 ms"),
+            "node total and adapter call measurements were conflated");
+    const std::pair<double, QString> measurements[] = {
+        {0.0, QStringLiteral("0 ms")}, {0.005, QStringLiteral("<0.01 ms")}, {1.1, QStringLiteral("1.1 ms")},
+        {-1.0, QStringLiteral("—")},
+        {std::numeric_limits<double>::quiet_NaN(), QStringLiteral("—")},
+        {std::numeric_limits<double>::infinity(), QStringLiteral("—")}
+    };
+    for (const auto &[value, expected] : measurements)
+    {
+        snapshot.timing.totalMs = value;
+        snapshot.timing.adapterExecuteMs = value;
+        const auto measured = nodeTimingText(&snapshot, false);
+        require(measured.total == expected && measured.toolCall == expected,
+                "controlled snapshot lost its measured zero, small value or invalid metric semantics");
+        require(measured.preprocess == QStringLiteral("—") && measured.postprocess == QStringLiteral("—"),
+                "controlled snapshot fabricated independent algorithm measurements");
+    }
+    const NodeSnapshot *previousSnapshots[] = {nullptr, &snapshot};
+    for (const auto *previous : previousSnapshots)
+    {
+        const auto running = nodeTimingText(previous, true);
+        require(running.total == QStringLiteral("运行中") && running.toolCall == QStringLiteral("运行中")
+                    && running.preprocess == QStringLiteral("—") && running.postprocess == QStringLiteral("—"),
+                "running node reused an earlier snapshot measurement");
+    }
+    std::cout << "[Evidence T-03] Duration text formatting covers missing, zero, tiny, regular and non-finite values.\n";
+    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, uncalled, measured and running values without relabeling framework stages.\n";
+}
+
 void nodeDiagnosticsContract()
 {
     QTemporaryDir directory;
@@ -125,6 +205,13 @@ void nodeDiagnosticsContract()
     {
         pyFile.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'value': 42}\n");
         pyFile.close();
+    }
+    QFile failPyFile(directory.path()
+                     + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.py");
+    if (failPyFile.open(QIODevice::WriteOnly))
+    {
+        failPyFile.write("def run(inputs):\n    raise RuntimeError('diag boom')\n");
+        failPyFile.close();
     }
     QFile yamlFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.yaml");
     if (yamlFile.open(QIODevice::WriteOnly))
@@ -139,12 +226,40 @@ void nodeDiagnosticsContract()
             "  file: test_diag.py\n"
             "  symbol: run\n"
             "init_params: []\n"
-            "inputs: []\n"
+            "inputs:\n"
+            "- id: x\n"
+            "  name: 输入\n"
+            "  type: Int\n"
+            "  default: 1\n"
+            "  min: 0\n"
+            "  max: 100\n"
+            "  step: 1\n"
             "outputs:\n"
             "- id: value\n"
             "  name: 输出\n"
             "  type: Int\n");
         yamlFile.close();
+    }
+    QFile failYamlFile(directory.path()
+                       + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.yaml");
+    if (failYamlFile.open(QIODevice::WriteOnly))
+    {
+        failYamlFile.write(
+            "schema_version: 1\n"
+            "tool_id: test.diag.fail\n"
+            "display_name: 诊断失败\n"
+            "version: 1.0.0\n"
+            "kind: python_function\n"
+            "entry:\n"
+            "  file: test_diag_fail.py\n"
+            "  symbol: run\n"
+            "init_params: []\n"
+            "inputs: []\n"
+            "outputs:\n"
+            "- id: value\n"
+            "  name: 输出\n"
+            "  type: Int\n");
+        failYamlFile.close();
     }
     QFile unfulfilledYaml(directory.path()
                           + "/tools-package/assets/tools/custom/test_category/test_diag/unfulfilled.yaml");
@@ -172,6 +287,8 @@ void nodeDiagnosticsContract()
             "tools:\n"
             "  test.diag.python:\n"
             "    definition: assets/tools/custom/test_category/test_diag/test_diag.yaml\n"
+            "  test.diag.fail:\n"
+            "    definition: assets/tools/custom/test_category/test_diag/test_diag_fail.yaml\n"
             "  test.diag.unfulfilled:\n"
             "    host_binding: nonexistent.binding\n"
             "    definition: assets/tools/custom/test_category/test_diag/unfulfilled.yaml\n");
@@ -186,9 +303,14 @@ void nodeDiagnosticsContract()
     }
     app.addNode("test.diag.python", 100, 100);
     app.addNode("test.diag.unfulfilled", 200, 200);
+    app.addNode("test.diag.fail", 300, 200);
 
     const auto nodes = app.nodes();
-    require(nodes.size() == 2, "expected 2 nodes in nodes()");
+    QStringList toolIds;
+    for (const auto &item : app.toolDefinitions())
+        toolIds << item.toMap().value("id").toString();
+    require(nodes.size() == 3, "expected 3 nodes in nodes(); tools=" + toolIds.join(',').toStdString()
+                                   + " diagnostic=" + app.diagnostic().toStdString());
 
     const auto map0 = nodes.at(0).toMap();
     require(map0.contains("state"), "node missing state");
@@ -197,14 +319,21 @@ void nodeDiagnosticsContract()
     require(map0.value("defMissing").toBool() == false, "registered node marked defMissing");
     require(map0.contains("implUnavailable"), "node missing implUnavailable");
     require(map0.value("implUnavailable").toBool() == false, "available node marked implUnavailable");
-    require(map0.contains("timingDetail"), "node missing timingDetail");
+    require(!map0.contains("timingDetail"), "obsolete timingDetail source must be removed");
+    require(map0.value("timingText").toString() == QStringLiteral("未运行"), "unrun node total is not 未运行");
+    require(map0.value("timingOperatorText").toString() == QStringLiteral("未运行"),
+            "unrun node operator time is not 未运行");
+    require(map0.value("timingPreprocessText").toString() == QStringLiteral("—"),
+            "unmeasured preprocess time must be unavailable");
+    require(map0.value("timingPostprocessText").toString() == QStringLiteral("—"),
+            "unmeasured postprocess time must be unavailable");
 
     const auto map1 = nodes.at(1).toMap();
     require(map1.value("defMissing").toBool() == false, "unfulfilled node marked defMissing");
     require(map1.value("implUnavailable").toBool() == true, "unfulfilled node not marked implUnavailable");
 
     app.runOnce();
-    for (int i = 0; i < 50; ++i)
+    for (int i = 0; i < 100 && app.busy(); ++i)
     {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -212,10 +341,50 @@ void nodeDiagnosticsContract()
     const auto executedNodes = app.nodes();
     require(!executedNodes.isEmpty(), "executed node empty");
     const auto executedMap = executedNodes.first().toMap();
-    const auto detail      = executedMap.value("timingDetail").toString();
-    require(detail.contains(QStringLiteral("工具调用(含桥接):")), "timingDetail missing bridge disclaimer");
-    require(!detail.contains(QStringLiteral("纯算法")), "timingDetail falsely claims pure algorithm");
+    require(executedMap.value("state").toString() == "green", "executed node is not green");
+    require(executedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
+            "executed node total timing is not measured");
+    require(executedMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
+            "executed node operator timing is not measured");
+    require(executedMap.value("timingPreprocessText").toString() == QStringLiteral("—"),
+            "executed node fabricates preprocess timing");
+    require(executedMap.value("timingPostprocessText").toString() == QStringLiteral("—"),
+            "executed node fabricates postprocess timing");
+
+    const auto unavailableMap = executedNodes.at(1).toMap();
+    require(unavailableMap.value("state").toString() == "red", "unavailable implementation is not red");
+    require(unavailableMap.value("timingOperatorText").toString() == QStringLiteral("—"),
+            "implementation without a tool call must not report operator time");
+
+    const auto failedMap = executedNodes.at(2).toMap();
+    require(failedMap.value("state").toString() == "red", "failing tool is not red");
+    require(failedMap.value("statusCode").toLongLong() != 0, "failing tool lost its status code");
+    require(!failedMap.value("statusMessage").toString().isEmpty(), "failing tool lost its diagnostic message");
+    require(failedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
+            "failing tool lost its measured total timing");
+
+    const QString pythonId = map0.value("id").toString();
+    app.selectNode(pythonId);
+    require(app.setParameter("x", false, "2"), "valid integer parameter change was rejected");
+    const auto staleMap = app.nodes().first().toMap();
+    require(staleMap.value("state").toString() == "gray", "stale snapshot still colors the node");
+    require(staleMap.value("timingText").toString() == QStringLiteral("未运行"),
+            "stale snapshot still reports the previous total timing");
+    require(staleMap.value("timingOperatorText").toString() == QStringLiteral("未运行"),
+            "stale snapshot still reports the previous operator timing");
+    require(staleMap.value("statusCode").toLongLong() == 0, "stale snapshot still exposes an old status");
+
+    app.runOnce();
+    for (int i = 0; i < 100 && app.busy(); ++i)
+    {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    require(app.nodes().first().toMap().value("timingText").toString().endsWith(QStringLiteral(" ms")),
+            "re-run after a revision change does not refresh timing");
+    std::cout << "[Evidence T-03] Structured node timing, stale revision invalidation and diagnostics verified.\n";
 }
+
 
 void mainQmlContract(double scale)
 {
@@ -556,6 +725,8 @@ void mainQmlContract(double scale)
         }
     }
     require(paramPreserved, "modified parameter draft was not preserved across drawer toggle");
+
+    hoverCardContract(app, window, scale);
 
     // 8. Screenshot capture evidence for this scale
     QImage frame = window->grabWindow();
@@ -971,6 +1142,27 @@ void packageDrivenCatalogAndRefreshContract()
         std::cout << "[Evidence T-05] Cross-flow receive of dynamic host_binding node verified, value="
                   << recvPreview.toStdString() << "\n";
 
+        app.addNode("test.pkg.function", 200, 100);
+        const auto relationTarget = app.selectedNode();
+        require(app.bindInput(app.portContext("x"), recvNodeId, "value"), "cannot bind source-derived receiver output");
+        require(app.wires().size() == 1, "valid receiver relation is missing");
+        const auto relationPorts = app.wires().front().toMap().value("ports").toList();
+        require(relationPorts.size() == 1 && relationPorts.front().toMap().value("output").toString() == "value"
+                    && relationPorts.front().toMap().value("input").toString() == "x",
+                "grouped wire discarded the source and target port identity");
+        app.selectNode(recvNodeId);
+        app.setParameter("source_node_name", true, "\"" + pythonNodeTitle + "\"");
+        app.setParameter("source_port_id", true, "\"image\"");
+        require(app.wires().isEmpty(), "incompatible or unresolved receiver binding is still drawn as an active wire");
+        require(outModel->get(2).value("count").toInt() == 0,
+                "invalid receiver relation is still counted as an active output reference");
+        app.setParameter("source_node_name", true, "\"" + funcNodeTitle + "\"");
+        app.setParameter("source_port_id", true, "\"y\"");
+        require(app.wires().size() == 1 && outModel->get(2).value("count").toInt() == 1,
+                "restoring the source type did not restore the same input relation");
+        app.deleteNodes({relationTarget});
+        app.selectNode(recvNodeId);
+
         // Save project
         require(app.save(projectFile), "save project failed");
 
@@ -1258,6 +1450,41 @@ void shortWindowContract()
 
 int main(int argc, char **argv)
 {
+    if (argc >= 2 && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
+                      || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"
+                      || std::string(argv[1]) == "--canvas-child" || std::string(argv[1]) == "--startup-child"
+                      || std::string(argv[1]) == "--catalog-child"
+                      || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"))
+    {
+        QGuiApplication qt(argc, argv);
+        try
+        {
+            if (std::string(argv[1]) == "--roi-child")
+                roiParameterContract();
+            else if (std::string(argv[1]) == "--output-child")
+                outputContract();
+            else if (std::string(argv[1]) == "--parameters-child")
+                parameterEditorsContract();
+            else if (std::string(argv[1]) == "--canvas-child")
+                flowCanvasContract();
+            else if (std::string(argv[1]) == "--startup-child")
+                startupProjectContract();
+            else if (std::string(argv[1]) == "--popups-child")
+                popupSessionsContract();
+            else if (std::string(argv[1]) == "--output-reuse-child")
+                outputCellReuseContract();
+            else if (std::string(argv[1]) == "--catalog-child")
+                packageDrivenCatalogAndRefreshContract();
+            else
+                pathEditorsContract();
+            return 0;
+        }
+        catch (const std::exception &error)
+        {
+            std::cerr << "[Workbench Focused Error] " << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc >= 2 && std::string(argv[1]) == "--short-window-child")
     {
         QGuiApplication qt(argc, argv);
@@ -1297,10 +1524,28 @@ int main(int argc, char **argv)
                 "installed tool metadata must not expose a second authoring entry");
         outputContract();
         pendingContract();
+        durationTextContract();
         nodeDiagnosticsContract();
         packageDrivenCatalogAndRefreshContract();
+        parameterEditorsContract();
+        pathEditorsContract();
 
         const QString appPath = QCoreApplication::applicationFilePath();
+
+        {
+            QProcess roiProc;
+            roiProc.start(appPath, {"--roi-child"});
+            const bool finished = roiProc.waitForFinished(30000);
+            if (!finished)
+            {
+                roiProc.kill();
+                roiProc.waitForFinished();
+            }
+            std::cout << roiProc.readAllStandardOutput().toStdString();
+            std::cerr << roiProc.readAllStandardError().toStdString();
+            require(finished && roiProc.exitStatus() == QProcess::NormalExit && roiProc.exitCode() == 0,
+                    "ROI child process failed or timed out");
+        }
 
         // 1. Run short window contract in child process
         {

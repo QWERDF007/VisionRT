@@ -20,6 +20,21 @@ struct InputPort
     bool        operator==(const InputPort &) const = default;
 };
 
+struct PortRelation
+{
+    SourcePort source;
+    InputPort target;
+    bool operator==(const PortRelation &) const = default;
+};
+
+struct PortRelations
+{
+    std::vector<PortRelation> active;
+    std::vector<std::string> errors;
+};
+
+PortRelations portRelations(const FlowDefinition &flow);
+
 // GUI-thread owned. Rejected commands throw ContractError without changing configuration.
 // Successful bool commands return whether persistent configuration actually changed.
 class ProjectEditor

@@ -85,9 +85,13 @@ ApplicationWindow {
         QuiColor.Primary = Theme.surfaceBg
         QuiColor.Border = Theme.border
         QuiColor.Highlight = Theme.highlight
+        QuiColor.Error = Theme.error
         QuiColor.FontPrimary = Theme.textPrimary
         QuiColor.FontCaption = Theme.textSecondary
         QuiColor.Button = Theme.menuButtonBg
+        QuiColor.CardBackground = Theme.paramEditorBg
+        QuiColor.CardBorder = Theme.paramEditorBorder
+        QuiColor.ItemHover = Theme.paramRowHoverBg
         QuiFont.Body = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12 })
         QuiFont.Caption = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
         Qt.callLater(resetLayout)
@@ -375,6 +379,7 @@ ApplicationWindow {
                     }
                     FlowCanvas {
                         id: flowCanvas
+                        objectName: "flowCanvas"
                         SplitView.fillHeight: true
                         SplitView.minimumHeight: 260
                     }
@@ -517,8 +522,8 @@ ApplicationWindow {
                 color: noticeMouse.containsMouse ? "#feebe9" : "transparent"
                 RowLayout {
                     id: noticeRow; anchors.centerIn: parent; spacing: 4
-                    QuiTextIcon { iconSource: QuiFontIcon.Warning; iconSize: 11; iconColor: "#cf222e" }
-                    QuiText { text: "提示信息"; font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 }); color: "#cf222e" }
+                    QuiTextIcon { iconSource: QuiFontIcon.Warning; iconSize: Theme.iconSizeSmall; iconColor: Theme.error }
+                    QuiText { text: "提示信息"; font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall }); color: Theme.error }
                 }
                 MouseArea {
                     id: noticeMouse; anchors.fill: parent; hoverEnabled: true

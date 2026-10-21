@@ -84,12 +84,11 @@ void Theme::initLightIndustrialPalette()
     paramEditorBorder_       = QColor("#d0d7de");
     paramEditorFocusBorder_  = QColor("#1677ff");
     paramEditorBg_           = QColor("#ffffff");
+    paramInputReadOnlyBg_    = QColor("#f0f2f5");
+    paramActionActiveBg_     = QColor(22, 119, 255, 26);  // rgba(22, 119, 255, 0.1)
+    paramActionHoverBg_      = QColor(22, 119, 255, 38);  // rgba(22, 119, 255, 0.15)
     bindingActiveColor_      = QColor("#1677ff");
     bindingInactiveColor_    = QColor("#8c959f");
-    spinButtonBg_            = QColor("#ffffff");
-    spinButtonHoverBg_       = QColor("#eef0f3");
-    spinButtonBorder_        = QColor("#c5ccd5");
-    spinButtonIcon_          = QColor("#57606a");
 
     // 全局通用色彩
     windowBg_      = QColor("#f5f7fa");
@@ -98,6 +97,8 @@ void Theme::initLightIndustrialPalette()
     highlight_     = QColor("#1677ff");
     textPrimary_   = QColor("#24292f");
     textSecondary_ = QColor("#57606a");
+    iconMuted_     = QColor("#8c959f");
+    iconSecondary_ = QColor("#57606a");
     error_         = QColor("#cf222e");
     success_       = QColor("#1a7f37");
     warning_       = QColor("#9a6700");
@@ -145,15 +146,25 @@ void Theme::initLightIndustrialPalette()
     paramGroupHeaderHeight_   = 28;
     paramGroupHeaderFontSize_ = 12;
     paramLabelFontSize_       = 12;
-    paramEditorHeight_        = 24;
+    paramEditorHeight_        = 32;
     paramEditorFontSize_      = 12;
+    paramActionBtnWidth_      = 28;
+    paramToggleIconSize_      = 14;
+    paramRoiIconSize_         = 16;
+    paramActionIconSize_      = 13;
 
-    // 全局字号与圆角
+    // 全局字号、图标与圆角
     fontSizeCaption_ = 10;
     fontSizeSmall_   = 11;
     fontSizeBase_    = 12;
     fontSizeMedium_  = 13;
     fontSizeLarge_   = 14;
+    iconSizeTiny_    = 10;
+    iconSizeSmall_   = 12;
+    iconSizeBase_    = 14;
+    iconSizeMedium_  = 16;
+    iconSizeLarge_   = 18;
+    iconSizeXLarge_  = 20;
     radiusSmall_     = 3;
     radiusBase_      = 4;
     radiusLarge_     = 6;

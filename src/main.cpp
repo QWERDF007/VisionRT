@@ -56,35 +56,32 @@ int main(int argc, char *argv[])
         qputenv("VISIONRT_PYTHON_HOME", parser.value("python-home").toUtf8());
     try
     {
+        QMetaObject::Connection startupConnection;
         visionrt::AppController controller(workers, QCoreApplication::applicationDirPath());
         if (parser.isSet("project"))
         {
             const QString projectPath = parser.value("project");
             const QString selectNode  = parser.value("select-node");
-            QTimer::singleShot(200,
-                               [&controller, projectPath, selectNode]()
-                               {
-                                   controller.resolveUnsaved("discard");
-                                   controller.requestOpen(projectPath);
-                                   controller.resolveUnsaved("discard");
-                                   QTimer::singleShot(
-                                       400,
-                                       [&controller, selectNode]()
-                                       {
-                                           if (!selectNode.isEmpty())
-                                           {
-                                               controller.selectNode(selectNode);
-                                           }
-                                           else
-                                           {
-                                               const auto nodes = controller.nodes();
-                                               if (!nodes.isEmpty())
-                                               {
-                                                   controller.selectNode(nodes.first().toMap().value("id").toString());
-                                               }
-                                           }
-                                       });
-                               });
+            const auto openProject = [&controller, &startupConnection, projectPath, selectNode]()
+            {
+                if (controller.busy())
+                    return;
+                QObject::disconnect(startupConnection);
+                QObject::connect(&controller, &visionrt::AppController::projectReplaced, &controller,
+                                 [&controller, selectNode]()
+                                 {
+                                     const auto nodes = controller.nodes();
+                                     if (!selectNode.isEmpty())
+                                         controller.selectNode(selectNode);
+                                     else if (!nodes.isEmpty())
+                                         controller.selectNode(nodes.first().toMap().value("id").toString());
+                                 }, Qt::SingleShotConnection);
+                controller.requestOpen(projectPath);
+                controller.resolveUnsaved("discard");
+            };
+            startupConnection = QObject::connect(&controller, &visionrt::AppController::runtimeChanged,
+                                                 &controller, openProject);
+            openProject();
         }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
         auto *theme = visionrt::Theme::instance();
