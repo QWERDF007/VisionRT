@@ -1,10 +1,10 @@
 #include "core/ToolRegistry.h"
-#include <visionrt/sdk/PythonInterop.h>
+#include <visionrt/contracts/PythonInterop.h>
 #include "python/PythonRuntime.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/numpy.h>
-#include <visionrt/sdk/Package.h>
+#include <visionrt/contracts/Package.h>
 
 #include <array>
 #include <cassert>

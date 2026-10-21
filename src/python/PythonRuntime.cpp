@@ -1,6 +1,6 @@
 #include "python/PythonRuntime.h"
 
-#include <visionrt/sdk/PythonInterop.h>
+#include <visionrt/contracts/PythonInterop.h>
 #include "runtime/Snapshot.h"
 
 #include <pybind11/embed.h>

@@ -4,7 +4,7 @@
 #include "ui/Theme.h"
 #include <quickui/Color.h>
 
-#include <visionrt/sdk/ValueYaml.h>
+#include <visionrt/contracts/ValueYaml.h>
 
 #include <QDir>
 #include <QFile>

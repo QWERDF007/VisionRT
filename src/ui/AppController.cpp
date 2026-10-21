@@ -2,8 +2,8 @@
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
 
-#include <visionrt/sdk/Package.h>
-#include <visionrt/sdk/ValueYaml.h>
+#include <visionrt/contracts/Package.h>
+#include <visionrt/contracts/ValueYaml.h>
 
 #include <QClipboard>
 #include <QCoreApplication>

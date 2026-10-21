@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core/Tool.h"
-#include "visionrt/sdk/Module.h"
-#include "visionrt/sdk/Package.h"
+#include "visionrt/contracts/Module.h"
+#include "visionrt/contracts/Package.h"
 
 #ifdef _WIN32
 #    ifndef WIN32_LEAN_AND_MEAN
