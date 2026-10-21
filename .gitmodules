@@ -16,7 +16,7 @@
 	branch = master
 [submodule "3rdparty/VisionRTContracts"]
 	path = 3rdparty/VisionRTContracts
-	url = https://github.com/QWERDF007/VisionRTSDK.git
+	url = https://github.com/QWERDF007/VisionRTContracts.git
 [submodule "3rdparty/adaptagrams"]
 	path = 3rdparty/adaptagrams
 	url = https://github.com/mjwybrow/adaptagrams.git
