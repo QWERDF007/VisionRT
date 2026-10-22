@@ -1,149 +1,83 @@
 #include "core/ToolPackage.h"
 
+#include "core/JsonFields.h"
+
 #include <algorithm>
-#include <set>
-#include <system_error>
 
 namespace visionrt {
-
 namespace {
-
-std::string pathText(const std::filesystem::path& path) {
-    const auto text = path.generic_u8string();
-    return {reinterpret_cast<const char*>(text.data()), text.size()};
-}
-
-std::filesystem::path utf8Path(std::string_view text) {
-    const auto view = std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size());
-    return std::filesystem::path(view);
-}
-
-bool cppKind(ToolKind kind) {
-    return kind == ToolKind::CppFunction || kind == ToolKind::CppClass;
-}
-
-bool underRoot(const std::filesystem::path& root, const std::filesystem::path& path) {
-    auto rootPart = root.begin();
-    auto pathPart = path.begin();
-    for (; rootPart != root.end(); ++rootPart, ++pathPart) {
-        if (pathPart == path.end() || *pathPart != *rootPart) return false;
+std::filesystem::path inside(const std::filesystem::path &root, const std::filesystem::path &path)
+{
+    const auto resolved = std::filesystem::weakly_canonical(path);
+    auto       part     = resolved.begin();
+    for (const auto &rootPart : root)
+    {
+        if (part == resolved.end() || *part != rootPart)
+            throw ContractError("路径超出工具包根目录：" + json::pathText(path).toStdString());
+        ++part;
     }
-    return true;
-}
-
-// Every package-relative reference resolves inside the installed package; a normalized
-// escape (for example "a/../../outside.yaml") is a contract violation, not a lookup hint.
-std::filesystem::path resolveInside(const std::filesystem::path& root, const std::string& relative,
-                                    const std::string& context) {
-    const auto resolved = (root / utf8Path(relative)).lexically_normal();
-    if (!underRoot(root, resolved))
-        throw ContractError(context + " resolves outside the package root: " + relative);
     return resolved;
 }
 
-} // namespace
+void requireFile(const std::filesystem::path &path)
+{
+    if (!std::filesystem::is_regular_file(path))
+        throw ContractError("工具包缺少文件：" + json::pathText(path).toStdString());
+}
+}
 
-ToolsPackage readToolsPackage(const std::filesystem::path& packageRoot) {
-    std::error_code error;
-    if (!std::filesystem::is_directory(packageRoot, error) || error) {
-        throw ContractError("Package root is not a valid directory: " + pathText(packageRoot));
-    }
-
+ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot)
+{
+    if (!std::filesystem::is_directory(packageRoot))
+        throw ContractError("工具包目录不存在：" + json::pathText(packageRoot).toStdString());
     ToolsPackage package;
-    package.root = std::filesystem::absolute(packageRoot).lexically_normal();
-
-    const auto indexFile = package.root / "module_index.yaml";
-    if (!std::filesystem::is_regular_file(indexFile, error) || error) {
-        throw ContractError("Missing module_index.yaml in package: " + pathText(package.root));
-    }
-    package.index = parseModuleIndexFile(indexFile);
-
-    for (const auto& [moduleName, moduleEntry] : package.index.modules) {
-        const auto library = resolveInside(package.root, moduleEntry.library,
-                                           "Module '" + moduleName + "' library");
-        if (!std::filesystem::is_regular_file(library, error) || error) {
-            throw ContractError("Module '" + moduleName + "' library file does not exist: " + pathText(library));
-        }
-    }
-
-    std::set<std::string> toolIds;
-    package.tools.reserve(package.index.tools.size());
-    for (const auto& [toolId, toolEntry] : package.index.tools) {
+    package.root  = std::filesystem::canonical(packageRoot);
+    package.index = parseModuleIndexFile(package.root / "module_index.json");
+    for (const auto &[id, module] : package.index.modules)
+        inside(package.root, package.root / json::relativePath(module.library, "modules.library"));
+    for (const auto &file : package.index.runtimeFiles)
+        inside(package.root, package.root / json::relativePath(file, "runtime_files"));
+    for (const auto &[id, entry] : package.index.tools)
+    {
         PackageTool tool;
-        tool.toolId = toolId;
-        const auto definitionPath = resolveInside(package.root, toolEntry.definition, "Tool '" + toolId + "' definition");
-        if (!std::filesystem::is_regular_file(definitionPath, error) || error) {
-            throw ContractError("Tool '" + toolId + "' definition file does not exist: " + pathText(definitionPath));
+        const auto file = inside(package.root, package.root / json::relativePath(entry.definition, "tools.definition"));
+        tool.definition = parseToolDefinitionFile(file, true);
+        if (tool.definition.id != id)
+            throw ContractError("索引 tool_id 与声明不一致：" + id + " / " + tool.definition.id);
+        if (tool.definition.kind == ToolKind::Cpp)
+        {
+            if (entry.module.empty())
+                throw ContractError("C++ 工具必须引用 module：" + id);
+            tool.moduleLibrary = inside(
+                package.root,
+                package.root / json::relativePath(package.index.modules.at(entry.module).library, "modules.library"));
         }
-        tool.definition = parseToolDefinitionFile(definitionPath, true);
-        if (tool.definition.id != toolId) {
-            throw ContractError("Tool definition id '" + tool.definition.id +
-                                "' does not match index tool_id '" + toolId + "'");
-        }
-        tool.registryName = tool.definition.registryName;
-        tool.hostBinding = toolEntry.hostBinding;
-        if (tool.hostBinding.empty() && std::any_of(tool.definition.outputs.begin(), tool.definition.outputs.end(),
-                [](const auto& port) { return port.typeFrom.has_value(); })) {
-            throw ContractError("Source-derived output types require host_binding: " + toolId);
-        }
-        if (!toolIds.insert(tool.toolId).second) {
-            throw ContractError("Duplicate tool_id in package: '" + tool.toolId + "'");
-        }
-
-        if (!tool.hostBinding.empty()) {
-            if (!toolEntry.module.empty()) {
-                throw ContractError("Tool '" + toolId + "' cannot specify both module and host_binding");
-            }
-            if (tool.definition.kind == ToolKind::PythonFunction || tool.definition.kind == ToolKind::PythonClass) {
-                throw ContractError("Python tool '" + toolId + "' cannot specify host_binding");
-            }
-        } else if (cppKind(tool.definition.kind)) {
-            if (toolEntry.module.empty()) {
-                throw ContractError("C++ domain tool '" + toolId + "' must reference a module");
-            }
-            tool.moduleLibrary = (package.root /
-                utf8Path(package.index.modules.at(toolEntry.module).library)).lexically_normal();
-        } else if (tool.definition.kind == ToolKind::PythonFunction || tool.definition.kind == ToolKind::PythonClass) {
-            if (!toolEntry.module.empty()) {
-                throw ContractError("Python tool '" + toolId + "' cannot reference a module");
-            }
-            if (tool.definition.script.empty()) {
-                throw ContractError("Python tool '" + toolId + "' declaration missing script entry");
-            }
-            const auto scriptPath = (definitionPath.parent_path() / tool.definition.script).lexically_normal();
-            if (!underRoot(package.root, scriptPath))
-                throw ContractError("Python tool '" + toolId + "' script resolves outside the package root: " +
-                                    pathText(scriptPath));
-            if (!std::filesystem::is_regular_file(scriptPath, error) || error) {
-                throw ContractError("Python tool '" + toolId + "' script file does not exist: " + pathText(scriptPath));
-            }
-        }
-
-        for (const auto& resource : tool.definition.resources) {
-            if (!underRoot(package.root, resource))
-                throw ContractError("Tool '" + toolId + "' resource resolves outside the package root");
-            if (!std::filesystem::exists(resource, error) || error)
-                throw ContractError("Tool '" + toolId + "' resource file does not exist: " + pathText(resource));
-        }
+        else if (!entry.module.empty())
+            throw ContractError("Python/host 工具不能引用 module：" + id);
+        if (!tool.definition.script.empty())
+            tool.definition.script = inside(package.root, tool.definition.script);
+        for (auto &resource : tool.definition.resources) resource = inside(package.root, resource);
         package.tools.push_back(std::move(tool));
     }
-
-    std::sort(package.tools.begin(), package.tools.end(), [](const PackageTool& a, const PackageTool& b) {
-        return a.definition.definitionPath.generic_u8string() < b.definition.definitionPath.generic_u8string();
-    });
-
-    for (const auto& runtimeFile : package.index.runtimeFiles) {
-        const auto resolved = resolveInside(package.root, runtimeFile, "runtime_files entry");
-        if (!std::filesystem::is_regular_file(resolved, error) || error) {
-            throw ContractError("runtime_files entry does not exist: " + pathText(resolved));
-        }
-    }
-
+    std::sort(package.tools.begin(), package.tools.end(), [](const auto &left, const auto &right)
+              { return left.definition.definitionPath < right.definition.definitionPath; });
     return package;
 }
 
-void validateToolsPackage(const std::filesystem::path& packageRoot) {
-    readToolsPackage(packageRoot);
+void validateToolsPackage(const std::filesystem::path &root)
+{
+    const auto package = readToolsPackage(root);
+    for (const auto &[id, module] : package.index.modules)
+        requireFile(package.root / json::relativePath(module.library, "modules.library"));
+    for (const auto &file : package.index.runtimeFiles)
+        requireFile(package.root / json::relativePath(file, "runtime_files"));
+    for (const auto &tool : package.tools)
+    {
+        if (!tool.definition.script.empty())
+            requireFile(tool.definition.script);
+        for (const auto &resource : tool.definition.resources)
+            if (!std::filesystem::exists(resource))
+                throw ContractError("工具包缺少资源：" + json::pathText(resource).toStdString());
+    }
 }
-
-} // namespace visionrt
+}

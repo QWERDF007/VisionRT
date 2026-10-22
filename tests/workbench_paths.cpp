@@ -38,18 +38,36 @@ void pathEditorsContract()
         require(file.open(QIODevice::WriteOnly), "cannot create path fixture file");
         require(file.write(content) == content.size(), "path fixture write failed");
     };
-    write("tools-package/module_index.yaml",
-          "schema_version: 2\nvariant: test\ntools:\n  test.paths:\n"
-          "    definition: assets/tools/custom/Test/paths.yaml\n");
+    write("tools-package/module_index.json",
+          R"json({
+  "schema_version": 1,
+  "variant": "test",
+  "tools": [
+    {"tool_id": "test.paths", "definition": "assets/tools/custom/Test/paths.json"}
+  ],
+  "modules": [],
+  "runtime_files": []
+})json");
     write("tools-package/assets/tools/custom/Test/run.py", "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
-    write("tools-package/assets/tools/custom/Test/paths.yaml",
-          "schema_version: 1\ntool_id: test.paths\ndisplay_name: 路径测试\nversion: 1.0.0\n"
-          "kind: python_function\nentry: {file: run.py, symbol: run}\ninit_params: []\ninputs:\n"
-          "  - {id: file, name: 文件, type: String, default: original file, editor: file}\n"
-          "  - {id: folder, name: 目录, type: String, default: original folder, editor: directory}\n"
-          "  - {id: mode, name: 模式, type: String, default: file, options: [file, directory]}\n"
-          "  - {id: path, name: 动态路径, type: String, default: original path, editor: path, path_mode_from: mode}\n"
-          "outputs:\n  - {id: mode_value, name: 模式输出, type: String}\n");
+    write("tools-package/assets/tools/custom/Test/paths.json",
+          R"json({
+  "schema_version": 1,
+  "tool_id": "test.paths",
+  "display_name": "路径测试",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "run.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [
+    {"id": "file", "name": "文件", "type": "String", "default": "original file", "editor": "file"},
+    {"id": "folder", "name": "目录", "type": "String", "default": "original folder", "editor": "directory"},
+    {"id": "mode", "name": "模式", "type": "String", "default": "file", "options": ["file", "directory"]},
+    {"id": "path", "name": "动态路径", "type": "String", "default": "original path", "editor": "path", "path_mode_from": "mode"}
+  ],
+  "outputs": [
+    {"id": "mode_value", "name": "模式输出", "type": "String"}
+  ]
+})json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
     const QString folderName = QStringLiteral("选择的目录 # %");
     const QString fileName = QStringLiteral("图像 示例 # %.txt");

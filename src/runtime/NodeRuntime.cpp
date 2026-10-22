@@ -231,11 +231,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     if (!instance)
                         throw RegistryError(ToolAvailability::ImplementationUnavailable,
                                             "factory returned no instance");
-                    if (kind == ToolKind::CppClass)
-                        status = instance->initialize(parameters);
-                    else if (kind == ToolKind::CppFunction)
-                        status = instance->initialize({});
-                    else if (kind == ToolKind::PythonClass)
+                    if (kind != ToolKind::PythonFunction)
                         status = instance->initialize(parameters);
                 }
                 catch (const RegistryError &error)

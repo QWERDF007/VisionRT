@@ -10,7 +10,7 @@
 
 namespace visionrt {
 
-enum class ToolKind { CppFunction, CppClass, PythonFunction, PythonClass };
+enum class ToolKind { Cpp, PythonFunction, PythonClass, Host };
 
 struct PortTypeReference {
     std::string flowParameter;
@@ -47,12 +47,12 @@ struct ToolDefinition {
     std::string id;
     std::string displayName;
     std::string version = "1.0.0";
-    ToolKind kind = ToolKind::CppFunction;
+    ToolKind kind = ToolKind::Cpp;
     std::filesystem::path definitionPath;
     std::string category;
     std::string subcategory;
     bool builtin = false;
-    std::string registryName;
+    std::string hostBinding;
     std::filesystem::path script;
     std::string symbol;
     std::vector<std::filesystem::path> resources;

@@ -106,7 +106,7 @@ QString stateName(RuntimeState state)
 std::filesystem::path toolsPackageDirectory(const std::filesystem::path &application)
 {
     const auto installed = (application / "tools-package").lexically_normal();
-    if (std::filesystem::exists(installed / "module_index.yaml"))
+    if (std::filesystem::exists(installed / "module_index.json"))
         return installed;
     return {};
 }

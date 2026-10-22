@@ -10,7 +10,7 @@ ValueJson::Document::Document(const QByteArray &bytes)
     QJsonParseError error;
     values_ = QJsonDocument::fromJson(bytes, &error);
     if (error.error != QJsonParseError::NoError)
-        throw ContractError("需要标准 JSON 文档：" + error.errorString().toStdString());
+        throw ContractError("需要标准 JSON 文档，offset=" + std::to_string(error.offset) + "：" + error.errorString().toStdString());
 
     const auto                      text = QString::fromUtf8(bytes);
     static const QRegularExpression tokens(

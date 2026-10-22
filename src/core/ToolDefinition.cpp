@@ -237,18 +237,18 @@ void validateToolDefinition(const ToolDefinition& def) {
         throw ContractError("Unknown tool kind on: " + def.id);
     }
 
-    if (def.kind == ToolKind::CppFunction || def.kind == ToolKind::CppClass) {
-        if (def.registryName.empty()) {
-            throw ContractError("C++ tool requires entry.registry_name: " + def.id);
-        }
-    } else if (def.kind == ToolKind::PythonFunction || def.kind == ToolKind::PythonClass) {
+    if (def.kind == ToolKind::PythonFunction || def.kind == ToolKind::PythonClass) {
         if (def.script.empty() || def.symbol.empty()) {
             throw ContractError("Python tool requires non-empty entry.file and entry.symbol: " + def.id);
         }
     }
+    if (def.kind == ToolKind::Host && def.hostBinding.empty())
+        throw ContractError("宿主工具必须声明 entry.binding：" + def.id);
+    if (def.kind != ToolKind::Host && !def.hostBinding.empty())
+        throw ContractError("非宿主工具不能声明 entry.binding：" + def.id);
 
     validatePorts(def.initParams, "init_params");
-    if (def.kind == ToolKind::CppFunction || def.kind == ToolKind::PythonFunction) {
+    if (def.kind == ToolKind::PythonFunction) {
         if (!def.initParams.empty()) {
             throw ContractError("Function tool cannot have init_params: " + def.id);
         }
@@ -283,6 +283,8 @@ void validateToolDefinition(const ToolDefinition& def) {
     }
     for (const auto& port : def.outputs) {
         if (port.typeFrom) {
+            if (def.kind != ToolKind::Host)
+                throw ContractError("type_from 仅适用于宿主工具：" + def.id);
             for (const auto& parameter : {port.typeFrom->flowParameter, port.typeFrom->nodeParameter,
                     port.typeFrom->portParameter}) {
                 const auto* reference = findPort(def.initParams, parameter);
@@ -292,10 +294,6 @@ void validateToolDefinition(const ToolDefinition& def) {
         }
         checkImageRef(def.outputs, port.imagePort, "image_port");
         checkImageRef(def.inputs, port.sameGeometryAsInput, "same_geometry_as_input");
-    }
-
-    if ((def.kind == ToolKind::CppFunction || def.kind == ToolKind::PythonFunction) && !def.initParams.empty()) {
-        throw ContractError("Function tools must have empty init_params: " + def.id);
     }
 }
 

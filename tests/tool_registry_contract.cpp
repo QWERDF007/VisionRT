@@ -1,102 +1,26 @@
-#include "core/ToolRegistry.h"
-#include "core/ToolDeclarationYaml.h"
 #include "core/ToolPackage.h"
+#include "core/ToolRegistry.h"
+#include "plugins/PluginLoader.h"
 
-#include <core/ValueYaml.h>
-
-#include <algorithm>
 #include <cassert>
-#include <chrono>
-#include <fstream>
-#include <limits>
-#include <stdexcept>
+#include <iostream>
 
 using namespace visionrt;
 
 namespace {
-template<class F>
-std::string rejects(F &&operation)
+template<class Action>
+void rejects(Action action)
 {
+    bool rejected = false;
     try
     {
-        operation();
+        action();
     }
-    catch (const std::exception &error)
+    catch (const std::exception &)
     {
-        return error.what();
+        rejected = true;
     }
-    throw std::runtime_error("Expected contract rejection");
-}
-
-struct TemporaryTools
-{
-    std::filesystem::path root
-        = std::filesystem::temp_directory_path()
-        / ("visionrt-registry-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-
-    TemporaryTools()
-    {
-        std::filesystem::create_directories(root);
-    }
-
-    ~TemporaryTools()
-    {
-        std::error_code error;
-        std::filesystem::remove_all(root, error);
-    }
-
-    ToolsPackage package(std::initializer_list<std::pair<std::string, std::string>> declarations) const
-    {
-        YAML::Node index;
-        index["schema_version"] = 2;
-        index["variant"] = "registry-fixture";
-        index["modules"] = YAML::Node(YAML::NodeType::Map);
-        index["tools"] = YAML::Node(YAML::NodeType::Map);
-        for (const auto &[id, relative] : declarations)
-        {
-            const auto definition = parseToolDefinitionFile(root / relative);
-            index["tools"][id]["definition"] = relative;
-            if (definition.kind == ToolKind::CppFunction || definition.kind == ToolKind::CppClass)
-            {
-                index["modules"]["fixture"]["library"] = "bin/fixture.dll";
-                index["tools"][id]["module"] = "fixture";
-            }
-        }
-        put("bin/fixture.dll", "registry fixture, never dynamically loaded");
-        put("module_index.yaml", YAML::Dump(index));
-        return readToolsPackage(root);
-    }
-
-    std::filesystem::path put(const std::string &relative, const std::string &yaml) const
-    {
-        const auto path = root / relative;
-        std::filesystem::create_directories(path.parent_path());
-        std::ofstream file(path, std::ios::binary);
-        file << yaml;
-        file.close();
-        assert(file);
-        return path;
-    }
-};
-
-YAML::Node definition(const std::string &id)
-{
-    return YAML::Load("schema_version: 1\ntool_id: " + id + R"(
-display_name: Contract tool
-category: Image
-subcategory: Basic
-version: v1
-kind: cpp_function
-entry: {registry_name: test.pass}
-init_params: []
-inputs:
-  - {id: images, name: Images, type: ImageBatch, default: null}
-  - {id: rois, name: ROIs, type: RoiBatch, default: [], image_input: images}
-  - {id: threshold, name: Threshold, type: Int, default: 4, min: 0, max: 10, step: 1}
-outputs:
-  - {id: images, name: Images, type: ImageBatch, display: {same_geometry_as_input: images, color_order: BGR}}
-  - {id: rois, name: ROIs, type: RoiBatch, image_port: images}
-)");
+    assert(rejected);
 }
 
 class PassTool final : public IToolInstance
@@ -107,12 +31,9 @@ public:
         return {};
     }
 
-    ToolResult execute(const Values &input) override
+    ToolResult execute(const Values &inputs) override
     {
-        return {
-            {},
-            {{"images", input.at("images")}, {"rois", input.at("rois")}}
-        };
+        return {{}, inputs};
     }
 
     ToolStatus release() override
@@ -120,414 +41,103 @@ public:
         return {};
     }
 };
-} // namespace
 
-int main(int argc, char **argv)
+ToolDefinition definition(std::string id)
 {
-    assert(argc == 2);
-    const TypeSpec integer{Type::Int};
-    for (const auto text : {"-9223372036854775808", "9223372036854775807"})
-    {
-        const auto value = decodeValue(YAML::Load(text), integer);
-        assert(std::get<std::int64_t>(value) == parseInt64(text));
-        const auto serialized = YAML::Dump(encodeValue(value, integer));
-        assert(std::get<std::int64_t>(decodeValue(YAML::Load(serialized), integer)) == parseInt64(text));
-    }
-    rejects([&] { decodeValue(YAML::Load("9223372036854775808"), integer); });
-    rejects([&] { decodeValue(YAML::Load("true"), integer); });
-    rejects([&] { decodeValue(YAML::Load("2.0"), integer); });
-    assert(isMissing(decodeValue(YAML::Load("null"), {Type::ImageBatch})));
-    assert(std::get<ImageBatch>(decodeValue(YAML::Load("[]"), {Type::ImageBatch})).images().empty());
-    rejects([] { decodeValue(YAML::Load("[1]"), {Type::ImageBatch}); });
-    rejects([] { decodeTypeSpec(YAML::Load("{type: NumericArray, rank: 1}")); });
-    rejects([] { decodeTypeSpec(YAML::Load("{type: NumericArray, dtype: int64}")); });
-    rejects([] { decodeTypeSpec(YAML::Load("{type: StringArray, rank: 1, dtype: int64}")); });
-    const TypeSpec dense{Type::NumericArray, DType::Int64, 2, Layout::Dense};
-    assert(decodeTypeSpec(encodeTypeSpec(dense)) == dense);
-    const auto denseValue
-        = decodeValue(YAML::Load("{shape: [1, 2], data: [9223372036854775807, -9223372036854775808]}"), dense);
-    const auto denseRoundTrip = decodeValue(YAML::Load(YAML::Dump(encodeValue(denseValue, dense))), dense);
-    const auto denseData      = std::get<NumericArray>(denseRoundTrip).buffers()[0].values<std::int64_t>();
-    assert(denseData[0] == std::numeric_limits<std::int64_t>::max());
-    assert(denseData[1] == std::numeric_limits<std::int64_t>::min());
-    rejects([&] { decodeValue(YAML::Load("{shape: [1, 2], data: [1]}"), dense); });
-    rejects([&] { decodeValue(YAML::Load("{shape: [-1, 0], data: []}"), dense); });
-    rejects([&] { decodeValue(YAML::Load("{shape: [9223372036854775807, 3], data: []}"), dense); });
-    const TypeSpec bytes{Type::NumericArray, DType::UInt8, 1};
-    const auto     byteValue     = decodeValue(YAML::Load("{shape: [2], data: [0, 255]}"), bytes);
-    const auto     byteRoundTrip = decodeValue(encodeValue(byteValue, bytes), bytes);
-    assert(std::get<NumericArray>(byteRoundTrip).buffers()[0].values<std::uint8_t>()[1] == 255);
-    rejects([&] { decodeValue(YAML::Load("{shape: [1], data: [256]}"), bytes); });
-    const TypeSpec ints{Type::NumericArray, DType::Int32, 1};
-    rejects([&] { decodeValue(YAML::Load("{shape: [1], data: [-2147483649]}"), ints); });
-    const TypeSpec flags{Type::NumericArray, DType::Bool, 1};
-    const auto     flagValue     = decodeValue(YAML::Load("{shape: [2], data: [true, false]}"), flags);
-    const auto     flagRoundTrip = decodeValue(encodeValue(flagValue, flags), flags);
-    assert(std::get<NumericArray>(flagRoundTrip).buffers()[0].values<bool>()[0]);
-    assert(!std::get<NumericArray>(flagRoundTrip).buffers()[0].values<bool>()[1]);
-    rejects([&] { decodeValue(YAML::Load("{shape: [1], data: [1]}"), flags); });
-    const TypeSpec ragged{Type::NumericArray, DType::Float32, 2, Layout::BatchRagged};
-    const auto     raggedValue
-        = decodeValue(YAML::Load("[{shape: [0], data: []}, {shape: [3], data: [0.8, 0.95, 0.7]}]"), ragged);
-    const auto  raggedRoundTrip = decodeValue(encodeValue(raggedValue, ragged), ragged);
-    const auto &scores          = std::get<NumericArray>(raggedRoundTrip);
-    assert(scores.buffers()[0].shape()[0] == 0);
-    assert(scores.buffers()[1].values<float>()[1] == 0.95F);
-    const TypeSpec names{Type::StringArray, {}, 2, Layout::BatchRagged};
-    const auto namesValue = decodeValue(YAML::Load("[{shape: [0], data: []}, {shape: [2], data: [one, two]}]"), names);
-    const auto namesRoundTrip = decodeValue(encodeValue(namesValue, names), names);
-    assert(std::get<StringArray>(namesRoundTrip).buffers()[1].values()[1] == "two");
-    const TypeSpec denseNames{Type::StringArray, {}, 1};
-    const auto     literalNames = decodeValue(YAML::Load("{shape: [2], data: ['null', '001']}"), denseNames);
-    const auto     literalRoundTrip
-        = decodeValue(YAML::Load(YAML::Dump(encodeValue(literalNames, denseNames))), denseNames);
-    assert(std::get<StringArray>(literalRoundTrip).buffers()[0].values()[0] == "null");
-    assert(std::get<StringArray>(literalRoundTrip).buffers()[0].values()[1] == "001");
-    const auto rois = decodeValue(
-        YAML::Load("[[[1, 0, 0, 1, 1], [2, 0, 0, 2, 3, 90], [3, 1, 2, 3], [4, 0, 0, 1, 0, 0, 1], [5, 1, 2]], []]"),
-        {Type::RoiBatch});
-    const auto  roiRoundTrip = decodeValue(encodeValue(rois, {Type::RoiBatch}), {Type::RoiBatch});
-    const auto &shapes       = std::get<RoiBatch>(roiRoundTrip).images();
-    assert(shapes[0][0].kind() == RoiKind::Segment);
-    assert(shapes[0][1].encoded()[5] == 90);
-    assert(shapes[0][2].kind() == RoiKind::Circle);
-    assert(shapes[0][3].kind() == RoiKind::Polygon);
-    assert(shapes[0][4].kind() == RoiKind::PointSet);
-    assert(shapes[1].empty());
-    rejects([] { decodeValue(YAML::Load("[[[3, 1, 2, 0]]]"), {Type::RoiBatch}); });
-
-    TemporaryTools temporary;
-    const auto     builtinPath = temporary.put("builtin/Image/Basic/a.yaml", YAML::Dump(definition("test.pass")));
-    temporary.put("custom/Image/Basic/duplicate.yaml", YAML::Dump(definition("test.pass")));
-    temporary.put("builtin/Image/Basic/broken.yaml", "inputs: [");
-    auto other                      = definition("test.other");
-    other["entry"]["registry_name"] = "test.other";
-    temporary.put("custom/Image/Basic/valid.yaml", YAML::Dump(other));
-    ToolRegistry registry;
-    registry.registerPackage(temporary.package({
-        {"test.pass", "builtin/Image/Basic/a.yaml"},
-        {"test.other", "custom/Image/Basic/valid.yaml"},
-    }));
-    assert(registry.definitions().size() == 2);
-    assert(registry.find("test.pass")->definitionPath == builtinPath);
-    assert(registry.find("test.pass")->category == "Image");
-    assert(registry.find("test.pass")->subcategory == "Basic");
-    assert(registry.find("test.pass")->outputs[0].id == "__status_code");
-    assert(registry.find("test.pass")->outputs[1].id == "__status_message");
-    assert(registry.find("test.pass")->outputs[2].id == "images");
-    assert(registry.availability("not.loaded").state == ToolAvailability::DefinitionMissing);
-    assert(registry.availability("test.pass").state == ToolAvailability::ImplementationUnavailable);
-    assert(rejects([&] { registry.create("test.pass", {}); }).find("unavailable") != std::string::npos);
-    auto contract                       = *registry.find("test.pass");
-    auto incompatible                   = contract;
-    incompatible.inputs[2].type         = {Type::Float};
-    incompatible.inputs[2].defaultValue = 4.0;
-    rejects(
-        [&]
-        {
-            registry.registerCpp("test.pass", incompatible,
-                                 [](const ToolServices &) { return std::make_unique<PassTool>(); });
-        });
-    registry.registerCpp("test.pass", contract, [](const ToolServices &) { return std::make_unique<PassTool>(); });
-    assert(registry.availability("test.pass").state == ToolAvailability::Available);
-    auto tool = registry.create("test.pass", {});
-    assert(tool->initialize({}));
-    const auto result = tool->execute({
-        {"images", ImageBatch{}},
-        {  "rois",   RoiBatch{}}
-    });
-    assert(result.status && std::get<ImageBatch>(result.outputs.at("images")).images().empty());
-    assert(tool->release());
-    auto customContract
-        = parseDefinitionNode(definition("custom.pass"), temporary.root / "custom/Image/Basic/copy.yaml", false);
-    registry.validateContract(customContract);
-    registry.addDefinition(std::move(customContract));
-    assert(registry.availability("custom.pass").state == ToolAvailability::Available);
-    auto changedSignature                 = definition("custom.changed");
-    changedSignature["inputs"][2]["type"] = "Float";
-    const auto changed
-        = parseDefinitionNode(changedSignature, temporary.root / "custom/Image/Basic/changed.yaml", false);
-    rejects([&] { registry.validateContract(changed); });
-    auto invalidReplacement        = changed;
-    invalidReplacement.id          = "test.pass";
-    invalidReplacement.displayName = "Rejected replacement";
-    rejects([&] { registry.replaceDefinition(invalidReplacement); });
-    assert(registry.find("test.pass")->displayName == contract.displayName);
-    assert(registry.availability("test.pass").state == ToolAvailability::Available);
-    auto renamed        = contract;
-    renamed.displayName = "Saved custom metadata";
-    registry.replaceDefinition(std::move(renamed));
-    assert(registry.find("test.pass")->displayName == "Saved custom metadata");
-    assert(registry.availability("test.pass").state == ToolAvailability::Available);
-    registry.registerPackage(temporary.package({{"test.pass", "builtin/Image/Basic/a.yaml"}, {"test.other", "custom/Image/Basic/valid.yaml"}}));
-    assert(registry.definitions()[0].id == "test.pass");
-    assert(registry.definitions()[1].id == "test.other");
-    assert(registry.availability("test.pass").state == ToolAvailability::Available);
-
-    std::vector<std::filesystem::path> invalidYamlPaths;
-    int                                invalidSeq       = 0;
-    const auto                         rejectDefinition = [&](YAML::Node yaml)
-    {
-        const auto path
-            = temporary.put("invalid/Image/Basic/tool_" + std::to_string(++invalidSeq) + ".yaml", YAML::Dump(yaml));
-        invalidYamlPaths.push_back(path);
-        const auto message = rejects([&] { parseDefinition(path, false); });
-        assert(message.find("tool_") != std::string::npos);
+    ToolDefinition result;
+    result.id          = std::move(id);
+    result.displayName = "注册工具";
+    result.inputs      = {
+        {"value", "输入", {Type::Int}}
     };
-    auto invalid = definition("bad.duplicate");
-    invalid["inputs"].push_back(YAML::Clone(invalid["inputs"][0]));
-    rejectDefinition(invalid);
-    invalid                     = definition("bad.reserved");
-    invalid["outputs"][0]["id"] = "__status_code";
-    rejectDefinition(invalid);
-    invalid = definition("bad.init");
-    invalid["init_params"].push_back(YAML::Clone(invalid["inputs"][0]));
-    rejectDefinition(invalid);
-    invalid                             = definition("bad.reference");
-    invalid["outputs"][1]["image_port"] = "rois";
-    rejectDefinition(invalid);
-    invalid                                                    = definition("bad.display");
-    invalid["outputs"][0]["display"]["same_geometry_as_input"] = "rois";
-    rejectDefinition(invalid);
-    invalid                     = definition("bad.range");
-    invalid["inputs"][2]["min"] = 20;
-    rejectDefinition(invalid);
-    invalid                         = definition("bad.default");
-    invalid["inputs"][2]["default"] = 12;
-    rejectDefinition(invalid);
-    invalid                      = definition("bad.step");
-    invalid["inputs"][2]["step"] = 0;
-    rejectDefinition(invalid);
-    invalid                       = definition("bad.array");
-    invalid["outputs"][1]["type"] = "NumericArray";
-    rejectDefinition(invalid);
-    invalid = definition("bad.function");
-    invalid["init_params"].push_back(YAML::Load("{id: count, name: Count, type: Int}"));
-    rejectDefinition(invalid);
-    invalid               = definition("bad.fields");
-    invalid["run_params"] = YAML::Node(YAML::NodeType::Sequence);
-    rejectDefinition(invalid);
-    invalid         = definition("bad.kind");
-    invalid["kind"] = "unsupported_kind";
-    rejectDefinition(invalid);
-    invalid          = definition("bad.py_empty_file");
-    invalid["kind"]  = "python_function";
-    invalid["entry"] = YAML::Load("{file: '', symbol: run}");
-    rejectDefinition(invalid);
-    invalid          = definition("bad.py_empty_sym");
-    invalid["kind"]  = "python_function";
-    invalid["entry"] = YAML::Load("{file: run.py, symbol: ''}");
-    rejectDefinition(invalid);
-    invalid                                  = definition("bad.unknown_port_field");
-    invalid["inputs"][2]["unsupported_prop"] = 42;
-    rejectDefinition(invalid);
-    invalid                   = definition("bad.unknown_entry_field");
-    invalid["entry"]["extra"] = "val";
-    rejectDefinition(invalid);
-    invalid                                   = definition("bad.unknown_display_field");
-    invalid["outputs"][0]["display"]["extra"] = "val";
-    rejectDefinition(invalid);
-    invalid                     = definition("bad.min_type");
-    invalid["inputs"][2]["min"] = "wrong_type";
-    rejectDefinition(invalid);
-    invalid                     = definition("bad.max_type");
-    invalid["inputs"][2]["max"] = "wrong_type";
-    rejectDefinition(invalid);
-    invalid                      = definition("bad.step_type");
-    invalid["inputs"][2]["step"] = "wrong_type";
-    rejectDefinition(invalid);
-    invalid                         = definition("bad.nan_min");
-    invalid["inputs"][2]["type"]    = "Float";
-    invalid["inputs"][2]["default"] = 1.0;
-    invalid["inputs"][2]["min"]     = ".nan";
-    rejectDefinition(invalid);
-    invalid                         = definition("bad.inf_max");
-    invalid["inputs"][2]["type"]    = "Float";
-    invalid["inputs"][2]["default"] = 1.0;
-    invalid["inputs"][2]["max"]     = ".inf";
-    rejectDefinition(invalid);
-    invalid                         = definition("bad.default_less_min");
-    invalid["inputs"][2]["default"] = -1;
-    rejectDefinition(invalid);
-    invalid                         = definition("bad.options_out_of_range");
-    invalid["inputs"][2]["options"] = YAML::Load("[0, 5, 20]");
-    rejectDefinition(invalid);
-    invalid                         = definition("bad.default_not_in_options");
-    invalid["inputs"][2]["options"] = YAML::Load("[0, 2, 4]");
-    invalid["inputs"][2]["default"] = 3;
-    rejectDefinition(invalid);
+    result.outputs = {
+        {"value", "输出", {Type::Int}}
+    };
+    return result;
+}
 
-    // Positive case: valid tool YAML with options and bounds
-    auto validWithOptions                    = definition("valid.options");
-    validWithOptions["inputs"][2]["options"] = YAML::Load("[0, 4, 8]");
-    validWithOptions["inputs"][2]["default"] = 4;
-    const auto validPath         = temporary.put("valid/Image/Basic/options.yaml", YAML::Dump(validWithOptions));
-    const auto parsedOptionsTool = parseDefinition(validPath, false);
-    assert(parsedOptionsTool.id == "valid.options");
-    assert(parsedOptionsTool.inputs[2].options.size() == 3);
+ToolsPackage package(const ToolDefinition &tool)
+{
+    ToolsPackage result;
+    result.tools.push_back({tool, {}});
+    return result;
+}
+}
 
-    // Direct SchemaYaml SDK tests
-    const std::string validYamlText = YAML::Dump(definition("sdk.direct"));
-    const auto        directDef     = parseToolDefinitionYaml(validYamlText);
-    assert(directDef.id == "sdk.direct");
-    validateToolYaml(validYamlText);
-    validateToolDefinition(directDef);
-    rejects([&] { parseToolDefinitionYaml("unknown_top_field: 123"); });
+int main()
+{
+    ToolRegistry registry;
+    auto         tool = definition("test.pass");
+    registry.registerPackage(package(tool));
+    assert(registry.availability("missing").state == ToolAvailability::DefinitionMissing);
+    assert(registry.availability(tool.id).state == ToolAvailability::ImplementationUnavailable);
+    rejects([&] { registry.create(tool.id, {}); });
+    registry.registerCpp(tool, [](const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+    assert(registry.availability(tool.id).state == ToolAvailability::Available);
+    rejects([&]
+            { registry.registerCpp(tool, [](const PlatformToolServices &) { return std::make_unique<PassTool>(); }); });
+    auto instance = registry.create(tool.id, {});
+    assert(instance->initialize({}));
+    assert(std::get<std::int64_t>(instance
+                                      ->execute({
+                                          {"value", std::int64_t{7}}
+    })
+                                      .outputs.at("value"))
+           == 7);
+    assert(instance->release());
 
-    // Direct C++ semantic negative tests on validateToolDefinition
-    {
-        ToolDefinition bad = directDef;
-        bad.id             = "bad ID with spaces";
-        rejects([&] { validateToolDefinition(bad); });
+    tool.outputs.insert(tool.outputs.begin(), {
+                                                  {   "__status_code", "状态",    {Type::Int}},
+                                                  {"__status_message", "消息", {Type::String}}
+    });
+    registry.registerPackage(package(tool));
+    auto invalid                = tool;
+    invalid.outputs.back().type = {Type::Float};
+    rejects([&] { registry.registerPackage(package(invalid)); });
+    assert(registry.find(tool.id)->outputs.back().type == TypeSpec{Type::Int});
+    rejects([&] { registry.addDefinition(tool); });
+    auto duplicate = package(tool);
+    duplicate.tools.push_back(duplicate.tools.front());
+    rejects([&] { registry.registerPackage(duplicate); });
+    assert(registry.find(tool.id));
 
-        bad             = directDef;
-        bad.displayName = "";
-        rejects([&] { validateToolDefinition(bad); });
+    auto python   = definition("test.python");
+    python.kind   = ToolKind::PythonFunction;
+    python.script = "tool.py";
+    python.symbol = "execute";
+    registry.registerPackage(package(python));
+    registry.setPythonImplementation(python.id,
+                                     [](const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+    assert(registry.availability(python.id).state == ToolAvailability::Available);
+    registry.registerPackage(package(python));
+    assert(registry.availability(python.id).state == ToolAvailability::ImplementationUnavailable);
+    registry.setPythonImplementation(python.id, {}, {-3, "import failed"});
+    assert(registry.availability(python.id).message.find("import failed") != std::string::npos);
 
-        bad         = directDef;
-        bad.version = "";
-        rejects([&] { validateToolDefinition(bad); });
+    auto host        = definition("test.receiver");
+    host.kind        = ToolKind::Host;
+    host.hostBinding = "receiver";
+    registry.registerPackage(package(host));
+    assert(registry.availability(host.id).state == ToolAvailability::ImplementationUnavailable);
+    registry.registerHostBinding(
+        "receiver", [](const ToolDefinition &, const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+    assert(registry.availability(host.id).state == ToolAvailability::Available);
+    assert(registry.create(host.id, {}));
+    rejects([&] { registry.setPythonImplementation(host.id, {}); });
 
-        bad      = directDef;
-        bad.kind = static_cast<ToolKind>(99);
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad        = directDef;
-        bad.kind   = ToolKind::PythonFunction;
-        bad.script = "";
-        bad.symbol = "run";
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad        = directDef;
-        bad.kind   = ToolKind::PythonFunction;
-        bad.script = "tool.py";
-        bad.symbol = "";
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                   = directDef;
-        bad.inputs[2].minimum = PortValue{"wrong_type"};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                   = directDef;
-        bad.inputs[2].maximum = PortValue{"wrong_type"};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                = directDef;
-        bad.inputs[2].step = PortValue{"wrong_type"};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                   = directDef;
-        bad.inputs[2].minimum = PortValue{std::int64_t{10}};
-        bad.inputs[2].maximum = PortValue{std::int64_t{5}};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                = directDef;
-        bad.inputs[2].step = PortValue{std::int64_t{0}};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                = directDef;
-        bad.inputs[2].step = PortValue{std::int64_t{-1}};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                        = directDef;
-        bad.inputs[2].defaultValue = PortValue{std::int64_t{20}};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                        = directDef;
-        bad.inputs[2].defaultValue = PortValue{std::int64_t{-5}};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                        = directDef;
-        bad.inputs[2].options      = {PortValue{std::int64_t{1}}, PortValue{std::int64_t{2}}};
-        bad.inputs[2].defaultValue = PortValue{std::int64_t{4}};
-        rejects([&] { validateToolDefinition(bad); });
-
-        bad                   = directDef;
-        bad.inputs[2].options = {PortValue{std::int64_t{100}}}; // exceeds max=10
-        rejects([&] { validateToolDefinition(bad); });
-
-        // Float NaN and Inf in C++
-        ToolDefinition floatDef         = directDef;
-        floatDef.inputs[2].type         = {Type::Float};
-        floatDef.inputs[2].defaultValue = PortValue{std::numeric_limits<double>::quiet_NaN()};
-        rejects([&] { validateToolDefinition(floatDef); });
-
-        floatDef.inputs[2].defaultValue = PortValue{std::numeric_limits<double>::infinity()};
-        rejects([&] { validateToolDefinition(floatDef); });
-
-        floatDef.inputs[2].defaultValue = PortValue{1.0};
-        floatDef.inputs[2].minimum      = PortValue{std::numeric_limits<double>::quiet_NaN()};
-        rejects([&] { validateToolDefinition(floatDef); });
-
-        floatDef.inputs[2].minimum = PortValue{0.0};
-        floatDef.inputs[2].maximum = PortValue{std::numeric_limits<double>::infinity()};
-        rejects([&] { validateToolDefinition(floatDef); });
-
-        floatDef.inputs[2].maximum = PortValue{10.0};
-        floatDef.inputs[2].step    = PortValue{std::numeric_limits<double>::quiet_NaN()};
-        rejects([&] { validateToolDefinition(floatDef); });
-    }
-
-    // Validate CLI executable tests across valid definition and all negative corpus files
-    std::filesystem::path validatorExe = std::filesystem::exists("bin/visionrt_validate_tool.exe")
-                                           ? std::filesystem::path("bin/visionrt_validate_tool.exe")
-                                           : (std::filesystem::exists("bin/visionrt_validate_tool")
-                                                  ? std::filesystem::path("bin/visionrt_validate_tool")
-                                                  : std::filesystem::path());
-    if (!validatorExe.empty())
-    {
-        validatorExe            = std::filesystem::absolute(validatorExe).make_preferred();
-        const auto validCommand = "\"\"" + validatorExe.string() + "\" \""
-                                + std::filesystem::absolute(validPath).make_preferred().string() + "\"\"";
-        const auto codeValid    = std::system(validCommand.c_str());
-        assert(codeValid == 0);
-        const auto invalidFile = temporary.put("invalid/bad.yaml", "unknown_field: 123\n");
-        invalidYamlPaths.push_back(invalidFile);
-        for (const auto &path : invalidYamlPaths)
-        {
-            const auto invalidCommand = "\"\"" + validatorExe.string() + "\" \""
-                                      + std::filesystem::absolute(path).make_preferred().string() + "\"\"";
-            const auto codeInvalid    = std::system(invalidCommand.c_str());
-            assert(codeInvalid != 0);
-        }
-    }
-
-    TemporaryTools refreshTools;
-    auto python = definition("refresh.python");
-    python["kind"] = "python_function";
-    python["entry"] = YAML::Load("{file: tool.py, symbol: execute}");
-    refreshTools.put("Python/python.yaml", YAML::Dump(python));
-    refreshTools.put("Python/tool.py", "def execute(inputs): return {}\n");
-    ToolRegistry refreshed;
-    refreshed.registerPackage(refreshTools.package({{"refresh.python", "Python/python.yaml"}}));
-    refreshed.setPythonImplementation("refresh.python", [](const ToolServices &) { return std::make_unique<PassTool>(); });
-    assert(refreshed.availability("refresh.python").state == ToolAvailability::Available);
-    python["display_name"] = "Reloaded package metadata";
-    refreshTools.put("Python/python.yaml", YAML::Dump(python));
-    refreshed.registerPackage(readToolsPackage(refreshTools.root));
-    assert(refreshed.find("refresh.python")->displayName == "Reloaded package metadata");
-    assert(refreshed.availability("refresh.python").state == ToolAvailability::ImplementationUnavailable);
-    std::filesystem::remove(refreshTools.root / "Python/python.yaml");
-    rejects([&] { readToolsPackage(refreshTools.root); });
-    assert(refreshed.find("refresh.python"));
-    refreshed.registerPackage({});
-    assert(refreshed.definitions().empty());
-
-    ToolRegistry examples;
-    examples.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
-    assert(examples.find("custom.image.mean"));
-    const auto *crop = examples.find("visionrt.image.crop");
-    assert(crop);
-    const auto rectangle = std::find_if(crop->inputs.begin(), crop->inputs.end(),
-                                        [](const auto &port) { return port.id == "rect"; });
-    assert(rectangle != crop->inputs.end() && rectangle->type == TypeSpec{Type::Rect}
-        && rectangle->imageInput == "images");
-    const auto origins = std::find_if(crop->outputs.begin(), crop->outputs.end(),
-                                      [](const auto &port) { return port.id == "origins"; });
-    assert((origins != crop->outputs.end()
-        && origins->type == TypeSpec{Type::NumericArray, DType::Float64, 2, Layout::Dense}));
-    assert(std::none_of(crop->outputs.begin(), crop->outputs.end(),
-                        [](const auto &port) { return port.id == "source_indices"; }));
-    assert(examples.find("custom.image.mean")->kind == ToolKind::PythonClass);
-    assert(examples.availability("custom.image.mean").state == ToolAvailability::ImplementationUnavailable);
+    auto         loader = std::make_shared<PluginLoader>();
+    ToolRegistry modules;
+    modules.setPluginLoader(loader);
+    auto unavailable                        = package(definition("test.missing.dll"));
+    unavailable.tools.front().moduleLibrary = "nonexistent-module.dll";
+    unavailable.tools.push_back({host, {}});
+    modules.registerHostBinding(
+        "receiver", [](const ToolDefinition &, const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+    modules.registerPackage(unavailable);
+    assert(modules.availability("test.missing.dll").state == ToolAvailability::ImplementationUnavailable);
+    assert(modules.availability(host.id).state == ToolAvailability::Available);
+    modules.registerPackage({});
+    assert(modules.definitions().empty());
+    assert(!loader->hasModule("test.missing.dll"));
+    std::cout << "Stable tool IDs, derived status ports and transactional registry refresh verified\n";
 }

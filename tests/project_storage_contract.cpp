@@ -98,8 +98,8 @@ ToolDefinition scalarTool()
     ToolDefinition tool;
     tool.id           = "unavailable";
     tool.displayName  = "原始名称";
-    tool.kind         = ToolKind::CppClass;
-    tool.registryName = tool.id;
+    tool.kind         = ToolKind::Cpp;
+
     PortDefinition value;
     value.id           = "value";
     value.name         = "值";

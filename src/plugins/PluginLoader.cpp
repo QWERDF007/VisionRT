@@ -15,11 +15,11 @@
 
 namespace visionrt {
 
-void PluginLoader::registerModule(std::string registryName, std::filesystem::path libraryPath)
+void PluginLoader::registerModule(std::string toolId, std::filesystem::path libraryPath)
 {
     std::lock_guard lock(mutex_);
     failures_.clear();
-    index_[std::move(registryName)] = std::move(libraryPath);
+    index_[std::move(toolId)] = std::move(libraryPath);
 }
 
 void PluginLoader::registerPackage(const ToolsPackage &package)
@@ -29,11 +29,11 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
     {
         if (tool.moduleLibrary.empty())
             continue;
-        const auto inserted = index.emplace(tool.registryName, tool.moduleLibrary);
+        const auto inserted = index.emplace(tool.definition.id, tool.moduleLibrary);
         // Two modules claiming one factory name would make the second tool silently
         // load the wrong library, so the combination is rejected instead (D-04).
         if (!inserted.second && inserted.first->second != tool.moduleLibrary)
-            throw ContractError("registry_name '" + tool.registryName
+            throw ContractError("tool_id '" + tool.definition.id
                                 + "' is provided by two different modules: " + inserted.first->second.string() + " and "
                                 + tool.moduleLibrary.string());
     }
@@ -42,16 +42,16 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
     index_ = std::move(index);
 }
 
-std::filesystem::path PluginLoader::resolveModulePath(std::string_view registryName) const
+std::filesystem::path PluginLoader::resolveModulePath(std::string_view toolId) const
 {
     std::lock_guard lock(mutex_);
-    const auto      it = index_.find(registryName);
+    const auto      it = index_.find(toolId);
     return it == index_.end() ? std::filesystem::path{} : it->second;
 }
 
-bool PluginLoader::hasModule(std::string_view registryName) const
+bool PluginLoader::hasModule(std::string_view toolId) const
 {
-    return !resolveModulePath(registryName).empty();
+    return std::filesystem::is_regular_file(resolveModulePath(toolId));
 }
 
 std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesystem::path &libraryPath,
@@ -251,11 +251,11 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::file
 #endif
 }
 
-std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view            registryName,
+std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view            toolId,
                                                            const PlatformToolServices &services)
 {
-    const auto path = resolveModulePath(registryName);
-    return std::make_unique<DomainToolAdapter>(shared_from_this(), path, std::string(registryName), services);
+    const auto path = resolveModulePath(toolId);
+    return std::make_unique<DomainToolAdapter>(shared_from_this(), path, std::string(toolId), services);
 }
 
 std::size_t PluginLoader::loadedModuleCount() const
@@ -265,10 +265,10 @@ std::size_t PluginLoader::loadedModuleCount() const
 }
 
 DomainToolAdapter::DomainToolAdapter(std::shared_ptr<PluginLoader> loader, std::filesystem::path libraryPath,
-                                     std::string registryName, PlatformToolServices services)
+                                     std::string toolId, PlatformToolServices services)
     : loader_(std::move(loader))
     , libraryPath_(std::move(libraryPath))
-    , registryName_(std::move(registryName))
+    , toolId_(std::move(toolId))
     , services_(std::move(services))
 {
 }
@@ -328,12 +328,12 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     }
 
     ToolStatus createStatus;
-    raw_ = module_->api->create(registryName_.c_str(), &services_, &createStatus);
+    raw_ = module_->api->create(toolId_.c_str(), &services_, &createStatus);
     if (!raw_)
     {
         failureStatus_
             = (createStatus.code != 0 ? createStatus
-                                      : ToolStatus{-3, "模块创建返回空实例：" + registryName_});
+                                      : ToolStatus{-3, "模块创建返回空实例：" + toolId_});
         return failureStatus_;
     }
 
@@ -394,7 +394,7 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     {
         const auto status = failureStatus_.code != 0
                               ? failureStatus_
-                              : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + registryName_};
+                              : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
         return ToolResult{status, {}};
     }
     try
