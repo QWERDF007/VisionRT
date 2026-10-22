@@ -8,6 +8,9 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -403,18 +406,30 @@ void outputCellReuseContract()
         QFile file(package + path);
         require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "cannot write the many-output fixture");
     };
-    write("module_index.yaml", "schema_version: 2\nvariant: test\ntools:\n  test.outputs:\n    definition: assets/outputs.yaml\n");
+    write("module_index.json", R"json({
+  "schema_version": 1,
+  "variant": "test",
+  "modules": [],
+  "tools": [
+    {"tool_id": "test.outputs", "definition": "assets/outputs.json"}
+  ],
+  "runtime_files": []
+})json");
     write("assets/outputs.py",
           "def run(inputs):\n"
           "    values = {'value_' + str(index): index for index in range(64)}\n"
           "    values.update(__status_code=0, __status_message='')\n"
           "    return values\n");
-    QByteArray definition = "schema_version: 1\ntool_id: test.outputs\ndisplay_name: Many outputs\nversion: 1.0.0\n"
-                            "kind: python_function\nentry: {file: outputs.py, symbol: run}\ninit_params: []\ninputs: []\noutputs:\n";
+    QJsonObject definition{{"schema_version", 1}, {"tool_id", "test.outputs"}, {"display_name", "Many outputs"},
+        {"version", "1.0.0"}, {"kind", "python_function"},
+        {"entry", QJsonObject{{"file", "outputs.py"}, {"symbol", "run"}}},
+        {"init_params", QJsonArray{}}, {"inputs", QJsonArray{}}};
+    QJsonArray ports;
     for (int number = 0; number < 64; ++number)
-        definition += "  - {id: value_" + QByteArray::number(number) + ", name: Value "
-                    + QByteArray::number(number).rightJustified(2, '0') + ", type: Int}\n";
-    write("assets/outputs.yaml", definition);
+        ports.append(QJsonObject{{"id", "value_" + QString::number(number)},
+            {"name", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "Int"}});
+    definition["outputs"] = ports;
+    write("assets/outputs.json", QJsonDocument(definition).toJson());
     visionrt::AppController manyApp(1, manyDirectory.path());
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output catalog did not become ready");
     manyApp.addNode("test.outputs", 0, 0);

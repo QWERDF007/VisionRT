@@ -1,4 +1,5 @@
 #include "core/ToolRegistry.h"
+#include "core/DefinitionJson.h"
 #include <python/PythonInterop.h>
 #include "python/PythonRuntime.h"
 
@@ -193,14 +194,17 @@ struct Sources
     ToolDefinition definition(const std::string &id, ToolKind kind, const std::string &symbol,
                               bool secondOutput = false)
     {
-        const auto name = id + ".yaml";
-        put(name, "schema_version: 1\ntool_id: " + id +
-            "\ndisplay_name: Contract tool\nversion: v1\nkind: " +
-            (kind == ToolKind::PythonClass ? "python_class" : "python_function") +
-            "\nentry: {file: entry.py, symbol: " + symbol +
-            "}\ninit_params: []\ninputs: []\noutputs:\n"
-            "- {id: value, name: Value, type: Int}\n" +
-            (secondOutput ? "- {id: other, name: Other, type: Float}\n" : ""));
+        const auto name = id + ".json";
+        ToolDefinition tool;
+        tool.id = id;
+        tool.displayName = "Contract tool";
+        tool.kind = kind;
+        tool.definitionPath = directory / name;
+        tool.script = directory / "entry.py";
+        tool.symbol = symbol;
+        tool.outputs.push_back({"value", "Value", {Type::Int}});
+        if (secondOutput) tool.outputs.push_back({"other", "Other", {Type::Float}});
+        put(name, emitNormalizedToolJson(tool));
         return parseDefinition(directory / name, false);
     }
 };
@@ -418,40 +422,38 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
     const auto calcDir = pkgRoot / "assets" / "tools" / "custom" / "Python" / "calc";
     std::filesystem::create_directories(calcDir);
 
-    // 2. module_index.yaml (schema_version: 2, pure python package)
+    // 2. module_index.json (pure Python JSON package)
     {
-        std::ofstream indexOut(pkgRoot / "module_index.yaml");
-        indexOut << "schema_version: 2\n"
-                 << "variant: cpu\n"
-                 << "modules: {}\n"
-                 << "tools:\n"
-                 << "  custom.image.biased_mean:\n"
-                 << "    definition: assets/tools/custom/Python/calc/calc.yaml\n";
+        std::ofstream indexOut(pkgRoot / "module_index.json");
+        indexOut << R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [],
+  "tools": [
+    {"tool_id": "custom.image.biased_mean", "definition": "assets/tools/custom/Python/calc/calc.json"}
+  ],
+  "runtime_files": []
+})json";
     }
 
-    // 3. calc.yaml declaration
+    // 3. calc.json declaration
     {
-        std::ofstream yamlOut(calcDir / "calc.yaml");
-        yamlOut << "schema_version: 1\n"
-                << "tool_id: custom.image.biased_mean\n"
-                << "display_name: 偏置均值计算\n"
-                << "version: 1.0.0\n"
-                << "kind: python_function\n"
-                << "entry:\n"
-                << "  file: calc.py\n"
-                << "  symbol: calculate_biased_mean\n"
-                << "init_params: []\n"
-                << "inputs:\n"
-                << "  - id: images\n"
-                << "    name: 输入图像\n"
-                << "    type: ImageBatch\n"
-                << "outputs:\n"
-                << "  - id: biased_means\n"
-                << "    name: 偏置均值\n"
-                << "    type: NumericArray\n"
-                << "    dtype: float64\n"
-                << "    rank: 1\n"
-                << "    layout: dense\n";
+        std::ofstream jsonOut(calcDir / "calc.json");
+        jsonOut << R"json({
+  "schema_version": 1,
+  "tool_id": "custom.image.biased_mean",
+  "display_name": "偏置均值计算",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "calc.py", "symbol": "calculate_biased_mean"},
+  "init_params": [],
+  "inputs": [
+    {"id": "images", "name": "输入图像", "type": "ImageBatch"}
+  ],
+  "outputs": [
+    {"id": "biased_means", "name": "偏置均值", "type": "NumericArray", "dtype": "float64", "rank": 1, "layout": "dense"}
+  ]
+})json";
     }
 
     // 4. calc.py main script with relative import and adjacent resource
@@ -493,22 +495,22 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
     {
         std::ofstream unindexedPy(calcDir / "unindexed_tool.py");
         unindexedPy << "def unindexed(inputs): return {}\n";
-        std::ofstream unindexedYaml(calcDir / "unindexed_tool.yaml");
-        unindexedYaml << "schema_version: 1\n"
-                      << "tool_id: custom.unindexed\n"
-                      << "display_name: 未索引工具\n"
-                      << "version: 1.0.0\n"
-                      << "kind: python_function\n"
-                      << "entry:\n"
-                      << "  file: unindexed_tool.py\n"
-                      << "  symbol: unindexed\n";
+        std::ofstream unindexedJson(calcDir / "unindexed_tool.json");
+        unindexedJson << R"json({
+  "schema_version": 1,
+  "tool_id": "custom.unindexed",
+  "display_name": "未索引工具",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "unindexed_tool.py", "symbol": "unindexed"}
+})json";
     }
 
     // 8. SDK readToolsPackage & validation
     visionrt::validateToolsPackage(pkgRoot);
     const auto package = visionrt::readToolsPackage(pkgRoot);
     assert(package.tools.size() == 1);
-    assert(package.tools[0].toolId == "custom.image.biased_mean");
+    assert(package.tools[0].definition.id == "custom.image.biased_mean");
 
     // 9. ToolRegistry registration: unindexed tools do NOT appear
     ToolRegistry registry;
@@ -546,18 +548,18 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
 
     // 11. Declaration change reflected in registry metadata without executing algorithm
     {
-        std::ofstream yamlOut(calcDir / "calc.yaml");
-        yamlOut << "schema_version: 1\n"
-                << "tool_id: custom.image.biased_mean\n"
-                << "display_name: 更新后的偏置均值\n"
-                << "version: 2.0.0\n"
-                << "kind: python_function\n"
-                << "entry:\n"
-                << "  file: calc.py\n"
-                << "  symbol: calculate_biased_mean\n"
-                << "init_params: []\n"
-                << "inputs: []\n"
-                << "outputs: []\n";
+        std::ofstream jsonOut(calcDir / "calc.json");
+        jsonOut << R"json({
+  "schema_version": 1,
+  "tool_id": "custom.image.biased_mean",
+  "display_name": "更新后的偏置均值",
+  "version": "2.0.0",
+  "kind": "python_function",
+  "entry": {"file": "calc.py", "symbol": "calculate_biased_mean"},
+  "init_params": [],
+  "inputs": [],
+  "outputs": []
+})json";
     }
     const auto   updatedPkg = visionrt::readToolsPackage(pkgRoot);
     ToolRegistry updatedRegistry;
@@ -566,18 +568,18 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
     assert(updatedRegistry.definitions()[0].displayName == "更新后的偏置均值");
     assert(updatedRegistry.definitions()[0].version == "2.0.0");
 
-    // 12. Negative: Missing script file is diagnosed cleanly by readToolsPackage
     {
         std::filesystem::rename(calcDir / "calc.py", calcDir / "calc.py.bak");
+        assert(visionrt::readToolsPackage(pkgRoot).tools.size() == 1);
         bool rejected = false;
         try
         {
-            visionrt::readToolsPackage(pkgRoot);
+            visionrt::validateToolsPackage(pkgRoot);
         }
         catch (const ContractError &err)
         {
             rejected = true;
-            assert(std::string(err.what()).find("script file does not exist") != std::string::npos);
+            assert(std::string(err.what()).find("calc.py") != std::string::npos);
         }
         assert(rejected);
         std::filesystem::rename(calcDir / "calc.py.bak", calcDir / "calc.py");
@@ -591,16 +593,18 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
             dummyLib << "dummy\n";
         }
         {
-            std::ofstream badIndex(pkgRoot / "module_index.yaml");
-            badIndex << "schema_version: 2\n"
-                     << "variant: cpu\n"
-                     << "modules:\n"
-                     << "  dummy_mod:\n"
-                     << "    library: bin/dummy.dll\n"
-                     << "tools:\n"
-                     << "  custom.image.biased_mean:\n"
-                     << "    module: dummy_mod\n"
-                     << "    definition: assets/tools/custom/Python/calc/calc.yaml\n";
+            std::ofstream badIndex(pkgRoot / "module_index.json");
+            badIndex << R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "dummy_mod", "library": "bin/dummy.dll"}
+  ],
+  "tools": [
+    {"tool_id": "custom.image.biased_mean", "module": "dummy_mod", "definition": "assets/tools/custom/Python/calc/calc.json"}
+  ],
+  "runtime_files": []
+})json";
         }
         bool rejected = false;
         try
@@ -610,7 +614,7 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
         catch (const ContractError &err)
         {
             rejected = true;
-            assert(std::string(err.what()).find("Python tool") != std::string::npos);
+            assert(std::string(err.what()).find("module") != std::string::npos);
         }
         assert(rejected);
     }
@@ -636,23 +640,26 @@ class PathProbe:
     def release(self):
         return {'__status_code': 0, '__status_message': 'ok'}
 )");
-    sources.put("paths.yaml", R"(
-schema_version: 1
-tool_id: python.paths
-display_name: Path probe
-version: 1.0.0
-kind: python_class
-entry: {file: entry.py, symbol: PathProbe}
-init_params:
-  - {id: init_mode, name: Mode, type: String, editor: text}
-  - {id: base_dir, name: Base, type: String, editor: path, path_mode_from: init_mode}
-inputs:
-  - {id: input_mode, name: Mode, type: String, editor: text}
-  - {id: input_path, name: Input, type: String, editor: path, path_mode_from: input_mode}
-outputs:
-  - {id: resolved, name: Resolved, type: String}
-)");
-    const auto definition = parseDefinition(sources.directory / "paths.yaml", false);
+    sources.put("paths.json", R"json({
+  "schema_version": 1,
+  "tool_id": "python.paths",
+  "display_name": "Path probe",
+  "version": "1.0.0",
+  "kind": "python_class",
+  "entry": {"file": "entry.py", "symbol": "PathProbe"},
+  "init_params": [
+    {"id": "init_mode", "name": "Mode", "type": "String", "editor": "text"},
+    {"id": "base_dir", "name": "Base", "type": "String", "editor": "path", "path_mode_from": "init_mode"}
+  ],
+  "inputs": [
+    {"id": "input_mode", "name": "Mode", "type": "String", "editor": "text"},
+    {"id": "input_path", "name": "Input", "type": "String", "editor": "path", "path_mode_from": "input_mode"}
+  ],
+  "outputs": [
+    {"id": "resolved", "name": "Resolved", "type": "String"}
+  ]
+})json");
+    const auto definition = parseDefinition(sources.directory / "paths.json", false);
     const auto loaded = runtime.refresh(std::span<const ToolDefinition>(&definition, 1));
     assert(loaded.size() == 1 && loaded[0].status.code == 0);
 

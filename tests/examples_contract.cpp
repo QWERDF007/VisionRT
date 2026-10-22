@@ -69,7 +69,7 @@ void setupPython(ToolRegistry &registry, PythonRuntime &runtime)
 
 std::filesystem::path resolveToolsPackage(const std::filesystem::path &installRoot)
 {
-    if (installRoot.empty() || !std::filesystem::is_regular_file(installRoot / "module_index.yaml"))
+    if (installRoot.empty() || !std::filesystem::is_regular_file(installRoot / "module_index.json"))
         throw std::runtime_error("--install-root must name an installed tools package");
     readToolsPackage(installRoot);
     return std::filesystem::canonical(installRoot);
@@ -345,8 +345,7 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     const auto *def = registry.find("visiontools.preprocess.adaptive_binary");
     assert(def != nullptr);
     assert(def->id == "visiontools.preprocess.adaptive_binary");
-    assert(def->registryName == "AdaptiveBinaryTool");
-    assert(def->id != def->registryName);
+    assert(def->kind == ToolKind::Cpp);
     assert(registry.availability("visiontools.preprocess.adaptive_binary").state == ToolAvailability::Available);
 
     PlatformToolServices services;
@@ -431,7 +430,7 @@ void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const 
     const auto testPkg = std::filesystem::u8path(temp.path().toUtf8().toStdString()) / "package_missing_dep";
     std::filesystem::create_directories(testPkg / "bin");
     std::filesystem::create_directories(testPkg / "assets" / "tools");
-    std::filesystem::copy_file(toolsPkg / "module_index.yaml", testPkg / "module_index.yaml");
+    std::filesystem::copy_file(toolsPkg / "module_index.json", testPkg / "module_index.json");
     std::filesystem::copy(toolsPkg / "assets" / "tools", testPkg / "assets" / "tools",
                           std::filesystem::copy_options::recursive);
     for (const auto &entry : std::filesystem::directory_iterator(toolsPkg / "bin"))
@@ -678,8 +677,8 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     counterDef.id           = "test.plugin.counter";
     counterDef.displayName  = "Plugin Counter";
     counterDef.version      = "1.0.0";
-    counterDef.kind         = ToolKind::CppClass;
-    counterDef.registryName = "test.plugin.counter";
+    counterDef.kind         = ToolKind::Cpp;
+
     PortDefinition initParam;
     initParam.id           = "initial";
     initParam.name         = "Initial";
@@ -698,8 +697,8 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     funcDef.id           = "test.plugin.function";
     funcDef.displayName  = "Plugin Function";
     funcDef.version      = "1.0.0";
-    funcDef.kind         = ToolKind::CppFunction;
-    funcDef.registryName = "test.plugin.function";
+    funcDef.kind         = ToolKind::Cpp;
+
     PortDefinition inX;
     inX.id           = "x";
     inX.name         = "X";
@@ -803,77 +802,90 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     // Copy plugin DLL to bin
     std::filesystem::copy_file(pluginDll, toolsPackageDir / "bin" / "test_plugin_module.dll");
 
-    // Write C++ tool declaration (func.yaml)
+    // Write C++ tool declaration (func.json)
     {
-        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "func.yaml");
-        ofs << "schema_version: 1\n"
-            << "tool_id: test.plugin.function\n"
-            << "display_name: Plugin Function\n"
-            << "version: 1.0.0\n"
-            << "kind: cpp_function\n"
-            << "entry:\n  registry_name: test.plugin.function\n"
-            << "init_params: []\n"
-            << "inputs:\n  - id: x\n    name: X\n    type: Int\n    default: 10\n"
-            << "outputs:\n  - id: y\n    name: Y\n    type: Int\n";
+        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "func.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.function",
+  "display_name": "Plugin Function",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "X", "type": "Int", "default": 10}
+  ],
+  "outputs": [
+    {"id": "y", "name": "Y", "type": "Int"}
+  ]
+})json";
     }
 
-    // Write Python tool declaration and script (calc.py, calc.yaml)
+    // Write Python tool declaration and script (calc.py, calc.json)
     {
         std::ofstream py(toolsPackageDir / "assets" / "tools" / "calc.py");
         py << "def execute(inputs):\n"
            << "    return {'res': int(inputs['val']) + 5, '__status_code': 0, '__status_message': 'ok'}\n";
 
-        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "calc.yaml");
-        ofs << "schema_version: 1\n"
-            << "tool_id: custom.py_math\n"
-            << "display_name: Python Calc\n"
-            << "version: 1.0.0\n"
-            << "kind: python_function\n"
-            << "entry:\n  file: calc.py\n  symbol: execute\n"
-            << "init_params: []\n"
-            << "inputs:\n  - id: val\n    name: Val\n    type: Int\n"
-            << "outputs:\n  - id: res\n    name: Res\n    type: Int\n";
+        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "calc.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "tool_id": "custom.py_math",
+  "display_name": "Python Calc",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "calc.py", "symbol": "execute"},
+  "init_params": [],
+  "inputs": [
+    {"id": "val", "name": "Val", "type": "Int"}
+  ],
+  "outputs": [
+    {"id": "res", "name": "Res", "type": "Int"}
+  ]
+})json";
     }
 
-    // Write Platform Receiver node declaration (recv.yaml)
+    // Write Platform Receiver node declaration (recv.json)
     {
-        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "recv.yaml");
-        ofs << "schema_version: 1\n"
-            << "tool_id: platform.test_recv\n"
-            << "display_name: Test Receiver\n"
-            << "version: 1.0.0\n"
-            << "kind: cpp_class\n"
-            << "entry:\n  registry_name: platform.test_recv\n"
-            << "init_params:\n"
-            << "  - id: source_flow_id\n    name: Source Flow\n    type: String\n    default: ''\n"
-            << "  - id: source_node_seq\n    name: Source Node\n    type: String\n    default: ''\n"
-            << "  - id: source_port_id\n    name: Source Port\n    type: String\n    default: ''\n"
-            << "  - id: timeout_ms\n    name: Timeout\n    type: Int\n    default: 1000\n"
-            << "inputs: []\n"
-            << "outputs:\n"
-            << "  - id: value\n    name: Value\n    type: Int\n"
-            << "  - id: source_status_code\n    name: Source Status Code\n    type: Int\n"
-            << "  - id: source_status_message\n    name: Source Status Message\n    type: String\n";
+        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "recv.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "tool_id": "platform.test_recv",
+  "display_name": "Test Receiver",
+  "version": "1.0.0",
+  "kind": "host",
+  "init_params": [
+    {"id": "source_flow_id", "name": "Source Flow", "type": "String", "default": ""},
+    {"id": "source_node_seq", "name": "Source Node", "type": "String", "default": ""},
+    {"id": "source_port_id", "name": "Source Port", "type": "String", "default": ""},
+    {"id": "timeout_ms", "name": "Timeout", "type": "Int", "default": 1000}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "value", "name": "Value", "type": "Int"},
+    {"id": "source_status_code", "name": "Source Status Code", "type": "Int"},
+    {"id": "source_status_message", "name": "Source Status Message", "type": "String"}
+  ],
+  "entry": {"binding": "visionrt.receiver"}
+})json";
     }
 
-    // Write module_index.yaml for Package 1
+    // Write module_index.json for Package 1
     {
-        std::ofstream ofs(toolsPackageDir / "module_index.yaml");
-        ofs << "schema_version: 2\n"
-            << "variant: cpu\n"
-            << "modules:\n"
-            << "  test_plugin_module:\n"
-            << "    library: bin/test_plugin_module.dll\n"
-            << "tools:\n"
-            << "  test.plugin.function:\n"
-            << "    module: test_plugin_module\n"
-            << "    definition: assets/tools/func.yaml\n"
-            << "  custom.py_math:\n"
-            << "    definition: assets/tools/calc.yaml\n"
-            << "  platform.test_recv:\n"
-            << "    host_binding: visionrt.receiver\n"
-            << "    definition: assets/tools/recv.yaml\n"
-            << "runtime_files: []\n";
+        std::ofstream ofs(toolsPackageDir / "module_index.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_plugin_module", "library": "bin/test_plugin_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.function", "module": "test_plugin_module", "definition": "assets/tools/func.json"},
+    {"tool_id": "custom.py_math", "definition": "assets/tools/calc.json"},
+    {"tool_id": "platform.test_recv", "definition": "assets/tools/recv.json"}
+  ],
+  "runtime_files": []
+})json";
     }
 
     // Add unique Package 1 sentinel file
@@ -1028,17 +1040,18 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     const auto    badPkgDir = std::filesystem::u8path(badPkgTemp.path().toUtf8().toStdString()) / "bad_pkg";
     std::filesystem::create_directories(badPkgDir / "assets" / "tools");
     {
-        std::ofstream ofs(badPkgDir / "module_index.yaml");
-        ofs << "schema_version: 2\n"
-            << "variant: cpu\n"
-            << "modules:\n"
-            << "  nonexistent_mod:\n"
-            << "    library: bin/nonexistent.dll\n"
-            << "tools:\n"
-            << "  broken.tool:\n"
-            << "    module: nonexistent_mod\n"
-            << "    definition: assets/tools/missing.yaml\n"
-            << "runtime_files: []\n";
+        std::ofstream ofs(badPkgDir / "module_index.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "nonexistent_mod", "library": "bin/nonexistent.dll"}
+  ],
+  "tools": [
+    {"tool_id": "broken.tool", "module": "nonexistent_mod", "definition": "assets/tools/missing.json"}
+  ],
+  "runtime_files": []
+})json";
     }
     bool badDeployFailed = false;
     try
@@ -1082,53 +1095,61 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
     // Write counter declaration
     {
-        std::ofstream ofs(stagingDir / "assets" / "tools" / "counter.yaml");
-        ofs << "schema_version: 1\n"
-            << "tool_id: test.plugin.counter\n"
-            << "display_name: Plugin Counter\n"
-            << "version: 1.0.0\n"
-            << "kind: cpp_class\n"
-            << "entry:\n  registry_name: test.plugin.counter\n"
-            << "init_params:\n  - id: initial\n    name: Initial\n    type: Int\n    default: 0\n"
-            << "inputs: []\n"
-            << "outputs:\n  - id: count\n    name: Count\n    type: Int\n";
+        std::ofstream ofs(stagingDir / "assets" / "tools" / "counter.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.counter",
+  "display_name": "Plugin Counter",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [
+    {"id": "initial", "name": "Initial", "type": "Int", "default": 0}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "count", "name": "Count", "type": "Int"}
+  ]
+})json";
     }
     // Write platform receiver declaration
     {
-        std::ofstream ofs(stagingDir / "assets" / "tools" / "recv.yaml");
-        ofs << "schema_version: 1\n"
-            << "tool_id: platform.test_recv\n"
-            << "display_name: Test Receiver\n"
-            << "version: 1.0.0\n"
-            << "kind: cpp_class\n"
-            << "entry:\n  registry_name: platform.test_recv\n"
-            << "init_params:\n"
-            << "  - id: source_flow_id\n    name: Source Flow\n    type: String\n    default: ''\n"
-            << "  - id: source_node_seq\n    name: Source Node\n    type: String\n    default: ''\n"
-            << "  - id: source_port_id\n    name: Source Port\n    type: String\n    default: ''\n"
-            << "  - id: timeout_ms\n    name: Timeout\n    type: Int\n    default: 1000\n"
-            << "inputs: []\n"
-            << "outputs:\n"
-            << "  - id: value\n    name: Value\n    type: Int\n"
-            << "  - id: source_status_code\n    name: Source Status Code\n    type: Int\n"
-            << "  - id: source_status_message\n    name: Source Status Message\n    type: String\n";
+        std::ofstream ofs(stagingDir / "assets" / "tools" / "recv.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "tool_id": "platform.test_recv",
+  "display_name": "Test Receiver",
+  "version": "1.0.0",
+  "kind": "host",
+  "init_params": [
+    {"id": "source_flow_id", "name": "Source Flow", "type": "String", "default": ""},
+    {"id": "source_node_seq", "name": "Source Node", "type": "String", "default": ""},
+    {"id": "source_port_id", "name": "Source Port", "type": "String", "default": ""},
+    {"id": "timeout_ms", "name": "Timeout", "type": "Int", "default": 1000}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "value", "name": "Value", "type": "Int"},
+    {"id": "source_status_code", "name": "Source Status Code", "type": "Int"},
+    {"id": "source_status_message", "name": "Source Status Message", "type": "String"}
+  ],
+  "entry": {"binding": "visionrt.receiver"}
+})json";
     }
-    // Write module_index.yaml for Package 2
+    // Write module_index.json for Package 2
     {
-        std::ofstream ofs(stagingDir / "module_index.yaml");
-        ofs << "schema_version: 2\n"
-            << "variant: cpu\n"
-            << "modules:\n"
-            << "  test_plugin_module:\n"
-            << "    library: bin/test_plugin_module.dll\n"
-            << "tools:\n"
-            << "  test.plugin.counter:\n"
-            << "    module: test_plugin_module\n"
-            << "    definition: assets/tools/counter.yaml\n"
-            << "  platform.test_recv:\n"
-            << "    host_binding: visionrt.receiver\n"
-            << "    definition: assets/tools/recv.yaml\n"
-            << "runtime_files: []\n";
+        std::ofstream ofs(stagingDir / "module_index.json");
+        ofs << R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_plugin_module", "library": "bin/test_plugin_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_plugin_module", "definition": "assets/tools/counter.json"},
+    {"tool_id": "platform.test_recv", "definition": "assets/tools/recv.json"}
+  ],
+  "runtime_files": []
+})json";
     }
 
     // Replace toolsPackageDir cleanly
@@ -1137,9 +1158,9 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
     // Verify Package 1 unique sentinel is completely gone (no leftover files)
     assert(!std::filesystem::exists(pkg1Sentinel));
-    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "func.yaml"));
+    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "func.json"));
     assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "calc.py"));
-    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "calc.yaml"));
+    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "calc.json"));
     std::cout << "[Evidence T-08] Package replacement verified: Package 1 unique files and scripts do not linger.\n";
 
     // 6. Simulate restart with Package 2:

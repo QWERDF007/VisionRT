@@ -51,10 +51,10 @@ ToolDefinition definition(std::string id, std::vector<std::string> inputs = {})
 {
     ToolDefinition d;
     d.id           = id;
-    d.registryName = id;
+
     d.displayName  = id;
     d.version      = "1";
-    d.kind         = ToolKind::CppClass;
+    d.kind         = ToolKind::Cpp;
     for (auto &input : inputs) d.inputs.push_back({input, input, {Type::Int}});
     d.outputs.push_back({"value", "Value", {Type::Int}});
     return d;
@@ -65,7 +65,7 @@ void install(
     std::function<ToolStatus()> init  = [] { return ToolStatus{}; },
     std::function<ToolStatus()> close = [] { return ToolStatus{}; })
 {
-    registry.registerCpp(d.registryName, d,
+    registry.registerCpp(d,
                          [=](const ToolServices &)
                          {
                              auto instance   = std::make_unique<Function>();
@@ -412,7 +412,7 @@ void receiverConsumesFailures()
             });
     auto sender   = node(1, source);
     auto consumer = definition("test.cursor");
-    registry.registerCpp(consumer.registryName, consumer,
+    registry.registerCpp(consumer,
                          [name = std::to_string(sender.id)](const PlatformToolServices &services)
                          {
                              auto instance = std::make_unique<Function>();
@@ -531,7 +531,7 @@ void executionMetricsAndTimingSeparation()
         }
     };
 
-    registry.registerCpp(mockDef.registryName, mockDef,
+    registry.registerCpp(mockDef,
                          [](const PlatformToolServices &) { return std::make_unique<MetricsTool>(); });
     registry.addDefinition(mockDef);
     auto              n = node(1, mockDef);
@@ -589,7 +589,7 @@ void timingRecordedOnFailure()
         }
     };
 
-    registry.registerCpp(mockDef.registryName, mockDef,
+    registry.registerCpp(mockDef,
                          [](const PlatformToolServices &) { return std::make_unique<FailingMetricsTool>(); });
     registry.addDefinition(mockDef);
     auto              n = node(1, mockDef);
@@ -657,7 +657,7 @@ void crossRoundPythonMetricIsolation()
         }
     };
 
-    registry.registerCpp(mockDef.registryName, mockDef, [&](const PlatformToolServices &)
+    registry.registerCpp(mockDef, [&](const PlatformToolServices &)
                          { return std::make_unique<PersistentMetricsTool>(shouldFailInExecute); });
     registry.addDefinition(mockDef);
 
@@ -710,8 +710,8 @@ void hostBindingReceiverContract()
     recvDef.id           = "test.custom.receiver";
     recvDef.displayName  = "自定义接收";
     recvDef.version      = "1.0.0";
-    recvDef.kind         = ToolKind::CppClass;
-    recvDef.registryName = "test.custom.receiver";
+    recvDef.kind         = ToolKind::Host;
+
     recvDef.initParams   = {
         {"source_flow_id", "源流程", {Type::String},          Utf8{""}},
         {"source_node_seq", "源节点", {Type::String},          Utf8{""}},
@@ -728,26 +728,23 @@ void hostBindingReceiverContract()
     pkg.root = std::filesystem::current_path();
 
     PackageTool pt;
-    pt.toolId      = recvDef.id;
     pt.definition  = recvDef;
-    pt.hostBinding = "visionrt.receiver";
+    pt.definition.hostBinding = "visionrt.receiver";
     pkg.tools.push_back(pt);
 
     ToolDefinition unknownDef = recvDef;
     unknownDef.id             = "test.unknown.receiver";
     PackageTool ptUnknown;
-    ptUnknown.toolId      = unknownDef.id;
     ptUnknown.definition  = unknownDef;
-    ptUnknown.hostBinding = "visionrt.nonexistent_binding";
+    ptUnknown.definition.hostBinding = "visionrt.nonexistent_binding";
     pkg.tools.push_back(ptUnknown);
 
     ToolDefinition missingValDef = recvDef;
     missingValDef.id             = "test.missing_val.receiver";
     missingValDef.outputs.erase(missingValDef.outputs.begin());
     PackageTool ptMissingVal;
-    ptMissingVal.toolId      = missingValDef.id;
     ptMissingVal.definition  = missingValDef;
-    ptMissingVal.hostBinding = "visionrt.receiver";
+    ptMissingVal.definition.hostBinding = "visionrt.receiver";
     pkg.tools.push_back(ptMissingVal);
 
     ToolRegistry registry;
@@ -820,9 +817,8 @@ void hostBindingReceiverContract()
     ToolsPackage strPkg;
     strPkg.root = std::filesystem::current_path();
     PackageTool strPt;
-    strPt.toolId      = strRecvDef.id;
     strPt.definition  = strRecvDef;
-    strPt.hostBinding = "visionrt.receiver";
+    strPt.definition.hostBinding = "visionrt.receiver";
     strPkg.tools.push_back(strPt);
 
     ToolRegistry strRegistry;

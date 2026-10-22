@@ -36,9 +36,9 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 add_library(visionrt_core
     src/core/ToolDefinition.cpp
     src/core/ToolValueValidation.cpp
-    src/core/ToolDeclarationYaml.cpp
+    src/core/DefinitionJson.cpp
+    src/core/ModuleIndex.cpp
     src/core/ToolPackage.cpp
-    src/core/ValueYaml.cpp
     src/core/ValueJson.cpp
     src/core/ValueJsonDocument.cpp
     src/core/NodeContracts.cpp
@@ -46,7 +46,7 @@ add_library(visionrt_core
     src/core/ProjectEditor.cpp
     src/core/ProjectStorage.cpp
     src/plugins/PluginLoader.cpp)
-target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::yaml-cpp)
+target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core)
 
 add_executable(visionrt_validate_tool tools/visionrt_validate_tool.cpp)
 target_link_libraries(visionrt_validate_tool PRIVATE visionrt_core)
@@ -148,10 +148,9 @@ if(BUILD_TESTING)
     add_test(NAME path_contract COMMAND path_contract)
     visionrt_apply_test_environment(path_contract)
 
-    visionrt_contract(tool_registry_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
-    add_dependencies(tool_registry_contract visionrt_validate_tool)
-    visionrt_contract(declaration_consumer_contract visionrt_core)
+    visionrt_contract(tool_registry_contract visionrt_core)
     visionrt_contract(declaration_values_contract visionrt_core)
+    visionrt_contract(definition_json_contract visionrt_core)
     visionrt_contract(declaration_value_contract visionrt_core)
     visionrt_contract(tools_package_contract visionrt_core)
     visionrt_contract(python_rect_contract visionrt_python)

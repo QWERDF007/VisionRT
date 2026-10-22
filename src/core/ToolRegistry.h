@@ -5,14 +5,9 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace YAML {
-class Node;
-}
-
 namespace visionrt {
 
 ToolDefinition parseDefinition(const std::filesystem::path &path, bool builtin);
-ToolDefinition parseDefinitionNode(const YAML::Node &node, const std::filesystem::path &path, bool builtin);
 
 enum class ToolAvailability
 {
@@ -51,7 +46,7 @@ public:
     void addDefinition(ToolDefinition definition);
     void replaceDefinition(ToolDefinition definition);
     void validateContract(const ToolDefinition &definition) const;
-    void registerCpp(std::string registryName, ToolDefinition contract, ToolFactory factory);
+    void registerCpp(ToolDefinition contract, ToolFactory factory);
     void setPythonImplementation(std::string toolId, ToolFactory factory, ToolStatus status = {});
 
     using HostBindingFactory
@@ -91,12 +86,11 @@ private:
         ToolStatus  status;
     };
 
-    std::shared_ptr<PluginLoader>                          pluginLoader_;
-    std::vector<ToolDefinition>                            definitions_;
+    std::shared_ptr<PluginLoader>                            pluginLoader_;
+    std::vector<ToolDefinition>                              definitions_;
     std::map<std::string, std::size_t, std::less<>>          index_;
     std::map<std::string, CppImplementation, std::less<>>    cpp_;
     std::map<std::string, PythonImplementation, std::less<>> python_;
-    std::map<std::string, std::string, std::less<>>          hostBindingsMap_;
     std::map<std::string, HostBindingFactory, std::less<>>   hostBindingExecutors_;
 };
 

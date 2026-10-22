@@ -41,21 +41,38 @@ void roiParameterContract()
         QFile file(package + name);
         require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "cannot write the ROI fixture");
     };
-    write("module_index.yaml",
-          "schema_version: 2\nvariant: test\ntools:\n"
-          "  test.roi.source:\n    definition: assets/roi/source.yaml\n"
-          "  test.roi.editor:\n    definition: assets/roi/editor.yaml\n");
+    write("module_index.json",
+          R"json({
+  "schema_version": 1,
+  "variant": "test",
+  "tools": [
+    {"tool_id": "test.roi.source", "definition": "assets/roi/source.json"},
+    {"tool_id": "test.roi.editor", "definition": "assets/roi/editor.json"}
+  ],
+  "modules": [],
+  "runtime_files": []
+})json");
     write("assets/roi/source.py",
           "import numpy as np\ndef run(inputs):\n"
           "    return {'__status_code': 0, '__status_message': '', 'images': [np.zeros((96, 128, 3), dtype=np.uint8), np.ones((24, 32, 3), dtype=np.uint8)], "
           "'rect': np.array([2, 1.25, 2.5, 3.75, 4.5, 17.5], dtype=np.float32), "
           "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float32)]]}\n");
-    write("assets/roi/source.yaml",
-          "schema_version: 1\ntool_id: test.roi.source\ndisplay_name: ROI图像源\nversion: 1.0.0\n"
-          "kind: python_function\nentry: {file: source.py, symbol: run}\ninit_params: []\ninputs: []\n"
-          "outputs:\n  - {id: images, name: 图像, type: ImageBatch, display: {color_order: BGR}}\n"
-          "  - {id: rois, name: 源区域, type: RoiBatch}\n"
-          "  - {id: rect, name: 源矩形, type: Rect, image_port: images}\n");
+    write("assets/roi/source.json",
+          R"json({
+  "schema_version": 1,
+  "tool_id": "test.roi.source",
+  "display_name": "ROI图像源",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "source.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [],
+  "outputs": [
+    {"id": "images", "name": "图像", "type": "ImageBatch", "display": {"color_order": "BGR"}},
+    {"id": "rois", "name": "源区域", "type": "RoiBatch"},
+    {"id": "rect", "name": "源矩形", "type": "Rect", "image_port": "images"}
+  ]
+})json");
     write("assets/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
           "    return {'__status_code': 0, '__status_message': '', 'count': len(inputs['rois'][0]), "
@@ -65,22 +82,33 @@ void roiParameterContract()
           "'crop_regions': [[np.array([2, 25, 20, 10, 10, 0], dtype=np.float32)], []], "
           "'origins': np.array([[10, 5] for image in inputs['images']], dtype=np.float64), "
           "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float32)]]}\n");
-    write("assets/roi/editor.yaml",
-          "schema_version: 1\ntool_id: test.roi.editor\ndisplay_name: ROI编辑\nversion: 1.0.0\n"
-          "kind: python_function\nentry: {file: editor.py, symbol: run}\ninit_params: []\ninputs:\n"
-          "  - {id: images, name: 图像, type: ImageBatch}\n"
-          "  - {id: rois, name: 区域, type: RoiBatch, default: [[]], image_input: images}\n"
-          "  - {id: rect, name: 矩形, type: Rect, default: [2, 1.234567881, 2.5, 3.75, 4.5, 17.5], image_input: images}\n"
-          "  - {id: guide, name: 参考区域, type: Rect, default: [2, 80, 50, 20, 20, 0], image_input: images}\n"
-          "outputs:\n  - {id: count, name: 区域数量, type: Int}\n"
-          "  - {id: images, name: 图像, type: ImageBatch, display: {color_order: BGR, same_geometry_as_input: images}}\n"
-          "  - {id: regions, name: 结果区域, type: RoiBatch, image_port: images}\n"
-          "  - {id: unrelated_images, name: 其他坐标图像, type: ImageBatch}\n"
-          "  - {id: unavailable_images, name: 空图像输出, type: ImageBatch}\n"
-          "  - {id: cropped_images, name: 裁剪坐标图像, type: ImageBatch}\n"
-          "  - {id: crop_regions, name: 裁剪坐标区域, type: RoiBatch, image_port: cropped_images}\n"
-          "  - {id: origins, name: 原点坐标, type: NumericArray, dtype: float64, rank: 2, layout: dense}\n"
-          "  - {id: unrelated_regions, name: 其他坐标区域, type: RoiBatch, image_port: unrelated_images}\n");
+    write("assets/roi/editor.json",
+          R"json({
+  "schema_version": 1,
+  "tool_id": "test.roi.editor",
+  "display_name": "ROI编辑",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "editor.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [
+    {"id": "images", "name": "图像", "type": "ImageBatch"},
+    {"id": "rois", "name": "区域", "type": "RoiBatch", "default": [[]], "image_input": "images"},
+    {"id": "rect", "name": "矩形", "type": "Rect", "default": [2, 1.234567881, 2.5, 3.75, 4.5, 17.5], "image_input": "images"},
+    {"id": "guide", "name": "参考区域", "type": "Rect", "default": [2, 80, 50, 20, 20, 0], "image_input": "images"}
+  ],
+  "outputs": [
+    {"id": "count", "name": "区域数量", "type": "Int"},
+    {"id": "images", "name": "图像", "type": "ImageBatch", "display": {"color_order": "BGR", "same_geometry_as_input": "images"}},
+    {"id": "regions", "name": "结果区域", "type": "RoiBatch", "image_port": "images"},
+    {"id": "unrelated_images", "name": "其他坐标图像", "type": "ImageBatch"},
+    {"id": "unavailable_images", "name": "空图像输出", "type": "ImageBatch"},
+    {"id": "cropped_images", "name": "裁剪坐标图像", "type": "ImageBatch"},
+    {"id": "crop_regions", "name": "裁剪坐标区域", "type": "RoiBatch", "image_port": "cropped_images"},
+    {"id": "origins", "name": "原点坐标", "type": "NumericArray", "dtype": "float64", "rank": 2, "layout": "dense"},
+    {"id": "unrelated_regions", "name": "其他坐标区域", "type": "RoiBatch", "image_port": "unrelated_images"}
+  ]
+})json");
 
     AppController app(1, directory.path());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "ROI catalog initialization did not finish");

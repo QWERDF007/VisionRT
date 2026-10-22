@@ -38,7 +38,7 @@ bool samePorts(const std::vector<PortDefinition> &a, const std::vector<PortDefin
 
 bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
 {
-    return a.id == b.id && a.version == b.version && a.kind == b.kind && a.registryName == b.registryName
+    return a.id == b.id && a.version == b.version && a.kind == b.kind && a.hostBinding == b.hostBinding
         && a.script == b.script && a.symbol == b.symbol && samePorts(a.inputs, b.inputs)
         && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
 }

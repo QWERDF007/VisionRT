@@ -9,10 +9,10 @@ QString kindName(ToolKind kind)
 {
     switch (kind)
     {
-    case ToolKind::CppFunction:
-        return "cpp_function";
-    case ToolKind::CppClass:
-        return "cpp_class";
+    case ToolKind::Cpp:
+        return "cpp";
+    case ToolKind::Host:
+        return "host";
     case ToolKind::PythonFunction:
         return "python_function";
     case ToolKind::PythonClass:
@@ -82,7 +82,7 @@ QVariantMap metadata(const ToolDefinition &definition)
         {   "subcategory",           q(definition.subcategory)},
         {       "builtin",                  definition.builtin},
         {"definitionPath", pathText(definition.definitionPath)},
-        {  "registryName",          q(definition.registryName)},
+        {  "hostBinding",          q(definition.hostBinding)},
         {        "symbol",                q(definition.symbol)},
         {        "script",                           QString{}}
     };

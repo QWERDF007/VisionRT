@@ -202,11 +202,11 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     registry.setPluginLoader(loader);
 
     ToolDefinition def;
-    def.id           = "test.plugin.func.tool";
+    def.id           = "test.plugin.function";
     def.displayName  = "函数算子";
     def.version      = "1.0.0";
-    def.kind         = ToolKind::CppFunction;
-    def.registryName = "test.plugin.function";
+    def.kind         = ToolKind::Cpp;
+
     def.inputs.push_back({"x", "输入", {Type::Int}, std::int64_t{0}});
     def.outputs.push_back({"y", "输出", {Type::Int}});
     registry.addDefinition(def);
@@ -259,71 +259,59 @@ void packageRegistration(const std::filesystem::path &modulePath)
     std::filesystem::copy_file(modulePath, pkgDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
 
-    writeText(declarationDir / "counter.yaml", R"(schema_version: 1
-tool_id: test.plugin.counter.packaged
-display_name: 打包计数器
-version: 1.0.0
-kind: cpp_class
-entry:
-  registry_name: test.plugin.counter
-init_params:
-  - id: initial
-    name: 初始值
-    type: Int
-    default: 10
-inputs: []
-outputs:
-  - id: count
-    name: 计数值
-    type: Int
-)");
-    writeText(declarationDir / "function.yaml", R"(schema_version: 1
-tool_id: test.plugin.func.packaged
-display_name: 打包函数
-version: 1.0.0
-kind: cpp_function
-entry:
-  registry_name: test.plugin.function
-init_params: []
-inputs:
-  - id: x
-    name: 输入X
-    type: Int
-outputs:
-  - id: y
-    name: 输出Y
-    type: Int
-)");
+    writeText(declarationDir / "counter.json", R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.counter",
+  "display_name": "打包计数器",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [
+    {"id": "initial", "name": "初始值", "type": "Int", "default": 10}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "count", "name": "计数值", "type": "Int"}
+  ]
+})json");
+    writeText(declarationDir / "function.json", R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.function",
+  "display_name": "打包函数",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "输入X", "type": "Int"}
+  ],
+  "outputs": [
+    {"id": "y", "name": "输出Y", "type": "Int"}
+  ]
+})json");
     // Present on disk but absent from the index: must never be discovered.
-    writeText(declarationDir / "ghost.yaml", R"(schema_version: 1
-tool_id: test.plugin.ghost.packaged
-display_name: 未索引工具
-version: 1.0.0
-kind: cpp_class
-entry:
-  registry_name: test.plugin.counter
-init_params: []
-inputs: []
-outputs:
-  - id: count
-    name: 计数值
-    type: Int
-)");
-    writeText(pkgDir / "module_index.yaml", R"(schema_version: 2
-variant: cpu
-modules:
-  test_module:
-    library: bin/test_module.dll
-tools:
-  test.plugin.counter.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/counter.yaml
-  test.plugin.func.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/function.yaml
-runtime_files:
-  - bin/test_module.dll
-)");
+    writeText(declarationDir / "ghost.json", R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.ghost.packaged",
+  "display_name": "未索引工具",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [],
+  "outputs": [
+    {"id": "count", "name": "计数值", "type": "Int"}
+  ]
+})json");
+    writeText(pkgDir / "module_index.json", R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/function.json"}
+  ],
+  "runtime_files": ["bin/test_module.dll"]
+})json");
 
     const auto package = readToolsPackage(pkgDir);
     assert(package.tools.size() == 2);
@@ -333,66 +321,59 @@ runtime_files:
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
 
-    assert(registry.find("test.plugin.counter.packaged") != nullptr);
-    assert(registry.find("test.plugin.func.packaged") != nullptr);
+    assert(registry.find("test.plugin.counter") != nullptr);
+    assert(registry.find("test.plugin.function") != nullptr);
     assert(registry.find("test.plugin.ghost.packaged") == nullptr);
     assert(loader->hasModule("test.plugin.counter") && loader->hasModule("test.plugin.function"));
 
     registry.registerPackage(readToolsPackage(pkgDir));
     assert(registry.find("test.plugin.ghost.packaged") == nullptr);
-    assert(registry.find("test.plugin.counter.packaged") != nullptr);
+    assert(registry.find("test.plugin.counter") != nullptr);
     assert(registry.definitions().size() == 2);
 
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
-    writeText(legacyDir / "legacy.yaml", R"(schema_version: 1
-tool_id: test.plugin.legacy
-display_name: 旧目录工具
-version: 1.0.0
-kind: cpp_function
-entry:
-  registry_name: test.plugin.function
-init_params: []
-inputs:
-  - id: x
-    name: 输入X
-    type: Int
-outputs:
-  - id: y
-    name: 输出Y
-    type: Int
-)");
+    writeText(legacyDir / "legacy.json", R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.legacy",
+  "display_name": "旧目录工具",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "输入X", "type": "Int"}
+  ],
+  "outputs": [
+    {"id": "y", "name": "输出Y", "type": "Int"}
+  ]
+})json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *legacy = registry.find("test.plugin.legacy");
     assert(legacy == nullptr);
 
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
-    writeText(duplicateDir / "counter.yaml", R"(schema_version: 1
-tool_id: test.plugin.counter.packaged
-display_name: 重复计数器
-version: 2.0.0
-kind: cpp_class
-entry:
-  registry_name: test.plugin.counter
-init_params:
-  - id: initial
-    name: 初始值
-    type: Int
-    default: 10
-inputs: []
-outputs:
-  - id: count
-    name: 计数值
-    type: Int
-)");
+    writeText(duplicateDir / "counter.json", R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.counter",
+  "display_name": "重复计数器",
+  "version": "2.0.0",
+  "kind": "cpp",
+  "init_params": [
+    {"id": "initial", "name": "初始值", "type": "Int", "default": 10}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "count", "name": "计数值", "type": "Int"}
+  ]
+})json");
     registry.registerPackage(readToolsPackage(pkgDir));
-    const auto *counter = registry.find("test.plugin.counter.packaged");
+    const auto *counter = registry.find("test.plugin.counter");
     assert(counter != nullptr);
     const auto counterRoot = package.root.generic_u8string();
     assert(counter->definitionPath.generic_u8string().rfind(counterRoot, 0) == 0);
 
     // Both packaged tools execute through the single module of the package.
     PlatformToolServices services;
-    auto                 instance = registry.create("test.plugin.counter.packaged", services);
+    auto                 instance = registry.create("test.plugin.counter", services);
     assert(instance != nullptr);
     Values initParams;
     initParams.emplace("initial", std::int64_t{10});
@@ -402,7 +383,7 @@ outputs:
     assert(std::get<std::int64_t>(counterResult.outputs.at("count")) == 11);
     assert(instance->release().code == 0);
 
-    auto function = registry.create("test.plugin.func.packaged", services);
+    auto function = registry.create("test.plugin.function", services);
     assert(function != nullptr);
     assert(function->initialize({}).code == 0);
     Values functionInputs;
@@ -417,44 +398,42 @@ outputs:
     std::filesystem::create_directories(otherDir / "bin");
     std::filesystem::copy_file(modulePath, otherDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
-    writeText(otherDir / std::filesystem::path(u8"assets/tools/custom/Python/示例/function.yaml"), R"(schema_version: 1
-tool_id: test.plugin.func.packaged
-display_name: 另一包函数
-version: 1.0.0
-kind: cpp_function
-entry:
-  registry_name: test.plugin.function
-init_params: []
-inputs:
-  - id: x
-    name: 输入X
-    type: Int
-outputs:
-  - id: y
-    name: 输出Y
-    type: Int
-)");
-    writeText(otherDir / "module_index.yaml", R"(schema_version: 2
-variant: cpu
-modules:
-  test_module:
-    library: bin/test_module.dll
-tools:
-  test.plugin.func.packaged:
-    module: test_module
-    definition: assets/tools/custom/Python/示例/function.yaml
-)");
+    writeText(otherDir / std::filesystem::path(u8"assets/tools/custom/Python/示例/function.json"), R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.function",
+  "display_name": "另一包函数",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "输入X", "type": "Int"}
+  ],
+  "outputs": [
+    {"id": "y", "name": "输出Y", "type": "Int"}
+  ]
+})json");
+    writeText(otherDir / "module_index.json", R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/custom/Python/示例/function.json"}
+  ],
+  "runtime_files": []
+})json");
     const auto otherPackage = readToolsPackage(otherDir);
     registry.registerPackage(otherPackage);
-    assert(registry.find("test.plugin.func.packaged") != nullptr);
-    assert(registry.find("test.plugin.counter.packaged") == nullptr);
+    assert(registry.find("test.plugin.function") != nullptr);
+    assert(registry.find("test.plugin.counter") == nullptr);
     assert(registry.find("test.plugin.legacy") == nullptr);
-    const auto *relocated = registry.find("test.plugin.func.packaged");
+    const auto *relocated = registry.find("test.plugin.function");
     assert(relocated->builtin);
-    assert(registry.availability("test.plugin.func.packaged").state == ToolAvailability::Available);
+    assert(registry.availability("test.plugin.function").state == ToolAvailability::Available);
 
     // A package that fails validation leaves the registered tool set untouched.
-    writeText(otherDir / "module_index.yaml", "modules: [ broken\n");
+    writeText(otherDir / "module_index.json", "modules: [ broken\n");
     bool rejected = false;
     try
     {
@@ -465,8 +444,8 @@ tools:
         rejected = true;
     }
     assert(rejected);
-    assert(registry.find("test.plugin.func.packaged") != nullptr);
-    assert(registry.availability("test.plugin.func.packaged").state == ToolAvailability::Available);
+    assert(registry.find("test.plugin.function") != nullptr);
+    assert(registry.availability("test.plugin.function").state == ToolAvailability::Available);
 }
 
 #if defined(VISIONRT_BUILD_APP)
@@ -479,67 +458,63 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     // Create tools-package directory structure
     const auto pkgDir  = appDir / "tools-package";
     const auto binDir  = pkgDir / "bin";
-    const auto yamlDir = pkgDir / std::filesystem::path(u8"assets/tools/builtin/测试/数学");
+    const auto jsonDir = pkgDir / std::filesystem::path(u8"assets/tools/builtin/测试/数学");
     std::filesystem::create_directories(binDir);
-    std::filesystem::create_directories(yamlDir);
+    std::filesystem::create_directories(jsonDir);
 
     // Copy module dll into binDir
     std::filesystem::copy_file(modulePath, binDir / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
 
-    // Create module_index.yaml
-    const auto indexFile = pkgDir / "module_index.yaml";
+    // Create module_index.json
+    const auto indexFile = pkgDir / "module_index.json";
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly));
-        const char *indexContent = R"(schema_version: 2
-variant: cpu
-modules:
-  test_module:
-    library: bin/test_module.dll
-tools:
-  test.plugin.counter.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/test.plugin.counter.yaml
-)";
+        const char *indexContent = R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.counter.json"}
+  ],
+  "runtime_files": []
+})json";
         f.write(indexContent);
     }
 
     // Create tool yaml
     {
-        QFile f(toQString(yamlDir / "test.plugin.counter.yaml"));
+        QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
-        const char *yamlContent = R"(
-schema_version: 1
-tool_id: test.plugin.counter.packaged
-display_name: 实际打包插件
-version: 1.0.0
-kind: cpp_class
-entry:
-  registry_name: test.plugin.counter
-init_params:
-  - id: initial
-    name: 初始值
-    type: Int
-    default: 10
-inputs: []
-outputs:
-  - id: count
-    name: 计数值
-    type: Int
-)";
+        const char *yamlContent = R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.counter",
+  "display_name": "实际打包插件",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [
+    {"id": "initial", "name": "初始值", "type": "Int", "default": 10}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "count", "name": "计数值", "type": "Int"}
+  ]
+})json";
         f.write(yamlContent);
     }
 
     // Initialize AppController pointing to appDir
     AppController app(1, temp.path());
-    const auto    meta = app.toolMetadata("test.plugin.counter.packaged");
+    const auto    meta = app.toolMetadata("test.plugin.counter");
     assert(!meta.isEmpty());
     assert(meta.value("displayName").toString() == "实际打包插件");
-    assert(meta.value("registryName").toString() == "test.plugin.counter");
+    assert(meta.value("id").toString() == "test.plugin.counter");
     auto defs = app.toolDefinitions();
     assert(std::any_of(defs.begin(), defs.end(), [](const QVariant &v)
-                       { return v.toMap().value("id").toString() == "test.plugin.counter.packaged"; }));
+                       { return v.toMap().value("id").toString() == "test.plugin.counter"; }));
 
     auto waitForIdle = [&app]()
     {
@@ -553,53 +528,49 @@ outputs:
     };
 
     // 1. Add node for Tool A, runOnce, verify execution
-    app.addNode("test.plugin.counter.packaged", 100, 100);
+    app.addNode("test.plugin.counter", 100, 100);
     assert(app.nodes().size() == 1);
     const auto nodeAId = app.nodes().first().toMap().value("id").toString();
     app.runOnce();
     waitForIdle();
     assert(app.nodes().first().toMap().value("state").toString() == "succeeded");
 
-    // 2. Add Tool B (test.plugin.function) into module_index.yaml & declaration YAML
-    const auto funcYamlFile = yamlDir / "test.plugin.function.yaml";
+    // 2. Add Tool B (test.plugin.function) into module_index.json & declaration JSON
+    const auto funcJsonFile = jsonDir / "test.plugin.function.json";
     {
-        QFile f(toQString(funcYamlFile));
+        QFile f(toQString(funcJsonFile));
         assert(f.open(QIODevice::WriteOnly));
-        const char *funcYamlContent = R"(schema_version: 1
-tool_id: test.plugin.func.packaged
-display_name: 函数插件
-version: 1.0.0
-kind: cpp_function
-entry:
-  registry_name: test.plugin.function
-init_params: []
-inputs:
-  - id: x
-    name: 输入X
-    type: Int
-outputs:
-  - id: y
-    name: 输出Y
-    type: Int
-)";
-        f.write(funcYamlContent);
+        const char *funcJsonContent = R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.function",
+  "display_name": "函数插件",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "输入X", "type": "Int"}
+  ],
+  "outputs": [
+    {"id": "y", "name": "输出Y", "type": "Int"}
+  ]
+})json";
+        f.write(funcJsonContent);
     }
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *indexWithB = R"(schema_version: 2
-variant: cpu
-modules:
-  test_module:
-    library: bin/test_module.dll
-tools:
-  test.plugin.counter.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/test.plugin.counter.yaml
-  test.plugin.func.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/test.plugin.function.yaml
-)";
+        const char *indexWithB = R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+  ],
+  "runtime_files": []
+})json";
         f.write(indexWithB);
     }
 
@@ -611,7 +582,7 @@ tools:
     bool foundB = false;
     for (const auto &d : defs)
     {
-        if (d.toMap().value("id").toString() == "test.plugin.func.packaged")
+        if (d.toMap().value("id").toString() == "test.plugin.function")
         {
             foundB = true;
             assert(d.toMap().value("available").toBool());
@@ -620,7 +591,7 @@ tools:
     assert(foundB);
 
     // Add node for Tool B, bind x to node A's count, runOnce
-    app.addNode("test.plugin.func.packaged", 300, 100);
+    app.addNode("test.plugin.function", 300, 100);
     assert(app.nodes().size() == 2);
     const auto nodeBId = app.nodes().last().toMap().value("id").toString();
     assert(app.bindInput(app.portContext("x"), nodeAId, "count"));
@@ -631,20 +602,21 @@ tools:
         assert(n.toMap().value("state").toString() == "succeeded");
     }
 
-    // 3. Delete Tool A mapping from module_index.yaml and rescan
+    // 3. Delete Tool A mapping from module_index.json and rescan
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *indexOnlyB = R"(schema_version: 2
-variant: cpu
-modules:
-  test_module:
-    library: bin/test_module.dll
-tools:
-  test.plugin.func.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/test.plugin.function.yaml
-)";
+        const char *indexOnlyB = R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+  ],
+  "runtime_files": []
+})json";
         f.write(indexOnlyB);
     }
     app.rescanTools();
@@ -671,12 +643,12 @@ tools:
     assert(nodeAUnavailable);
     assert(nodeBAvailable);
 
-    // 4. Bad index rescan: corrupt module_index.yaml and rescan
+    // 4. Bad index rescan: corrupt module_index.json and rescan
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *badYaml = R"(invalid: [ broken yaml)";
-        f.write(badYaml);
+        const char *badJson = R"(invalid: [ broken yaml)";
+        f.write(badJson);
     }
     app.rescanTools();
     // Bad index is rejected immediately; Tool B remains available!
@@ -684,7 +656,7 @@ tools:
     foundB = false;
     for (const auto &d : defs)
     {
-        if (d.toMap().value("id").toString() == "test.plugin.func.packaged")
+        if (d.toMap().value("id").toString() == "test.plugin.function")
         {
             foundB = true;
             assert(d.toMap().value("available").toBool());
@@ -696,16 +668,17 @@ tools:
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *indexOnlyB = R"(schema_version: 2
-variant: cpu
-modules:
-  test_module:
-    library: bin/test_module.dll
-tools:
-  test.plugin.func.packaged:
-    module: test_module
-    definition: assets/tools/builtin/测试/数学/test.plugin.function.yaml
-)";
+        const char *indexOnlyB = R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+  ],
+  "runtime_files": []
+})json";
         f.write(indexOnlyB);
     }
     app.rescanTools();
@@ -748,11 +721,11 @@ void registryIntegration(const std::filesystem::path &modulePath)
     registry.setPluginLoader(loader);
 
     ToolDefinition def;
-    def.id           = "test.plugin.counter.tool";
+    def.id           = "test.plugin.counter";
     def.displayName  = "插件计数器";
     def.version      = "1.0.0";
-    def.kind         = ToolKind::CppClass;
-    def.registryName = "test.plugin.counter";
+    def.kind         = ToolKind::Cpp;
+
     PortDefinition outPort;
     outPort.id   = "count";
     outPort.name = "计数";
@@ -888,31 +861,30 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     std::filesystem::copy_file(pluginAPath, targetDll, std::filesystem::copy_options::overwrite_existing);
     std::filesystem::copy_file(depAPath, targetDep, std::filesystem::copy_options::overwrite_existing);
 
-    writeText(unicodeDir / std::filesystem::path(u8"assets/tools/builtin/测试/示例") / "plugin_a.yaml",
-              R"(schema_version: 1
-tool_id: test.plugin.a.tool
-display_name: 插件甲
-version: 1.0.0
-kind: cpp_class
-entry:
-  registry_name: test.plugin.a
-init_params: []
-inputs: []
-outputs:
-  - id: val
-    name: 值
-    type: Int
-)");
-    writeText(unicodeDir / "module_index.yaml", R"(schema_version: 2
-variant: cpu
-modules:
-  mod_a:
-    library: bin/plugin_a.dll
-tools:
-  test.plugin.a.tool:
-    module: mod_a
-    definition: assets/tools/builtin/测试/示例/plugin_a.yaml
-)");
+    writeText(unicodeDir / std::filesystem::path(u8"assets/tools/builtin/测试/示例") / "plugin_a.json",
+              R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.a",
+  "display_name": "插件甲",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [],
+  "outputs": [
+    {"id": "val", "name": "值", "type": "Int"}
+  ]
+})json");
+    writeText(unicodeDir / "module_index.json", R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "mod_a", "library": "bin/plugin_a.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.a", "module": "mod_a", "definition": "assets/tools/builtin/测试/示例/plugin_a.json"}
+  ],
+  "runtime_files": []
+})json");
 
     // A package installed under a path with Chinese characters and spaces loads and executes.
     const auto package = readToolsPackage(unicodeDir);
@@ -923,7 +895,7 @@ tools:
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
 
-    const auto state = registry.availability("test.plugin.a.tool");
+    const auto state = registry.availability("test.plugin.a");
     if (state.state != ToolAvailability::Available)
     {
         std::cerr << "Unavailable: " << state.message << "\n";
@@ -931,7 +903,7 @@ tools:
     assert(state.state == ToolAvailability::Available);
 
     PlatformToolServices services;
-    auto                 instance = registry.create("test.plugin.a.tool", services);
+    auto                 instance = registry.create("test.plugin.a", services);
     assert(instance != nullptr);
     auto initStatus = instance->initialize({});
     if (initStatus.code != 0)

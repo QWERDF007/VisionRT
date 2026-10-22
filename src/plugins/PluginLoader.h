@@ -85,16 +85,16 @@ public:
     ~PluginLoader() = default;
 
     // Low-level seam for registering a single known module (tests, embedded modules).
-    void registerModule(std::string registryName, std::filesystem::path libraryPath);
+    void registerModule(std::string toolId, std::filesystem::path libraryPath);
 
     // Replaces the factory mapping with the modules of a package read by the SDK.
     void registerPackage(const ToolsPackage &package);
 
-    std::filesystem::path resolveModulePath(std::string_view registryName) const;
-    bool                  hasModule(std::string_view registryName) const;
+    std::filesystem::path resolveModulePath(std::string_view toolId) const;
+    bool                  hasModule(std::string_view toolId) const;
 
     std::shared_ptr<const LoadedModule> loadModule(const std::filesystem::path &libraryPath, ToolStatus &status);
-    std::unique_ptr<IToolInstance> createAdapter(std::string_view registryName, const PlatformToolServices &services);
+    std::unique_ptr<IToolInstance> createAdapter(std::string_view toolId, const PlatformToolServices &services);
 
     std::size_t loadedModuleCount() const;
 
@@ -117,7 +117,7 @@ private:
 class DomainToolAdapter final : public IToolInstance
 {
 public:
-    DomainToolAdapter(std::shared_ptr<PluginLoader> loader, std::filesystem::path libraryPath, std::string registryName,
+    DomainToolAdapter(std::shared_ptr<PluginLoader> loader, std::filesystem::path libraryPath, std::string toolId,
                       PlatformToolServices services);
     ~DomainToolAdapter() override;
 
@@ -128,7 +128,7 @@ public:
 private:
     std::shared_ptr<PluginLoader>       loader_;
     std::filesystem::path               libraryPath_;
-    std::string                         registryName_;
+    std::string                         toolId_;
     PlatformToolServices                services_;
     std::shared_ptr<const LoadedModule> module_;
     IToolInstance                      *raw_ = nullptr;

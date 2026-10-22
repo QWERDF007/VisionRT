@@ -1,6 +1,6 @@
 #include "core/ProjectEditor.h"
 #include "core/ToolRegistry.h"
-#include <yaml-cpp/yaml.h>
+#include "core/DefinitionJson.h"
 
 #include <algorithm>
 #include <array>
@@ -31,7 +31,7 @@ ToolDefinition integerTool()
     ToolDefinition tool;
     tool.id          = "test.integer";
     tool.displayName = "整数";
-    tool.kind        = ToolKind::CppFunction;
+    tool.kind        = ToolKind::Cpp;
     tool.inputs      = {
         { "first", "输入一", {Type::Int}, std::int64_t{10}},
         {"second", "输入二", {Type::Int}, std::int64_t{20}}
@@ -437,22 +437,23 @@ void compatibilityAndRelationshipMenusUseEffectiveInputs()
 
 void receiverOutputFollowsItsSource()
 {
-    const auto receiver = parseDefinitionNode(YAML::Load(R"(schema_version: 1
-tool_id: visionrt.flow.receive
-display_name: 跨流程接收
-version: 1.0.0
-kind: cpp_class
-entry: {registry_name: visionrt.flow.receive}
-init_params:
-- {id: source_flow_id, name: 源流程, type: String, default: ''}
-- {id: source_node_seq, name: 源节点, type: String, default: ''}
-- {id: source_port_id, name: 源端口, type: String, default: ''}
-inputs: []
-outputs:
-- id: value
-  name: 数据
-  type_from: {flow: source_flow_id, node: source_node_seq, port: source_port_id}
-)"), {}, true);
+    const auto receiver = parseToolDefinitionJson(R"json({
+  "schema_version": 1,
+  "tool_id": "visionrt.flow.receive",
+  "display_name": "跨流程接收",
+  "version": "1.0.0",
+  "kind": "host",
+  "entry": {"binding": "visionrt.receiver"},
+  "init_params": [
+    {"id": "source_flow_id", "name": "源流程", "type": "String", "default": ""},
+    {"id": "source_node_seq", "name": "源节点", "type": "String", "default": ""},
+    {"id": "source_port_id", "name": "源端口", "type": "String", "default": ""}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "value", "name": "数据", "type_from": {"flow": "source_flow_id", "node": "source_node_seq", "port": "source_port_id"}}
+  ]
+})json", {}, true);
     ProjectEditor editor;
     const auto sourceFlow = editor.addFlow("source");
     const auto sender = editor.addNode(sourceFlow, integerTool(), {});

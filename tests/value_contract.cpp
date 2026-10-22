@@ -5,7 +5,6 @@
 #include "core/ToolDefinition.h"
 
 #include <visionrt/contracts/Value.h>
-#include <core/ValueYaml.h>
 
 #include <array>
 #include <cassert>
@@ -202,8 +201,8 @@ int main()
     valid.id            = "valid.tool";
     valid.displayName   = "Valid Tool";
     valid.version       = "1.0.0";
-    valid.kind          = ToolKind::CppFunction;
-    valid.registryName  = "valid.tool.cpp";
+    valid.kind          = ToolKind::Cpp;
+
     valid.inputs.push_back({"in_img", "Input Image", {Type::ImageBatch}});
     valid.inputs.push_back({"threshold",
                             "Threshold",
@@ -254,15 +253,16 @@ int main()
         bad.id   = "bad id with space";
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 4. missing registryName on C++ tool
-    {
-        auto bad         = valid;
-        bad.registryName = "";
-        rejects([&] { validateToolDefinition(bad); });
-    }
-    // 5. CppFunction having non-empty init_params
     {
         auto bad = valid;
+        bad.kind = ToolKind::Host;
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    {
+        auto bad = valid;
+        bad.kind = ToolKind::PythonFunction;
+        bad.script = "tool.py";
+        bad.symbol = "execute";
         bad.initParams.push_back({"param1", "Param 1", {Type::Int}});
         rejects([&] { validateToolDefinition(bad); });
     }

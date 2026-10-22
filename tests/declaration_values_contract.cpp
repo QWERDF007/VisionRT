@@ -2,7 +2,7 @@
 #    undef NDEBUG
 #endif
 
-#include "core/ToolDeclarationYaml.h"
+#include "core/DefinitionJson.h"
 #include "core/ToolDefinition.h"
 #include "core/ToolValueValidation.h"
 
@@ -56,21 +56,21 @@ int main()
 {
     // CT-01: a single classification for every resource-path editor.
     {
-        const auto definition = parseToolDefinitionYaml(R"(
-schema_version: 1
-tool_id: runtime.paths
-display_name: 路径分类
-version: 1.0.0
-kind: cpp_function
-entry: {registry_name: runtime.paths}
-init_params: []
-inputs:
-  - {id: mode, name: 模式, type: String, editor: text}
-  - {id: file, name: 文件, type: String, editor: file}
-  - {id: directory, name: 目录, type: String, editor: directory}
-  - {id: dynamic, name: 动态路径, type: String, editor: path, path_mode_from: mode}
-outputs: []
-)");
+        const auto definition = parseToolDefinitionJson(R"json({
+  "schema_version": 1,
+  "tool_id": "runtime.paths",
+  "display_name": "路径分类",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "mode", "name": "模式", "type": "String", "editor": "text"},
+    {"id": "file", "name": "文件", "type": "String", "editor": "file"},
+    {"id": "directory", "name": "目录", "type": "String", "editor": "directory"},
+    {"id": "dynamic", "name": "动态路径", "type": "String", "editor": "path", "path_mode_from": "mode"}
+  ],
+  "outputs": []
+})json");
         assert(isPathPort(definition.inputs[1]));
         assert(isPathPort(definition.inputs[2]));
         assert(isPathPort(definition.inputs[3]));
@@ -85,35 +85,35 @@ outputs: []
         rejects(
             []
             {
-                (void)parseToolDefinitionYaml(R"(
-schema_version: 1
-tool_id: runtime.paths.bad.file
-display_name: 错误文件端口
-version: 1.0.0
-kind: cpp_function
-entry: {registry_name: runtime.paths.bad.file}
-init_params: []
-inputs:
-  - {id: file, name: 文件, type: Int, editor: file}
-outputs: []
-)");
+                (void)parseToolDefinitionJson(R"json({
+  "schema_version": 1,
+  "tool_id": "runtime.paths.bad.file",
+  "display_name": "错误文件端口",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "file", "name": "文件", "type": "Int", "editor": "file"}
+  ],
+  "outputs": []
+})json");
             },
             "路径编辑器");
         rejects(
             []
             {
-                (void)parseToolDefinitionYaml(R"(
-schema_version: 1
-tool_id: runtime.paths.bad.directory
-display_name: 错误目录端口
-version: 1.0.0
-kind: cpp_function
-entry: {registry_name: runtime.paths.bad.directory}
-init_params: []
-inputs:
-  - {id: directory, name: 目录, type: Bool, editor: directory}
-outputs: []
-)");
+                (void)parseToolDefinitionJson(R"json({
+  "schema_version": 1,
+  "tool_id": "runtime.paths.bad.directory",
+  "display_name": "错误目录端口",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "directory", "name": "目录", "type": "Bool", "editor": "directory"}
+  ],
+  "outputs": []
+})json");
             },
             "路径编辑器");
     }
@@ -295,20 +295,21 @@ outputs: []
     }
 
     {
-        const auto declared = parseToolDefinitionYaml(R"(
-schema_version: 1
-tool_id: runtime.required
-display_name: 必填声明
-version: 1.0.0
-kind: cpp_class
-entry: {registry_name: runtime.required}
-init_params:
-  - {id: seed, name: 种子, type: Int, default: 5, required: false}
-inputs:
-  - {id: input, name: 输入, type: String, default: text}
-  - {id: optional, name: 可选输入, type: Int, required: false}
-outputs: []
-)");
+        const auto declared = parseToolDefinitionJson(R"json({
+  "schema_version": 1,
+  "tool_id": "runtime.required",
+  "display_name": "必填声明",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [
+    {"id": "seed", "name": "种子", "type": "Int", "default": 5, "required": false}
+  ],
+  "inputs": [
+    {"id": "input", "name": "输入", "type": "String", "default": "text"},
+    {"id": "optional", "name": "可选输入", "type": "Int", "required": false}
+  ],
+  "outputs": []
+})json");
         assert(!declared.initParams[0].required);
         assert(declared.inputs[0].required);
         assert(!declared.inputs[1].required);
@@ -317,7 +318,7 @@ outputs: []
         });
         validateToolValue(declared.inputs[1], Missing{});
         rejects([&] { validateToolValue(declared.inputs[0], Missing{}); }, "input");
-        const auto roundTrip = parseToolDefinitionYaml(emitNormalizedToolYaml(declared));
+        const auto roundTrip = parseToolDefinitionJson(emitNormalizedToolJson(declared));
         assert(!roundTrip.initParams[0].required);
         assert(roundTrip.inputs[0].required);
         assert(!roundTrip.inputs[1].required);

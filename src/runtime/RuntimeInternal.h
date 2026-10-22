@@ -92,7 +92,7 @@ struct NodeRuntime
 
     NodeId                                         id;
     std::string                                    toolId;
-    ToolKind                                       kind = ToolKind::CppFunction;
+    ToolKind                                       kind = ToolKind::Cpp;
     ResultSlot                                     slot;
     std::atomic<bool>                              active{false};
     std::atomic<std::shared_ptr<const ToolStatus>> lifecycle;

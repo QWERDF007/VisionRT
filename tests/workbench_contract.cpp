@@ -220,85 +220,82 @@ void nodeDiagnosticsContract()
         failPyFile.write("def run(inputs):\n    raise RuntimeError('diag boom')\n");
         failPyFile.close();
     }
-    QFile yamlFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.yaml");
-    if (yamlFile.open(QIODevice::WriteOnly))
+    QFile jsonFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.json");
+    if (jsonFile.open(QIODevice::WriteOnly))
     {
-        yamlFile.write(
-            "schema_version: 1\n"
-            "tool_id: test.diag.python\n"
-            "display_name: 诊断测试\n"
-            "version: 1.0.0\n"
-            "kind: python_function\n"
-            "entry:\n"
-            "  file: test_diag.py\n"
-            "  symbol: run\n"
-            "init_params: []\n"
-            "inputs:\n"
-            "- id: x\n"
-            "  name: 输入\n"
-            "  type: Int\n"
-            "  default: 1\n"
-            "  min: 0\n"
-            "  max: 100\n"
-            "  step: 1\n"
-            "outputs:\n"
-            "- id: value\n"
-            "  name: 输出\n"
-            "  type: Int\n");
-        yamlFile.close();
+        jsonFile.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.diag.python",
+  "display_name": "诊断测试",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "test_diag.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "输入", "type": "Int", "default": 1, "min": 0, "max": 100, "step": 1}
+  ],
+  "outputs": [
+    {"id": "value", "name": "输出", "type": "Int"}
+  ]
+})json");
+        jsonFile.close();
     }
-    QFile failYamlFile(directory.path()
-                       + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.yaml");
-    if (failYamlFile.open(QIODevice::WriteOnly))
+    QFile failJsonFile(directory.path()
+                       + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.json");
+    if (failJsonFile.open(QIODevice::WriteOnly))
     {
-        failYamlFile.write(
-            "schema_version: 1\n"
-            "tool_id: test.diag.fail\n"
-            "display_name: 诊断失败\n"
-            "version: 1.0.0\n"
-            "kind: python_function\n"
-            "entry:\n"
-            "  file: test_diag_fail.py\n"
-            "  symbol: run\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs:\n"
-            "- id: value\n"
-            "  name: 输出\n"
-            "  type: Int\n");
-        failYamlFile.close();
+        failJsonFile.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.diag.fail",
+  "display_name": "诊断失败",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "test_diag_fail.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [],
+  "outputs": [
+    {"id": "value", "name": "输出", "type": "Int"}
+  ]
+})json");
+        failJsonFile.close();
     }
-    QFile unfulfilledYaml(directory.path()
-                          + "/tools-package/assets/tools/custom/test_category/test_diag/unfulfilled.yaml");
-    if (unfulfilledYaml.open(QIODevice::WriteOnly))
+    QFile unfulfilledJson(directory.path()
+                          + "/tools-package/assets/tools/custom/test_category/test_diag/unfulfilled.json");
+    if (unfulfilledJson.open(QIODevice::WriteOnly))
     {
-        unfulfilledYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.diag.unfulfilled\n"
-            "display_name: 未提供实现测试\n"
-            "version: 1.0.0\n"
-            "kind: cpp_function\n"
-            "entry:\n"
-            "  registry_name: test.diag.missing_symbol\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs: []\n");
-        unfulfilledYaml.close();
+        unfulfilledJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.diag.unfulfilled",
+  "display_name": "未提供实现测试",
+  "version": "1.0.0",
+  "kind": "host",
+  "init_params": [],
+  "inputs": [],
+  "outputs": [],
+  "entry": {"binding": "nonexistent.binding"}
+})json");
+        unfulfilledJson.close();
     }
-    QFile indexFile(directory.path() + "/tools-package/module_index.yaml");
+    QFile indexFile(directory.path() + "/tools-package/module_index.json");
     if (indexFile.open(QIODevice::WriteOnly))
     {
         indexFile.write(
-            "schema_version: 2\n"
-            "variant: cpu\n"
-            "tools:\n"
-            "  test.diag.python:\n"
-            "    definition: assets/tools/custom/test_category/test_diag/test_diag.yaml\n"
-            "  test.diag.fail:\n"
-            "    definition: assets/tools/custom/test_category/test_diag/test_diag_fail.yaml\n"
-            "  test.diag.unfulfilled:\n"
-            "    host_binding: nonexistent.binding\n"
-            "    definition: assets/tools/custom/test_category/test_diag/unfulfilled.yaml\n");
+            R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "tools": [
+    {"tool_id": "test.diag.python", "definition": "assets/tools/custom/test_category/test_diag/test_diag.json"},
+    {"tool_id": "test.diag.fail", "definition": "assets/tools/custom/test_category/test_diag/test_diag_fail.json"},
+    {"tool_id": "test.diag.unfulfilled", "definition": "assets/tools/custom/test_category/test_diag/unfulfilled.json", "module": "missing"}
+  ],
+  "modules": [
+    {"id": "missing", "library": "bin/notbuilt.dll"}
+  ],
+  "runtime_files": []
+})json");
         indexFile.close();
     }
 
@@ -400,7 +397,7 @@ void mainQmlContract(double scale)
     QTemporaryDir directory;
     const auto    dirPath = directory.path();
 
-    // 1. Prepare plugin and YAML definitions
+    // 1. Prepare plugin and JSON definitions
     QDir(dirPath).mkpath("tools-package/bin");
     const QString dllSrc = QCoreApplication::applicationDirPath() + "/test_plugin_module.dll";
     const QString dllDst = dirPath + "/tools-package/bin/test_plugin_module.dll";
@@ -409,78 +406,82 @@ void mainQmlContract(double scale)
         QFile::copy(dllSrc, dllDst);
     }
 
-    QFile indexFile(dirPath + "/tools-package/module_index.yaml");
+    QFile indexFile(dirPath + "/tools-package/module_index.json");
     if (indexFile.open(QIODevice::WriteOnly))
     {
         indexFile.write(
-            "schema_version: 2\n"
-            "variant: cpu\n"
-            "modules:\n"
-            "  test_module:\n"
-            "    library: bin/test_plugin_module.dll\n"
-            "tools:\n"
-            "  test.plugin.counter:\n"
-            "    module: test_module\n"
-            "    definition: assets/tools/builtin/Plugin/Basic/counter.yaml\n"
-            "  test.plugin.sleep:\n"
-            "    module: test_module\n"
-            "    definition: assets/tools/builtin/Plugin/Basic/sleep.yaml\n"
-            "  test.plugin.fail:\n"
-            "    module: test_module\n"
-            "    definition: assets/tools/builtin/Plugin/Basic/fail.yaml\n");
+            R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_plugin_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/counter.json"},
+    {"tool_id": "test.plugin.sleep", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/sleep.json"},
+    {"tool_id": "test.plugin.fail_init", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/fail.json"}
+  ],
+  "runtime_files": []
+})json");
         indexFile.close();
     }
 
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/Plugin/Basic");
-    QFile sleepYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/sleep.yaml");
-    if (sleepYaml.open(QIODevice::WriteOnly))
+    QFile sleepJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/sleep.json");
+    if (sleepJson.open(QIODevice::WriteOnly))
     {
-        sleepYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.plugin.sleep\n"
-            "display_name: Plugin Sleep\n"
-            "version: 1.0.0\n"
-            "kind: cpp_class\n"
-            "entry: {registry_name: test.plugin.sleep}\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs:\n"
-            "  - {id: y, name: Y, type: Int}\n");
-        sleepYaml.close();
+        sleepJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.sleep",
+  "display_name": "Plugin Sleep",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [],
+  "outputs": [
+    {"id": "y", "name": "Y", "type": "Int"}
+  ]
+})json");
+        sleepJson.close();
     }
 
-    QFile counterYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.yaml");
-    if (counterYaml.open(QIODevice::WriteOnly))
+    QFile counterJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.json");
+    if (counterJson.open(QIODevice::WriteOnly))
     {
-        counterYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.plugin.counter\n"
-            "display_name: Plugin Counter\n"
-            "version: 1.0.0\n"
-            "kind: cpp_class\n"
-            "entry: {registry_name: test.plugin.counter}\n"
-            "init_params: []\n"
-            "inputs:\n"
-            "  - {id: step, name: Step, type: Int, default: 1}\n"
-            "outputs:\n"
-            "  - {id: count, name: Count, type: Int}\n");
-        counterYaml.close();
+        counterJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.counter",
+  "display_name": "Plugin Counter",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "step", "name": "Step", "type": "Int", "default": 1}
+  ],
+  "outputs": [
+    {"id": "count", "name": "Count", "type": "Int"}
+  ]
+})json");
+        counterJson.close();
     }
 
-    QFile failYaml(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/fail.yaml");
-    if (failYaml.open(QIODevice::WriteOnly))
+    QFile failJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/fail.json");
+    if (failJson.open(QIODevice::WriteOnly))
     {
-        failYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.plugin.fail\n"
-            "display_name: Fail Init Tool\n"
-            "version: 1.0.0\n"
-            "kind: cpp_class\n"
-            "entry: {registry_name: test.plugin.fail_init}\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs: []\n");
-        failYaml.close();
+        failJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.fail_init",
+  "display_name": "Fail Init Tool",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [],
+  "outputs": []
+})json");
+        failJson.close();
     }
 
     AppController app(1, dirPath);
@@ -669,7 +670,7 @@ void mainQmlContract(double scale)
             "node state after execution is not succeeded");
 
     // Add failing node and verify red error state
-    app.addNode("test.plugin.fail", 300, 100);
+    app.addNode("test.plugin.fail_init", 300, 100);
     app.runOnce();
     for (int i = 0; i < 50 && app.busy(); ++i)
     {
@@ -780,23 +781,23 @@ void packageDrivenCatalogAndRefreshContract()
                 "workbench must start with empty tool catalog when no package is installed");
         std::cout << "[Evidence T-05] Empty catalog on startup without package verified.\n";
 
-        // 2. Placing YAML into old host directories without package does NOT populate tools
+        // 2. Placing JSON into old host directories without package does NOT populate tools
         QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
-        QFile legacyYaml(dirPath + "/assets/tools/builtin/flow/func/platform_func.yaml");
-        if (legacyYaml.open(QIODevice::WriteOnly))
+        QFile legacyJson(dirPath + "/assets/tools/builtin/flow/func/platform_func.json");
+        if (legacyJson.open(QIODevice::WriteOnly))
         {
-            legacyYaml.write(
-                "schema_version: 1\n"
-                "tool_id: test.legacy.func\n"
-                "display_name: 遗留函数\n"
-                "version: 1.0.0\n"
-                "kind: cpp_function\n"
-                "entry:\n"
-                "  registry_name: test.plugin.function\n"
-                "init_params: []\n"
-                "inputs: []\n"
-                "outputs: []\n");
-            legacyYaml.close();
+            legacyJson.write(
+                R"json({
+  "schema_version": 1,
+  "tool_id": "test.legacy.func",
+  "display_name": "遗留函数",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [],
+  "outputs": []
+})json");
+            legacyJson.close();
         }
         QDir(dirPath).mkpath("tools/custom/user/py");
         QFile legacyPy(dirPath + "/tools/custom/user/py/legacy.py");
@@ -805,22 +806,22 @@ void packageDrivenCatalogAndRefreshContract()
             legacyPy.write("def run(i): return {'val': 1}\n");
             legacyPy.close();
         }
-        QFile legacyPyYaml(dirPath + "/tools/custom/user/py/legacy.yaml");
-        if (legacyPyYaml.open(QIODevice::WriteOnly))
+        QFile legacyPyJson(dirPath + "/tools/custom/user/py/legacy.json");
+        if (legacyPyJson.open(QIODevice::WriteOnly))
         {
-            legacyPyYaml.write(
-                "schema_version: 1\n"
-                "tool_id: test.legacy.python\n"
-                "display_name: 遗留脚本\n"
-                "version: 1.0.0\n"
-                "kind: python_function\n"
-                "entry:\n"
-                "  file: legacy.py\n"
-                "  symbol: run\n"
-                "init_params: []\n"
-                "inputs: []\n"
-                "outputs: []\n");
-            legacyPyYaml.close();
+            legacyPyJson.write(
+                R"json({
+  "schema_version": 1,
+  "tool_id": "test.legacy.python",
+  "display_name": "遗留脚本",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "legacy.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [],
+  "outputs": []
+})json");
+            legacyPyJson.close();
         }
         app.rescanTools();
         for (int i = 0; i < 50 && app.busy(); ++i)
@@ -829,7 +830,7 @@ void packageDrivenCatalogAndRefreshContract()
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         require(app.toolDefinitions().isEmpty(),
-                "putting YAML into old host directories must not populate tools without package");
+                "putting JSON into old host directories must not populate tools without package");
         std::cout
             << "[Evidence T-05] Legacy directory exclusion verified: 0 tools discovered from unindexed legacy paths.\n";
     }
@@ -845,54 +846,48 @@ void packageDrivenCatalogAndRefreshContract()
 
     // Package builtin C++ counter
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/counter");
-    QFile rootCounterYaml(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.yaml");
-    if (rootCounterYaml.open(QIODevice::WriteOnly))
+    QFile rootCounterJson(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.json");
+    if (rootCounterJson.open(QIODevice::WriteOnly))
     {
-        rootCounterYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.pkg.counter\n"
-            "display_name: 计数器插件\n"
-            "version: 1.0.0\n"
-            "kind: cpp_class\n"
-            "entry:\n"
-            "  registry_name: test.plugin.counter\n"
-            "init_params:\n"
-            "- id: initial\n"
-            "  name: 初始值\n"
-            "  type: Int\n"
-            "  default: 10\n"
-            "inputs: []\n"
-            "outputs:\n"
-            "- id: count\n"
-            "  name: 计数值\n"
-            "  type: Int\n");
-        rootCounterYaml.close();
+        rootCounterJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.counter",
+  "display_name": "计数器插件",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [
+    {"id": "initial", "name": "初始值", "type": "Int", "default": 10}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "count", "name": "计数值", "type": "Int"}
+  ]
+})json");
+        rootCounterJson.close();
     }
 
     // Package builtin C++ function
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/function");
-    QFile rootFunctionYaml(dirPath + "/tools-package/assets/tools/builtin/pkg/function/function.yaml");
-    if (rootFunctionYaml.open(QIODevice::WriteOnly))
+    QFile rootFunctionJson(dirPath + "/tools-package/assets/tools/builtin/pkg/function/function.json");
+    if (rootFunctionJson.open(QIODevice::WriteOnly))
     {
-        rootFunctionYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.pkg.function\n"
-            "display_name: 函数插件\n"
-            "version: 1.0.0\n"
-            "kind: cpp_function\n"
-            "entry:\n"
-            "  registry_name: test.plugin.function\n"
-            "init_params: []\n"
-            "inputs:\n"
-            "- id: x\n"
-            "  name: 输入\n"
-            "  type: Int\n"
-            "  default: 5\n"
-            "outputs:\n"
-            "- id: y\n"
-            "  name: 输出\n"
-            "  type: Int\n");
-        rootFunctionYaml.close();
+        rootFunctionJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.plugin.function",
+  "display_name": "函数插件",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "x", "name": "输入", "type": "Int", "default": 5}
+  ],
+  "outputs": [
+    {"id": "y", "name": "输出", "type": "Int"}
+  ]
+})json");
+        rootFunctionJson.close();
     }
 
     // Package Python tool
@@ -905,115 +900,94 @@ void packageDrivenCatalogAndRefreshContract()
             "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111, 'image': []}\n");
         pyScriptA.close();
     }
-    QFile root3YamlA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.yaml");
-    if (root3YamlA.open(QIODevice::WriteOnly))
+    QFile root3JsonA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.json");
+    if (root3JsonA.open(QIODevice::WriteOnly))
     {
-        root3YamlA.write(
-            "schema_version: 1\n"
-            "tool_id: test.user.pythonA\n"
-            "display_name: 用户脚本A\n"
-            "version: 1.0.0\n"
-            "kind: python_function\n"
-            "entry:\n"
-            "  file: user_node_a.py\n"
-            "  symbol: run\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs:\n"
-            "- id: result\n"
-            "  name: 结果\n"
-            "  type: Int\n"
-            "- id: image\n"
-            "  name: 图像\n"
-            "  type: ImageBatch\n");
-        root3YamlA.close();
+        root3JsonA.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.user.pythonA",
+  "display_name": "用户脚本A",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "user_node_a.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [],
+  "outputs": [
+    {"id": "result", "name": "结果", "type": "Int"},
+    {"id": "image", "name": "图像", "type": "ImageBatch"}
+  ]
+})json");
+        root3JsonA.close();
     }
 
     // Platform receiver tool with host_binding
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/flow/recv");
-    QFile recvYaml(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.yaml");
-    if (recvYaml.open(QIODevice::WriteOnly))
+    QFile recvJson(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.json");
+    if (recvJson.open(QIODevice::WriteOnly))
     {
-        recvYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.custom.receiver\n"
-            "display_name: 动态接收器\n"
-            "version: 1.0.0\n"
-            "kind: cpp_class\n"
-            "entry:\n"
-            "  registry_name: test.custom.receiver\n"
-            "init_params:\n"
-            "- id: source_flow_id\n"
-            "  name: 源流程\n"
-            "  type: String\n"
-            "  default: ''\n"
-            "- id: source_node_seq\n"
-            "  name: 源节点\n"
-            "  type: String\n"
-            "  default: ''\n"
-            "- id: source_port_id\n"
-            "  name: 源端口\n"
-            "  type: String\n"
-            "  default: ''\n"
-            "- id: timeout_ms\n"
-            "  name: 超时时间(ms)\n"
-            "  type: Int\n"
-            "  default: 500\n"
-            "inputs: []\n"
-            "outputs:\n"
-            "- id: value\n"
-            "  name: 接收值\n"
-              "  type_from: {flow: source_flow_id, node: source_node_seq, port: source_port_id}\n"
-            "- id: source_status_code\n"
-            "  name: 源状态码\n"
-            "  type: Int\n"
-            "- id: source_status_message\n"
-            "  name: 源状态消息\n"
-            "  type: String\n");
-        recvYaml.close();
+        recvJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.custom.receiver",
+  "display_name": "动态接收器",
+  "version": "1.0.0",
+  "kind": "host",
+  "init_params": [
+    {"id": "source_flow_id", "name": "源流程", "type": "String", "default": ""},
+    {"id": "source_node_seq", "name": "源节点", "type": "String", "default": ""},
+    {"id": "source_port_id", "name": "源端口", "type": "String", "default": ""},
+    {"id": "timeout_ms", "name": "超时时间(ms)", "type": "Int", "default": 500}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "value", "name": "接收值", "type_from": {"flow": "source_flow_id", "node": "source_node_seq", "port": "source_port_id"}},
+    {"id": "source_status_code", "name": "源状态码", "type": "Int"},
+    {"id": "source_status_message", "name": "源状态消息", "type": "String"}
+  ],
+  "entry": {"binding": "visionrt.receiver"}
+})json");
+        recvJson.close();
     }
 
-    // Unindexed YAML inside package
+    // Unindexed JSON inside package
     QDir(dirPath).mkpath("tools-package/assets/tools/builtin/unindexed");
-    QFile unindexedYaml(dirPath + "/tools-package/assets/tools/builtin/unindexed/unindexed.yaml");
-    if (unindexedYaml.open(QIODevice::WriteOnly))
+    QFile unindexedJson(dirPath + "/tools-package/assets/tools/builtin/unindexed/unindexed.json");
+    if (unindexedJson.open(QIODevice::WriteOnly))
     {
-        unindexedYaml.write(
-            "schema_version: 1\n"
-            "tool_id: test.unindexed.tool\n"
-            "display_name: 未索引工具\n"
-            "version: 1.0.0\n"
-            "kind: cpp_class\n"
-            "entry:\n"
-            "  registry_name: test.unindexed.tool\n"
-            "init_params: []\n"
-            "inputs: []\n"
-            "outputs: []\n");
-        unindexedYaml.close();
+        unindexedJson.write(
+            R"json({
+  "schema_version": 1,
+  "tool_id": "test.unindexed.tool",
+  "display_name": "未索引工具",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [],
+  "outputs": []
+})json");
+        unindexedJson.close();
     }
 
-    // module_index.yaml
-    QFile indexFile(dirPath + "/tools-package/module_index.yaml");
+    // module_index.json
+    QFile indexFile(dirPath + "/tools-package/module_index.json");
     if (indexFile.open(QIODevice::WriteOnly))
     {
         indexFile.write(
-            "schema_version: 2\n"
-            "variant: cpu\n"
-            "modules:\n"
-            "  test_module:\n"
-            "    library: bin/test_plugin_module.dll\n"
-            "tools:\n"
-            "  test.pkg.counter:\n"
-            "    module: test_module\n"
-            "    definition: assets/tools/builtin/pkg/counter/counter.yaml\n"
-            "  test.pkg.function:\n"
-            "    module: test_module\n"
-            "    definition: assets/tools/builtin/pkg/function/function.yaml\n"
-            "  test.user.pythonA:\n"
-            "    definition: assets/tools/custom/user/py/user_node_a.yaml\n"
-            "  test.custom.receiver:\n"
-            "    host_binding: visionrt.receiver\n"
-            "    definition: assets/tools/builtin/flow/recv/receiver.yaml\n");
+            R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_plugin_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/pkg/counter/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/pkg/function/function.json"},
+    {"tool_id": "test.user.pythonA", "definition": "assets/tools/custom/user/py/user_node_a.json"},
+    {"tool_id": "test.custom.receiver", "definition": "assets/tools/builtin/flow/recv/receiver.json"}
+  ],
+  "runtime_files": []
+})json");
         indexFile.close();
     }
 
@@ -1036,12 +1010,12 @@ void packageDrivenCatalogAndRefreshContract()
             const auto map   = item.toMap();
             const auto id    = map.value("id").toString();
             const bool avail = map.value("available").toBool();
-            if (id == "test.pkg.counter")
+            if (id == "test.plugin.counter")
             {
                 hasCounter = true;
                 require(avail, "counter tool not available");
             }
-            if (id == "test.pkg.function")
+            if (id == "test.plugin.function")
             {
                 hasFunction = true;
                 require(avail, "function tool not available");
@@ -1072,8 +1046,8 @@ void packageDrivenCatalogAndRefreshContract()
         const auto flow1Name = initialFlows.first().toMap().value("name").toString();
         const auto flow1Id   = initialFlows.first().toMap().value("id").toString();
 
-        app.addNode("test.pkg.function", 100, 100);
-        app.addNode("test.pkg.counter", 200, 100);
+        app.addNode("test.plugin.function", 100, 100);
+        app.addNode("test.plugin.counter", 200, 100);
         app.addNode("test.user.pythonA", 300, 100);
 
         QString funcNodeTitle;
@@ -1083,7 +1057,7 @@ void packageDrivenCatalogAndRefreshContract()
         for (const auto &n : app.nodes())
         {
             const auto m = n.toMap();
-            if (m.value("toolId").toString() == "test.pkg.function")
+            if (m.value("toolId").toString() == "test.plugin.function")
             {
                 funcNodeTitle = m.value("title").toString();
                 funcNodeId    = m.value("id").toString();
@@ -1162,7 +1136,7 @@ void packageDrivenCatalogAndRefreshContract()
         std::cout << "[Evidence T-05] Cross-flow receive of dynamic host_binding node verified, value="
                   << recvPreview.toStdString() << "\n";
 
-        app.addNode("test.pkg.function", 200, 100);
+        app.addNode("test.plugin.function", 200, 100);
         const auto relationTarget = app.selectedNode();
         require(app.bindInput(app.portContext("x"), recvNodeId, "value"), "cannot bind source-derived receiver output");
         require(app.wires().size() == 1, "valid receiver relation is missing");
@@ -1229,70 +1203,52 @@ void packageDrivenCatalogAndRefreshContract()
 
         // 4. Change receiver declaration only (metadata-only identity change)
         std::cout << "[Evidence T-05] Changing receiver declaration identity and display name...\n";
-        QFile::remove(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.yaml");
-        QFile renamedYaml(dirPath + "/tools-package/assets/tools/builtin/flow/recv/renamed.yaml");
-        if (renamedYaml.open(QIODevice::WriteOnly))
+        QFile::remove(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.json");
+        QFile renamedJson(dirPath + "/tools-package/assets/tools/builtin/flow/recv/renamed.json");
+        if (renamedJson.open(QIODevice::WriteOnly))
         {
-            renamedYaml.write(
-                "schema_version: 1\n"
-                "tool_id: test.custom.renamed_recv\n"
-                "display_name: 改名接收器\n"
-                "version: 1.0.0\n"
-                "kind: cpp_class\n"
-                "entry:\n"
-                "  registry_name: test.custom.renamed_recv\n"
-                "init_params:\n"
-                "- id: source_flow_id\n"
-                "  name: 源流程\n"
-                "  type: String\n"
-                "  default: ''\n"
-                "- id: source_node_seq\n"
-                "  name: 源节点\n"
-                "  type: String\n"
-                "  default: ''\n"
-                "- id: source_port_id\n"
-                "  name: 源端口\n"
-                "  type: String\n"
-                "  default: ''\n"
-                "- id: timeout_ms\n"
-                "  name: 超时时间(ms)\n"
-                "  type: Int\n"
-                "  default: 500\n"
-                "inputs: []\n"
-                "outputs:\n"
-                "- id: value\n"
-                "  name: 接收值\n"
-                "  type_from: {flow: source_flow_id, node: source_node_seq, port: source_port_id}\n"
-                "- id: source_status_code\n"
-                "  name: 源状态码\n"
-                "  type: Int\n"
-                "- id: source_status_message\n"
-                "  name: 源状态消息\n"
-                "  type: String\n");
-            renamedYaml.close();
+            renamedJson.write(
+                R"json({
+  "schema_version": 1,
+  "tool_id": "test.custom.renamed_recv",
+  "display_name": "改名接收器",
+  "version": "1.0.0",
+  "kind": "host",
+  "init_params": [
+    {"id": "source_flow_id", "name": "源流程", "type": "String", "default": ""},
+    {"id": "source_node_seq", "name": "源节点", "type": "String", "default": ""},
+    {"id": "source_port_id", "name": "源端口", "type": "String", "default": ""},
+    {"id": "timeout_ms", "name": "超时时间(ms)", "type": "Int", "default": 500}
+  ],
+  "inputs": [],
+  "outputs": [
+    {"id": "value", "name": "接收值", "type_from": {"flow": "source_flow_id", "node": "source_node_seq", "port": "source_port_id"}},
+    {"id": "source_status_code", "name": "源状态码", "type": "Int"},
+    {"id": "source_status_message", "name": "源状态消息", "type": "String"}
+  ],
+  "entry": {"binding": "visionrt.receiver"}
+})json");
+            renamedJson.close();
         }
 
-        // Update module_index.yaml with renamed tool
+        // Update module_index.json with renamed tool
         if (indexFile.open(QIODevice::WriteOnly))
         {
             indexFile.write(
-                "schema_version: 2\n"
-                "variant: cpu\n"
-                "modules:\n"
-                "  test_module:\n"
-                "    library: bin/test_plugin_module.dll\n"
-                "tools:\n"
-                "  test.pkg.counter:\n"
-                "    module: test_module\n"
-                "    definition: assets/tools/builtin/pkg/counter/counter.yaml\n"
-                "  test.pkg.function:\n"
-                "    module: test_module\n"
-                "    definition: assets/tools/builtin/pkg/function/function.yaml\n"
-                "  test.user.pythonA:\n"
-                "    definition: assets/tools/custom/user/py/user_node_a.yaml\n"
-                "  test.custom.renamed_recv:\n"
-                "    host_binding: visionrt.receiver\n"
-                "    definition: assets/tools/builtin/flow/recv/renamed.yaml\n");
+                R"json({
+  "schema_version": 1,
+  "variant": "cpu",
+  "modules": [
+    {"id": "test_module", "library": "bin/test_plugin_module.dll"}
+  ],
+  "tools": [
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/pkg/counter/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/pkg/function/function.json"},
+    {"tool_id": "test.user.pythonA", "definition": "assets/tools/custom/user/py/user_node_a.json"},
+    {"tool_id": "test.custom.renamed_recv", "definition": "assets/tools/builtin/flow/recv/renamed.json"}
+  ],
+  "runtime_files": []
+})json");
             indexFile.close();
         }
 
@@ -1357,7 +1313,7 @@ void packageDrivenCatalogAndRefreshContract()
 
         // 6. Broken package diagnosis
         QDir(dirPath).mkpath("tools-package");
-        QFile brokenIndex(dirPath + "/tools-package/module_index.yaml");
+        QFile brokenIndex(dirPath + "/tools-package/module_index.json");
         if (brokenIndex.open(QIODevice::WriteOnly))
         {
             brokenIndex.write("unclosed_yaml: [invalid");
@@ -1373,7 +1329,7 @@ void packageDrivenCatalogAndRefreshContract()
         bool hasBrokenDiag = false;
         for (const auto &d : app.diagnostics())
         {
-            if (d.contains("tools-package") || d.contains("module_index.yaml"))
+            if (d.contains("tools-package") || d.contains("module_index.json"))
             {
                 hasBrokenDiag = true;
                 break;

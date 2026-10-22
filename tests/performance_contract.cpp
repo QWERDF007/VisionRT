@@ -232,10 +232,10 @@ void test200NodesExecution()
 
     ToolDefinition addDef;
     addDef.id           = "perf.add";
-    addDef.registryName = "perf.add";
+
     addDef.displayName  = "Add One";
     addDef.version      = "1.0";
-    addDef.kind         = ToolKind::CppClass;
+    addDef.kind         = ToolKind::Cpp;
     addDef.inputs.push_back({"in", "in", {Type::Int}});
     addDef.outputs.push_back({"out", "out", {Type::Int}});
 
@@ -263,7 +263,7 @@ void test200NodesExecution()
         }
     };
 
-    registry.registerCpp(addDef.registryName, addDef, [](const ToolServices &) { return std::make_unique<AddTool>(); });
+    registry.registerCpp(addDef, [](const ToolServices &) { return std::make_unique<AddTool>(); });
     registry.addDefinition(addDef);
 
     ProjectDefinition project;
@@ -369,10 +369,10 @@ void test10x4KZeroCopyAndPythonPassthrough()
 
     ToolDefinition srcDef;
     srcDef.id           = "perf.source10x4k";
-    srcDef.registryName = "perf.source10x4k";
+
     srcDef.displayName  = "10x4K Source";
     srcDef.version      = "1.0";
-    srcDef.kind         = ToolKind::CppClass;
+    srcDef.kind         = ToolKind::Cpp;
     srcDef.outputs.push_back({"batch", "batch", {Type::ImageBatch}});
 
     class SourceTool final : public IToolInstance
@@ -402,16 +402,16 @@ void test10x4KZeroCopyAndPythonPassthrough()
     };
 
     ImageBatch batchForSource = batch;
-    registry.registerCpp(srcDef.registryName, srcDef, [batchForSource](const ToolServices &)
+    registry.registerCpp(srcDef, [batchForSource](const ToolServices &)
                          { return std::make_unique<SourceTool>(batchForSource); });
     registry.addDefinition(srcDef);
 
     ToolDefinition consDef;
     consDef.id           = "perf.consumer";
-    consDef.registryName = "perf.consumer";
+
     consDef.displayName  = "Batch Consumer";
     consDef.version      = "1.0";
-    consDef.kind         = ToolKind::CppClass;
+    consDef.kind         = ToolKind::Cpp;
     consDef.inputs.push_back({"batch", "batch", {Type::ImageBatch}});
     consDef.outputs.push_back({"matched", "matched", {Type::Int}});
 
@@ -473,7 +473,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     };
 
     registry.registerCpp(
-        consDef.registryName, consDef, [&originalPointers, &consumerExecCount, &pointerMismatch](const ToolServices &)
+        consDef, [&originalPointers, &consumerExecCount, &pointerMismatch](const ToolServices &)
         { return std::make_unique<ConsumerTool>(originalPointers, consumerExecCount, pointerMismatch); });
     registry.addDefinition(consDef);
 
@@ -708,10 +708,10 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
 
     ToolDefinition genDef;
     genDef.id           = "perf.generator";
-    genDef.registryName = "perf.generator";
+
     genDef.displayName  = "Generator";
     genDef.version      = "1.0";
-    genDef.kind         = ToolKind::CppClass;
+    genDef.kind         = ToolKind::Cpp;
     genDef.outputs.push_back({"val", "val", {Type::Int}});
     genDef.outputs.push_back({"image", "image", {Type::ImageBatch}});
 
@@ -743,15 +743,15 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         }
     };
 
-    registry.registerCpp(genDef.registryName, genDef, [](const ToolServices &) { return std::make_unique<GenTool>(); });
+    registry.registerCpp(genDef, [](const ToolServices &) { return std::make_unique<GenTool>(); });
     registry.addDefinition(genDef);
 
     ToolDefinition procDef;
     procDef.id           = "perf.processor";
-    procDef.registryName = "perf.processor";
+
     procDef.displayName  = "Processor";
     procDef.version      = "1.0";
-    procDef.kind         = ToolKind::CppClass;
+    procDef.kind         = ToolKind::Cpp;
     procDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
     procDef.inputs.push_back({"in_image", "in_image", {Type::ImageBatch}});
     procDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
@@ -787,7 +787,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         }
     };
 
-    registry.registerCpp(procDef.registryName, procDef,
+    registry.registerCpp(procDef,
                          [](const ToolServices &) { return std::make_unique<ProcTool>(); });
     registry.addDefinition(procDef);
 
@@ -841,7 +841,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         pyToolDef.version        = "1.0.0";
         pyToolDef.kind           = ToolKind::PythonFunction;
         pyToolDef.script         = scriptPath.string();
-        pyToolDef.definitionPath = scriptPath.parent_path() / "loop_tool.yaml";
+        pyToolDef.definitionPath = scriptPath.parent_path() / "loop_tool.json";
         pyToolDef.symbol         = "execute";
         pyToolDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
         pyToolDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
@@ -1007,7 +1007,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     pyDef.version        = "1.0.0";
     pyDef.kind           = ToolKind::PythonFunction;
     pyDef.script         = scriptPath.string();
-    pyDef.definitionPath = tempPath / "timing_test.yaml";
+    pyDef.definitionPath = tempPath / "timing_test.json";
     pyDef.symbol         = "execute";
     pyDef.inputs.push_back({"val", "val", {Type::Int}});
     pyDef.outputs.push_back({"out", "out", {Type::Int}});
@@ -1286,8 +1286,8 @@ void testWorkbenchBrowsingLatency()
         d.id           = "perf.tool." + std::to_string(i);
         d.displayName  = "Performance Tool " + std::to_string(i);
         d.version      = "1.0.0";
-        d.kind         = ToolKind::CppFunction;
-        d.registryName = d.id;
+        d.kind         = ToolKind::Cpp;
+
         d.category     = "Category_" + std::to_string(i % 10);
         d.subcategory  = "Subcategory_" + std::to_string(i % 5);
         registry.addDefinition(d);

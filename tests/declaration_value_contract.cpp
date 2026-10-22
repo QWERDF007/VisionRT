@@ -2,9 +2,9 @@
 #    undef NDEBUG
 #endif
 
-#include "core/ToolDeclarationYaml.h"
+#include "core/DefinitionJson.h"
 #include "core/ToolDefinition.h"
-#include "core/ValueYaml.h"
+#include "core/ValueJson.h"
 
 #include <visionrt/contracts/Value.h>
 
@@ -34,20 +34,20 @@ void rejects(F &&operation)
 int main()
 try
 {
-    const auto rectType  = decodeTypeSpec(YAML::Load("{type: Rect}"));
-    const auto rectValue = decodeValue(YAML::Load("[2, 1.25, -2.5, 3.75, 4.5, 17.5]"), rectType);
+    const TypeSpec rectType{Type::Rect};
+    const auto rectValue = ValueJson::parse("[2, 1.25, -2.5, 3.75, 4.5, 17.5]", rectType);
     assert(std::get<Roi>(rectValue).kind() == RoiKind::Rectangle);
     assert(equalValues(rectValue, Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F)));
     assert(typeOf(rectValue) == rectType);
-    assert(encodeTypeSpec(rectType)["type"].as<std::string>() == "Rect");
+    assert(ValueJson::encodeType(rectType)["type"].toString() == "Rect");
     assert(std::string_view(typeName(Type::Rect)) == "Rect");
     assert(std::string_view(dtypeName(DType::Float64)) == "float64");
     rejects([] { (void)typeName(static_cast<Type>(999)); });
-    assert(equalValues(decodeValue(encodeValue(rectValue, rectType), rectType), rectValue));
+    assert(equalValues(ValueJson::decode(ValueJson::encode(rectValue, rectType), rectType), rectValue));
     validateValue(rectType, Missing{});
-    rejects([&] { (void)decodeValue(YAML::Load("[3, 1, 2, 3]"), rectType); });
-    rejects([&] { (void)decodeValue(YAML::Load("[[[2, 1, 2, 3, 4, 0]]]"), rectType); });
-    rejects([&] { (void)decodeValue(YAML::Load("[2, 0, 0, 0, 4, 0]"), rectType); });
+    rejects([&] { (void)ValueJson::parse("[3, 1, 2, 3]", rectType); });
+    rejects([&] { (void)ValueJson::parse("[[[2, 1, 2, 3, 4, 0]]]", rectType); });
+    rejects([&] { (void)ValueJson::parse("[2, 0, 0, 0, 4, 0]", rectType); });
     rejects([&] { validateValue(rectType, RoiBatch{}); });
     rejects([&] { validateValue(rectType, Roi::circle(1, 2, 3)); });
 
@@ -57,8 +57,8 @@ try
     valid.id            = "valid.tool";
     valid.displayName   = "Valid Tool";
     valid.version       = "1.0.0";
-    valid.kind          = ToolKind::CppFunction;
-    valid.registryName  = "valid.tool.cpp";
+    valid.kind          = ToolKind::Cpp;
+
     valid.inputs.push_back({"in_img", "Input Image", {Type::ImageBatch}});
     valid.inputs.push_back({"threshold",
                             "Threshold",
@@ -122,15 +122,16 @@ try
         bad.id   = "bad id with space";
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 4. missing registryName on C++ tool
-    {
-        auto bad         = valid;
-        bad.registryName = "";
-        rejects([&] { validateToolDefinition(bad); });
-    }
-    // 5. CppFunction having non-empty init_params
     {
         auto bad = valid;
+        bad.kind = ToolKind::Host;
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    {
+        auto bad = valid;
+        bad.kind = ToolKind::PythonFunction;
+        bad.script = "tool.py";
+        bad.symbol = "execute";
         bad.initParams.push_back({"param1", "Param 1", {Type::Int}});
         rejects([&] { validateToolDefinition(bad); });
     }
@@ -203,11 +204,20 @@ try
         rejects([&] { validateToolDefinition(bad); });
     }
 
-    const auto pathEditor = parseToolDefinitionYaml(
-        "schema_version: 1\ntool_id: test.path\ndisplay_name: Path\nversion: 1.0.0\n"
-        "kind: cpp_function\nentry: {registry_name: test.path}\ninit_params: []\n"
-        "inputs:\n  - {id: mode, name: Mode, type: String, default: file, options: [file, directory]}\n"
-        "  - {id: path, name: Path, type: String, editor: path, path_mode_from: mode}\noutputs: []\n");
+    const auto pathEditor = parseToolDefinitionJson(
+        R"json({
+  "schema_version": 1,
+  "tool_id": "test.path",
+  "display_name": "Path",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "init_params": [],
+  "inputs": [
+    {"id": "mode", "name": "Mode", "type": "String", "default": "file", "options": ["file", "directory"]},
+    {"id": "path", "name": "Path", "type": "String", "editor": "path", "path_mode_from": "mode"}
+  ],
+  "outputs": []
+})json");
     assert(pathEditor.inputs[1].editor == "path");
     assert(pathEditor.inputs[1].pathModeFrom == "mode");
     {
@@ -230,7 +240,7 @@ try
     }
     {
         auto initialization       = pathEditor;
-        initialization.kind       = ToolKind::CppClass;
+        initialization.kind       = ToolKind::Cpp;
         initialization.initParams = std::move(initialization.inputs);
         initialization.inputs.clear();
         validateToolDefinition(initialization);

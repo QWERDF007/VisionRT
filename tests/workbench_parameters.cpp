@@ -38,27 +38,46 @@ void parameterEditorsContract()
         require(file.open(QIODevice::WriteOnly), "cannot create parameter fixture");
         require(file.write(content) == content.size(), "parameter fixture write failed");
     };
-    write("module_index.yaml",
-          "schema_version: 2\nvariant: test\ntools:\n  test.parameters:\n"
-          "    definition: assets/tools/custom/Test/Parameters/tool.yaml\n");
+    write("module_index.json",
+          R"json({
+  "schema_version": 1,
+  "variant": "test",
+  "tools": [
+    {"tool_id": "test.parameters", "definition": "assets/tools/custom/Test/Parameters/tool.json"}
+  ],
+  "modules": [],
+  "runtime_files": []
+})json");
     write("assets/tools/custom/Test/Parameters/run.py",
           "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', "
           "'ratio': inputs['ratio'], 'count': inputs['count']}\n");
-    write("assets/tools/custom/Test/Parameters/tool.yaml",
-          "schema_version: 1\ntool_id: test.parameters\ndisplay_name: 参数测试\nversion: 1.0.0\n"
-          "kind: python_function\nentry: {file: run.py, symbol: run}\ninit_params: []\ninputs:\n"
-          "  - {id: ratio, name: 比例, type: Float, default: 0.15, min: 0, max: 1, step: 0.05, decimals: 2}\n"
-          "  - {id: count, name: 整数, type: Int, default: 9007199254740993}\n"
-          "  - {id: path, name: 路径, type: String, default: 原始路径, editor: file}\n"
-          "  - {id: enabled, name: 启用, type: Bool, default: true}\n"
-          "  - {id: mode, name: 色彩, type: String, default: bgr, options: [bgr, gray]}\n"
-          "  - {id: labels, name: 标签列表, type: StringArray, rank: 1, default: {shape: [2], data: [a, b]}}\n"
-          "  - {id: note, name: 备注, type: String, default: 中文备注}\n"
-          "  - {id: directory, name: 数据目录, type: String, default: 'F:/tmp', editor: directory}\n"
-          "  - {id: weights, name: 数值数组, type: NumericArray, dtype: float64, rank: 1, default: {shape: [2], data: [0, 1]}}\n"
-          "  - {id: images, name: 图像, type: ImageBatch, default: [], required: false}\n"
-          "  - {id: rois, name: 区域, type: RoiBatch, default: [], image_input: images}\n"
-          "outputs:\n  - {id: ratio, name: 比例, type: Float}\n  - {id: count, name: 整数, type: Int}\n");
+    write("assets/tools/custom/Test/Parameters/tool.json",
+          R"json({
+  "schema_version": 1,
+  "tool_id": "test.parameters",
+  "display_name": "参数测试",
+  "version": "1.0.0",
+  "kind": "python_function",
+  "entry": {"file": "run.py", "symbol": "run"},
+  "init_params": [],
+  "inputs": [
+    {"id": "ratio", "name": "比例", "type": "Float", "default": 0.15, "min": 0, "max": 1, "step": 0.05, "decimals": 2},
+    {"id": "count", "name": "整数", "type": "Int", "default": 9007199254740993},
+    {"id": "path", "name": "路径", "type": "String", "default": "原始路径", "editor": "file"},
+    {"id": "enabled", "name": "启用", "type": "Bool", "default": true},
+    {"id": "mode", "name": "色彩", "type": "String", "default": "bgr", "options": ["bgr", "gray"]},
+    {"id": "labels", "name": "标签列表", "type": "StringArray", "rank": 1, "default": {"shape": [2], "data": ["a", "b"]}},
+    {"id": "note", "name": "备注", "type": "String", "default": "中文备注"},
+    {"id": "directory", "name": "数据目录", "type": "String", "default": "F:/tmp", "editor": "directory"},
+    {"id": "weights", "name": "数值数组", "type": "NumericArray", "dtype": "float64", "rank": 1, "default": {"shape": [2], "data": [0, 1]}},
+    {"id": "images", "name": "图像", "type": "ImageBatch", "default": [], "required": false},
+    {"id": "rois", "name": "区域", "type": "RoiBatch", "default": [], "image_input": "images"}
+  ],
+  "outputs": [
+    {"id": "ratio", "name": "比例", "type": "Float"},
+    {"id": "count", "name": "整数", "type": "Int"}
+  ]
+})json");
 
     AppController app(1, directory.path());
     for (int attempt = 0; app.busy() && attempt < 100; ++attempt)
