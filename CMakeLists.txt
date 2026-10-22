@@ -221,6 +221,11 @@ if(BUILD_TESTING)
         visionrt_contract(viewport_contract visionrt_viewport)
         visionrt_contract(ui_value_contract visionrt_ui)
         target_link_libraries(ui_value_contract PRIVATE Qt6::Test)
+        visionrt_contract(ui_storage_contract visionrt_ui)
+        target_link_libraries(ui_storage_contract PRIVATE Qt6::Test)
+        if(WIN32)
+            target_link_libraries(ui_storage_contract PRIVATE psapi)
+        endif()
         visionrt_contract(workbench_contract visionrt_ui)
         target_sources(workbench_contract PRIVATE
             tests/workbench_parameters.cpp

@@ -15,6 +15,7 @@
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
 #include "ui/ToolTreeModel.h"
+#include "ProcessMemory.h"
 
 #include <opencv2/core.hpp>
 #include <pybind11/numpy.h>
@@ -56,6 +57,7 @@
 #endif
 
 using namespace visionrt;
+using visionrt::testing::getWorkingSetMemory;
 using namespace std::chrono_literals;
 
 namespace {
@@ -70,32 +72,6 @@ void require(bool condition, const std::string &message)
 {
     if (!condition)
         throw std::runtime_error(message);
-}
-
-struct MemoryProbe
-{
-    bool        supported    = false;
-    std::size_t workingSetKB = 0;
-    std::string report;
-};
-
-MemoryProbe getWorkingSetMemory()
-{
-    MemoryProbe probe;
-#ifdef _WIN32
-    PROCESS_MEMORY_COUNTERS pmc{};
-    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
-    {
-        probe.supported    = true;
-        probe.workingSetKB = pmc.WorkingSetSize / 1024;
-        probe.report       = std::to_string(probe.workingSetKB) + " KB";
-        return probe;
-    }
-    probe.report = "unsupported (GetProcessMemoryInfo failed)";
-#else
-    probe.report = "unsupported (non-Windows platform)";
-#endif
-    return probe;
 }
 
 struct GpuVramProbe
