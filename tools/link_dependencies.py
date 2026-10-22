@@ -40,14 +40,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Link VisionRT runtime dependencies into build/bin.")
     parser.add_argument("--build-dir", "-BuildDir", default="build", help="CMake build directory.")
     parser.add_argument("--config", "-Config", choices=["release", "debug"], default="release", help="Build configuration.")
-    parser.add_argument("--dependencies", default="tools/dependencies.yaml", help="Path to dependencies.yaml.")
+    parser.add_argument("--dependencies", default="tools/dependencies.json", help="Path to dependencies.json.")
     parser.add_argument("--skip-external", action="store_true", help="Skip linking external dependencies.")
     parser.add_argument("--skip-qt", action="store_true", help="Skip linking Qt DLLs and plugins.")
     return parser.parse_args()
 
 
 def link_external_dependencies(build_dir: Path, dependency_file: Path, config: str) -> None:
-    """Link external libraries according to dependencies.yaml."""
+    """Link external libraries according to dependencies.json."""
     platform = platform_key()
     dependencies = load_dependencies(dependency_file)
     for dep in dependencies:
