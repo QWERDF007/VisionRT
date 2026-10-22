@@ -236,7 +236,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 catch (const RegistryError &error)
                 {
-                    status = {-3, error.what()};
+                    status = error.status;
                 }
                 catch (const ContractError &error)
                 {
@@ -330,8 +330,9 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     catch (const RegistryError &error)
     {
-        result.status    = {-3, location(id, config.toolId, phase, error.what())};
-        frameworkFailure = true;
+        result.status         = error.status;
+        result.status.message = location(id, config.toolId, phase, result.status.message);
+        frameworkFailure      = true;
     }
     catch (const ContractError &error)
     {

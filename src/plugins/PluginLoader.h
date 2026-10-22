@@ -53,7 +53,7 @@ struct LoadedModule
     ToolRegistry registry;
 };
 
-class PluginLoader : public std::enable_shared_from_this<PluginLoader>
+class PluginLoader
 {
 public:
     PluginLoader()  = default;
@@ -91,8 +91,7 @@ private:
 class DomainToolAdapter final : public IToolInstance
 {
 public:
-    DomainToolAdapter(std::shared_ptr<PluginLoader> loader, std::filesystem::path libraryPath, std::string toolId,
-                      PlatformToolServices services);
+    DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId, PlatformToolServices services);
     ~DomainToolAdapter() override;
 
     ToolStatus initialize(const Values &initParams) override;
@@ -100,13 +99,12 @@ public:
     ToolStatus release() override;
 
 private:
-    std::shared_ptr<PluginLoader>       loader_;
-    std::filesystem::path               libraryPath_;
     std::string                         toolId_;
     PlatformToolServices                services_;
     std::shared_ptr<const LoadedModule> module_;
-    const ToolRegistry::NativeFactory  *factory_ = nullptr;
-    IToolInstance                      *raw_     = nullptr;
+    const ToolRegistry::NativeFactory  *factory_     = nullptr;
+    IToolInstance                      *raw_         = nullptr;
+    bool                                initialized_ = false;
     ToolStatus                          failureStatus_;
 };
 

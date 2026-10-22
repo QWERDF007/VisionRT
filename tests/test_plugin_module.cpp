@@ -240,7 +240,8 @@ visionrt::IToolInstance *VT_CALL pluginCreate(const visionrt::ToolServices *, vi
         if constexpr (!std::is_void_v<Tool>)
             instance = new Tool();
         if (status)
-            *status = {StatusCode, StatusCode == 0 ? "" : "Simulated factory creation failure"};
+            *status = {StatusCode, StatusCode == 0 ? "" : "Simulated factory creation failure",
+                       StatusCode == 0 ? "" : "factory diagnostic"};
         return instance;
     }
     catch (const std::exception &error)

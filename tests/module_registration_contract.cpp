@@ -64,7 +64,10 @@ int main(int argc, char **argv)
     QLibrary probe(QString::fromLocal8Bit(argv[1]));
     assert(probe.load());
     const auto createCalls = reinterpret_cast<int(VT_CALL *)() noexcept>(probe.resolve("testRegistrationCreateCalls"));
+    const auto initializeCalls
+        = reinterpret_cast<int(VT_CALL *)() noexcept>(probe.resolve("testRegistrationInitializeCalls"));
     assert(createCalls && createCalls() == 0);
+    assert(initializeCalls && initializeCalls() == 0);
     loader->registerModule("test.registration.first", std::filesystem::path(argv[2]));
     catalog.loadNativeImplementations();
     assert(catalog.availability("test.registration.first").state == ToolAvailability::ImplementationUnavailable);
@@ -77,17 +80,35 @@ int main(int argc, char **argv)
              {"test.registration.second", 22}
     })
     {
-        auto instance = loader->createAdapter(id, {});
-        assert(instance && instance->initialize({}));
+        const auto before            = createCalls();
+        const auto initializedBefore = initializeCalls();
+        auto       instance          = catalog.create(id, {});
+        assert(instance && createCalls() == before + 1);
+        assert(initializeCalls() == initializedBefore);
+        assert(instance->execute({}).status.code == -2);
+        assert(instance->initialize({}));
+        assert(initializeCalls() == initializedBefore + 1);
+        assert(createCalls() == before + 1);
         const auto result = instance->execute({});
         assert(result.status);
         assert(std::get<std::int64_t>(result.outputs.at("value")) == expected);
+        assert(instance->initialize({}).code == -2);
         assert(instance->release());
         assert(instance->release());
+        assert(instance->initialize({}).code == -2);
+        assert(createCalls() == before + 1);
     }
     loader->registerModule("not.registered", path);
-    const auto absent = loader->createAdapter("not.registered", {})->initialize({});
-    assert(!absent && absent.message.find("not.registered") != std::string::npos);
+    try
+    {
+        loader->createAdapter("not.registered", {});
+        assert(false);
+    }
+    catch (const RegistryError &error)
+    {
+        assert(error.status.code == -3 && error.status.message.find("not.registered") != std::string::npos);
+        assert(!error.status.detail.empty());
+    }
     assert(createCalls() == 2);
     for (int index = 2; index < argc; ++index)
     {
@@ -102,5 +123,16 @@ int main(int argc, char **argv)
     assert(surviving->initialize({}));
     assert(std::get<std::int64_t>(surviving->execute({}).outputs.at("value")) == 11);
     assert(surviving->release());
+    auto                              retained  = catalog.create("test.registration.first", {});
+    std::weak_ptr<const LoadedModule> ownership = module;
+    assert(probe.unload());
+    module.reset();
+    catalog.setPluginLoader({});
+    loader.reset();
+    assert(!ownership.expired());
+    assert(retained->initialize({}));
+    assert(std::get<std::int64_t>(retained->execute({}).outputs.at("value")) == 11);
+    assert(retained->release());
+    assert(ownership.expired());
     std::cout << "ABI3 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
 }

@@ -17,7 +17,8 @@
 | 值 JSON 编解码 | [ValueJson](../src/core/ValueJson.h) |
 | 工程 JSON 存取 | [ProjectStorage](../src/core/ProjectStorage.h)、[工程样例](../examples) |
 | 调度、快照与接收 | [runtime](../src/runtime) |
-| 目录状态、显式加载与生命周期 | [公共注册接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Registry.h)、[ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h)、[真实模块契约](../tests/module_registration_contract.cpp)、[CLI 契约](../tests/validator_cli_contract.py) |
+| 目录状态与显式加载 | [公共注册接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Registry.h)、[ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h)、[CLI 契约](../tests/validator_cli_contract.py) |
+| 原生实例、模块所有权与失败诊断 | [原生适配器](../src/plugins/PluginLoader.cpp)、[运行节点](../src/runtime/NodeRuntime.cpp)、[真实模块契约](../tests/module_registration_contract.cpp)、[插件契约](../tests/plugin_contract.cpp) |
 | Python 实例适配与值转换 | [PythonRuntime](../src/python/PythonRuntime.h)、[PythonInterop](../src/python/PythonInterop.h) |
 | 工作台 | [ui](../src/ui) |
 | 契约验证 | [tests](../tests)、[测试注册](../CMakeLists.txt) |
