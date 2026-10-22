@@ -25,7 +25,7 @@
 | 节点配置同步、调度与接收 | [RuntimeEngine](../src/runtime/RuntimeEngine.h)、[实例配置与所有权](../src/runtime/RuntimeInternal.h)、[节点执行](../src/runtime/NodeRuntime.cpp)、[Receiver](../src/runtime/Receiver.h)、[真实插件与工作台生命周期契约](../tests/plugin_contract.cpp) |
 | 目录状态与显式加载 | [公共注册接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Registry.h)、[ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h)、[CLI 契约](../tests/validator_cli_contract.py) |
 | 原生实例、模块所有权与失败诊断 | [原生适配器](../src/plugins/PluginLoader.cpp)、[运行节点](../src/runtime/NodeRuntime.cpp)、[真实模块契约](../tests/module_registration_contract.cpp)、[插件契约](../tests/plugin_contract.cpp)、[CPU 工具与原始解码异常](../tests/cpu_tools_contract.cpp) |
-| Python 实例适配与值转换 | [PythonRuntime](../src/python/PythonRuntime.h)、[PythonInterop](../src/python/PythonInterop.h) |
+| Python 实例适配与值转换 | [PythonRuntime](../src/python/PythonRuntime.h)、[PythonInterop](../src/python/PythonInterop.h)、[真实发行 Python 消费契约](../tests/python_contract.cpp) |
 | 执行状态、阶段与独立生命周期诊断 | [快照与诊断模型](../src/runtime/Snapshot.h)、[最终发布](../src/runtime/NodeRuntime.cpp)、[界面上下文与 JSON](../src/ui/Diagnostics.h)、[输出预览与捕获](../src/ui/OutputModel.h)、[真实模块及工作台契约](../tests/plugin_contract.cpp) |
 | 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |
 | 应用提示与诊断导出 | [统一诊断模型](../src/ui/Diagnostics.h)、[控制器诊断入口](../src/ui/AppControllerDiagnostics.cpp)、[文本对话框](../src/ui/qml/WorkbenchTextDialog.qml)、[真实窗口契约](../tests/workbench_startup.cpp) |
