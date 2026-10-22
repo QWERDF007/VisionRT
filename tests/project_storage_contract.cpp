@@ -11,6 +11,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 using namespace visionrt;
 
@@ -115,6 +116,37 @@ ToolDefinition scalarTool()
     return tool;
 }
 
+void knownFailureDiagnostics(const QString &directory)
+{
+    ToolRegistry registry;
+    const auto   filename = directory + "/错误 工程.vrt.json";
+    for (const auto &[document, reason] : {
+             std::pair{R"json({"format_version":2,"project":{},"flows":{}})json",                             "flows 必须是数组"},
+             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 2，实际 1"},
+             std::pair{                      R"json({"format_version":"2"})json",                    "format_version 必须是整数"},
+             std::pair{                                                  "[1,2]",              "工程 JSON 根节点必须是对象"}
+    })
+    {
+        put(filename, document);
+        bool rejected = false;
+        try
+        {
+            ProjectStorage(registry).load(path(filename));
+        }
+        catch (const ContractError &error)
+        {
+            const std::string message = error.what();
+            require(
+                message.find("错误 工程.vrt.json") != std::string::npos && message.find(reason) != std::string::npos,
+                "project contract failure lost its file and precise Chinese field reason");
+            require(message.find("格式不受支持") == std::string::npos,
+                    "project field failure was relabeled as an unsupported format");
+            rejected = true;
+        }
+        require(rejected, "known project failure did not use ContractError");
+    }
+}
+
 void candidateAndRawPreservation(const QString &directory)
 {
     ToolRegistry   registry;
@@ -188,8 +220,10 @@ void candidateAndRawPreservation(const QString &directory)
     }
     catch (const std::exception &error)
     {
-        require(std::string(error.what()).find("工程格式不受支持，请使用 JSON 工程") != std::string::npos,
-                "legacy format error is unclear");
+        const std::string message = error.what();
+        require(message.find("需要标准 JSON 文档，offset=") != std::string::npos
+                    && message.find(utf8Path(path(source))) != std::string::npos,
+                "legacy syntax failure lost its JSON position or source file");
     }
 }
 
@@ -484,6 +518,7 @@ int main()
     {
         QTemporaryDir temporary;
         require(temporary.isValid(), "temporary directory unavailable");
+        knownFailureDiagnostics(temporary.path());
         candidateAndRawPreservation(temporary.path());
         reconciliationAndIdentities(temporary.path());
         typedArraysAndRanges(temporary.path());

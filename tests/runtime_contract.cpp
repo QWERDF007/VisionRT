@@ -997,7 +997,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
             install(changedRegistry, source, [](const Values &) { return ToolResult{{}, {{"value", Utf8("changed")}}}; });
             install(changedRegistry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
             const auto rejected = engine.start(editor.project(), changedRegistry, RunMode::Once);
-            assert(!rejected && rejected.message.find("Incompatible") != std::string::npos);
+            assert(!rejected && rejected.message.find("类型不兼容") != std::string::npos);
             const auto reconciled = ProjectStorage(changedRegistry).reconcile(editor.project());
             assert(reconciled.project.flows.front().nodes.front().signatures.outputs.at("value") == TypeSpec{Type::String});
             assert(std::any_of(reconciled.diagnostics.begin(), reconciled.diagnostics.end(), [](const auto &diagnostic)
@@ -1203,6 +1203,15 @@ void explicitRequirednessAtExecution()
 
 void managementDiagnosticsPreserveStatus()
 {
+    {
+        RuntimeEngine     engine(1);
+        ToolRegistry      registry;
+        ProjectDefinition project;
+        const auto        empty = engine.start(project, registry, RunMode::Once);
+        assert(empty.code == 1 && empty.message == "请至少选择一个非空流程");
+        const auto missing = engine.start(project, registry, RunMode::Node, 99);
+        assert(missing.code == 1 && missing.message == "目标节点不存在：99");
+    }
     for (int scenario = 0; scenario < 3; ++scenario)
     {
         RuntimeEngine engine(1);

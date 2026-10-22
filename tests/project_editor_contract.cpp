@@ -7,20 +7,22 @@
 #include <cassert>
 #include <limits>
 #include <iostream>
+#include <string_view>
 
 using namespace visionrt;
 
 namespace {
 template<class F>
-void rejects(F &&operation)
+void rejects(F &&operation, std::string_view reason = {})
 {
     bool rejected = false;
     try
     {
         operation();
     }
-    catch (const ContractError &)
+    catch (const ContractError &error)
     {
+        assert(std::string_view(error.what()).find(reason) != std::string_view::npos);
         rejected = true;
     }
     assert(rejected);
@@ -318,7 +320,7 @@ void flowsAndBusyGuard()
     assert(third != second);
     editor.markSaved();
     editor.setBusy(true);
-    rejects([&] { editor.renameProject("busy"); });
+    rejects([&] { editor.renameProject("busy"); }, "运行或管理期间不能修改工程配置");
     rejects([&] { editor.addFlow(); });
     rejects([&] { editor.renameFlow("flow_1", "busy"); });
     rejects([&] { editor.setRunSelected("flow_1", false); });

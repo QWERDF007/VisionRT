@@ -18,6 +18,8 @@
 
 namespace visionrt {
 namespace {
+constexpr int projectFormatVersion = 2;
+
 QString qtPath(const std::filesystem::path &path)
 {
     const auto utf8 = path.u8string();
@@ -32,26 +34,26 @@ std::string utf8Path(const std::filesystem::path &path)
 
 [[noreturn]] void invalid(const std::string &message)
 {
-    throw std::runtime_error(message);
+    throw ContractError(message);
 }
 
 QJsonObject map(const QJsonValue &node, std::string_view context)
 {
     if (!node.isObject())
-        invalid(std::string(context) + " must be a JSON object");
+        invalid(std::string(context) + " 必须是 JSON 对象");
     return node.toObject();
 }
 
 std::string text(const QJsonValue &node, std::string_view context, bool nonempty = false)
 {
     if (!node.isString())
-        invalid(std::string(context) + " must be a string");
+        invalid(std::string(context) + " 必须是字符串");
     auto value = node.toString().toStdString();
     validateUtf8(value);
     if (nonempty
         && (value.empty()
             || std::any_of(value.begin(), value.end(), [](unsigned char c) { return c < 0x20 || c == 0x7f; })))
-        invalid(std::string(context) + " must be a nonempty identifier");
+        invalid(std::string(context) + " 必须是非空标识符，且不能包含控制字符");
     return value;
 }
 
@@ -59,11 +61,11 @@ std::uint64_t sequence(const QJsonValue &node, std::string_view context)
 {
     const auto value = text(node, context, true);
     if (!std::all_of(value.begin(), value.end(), [](char c) { return c >= '0' && c <= '9'; }))
-        invalid(std::string(context) + " must be an unsigned decimal uint64");
+        invalid(std::string(context) + " 必须是无符号十进制 uint64");
     std::uint64_t result    = 0;
     const auto    converted = std::from_chars(value.data(), value.data() + value.size(), result);
     if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size())
-        invalid(std::string(context) + " exceeds uint64");
+        invalid(std::string(context) + " 超出 uint64 范围");
     return result;
 }
 
@@ -131,7 +133,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     if (node.signatures.initParams != initTypes || node.signatures.inputs != inputTypes
         || node.signatures.outputs != outputTypes)
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "type_snapshot",
-                 "Saved tool signatures were reconciled with the current definition", true);
+                 "保存的端口类型已与当前工具定义同步", true);
 
     Values parameters;
     for (const auto &port : definition.initParams)
@@ -143,7 +145,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         auto value = retain ? old->second : defaultValue(port);
         if (!retain)
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + port.id,
-                     "Missing or incompatible parameter was replaced with its declared default", true);
+                     "缺失或类型不兼容的初始化参数已替换为声明默认值", true);
         rangeWarning(result, flow, node, port, value);
         parameters.emplace(port.id, std::move(value));
     }
@@ -151,7 +153,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     {
         if (!initTypes.contains(id))
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + id,
-                     "Removed parameter was discarded", true);
+                     "已丢弃声明中不再存在的初始化参数", true);
     }
     std::map<std::string, InputBinding, std::less<>> inputs;
     for (const auto &port : definition.inputs)
@@ -168,7 +170,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             {
                 binding.literal = defaultValue(port);
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
-                         "Absent literal draft was filled with its declared default", true);
+                         "未配置的字面量草稿已填入声明默认值", true);
             }
         }
         else
@@ -177,7 +179,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             if (old != node.inputs.end())
                 binding.mode = old->second.mode;
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
-                     "Missing or incompatible input was reset; its old source was cleared", true);
+                     "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
         }
         if (binding.mode == BindingMode::Literal || !binding.source)
             rangeWarning(result, flow, node, port, binding.literal);
@@ -187,7 +189,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     {
         if (!inputTypes.contains(id))
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + id,
-                     "Removed input and its binding were discarded", true);
+                     "已丢弃声明中不再存在的输入及其绑定", true);
     }
     node.initParams = std::move(parameters);
     node.inputs     = std::move(inputs);
@@ -195,8 +197,8 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     if (node.toolNameSnapshot != definition.displayName)
     {
         node.toolNameSnapshot = definition.displayName;
-        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "tool_name_snapshot",
-                 "Tool display name snapshot was updated", true);
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "tool_name_snapshot", "工具显示名称快照已更新",
+                 true);
     }
 }
 
@@ -252,7 +254,7 @@ void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
         if (cyclic)
             for (const auto index : component)
                 diagnose(result, ProjectStorageCode::Cycle, flow, flow.nodes[index], {},
-                         "Node participates in an upstream cycle; bindings were retained");
+                         "节点参与上游依赖循环，绑定已保留");
     };
     for (std::size_t i = 0; i < flow.nodes.size(); ++i)
         if (discovery[i] == unseen)
@@ -262,14 +264,17 @@ void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
 ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolRegistry &registry)
 {
     if (!document.json().isObject())
-        invalid("工程格式不受支持，请使用 JSON 工程");
+        invalid("工程 JSON 根节点必须是对象");
     const auto root = document.json().object();
-    if (!root.value("format_version").isDouble()
-        || std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int})) != 2)
-        invalid("工程格式不受支持，请使用 JSON 工程");
+    if (!root.value("format_version").isDouble())
+        invalid("format_version 必须是整数");
+    const auto version = std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int}));
+    if (version != projectFormatVersion)
+        invalid("format_version 不受支持，要求 " + std::to_string(projectFormatVersion) + "，实际 "
+                + std::to_string(version));
     const auto metadata = map(root.value("project"), "project");
     if (!root.value("flows").isArray())
-        invalid("flows must be an array");
+        invalid("flows 必须是数组");
     ProjectLoadResult result;
     auto             &project = result.project;
     project.flows.clear();
@@ -289,7 +294,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
         FlowDefinition flow;
         flow.id = text(rawFlow.value("flow_id"), "flow_id", true);
         if (!flowIds.insert(flow.id).second)
-            invalid("Duplicate flow_id: " + flow.id);
+            invalid("flow_id 重复：" + flow.id);
         if (flow.id.starts_with("flow_"))
         {
             const std::string_view suffix(flow.id.data() + 5, flow.id.size() - 5);
@@ -300,25 +305,19 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 const bool exhausted = number == std::numeric_limits<std::uint64_t>::max();
                 minimumFlow          = std::max(minimumFlow, exhausted ? number : number + 1);
                 if (exhausted)
-                    result.diagnostics.push_back({ProjectStorageCode::SequenceExhausted,
-                                                  flow.id,
-                                                  {},
-                                                  {},
-                                                  "Flow identity sequence is exhausted; creating flows is disabled"});
+                    result.diagnostics.push_back(
+                        {ProjectStorageCode::SequenceExhausted, flow.id, {}, {}, "流程标识序号已耗尽，无法新建流程"});
             }
         }
         flow.name = text(rawFlow.value("name"), "flow.name");
         if (!flowNames.insert(flow.name).second)
-            result.diagnostics.push_back({ProjectStorageCode::DuplicateFlowName,
-                                          flow.id,
-                                          {},
-                                          {},
-                                          "Duplicate flow display name; rename before name-based lookup"});
+            result.diagnostics.push_back(
+                {ProjectStorageCode::DuplicateFlowName, flow.id, {}, {}, "流程显示名称重复，按名称查找前请先重命名"});
         if (!rawFlow.value("run_selected").isBool())
-            invalid("run_selected must be a boolean");
+            invalid("run_selected 必须是布尔值");
         flow.runSelected = rawFlow.value("run_selected").toBool();
         if (!rawFlow.value("nodes").isArray())
-            invalid("flow.nodes must be an array");
+            invalid("flow.nodes 必须是数组");
         std::map<std::pair<int, int>, NodeId> positions;
         const auto                            nodes = rawFlow.value("nodes").toArray();
         for (qsizetype nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
@@ -332,27 +331,27 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             NodeDefinition node;
             node.id = sequence(raw.value("node_seq"), "node_seq");
             if (!nodeIds.insert(node.id).second)
-                invalid("Duplicate project-wide node_seq");
+                invalid("工程内 node_seq 重复：" + std::to_string(node.id));
             const bool exhausted = node.id == std::numeric_limits<NodeId>::max();
             minimumNode          = std::max(minimumNode, exhausted ? node.id : node.id + 1);
             if (exhausted)
                 diagnose(result, ProjectStorageCode::SequenceExhausted, flow, node, "node_seq",
-                         "Node identity sequence is exhausted; creating nodes is disabled");
+                         "节点标识序号已耗尽，无法新建节点");
             node.toolId           = text(raw.value("tool_id"), "tool_id", true);
             node.toolNameSnapshot = text(raw.value("tool_name_snapshot"), "tool_name_snapshot");
             node.alias            = text(raw.value("alias"), "alias");
             if (!raw.value("pos").isArray() || raw.value("pos").toArray().size() != 2)
-                invalid("node.pos must contain two integer coordinates");
+                invalid("node.pos 必须包含两个整数坐标");
             const auto x = std::get<std::int64_t>(literal({"pos", "0"}, {Type::Int}));
             const auto y = std::get<std::int64_t>(literal({"pos", "1"}, {Type::Int}));
             if (x < std::numeric_limits<int>::min() || x > std::numeric_limits<int>::max()
                 || y < std::numeric_limits<int>::min() || y > std::numeric_limits<int>::max())
-                invalid("node.pos exceeds signed coordinate range");
+                invalid("node.pos 超出有符号坐标范围");
             node.position                   = {static_cast<int>(x), static_cast<int>(y)};
             const auto [position, inserted] = positions.emplace(std::pair{node.position.x, node.position.y}, node.id);
             if (!inserted)
                 diagnose(result, ProjectStorageCode::LayoutConflict, flow, node, "pos",
-                         "Node overlaps node " + std::to_string(position->second) + "; position was retained");
+                         "节点与节点 " + std::to_string(position->second) + " 重叠，位置已保留");
             const auto signatures  = map(raw.value("type_snapshot"), "type_snapshot");
             node.signatures        = {decodeTypes(signatures.value("init_params"), "init signature"),
                                       decodeTypes(signatures.value("inputs"), "input signature"),
@@ -364,7 +363,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 const auto id        = text(entry.key(), "init parameter ID", true);
                 const auto signature = node.signatures.initParams.find(id);
                 if (signature == node.signatures.initParams.end())
-                    invalid("Saved init parameter has no type_snapshot: " + id);
+                    invalid("保存的初始化参数缺少 type_snapshot：" + id);
                 node.initParams.emplace(id, literal({"init_params", entry.key()}, signature->second));
             }
             const auto inputs = map(raw.value("inputs"), "inputs");
@@ -377,10 +376,10 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 if (mode == "upstream")
                     binding.mode = BindingMode::Upstream;
                 else if (mode != "literal")
-                    invalid("Unknown input binding mode: " + mode);
+                    invalid("未知的输入绑定模式：" + mode);
                 const auto signature = node.signatures.inputs.find(id);
                 if (signature == node.signatures.inputs.end())
-                    invalid("Saved input has no type_snapshot: " + id);
+                    invalid("保存的输入缺少 type_snapshot：" + id);
                 if (saved.contains("literal"))
                     binding.literal = literal({"inputs", entry.key(), "literal"}, signature->second);
                 const auto source = saved.value("source");
@@ -388,7 +387,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 {
                     const auto reference = map(source, "binding source");
                     if (binding.mode != BindingMode::Upstream)
-                        invalid("Literal binding must not contain an active source");
+                        invalid("字面量绑定不能包含生效的上游引用：" + id);
                     binding.source = SourcePort{sequence(reference.value("node_seq"), "source.node_seq"),
                                                 text(reference.value("port_id"), "source.port_id", true)};
                 }
@@ -398,7 +397,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             {
                 node.unresolved = raw;
                 diagnose(result, ProjectStorageCode::DefinitionMissing, flow, node, {},
-                         "Tool definition is missing; original configuration was retained: " + node.toolId);
+                         "工具定义缺失，原始配置已保留：" + node.toolId);
             }
             else
                 reconcileNode(result, flow, node, raw, *definition, changedOutputs[node.id]);
@@ -411,11 +410,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
         project.nextNodeId = std::max(project.nextNodeId, minimumNode);
         project.nextFlowId = std::max(project.nextFlowId, minimumFlow);
         project.dirty      = true;
-        result.diagnostics.push_back({ProjectStorageCode::CounterRepaired,
-                                      {},
-                                      {},
-                                      {},
-                                      "Next identity counters were raised above existing identifiers"});
+        result.diagnostics.push_back({ProjectStorageCode::CounterRepaired, {}, {}, {}, "标识分配计数已按现有标识修复"});
     }
     std::map<NodeId, TypeMap> savedOutputs;
     for (const auto &flow : project.flows)
@@ -445,7 +440,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 if (source != nodes.end() && !source->second->unresolved.isEmpty())
                 {
                     diagnose(result, ProjectStorageCode::PendingReference, flow, node, "inputs." + id,
-                             "Source definition is missing; reference was retained for recovery");
+                             "上游工具定义缺失，引用已保留以便恢复");
                     continue;
                 }
                 bool valid = false;
@@ -460,7 +455,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 {
                     binding.source.reset();
                     diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
-                             "Source is absent, changed, cross-flow, or incompatible; reference was cleared", true);
+                             "上游不存在、输出已变更、跨流程或类型不兼容，引用已清除", true);
                 }
             }
         }
@@ -498,7 +493,7 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                 {
                     const auto signature = node.signatures.initParams.find(id);
                     if (signature == node.signatures.initParams.end())
-                        invalid("Cannot save parameter without type_snapshot: " + id);
+                        invalid("无法保存缺少 type_snapshot 的初始化参数：" + id);
                     parameters.insert(QString::fromStdString(id), ValueJson::encode(value, signature->second));
                 }
                 raw.insert("init_params", parameters);
@@ -518,7 +513,7 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                 {
                     const auto signature = node.signatures.inputs.find(id);
                     if (signature == node.signatures.inputs.end())
-                        invalid("Cannot save input without type_snapshot: " + id);
+                        invalid("无法保存缺少 type_snapshot 的输入：" + id);
                     saved.insert("literal", ValueJson::encode(binding.literal, signature->second));
                 }
                 if (binding.mode == BindingMode::Upstream && binding.source)
@@ -541,7 +536,7 @@ QJsonObject encodeProject(const ProjectDefinition &project)
         });
     }
     return {
-        {"format_version",                                                                                      2},
+        {"format_version",                                                                   projectFormatVersion},
         {       "project", QJsonObject{{"name", QString::fromStdString(project.name)},
  {"next_node_seq", QString::number(project.nextNodeId)},
  {"next_flow_seq", QString::number(project.nextFlowId)}}                               },
@@ -571,10 +566,10 @@ ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
     const auto absolute = std::filesystem::absolute(path).lexically_normal();
     QFile      file(qtPath(absolute));
     if (!file.open(QIODevice::ReadOnly))
-        invalid("Cannot open project " + utf8Path(absolute) + ": " + file.errorString().toStdString());
+        throw std::runtime_error("无法打开工程 " + utf8Path(absolute) + "：" + file.errorString().toStdString());
     const auto bytes = file.readAll();
     if (file.error() != QFileDevice::NoError)
-        invalid("Cannot read project " + utf8Path(absolute) + ": " + file.errorString().toStdString());
+        throw std::runtime_error("无法读取工程 " + utf8Path(absolute) + "：" + file.errorString().toStdString());
     try
     {
         const ValueJson::Document document(bytes);
@@ -582,9 +577,9 @@ ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
         result.project.path              = absolute;
         return result;
     }
-    catch (const std::exception &error)
+    catch (const ContractError &error)
     {
-        invalid("工程格式不受支持，请使用 JSON 工程：" + utf8Path(absolute) + ": " + error.what());
+        invalid("工程 " + utf8Path(absolute) + " 无效：" + error.what());
     }
 }
 
@@ -652,11 +647,11 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
 {
     auto target = destination.empty() ? project.path : destination;
     if (target.empty())
-        invalid("An unnamed project requires a save destination");
+        invalid("未命名工程必须指定保存位置");
     if (!target.has_extension())
         target += ".vrt.json";
     if (target.extension() != ".json")
-        invalid("工程格式不受支持，请使用 JSON 工程");
+        invalid("工程保存路径必须使用 .json 扩展名：" + utf8Path(target));
     target                                          = std::filesystem::absolute(target).lexically_normal();
     ProjectDefinition                     candidate = project;
     std::vector<ProjectStorageDiagnostic> diagnostics;
@@ -672,12 +667,11 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
                 const auto *definition = registry_.find(node.toolId);
                 if (!definition || !node.unresolved.isEmpty())
                 {
-                    diagnostics.push_back(
-                        {ProjectStorageCode::UnknownPaths,
-                         flow.id,
-                         node.id,
-                         {},
-                         "Unknown tool fields were retained; relative paths may need repair after Save As"});
+                    diagnostics.push_back({ProjectStorageCode::UnknownPaths,
+                                           flow.id,
+                                           node.id,
+                                           {},
+                                           "未知工具字段已保留，另存为后可能需要修复相对路径"});
                     continue;
                 }
                 for (const auto &port : definition->initParams)
@@ -701,15 +695,15 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
     QSaveFile  file(qtPath(target));
     file.setDirectWriteFallback(false);
     if (!file.open(QIODevice::WriteOnly))
-        invalid("Cannot save project " + utf8Path(target) + ": " + file.errorString().toStdString());
+        throw std::runtime_error("无法保存工程 " + utf8Path(target) + "：" + file.errorString().toStdString());
     if (file.write(serialized) != serialized.size())
     {
         const auto error = file.errorString().toStdString();
         file.cancelWriting();
-        invalid("Cannot write project " + utf8Path(target) + ": " + error);
+        throw std::runtime_error("无法写入工程 " + utf8Path(target) + "：" + error);
     }
     if (!file.commit())
-        invalid("Cannot commit project " + utf8Path(target) + ": " + file.errorString().toStdString());
+        throw std::runtime_error("无法提交工程文件 " + utf8Path(target) + "：" + file.errorString().toStdString());
     project = std::move(candidate);
     return diagnostics;
 }

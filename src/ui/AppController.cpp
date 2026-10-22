@@ -332,7 +332,7 @@ void AppController::Impl::synchronizeNodes()
 
 void AppController::Impl::storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items)
 {
-    for (const auto &item : items) report(workbench::q(item.message));
+    for (const auto &item : items) report(ApplicationDiagnostic{item});
 }
 
 void AppController::Impl::clearResults()

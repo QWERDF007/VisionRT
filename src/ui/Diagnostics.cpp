@@ -2,6 +2,7 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStringList>
 #include <exception>
 #include <utility>
 
@@ -45,6 +46,49 @@ const char *phaseName(RuntimePhase phase)
     std::terminate();
 }
 
+const char *storageCodeName(ProjectStorageCode code)
+{
+    switch (code)
+    {
+    case ProjectStorageCode::DefinitionMissing:
+        return "definition_missing";
+    case ProjectStorageCode::PendingReference:
+        return "pending_reference";
+    case ProjectStorageCode::InvalidReference:
+        return "invalid_reference";
+    case ProjectStorageCode::SchemaChanged:
+        return "schema_changed";
+    case ProjectStorageCode::CounterRepaired:
+        return "counter_repaired";
+    case ProjectStorageCode::SequenceExhausted:
+        return "sequence_exhausted";
+    case ProjectStorageCode::Cycle:
+        return "cycle";
+    case ProjectStorageCode::DuplicateFlowName:
+        return "duplicate_flow_name";
+    case ProjectStorageCode::LayoutConflict:
+        return "layout_conflict";
+    case ProjectStorageCode::RangeWarning:
+        return "range_warning";
+    case ProjectStorageCode::UnknownPaths:
+        return "unknown_paths";
+    }
+    std::terminate();
+}
+
+QString summary(const ProjectStorageDiagnostic &diagnostic)
+{
+    QStringList context;
+    if (!diagnostic.flowId.empty())
+        context.push_back(QStringLiteral("流程 %1").arg(QString::fromStdString(diagnostic.flowId)));
+    if (diagnostic.node)
+        context.push_back(QStringLiteral("节点 %1").arg(QString::number(*diagnostic.node)));
+    if (!diagnostic.field.empty())
+        context.push_back(QStringLiteral("字段 %1").arg(QString::fromStdString(diagnostic.field)));
+    const auto message = QString::fromStdString(diagnostic.message);
+    return context.empty() ? message : context.join(QStringLiteral(" · ")) + QStringLiteral("：") + message;
+}
+
 QString summary(const QString &message)
 {
     return message;
@@ -66,6 +110,19 @@ QString summary(const NodeDiagnostic &diagnostic)
 QString summary(const RuntimeDiagnostic &diagnostic)
 {
     return std::visit([](const auto &entry) { return summary(entry); }, diagnostic.payload);
+}
+
+QJsonObject encode(const ProjectStorageDiagnostic &diagnostic)
+{
+    QJsonObject object{
+        {"storage_code", QString::fromUtf8(storageCodeName(diagnostic.code))},
+        {     "flow_id",           QString::fromStdString(diagnostic.flowId)},
+        {       "field",            QString::fromStdString(diagnostic.field)},
+        {     "message",          QString::fromStdString(diagnostic.message)}
+    };
+    if (diagnostic.node)
+        object.insert("node", QString::number(*diagnostic.node));
+    return object;
 }
 
 QJsonObject encode(const QString &message)

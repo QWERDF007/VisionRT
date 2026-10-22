@@ -131,6 +131,9 @@ void parameterEditorsContract()
         }
         return QString{};
     };
+    require(!app.setParameter("missing_port", false, "1"), "unknown parameter was accepted");
+    require(app.diagnostic() == QStringLiteral("参数不存在：missing_port"),
+            "parameter rejection lost its precise Chinese reason and stable port ID");
     for (const auto &raw : {QString{}, QStringLiteral("null"), QStringLiteral("~"), QStringLiteral("[1]"),
                             QStringLiteral("\"原始引号\"\n中文")})
     {
