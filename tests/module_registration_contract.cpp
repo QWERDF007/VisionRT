@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     assert(catalog.availability("test.registration.first").state == ToolAvailability::Available);
     assert(catalog.availability("not.registered").state == ToolAvailability::ImplementationUnavailable);
     assert(catalog.availability("test.rejected.module").state == ToolAvailability::ImplementationUnavailable);
-    assert(!catalog.availability("test.rejected.module").message.empty());
+    assert(!catalog.availability("test.rejected.module").status.message.empty());
     catalog.loadNativeImplementations();
     assert(loader->loadedModuleCount() == 1);
     ToolStatus status;

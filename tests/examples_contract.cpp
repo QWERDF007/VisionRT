@@ -650,7 +650,9 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     loaded.project.flows[1].runSelected = true;
     const auto missingStartStatus       = engine.start(loaded.project, registry, RunMode::Once);
     assert(!missingStartStatus);
-    assert(missingStartStatus.code == 1);
+    assert(missingStartStatus.code == -2);
+    assert(missingStartStatus.message == "执行节点的工具定义缺失：unavailable.custom.plugin");
+    assert(missingStartStatus.detail.empty());
 }
 
 void testRealPluginModulePipeline(PythonRuntime &python)

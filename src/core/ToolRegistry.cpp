@@ -17,7 +17,7 @@ std::string pathText(const std::filesystem::path &path)
 void align(const ToolDefinition &definition, const ToolDefinition &contract)
 {
     if (definition.kind != contract.kind || definition.id != contract.id)
-        throw ContractError("C++ tool kind/id does not match registered contract: " + definition.id);
+        throw ContractError("C++ 工具种类或 ID 与注册合同不一致：" + definition.id);
     const auto portsMatch = [](const auto &actual, const auto &expected, const char *direction)
     {
         const auto business = [](const auto &port)
@@ -26,7 +26,7 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
         };
         if (std::count_if(actual.begin(), actual.end(), business)
             != std::count_if(expected.begin(), expected.end(), business))
-            throw ContractError(std::string("C++ contract port count differs: ") + direction);
+            throw ContractError(std::string("C++ 合同端口数量不一致：") + direction);
         for (const auto &port : actual)
         {
             if (!business(port))
@@ -34,7 +34,7 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
             const auto other
                 = std::find_if(expected.begin(), expected.end(), [&](const auto &item) { return item.id == port.id; });
             if (other == expected.end() || !compatible(port.type, other->type))
-                throw ContractError(std::string("C++ contract differs at ") + direction + "." + port.id);
+                throw ContractError(std::string("C++ 合同端口不一致：") + direction + "." + port.id);
         }
     };
     portsMatch(definition.initParams, contract.initParams, "init_params");
@@ -83,7 +83,7 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
         validateToolDefinition(tool.definition);
         validateContract(tool.definition);
         if (!index.emplace(tool.definition.id, definitions.size()).second)
-            throw ContractError("Duplicate packaged tool_id: " + tool.definition.id);
+            throw ContractError("工具包内 tool_id 重复：" + tool.definition.id);
         definitions.push_back(tool.definition);
     }
     if (pluginLoader_)
@@ -116,8 +116,8 @@ void ToolRegistry::addDefinition(ToolDefinition definition)
 {
     validateToolDefinition(definition);
     if (const auto *previous = find(definition.id))
-        throw ContractError("Duplicate tool_id " + definition.id + ": " + pathText(previous->definitionPath) + " and "
-                            + pathText(definition.definitionPath));
+        throw ContractError("tool_id 重复：" + definition.id + "，声明位于 " + pathText(previous->definitionPath)
+                            + " 和 " + pathText(definition.definitionPath));
     validateContract(definition);
     const auto index = definitions_.size();
     const auto id    = definition.id;
@@ -142,11 +142,11 @@ void ToolRegistry::replaceDefinition(ToolDefinition definition)
 void ToolRegistry::registerCpp(ToolDefinition contract, ToolFactory factory)
 {
     if (!factory || contract.kind != ToolKind::Cpp)
-        throw ContractError("Invalid C++ factory registration");
+        throw ContractError("C++ 工厂注册无效：需要 cpp 工具种类和非空工厂");
     validateToolDefinition(contract);
     const auto id = contract.id;
     if (cpp_.contains(id))
-        throw ContractError("Duplicate C++ tool_id: " + id);
+        throw ContractError("C++ 工厂 tool_id 重复：" + id);
     if (const auto *definition = find(id))
         align(*definition, contract);
     cpp_.emplace(id, CppImplementation{std::move(contract), std::move(factory)});
@@ -166,14 +166,14 @@ void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory facto
 {
     const auto *definition = find(toolId);
     if (!definition || (definition->kind != ToolKind::PythonFunction && definition->kind != ToolKind::PythonClass))
-        throw ContractError("Python implementation requires a loaded Python definition: " + toolId);
+        throw ContractError("注册 Python 实现需要已加载的 Python 工具声明：" + toolId);
     python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(status)});
 }
 
 void ToolRegistry::registerHostBinding(std::string bindingName, HostBindingFactory factory)
 {
     if (bindingName.empty() || !factory)
-        throw ContractError("Invalid host binding registration");
+        throw ContractError("宿主绑定注册无效：名称和工厂不能为空");
     hostBindingExecutors_[std::move(bindingName)] = std::move(factory);
 }
 
@@ -187,7 +187,10 @@ Availability ToolRegistry::availability(std::string_view id) const
 {
     const auto *definition = find(id);
     if (!definition)
-        return {ToolAvailability::DefinitionMissing, "Tool definition missing: " + std::string(id)};
+        return {
+            ToolAvailability::DefinitionMissing,
+            {-3, "工具定义缺失：" + std::string(id)}
+        };
     if (definition->kind == ToolKind::Host)
     {
         const auto &bindingName = definition->hostBinding;
@@ -195,7 +198,10 @@ Availability ToolRegistry::availability(std::string_view id) const
         {
             return {ToolAvailability::Available, {}};
         }
-        return {ToolAvailability::ImplementationUnavailable, "Unknown host_binding: " + bindingName};
+        return {
+            ToolAvailability::ImplementationUnavailable,
+            {-3, "宿主绑定未注册：" + bindingName}
+        };
     }
     if (definition->kind == ToolKind::Cpp)
     {
@@ -203,24 +209,27 @@ Availability ToolRegistry::availability(std::string_view id) const
             return {ToolAvailability::Available, {}};
         if (pluginLoader_)
             return pluginLoader_->availability(definition->id);
-        return {ToolAvailability::ImplementationUnavailable, "C++ implementation unavailable: " + definition->id + " ("
-                                                                 + pathText(definition->definitionPath) + ")"};
+        return {
+            ToolAvailability::ImplementationUnavailable,
+            {-3, "C++ 实现不可用：" + definition->id, pathText(definition->definitionPath)}
+        };
     }
     const auto implementation = python_.find(id);
     if (implementation != python_.end() && implementation->second.factory && implementation->second.status)
         return {ToolAvailability::Available, {}};
-    return {ToolAvailability::ImplementationUnavailable,
-            "Python implementation unavailable: " + std::string(id)
-                + (implementation != python_.end() && !implementation->second.status.message.empty()
-                       ? ": " + implementation->second.status.message
-                       : " (not loaded)")};
+    if (implementation != python_.end() && !implementation->second.status)
+        return {ToolAvailability::ImplementationUnavailable, implementation->second.status};
+    return {
+        ToolAvailability::ImplementationUnavailable,
+        {-3, "Python 实现尚未加载：" + std::string(id)}
+    };
 }
 
 std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const PlatformToolServices &services) const
 {
     const auto *definition = find(id);
     if (!definition)
-        throw RegistryError(ToolAvailability::DefinitionMissing, "Tool definition is missing: " + std::string(id));
+        throw RegistryError(ToolAvailability::DefinitionMissing, availability(id).status);
     return create(*definition, services);
 }
 
@@ -230,10 +239,10 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     const std::string_view id    = definition.id;
     const auto             state = availability(id);
     if (state.state != ToolAvailability::Available)
-        throw RegistryError(state.state, ToolStatus{-3, state.message, state.detail});
+        throw RegistryError(state.state, state.status);
     for (const auto &port : definition.outputs)
         if (port.typeFrom)
-            throw ContractError("Tool output type has not been resolved: " + definition.id + "." + port.id);
+            throw ContractError("工具输出类型尚未解析：" + definition.id + "." + port.id);
     if (definition.kind == ToolKind::Host)
     {
         const auto execIt = hostBindingExecutors_.find(definition.hostBinding);
@@ -242,11 +251,10 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
             auto instance = execIt->second(definition, services);
             if (!instance)
                 throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                                    "Host binding factory returned no instance: " + std::string(id));
+                                    "宿主绑定工厂返回空实例：" + std::string(id));
             return instance;
         }
-        throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                            "Unknown host binding: " + definition.hostBinding);
+        throw RegistryError(ToolAvailability::ImplementationUnavailable, "宿主绑定未注册：" + definition.hostBinding);
     }
     if (definition.kind == ToolKind::Cpp)
     {
@@ -256,7 +264,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
             auto instance = it->second.factory(services);
             if (!instance)
                 throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                                    "Tool factory returned no instance: " + std::string(id));
+                                    "工具工厂返回空实例：" + std::string(id));
             return instance;
         }
         if (pluginLoader_)
@@ -265,8 +273,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     const auto &factory  = python_.find(id)->second.factory;
     auto        instance = factory(services);
     if (!instance)
-        throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                            "Tool factory returned no instance: " + std::string(id));
+        throw RegistryError(ToolAvailability::ImplementationUnavailable, "工具工厂返回空实例：" + std::string(id));
     return instance;
 }
 

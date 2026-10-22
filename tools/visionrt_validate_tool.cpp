@@ -66,9 +66,10 @@ int main(int argc, char **argv)
                     else
                     {
                         available = false;
-                        std::cerr << "Native factory unavailable: " << definition.id << ": " << state.message << '\n';
-                        if (!state.detail.empty())
-                            std::cerr << state.detail << '\n';
+                        std::cerr << "Native factory unavailable: " << definition.id << ": " << state.status.message
+                                  << '\n';
+                        if (!state.status.detail.empty())
+                            std::cerr << state.status.detail << '\n';
                     }
                 }
                 if (!available)

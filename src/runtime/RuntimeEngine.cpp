@@ -48,6 +48,24 @@ double milliseconds(Clock::duration duration)
     return std::chrono::duration<double, std::milli>(duration).count();
 }
 
+const char *exceptionSummary(RuntimePhase phase)
+{
+    switch (phase)
+    {
+    case RuntimePhase::Setup:
+        return "运行准备异常";
+    case RuntimePhase::Submission:
+        return "任务提交异常";
+    case RuntimePhase::Completion:
+        return "任务完成异常";
+    case RuntimePhase::Management:
+        return "运行时管理异常";
+    case RuntimePhase::Notification:
+        return "运行完成通知异常";
+    }
+    std::terminate();
+}
+
 // Single-node execution may reuse a previous session, but only while every
 // consumed publication is still the current, successful and type-compatible
 // source. The result is the first node that must be rerun.
@@ -183,7 +201,7 @@ struct RuntimeEngine::Impl
     std::shared_ptr<std::stop_source>                                 activeStop;
     std::thread                                                       coordinator;
 
-    void diagnose(std::string message, std::optional<NodeDiagnostic> nodeDiagnostic = {})
+    void diagnose(RuntimePhase phase, RuntimeDiagnostic::Payload payload)
     {
         std::lock_guard lock(control);
         if (diagnostics.size() == 100)
@@ -191,7 +209,34 @@ struct RuntimeEngine::Impl
             diagnostics.pop_front();
             ++droppedDiagnostics;
         }
-        diagnostics.push_back({generation, nextDiagnosticSequence++, std::move(message), std::move(nodeDiagnostic)});
+        diagnostics.push_back({generation, nextDiagnosticSequence++, phase, std::move(payload)});
+    }
+
+    template<class Work>
+    bool attempt(RuntimePhase phase, Work &&work)
+    {
+        try
+        {
+            work();
+            return true;
+        }
+        catch (const RegistryError &error)
+        {
+            diagnose(phase, error.status);
+        }
+        catch (const ContractError &error)
+        {
+            diagnose(phase, ToolStatus{-2, error.what()});
+        }
+        catch (const std::exception &error)
+        {
+            diagnose(phase, ToolStatus{-1, exceptionSummary(phase), error.what()});
+        }
+        catch (...)
+        {
+            diagnose(phase, ToolStatus{-1, exceptionSummary(phase), "未知异常"});
+        }
+        return false;
     }
 
     void resetDiagnostics()
@@ -239,7 +284,7 @@ struct RuntimeEngine::Impl
                       });
         for (auto &runtime : removed)
             if (auto status = runtime->release())
-                diagnose({}, *status);
+                diagnose(RuntimePhase::Management, *status);
         for (const auto &[runtime, node] : configured)
             runtime->configure(*node, registry, InstanceConfiguration(*node, registry, project.path.parent_path()),
                                retry.contains(node->id));
@@ -354,24 +399,17 @@ struct RuntimeEngine::Impl
             auto       roundEnd   = roundStart;
             for (const auto &plan : selected)
             {
-                try
-                {
-                    plan->activeRound = context;
-                    auto clock        = std::make_shared<CompletionClock>();
-                    clock->start      = Clock::now();
-                    auto future       = executor.run(plan->graph, [clock] { clock->end = Clock::now(); });
-                    submitted.push_back({plan, std::move(clock), std::move(future)});
-                }
-                catch (const std::exception &error)
-                {
-                    infrastructureError = true;
-                    diagnose(std::string("Taskflow submission failed: ") + error.what());
-                    break;
-                }
-                catch (...)
+                if (!attempt(RuntimePhase::Submission,
+                             [&]
+                             {
+                                 plan->activeRound = context;
+                                 auto clock        = std::make_shared<CompletionClock>();
+                                 clock->start      = Clock::now();
+                                 auto future       = executor.run(plan->graph, [clock] { clock->end = Clock::now(); });
+                                 submitted.push_back({plan, std::move(clock), std::move(future)});
+                             }))
                 {
                     infrastructureError = true;
-                    diagnose("Taskflow submission failed with an unknown exception");
                     break;
                 }
             }
@@ -379,20 +417,8 @@ struct RuntimeEngine::Impl
             timings.reserve(submitted.size());
             for (auto &submission : submitted)
             {
-                try
-                {
-                    submission.future.get();
-                }
-                catch (const std::exception &error)
-                {
+                if (!attempt(RuntimePhase::Completion, [&] { submission.future.get(); }))
                     infrastructureError = true;
-                    diagnose(std::string("Taskflow completion failed: ") + error.what());
-                }
-                catch (...)
-                {
-                    infrastructureError = true;
-                    diagnose("Taskflow completion failed with an unknown exception");
-                }
                 if (submission.clock->end != Clock::time_point{})
                 {
                     timings.push_back(
@@ -428,7 +454,7 @@ struct RuntimeEngine::Impl
         {
             auto status = work();
             if (!status)
-                diagnose(status.message);
+                diagnose(RuntimePhase::Management, std::move(status));
         }
         if (action == Management::Reset)
         {
@@ -455,19 +481,8 @@ struct RuntimeEngine::Impl
                 commandPending = false;
                 frozen         = std::move(command);
             }
-            try
-            {
-                if (frozen)
-                    run(frozen);
-            }
-            catch (const std::exception &error)
-            {
-                diagnose(std::string("Runtime setup failed: ") + error.what());
-            }
-            catch (...)
-            {
-                diagnose("Runtime setup failed with an unknown exception");
-            }
+            if (frozen)
+                attempt(RuntimePhase::Setup, [&] { run(frozen); });
             Management                  action;
             std::function<ToolStatus()> work;
             {
@@ -480,19 +495,8 @@ struct RuntimeEngine::Impl
                 if (action == Management::Refresh || action == Management::Synchronize)
                     state = RuntimeState::Refreshing;
             }
-            try
-            {
-                if (action != Management::None)
-                    manage(action, std::move(work));
-            }
-            catch (const std::exception &error)
-            {
-                diagnose(std::string("Runtime management failed: ") + error.what());
-            }
-            catch (...)
-            {
-                diagnose("Runtime management failed with an unknown exception");
-            }
+            if (action != Management::None)
+                attempt(RuntimePhase::Management, [&] { manage(action, std::move(work)); });
             frozen.reset();
             std::function<void(RuntimeCompletion)> notify;
             RuntimeCompletion                      finished;
@@ -506,20 +510,7 @@ struct RuntimeEngine::Impl
                 notify     = callback;
             }
             if (notify)
-            {
-                try
-                {
-                    notify(finished);
-                }
-                catch (const std::exception &error)
-                {
-                    diagnose(std::string("Completion callback failed: ") + error.what());
-                }
-                catch (...)
-                {
-                    diagnose("Completion callback failed with an unknown exception");
-                }
-            }
+                attempt(RuntimePhase::Notification, [&] { notify(finished); });
         }
         plans.clear();
         for (auto &[id, runtime] : nodes) runtime->release();
@@ -550,7 +541,7 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
 {
     std::lock_guard lock(impl_->control);
     if (impl_->state != RuntimeState::Idle || impl_->shutdown)
-        return {1, "runtime is busy"};
+        return {1, "运行时忙，不能开始执行"};
     try
     {
         auto frozen      = std::make_shared<FrozenRun>();
@@ -574,12 +565,12 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
         for (const auto &flow : frozen->project.flows)
         {
             if (!flowIds.insert(flow.id).second)
-                throw ContractError("duplicate flow identity");
+                throw ContractError("流程标识重复：" + flow.id);
             bool containsTarget = false;
             for (const auto &node : flow.nodes)
             {
                 if (!frozen->nodes.emplace(node.id, &node).second)
-                    throw ContractError("duplicate node identity");
+                    throw ContractError("节点标识重复：" + std::to_string(node.id));
                 if (target && node.id == *target)
                     containsTarget = targetFound = true;
             }
@@ -594,11 +585,11 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                     continue;
                 const auto *definition = frozen->registry.find(node.toolId);
                 if (!definition)
-                    throw ContractError("selected node tool definition is missing: " + node.toolId);
+                    throw ContractError("执行节点的工具定义缺失：" + node.toolId);
                 frozen->contracts.emplace(node.id, nodeContract(node, *definition));
             }
             if (mode != RunMode::Node && hasDependencyCycle(flow))
-                throw ContractError("selected flow contains a dependency cycle");
+                throw ContractError("执行流程存在依赖循环：" + flow.id);
         }
         if (mode == RunMode::Node && (!target || !targetFound))
             return {1, "target node does not exist"};
@@ -625,9 +616,17 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
         impl_->commandReady.notify_one();
         return {};
     }
+    catch (const RegistryError &error)
+    {
+        return error.status;
+    }
+    catch (const ContractError &error)
+    {
+        return {-2, error.what()};
+    }
     catch (const std::exception &error)
     {
-        return {1, error.what()};
+        return {-1, "运行准备异常", error.what()};
     }
 }
 
@@ -771,7 +770,7 @@ RuntimeUpdate RuntimeEngine::pollLatest()
 #ifdef VISIONRT_TEST_PROBES
 void RuntimeEngine::injectDiagnosticForTest(std::string message)
 {
-    impl_->diagnose(std::move(message));
+    impl_->diagnose(RuntimePhase::Management, ToolStatus{0, std::move(message)});
 }
 #endif
 

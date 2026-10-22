@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <variant>
 
 namespace visionrt {
 enum class RunMode
@@ -47,12 +48,30 @@ struct RuntimeCompletion
     std::uint64_t token      = 0;
 };
 
+enum class RuntimePhase
+{
+    Setup,
+    Submission,
+    Completion,
+    Management,
+    Notification
+};
+
 struct RuntimeDiagnostic
 {
+    using Payload = std::variant<ToolStatus, NodeDiagnostic>;
+
     std::uint64_t generation = 0;
     std::uint64_t sequence   = 0;
-    std::string   message;
-    std::optional<NodeDiagnostic> nodeDiagnostic;
+    RuntimePhase  phase;
+    Payload       payload;
+
+    const ToolStatus &status() const
+    {
+        if (const auto *node = std::get_if<NodeDiagnostic>(&payload))
+            return node->status;
+        return std::get<ToolStatus>(payload);
+    }
 };
 
 struct RuntimeUpdate
