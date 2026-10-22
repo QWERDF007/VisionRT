@@ -17,6 +17,7 @@
 | 值 JSON 编解码 | [ValueJson](../src/core/ValueJson.h) |
 | 输出发布与缓存值合同 | [节点合同](../src/core/NodeContracts.h)、[值校验](../src/core/ToolValueValidation.h)、[发布快照](../src/runtime/Snapshot.h)、[运行时契约](../tests/runtime_contract.cpp)、[原生 DLL 契约](../tests/plugin_contract.cpp)、[Python 契约](../tests/python_contract.cpp) |
 | 工程编辑与 JSON 存取 | [ProjectEditor](../src/core/ProjectEditor.h)、[ProjectStorage](../src/core/ProjectStorage.h)、[编辑契约](../tests/project_editor_contract.cpp)、[存储契约](../tests/project_storage_contract.cpp)、[工程样例](../examples) |
+| 输出关联与拒绝诊断 | [绑定动作与候选查询](../src/core/ProjectEditor.h)、[工作台绑定入口](../src/ui/AppControllerBindings.cpp)、[真实窗口契约](../tests/workbench_popups.cpp) |
 | 节点配置同步、调度与接收 | [RuntimeEngine](../src/runtime/RuntimeEngine.h)、[实例配置与所有权](../src/runtime/RuntimeInternal.h)、[节点执行](../src/runtime/NodeRuntime.cpp)、[Receiver](../src/runtime/Receiver.h)、[真实插件与工作台生命周期契约](../tests/plugin_contract.cpp) |
 | 目录状态与显式加载 | [公共注册接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Registry.h)、[ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h)、[CLI 契约](../tests/validator_cli_contract.py) |
 | 原生实例、模块所有权与失败诊断 | [原生适配器](../src/plugins/PluginLoader.cpp)、[运行节点](../src/runtime/NodeRuntime.cpp)、[真实模块契约](../tests/module_registration_contract.cpp)、[插件契约](../tests/plugin_contract.cpp) |

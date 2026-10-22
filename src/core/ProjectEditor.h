@@ -89,6 +89,7 @@ public:
                                             GridPoint preferredOffset);
     bool                     setAlias(std::string_view flowId, NodeId node, std::string alias);
 
+    bool bindFreeInput(std::string_view flowId, const SourcePort &source, const InputPort &target);
     bool setBinding(std::string_view flowId, NodeId node, std::string_view input, InputBinding binding);
     bool setMode(std::string_view flowId, NodeId node, std::string_view input, BindingMode mode);
     bool setSource(std::string_view flowId, NodeId node, std::string_view input, std::optional<SourcePort> source);

@@ -120,9 +120,15 @@ void popupSessionsContract()
     const auto beforeRejectedBinding = app.wires();
     QSignalSpy rejectedProjectChanges(&app, &visionrt::AppController::projectChanged);
     QSignalSpy rejectedParameterChanges(&app, &visionrt::AppController::parametersChanged);
-    require(!app.bindOutputTo(sourceContext, target, QStringLiteral("images"))
-                && !app.bindOutputTo(sourceContext, target, QStringLiteral("rect"))
-                && app.wires() == beforeRejectedBinding && rejectedProjectChanges.isEmpty()
+    require(!app.bindOutputTo(sourceContext, target, QStringLiteral("images")),
+            "output connection replaced an occupied input");
+    require(app.diagnostic() == QStringLiteral("输入端口已关联上游：%1.images").arg(target),
+            "occupied input rejection lost its precise reason or stable target identity");
+    require(!app.bindOutputTo(sourceContext, target, QStringLiteral("rect")),
+            "output connection accepted an incompatible input");
+    require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".rect"),
+            "incompatible input rejection lost its precise reason or stable target identity");
+    require(app.wires() == beforeRejectedBinding && rejectedProjectChanges.isEmpty()
                 && rejectedParameterChanges.isEmpty() && popup->property("visible").toBool()
                 && popup->property("context").toMap() == sourceContext,
             "a rejected output connection changed bindings or dismissed its current selector");
