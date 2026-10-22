@@ -401,6 +401,13 @@ void exampleTools(PythonRuntime &runtime, const std::filesystem::path &root)
         assert(result.status.code == 0 && result.outputs.size() == 1);
         const auto &means = std::get<NumericArray>(result.outputs.at("means"));
         assert(means.buffers()[0].values<double>()[0] == 8.0);
+        const auto wrongBatch = function->execute({
+            {"images", std::int64_t{7}}
+        });
+        assert(wrongBatch.status.code == -2 && wrongBatch.outputs.size() == 1);
+        assert(dynamic_cast<IToolFailureContext &>(*function).failurePhase() == NodePhase::Prepare);
+        assert(!wrongBatch.status.message.empty());
+        assert(wrongBatch.status.detail.empty() && isMissing(wrongBatch.outputs.at("means")));
         const auto missing = function->execute({
             {"images", Missing{}}
         });
