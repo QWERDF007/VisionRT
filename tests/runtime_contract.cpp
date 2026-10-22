@@ -300,6 +300,7 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
             [&](const Values &in)
             {
                 ++fastCalls;
+                gate.notify_all();
                 return ToolResult{{}, {{"value", in.at("input")}}};
             });
     auto slow = definition("test.slow");
@@ -327,7 +328,7 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
     assert(engine.start(project, registry, RunMode::Loop));
     {
         std::unique_lock lock(mutex);
-        assert(gate.wait_for(lock, 2s, [&] { return entered; }));
+        assert(gate.wait_for(lock, 2s, [&] { return entered && fastCalls == 1; }));
     }
     project.flows.front().nodes.front().inputs["input"].literal = std::int64_t{99};
     engine.requestStop();
@@ -445,54 +446,67 @@ void receiverConsumesFailures()
     assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 1);
 }
 
-void resetWaitsForActiveInvocation()
+void managementWaitsForActiveInvocation()
 {
-    RuntimeEngine           engine(1);
-    ToolRegistry            registry;
-    std::mutex              mutex;
-    std::condition_variable gate;
-    bool                    entered = false, proceed = false, finishedExecution = false;
-    std::atomic<bool>       releasedAfterExecution{false};
-    auto                    resource = definition("test.reset_active");
-    install(
-        registry, resource,
-        [&](const Values &)
+    for (const bool reset : {true, false})
+    {
+        RuntimeEngine           engine(1);
+        ToolRegistry            registry;
+        std::mutex              mutex;
+        std::condition_variable gate;
+        bool                    entered = false, proceed = false, finishedExecution = false;
+        std::atomic<bool>       releasedAfterExecution{false};
+        auto                    resource = definition("test.reset_active");
+        install(
+            registry, resource,
+            [&](const Values &)
+            {
+                std::unique_lock lock(mutex);
+                entered = true;
+                gate.notify_all();
+                if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
+                    return ToolResult{
+                        {1, "test gate timeout"},
+                        {{"value", Missing{}}}
+                    };
+                finishedExecution = true;
+                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+            },
+            [] { return ToolStatus{}; },
+            [&]
+            {
+                std::lock_guard lock(mutex);
+                releasedAfterExecution = finishedExecution;
+                return ToolStatus{};
+            });
+        ProjectDefinition project;
+        project.flows.front().nodes = {node(1, resource)};
+        assert(engine.start(project, registry, RunMode::Loop));
         {
             std::unique_lock lock(mutex);
-            entered = true;
-            gate.notify_all();
-            if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
-                return ToolResult{
-                    {1, "test gate timeout"},
-                    {{"value", Missing{}}}
-                };
-            finishedExecution = true;
-            return ToolResult{{}, {{"value", std::int64_t{1}}}};
-        },
-        [] { return ToolStatus{}; },
-        [&]
+            assert(gate.wait_for(lock, 2s, [&] { return entered; }));
+        }
+        if (reset)
+            assert(engine.requestReset());
+        else
+        {
+            project.flows.front().nodes.clear();
+            assert(engine.requestSynchronize(project, registry));
+        }
+        assert(engine.pollLatest().state == RuntimeState::Stopping);
+        assert(!releasedAfterExecution);
         {
             std::lock_guard lock(mutex);
-            releasedAfterExecution = finishedExecution;
-            return ToolStatus{};
-        });
-    ProjectDefinition project;
-    project.flows.front().nodes = {node(1, resource)};
-    assert(engine.start(project, registry, RunMode::Loop));
-    {
-        std::unique_lock lock(mutex);
-        assert(gate.wait_for(lock, 2s, [&] { return entered; }));
+            proceed = true;
+        }
+        gate.notify_all();
+        const auto completed = finish(engine);
+        assert(releasedAfterExecution);
+        if (reset)
+            assert(completed.generation == 2 && !snapshot(completed, 1));
+        else
+            assert(completed.generation == 1 && completed.nodes.empty());
     }
-    assert(engine.requestReset());
-    assert(engine.pollLatest().state == RuntimeState::Stopping);
-    assert(!releasedAfterExecution);
-    {
-        std::lock_guard lock(mutex);
-        proceed = true;
-    }
-    gate.notify_all();
-    auto reset = finish(engine);
-    assert(releasedAfterExecution && reset.generation == 2 && !snapshot(reset, 1));
 }
 
 void executionMetricsAndTimingSeparation()
@@ -1177,7 +1191,7 @@ int main(int argc, char **argv)
     singleReceiverResolvesAllValueTypes(argv[1]);
     receiverConsumesFailures();
     hostBindingReceiverContract();
-    resetWaitsForActiveInvocation();
+    managementWaitsForActiveInvocation();
     executionMetricsAndTimingSeparation();
     timingRecordedOnFailure();
     crossRoundPythonMetricIsolation();

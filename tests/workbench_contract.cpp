@@ -306,13 +306,15 @@ void nodeDiagnosticsContract()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     app.addNode("test.diag.python", 100, 100);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.addNode("test.diag.unfulfilled", 200, 200);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.addNode("test.diag.fail", 300, 200);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
 
     const auto nodes = app.nodes();
     QStringList toolIds;
-    for (const auto &item : app.toolDefinitions())
-        toolIds << item.toMap().value("id").toString();
+    for (const auto &item : app.toolDefinitions()) toolIds << item.toMap().value("id").toString();
     require(nodes.size() == 3, "expected 3 nodes in nodes(); tools=" + toolIds.join(',').toStdString()
                                    + " diagnostic=" + app.diagnostic().toStdString());
 
@@ -541,6 +543,7 @@ void mainQmlContract(double scale)
     // 2. Initial state verification & drawer items
     require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
     app.save(dirPath + "/test.vrt.json");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.dirty() == false, "project initially dirty after save");
 
     auto *leftHandle     = window->findChild<QQuickItem *>("leftHandle");
@@ -602,8 +605,11 @@ void mainQmlContract(double scale)
 
     // 6. Running state, loop execution, and drawer toggling
     app.addNode("test.plugin.sleep", 100, 100);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.addNode("test.plugin.counter", 200, 100);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.save(dirPath + "/test.vrt.json");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.dirty() == false, "project dirty after save with nodes");
 
     const auto nodesBeforeRun = app.nodes();
@@ -671,6 +677,7 @@ void mainQmlContract(double scale)
 
     // Add failing node and verify red error state
     app.addNode("test.plugin.fail_init", 300, 100);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.runOnce();
     for (int i = 0; i < 50 && app.busy(); ++i)
     {
@@ -1047,8 +1054,13 @@ void packageDrivenCatalogAndRefreshContract()
         const auto flow1Id   = initialFlows.first().toMap().value("id").toString();
 
         app.addNode("test.plugin.function", 100, 100);
+
+
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.addNode("test.plugin.counter", 200, 100);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.addNode("test.user.pythonA", 300, 100);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
 
         QString funcNodeTitle;
         QString pythonNodeTitle;
@@ -1074,6 +1086,7 @@ void packageDrivenCatalogAndRefreshContract()
         app.addFlow("flow_2");
         app.setFlowSelected("flow_2", true);
         app.addNode("test.custom.receiver", 100, 100);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
 
         QString recvNodeId;
         for (const auto &n : app.nodes())
@@ -1105,18 +1118,25 @@ void packageDrivenCatalogAndRefreshContract()
         require(choices("source_flow_id", "label").contains(flow1Name), "source flow choices are missing");
         require(choices("source_flow_id", "value").contains(flow1Id), "source flow identity is missing");
         app.setParameter("source_flow_id", true, flow1Id);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(!pythonNodeTitle.isEmpty(), "missing Python image source");
         app.setParameter("source_node_seq", true, pythonNodeId);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.setParameter("source_port_id", true, "image");
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.imageOutputs().size() == 1
                     && app.imageOutputs().first().toMap().value("id").toString() == "value",
                 "source-derived image output is missing from the viewport selector");
         require(choices("source_node_seq", "label").contains(funcNodeTitle), "source node choices are missing");
         app.setParameter("source_node_seq", true, funcNodeId);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(choices("source_port_id", "value").contains(QStringLiteral("y")), "source output choices are missing");
         app.setParameter("source_port_id", true, "y");
-        require(receiverOutputs->get(2).value("type").toString() == typeText({Type::Int}), "receiver output not resolved after source selection");
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
+        require(receiverOutputs->get(2).value("type").toString() == typeText({Type::Int}),
+                "receiver output not resolved after source selection");
         app.setParameter("timeout_ms", true, "1000");
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
 
         // Run once
         app.runOnce();
@@ -1137,6 +1157,9 @@ void packageDrivenCatalogAndRefreshContract()
                   << recvPreview.toStdString() << "\n";
 
         app.addNode("test.plugin.function", 200, 100);
+
+
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         const auto relationTarget = app.selectedNode();
         require(app.bindInput(app.portContext("x"), recvNodeId, "value"), "cannot bind source-derived receiver output");
         require(app.wires().size() == 1, "valid receiver relation is missing");
@@ -1146,15 +1169,20 @@ void packageDrivenCatalogAndRefreshContract()
                 "grouped wire discarded the source and target port identity");
         app.selectNode(recvNodeId);
         app.setParameter("source_node_seq", true, pythonNodeId);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.setParameter("source_port_id", true, "image");
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.wires().isEmpty(), "incompatible or unresolved receiver binding is still drawn as an active wire");
         require(outModel->get(2).value("count").toInt() == 0,
                 "invalid receiver relation is still counted as an active output reference");
         app.setParameter("source_node_seq", true, funcNodeId);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.setParameter("source_port_id", true, "y");
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.wires().size() == 1 && outModel->get(2).value("count").toInt() == 1,
                 "restoring the source type did not restore the same input relation");
         app.deleteNodes({relationTarget});
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.selectNode(recvNodeId);
 
         // Save project

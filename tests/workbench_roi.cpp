@@ -113,6 +113,7 @@ void roiParameterContract()
     AppController app(1, directory.path());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "ROI catalog initialization did not finish");
     app.addNode("test.roi.source", 0, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto source = app.selectedNode();
     require(!source.isEmpty(), "ROI source was not discovered");
     app.runNode();
@@ -130,6 +131,7 @@ void roiParameterContract()
         throw std::runtime_error((QStringLiteral("ROI numpy image source failed: ") + output("__status_message")
                                  + " " + app.diagnostic()).toStdString());
     app.addNode("test.roi.editor", 0, 1);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto target = app.selectedNode();
     require(target != source && app.bindInput(app.portContext("images"), source, "images"), "ROI image input could not bind to the source");
     const auto literal = [&]
@@ -206,6 +208,7 @@ void roiParameterContract()
     viewport.setDrawShape(2);
     const auto project = directory.filePath("roi.vrt.json");
     require(app.save(project) && !app.dirty(), "ROI baseline could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "saved project instances did not synchronize");
     const auto initial = literal();
     QSignalSpy changes(&app, &AppController::parametersChanged);
     const auto draw = [&](bool cancel, QPointF from = {10, 10}, QPointF to = {30, 30}, bool holdForPolling = false)
@@ -387,6 +390,7 @@ void roiParameterContract()
     require(viewport.selectedRoi() == -1 && !app.dirty(), "read-only result geometry became editable");
     app.endRoiPreview();
     app.addNode("test.roi.editor", 1, 1);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.bindInput(app.portContext("images"), source, "images") && app.bindInput(app.portContext("rois"), source, "rois"),
             "upstream ROI verification inputs could not bind");
     app.runNode();
@@ -656,6 +660,7 @@ void roiParameterContract()
     app.endRoiPreview();
     require(rectLiteral() == boundRectangle && !app.dirty(), "Stale gesture changed the saved input binding");
     app.addNode("test.roi.editor", 0, 2);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto withoutImage = app.selectedNode();
     require(app.save(project) && !app.dirty(), "Image-free rectangle baseline could not be saved");
     const auto imageFreeOriginal = rectLiteral();

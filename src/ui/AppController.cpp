@@ -298,12 +298,12 @@ void AppController::Impl::pruneDeletedNodes()
     }
     for (auto it = lifecycleErrors.begin(); it != lifecycleErrors.end();)
         it = existing.contains(it->first) ? std::next(it) : lifecycleErrors.erase(it);
+    for (auto it = instanceErrors.begin(); it != instanceErrors.end();)
+        it = existing.contains(it->first) ? std::next(it) : instanceErrors.erase(it);
     for (auto it = active.begin(); it != active.end();)
         it = existing.contains(*it) ? std::next(it) : active.erase(it);
     if (!removed.empty())
     {
-        if (auto status = runtime->removeNodes(removed); !status)
-            report(workbench::q(status.message));
         if (roi && !existing.contains(roi->node))
             finishRoi();
         updateResults();
@@ -325,7 +325,19 @@ void AppController::Impl::changed(bool structure)
     emit q->parametersChanged();
     if (structure || !search.isEmpty())
         emit q->searchChanged();
+    synchronizeNodes();
     updateResults();
+}
+
+void AppController::Impl::synchronizeNodes()
+{
+    if (state != RuntimeState::Idle)
+        return;
+    const auto status = runtime->requestSynchronize(editor.project(), registry);
+    if (!status)
+        report(workbench::q(status.message));
+    else
+        setState(runtime->state());
 }
 
 void AppController::Impl::storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items)
@@ -338,6 +350,7 @@ void AppController::Impl::clearResults()
     snapshots.clear();
     active.clear();
     lifecycleErrors.clear();
+    instanceErrors.clear();
     timing.clear();
     finishRoi();
     converter.invalidate(generation);
@@ -384,6 +397,20 @@ void AppController::Impl::poll()
                     nodesChanged                = true;
                 }
             }
+            if (item.instanceDiagnostic)
+            {
+                const auto previous = instanceErrors.find(item.node);
+                if (previous == instanceErrors.end() || previous->second.code != item.instanceDiagnostic->code
+                    || previous->second.message != item.instanceDiagnostic->message
+                    || previous->second.detail != item.instanceDiagnostic->detail)
+                {
+                    instanceErrors[item.node] = *item.instanceDiagnostic;
+                    nodesChanged              = true;
+                    report(workbench::q(item.instanceDiagnostic->message));
+                }
+            }
+            else if (instanceErrors.erase(item.node))
+                nodesChanged = true;
             if (item.snapshot && item.snapshot->generation == generation)
             {
                 const auto previous = snapshots.find(item.node);
@@ -513,6 +540,14 @@ void AppController::Impl::advancePending()
 {
     if (pending == Pending::None || state != RuntimeState::Idle)
         return;
+    if (pending == Pending::DeleteNodes)
+    {
+        auto deletion = std::move(*pendingDeletion);
+        pendingDeletion.reset();
+        pending = Pending::None;
+        command([&] { return editor.removeNodes(deletion.flow, deletion.nodes); }, true);
+        return;
+    }
     if (!pendingApproved && editor.project().dirty)
     {
         if (!awaitingDecision)
@@ -576,6 +611,8 @@ void AppController::Impl::advancePending()
     }
     if (completed == Pending::Close)
         emit q->closeReady();
+    else if (completed == Pending::Reset)
+        synchronizeNodes();
 }
 
 void AppController::Impl::refresh(bool rescan)
@@ -829,6 +866,12 @@ QVariantList AppController::nodes() const
                 statusMessage = q(snapshot->status.message);
             }
             const auto timing = nodeTimingText(snapshot.get(), running);
+            if (impl_->instanceErrors.contains(node.id))
+            {
+                state         = "failed";
+                statusCode    = impl_->instanceErrors.at(node.id).code;
+                statusMessage = q(impl_->instanceErrors.at(node.id).message);
+            }
             if (impl_->lifecycleErrors.contains(node.id))
             {
                 state         = "failed";
@@ -840,7 +883,9 @@ QVariantList AppController::nodes() const
             const QString category        = def ? q(def->category) : QString();
             const auto    avail           = impl_->registry.availability(node.toolId);
             const bool    defMissing      = (avail.state == ToolAvailability::DefinitionMissing);
-            const bool    implUnavailable = !defMissing && avail.state != ToolAvailability::Available;
+            const bool    implUnavailable
+                = !defMissing
+               && (avail.state != ToolAvailability::Available || impl_->instanceErrors.contains(node.id));
             const bool    missing         = defMissing || implUnavailable;
             result.push_back(QVariantMap{
                 {             "id", QString::number(node.id)},
@@ -985,13 +1030,20 @@ bool AppController::moveNodes(const QVariantList &values, int dx, int dy)
 
 void AppController::deleteNodes(const QVariantList &values)
 {
-    impl_->command(
-        [&]
-        {
-            impl_->finishRoi();
-            return impl_->editor.removeNodes(impl_->flow.toStdString(), ids(values));
-        },
-        true);
+    if (impl_->pending != Impl::Pending::None)
+    {
+        impl_->report(QStringLiteral("请先完成或取消当前操作"));
+        return;
+    }
+    try
+    {
+        impl_->pendingDeletion = Impl::PendingDeletion{impl_->flow.toStdString(), ids(values)};
+        impl_->request(Impl::Pending::DeleteNodes);
+    }
+    catch (const std::exception &error)
+    {
+        impl_->report(q(error.what()));
+    }
 }
 
 void AppController::copyNodes(const QVariantList &values)
@@ -1202,6 +1254,7 @@ bool AppController::save(const QString &path)
             impl_->editor.markSaved();
         else
             impl_->editor.replaceProject(std::move(candidate));
+        impl_->synchronizeNodes();
         impl_->storageDiagnostics(diagnostics);
         emit projectChanged();
         return true;

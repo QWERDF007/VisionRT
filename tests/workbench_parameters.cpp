@@ -84,6 +84,7 @@ void parameterEditorsContract()
         QTest::qWait(10);
     require(!app.busy(), "parameter tool initialization did not finish");
     app.addNode("test.parameters", 0, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     if (app.nodes().size() != 1)
         throw std::runtime_error("parameter fixture tool was not discovered: " + app.diagnostic().toStdString());
     app.selectNode(app.nodes().front().toMap().value("id").toString());
@@ -199,6 +200,7 @@ void parameterEditorsContract()
     require(pathSaved, "text parameter did not preserve Unicode, whitespace and quotes");
     const auto project = directory.path() + "/parameters.vrt.json";
     app.save(project);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(!app.dirty(), "parameter save failed");
     owner.reset();
     app.requestOpen(project);
@@ -287,6 +289,7 @@ void parameterEditorsContract()
     QGuiApplication::sendEvent(&window, &cancelComposition);
     const auto firstNode = app.selectedNode();
     app.addNode("test.parameters", 240, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto secondNode = app.selectedNode();
     require(firstNode != secondNode, "second parameter test node was not selected");
     app.selectNode(firstNode);
@@ -538,6 +541,7 @@ void parameterEditorsContract()
     require(app.wires().isEmpty(), "grouped dropdown did not remove the binding");
     require(value("ratio") == "0.35", "unbinding replaced the retained literal value");
     app.deleteNodes(QVariantList{secondNode});
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.selectNode(firstNode);
     require(app.setParameterMode("ratio", true), "parameter could not return to upstream mode");
     QTest::qWait(30);

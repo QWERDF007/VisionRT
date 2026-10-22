@@ -234,6 +234,9 @@ class Broken:
         raise RuntimeError('execution detail')
     def release(self):
         raise RuntimeError('release detail')
+class BadConstructor(Counter):
+    def __init__(self):
+        raise RuntimeError('constructor detail')
 def missing(inputs):
     return {'__status_code': 0, '__status_message': ''}
 def extra(inputs):
@@ -248,12 +251,14 @@ def partial(inputs):
     auto function = sources.definition("python.function", ToolKind::PythonFunction, "execute");
     auto counter  = sources.definition("python.counter", ToolKind::PythonClass, "Counter");
     auto broken   = sources.definition("python.broken", ToolKind::PythonClass, "Broken");
+    auto constructor = sources.definition("python.constructor", ToolKind::PythonClass, "BadConstructor");
     auto missing  = sources.definition("python.missing", ToolKind::PythonFunction, "missing");
     auto extra    = sources.definition("python.extra", ToolKind::PythonFunction, "extra");
     auto wrong    = sources.definition("python.wrong", ToolKind::PythonFunction, "wrong");
     auto business = sources.definition("python.business", ToolKind::PythonFunction, "business");
     auto partial  = sources.definition("python.partial", ToolKind::PythonFunction, "partial", true);
-    std::vector<ToolDefinition> definitions{function, counter, broken, missing, extra, wrong, business, partial};
+    std::vector<ToolDefinition> definitions{function, counter, broken,   constructor, missing,
+                                            extra,    wrong,   business, partial};
     std::uintptr_t              numpyIdentity;
     {
         py::gil_scoped_acquire gil;
@@ -264,6 +269,16 @@ def partial(inputs):
     const auto loaded = runtime.refresh(definitions);
     for (const auto &record : loaded) assert(record.status.code == 0);
     const ToolServices services;
+    try
+    {
+        runtime.factory(constructor)(services);
+        assert(false);
+    }
+    catch (const RegistryError &error)
+    {
+        assert(error.status.code == -1);
+        assert(error.status.detail.find("constructor detail") != std::string::npos);
+    }
     auto               first  = runtime.factory(counter)(services);
     auto               second = runtime.factory(counter)(services);
     assert(first->initialize({}).code == 0 && second->initialize({}).code == 0);
@@ -334,9 +349,7 @@ def execute(inputs):
     const auto invalid = runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     assert(invalid[0].status.code == -3 && invalid[0].status.message.find("SyntaxError") != std::string::npos);
     {
-        auto       instance = oldFactory(services);
-        const auto result   = instance->execute({});
-        assert(result.status.code == -3 && result.outputs.size() == 1 && isMissing(result.outputs.at("value")));
+        rejects([&] { oldFactory(services); });
     }
     runtime.refresh({});
 }
@@ -386,10 +399,7 @@ void exampleTools(PythonRuntime &runtime, const std::filesystem::path &root)
         assert(first->release().code == 0 && second->release().code == 0);
     }
     runtime.refresh({});
-    auto       unavailable = runtime.factory(mean)(services);
-    const auto result      = unavailable->execute({});
-    assert(result.status.code == -3 && result.outputs.size() == 1);
-    assert(isMissing(result.outputs.at("means")));
+    rejects([&] { runtime.factory(mean)(services); });
 }
 
 void deployedPurePythonPackage(PythonRuntime &runtime, const std::filesystem::path &root)

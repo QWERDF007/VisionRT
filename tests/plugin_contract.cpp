@@ -227,6 +227,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     def.kind         = ToolKind::Cpp;
 
     def.inputs.push_back({"x", "输入", {Type::Int}, std::int64_t{0}});
+    def.initParams.push_back({"resource", "资源", {Type::Int}, std::int64_t{1}});
     def.outputs.push_back({"y", "输出", {Type::Int}});
     registry.addDefinition(def);
     registry.loadNativeImplementations();
@@ -250,6 +251,20 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     flow.nodes.push_back(node);
     project.flows = {flow};
 
+    QLibrary probe(toQString(modulePath));
+    assert(probe.load());
+    const auto instanceCount = reinterpret_cast<int(VT_CALL *)() noexcept>(probe.resolve("testPluginInstanceCount"));
+    const auto initializeCount
+        = reinterpret_cast<int(VT_CALL *)() noexcept>(probe.resolve("testPluginFunctionInitializeCalls"));
+    assert(instanceCount && initializeCount);
+    const auto initializations = initializeCount();
+    assert(engine.requestSynchronize(project, registry));
+    auto prepared = finish(engine);
+    assert(!snapshot(prepared, 1));
+    assert(instanceCount() == 1 && initializeCount() == initializations);
+    assert(engine.requestSynchronize(project, registry));
+    assert(engine.state() == RuntimeState::Idle);
+
     auto startStatus = engine.start(project, registry, RunMode::Once);
     assert(startStatus.code == 0);
     auto update = finish(engine);
@@ -257,12 +272,53 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     assert(snap != nullptr);
     assert(snap->status.code == 0);
     assert(std::get<std::int64_t>(snap->outputs.at("y")) == 42);
+    assert(instanceCount() == 1 && initializeCount() == initializations + 1);
+    project.flows.front().nodes.front().inputs.at("x").literal = std::int64_t{42};
+    assert(engine.requestSynchronize(project, registry));
+    assert(engine.state() == RuntimeState::Idle);
+    assert(engine.start(project, registry, RunMode::Once));
+    snap = snapshot(finish(engine), 1);
+    assert(std::get<std::int64_t>(snap->outputs.at("y")) == 84);
+    assert(instanceCount() == 1 && initializeCount() == initializations + 1);
+
+    const auto publication                                     = snap->publication;
+    project.flows.front().nodes.front().initParams["resource"] = std::int64_t{2};
+    assert(engine.requestSynchronize(project, registry));
+    prepared = finish(engine);
+    assert(snapshot(prepared, 1)->publication == publication);
+    assert(instanceCount() == 1 && initializeCount() == initializations + 1);
+    assert(engine.start(project, registry, RunMode::Once));
+    finish(engine);
+    assert(initializeCount() == initializations + 2);
+
+    project.path = modulePath.parent_path() / "managed.vrt.json";
+    assert(engine.requestSynchronize(project, registry));
+    finish(engine);
+    assert(instanceCount() == 1 && initializeCount() == initializations + 2);
+    auto copied = project.flows.front().nodes.front();
+    copied.id   = 2;
+    project.flows.front().nodes.push_back(copied);
+    assert(engine.requestSynchronize(project, registry));
+    prepared = finish(engine);
+    assert(!snapshot(prepared, 2));
+    assert(instanceCount() == 2 && initializeCount() == initializations + 2);
+    project.flows.front().nodes.pop_back();
+    assert(engine.requestSynchronize(project, registry));
+    finish(engine);
+    assert(instanceCount() == 1 && initializeCount() == initializations + 2);
 
     def.id = "test.plugin.create_nonnull_fail";
     loader->registerModule(def.id, modulePath);
     registry.addDefinition(def);
     registry.loadNativeImplementations();
     project.flows.front().nodes.front().toolId = def.id;
+    assert(engine.requestSynchronize(project, registry));
+    prepared = finish(engine);
+    assert(prepared.nodes.front().instanceDiagnostic->code == 5);
+    assert(prepared.nodes.front().instanceDiagnostic->detail == "factory diagnostic");
+    assert(instanceCount() == 0);
+    assert(engine.requestSynchronize(project, registry));
+    assert(engine.state() == RuntimeState::Idle);
     assert(engine.start(project, registry, RunMode::Once));
     snap = snapshot(finish(engine), 1);
     assert(snap && snap->status.code == 5);
@@ -564,11 +620,38 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     for (const auto &item : app.toolDefinitions())
         assert(item.toMap().value("available").toBool());
+    QLibrary probe(toQString(binDir / "test_module.dll"));
+    assert(probe.load());
+    const auto instances = reinterpret_cast<int(VT_CALL *)() noexcept>(probe.resolve("testPluginInstanceCount"));
+    assert(instances && instances() == 0);
 
     // 1. Add node for Tool A, runOnce, verify execution
     app.addNode("test.plugin.counter", 100, 100);
+    waitForIdle();
     assert(app.nodes().size() == 1);
     const auto nodeAId = app.nodes().first().toMap().value("id").toString();
+    assert(instances() == 1 && app.nodes().first().toMap().value("state") == "idle");
+    app.copyNodes({nodeAId});
+    app.pasteNodes(200, 100);
+    waitForIdle();
+    assert(app.nodes().size() == 2 && instances() == 2);
+    const auto copiedNode = app.nodes().last().toMap().value("id").toString();
+    assert(copiedNode != nodeAId);
+    app.deleteNodes({copiedNode});
+    waitForIdle();
+    assert(app.nodes().size() == 1 && instances() == 1);
+    app.selectNode(nodeAId);
+    const auto saved = temp.filePath("node-lifecycle.vrt.json");
+    assert(app.save(saved));
+    waitForIdle();
+    app.requestNew();
+    waitForIdle();
+    assert(app.nodes().isEmpty() && instances() == 0);
+    app.requestOpen(saved);
+    app.resolveUnsaved("discard");
+    waitForIdle();
+    assert(app.nodes().size() == 1 && instances() == 1);
+    assert(app.nodes().first().toMap().value("state") == "idle");
     app.runOnce();
     waitForIdle();
     assert(app.nodes().first().toMap().value("state").toString() == "succeeded");
@@ -630,6 +713,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
 
     // Add node for Tool B, bind x to node A's count, runOnce
     app.addNode("test.plugin.function", 300, 100);
+    waitForIdle();
     assert(app.nodes().size() == 2);
     const auto nodeBId = app.nodes().last().toMap().value("id").toString();
     assert(app.bindInput(app.portContext("x"), nodeAId, "count"));
@@ -730,6 +814,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     // 6. Running rejection test: rescan request while not Idle is rejected
     // Delete node A to make the flow runnable, then toggle loop
     app.deleteNodes(QVariantList{nodeAId});
+    waitForIdle();
     assert(app.nodes().size() == 1);
     app.toggleLoop();
     for (int i = 0; i < 20 && !app.busy(); ++i)
@@ -743,10 +828,10 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     // Call rescanTools while running; must be rejected and state remains RunningLoop
     app.rescanTools();
     assert(app.runState() == "RunningLoop");
-    // Stop loop and wait for idle
-    app.toggleLoop();
+    app.deleteNodes({app.nodes().first().toMap().value("id")});
     waitForIdle();
     assert(app.runState() == "Idle");
+    assert(app.nodes().isEmpty() && instances() == 0);
 }
 #endif
 

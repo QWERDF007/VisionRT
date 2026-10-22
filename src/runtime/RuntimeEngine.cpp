@@ -43,11 +43,6 @@ bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
         && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
 }
 
-bool isPython(ToolKind kind)
-{
-    return kind == ToolKind::PythonFunction || kind == ToolKind::PythonClass;
-}
-
 double milliseconds(Clock::duration duration)
 {
     return std::chrono::duration<double, std::milli>(duration).count();
@@ -133,7 +128,8 @@ struct RuntimeEngine::Impl
     {
         None,
         Reset,
-        Refresh
+        Refresh,
+        Synchronize
     };
 
     explicit Impl(std::size_t requested)
@@ -206,14 +202,20 @@ struct RuntimeEngine::Impl
         droppedDiagnostics          = 0;
     }
 
-    std::vector<std::shared_ptr<CompiledFlow>> compile(const std::shared_ptr<FrozenRun> &frozen)
+    void synchronize(const ProjectDefinition &project, const ToolRegistry &registry, const std::set<NodeId> &retry = {})
     {
+        std::map<NodeId, const NodeDefinition *> definitions;
+        for (const auto &flow : project.flows)
+            for (const auto &node : flow.nodes)
+                if (!definitions.emplace(node.id, &node).second)
+                    throw ContractError("节点标识重复：" + std::to_string(node.id));
         std::vector<std::shared_ptr<NodeRuntime>> removed;
+        std::vector<std::pair<std::shared_ptr<NodeRuntime>, const NodeDefinition *>> configured;
         {
             std::lock_guard lock(control);
             for (auto it = nodes.begin(); it != nodes.end();)
             {
-                if (!frozen->nodes.contains(it->first))
+                if (!definitions.contains(it->first))
                 {
                     removed.push_back(std::move(it->second));
                     it = nodes.erase(it);
@@ -221,25 +223,37 @@ struct RuntimeEngine::Impl
                 else
                     ++it;
             }
-            for (const auto &[id, config] : frozen->nodes)
+            for (const auto &[id, definition] : definitions)
             {
                 auto [item, inserted] = nodes.try_emplace(id);
                 if (inserted)
-                {
                     item->second = std::make_shared<NodeRuntime>(id, budget);
-                    if (const auto *definition = frozen->registry.find(config->toolId))
-                        item->second->kind = definition->kind;
-                }
-                frozen->runtimes.emplace(id, item->second);
+                configured.emplace_back(item->second, definition);
             }
         }
         std::erase_if(plans,
                       [&](const auto &item)
                       {
                           return std::any_of(item.second->nodes.begin(), item.second->nodes.end(),
-                                             [&](NodeId id) { return !frozen->nodes.contains(id); });
+                                             [&](NodeId id) { return !definitions.contains(id); });
                       });
-        for (auto &runtime : removed) runtime->release();
+        for (auto &runtime : removed)
+            if (auto status = runtime->release())
+                diagnose(status->message);
+        for (const auto &[runtime, node] : configured)
+            runtime->configure(*node, registry, InstanceConfiguration(*node, registry, project.path.parent_path()),
+                               retry.contains(node->id));
+    }
+
+    std::vector<std::shared_ptr<CompiledFlow>> compile(const std::shared_ptr<FrozenRun> &frozen)
+    {
+        std::set<NodeId> retry;
+        for (const auto &[id, contract] : frozen->contracts) retry.insert(id);
+        synchronize(frozen->project, frozen->registry, retry);
+        {
+            std::lock_guard lock(control);
+            frozen->runtimes = nodes;
+        }
         std::vector<std::shared_ptr<CompiledFlow>> selected;
         for (const auto &flow : frozen->project.flows)
         {
@@ -405,8 +419,11 @@ struct RuntimeEngine::Impl
             std::lock_guard lock(control);
             for (auto &[id, runtime] : nodes) affected.push_back(runtime);
         }
-        for (auto &runtime : affected) runtime->reset();
-        plans.clear();
+        if (action != Management::Synchronize)
+        {
+            for (auto &runtime : affected) runtime->reset();
+            plans.clear();
+        }
         if (work)
         {
             auto status = work();
@@ -460,7 +477,7 @@ struct RuntimeEngine::Impl
                 work      = std::move(managementWork);
                 if (action == Management::Reset)
                     state = RuntimeState::Resetting;
-                if (action == Management::Refresh)
+                if (action == Management::Refresh || action == Management::Synchronize)
                     state = RuntimeState::Refreshing;
             }
             try
@@ -522,6 +539,12 @@ std::size_t RuntimeEngine::workers() const noexcept
     return impl_->executor.num_workers();
 }
 
+RuntimeState RuntimeEngine::state() const
+{
+    std::lock_guard lock(impl_->control);
+    return impl_->state;
+}
+
 ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
                                 std::optional<NodeId> target)
 {
@@ -573,12 +596,6 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                 if (!definition)
                     throw ContractError("selected node tool definition is missing: " + node.toolId);
                 frozen->contracts.emplace(node.id, nodeContract(node, *definition));
-                auto &parameters = frozen->initParameters[node.id];
-                for (const auto &port : definition->initParams)
-                {
-                    const auto value = node.initParams.find(port.id);
-                    parameters.emplace(port.id, value == node.initParams.end() ? port.defaultValue : value->second);
-                }
             }
             if (mode != RunMode::Node && hasDependencyCycle(flow))
                 throw ContractError("selected flow contains a dependency cycle");
@@ -656,26 +673,51 @@ ToolStatus RuntimeEngine::requestReset()
     return {};
 }
 
-ToolStatus RuntimeEngine::removeNodes(std::span<const NodeId> ids)
+ToolStatus RuntimeEngine::requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry)
 {
-    std::vector<std::shared_ptr<NodeRuntime>> removed;
-    {
-        std::lock_guard lock(impl_->control);
-        if (impl_->state != RuntimeState::Idle || impl_->shutdown || impl_->finishing
-            || impl_->management != Impl::Management::None || impl_->completion)
-            return {1, "runtime is busy"};
-        for (const auto id : ids)
+    std::unique_lock lock(impl_->control);
+    if (impl_->shutdown || impl_->finishing || impl_->management != Impl::Management::None || impl_->completion)
+        return {1, "运行时已有管理任务"};
+    const bool       idle    = impl_->state == RuntimeState::Idle;
+    bool             changed = !idle;
+    std::set<NodeId> identities;
+    for (const auto &flow : project.flows)
+        for (const auto &node : flow.nodes)
         {
-            const auto found = impl_->nodes.find(id);
-            if (found == impl_->nodes.end())
-                continue;
-            removed.push_back(std::move(found->second));
-            impl_->nodes.erase(found);
+            if (!identities.insert(node.id).second)
+                return {-2, "节点标识重复：" + std::to_string(node.id)};
+            if (idle)
+            {
+                const auto found = impl_->nodes.find(node.id);
+                if (found == impl_->nodes.end() || !found->second->configuration
+                    || *found->second->configuration
+                           != InstanceConfiguration(node, registry, project.path.parent_path()))
+                    changed = true;
+            }
         }
+    if (!changed && identities.size() == impl_->nodes.size())
+        return {};
+    impl_->management     = Impl::Management::Synchronize;
+    impl_->managementWork = [state = impl_.get(), project, registry]
+    {
+        state->synchronize(project, registry);
+        return ToolStatus{};
+    };
+    if (idle)
+    {
+        impl_->state          = RuntimeState::Refreshing;
+        impl_->commandPending = true;
+        impl_->commandReady.notify_one();
     }
-    for (const auto &runtime : removed)
-        if (auto status = runtime->release())
-            impl_->diagnose(status->message);
+    else
+    {
+        impl_->stopRequested = true;
+        impl_->state         = RuntimeState::Stopping;
+    }
+    const auto stop = idle ? std::shared_ptr<std::stop_source>{} : impl_->activeStop;
+    lock.unlock();
+    if (stop)
+        stop->request_stop();
     return {};
 }
 
@@ -719,6 +761,8 @@ RuntimeUpdate RuntimeEngine::pollLatest()
         NodeUpdate item{id, runtime->active.load(std::memory_order_acquire), runtime->slot.latest(), {}};
         if (const auto status = runtime->lifecycle.load(std::memory_order_acquire))
             item.lifecycleDiagnostic = *status;
+        if (const auto status = runtime->preparation.load(std::memory_order_acquire))
+            item.instanceDiagnostic = *status;
         update.nodes.push_back(std::move(item));
     }
     return update;
