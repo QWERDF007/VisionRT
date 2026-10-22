@@ -69,7 +69,7 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
     }
     catch (const std::exception &error)
     {
-        impl_->report(q(error.what()));
+        impl_->report(error, QStringLiteral("输入关联候选读取失败"));
     }
     return result;
 }
@@ -148,7 +148,7 @@ QVariantList AppController::relationTargets(const QVariantMap &context) const
     }
     catch (const std::exception &error)
     {
-        impl_->report(q(error.what()));
+        impl_->report(error, QStringLiteral("输出关联目标读取失败"));
     }
     return result;
 }

@@ -50,7 +50,7 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
     }
     catch (const std::exception &error)
     {
-        impl_->report(workbench::q(error.what()));
+        impl_->report(error, QStringLiteral("连线路径计算失败"));
         return {};
     }
 }

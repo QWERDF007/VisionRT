@@ -5,6 +5,7 @@
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
 #include "ui/AppController.h"
+#include "ui/Diagnostics.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/ToolTreeModel.h"
@@ -54,8 +55,7 @@ struct AppController::Impl
     QString                                selected;
     QString                                search;
     QString                                timing;
-    std::deque<QString>                    diagnostics;
-    QString                                diagnostic;
+    std::deque<ApplicationDiagnostic>                       diagnostics;
     std::optional<CopiedSelection>         clipboard;
     std::set<std::string>                  routingErrors;
     enum class Pending
@@ -142,6 +142,8 @@ struct AppController::Impl
     bool                                 idle();
     bool                                 applyParameter(const QString &id, bool initialization, PortValue value);
     void                                 report(const QString &text);
+    void                                 report(ApplicationDiagnostic diagnostic);
+    void                                 report(const std::exception &error, const QString &summary);
     void                                 changed(bool structure = false);
 
     template<class Function>
@@ -157,7 +159,7 @@ struct AppController::Impl
         }
         catch (const std::exception &error)
         {
-            report(workbench::q(error.what()));
+            report(error, QStringLiteral("配置操作失败"));
             return false;
         }
     }

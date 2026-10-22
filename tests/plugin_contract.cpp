@@ -21,6 +21,7 @@ using namespace visionrt;
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLibrary>
@@ -895,6 +896,25 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(app.save(temp.filePath("again/lifecycle.vrt.json")));
     waitForIdle();
     assert(app.diagnostics().size() == reported + 1);
+    const auto applicationLog = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array();
+    assert(applicationLog.size() == app.diagnostics().size());
+    for (const auto &entry : {applicationLog.at(0).toObject(), applicationLog.at(1).toObject()})
+    {
+        assert(entry.value("node") == released.value("id").toString());
+        assert(entry.value("tool_id") == "test.plugin.release_fail" && entry.value("phase") == "release");
+        assert(entry.value("code").toInt() == -4 && entry.value("message") == "释放资源失败");
+        assert(entry.value("detail") == "native release detail");
+    }
+    assert(!app.diagnostic().contains("native release detail"));
+    app.deleteNodes({released.value("id")});
+    waitForIdle();
+    assert(app.nodes().isEmpty());
+    const auto removed = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array().first().toObject();
+    assert(removed.value("node") == released.value("id").toString());
+    assert(removed.value("tool_id") == "test.plugin.release_fail" && removed.value("phase") == "release");
+    assert(removed.value("runtime_phase") == "management");
+    assert(!removed.value("generation").toString().isEmpty() && !removed.value("sequence").toString().isEmpty());
+    assert(removed.value("code").toInt() == -4 && removed.value("detail") == "native release detail");
 }
 #endif
 

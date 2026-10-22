@@ -85,12 +85,13 @@ if(VISIONRT_BUILD_APP)
         src/ui/AppControllerParameters.cpp
         src/ui/AppControllerRouting.cpp
         src/ui/AppController.h
+        src/ui/AppControllerDiagnostics.cpp
         src/ui/ToolTreeModel.cpp
         src/ui/ToolTreeModel.h
         src/ui/OutputModel.cpp
         src/ui/OutputModel.h
-        src/ui/NodeDiagnostics.cpp
-        src/ui/NodeDiagnostics.h
+        src/ui/Diagnostics.cpp
+        src/ui/Diagnostics.h
         src/ui/ImageViewport.cpp
         src/ui/ImageViewport.h
         src/ui/DisplayConverter.cpp

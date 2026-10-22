@@ -21,7 +21,6 @@ ApplicationWindow {
     property real savedLibraryHeight: 0
     property bool closingApproved: false
     property bool unsavedSaving: false
-    property var notices: []
     property int toastCount: 0
     property real leftRatio: 0.362
     property real libraryRatio: 0.38
@@ -568,10 +567,20 @@ ApplicationWindow {
         useNegativeButton: false; positiveText: "关闭"
         message: "工具声明与实现由 VisionTools 维护。通过工具库打包脚本生成 ZIP，再由 VisionRT 部署入口安装。安装元数据只读；修改后重新打包，在退出宿主后更换工具包。"
     }
-    WorkbenchDialog {
-        id: noticeDialog; title: "应用操作提示"; width: Math.min(800, window.width - 40)
-        useNegativeButton: false; positiveText: "关闭"
-        message: window.notices.join("\n\n")
+    WorkbenchTextDialog {
+        id: noticeDialog; objectName: "applicationDiagnosticDialog"; title: "应用操作提示"
+        text: app.diagnostics.join("\n\n")
+        useNeutralButton: true; neutralText: "查看 JSON"
+        onNeutralClickListener: function() {
+            noticeJsonDialog.text = app.diagnosticsJson()
+            noticeJsonDialog.open()
+        }
+        useNegativeButton: true; negativeText: "复制 JSON"
+        onNegativeClickListener: function() { app.copyDiagnostics() }
+    }
+    WorkbenchTextDialog {
+        id: noticeJsonDialog; objectName: "applicationDiagnosticJsonDialog"; title: "应用诊断 JSON"
+        monospace: true
     }
     QuiInfoBar { id: info; root: window.contentItem; maxWidth: Math.min(520, window.width - 40) }
     Timer { id: toastExpiry; interval: 6000; onTriggered: { info.clearAllInfo(); window.toastCount = 0 } }
@@ -582,11 +591,5 @@ ApplicationWindow {
         function onCloseReady() { window.closingApproved = true; window.close() }
         function onProjectReplaced() { unsaved.close(); window.unsavedSaving = false; window.resetLayout() }
         function onProjectChanged() { if (!app.dirty && window.unsavedSaving) { unsaved.close(); window.unsavedSaving = false } }
-        function onDiagnosticChanged() {
-            if (!app.diagnostic) return
-            let list = window.notices.slice()
-            if (!list.length || list[0] !== app.diagnostic) list.unshift(app.diagnostic)
-            window.notices = list.slice(0, 100)
-        }
     }
 }
