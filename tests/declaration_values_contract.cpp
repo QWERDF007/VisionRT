@@ -1,10 +1,11 @@
 #ifdef NDEBUG
-#undef NDEBUG
+#    undef NDEBUG
 #endif
 
-#include "core/ToolValueValidation.h"
-#include "core/ToolDefinition.h"
 #include "core/ToolDeclarationYaml.h"
+#include "core/ToolDefinition.h"
+#include "core/ToolValueValidation.h"
+
 #include <visionrt/contracts/Tool.h>
 
 #include <cassert>
@@ -16,13 +17,20 @@
 using namespace visionrt;
 
 namespace {
-template<class F> void rejects(F&& operation, const std::string& expectedFragment = {}) {
-    try {
+template<class F>
+void rejects(F &&operation, const std::string &expectedFragment = {})
+{
+    try
+    {
         operation();
-    } catch (const ContractError& error) {
-        if (!expectedFragment.empty()) {
+    }
+    catch (const ContractError &error)
+    {
+        if (!expectedFragment.empty())
+        {
             const std::string message = error.what();
-            if (message.find(expectedFragment) == std::string::npos) {
+            if (message.find(expectedFragment) == std::string::npos)
+            {
                 std::cerr << "Unexpected message: " << message << " (expected fragment: " << expectedFragment << ")\n";
                 std::abort();
             }
@@ -33,24 +41,19 @@ template<class F> void rejects(F&& operation, const std::string& expectedFragmen
     std::abort();
 }
 
-PortDefinition port(std::string id, TypeSpec type) {
+PortDefinition port(std::string id, TypeSpec type, bool required = true)
+{
     PortDefinition definition;
-    definition.id = std::move(id);
-    definition.name = definition.id;
-    definition.type = type;
+    definition.id       = std::move(id);
+    definition.name     = definition.id;
+    definition.type     = type;
+    definition.required = required;
     return definition;
-}
-
-PortContract contract(std::string id, TypeSpec type, bool required = true) {
-    PortContract result;
-    result.id = std::move(id);
-    result.type = type;
-    result.required = required;
-    return result;
 }
 } // namespace
 
-int main() {
+int main()
+{
     // CT-01: a single classification for every resource-path editor.
     {
         const auto definition = parseToolDefinitionYaml(R"(
@@ -72,15 +75,17 @@ outputs: []
         assert(isPathPort(definition.inputs[2]));
         assert(isPathPort(definition.inputs[3]));
         assert(!isPathPort(definition.inputs[0]));
-        auto plain = port("plain", {Type::String});
+        auto plain   = port("plain", {Type::String});
         plain.editor = "text";
         assert(!isPathPort(plain));
-        auto wrongType = port("wrong", {Type::Int});
+        auto wrongType   = port("wrong", {Type::Int});
         wrongType.editor = "file";
         assert(!isPathPort(wrongType));
 
-        rejects([] {
-            (void)parseToolDefinitionYaml(R"(
+        rejects(
+            []
+            {
+                (void)parseToolDefinitionYaml(R"(
 schema_version: 1
 tool_id: runtime.paths.bad.file
 display_name: 错误文件端口
@@ -92,9 +97,12 @@ inputs:
   - {id: file, name: 文件, type: Int, editor: file}
 outputs: []
 )");
-        }, "路径编辑器");
-        rejects([] {
-            (void)parseToolDefinitionYaml(R"(
+            },
+            "路径编辑器");
+        rejects(
+            []
+            {
+                (void)parseToolDefinitionYaml(R"(
 schema_version: 1
 tool_id: runtime.paths.bad.directory
 display_name: 错误目录端口
@@ -106,7 +114,8 @@ inputs:
   - {id: directory, name: 目录, type: Bool, editor: directory}
 outputs: []
 )");
-        }, "路径编辑器");
+            },
+            "路径编辑器");
     }
 
     // CT-02: one execution status rule shared by tools and the host.
@@ -131,7 +140,7 @@ outputs: []
         const auto cancelledWithReason = normalizeExecutionStatus({-5, "用户停止"});
         assert(cancelledWithReason.message == "用户停止");
 
-        const auto once = normalizeExecutionStatus({-1, ""});
+        const auto once  = normalizeExecutionStatus({-1, ""});
         const auto twice = normalizeExecutionStatus(once);
         assert(once.code == twice.code && once.message == twice.message);
         assert(static_cast<bool>(ToolStatus{0, ""}));
@@ -140,57 +149,179 @@ outputs: []
 
     // CT-03: one actual-value implementation for options, range and finite values.
     {
-        auto choice = contract("mode", {Type::Int});
+        auto choice    = port("mode", {Type::Int});
         choice.options = {PortValue{std::int64_t{1}}, PortValue{std::int64_t{2}}};
-        validateToolValues({choice}, {{"mode", std::int64_t{2}}}, false);
-        rejects([&] { validateToolValues({choice}, {{"mode", std::int64_t{3}}}, false); }, "mode");
+        validateToolValues(
+            {
+                choice
+        },
+            {{"mode", std::int64_t{2}}});
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        choice
+                },
+                    {{"mode", std::int64_t{3}}});
+            },
+            "mode");
 
-        auto ranged = contract("threshold", {Type::Int});
+        auto ranged    = port("threshold", {Type::Int});
         ranged.minimum = PortValue{std::int64_t{0}};
         ranged.maximum = PortValue{std::int64_t{10}};
-        validateToolValues({ranged}, {{"threshold", std::int64_t{0}}}, false);
-        validateToolValues({ranged}, {{"threshold", std::int64_t{10}}}, false);
-        rejects([&] { validateToolValues({ranged}, {{"threshold", std::int64_t{-1}}}, false); }, "threshold");
-        rejects([&] { validateToolValues({ranged}, {{"threshold", std::int64_t{11}}}, false); }, "threshold");
+        validateToolValues(
+            {
+                ranged
+        },
+            {{"threshold", std::int64_t{0}}});
+        validateToolValues(
+            {
+                ranged
+        },
+            {{"threshold", std::int64_t{10}}});
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        ranged
+                },
+                    {{"threshold", std::int64_t{-1}}});
+            },
+            "threshold");
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        ranged
+                },
+                    {{"threshold", std::int64_t{11}}});
+            },
+            "threshold");
 
-        constexpr std::int64_t large = 9007199254740993LL;
-        auto precise = contract("count", {Type::Int});
-        precise.minimum = PortValue{large};
-        precise.maximum = PortValue{large};
-        validateToolValues({precise}, {{"count", large}}, false);
-        rejects([&] { validateToolValues({precise}, {{"count", large - 1}}, false); }, "count");
+        constexpr std::int64_t large   = 9007199254740993LL;
+        auto                   precise = port("count", {Type::Int});
+        precise.minimum                = PortValue{large};
+        precise.maximum                = PortValue{large};
+        validateToolValues(
+            {
+                precise
+        },
+            {{"count", large}});
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        precise
+                },
+                    {{"count", large - 1}});
+            },
+            "count");
 
-        auto finite = contract("ratio", {Type::Float});
+        auto finite    = port("ratio", {Type::Float});
         finite.minimum = PortValue{0.0};
-        rejects([&] {
-            validateToolValues({finite}, {{"ratio", std::numeric_limits<double>::quiet_NaN()}}, false);
-        }, "ratio");
-        rejects([&] {
-            validateToolValues({finite}, {{"ratio", std::numeric_limits<double>::infinity()}}, false);
-        }, "ratio");
-        validateToolValues({contract("ratio", {Type::Float})},
-                           {{"ratio", std::numeric_limits<double>::quiet_NaN()}}, false);
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        finite
+                },
+                    {{"ratio", std::numeric_limits<double>::quiet_NaN()}});
+            },
+            "ratio");
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        finite
+                },
+                    {{"ratio", std::numeric_limits<double>::infinity()}});
+            },
+            "ratio");
+        validateToolValues(
+            {
+                port("ratio", {Type::Float}
+                 )
+        },
+            {{"ratio", std::numeric_limits<double>::quiet_NaN()}});
 
-        rejects([&] { validateToolValues({contract("image", {Type::ImageBatch})}, {}, false); }, "image");
-        validateToolValues({contract("image", {Type::ImageBatch})}, {}, true);
-        rejects([&] { validateToolValues({contract("image", {Type::ImageBatch})}, {{"image", Missing{}}}, false); },
-                "image");
-        rejects([&] { validateToolValues({contract("count", {Type::Int})}, {{"count", true}}, false); }, "count");
+        rejects([&] { validateToolValues({port("image", {Type::ImageBatch})}, {}); }, "image");
+        validateToolValues({port("image", {Type::ImageBatch}, false)}, {});
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        port("image", {Type::ImageBatch}
+                         )
+                },
+                    {{"image", Missing{}}});
+            },
+            "image");
+        rejects(
+            [&]
+            {
+                validateToolValues(
+                    {
+                        port("count", {Type::Int}
+                         )
+                },
+                    {{"count", true}});
+            },
+            "count");
 
         PortDefinition declared = port("limit", {Type::Int});
-        declared.defaultValue = PortValue{std::int64_t{5}};
-        declared.minimum = PortValue{std::int64_t{1}};
-        declared.maximum = PortValue{std::int64_t{9}};
-        declared.options = {PortValue{std::int64_t{5}}, PortValue{std::int64_t{7}}};
-        const auto generated = portContractFromDefinition(declared);
-        assert(generated.id == "limit");
-        assert(!generated.required);
-        assert(generated.options.size() == 2);
-        assert(generated.minimum && generated.maximum);
-        const auto required = portContractFromDefinition(port("required", {Type::String}));
-        assert(required.required);
+        declared.defaultValue   = PortValue{std::int64_t{5}};
+        declared.minimum        = PortValue{std::int64_t{1}};
+        declared.maximum        = PortValue{std::int64_t{9}};
+        declared.options        = {PortValue{std::int64_t{5}}, PortValue{std::int64_t{7}}};
+        assert(declared.required);
+        rejects([&] { validateToolValues({declared}, {}); }, "limit");
+        rejects([&] { validateToolValue(declared, Missing{}); }, "limit");
+        validateToolValue(declared, std::int64_t{5});
+        declared.required = false;
+        validateToolValues({declared}, {});
+        validateToolValue(declared, Missing{});
+        rejects([&] { validateToolValue(declared, std::int64_t{0}); }, "limit");
+        rejects([&] { validateToolValue(declared, std::int64_t{6}); }, "limit");
+        auto optional = port("optional", {Type::ImageBatch}, false);
+        validateToolValue(optional, ImageBatch{});
+        rejects([&] { validateToolValue(optional, std::int64_t{0}); }, "optional");
     }
 
+    {
+        const auto declared = parseToolDefinitionYaml(R"(
+schema_version: 1
+tool_id: runtime.required
+display_name: 必填声明
+version: 1.0.0
+kind: cpp_class
+entry: {registry_name: runtime.required}
+init_params:
+  - {id: seed, name: 种子, type: Int, default: 5, required: false}
+inputs:
+  - {id: input, name: 输入, type: String, default: text}
+  - {id: optional, name: 可选输入, type: Int, required: false}
+outputs: []
+)");
+        assert(!declared.initParams[0].required);
+        assert(declared.inputs[0].required);
+        assert(!declared.inputs[1].required);
+        validateToolValues(declared.initParams, {
+                                                    {"seed", Missing{}}
+        });
+        validateToolValue(declared.inputs[1], Missing{});
+        rejects([&] { validateToolValue(declared.inputs[0], Missing{}); }, "input");
+        const auto roundTrip = parseToolDefinitionYaml(emitNormalizedToolYaml(declared));
+        assert(!roundTrip.initParams[0].required);
+        assert(roundTrip.inputs[0].required);
+        assert(!roundTrip.inputs[1].required);
+    }
     std::cout << "[Runtime Contract] Path classification, status normalization and value constraints verified.\n";
     return 0;
 }

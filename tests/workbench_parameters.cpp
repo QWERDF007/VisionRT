@@ -56,7 +56,7 @@ void parameterEditorsContract()
           "  - {id: note, name: 备注, type: String, default: 中文备注}\n"
           "  - {id: directory, name: 数据目录, type: String, default: 'F:/tmp', editor: directory}\n"
           "  - {id: weights, name: 数值数组, type: NumericArray, dtype: float64, rank: 1, default: {shape: [2], data: [0, 1]}}\n"
-          "  - {id: images, name: 图像, type: ImageBatch, default: []}\n"
+          "  - {id: images, name: 图像, type: ImageBatch, default: [], required: false}\n"
           "  - {id: rois, name: 区域, type: RoiBatch, default: [], image_input: images}\n"
           "outputs:\n  - {id: ratio, name: 比例, type: Float}\n  - {id: count, name: 整数, type: Int}\n");
 

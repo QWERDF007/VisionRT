@@ -247,6 +247,7 @@ void initializationSuppressionRetryAndReset()
         });
     auto observer = definition("test.observer", {"input"});
     observer.inputs[0].defaultValue = std::int64_t{0};
+    observer.inputs[0].required = false;
     install(registry, observer,
             [&](const Values &)
             {
@@ -1081,6 +1082,57 @@ void singleNodeUpstreamValidity()
     std::cout << "Single-node execution rejects stale upstream publications and ignores layout changes\n";
 }
 
+void explicitRequirednessAtExecution()
+{
+    for (const bool initialization : {false, true})
+        for (const bool required : {false, true})
+            for (const bool explicitMissing : {false, true})
+            {
+                RuntimeEngine engine(1);
+                ToolRegistry registry;
+                auto declared = definition("test.required");
+                PortDefinition limit{"limit", "限制", {Type::Int}, std::int64_t{5}};
+                limit.required = required;
+                (initialization ? declared.initParams : declared.inputs).push_back(limit);
+                int initialized = 0;
+                int executed = 0;
+                install(registry, declared,
+                        [&](const Values &inputs)
+                        {
+                            ++executed;
+                            if (!initialization)
+                                assert(equalValues(inputs.at("limit"), explicitMissing ? PortValue{Missing{}}
+                                                                                     : PortValue{std::int64_t{5}}));
+                            return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                        },
+                        [&]
+                        {
+                            ++initialized;
+                            return ToolStatus{};
+                        });
+                auto configured = node(1, declared);
+                if (initialization)
+                {
+                    configured.signatures.initParams.emplace("limit", TypeSpec{Type::Int});
+                    if (explicitMissing)
+                        configured.initParams.emplace("limit", Missing{});
+                }
+                else if (!explicitMissing)
+                    configured.inputs.erase("limit");
+                ProjectDefinition project;
+                project.flows.front().nodes = {configured};
+                assert(engine.start(project, registry, RunMode::Once));
+                const auto result = snapshot(finish(engine), 1);
+                const bool accepted = !required || !explicitMissing;
+                assert(static_cast<bool>(result->status) == accepted);
+                assert(initialized == (accepted ? 1 : 0));
+                assert(executed == (accepted ? 1 : 0));
+                if (!accepted)
+                    assert(result->status.message.find("limit") != std::string::npos);
+            }
+    std::cout << "Explicit requiredness governs input and initialization Missing values independently of defaults\n";
+}
+
 void diagnosticIdentityAndTruncation()
 {
     RuntimeEngine engine(1);
@@ -1110,6 +1162,7 @@ void diagnosticIdentityAndTruncation()
 int main(int argc, char **argv)
 {
     assert(argc == 2);
+    explicitRequirednessAtExecution();
     diagnosticIdentityAndTruncation();
     singleNodeUpstreamValidity();
     stopWakesReceiverWait(argv[1]);
