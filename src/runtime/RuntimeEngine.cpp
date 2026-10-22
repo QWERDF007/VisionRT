@@ -617,9 +617,9 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                 throw ContractError("执行流程存在依赖循环：" + flow.id);
         }
         if (mode == RunMode::Node && (!target || !targetFound))
-            return {1, "target node does not exist"};
+            return {1, "目标节点不存在：" + (target ? std::to_string(*target) : "未指定")};
         if (frozen->selected.empty() || !nonempty)
-            return {1, "select at least one nonempty flow"};
+            return {1, "请至少选择一个非空流程"};
         if (mode == RunMode::Node)
         {
             if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
@@ -676,9 +676,9 @@ ToolStatus RuntimeEngine::requestReset()
 {
     std::unique_lock lock(impl_->control);
     if (impl_->shutdown || impl_->finishing || impl_->management != Impl::Management::None || impl_->completion)
-        return {1, "runtime management is already pending"};
+        return {1, "已有运行时管理操作尚未完成"};
     if (impl_->state == RuntimeState::Refreshing || impl_->state == RuntimeState::Resetting)
-        return {1, "runtime management is already pending"};
+        return {1, "已有运行时管理操作尚未完成"};
     impl_->management    = Impl::Management::Reset;
     impl_->stopRequested = true;
     if (impl_->state == RuntimeState::Idle)
@@ -749,7 +749,7 @@ ToolStatus RuntimeEngine::requestRefresh(std::function<ToolStatus()> work)
 {
     std::lock_guard lock(impl_->control);
     if (impl_->state != RuntimeState::Idle || impl_->shutdown)
-        return {1, "refresh requires Idle"};
+        return {1, "只能在空闲状态刷新工具目录"};
     impl_->management     = Impl::Management::Refresh;
     impl_->managementWork = std::move(work);
     impl_->state          = RuntimeState::Refreshing;

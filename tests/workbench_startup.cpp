@@ -5,6 +5,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QClipboard>
+#include <QFile>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -12,6 +13,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTest>
+#include <QTemporaryDir>
 #include <iostream>
 #include <stdexcept>
 
@@ -91,6 +93,83 @@ void startupProjectContract()
         std::cout << "[Startup Contract Passed] " << mode << " project has five visible, readable nodes.\n";
         if (projectReadyBeforeWindow)
         {
+            QTemporaryDir directory;
+            require(directory.isValid(), "project diagnostic directory is unavailable");
+            const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
+            QFile      badProject(badPath);
+            require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
+            require(badProject.write(R"json({"format_version":2,"project":{},"flows":{}})json") > 0,
+                    "cannot populate malformed project fixture");
+            badProject.close();
+            const auto oldNodes   = app.nodes();
+            const auto oldFlows   = app.flows();
+            const auto oldTitle   = app.title();
+            const auto beforeOpen = app.diagnostics().size();
+            app.requestOpen(badPath);
+            app.resolveUnsaved(QStringLiteral("discard"));
+            require(QTest::qWaitFor([&] { return !app.busy() && app.diagnostics().size() > beforeOpen; }, 3000),
+                    "project contract failure did not reach the application");
+            const auto failure = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array().at(0).toObject();
+            require(failure.value("code").toInt() == -2
+                        && failure.value("message").toString().contains(QStringLiteral("flows 必须是数组"))
+                        && failure.value("message").toString().contains(badPath)
+                        && failure.value("detail").toString().isEmpty(),
+                    "project contract reason was hidden behind an unrelated summary or exception detail");
+            require(app.nodes() == oldNodes && app.flows() == oldFlows && app.title() == oldTitle,
+                    "malformed project replaced the active project");
+            auto *failureNotice = window->findChild<QObject *>("applicationDiagnosticDialog");
+            require(failureNotice && QMetaObject::invokeMethod(failureNotice, "open"),
+                    "project diagnostic dialog is missing");
+            require(QTest::qWaitFor([&] { return failureNotice->property("opened").toBool(); }, 1000)
+                        && failureNotice->property("text").toString().contains(app.diagnostic()),
+                    "real window did not display the precise project rejection");
+            require(window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/project_load_failure.png")),
+                    "cannot capture project failure diagnostic");
+            require(QMetaObject::invokeMethod(failureNotice, "close"), "cannot close project failure diagnostic");
+            require(QTest::qWaitFor([&] { return !failureNotice->property("visible").toBool(); }, 1000),
+                    "project failure diagnostic did not close");
+            QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
+            require(example.open(QIODevice::ReadOnly), "cannot read project warning fixture");
+            auto document     = QJsonDocument::fromJson(example.readAll()).object();
+            auto projectFlows = document.value("flows").toArray();
+            auto projectFlow  = projectFlows.at(0).toObject();
+            auto projectNodes = projectFlow.value("nodes").toArray();
+            auto configured   = projectNodes.at(3).toObject();
+            require(configured.value("node_seq").toString() == "4", "project warning node identity changed");
+            auto inputs = configured.value("inputs").toObject();
+            auto kernel = inputs.value("kernel").toObject();
+            kernel.insert("literal", 0);
+            inputs.insert("kernel", kernel);
+            configured.insert("inputs", inputs);
+            projectNodes[3] = configured;
+            projectFlow.insert("nodes", projectNodes);
+            projectFlows[0] = projectFlow;
+            document.insert("flows", projectFlows);
+            const auto warningPath = directory.filePath(QStringLiteral("越界 工程.vrt.json"));
+            QFile      warningProject(warningPath);
+            require(
+                warningProject.open(QIODevice::WriteOnly) && warningProject.write(QJsonDocument(document).toJson()) > 0,
+                "cannot write project warning fixture");
+            warningProject.close();
+            app.requestOpen(warningPath);
+            app.resolveUnsaved(QStringLiteral("discard"));
+            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 3000),
+                    "project warning load did not complete");
+            QJsonObject rangeWarning;
+            for (const auto &entry : QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array())
+                if (entry.toObject().value("storage_code") == "range_warning")
+                    rangeWarning = entry.toObject();
+            require(rangeWarning.value("flow_id") == "flow_1" && rangeWarning.value("node") == "4"
+                        && rangeWarning.value("field") == "kernel"
+                        && rangeWarning.value("message").toString().contains(QStringLiteral("已保留原值"))
+                        && !rangeWarning.contains("code"),
+                    "project warning lost its typed context or invented an execution status");
+            app.selectNode("4");
+            bool retained = false;
+            for (const auto &parameter : app.parameters())
+                if (parameter.toMap().value("id") == "kernel")
+                    retained = parameter.toMap().value("valueText") == "0";
+            require(retained, "loading a range warning clamped the original parameter");
             const auto previous = app.diagnostics().size();
             app.addNode("test.unregistered", 0, 0);
             app.addNode("test.unregistered", 0, 0);
@@ -103,6 +182,8 @@ void startupProjectContract()
                     "application diagnostic dialog did not open");
             const auto summaries = notice->property("text").toString();
             require(summaries.count(app.diagnostic()) >= 2, "QML hides a same-text new diagnostic event");
+            require(summaries.contains(QStringLiteral("流程 flow_1 · 节点 4 · 字段 kernel：")),
+                    "real diagnostic dialog omitted project warning context");
             const auto findText = [](auto &&self, QQuickItem *parent, const QString &text) -> QQuickItem *
             {
                 if (parent->isVisible() && parent->property("text").toString() == text)

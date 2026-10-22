@@ -60,7 +60,7 @@ void resolveOutputTypes(ProjectDefinition &project)
             for (const auto &[port, reference] : node.outputTypeSources)
                 resolution.outputs.erase(port);
             if (!resolutions.emplace(node.id, std::move(resolution)).second)
-                throw ContractError("Duplicate node ID");
+                throw ContractError("节点标识重复：" + std::to_string(node.id));
         }
     std::set<std::pair<NodeId, std::string>> resolving;
     std::function<std::optional<TypeSpec>(const NodeDefinition &, const std::string &)> resolve;
@@ -149,7 +149,7 @@ void resolveOutputTypes(ProjectDefinition &project)
             {
                 if (node.executionRevision == std::numeric_limits<std::uint64_t>::max()
                     || flow.structureRevision == std::numeric_limits<std::uint64_t>::max())
-                    throw ContractError("Output type revision exhausted");
+                    throw ContractError("输出类型修订计数已耗尽");
                 changedFlows.insert(flow.id);
             }
     for (auto &flow : project.flows)
@@ -180,8 +180,8 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
             if (type == node.signatures.outputs.end())
             {
                 const auto error = node.outputTypeErrors.find(port.id);
-                throw ContractError("Unresolved output type for " + node.title() + "." + port.id + ": "
-                    + (error == node.outputTypeErrors.end() ? "source is not configured" : error->second));
+                throw ContractError("输出类型无法解析：" + node.title() + "." + port.id + "："
+                                    + (error == node.outputTypeErrors.end() ? "未配置类型来源" : error->second));
             }
             port.type = type->second;
             port.typeFrom.reset();

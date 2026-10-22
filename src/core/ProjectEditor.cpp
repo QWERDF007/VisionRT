@@ -14,13 +14,13 @@ constexpr auto maximumCounter = std::numeric_limits<std::uint64_t>::max();
 void requireIncrement(std::uint64_t value)
 {
     if (value == maximumCounter)
-        throw ContractError("Configuration counter exhausted");
+        throw ContractError("工程配置修订计数已耗尽");
 }
 
 void requireEditable(const NodeDefinition &node)
 {
     if (!node.unresolved.isEmpty())
-        throw ContractError("Missing tool definition: parameters are read-only");
+        throw ContractError("工具定义缺失，参数只读：" + node.toolId);
 }
 
 const NodeDefinition &findNode(const FlowDefinition &flow, NodeId id)
@@ -28,7 +28,7 @@ const NodeDefinition &findNode(const FlowDefinition &flow, NodeId id)
     const auto found
         = std::find_if(flow.nodes.begin(), flow.nodes.end(), [id](const auto &node) { return node.id == id; });
     if (found == flow.nodes.end())
-        throw ContractError("Node is not in this flow");
+        throw ContractError("节点不属于当前流程：" + std::to_string(id));
     return *found;
 }
 
@@ -41,7 +41,7 @@ const TypeSpec &signature(const TypeMap &types, std::string_view port)
 {
     const auto found = types.find(port);
     if (found == types.end())
-        throw ContractError("Port has no type signature");
+        throw ContractError("端口缺少类型声明：" + std::string(port));
     return found->second;
 }
 
@@ -49,7 +49,7 @@ const InputBinding &inputBinding(const NodeDefinition &node, std::string_view in
 {
     const auto found = node.inputs.find(input);
     if (found == node.inputs.end())
-        throw ContractError("Input does not exist");
+        throw ContractError("输入端口不存在：" + std::string(input));
     return found->second;
 }
 
@@ -57,7 +57,7 @@ void validateLiteral(const TypeSpec &type, const PortValue &value)
 {
     validateValue(type, value);
     if (const auto *images = std::get_if<ImageBatch>(&value); images && !images->images().empty())
-        throw ContractError("Image literals may only be Missing or an empty batch");
+        throw ContractError("图像字面量只能是 Missing 或空批次");
 }
 
 const std::optional<SourcePort> &effectiveSource(const InputBinding &binding)
@@ -84,7 +84,7 @@ PortRelations deriveRelations(const FlowDefinition &flow, NodeId replacedNode = 
     for (const auto &node : flow.nodes)
     {
         if (!nodes.emplace(node.id, &node).second)
-            throw ContractError("Duplicate node ID");
+            throw ContractError("节点标识重复：" + std::to_string(node.id));
     }
     PortRelations result;
     for (const auto &target : flow.nodes)
@@ -100,16 +100,16 @@ PortRelations deriveRelations(const FlowDefinition &flow, NodeId replacedNode = 
             {
                 const auto found = nodes.find(source.node);
                 if (found == nodes.end())
-                    throw ContractError("Upstream node is not in this flow");
+                    throw ContractError("上游节点不属于当前流程");
                 if (!compatible(signature(found->second->signatures.outputs, source.port),
                                 signature(target.signatures.inputs, input)))
-                    throw ContractError("Incompatible upstream port signature");
+                    throw ContractError("上游输出与输入端口类型不兼容");
                 result.active.push_back({source, {target.id, input}});
             }
             catch (const ContractError &error)
             {
-                result.errors.push_back(std::string(error.what()) + ": node " + std::to_string(source.node)
-                                        + "." + source.port + " -> node " + std::to_string(target.id) + "." + input);
+                result.errors.push_back(std::string(error.what()) + "：节点 " + std::to_string(source.node) + "."
+                                        + source.port + " -> 节点 " + std::to_string(target.id) + "." + input);
             }
         }
     }
@@ -159,7 +159,7 @@ GridPoint translated(GridPoint point, std::int64_t dx, std::int64_t dy)
     const auto y = static_cast<std::int64_t>(point.y) + dy;
     if (x < std::numeric_limits<int>::min() || x > std::numeric_limits<int>::max()
         || y < std::numeric_limits<int>::min() || y > std::numeric_limits<int>::max())
-        throw ContractError("Grid coordinate overflow");
+        throw ContractError("网格坐标超出范围");
     return {static_cast<int>(x), static_cast<int>(y)};
 }
 
@@ -177,7 +177,7 @@ std::pair<std::int64_t, std::int64_t> nearestTranslation(std::span<const GridPoi
     for (auto point : points)
     {
         if (!unique.emplace(point.x, point.y).second)
-            throw ContractError("Copied nodes overlap; repair their layout first");
+            throw ContractError("复制的节点存在重叠，请先修复布局");
         minX = std::max(minX, static_cast<std::int64_t>(std::numeric_limits<int>::min()) - point.x);
         maxX = std::min(maxX, static_cast<std::int64_t>(std::numeric_limits<int>::max()) - point.x);
         minY = std::max(minY, static_cast<std::int64_t>(std::numeric_limits<int>::min()) - point.y);
@@ -214,7 +214,7 @@ std::pair<std::int64_t, std::int64_t> nearestTranslation(std::span<const GridPoi
             }
         }
     }
-    throw ContractError("No free grid placement exists");
+    throw ContractError("网格中没有可用的放置位置");
 }
 
 std::vector<const NodeDefinition *> selection(const FlowDefinition &source, std::span<const NodeId> ids)
@@ -226,7 +226,7 @@ std::vector<const NodeDefinition *> selection(const FlowDefinition &source, std:
         if (wanted.erase(node.id))
             result.push_back(&node);
     if (!wanted.empty())
-        throw ContractError("Selected node is not in this flow");
+        throw ContractError("选中的节点不属于当前流程");
     return result;
 }
 
@@ -240,7 +240,7 @@ CopiedNodes duplicateNodes(std::span<const NodeDefinition *const> selected, Node
                            std::int64_t dy)
 {
     if (selected.size() > maximumCounter - next)
-        throw ContractError("Node IDs exhausted");
+        throw ContractError("节点标识序号已耗尽");
     CopiedNodes result;
     result.nodes.reserve(selected.size());
     for (const auto *node : selected) result.mapping.emplace(node->id, next++);
@@ -277,7 +277,7 @@ std::string flowName(const ProjectDefinition &project, std::string requested, co
     {
         validateUtf8(requested);
         if (exists(requested))
-            throw ContractError("Flow name must be unique");
+            throw ContractError("流程名称不能重复");
         return requested;
     }
     auto name = base;
@@ -384,7 +384,7 @@ ProjectEditor::ProjectEditor(ProjectDefinition project)
 void ProjectEditor::requireIdle() const
 {
     if (busy_)
-        throw ContractError("Project configuration is locked while busy");
+        throw ContractError("运行或管理期间不能修改工程配置");
 }
 
 const FlowDefinition &ProjectEditor::flow(std::string_view id) const
@@ -392,7 +392,7 @@ const FlowDefinition &ProjectEditor::flow(std::string_view id) const
     const auto found
         = std::find_if(project_.flows.begin(), project_.flows.end(), [id](const auto &item) { return item.id == id; });
     if (found == project_.flows.end())
-        throw ContractError("Flow does not exist");
+        throw ContractError("流程不存在：" + std::string(id));
     return *found;
 }
 
@@ -405,7 +405,7 @@ void ProjectEditor::replaceProject(ProjectDefinition project)
 {
     requireIdle();
     if (project.flows.empty())
-        throw ContractError("A project needs at least one flow");
+        throw ContractError("工程必须至少包含一个流程");
     resolveOutputTypes(project);
     project_ = std::move(project);
 }
@@ -425,7 +425,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     requireIncrement(edit.project_.nextNodeId);
     requireIncrement(target.structureRevision);
     if (tool.id.empty())
-        throw ContractError("Tool ID is empty");
+        throw ContractError("工具标识不能为空");
     NodeDefinition node;
     node.id               = edit.project_.nextNodeId;
     node.toolId           = tool.id;
@@ -434,7 +434,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     {
         validateLiteral(parameter.type, parameter.defaultValue);
         if (!node.signatures.initParams.emplace(parameter.id, parameter.type).second)
-            throw ContractError("Duplicate initialization parameter");
+            throw ContractError("初始化参数标识重复");
         node.initParams.emplace(parameter.id, parameter.defaultValue);
     }
     for (const auto &input : tool.inputs)
@@ -442,7 +442,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
         validateLiteral(input.type, input.defaultValue);
         if (node.signatures.initParams.contains(input.id)
             || !node.signatures.inputs.emplace(input.id, input.type).second)
-            throw ContractError("Duplicate input parameter");
+            throw ContractError("输入参数标识重复");
         const bool hasDefault = !isMissing(input.defaultValue);
         const bool canBeLiteral = input.type.type != Type::ImageBatch && hasDefault;
         node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream, input.defaultValue, {}});
@@ -453,7 +453,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
             continue;
         validateTypeSpec(output.type);
         if (!node.signatures.outputs.emplace(output.id, output.type).second)
-            throw ContractError("Duplicate output port");
+            throw ContractError("输出端口标识重复");
     }
     const GridPoint origin{};
     const auto [x, y] = nearestTranslation(std::span(&origin, 1), target, preferred);
@@ -475,12 +475,12 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
     const auto &current = inputBinding(node, input);
     const auto &type    = signature(node.signatures.inputs, input);
     if (binding.mode != BindingMode::Literal && binding.mode != BindingMode::Upstream)
-        throw ContractError("Invalid input mode");
+        throw ContractError("输入绑定模式无效");
     validateLiteral(type, binding.literal);
     if (binding.source
         && !compatible(signature(findNode(target, binding.source->node).signatures.outputs, binding.source->port),
                        type))
-        throw ContractError("Incompatible upstream port signature");
+        throw ContractError("上游输出与输入端口类型不兼容");
     if (current.mode == binding.mode && current.source == binding.source
         && equalValues(current.literal, binding.literal))
         return false;
@@ -488,7 +488,7 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
     const bool executionChanged = !sameEffectiveValue(current, binding);
     if (structureChanged && effectiveSource(binding)
         && containsCycle(deriveEdges(deriveRelations(target, id, input, &binding))))
-        throw ContractError("Binding would create a dependency cycle");
+        throw ContractError("绑定将形成依赖循环");
     if (structureChanged)
         requireIncrement(target.structureRevision);
     if (executionChanged)
@@ -544,7 +544,7 @@ bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string
     requireEditable(node);
     const auto found = node.initParams.find(parameter);
     if (found == node.initParams.end())
-        throw ContractError("Initialization parameter does not exist");
+        throw ContractError("初始化参数不存在");
     validateLiteral(signature(node.signatures.initParams, parameter), value);
     if (equalValues(found->second, value))
         return false;
@@ -620,7 +620,7 @@ bool ProjectEditor::renameProject(std::string name)
     requireIdle();
     validateUtf8(name);
     if (name.empty())
-        throw ContractError("Project name is empty");
+        throw ContractError("工程名称不能为空");
     if (project_.name == name)
         return false;
     project_.name  = std::move(name);
@@ -647,7 +647,7 @@ bool ProjectEditor::renameFlow(std::string_view flowId, std::string name)
     ProjectEditor edit(project_);
     auto &target = edit.flow(flowId);
     if (name.empty())
-        throw ContractError("Flow name is empty");
+        throw ContractError("流程名称不能为空");
     name = flowName(project_, std::move(name), {}, flowId);
     if (target.name == name)
         return false;
@@ -674,7 +674,7 @@ std::string ProjectEditor::removeFlow(std::string_view flowId)
     auto &candidate = edit.project_;
     auto &target = edit.flow(flowId);
     if (candidate.flows.size() == 1)
-        throw ContractError("Cannot delete the last flow");
+        throw ContractError("不能删除最后一个流程");
     const auto       index    = static_cast<std::size_t>(&target - candidate.flows.data());
     auto             adjacent = candidate.flows[index + 1 < candidate.flows.size() ? index + 1 : index - 1].id;
     std::set<NodeId> removed;
@@ -751,11 +751,11 @@ bool ProjectEditor::moveNodes(std::string_view flowId, std::span<const NodeId> n
         moving.insert(node->id);
         const auto position = translated(node->position, delta.x, delta.y);
         if (!destinations.emplace(position.x, position.y).second)
-            throw ContractError("Moved nodes overlap");
+            throw ContractError("移动后的节点相互重叠");
     }
     for (const auto &node : target.nodes)
         if (!moving.contains(node.id) && destinations.contains({node.position.x, node.position.y}))
-            throw ContractError("Move collides with an existing node");
+            throw ContractError("移动位置与已有节点重叠");
     for (auto &node : target.nodes)
         if (moving.contains(node.id))
             node.position = translated(node.position, delta.x, delta.y);
@@ -777,7 +777,7 @@ std::map<NodeId, NodeId> ProjectEditor::pasteSelection(std::string_view targetFl
 {
     requireIdle();
     if (selection.nodes.empty())
-        throw ContractError("No copied nodes to paste");
+        throw ContractError("没有可粘贴的节点");
     ProjectEditor edit(project_);
     auto         &target = edit.flow(targetFlow);
     requireIncrement(target.structureRevision);
