@@ -192,10 +192,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 inputs.emplace(port.id, std::move(value));
             }
-            std::vector<PortContract> contracts;
-            contracts.reserve(definition->inputs.size());
-            for (const auto &port : definition->inputs) contracts.push_back(portContractFromDefinition(port));
-            validateToolValues(contracts, inputs, false);
+            validateToolValues(definition->inputs, inputs);
             prepareTimer.stop();
         }
         phase = "initialize";
@@ -203,10 +200,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         const auto &parameters = frozen.initParameters.at(id);
         if (configurationSession != context->session)
         {
-            std::vector<PortContract> contracts;
-            contracts.reserve(definition->initParams.size());
-            for (const auto &port : definition->initParams) contracts.push_back(portContractFromDefinition(port));
-            validateToolValues(contracts, parameters, false);
+            validateToolValues(definition->initParams, parameters);
             const auto directory = frozen.project.path.parent_path();
             if (toolId != config.toolId || kind != definition->kind || toolVersion != definition->version
                 || servicesDirectory != directory || !sameParameters(initializedWith, parameters)

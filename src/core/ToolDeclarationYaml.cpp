@@ -112,16 +112,22 @@ std::vector<PortDefinition> parsePorts(const YAML::Node& node, const std::string
     ports.reserve(node.size());
     for (const auto& item : node) {
         if (output) {
-            fields(item, {"id", "name", "type", "type_from", "dtype", "rank", "layout", "image_port", "display"}, direction);
+            fields(item, {"id", "name", "type", "type_from", "dtype", "rank", "layout", "required", "image_port", "display"}, direction);
         } else {
             fields(item, {"id", "name", "type", "dtype", "rank", "layout", "default", "editor", "min", "max",
-                "step", "decimals", "options", "options_provider", "tab", "group", "image_input", "path_mode_from"}, direction);
+                "step", "decimals", "options", "options_provider", "tab", "group", "image_input", "path_mode_from", "required"}, direction);
         }
         PortDefinition port;
         port.id = text(item["id"], direction + ".id", false);
         const auto context = direction + "." + port.id;
         try {
             port.name = text(item["name"], "name", false);
+            if (item["required"]) {
+                const auto required = decodeValue(item["required"], {Type::Bool});
+                if (!std::holds_alternative<bool>(required))
+                    throw ContractError("required 必须是布尔值");
+                port.required = std::get<bool>(required);
+            }
             if (const auto reference = item["type_from"]) {
                 fields(reference, {"flow", "node", "port"}, "type_from");
                 for (const auto* field : {"type", "dtype", "rank", "layout", "image_port", "display"})
@@ -348,6 +354,7 @@ YAML::Node encodePort(const PortDefinition& port, bool output) {
     YAML::Node node(YAML::NodeType::Map);
     node["id"] = port.id;
     node["name"] = port.name;
+    node["required"] = port.required;
     if (port.typeFrom) {
         YAML::Node reference(YAML::NodeType::Map);
         reference["flow"] = port.typeFrom->flowParameter;

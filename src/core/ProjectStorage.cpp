@@ -95,11 +95,7 @@ void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const N
 {
     try
     {
-        validateToolValues(
-            {
-                portContractFromDefinition(port)
-        },
-            {{port.id, value}}, false);
+        validateToolValue(port, value);
     }
     catch (const ContractError &error)
     {

@@ -20,7 +20,7 @@ bool AppController::Impl::applyParameter(const QString &id, bool initialization,
     if (const auto *declaration = parameter(id.toStdString(), initialization))
     {
         if (!isMissing(value))
-            validateToolValues({portContractFromDefinition(*declaration)}, {{id.toStdString(), value}}, false);
+            validateToolValue(*declaration, value);
     }
     else if (signature->second.type == Type::Float && !isMissing(value)
              && !std::isfinite(std::get<double>(value)))
@@ -92,7 +92,7 @@ bool AppController::stepIntegerParameter(const QString &id, bool initialization,
         std::int64_t step = 1;
         if (const auto *declaration = impl_->parameter(id.toStdString(), initialization))
         {
-            validateToolValues({portContractFromDefinition(*declaration)}, {{id.toStdString(), value}}, false);
+            validateToolValue(*declaration, value);
             if (declaration->step)
             {
                 const auto *declared = std::get_if<std::int64_t>(&*declaration->step);

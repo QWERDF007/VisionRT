@@ -39,6 +39,7 @@ struct PortDefinition {
     std::string sameGeometryAsInput;
     std::optional<PortTypeReference> typeFrom;
     std::string pathModeFrom;
+    bool required = true;
 };
 
 struct ToolDefinition {
