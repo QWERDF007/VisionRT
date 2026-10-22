@@ -230,7 +230,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     const std::string_view id    = definition.id;
     const auto             state = availability(id);
     if (state.state != ToolAvailability::Available)
-        throw RegistryError(state.state, state.message);
+        throw RegistryError(state.state, ToolStatus{-3, state.message, state.detail});
     for (const auto &port : definition.outputs)
         if (port.typeFrom)
             throw ContractError("Tool output type has not been resolved: " + definition.id + "." + port.id);
@@ -260,13 +260,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
             return instance;
         }
         if (pluginLoader_)
-        {
-            auto instance = pluginLoader_->createAdapter(definition.id, services);
-            if (!instance)
-                throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                                    "Plugin loader returned no adapter: " + std::string(id));
-            return instance;
-        }
+            return pluginLoader_->createAdapter(definition.id, services);
     }
     const auto &factory  = python_.find(id)->second.factory;
     auto        instance = factory(services);

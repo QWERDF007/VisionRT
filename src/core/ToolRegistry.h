@@ -29,12 +29,19 @@ class RegistryError : public std::runtime_error
 {
 public:
     RegistryError(ToolAvailability reason, std::string message)
-        : std::runtime_error(std::move(message))
+        : RegistryError(reason, ToolStatus{-3, std::move(message)})
+    {
+    }
+
+    RegistryError(ToolAvailability reason, ToolStatus status)
+        : std::runtime_error(status.message)
         , reason(reason)
+        , status(std::move(status))
     {
     }
 
     ToolAvailability reason;
+    ToolStatus       status;
 };
 
 class PluginLoader;

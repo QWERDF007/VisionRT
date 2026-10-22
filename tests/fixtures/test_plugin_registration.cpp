@@ -5,6 +5,7 @@
 
 namespace {
 std::atomic<int> createCalls{0};
+std::atomic<int> initializeCalls{0};
 
 class ValueTool final : public visionrt::IToolInstance
 {
@@ -16,6 +17,7 @@ public:
 
     visionrt::ToolStatus initialize(const visionrt::Values &) override
     {
+        ++initializeCalls;
         return {};
     }
 
@@ -106,4 +108,9 @@ extern "C" VT_EXPORT const visionrt::ModuleApi *VT_CALL visiontoolsModuleApi() n
 extern "C" VT_EXPORT int VT_CALL testRegistrationCreateCalls() noexcept
 {
     return createCalls.load();
+}
+
+extern "C" VT_EXPORT int VT_CALL testRegistrationInitializeCalls() noexcept
+{
+    return initializeCalls.load();
 }

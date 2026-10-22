@@ -271,7 +271,11 @@ std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view     
                                                            const PlatformToolServices &services)
 {
     const auto path = resolveModulePath(toolId);
-    return std::make_unique<DomainToolAdapter>(shared_from_this(), path, std::string(toolId), services);
+    ToolStatus status;
+    auto       module = loadModule(path, status);
+    if (!module)
+        throw RegistryError(ToolAvailability::ImplementationUnavailable, std::move(status));
+    return std::make_unique<DomainToolAdapter>(std::move(module), std::string(toolId), services);
 }
 
 std::size_t PluginLoader::loadedModuleCount() const
@@ -280,13 +284,27 @@ std::size_t PluginLoader::loadedModuleCount() const
     return loadedModules_.size();
 }
 
-DomainToolAdapter::DomainToolAdapter(std::shared_ptr<PluginLoader> loader, std::filesystem::path libraryPath,
-                                     std::string toolId, PlatformToolServices services)
-    : loader_(std::move(loader))
-    , libraryPath_(std::move(libraryPath))
-    , toolId_(std::move(toolId))
+DomainToolAdapter::DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId,
+                                     PlatformToolServices services)
+    : toolId_(std::move(toolId))
     , services_(std::move(services))
+    , module_(std::move(module))
 {
+    const auto found = module_->registry.nativeFactories().find(toolId_);
+    if (found == module_->registry.nativeFactories().end())
+        throw RegistryError(
+            ToolAvailability::ImplementationUnavailable,
+            ToolStatus{-3, "指定模块未注册工具工厂：" + toolId_, json::pathText(module_->path).toStdString()});
+    factory_ = &found->second;
+    ToolStatus createStatus;
+    raw_ = factory_->create(&services_, &createStatus);
+    if (!raw_ || !createStatus)
+    {
+        if (createStatus)
+            createStatus = {-3, "模块创建返回空实例：" + toolId_};
+        release();
+        throw RegistryError(ToolAvailability::ImplementationUnavailable, std::move(createStatus));
+    }
 }
 
 DomainToolAdapter::~DomainToolAdapter()
@@ -296,51 +314,12 @@ DomainToolAdapter::~DomainToolAdapter()
 
 ToolStatus DomainToolAdapter::initialize(const Values &initParams)
 {
-    if (failureStatus_.code != 0)
+    if (!failureStatus_)
         return failureStatus_;
-
-    if (raw_)
-    {
-        if (const auto status = release(); !status)
-        {
-            failureStatus_ = status;
-            return failureStatus_;
-        }
-    }
+    if (!raw_ || initialized_)
+        return {-2, "工具实例已释放或已初始化：" + toolId_};
 
     ToolStatus status;
-    module_ = loader_->loadModule(libraryPath_, status);
-    if (!module_ || !status)
-    {
-        failureStatus_ = (status.code != 0 ? status : ToolStatus{-3, "模块加载失败：" + libraryPath_.string()});
-        return failureStatus_;
-    }
-
-    const auto found = module_->registry.nativeFactories().find(toolId_);
-    if (found == module_->registry.nativeFactories().end())
-    {
-        failureStatus_ = {-3, "指定模块未注册工具工厂：" + toolId_};
-        module_.reset();
-        return failureStatus_;
-    }
-    factory_ = &found->second;
-    ToolStatus createStatus;
-    raw_ = factory_->create(&services_, &createStatus);
-    if (!raw_)
-    {
-        failureStatus_ = (createStatus.code != 0 ? createStatus : ToolStatus{-3, "模块创建返回空实例：" + toolId_});
-        factory_ = nullptr;
-        module_.reset();
-        return failureStatus_;
-    }
-
-    if (createStatus.code != 0)
-    {
-        release();
-        failureStatus_ = createStatus;
-        return failureStatus_;
-    }
-
     try
     {
         status = raw_->initialize(initParams);
@@ -361,12 +340,13 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
         return failureStatus_;
     }
 
+    initialized_ = true;
     return status;
 }
 
 ToolResult DomainToolAdapter::execute(const Values &inputs)
 {
-    if (!raw_)
+    if (!raw_ || !initialized_)
     {
         const auto status
             = failureStatus_.code != 0 ? failureStatus_ : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
@@ -410,8 +390,9 @@ ToolStatus DomainToolAdapter::release()
         status = {-4, "工具释放发生未知异常"};
     }
     factory_->destroy(raw_);
-    raw_     = nullptr;
-    factory_ = nullptr;
+    raw_         = nullptr;
+    initialized_ = false;
+    factory_     = nullptr;
     module_.reset();
     return status;
 }

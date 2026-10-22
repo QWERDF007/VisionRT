@@ -132,21 +132,22 @@ void faultInjection(const std::filesystem::path &modulePath)
     auto                 loader = std::make_shared<PluginLoader>();
     PlatformToolServices services;
 
-    // 1. Missing DLL file
-    loader->registerModule("test.missing.dll", "non_existent_library_12345.dll");
-    auto missingAdapter = loader->createAdapter("test.missing.dll", services);
-    auto missingInit    = missingAdapter->initialize({});
-    assert(missingInit.code == -3);
-    auto missingExec = missingAdapter->execute({});
-    assert(missingExec.status.code == -3);
-
-    // 2. Unknown registry_name / null factory returned from module
-    loader->registerModule("test.unknown.tool", modulePath);
-    auto unknownAdapter = loader->createAdapter("test.unknown.tool", services);
-    auto unknownInit    = unknownAdapter->initialize({});
-    assert(unknownInit.code == -3);
-    auto unknownExec = unknownAdapter->execute({});
-    assert(unknownExec.status.code == -3);
+    for (const auto &[id, path] : {
+             std::pair{ "test.missing.dll", std::filesystem::path("non_existent_library_12345.dll")},
+             std::pair{"test.unknown.tool",                                              modulePath}
+    })
+    {
+        loader->registerModule(id, path);
+        try
+        {
+            loader->createAdapter(id, services);
+            assert(false);
+        }
+        catch (const RegistryError &error)
+        {
+            assert(error.status.code == -3 && !error.status.message.empty());
+        }
+    }
 
     // 3. Partial initialization failure inside plugin
     loader->registerModule("test.plugin.fail_init", modulePath);
@@ -168,17 +169,24 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
     assert(releaseCalls);
     const auto before = releaseCalls();
 
-    // 1. create returns nullptr + code 0 -> host converts to -3
-    loader->registerModule("test.plugin.create_null_success", modulePath);
-    auto nullSuccessAdapter = loader->createAdapter("test.plugin.create_null_success", services);
-    assert(nullSuccessAdapter->initialize({}).code == -3);
-
-    // 2. create returns nonnull + code 5 -> host destroys inside module and returns 5
-    loader->registerModule("test.plugin.create_nonnull_fail", modulePath);
-    auto nonnullFailAdapter = loader->createAdapter("test.plugin.create_nonnull_fail", services);
-    assert(nonnullFailAdapter->initialize({}).code == 5);
-    assert(releaseCalls() == before + 1);
-    assert(nonnullFailAdapter->release());
+    for (const auto &[id, code] : {
+             std::pair{"test.plugin.create_null_success", -3},
+             std::pair{"test.plugin.create_nonnull_fail",  5}
+    })
+    {
+        loader->registerModule(id, modulePath);
+        try
+        {
+            loader->createAdapter(id, services);
+            assert(false);
+        }
+        catch (const RegistryError &error)
+        {
+            assert(error.status.code == code);
+            if (code == 5)
+                assert(error.status.detail == "factory diagnostic");
+        }
+    }
     assert(releaseCalls() == before + 1);
 
     // 3. initialize throws exception -> host catches, returns -1
@@ -249,6 +257,17 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     assert(snap != nullptr);
     assert(snap->status.code == 0);
     assert(std::get<std::int64_t>(snap->outputs.at("y")) == 42);
+
+    def.id = "test.plugin.create_nonnull_fail";
+    loader->registerModule(def.id, modulePath);
+    registry.addDefinition(def);
+    registry.loadNativeImplementations();
+    project.flows.front().nodes.front().toolId = def.id;
+    assert(engine.start(project, registry, RunMode::Once));
+    snap = snapshot(finish(engine), 1);
+    assert(snap && snap->status.code == 5);
+    assert(snap->status.detail == "factory diagnostic");
+    assert(isMissing(snap->outputs.at("y")));
 }
 
 void writeText(const std::filesystem::path &path, const std::string &content)
