@@ -138,6 +138,6 @@ int main()
     assert(modules.availability(host.id).state == ToolAvailability::Available);
     modules.registerPackage({});
     assert(modules.definitions().empty());
-    assert(!loader->hasModule("test.missing.dll"));
+    assert(loader->availability("test.missing.dll").state == ToolAvailability::ImplementationUnavailable);
     std::cout << "Stable tool IDs, derived status ports and transactional registry refresh verified\n";
 }

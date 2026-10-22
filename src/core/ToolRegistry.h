@@ -14,6 +14,7 @@ enum class ToolAvailability
 {
     Available,
     DefinitionMissing,
+    ImplementationNotLoaded,
     ImplementationUnavailable
 };
 
@@ -21,6 +22,7 @@ struct Availability
 {
     ToolAvailability state;
     std::string      message;
+    std::string      detail;
 };
 
 class RegistryError : public std::runtime_error
@@ -62,6 +64,7 @@ public:
 
     // Replaces the tool set with a validated package: inside the package root the index is the single discovery source.
     void registerPackage(const ToolsPackage &package);
+    void loadNativeImplementations() const;
     void addDefinition(ToolDefinition definition);
     void replaceDefinition(ToolDefinition definition);
     void validateContract(const ToolDefinition &definition) const;

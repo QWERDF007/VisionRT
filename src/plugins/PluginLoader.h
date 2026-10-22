@@ -65,7 +65,7 @@ public:
     void registerPackage(const ToolsPackage &package);
 
     std::filesystem::path resolveModulePath(std::string_view toolId) const;
-    bool                  hasModule(std::string_view toolId) const;
+    Availability          availability(std::string_view toolId) const;
 
     std::shared_ptr<const LoadedModule> loadModule(const std::filesystem::path &libraryPath, ToolStatus &status);
     std::unique_ptr<IToolInstance>      createAdapter(std::string_view toolId, const PlatformToolServices &services);

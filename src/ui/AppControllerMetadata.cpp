@@ -110,6 +110,7 @@ QVariantList AppController::toolDefinitions() const
         const auto availability = impl_->registry.availability(definition.id);
         item["available"]       = availability.state == ToolAvailability::Available;
         item["message"]         = workbench::q(availability.message);
+        item["detail"]          = workbench::q(availability.detail);
         result.push_back(item);
     }
     return result;

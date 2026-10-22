@@ -36,6 +36,7 @@ int main(int argc, char **argv)
         ToolRegistry registry;
         registry.setPluginLoader(std::make_shared<PluginLoader>());
         registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
+        registry.loadNativeImplementations();
         ProjectStorage storage(registry);
         auto loaded = storage.load(std::filesystem::u8path(argv[2]));
         for (const auto &diagnostic : loaded.diagnostics)

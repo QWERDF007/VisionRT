@@ -350,6 +350,7 @@ void receiverCapacityAndSessionIsolation(const std::filesystem::path &toolsRoot)
 {
     ToolRegistry registry;
     registry.registerPackage(readToolsPackage(toolsRoot));
+    registry.loadNativeImplementations();
     registerReceiveTools(registry);
     auto source = definition("test.sender");
     install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{25}}}}; });
@@ -750,6 +751,7 @@ void hostBindingReceiverContract()
     ToolRegistry registry;
     registerReceiveTools(registry);
     registry.registerPackage(pkg);
+    registry.loadNativeImplementations();
 
     auto availValid = registry.availability("test.custom.receiver");
     assert(availValid.state == ToolAvailability::Available);
@@ -824,6 +826,7 @@ void hostBindingReceiverContract()
     ToolRegistry strRegistry;
     registerReceiveTools(strRegistry);
     strRegistry.registerPackage(strPkg);
+    strRegistry.loadNativeImplementations();
 
     auto strSource            = definition("test.str_sender");
     strSource.outputs[0].type = {Type::String};
@@ -886,6 +889,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
     {
         ToolRegistry registry;
         registry.registerPackage(readToolsPackage(toolsRoot));
+        registry.loadNativeImplementations();
         registerReceiveTools(registry);
         auto source = definition("test.typed.sender");
         source.outputs.front().type = type;
@@ -922,6 +926,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
             source.outputs.front().type = {Type::String};
             ToolRegistry changedRegistry;
             changedRegistry.registerPackage(readToolsPackage(toolsRoot));
+            changedRegistry.loadNativeImplementations();
             registerReceiveTools(changedRegistry);
             install(changedRegistry, source, [](const Values &) { return ToolResult{{}, {{"value", Utf8("changed")}}}; });
             install(changedRegistry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
@@ -940,6 +945,7 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
 {
     ToolRegistry registry;
     registry.registerPackage(readToolsPackage(toolsRoot));
+    registry.loadNativeImplementations();
     registerReceiveTools(registry);
     auto source = definition("test.waiting_sender");
     install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{1}}}}; });

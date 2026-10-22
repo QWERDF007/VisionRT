@@ -448,6 +448,7 @@ int main(int argc, char **argv)
     ToolRegistry registry;
     registry.setPluginLoader(std::make_shared<PluginLoader>());
     registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
+    registry.loadNativeImplementations();
     readImages(registry);
     projection(registry);
     crop(registry);
