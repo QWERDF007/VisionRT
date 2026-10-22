@@ -15,7 +15,7 @@ QVariantMap textTarget(QVariantMap context)
 
 bool AppController::Impl::readsAllowed() const noexcept
 {
-    return state == RuntimeState::Idle || readback.has_value();
+    return runtime->state() == RuntimeState::Idle || readback.has_value();
 }
 
 void AppController::Impl::drainReaders()

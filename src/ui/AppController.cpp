@@ -262,10 +262,10 @@ bool AppController::Impl::idle()
 
 void AppController::Impl::setState(RuntimeState value)
 {
+    editor.setBusy(value != RuntimeState::Idle);
     if (state == value)
         return;
     state = value;
-    editor.setBusy(state != RuntimeState::Idle);
     if (viewport)
         viewport->setReadOnly(state != RuntimeState::Idle || !roi);
     emit q->runtimeChanged();
@@ -332,14 +332,14 @@ void AppController::Impl::changed(bool structure)
 
 void AppController::Impl::synchronizeNodes()
 {
-    if (state != RuntimeState::Idle)
+    if (runtime->state() != RuntimeState::Idle)
         return;
     drainReaders();
     const auto status = runtime->requestSynchronize(editor.project(), registry);
     if (!status)
         report(status);
-    else
-        setState(runtime->state());
+    else if (const auto current = runtime->state(); current != RuntimeState::Idle)
+        setState(current);
 }
 
 void AppController::Impl::storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items)
@@ -467,11 +467,13 @@ void AppController::Impl::poll()
             q->parameters();
         if (update.completion && runtime->acknowledgeCompletion(*update.completion))
         {
-            setState(RuntimeState::Idle);
-            updateResults();
-            emit q->parametersChanged();
+            editor.setBusy(false);
+            updateReadback();
             if (refreshResult)
                 refreshFinished();
+            updateResults();
+            emit q->parametersChanged();
+            setState(runtime->state());
             advancePending();
         }
     }
