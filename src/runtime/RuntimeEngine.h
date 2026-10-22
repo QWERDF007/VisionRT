@@ -5,7 +5,6 @@
 
 #include <functional>
 #include <optional>
-#include <span>
 #include <string>
 #include <vector>
 
@@ -33,6 +32,7 @@ struct NodeUpdate
     bool                      active = false;
     ResultSlot::Snapshot      snapshot;
     std::optional<ToolStatus> lifecycleDiagnostic;
+    std::optional<ToolStatus> instanceDiagnostic;
 };
 
 struct FlowTiming
@@ -80,15 +80,14 @@ public:
     RuntimeEngine(const RuntimeEngine &)            = delete;
     RuntimeEngine &operator=(const RuntimeEngine &) = delete;
     std::size_t    workers() const noexcept;
+    RuntimeState   state() const;
     ToolStatus     start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
                          std::optional<NodeId> target = {});
     void           requestStop();
     ToolStatus     requestReset();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);
-    // Idle only. Releases removed instances outside the control lock without
-    // discarding surviving node publications.
-    ToolStatus     removeNodes(std::span<const NodeId> ids);
+    ToolStatus     requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry);
     RuntimeUpdate  pollLatest();
     bool           acknowledgeCompletion(RuntimeCompletion completion);
     void           setCompletionCallback(std::function<void(RuntimeCompletion)> callback);

@@ -96,6 +96,7 @@ void popupSessionsContract()
             "an obsolete input context writes to the newly selected node");
 
     app.addNode(QStringLiteral("visionrt.image.crop"), 8, 8);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto target = app.selectedNode();
     require(app.nodes().size() == 6 && !target.isEmpty(), "cannot create the output association target");
     app.selectNode(QStringLiteral("1"));
@@ -433,6 +434,7 @@ void outputCellReuseContract()
     visionrt::AppController manyApp(1, manyDirectory.path());
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output catalog did not become ready");
     manyApp.addNode("test.outputs", 0, 0);
+    require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "node instance synchronization did not finish");
     require(!manyApp.selectedNode().isEmpty(), "many-output tool was not discovered");
     manyApp.runNode();
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output tool did not finish");

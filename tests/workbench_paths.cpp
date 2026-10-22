@@ -77,6 +77,7 @@ void pathEditorsContract()
     visionrt::AppController app(1, directory.path());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "path tool initialization did not finish");
     app.addNode("test.paths", 0, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.nodes().size() == 1, "path fixture tool was not discovered");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
     QQmlEngine engine;
@@ -157,6 +158,7 @@ void pathEditorsContract()
                     "path chooser did not open from its embedded button");
         };
         app.save(project);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(!app.dirty(), "path baseline could not be saved");
         const auto original = value(id);
         QSignalSpy changes(&app, &visionrt::AppController::parametersChanged);
@@ -179,6 +181,7 @@ void pathEditorsContract()
         require(value(id) == expected, "path selection damaged unicode, spaces, percent or hash characters");
         require(app.dirty() && changes.count() == 1, "path selection did not submit exactly once");
         app.save(project);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.requestOpen(project);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "path project did not finish reopening");
         app.selectNode(app.nodes().front().toMap().value("id").toString());
@@ -216,6 +219,7 @@ void pathEditorsContract()
             "a remote URL was submitted as a local path");
     const auto targetNode = app.selectedNode();
     app.addNode("test.paths", 1, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto modeSource = app.selectedNode();
     app.selectNode(targetNode);
     require(app.bindInput(app.portContext("mode"), modeSource, "mode_value") && editorKind().isEmpty(),
@@ -233,6 +237,7 @@ void pathEditorsContract()
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().isEmpty(); }, 3000),
             "Path verification could not create a fresh unsaved project");
     app.addNode("test.paths", 0, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.nodes().size() == 1, "Unsaved project could not create its path parameter tool");
     QSignalSpy saveRequested(&app, &visionrt::AppController::savePathRequired);
     const auto unsavedPath = root.filePath(nested + "/" + fileName);

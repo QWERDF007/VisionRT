@@ -1,6 +1,8 @@
 #include "python/PythonRuntime.h"
 
 #include <python/PythonInterop.h>
+
+#include "core/ToolRegistry.h"
 #include "runtime/Snapshot.h"
 
 #include <pybind11/embed.h>
@@ -173,30 +175,32 @@ public:
         , definitionOwner_(std::move(definition))
         , definition_(*definitionOwner_)
         , services_(std::move(services))
-        , unavailable_(implementation.status)
     {
         // Factory holds the GIL, including member construction and failure cleanup.
         objects_ = std::make_unique<Objects>();
-        if (unavailable_)
+        ToolStatus status;
+        try
         {
-            try
+            if (definition_.kind == ToolKind::PythonClass)
             {
-                if (definition_.kind == ToolKind::PythonClass)
-                {
-                    objects_->instance = implementation.symbol();
-                    objects_->execute  = objects_->instance.attr("execute");
-                }
-                else
-                    objects_->execute = implementation.symbol;
+                objects_->instance = implementation.symbol();
+                objects_->execute  = objects_->instance.attr("execute");
             }
-            catch (const py::error_already_set &error)
-            {
-                unavailable_ = errorStatus(definition_, -1, "construct", error.what());
-            }
-            catch (const std::exception &error)
-            {
-                unavailable_ = errorStatus(definition_, -1, "construct", error.what());
-            }
+            else
+                objects_->execute = implementation.symbol;
+        }
+        catch (const py::error_already_set &error)
+        {
+            status = {-1, "Python 实例创建异常", error.what()};
+        }
+        catch (const std::exception &error)
+        {
+            status = {-1, "Python 实例创建异常", error.what()};
+        }
+        if (!status)
+        {
+            releaseWithGil();
+            throw RegistryError(ToolAvailability::ImplementationUnavailable, std::move(status));
         }
         ++state_->instances;
     }
@@ -218,8 +222,6 @@ public:
     ToolStatus initialize(const Values &parameters) override
     {
         py::gil_scoped_acquire gil;
-        if (!unavailable_)
-            return unavailable_;
         if (released_)
             return errorStatus(definition_, -1, "initialize", "Instance was released");
         if (definition_.kind == ToolKind::PythonFunction)
@@ -259,8 +261,6 @@ public:
                     result.outputs.emplace(output.id, Missing{});
             return std::move(result);
         };
-        if (!unavailable_)
-            return fail(unavailable_);
         if (released_)
             return fail(errorStatus(definition_, -1, "execute", "Instance was released"));
 
@@ -396,46 +396,9 @@ private:
     const std::size_t                     businessOutputCount_ = static_cast<std::size_t>(
         std::count_if(definition_.outputs.begin(), definition_.outputs.end(), isBusinessOutput));
     ToolServices             services_;
-    ToolStatus               unavailable_;
     std::unique_ptr<Objects> objects_;
     ExecutionMetrics         metrics_;
     bool                     released_ = false;
-};
-
-class UnavailableTool final : public IToolInstance
-{
-public:
-    UnavailableTool(std::shared_ptr<const ToolDefinition> definition, std::string message)
-        : definitionOwner_(std::move(definition))
-        , definition_(*definitionOwner_)
-        , message_(std::move(message))
-    {
-    }
-
-    ToolStatus initialize(const Values &) override
-    {
-        return errorStatus(definition_, -3, "initialize", message_);
-    }
-
-    ToolResult execute(const Values &) override
-    {
-        ToolResult result;
-        result.status = errorStatus(definition_, -3, "execute", message_);
-        for (const auto &output : definition_.outputs)
-            if (isBusinessOutput(output))
-                result.outputs.emplace(output.id, Missing{});
-        return result;
-    }
-
-    ToolStatus release() override
-    {
-        return {};
-    }
-
-private:
-    std::shared_ptr<const ToolDefinition> definitionOwner_;
-    const ToolDefinition                 &definition_;
-    std::string                           message_;
 };
 
 } // namespace
@@ -596,11 +559,13 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
     {
         auto state = weak.lock();
         if (!state)
-            return std::make_unique<UnavailableTool>(definition, "Python runtime is no longer available");
+            throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 运行时已关闭：" + definition->id);
         py::gil_scoped_acquire gil;
         const auto             implementation = state->implementations.find(definition->id);
         if (!state->alive || implementation == state->implementations.end())
-            return std::make_unique<UnavailableTool>(definition, "Python implementation is not loaded");
+            throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 实现未加载：" + definition->id);
+        if (!implementation->second.status)
+            throw RegistryError(ToolAvailability::ImplementationUnavailable, implementation->second.status);
         return std::make_unique<PythonTool>(std::move(state), definition, services, implementation->second);
     };
 }

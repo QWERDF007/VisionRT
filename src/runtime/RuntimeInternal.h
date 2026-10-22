@@ -46,7 +46,6 @@ struct FrozenRun
     std::optional<NodeId>                          target;
     std::vector<std::string>                       selected;
     std::map<NodeId, const NodeDefinition *>       nodes;
-    std::map<NodeId, Values>                       initParameters;
     std::map<NodeId, ToolDefinition>               contracts;
     std::map<NodeId, std::shared_ptr<NodeRuntime>> runtimes;
 };
@@ -82,6 +81,21 @@ private:
     std::weak_ptr<const RoundContext> context_;
 };
 
+struct InstanceConfiguration
+{
+    InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry,
+                          const std::filesystem::path &directory);
+    bool operator==(const InstanceConfiguration &other) const;
+
+    std::string           toolId;
+    std::string           version;
+    ToolKind              kind = ToolKind::Cpp;
+    ToolAvailability      availability;
+    Values                parameters;
+    TypeMap               outputs;
+    std::filesystem::path directory;
+};
+
 struct NodeRuntime
 {
     NodeRuntime(NodeId id, std::shared_ptr<WaitBudget> budget)
@@ -91,22 +105,17 @@ struct NodeRuntime
     }
 
     NodeId                                         id;
-    std::string                                    toolId;
-    ToolKind                                       kind = ToolKind::Cpp;
     ResultSlot                                     slot;
     std::atomic<bool>                              active{false};
     std::atomic<std::shared_ptr<const ToolStatus>> lifecycle;
+    std::atomic<std::shared_ptr<const ToolStatus>> preparation;
     std::shared_ptr<NodeReader>                    reader;
     std::unique_ptr<IToolInstance>                 instance;
-    Values                                         initializedWith;
-    TypeMap                                        outputTypes;
-    std::filesystem::path                          servicesDirectory;
-    std::string                                    toolVersion;
-    std::optional<ToolStatus>                      initializationFailure;
-    std::uint64_t                                  failureSession       = 0;
-    std::uint64_t                                  configurationSession = 0;
+    std::optional<InstanceConfiguration>           configuration;
+    bool                                           initialized          = false;
     std::uint64_t                                  publication          = 0;
     void                                           run(const std::shared_ptr<const RoundContext> &context);
+    void configure(const NodeDefinition &node, const ToolRegistry &registry, InstanceConfiguration next, bool retry);
     // Returns the release failure when one was observed; success is nullopt.
     std::optional<ToolStatus>                      release() noexcept;
     void                                           reset() noexcept;

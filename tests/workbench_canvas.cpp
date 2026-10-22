@@ -380,6 +380,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(texts().contains(longName + "-" + id), "hover card lost the long tool name");
 
     app.deleteNodes(QVariantList{id});
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     QTest::qWait(100);
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived deleting the node");
 
@@ -525,7 +526,9 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     app.addFlow(QStringLiteral("缩放交互"));
     const auto interactionFlow = app.currentFlow();
     app.addNode("test.plugin.counter", 0, 0);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.addNode("test.plugin.counter", 1, 2);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.nodes().size() == 2, "canvas interaction fixtures were not created");
     const auto sourceId = app.nodes().first().toMap().value("id").toString();
     const auto targetId = app.nodes().last().toMap().value("id").toString();

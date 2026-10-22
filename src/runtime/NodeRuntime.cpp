@@ -1,3 +1,4 @@
+#include "core/NodeContracts.h"
 #include "runtime/RuntimeInternal.h"
 
 #include <core/ToolValueValidation.h>
@@ -33,6 +34,8 @@ std::string phaseText(const char *phase)
 {
     const std::string_view value = phase ? phase : "";
     if (value == "prepare") return "准备输入";
+    if (value == "create")
+        return "创建实例";
     if (value == "initialize") return "初始化";
     if (value == "execute") return "执行";
     if (value == "convert") return "校验输出";
@@ -46,8 +49,75 @@ std::string location(NodeId node, const std::string &tool, const char *phase, co
 }
 } // namespace
 
+InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry,
+                                             const std::filesystem::path &directory)
+    : toolId(node.toolId)
+    , availability(registry.availability(node.toolId).state)
+    , outputs(node.signatures.outputs)
+    , directory(directory)
+{
+    if (const auto *definition = registry.find(toolId))
+    {
+        version = definition->version;
+        kind    = definition->kind;
+        for (const auto &port : definition->initParams)
+        {
+            const auto value = node.initParams.find(port.id);
+            parameters.emplace(port.id, value == node.initParams.end() ? port.defaultValue : value->second);
+        }
+    }
+}
+
+bool InstanceConfiguration::operator==(const InstanceConfiguration &other) const
+{
+    return toolId == other.toolId && version == other.version && kind == other.kind
+        && availability == other.availability && outputs == other.outputs && directory == other.directory
+        && sameParameters(parameters, other.parameters);
+}
+
+void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &registry, InstanceConfiguration next,
+                            bool retry)
+{
+    if (configuration && *configuration == next && (instance || !retry))
+        return;
+    release();
+    configuration = std::move(next);
+    preparation.store({}, std::memory_order_release);
+    ToolStatus status;
+    try
+    {
+        const auto *definition = registry.find(node.toolId);
+        if (!definition)
+            throw RegistryError(ToolAvailability::DefinitionMissing, "工具定义缺失：" + node.toolId);
+        PlatformToolServices services{PathResolver(configuration->directory), reader};
+        instance = registry.create(nodeContract(node, *definition), services);
+    }
+    catch (const RegistryError &error)
+    {
+        status = error.status;
+    }
+    catch (const ContractError &error)
+    {
+        status = {-2, "节点工具合同不可用", error.what()};
+    }
+    catch (const std::exception &error)
+    {
+        status = {-1, "工具实例创建异常", error.what()};
+    }
+    catch (...)
+    {
+        status = {-1, "工具实例创建发生未知异常"};
+    }
+    if (!status)
+    {
+        status.message = location(id, node.toolId, "create", status.message);
+        preparation.store(std::make_shared<const ToolStatus>(std::move(status)), std::memory_order_release);
+    }
+}
+
 std::optional<ToolStatus> NodeRuntime::release() noexcept
 {
+    initialized = false;
     if (!instance)
         return std::nullopt;
     ToolStatus status;
@@ -67,7 +137,7 @@ std::optional<ToolStatus> NodeRuntime::release() noexcept
     if (!status)
     {
         status.code    = -4;
-        status.message = location(id, toolId, "release", status.message);
+        status.message = location(id, configuration->toolId, "release", status.message);
         lifecycle.store(std::make_shared<const ToolStatus>(status), std::memory_order_release);
         return status;
     }
@@ -78,11 +148,8 @@ void NodeRuntime::reset() noexcept
 {
     lifecycle.store({}, std::memory_order_release);
     release();
-    initializationFailure.reset();
-    failureSession       = 0;
-    configurationSession = 0;
-    initializedWith.clear();
-    outputTypes.clear();
+    configuration.reset();
+    preparation.store({}, std::memory_order_release);
     slot.publish({});
     active.store(false, std::memory_order_release);
 }
@@ -197,41 +264,16 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         }
         phase = "initialize";
         reader->bind(context);
-        const auto &parameters = frozen.initParameters.at(id);
-        if (configurationSession != context->session)
+        const auto &parameters = configuration->parameters;
+        if (instance && !initialized)
         {
             validateToolValues(definition->initParams, parameters);
-            const auto directory = frozen.project.path.parent_path();
-            if (toolId != config.toolId || kind != definition->kind || toolVersion != definition->version
-                || servicesDirectory != directory || !sameParameters(initializedWith, parameters)
-                || outputTypes != config.signatures.outputs)
-            {
-                release();
-                initializationFailure.reset();
-                initializedWith   = parameters;
-                outputTypes       = config.signatures.outputs;
-                servicesDirectory = directory;
-                toolVersion       = definition->version;
-            }
-            configurationSession = context->session;
-        }
-        toolId          = config.toolId;
-        kind            = definition->kind;
-        bool suppressed = !instance && initializationFailure && failureSession == context->session;
-        if (!instance && !suppressed)
-        {
-            initializationFailure.reset();
             ToolStatus status;
             {
                 ScopeTimer initTimer(snapshot->timing.initMs);
                 try
                 {
-                    PlatformToolServices services{PathResolver(frozen.project.path.parent_path()), reader};
-                    instance = frozen.registry.create(*definition, services);
-                    if (!instance)
-                        throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                                            "factory returned no instance");
-                    if (kind != ToolKind::PythonFunction)
+                    if (definition->kind != ToolKind::PythonFunction)
                         status = instance->initialize(parameters);
                 }
                 catch (const RegistryError &error)
@@ -254,11 +296,12 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             }
             if (!status)
             {
-                status.message = location(id, toolId, "initialize", status.message);
+                status.message = location(id, config.toolId, "initialize", status.message);
                 release();
-                initializationFailure = status;
-                failureSession        = context->session;
+                preparation.store(std::make_shared<const ToolStatus>(std::move(status)), std::memory_order_release);
             }
+            else
+                initialized = true;
         }
         phase = "execute";
         if (instance)
@@ -282,7 +325,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         }
         else
         {
-            result.status    = *initializationFailure;
+            result.status    = *preparation.load(std::memory_order_acquire);
             frameworkFailure = true;
         }
         snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;

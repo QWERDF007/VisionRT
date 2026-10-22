@@ -49,6 +49,7 @@ struct AppController::Impl
     std::map<NodeId, ResultSlot::Snapshot> snapshots;
     std::set<NodeId>                       active;
     std::map<NodeId, ToolStatus>           lifecycleErrors;
+    std::map<NodeId, ToolStatus>           instanceErrors;
     QString                                flow = "flow_1";
     QString                                selected;
     QString                                search;
@@ -63,7 +64,8 @@ struct AppController::Impl
         New,
         Open,
         Close,
-        Reset
+        Reset,
+        DeleteNodes
     };
     Pending                          pending = Pending::None;
     QString                          pendingPath;
@@ -71,7 +73,15 @@ struct AppController::Impl
     bool                             awaitingDecision = false;
     bool                             pendingReset     = false;
     std::optional<ProjectDefinition> replacement;
-    bool                             refreshReconcile = false;
+
+    struct PendingDeletion
+    {
+        std::string         flow;
+        std::vector<NodeId> nodes;
+    };
+
+    std::optional<PendingDeletion> pendingDeletion;
+    bool                          refreshReconcile = false;
 
     struct RefreshResult
     {
@@ -159,6 +169,7 @@ struct AppController::Impl
     void      clearResults();
     bool      nodeExists(NodeId id) const;
     void      pruneDeletedNodes();
+    void      synchronizeNodes();
     void      refresh(bool rescan);
     void      loadToolsPackage();
     void      rescanTools();

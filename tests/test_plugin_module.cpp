@@ -11,6 +11,7 @@ namespace {
 std::atomic<int> g_instanceCount{0};
 std::atomic<int> g_destroyCalls{0};
 std::atomic<int> g_counterReleaseCalls{0};
+std::atomic<int> g_functionInitializeCalls{0};
 
 class SleepTool final : public visionrt::IToolInstance
 {
@@ -142,6 +143,7 @@ public:
 
     visionrt::ToolStatus initialize(const visionrt::Values &) override
     {
+        ++g_functionInitializeCalls;
         return {};
     }
 
@@ -304,4 +306,9 @@ extern "C" VT_EXPORT int VT_CALL testPluginDestroyCalls() noexcept
 extern "C" VT_EXPORT int VT_CALL testPluginCounterReleaseCalls() noexcept
 {
     return g_counterReleaseCalls.load();
+}
+
+extern "C" VT_EXPORT int VT_CALL testPluginFunctionInitializeCalls() noexcept
+{
+    return g_functionInitializeCalls.load();
 }
