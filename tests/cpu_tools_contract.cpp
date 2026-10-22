@@ -1,6 +1,7 @@
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 #include <core/ToolPackage.h>
+#include "ImageFixtures.h"
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -103,6 +104,35 @@ void readImages(ToolRegistry &registry)
     result          = execute(registry, "visionrt.image.read", inputs, services);
     failure(result);
     assert(result.status.message.find("c.png") != std::string::npos);
+    const auto  oversized = testing::oversizedBmp();
+    std::string decoderDetail;
+    try
+    {
+        cv::imdecode(oversized, cv::IMREAD_COLOR);
+    }
+    catch (const cv::Exception &error)
+    {
+        decoderDetail = error.what();
+    }
+    assert(decoderDetail.find("validateInputImageSize") != std::string::npos);
+    QFile oversizedFile(folder + "/oversized.bmp");
+    assert(oversizedFile.open(QIODevice::WriteOnly));
+    assert(oversizedFile.write(reinterpret_cast<const char *>(oversized.data()), oversized.size())
+           == static_cast<qint64>(oversized.size()));
+    oversizedFile.close();
+    result = execute(registry, "visionrt.image.read",
+                     {
+                         {"mode",                       Utf8("file")},
+                         {"path", Utf8("中文目录/oversized.bmp")}
+    },
+                     services);
+    failure(result);
+    assert(result.status.code == 1);
+    assert(result.status.message.find("图像解码失败") != std::string::npos);
+    assert(result.status.message.find("oversized.bmp") != std::string::npos);
+    assert(result.status.message.find("批次索引 0") != std::string::npos);
+    assert(result.status.message.find("OpenCV") == std::string::npos);
+    assert(result.status.detail == decoderDetail);
     inputs["mode"] = Utf8("file");
     inputs["path"] = Utf8("中文目录/a.png");
     success(execute(registry, "visionrt.image.read", inputs, services));

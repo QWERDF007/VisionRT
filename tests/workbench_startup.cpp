@@ -1,17 +1,21 @@
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
+#include "ui/OutputModel.h"
 #include "ui/Theme.h"
+#include "ImageFixtures.h"
 
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QClipboard>
 #include <QFile>
+#include <QDir>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSignalSpy>
 #include <QTest>
 #include <QTemporaryDir>
 #include <iostream>
@@ -220,6 +224,88 @@ void startupProjectContract()
                 window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/application_diagnostics.png")),
                 "cannot capture application diagnostics");
             require(QMetaObject::invokeMethod(notice, "close"), "cannot close application diagnostics");
+            require(QTest::qWaitFor([&] { return !notice->property("visible").toBool(); }, 1000),
+                    "application diagnostics did not close before native failure");
+            const auto oversized = visionrt::testing::oversizedBmp();
+            const auto imagePath = directory.filePath(QStringLiteral("超尺寸图像.bmp"));
+            QFile      oversizedFile(imagePath);
+            require(oversizedFile.open(QIODevice::WriteOnly)
+                        && oversizedFile.write(reinterpret_cast<const char *>(oversized.data()), oversized.size())
+                               == static_cast<qint64>(oversized.size()),
+                    "cannot write native decode failure fixture");
+            oversizedFile.close();
+            app.selectNode("1");
+            require(app.setParameter("mode", false, "file")
+                        && app.setParameterPath("path", false, QUrl::fromLocalFile(imagePath)),
+                    "cannot select native decode failure input");
+            auto *outputModel = qobject_cast<visionrt::OutputModel *>(app.outputModel());
+            require(outputModel != nullptr, "main-window output model is missing");
+            app.runNode();
+            require(QTest::qWaitFor(
+                        [&]
+                        {
+                            const auto status = outputModel->capture(QStringLiteral("__status_message"));
+                            return !app.busy() && status && status->diagnostic && status->diagnostic->status.code != 0;
+                        },
+                        3000),
+                    "native decode failure did not reach the main window");
+            const auto decodeJson
+                = visionrt::OutputModel::diagnosticText(*outputModel->capture(QStringLiteral("__status_message")));
+            const auto decode = QJsonDocument::fromJson(decodeJson.toUtf8()).object();
+            require(decode.value("code").toInt() == 1 && decode.value("node") == "1"
+                        && decode.value("tool_id") == "visionrt.image.read" && decode.value("phase") == "execute"
+                        && QDir::fromNativeSeparators(decode.value("message").toString()).contains(imagePath)
+                        && decode.value("message").toString().contains(QStringLiteral("批次索引 0"))
+                        && !decode.value("message").toString().contains("OpenCV")
+                        && decode.value("detail").toString().contains("validateInputImageSize"),
+                    "native exception lost its raw detail, identity or actual execution phase: "
+                        + decodeJson.toStdString());
+            for (const auto &entry : app.nodes())
+                if (entry.toMap().value("id") == "1")
+                {
+                    const auto summary = entry.toMap().value("statusMessage").toString();
+                    require(summary.count(QStringLiteral("节点 1（visionrt.image.read）执行：")) == 1
+                                && !summary.contains("OpenCV")
+                                && entry.toMap().value("statusDetail") == decode.value("detail").toString(),
+                            "native exception has duplicated context or leaked detail in the node summary");
+                }
+            require(QTest::qWaitFor(
+                        [&] {
+                            return findText(findText, window->contentItem(),
+                                            outputModel->get(1).value("preview").toString())
+                                != nullptr;
+                        },
+                        1000),
+                    "main-window result table did not display the native failure before interaction");
+            auto *statusCell = findText(findText, window->contentItem(), QStringLiteral("状态消息"));
+            require(statusCell != nullptr, "main-window status message cell is missing");
+            QTest::mouseClick(
+                window, Qt::RightButton, Qt::NoModifier,
+                statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());
+            QQuickItem *viewDecode = nullptr;
+            auto       *decodeMenu = window->findChild<QObject *>(QStringLiteral("outputMenu"));
+            const bool  menuReady  = QTest::qWaitFor(
+                [&]
+                {
+                    viewDecode = findText(findText, window->contentItem(), QStringLiteral("查看诊断 JSON"));
+                    return decodeMenu && decodeMenu->property("opened").toBool() && viewDecode
+                        && viewDecode->isEnabled();
+                },
+                1000);
+            require(menuReady, "native decode diagnostic menu action is unavailable");
+            QSignalSpy nativeText(&app, &visionrt::AppController::outputTextReady);
+            QTest::mouseClick(
+                window, Qt::LeftButton, Qt::NoModifier,
+                viewDecode->mapToScene(QPointF(viewDecode->width() / 2, viewDecode->height() / 2)).toPoint());
+            auto *decodeDialog = window->findChild<QObject *>(QStringLiteral("outputDataDialog"));
+            require(decodeDialog && QTest::qWaitFor([&] { return decodeDialog->property("opened").toBool(); }, 1000)
+                        && decodeDialog->property("text").toString() == decodeJson && nativeText.count() == 1
+                        && nativeText.last().front().toString() == decodeJson,
+                    "main-window JSON cannot show the complete native exception detail exactly once");
+            require(window->grabWindow().save(
+                        QStringLiteral(VISIONRT_BINARY_DIR "/evidence/native_decode_diagnostics.png")),
+                    "cannot capture native decode diagnostics");
+            require(QMetaObject::invokeMethod(decodeDialog, "close"), "cannot close native decode diagnostics");
         }
     }
 }
