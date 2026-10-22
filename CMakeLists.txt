@@ -20,9 +20,7 @@ include(ConfigPython)
 include(ConfigQuickUI)
 
 # 独立通用工具 SDK（Git 子模块）
-set(VISIONRT_BUILD_PYTHON_INTEROP ON CACHE BOOL "Build SDK Python interop" FORCE)
 if(BUILD_TESTING)
-    set(VISIONRT_ENABLE_TEST_PROBES ON CACHE BOOL "Enable test probes" FORCE)
     add_compile_definitions(VISIONRT_TEST_PROBES)
 endif()
 add_subdirectory(3rdparty/VisionRTContracts)
@@ -36,6 +34,11 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 核心业务逻辑库
 add_library(visionrt_core
+    src/core/ToolDefinition.cpp
+    src/core/ToolValueValidation.cpp
+    src/core/ToolDeclarationYaml.cpp
+    src/core/ToolPackage.cpp
+    src/core/ValueYaml.cpp
     src/core/ValueJson.cpp
     src/core/ValueJsonDocument.cpp
     src/core/NodeContracts.cpp
@@ -45,11 +48,15 @@ add_library(visionrt_core
     src/plugins/PluginLoader.cpp)
 target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::yaml-cpp)
 
+add_executable(visionrt_validate_tool tools/visionrt_validate_tool.cpp)
+target_link_libraries(visionrt_validate_tool PRIVATE visionrt_core)
+
 
 # Python 运行时及交互桥接库
-add_library(visionrt_python src/python/PythonRuntime.cpp)
-target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed VisionRT::ContractsPython)
+add_library(visionrt_python src/python/PythonRuntime.cpp src/python/PythonInterop.cpp)
+target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed)
 target_compile_definitions(visionrt_python PUBLIC
+    PYBIND11_DETAILED_ERROR_MESSAGES
     VISIONRT_PYTHON_DEFAULT_HOME="${VISIONRT_PYTHON_HOME}")
 
 # DAG 执行调度引擎库
@@ -132,7 +139,7 @@ if(BUILD_TESTING)
     visionrt_apply_test_environment(version_contract)
 
     add_executable(value_contract tests/value_contract.cpp)
-    target_link_libraries(value_contract PRIVATE visionrt_common)
+    target_link_libraries(value_contract PRIVATE visionrt_core)
     add_test(NAME value_contract COMMAND value_contract)
     visionrt_apply_test_environment(value_contract)
 
@@ -142,6 +149,16 @@ if(BUILD_TESTING)
     visionrt_apply_test_environment(path_contract)
 
     visionrt_contract(tool_registry_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    add_dependencies(tool_registry_contract visionrt_validate_tool)
+    visionrt_contract(declaration_consumer_contract visionrt_core)
+    visionrt_contract(declaration_values_contract visionrt_core)
+    visionrt_contract(declaration_value_contract visionrt_core)
+    visionrt_contract(tools_package_contract visionrt_core)
+    visionrt_contract(python_rect_contract visionrt_python)
+    add_test(NAME validator_cli_contract COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
+        --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}")
+    visionrt_apply_test_environment(validator_cli_contract)
     visionrt_contract(value_json_contract visionrt_core)
     visionrt_contract(project_editor_contract visionrt_core)
     visionrt_contract(project_storage_contract visionrt_core)

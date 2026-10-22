@@ -2,7 +2,7 @@
 
 #include "core/Tool.h"
 #include "visionrt/contracts/Module.h"
-#include "visionrt/contracts/Package.h"
+#include "core/ToolPackage.h"
 
 #ifdef _WIN32
 #    ifndef WIN32_LEAN_AND_MEAN

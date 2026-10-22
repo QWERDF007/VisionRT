@@ -1,0 +1,603 @@
+#include "core/ToolDeclarationYaml.h"
+#include "core/ValueYaml.h"
+
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <limits>
+#include <set>
+#include <sstream>
+#include <unordered_set>
+#include <yaml-cpp/parser.h>
+#include <yaml-cpp/eventhandler.h>
+
+namespace visionrt {
+
+namespace {
+
+class DuplicateKeyDetector : public YAML::EventHandler {
+public:
+    enum class ContainerType { Sequence, Map };
+    struct Frame {
+        ContainerType type;
+        bool isKey{true};
+        std::set<std::string> keys;
+    };
+    std::vector<Frame> stack;
+
+    void OnDocumentStart(const YAML::Mark&) override {}
+    void OnDocumentEnd() override {}
+    void OnNull(const YAML::Mark&, YAML::anchor_t) override { advance(); }
+    void OnAlias(const YAML::Mark&, YAML::anchor_t) override { advance(); }
+
+    void OnScalar(const YAML::Mark&, const std::string&, YAML::anchor_t, const std::string& value) override {
+        if (!stack.empty() && stack.back().type == ContainerType::Map && stack.back().isKey) {
+            if (stack.back().keys.contains(value)) {
+                throw ContractError("Duplicate key detected in YAML: " + value);
+            }
+            stack.back().keys.insert(value);
+            stack.back().isKey = false;
+        } else {
+            advance();
+        }
+    }
+
+    void OnSequenceStart(const YAML::Mark&, const std::string&, YAML::anchor_t, YAML::EmitterStyle::value) override {
+        stack.push_back({ContainerType::Sequence, false, {}});
+    }
+    void OnSequenceEnd() override {
+        if (!stack.empty()) stack.pop_back();
+        advance();
+    }
+
+    void OnMapStart(const YAML::Mark&, const std::string&, YAML::anchor_t, YAML::EmitterStyle::value) override {
+        stack.push_back({ContainerType::Map, true, {}});
+    }
+    void OnMapEnd() override {
+        if (!stack.empty()) stack.pop_back();
+        advance();
+    }
+
+private:
+    void advance() {
+        if (!stack.empty() && stack.back().type == ContainerType::Map && !stack.back().isKey) {
+            stack.back().isKey = true;
+        }
+    }
+};
+
+void checkDuplicateKeys(std::istream& stream) {
+    try {
+        YAML::Parser parser(stream);
+        DuplicateKeyDetector detector;
+        while (parser.HandleNextDocument(detector)) {}
+    } catch (const ContractError&) {
+        throw;
+    } catch (const std::exception& error) {
+        throw ContractError("YAML parse error: " + std::string(error.what()));
+    }
+}
+
+std::string pathText(const std::filesystem::path& path) {
+    const auto text = path.generic_u8string();
+    return {reinterpret_cast<const char*>(text.data()), text.size()};
+}
+
+void fields(const YAML::Node& node, std::initializer_list<std::string_view> allowed,
+            const std::string& context) {
+    if (!node.IsMap()) throw ContractError(context + " must be a mapping");
+    std::set<std::string> seen;
+    for (const auto& field : node) {
+        if (!field.first.IsScalar()) throw ContractError(context + " has a non-scalar key");
+        const auto key = field.first.Scalar();
+        if (!seen.insert(key).second) throw ContractError(context + " has duplicate key: " + key);
+        if (std::find(allowed.begin(), allowed.end(), key) == allowed.end())
+            throw ContractError(context + " has unknown field: " + key);
+    }
+}
+
+std::string text(const YAML::Node& node, const std::string& context, bool nonempty = false) {
+    if (!node.IsScalar()) throw ContractError(context + " must be a string scalar");
+    auto value = node.Scalar();
+    validateUtf8(value);
+    if (nonempty && value.empty()) throw ContractError(context + " must not be empty");
+    return value;
+}
+
+
+std::vector<PortDefinition> parsePorts(const YAML::Node& node, const std::string& direction) {
+    if (!node.IsSequence()) throw ContractError(direction + " must be a sequence");
+    const bool output = direction == "outputs";
+    std::vector<PortDefinition> ports;
+    ports.reserve(node.size());
+    for (const auto& item : node) {
+        if (output) {
+            fields(item, {"id", "name", "type", "type_from", "dtype", "rank", "layout", "image_port", "display"}, direction);
+        } else {
+            fields(item, {"id", "name", "type", "dtype", "rank", "layout", "default", "editor", "min", "max",
+                "step", "decimals", "options", "options_provider", "tab", "group", "image_input", "path_mode_from"}, direction);
+        }
+        PortDefinition port;
+        port.id = text(item["id"], direction + ".id", false);
+        const auto context = direction + "." + port.id;
+        try {
+            port.name = text(item["name"], "name", false);
+            if (const auto reference = item["type_from"]) {
+                fields(reference, {"flow", "node", "port"}, "type_from");
+                for (const auto* field : {"type", "dtype", "rank", "layout", "image_port", "display"})
+                    if (item[field]) throw ContractError("type_from cannot be combined with " + std::string(field));
+                port.typeFrom = PortTypeReference{text(reference["flow"], "type_from.flow", true),
+                    text(reference["node"], "type_from.node", true), text(reference["port"], "type_from.port", true)};
+            } else {
+                port.type = decodeTypeSpec(item);
+            }
+            if (item["default"]) port.defaultValue = decodeValue(item["default"], port.type);
+            if (item["editor"]) port.editor = text(item["editor"], "editor");
+            if (item["path_mode_from"]) port.pathModeFrom = text(item["path_mode_from"], "path_mode_from", false);
+            if (item["tab"]) port.tab = text(item["tab"], "tab");
+            if (item["group"]) port.group = text(item["group"], "group");
+            if (item["min"]) port.minimum = decodeValue(item["min"], port.type);
+            if (item["max"]) port.maximum = decodeValue(item["max"], port.type);
+            if (item["step"]) port.step = decodeValue(item["step"], port.type);
+            if (item["decimals"]) {
+                const auto decimals = parseInt64(text(item["decimals"], "decimals"));
+                if (decimals < std::numeric_limits<int>::min() || decimals > std::numeric_limits<int>::max())
+                    throw ContractError("Invalid decimals");
+                port.decimals = static_cast<int>(decimals);
+            }
+            if (item["options"]) {
+                if (!item["options"].IsSequence()) throw ContractError("options must be a sequence");
+                port.options.reserve(item["options"].size());
+                for (const auto& option : item["options"]) {
+                    port.options.push_back(decodeValue(option, port.type));
+                }
+            }
+            if (item["options_provider"]) port.optionsProvider = text(item["options_provider"], "options_provider");
+            if (item["image_input"]) port.imageInput = text(item["image_input"], "image_input", false);
+            if (item["image_port"]) port.imagePort = text(item["image_port"], "image_port", false);
+            if (item["display"]) {
+                const auto display = item["display"];
+                fields(display, {"color_order", "same_geometry_as_input"}, "display");
+                if (display["color_order"]) port.colorOrder = text(display["color_order"], "color_order");
+                if (display["same_geometry_as_input"])
+                    port.sameGeometryAsInput = text(display["same_geometry_as_input"], "same_geometry_as_input", false);
+            }
+        } catch (const std::exception& error) {
+            throw ContractError(context + ": " + error.what());
+        }
+        ports.push_back(std::move(port));
+    }
+    return ports;
+}
+
+const PortDefinition* portById(const std::vector<PortDefinition>& ports, std::string_view id) {
+    const auto found = std::find_if(ports.begin(), ports.end(), [&](const auto& port) { return port.id == id; });
+    return found == ports.end() ? nullptr : &*found;
+}
+
+void systemOutputs(ToolDefinition& definition) {
+    const auto* code = portById(definition.outputs, "__status_code");
+    const auto* message = portById(definition.outputs, "__status_message");
+    if (code || message) {
+        if (definition.outputs.size() < 2 || definition.outputs[0].id != "__status_code" ||
+            definition.outputs[1].id != "__status_message" || code->type != TypeSpec{Type::Int} ||
+            message->type != TypeSpec{Type::String}) throw ContractError("Invalid automatic system outputs");
+        return;
+    }
+    PortDefinition statusCode;
+    statusCode.id = "__status_code";
+    statusCode.name = "状态码";
+    statusCode.type = {Type::Int};
+    PortDefinition statusMessage;
+    statusMessage.id = "__status_message";
+    statusMessage.name = "状态消息";
+    statusMessage.type = {Type::String};
+    definition.outputs.insert(definition.outputs.begin(), {std::move(statusCode), std::move(statusMessage)});
+}
+
+ToolDefinition parseDefinitionNode(const YAML::Node& node, const std::filesystem::path& path, bool builtin) {
+    try {
+        fields(node, {"schema_version", "tool_id", "display_name", "version", "kind", "entry", "init_params", "inputs", "outputs", "category", "subcategory", "resources"}, "Tool definition");
+        if (parseInt64(text(node["schema_version"], "schema_version")) != 1) throw ContractError("Unsupported schema_version");
+        ToolDefinition definition;
+        definition.id = text(node["tool_id"], "tool_id", true);
+        definition.displayName = text(node["display_name"], "display_name", true);
+        definition.version = text(node["version"], "version", true);
+        definition.builtin = builtin;
+        if (!path.empty()) {
+            definition.definitionPath = path.lexically_normal();
+        }
+        if (node["category"]) definition.category = text(node["category"], "category");
+        if (node["subcategory"]) definition.subcategory = text(node["subcategory"], "subcategory");
+        if (const auto resources = node["resources"]) {
+            if (!resources.IsSequence()) throw ContractError("resources must be a sequence");
+            for (const auto& resource : resources) {
+                const auto name = text(resource, "resource", true);
+                const auto relative = std::filesystem::path(std::u8string_view(
+                    reinterpret_cast<const char8_t*>(name.data()), name.size()));
+                if (relative.is_absolute() || relative.has_root_name())
+                    throw ContractError("resource must be relative to its declaration");
+                for (const auto& part : relative)
+                    if (part == std::filesystem::path(u8".."))
+                        throw ContractError("resource must not escape its declaration directory");
+                definition.resources.push_back((path.parent_path() / relative).lexically_normal());
+            }
+        }
+        const auto kind = text(node["kind"], "kind");
+        if (kind == "cpp_function") definition.kind = ToolKind::CppFunction;
+        else if (kind == "cpp_class") definition.kind = ToolKind::CppClass;
+        else if (kind == "python_function") definition.kind = ToolKind::PythonFunction;
+        else if (kind == "python_class") definition.kind = ToolKind::PythonClass;
+        else throw ContractError("Unknown tool kind: " + kind);
+
+        const auto entry = node["entry"];
+        if (definition.kind == ToolKind::CppClass || definition.kind == ToolKind::CppFunction) {
+            fields(entry, {"registry_name"}, "C++ entry");
+            definition.registryName = text(entry["registry_name"], "registry_name", true);
+        } else {
+            fields(entry, {"file", "symbol"}, "Python entry");
+            const auto fileStr = text(entry["file"], "entry.file", true);
+            const auto file = std::filesystem::path(std::u8string_view(
+                reinterpret_cast<const char8_t*>(fileStr.data()), fileStr.size()));
+            if (file.is_absolute() || file.has_root_name()) throw ContractError("Python entry.file must be relative to its YAML");
+            // Every package-relative reference stays inside the declaration directory:
+            // a parent component would resolve outside the installed package.
+            for (const auto& part : file) {
+                if (part == std::filesystem::path(u8".."))
+                    throw ContractError("Python entry.file must not escape its declaration directory: " + fileStr);
+            }
+            if (!path.empty()) {
+                definition.script = (path.parent_path() / file).lexically_normal();
+            } else {
+                definition.script = file;
+            }
+            definition.symbol = text(entry["symbol"], "entry.symbol", true);
+        }
+        definition.initParams = parsePorts(node["init_params"], "init_params");
+        definition.inputs = parsePorts(node["inputs"], "inputs");
+        definition.outputs = parsePorts(node["outputs"], "outputs");
+
+        systemOutputs(definition);
+        validateToolDefinition(definition);
+        return definition;
+    } catch (const std::exception& error) {
+        const auto prefix = path.empty() ? std::string{} : (pathText(path) + ": ");
+        throw ContractError(prefix + error.what());
+    }
+}
+
+} // namespace
+
+ToolDefinition parseToolDefinitionYaml(const std::string& yamlContent,
+                                       const std::filesystem::path& definitionPath,
+                                       bool builtin) {
+    {
+        std::istringstream stream(yamlContent);
+        checkDuplicateKeys(stream);
+    }
+    YAML::Node node;
+    try {
+        node = YAML::Load(yamlContent);
+    } catch (const std::exception& error) {
+        throw ContractError("Invalid YAML: " + std::string(error.what()));
+    }
+    return parseDefinitionNode(node, definitionPath, builtin);
+}
+
+ToolDefinition parseToolDefinitionFile(const std::filesystem::path& path, bool builtin) {
+    std::string content;
+    {
+        std::ifstream input(path, std::ios::binary);
+        if (!input) throw ContractError("Cannot open tool definition");
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        content = buffer.str();
+    }
+    {
+        std::istringstream stream(content);
+        checkDuplicateKeys(stream);
+    }
+    YAML::Node node;
+    try {
+        node = YAML::Load(content);
+    } catch (const std::exception& error) {
+        throw ContractError(pathText(path) + ": " + error.what());
+    }
+    return parseDefinitionNode(node, path, builtin);
+}
+
+void validateToolYaml(const std::string& yamlContent,
+                      const std::filesystem::path& definitionPath,
+                      bool builtin) {
+    parseToolDefinitionYaml(yamlContent, definitionPath, builtin);
+}
+
+namespace {
+
+const char* kindText(ToolKind kind) {
+    switch (kind) {
+    case ToolKind::CppFunction: return "cpp_function";
+    case ToolKind::CppClass: return "cpp_class";
+    case ToolKind::PythonFunction: return "python_function";
+    case ToolKind::PythonClass: return "python_class";
+    }
+    throw ContractError("Unknown tool kind");
+}
+
+std::string declarationRelativeText(const std::filesystem::path& path,
+                                    const std::filesystem::path& declaration) {
+    if (path.empty()) return {};
+    const auto base = declaration.parent_path();
+    if (base.empty()) return pathText(path);
+    const auto relative = path.lexically_relative(base);
+    if (relative.empty() || (!relative.empty() && *relative.begin() == std::filesystem::path(u8"..")))
+        throw ContractError("资源路径不在工具声明目录内：" + pathText(path));
+    return pathText(relative);
+}
+
+void encodePortType(YAML::Node& node, const TypeSpec& type) {
+    node["type"] = typeName(type.type);
+    if (type.type == Type::NumericArray || type.type == Type::StringArray) {
+        if (type.dtype) node["dtype"] = dtypeName(*type.dtype);
+        node["rank"] = type.rank;
+        node["layout"] = type.layout == Layout::Dense ? "dense" : "batch_ragged";
+    }
+}
+
+YAML::Node encodePort(const PortDefinition& port, bool output) {
+    YAML::Node node(YAML::NodeType::Map);
+    node["id"] = port.id;
+    node["name"] = port.name;
+    if (port.typeFrom) {
+        YAML::Node reference(YAML::NodeType::Map);
+        reference["flow"] = port.typeFrom->flowParameter;
+        reference["node"] = port.typeFrom->nodeParameter;
+        reference["port"] = port.typeFrom->portParameter;
+        node["type_from"] = reference;
+        return node;
+    }
+    encodePortType(node, port.type);
+    if (!output) {
+        if (!isMissing(port.defaultValue)) node["default"] = encodeValue(port.defaultValue, port.type);
+        if (!port.editor.empty()) node["editor"] = port.editor;
+        if (!port.pathModeFrom.empty()) node["path_mode_from"] = port.pathModeFrom;
+        if (!port.tab.empty()) node["tab"] = port.tab;
+        if (!port.group.empty()) node["group"] = port.group;
+        if (port.minimum) node["min"] = encodeValue(*port.minimum, port.type);
+        if (port.maximum) node["max"] = encodeValue(*port.maximum, port.type);
+        if (port.step) node["step"] = encodeValue(*port.step, port.type);
+        if (port.decimals) node["decimals"] = *port.decimals;
+        if (!port.options.empty()) {
+            YAML::Node options(YAML::NodeType::Sequence);
+            for (const auto& option : port.options) options.push_back(encodeValue(option, port.type));
+            node["options"] = options;
+        }
+        if (!port.optionsProvider.empty()) node["options_provider"] = port.optionsProvider;
+        if (!port.imageInput.empty()) node["image_input"] = port.imageInput;
+    } else {
+        if (!port.imagePort.empty()) node["image_port"] = port.imagePort;
+        if (!port.colorOrder.empty() || !port.sameGeometryAsInput.empty()) {
+            YAML::Node display(YAML::NodeType::Map);
+            if (!port.colorOrder.empty()) display["color_order"] = port.colorOrder;
+            if (!port.sameGeometryAsInput.empty()) display["same_geometry_as_input"] = port.sameGeometryAsInput;
+            node["display"] = display;
+        }
+    }
+    return node;
+}
+
+YAML::Node encodePorts(const std::vector<PortDefinition>& ports, bool output) {
+    YAML::Node sequence(YAML::NodeType::Sequence);
+    for (const auto& port : ports) sequence.push_back(encodePort(port, output));
+    return sequence;
+}
+
+} // namespace
+
+std::string emitNormalizedToolYaml(const ToolDefinition& definition) {
+    validateToolDefinition(definition);
+    YAML::Node node(YAML::NodeType::Map);
+    node["schema_version"] = definition.schemaVersion;
+    node["tool_id"] = definition.id;
+    node["display_name"] = definition.displayName;
+    node["version"] = definition.version;
+    node["kind"] = kindText(definition.kind);
+    if (!definition.category.empty()) node["category"] = definition.category;
+    if (!definition.subcategory.empty()) node["subcategory"] = definition.subcategory;
+
+    YAML::Node entry(YAML::NodeType::Map);
+    if (definition.kind == ToolKind::CppFunction || definition.kind == ToolKind::CppClass) {
+        entry["registry_name"] = definition.registryName;
+    } else {
+        entry["file"] = declarationRelativeText(definition.script, definition.definitionPath);
+        entry["symbol"] = definition.symbol;
+    }
+    node["entry"] = entry;
+
+    if (!definition.resources.empty()) {
+        YAML::Node resources(YAML::NodeType::Sequence);
+        for (const auto& resource : definition.resources)
+            resources.push_back(declarationRelativeText(resource, definition.definitionPath));
+        node["resources"] = resources;
+    }
+    node["init_params"] = encodePorts(definition.initParams, false);
+    node["inputs"] = encodePorts(definition.inputs, false);
+    node["outputs"] = encodePorts(definition.outputs, true);
+    return YAML::Dump(node) + "\n";
+}
+
+ModuleIndexData parseModuleIndexNode(const YAML::Node& node) {
+    if (!node.IsMap()) throw ContractError("Module index YAML root must be a mapping");
+    fields(node, {"schema_version", "variant", "modules", "tools", "runtime_files"}, "module index root");
+
+    ModuleIndexData result;
+
+    if (!node["schema_version"]) throw ContractError("Missing required field 'schema_version'");
+    try {
+        result.schemaVersion = node["schema_version"].as<int>();
+    } catch (...) {
+        throw ContractError("schema_version must be an integer");
+    }
+    if (result.schemaVersion != 2) {
+        throw ContractError("Unsupported schema_version: " + std::to_string(result.schemaVersion) + " (expected 2)");
+    }
+
+    if (!node["variant"]) throw ContractError("Missing required field 'variant'");
+    result.variant = text(node["variant"], "variant", true);
+    if (result.variant.empty()) throw ContractError("variant must not be empty");
+
+    if (node["modules"]) {
+        if (!node["modules"].IsMap()) throw ContractError("modules must be a mapping");
+        for (const auto& modField : node["modules"]) {
+            if (!modField.first.IsScalar()) throw ContractError("Module name in 'modules' must be a scalar");
+            const auto modName = modField.first.as<std::string>();
+            if (modName.empty()) throw ContractError("Module name in 'modules' must not be empty");
+            const auto& modNode = modField.second;
+            if (!modNode.IsMap()) throw ContractError("Module '" + modName + "' entry must be a mapping");
+            fields(modNode, {"library"}, "Module '" + modName + "'");
+
+            if (!modNode["library"]) throw ContractError("Module '" + modName + "' missing required field 'library'");
+            const auto libStr = text(modNode["library"], "library", true);
+            if (libStr.empty()) throw ContractError("Module '" + modName + "' library path must not be empty");
+
+            const auto libPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(libStr.data()), libStr.size()));
+            if (libPath.is_absolute() || libPath.has_root_name()) {
+                throw ContractError("Module '" + modName + "' library path must be relative: " + libStr);
+            }
+            const auto normLib = libPath.lexically_normal();
+            if (!normLib.empty() && normLib.begin()->string() == "..") {
+                throw ContractError("Module '" + modName + "' library path escapes root: " + libStr);
+            }
+
+            result.modules[modName] = ModuleEntry{libStr};
+        }
+    }
+
+    if (!node["tools"]) throw ContractError("Missing required field 'tools'");
+    if (!node["tools"].IsMap()) throw ContractError("tools must be a mapping");
+    if (node["tools"].size() == 0) throw ContractError("tools must not be empty");
+
+    for (const auto& toolField : node["tools"]) {
+        if (!toolField.first.IsScalar()) throw ContractError("Tool key in 'tools' must be a scalar");
+        const auto toolId = toolField.first.as<std::string>();
+        if (toolId.empty()) throw ContractError("Tool key in 'tools' must not be empty");
+        const auto& toolNode = toolField.second;
+        if (!toolNode.IsMap()) throw ContractError("Tool '" + toolId + "' entry must be a mapping");
+        fields(toolNode, {"module", "definition", "host_binding"}, "Tool '" + toolId + "'");
+
+        ToolIndexEntry entry;
+
+        if (!toolNode["definition"]) throw ContractError("Tool '" + toolId + "' missing required field 'definition'");
+        const auto defStr = text(toolNode["definition"], "definition", true);
+        if (defStr.empty()) throw ContractError("Tool '" + toolId + "' definition path must not be empty");
+
+        const auto defPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(defStr.data()), defStr.size()));
+        if (defPath.is_absolute() || defPath.has_root_name()) {
+            throw ContractError("Tool '" + toolId + "' definition path must be relative: " + defStr);
+        }
+        const auto normDef = defPath.lexically_normal();
+        if (!normDef.empty() && normDef.begin()->string() == "..") {
+            throw ContractError("Tool '" + toolId + "' definition path escapes root: " + defStr);
+        }
+        entry.definition = defStr;
+
+        if (toolNode["module"]) {
+            entry.module = text(toolNode["module"], "module", true);
+            if (entry.module.empty()) throw ContractError("Tool '" + toolId + "' module reference must not be empty");
+            if (!result.modules.contains(entry.module)) {
+                throw ContractError("Tool '" + toolId + "' references undeclared module: '" + entry.module + "'");
+            }
+        }
+
+        if (toolNode["host_binding"]) {
+            entry.hostBinding = text(toolNode["host_binding"], "host_binding", true);
+            if (entry.hostBinding.empty()) throw ContractError("Tool '" + toolId + "' host_binding must not be empty");
+        }
+
+        if (!entry.module.empty() && !entry.hostBinding.empty()) {
+            throw ContractError("Tool '" + toolId + "' cannot specify both 'module' and 'host_binding'");
+        }
+
+        result.tools[toolId] = std::move(entry);
+    }
+
+    std::unordered_set<std::string> referencedModules;
+    for (const auto& [toolId, toolEntry] : result.tools) {
+        if (!toolEntry.module.empty()) {
+            referencedModules.insert(toolEntry.module);
+        }
+    }
+    for (const auto& [modName, modEntry] : result.modules) {
+        if (!referencedModules.contains(modName)) {
+            throw ContractError("Module '" + modName + "' is not referenced by any tool");
+        }
+    }
+
+    if (node["runtime_files"]) {
+        if (!node["runtime_files"].IsSequence()) {
+            throw ContractError("runtime_files must be a sequence");
+        }
+        for (std::size_t i = 0; i < node["runtime_files"].size(); ++i) {
+            const auto rfNode = node["runtime_files"][i];
+            const auto rfStr = text(rfNode, "runtime_files[" + std::to_string(i) + "]", true);
+            if (rfStr.empty()) throw ContractError("runtime_files entry must not be empty");
+            const auto rfPath = std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(rfStr.data()), rfStr.size()));
+            if (rfPath.is_absolute() || rfPath.has_root_name()) {
+                throw ContractError("runtime_files entry must be relative: " + rfStr);
+            }
+            const auto normRf = rfPath.lexically_normal();
+            if (!normRf.empty() && normRf.begin()->string() == "..") {
+                throw ContractError("runtime_files entry escapes root: " + rfStr);
+            }
+            result.runtimeFiles.push_back(rfStr);
+        }
+    }
+
+    return result;
+}
+
+ModuleIndexData parseModuleIndexYaml(const std::string& yamlContent) {
+    {
+        std::istringstream stream(yamlContent);
+        checkDuplicateKeys(stream);
+    }
+    YAML::Node node;
+    try {
+        node = YAML::Load(yamlContent);
+    } catch (const std::exception& error) {
+        throw ContractError("Invalid YAML: " + std::string(error.what()));
+    }
+    return parseModuleIndexNode(node);
+}
+
+ModuleIndexData parseModuleIndexFile(const std::filesystem::path& path) {
+    std::string content;
+    {
+        std::ifstream input(path, std::ios::binary);
+        if (!input) throw ContractError("Cannot open module index file: " + pathText(path));
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        content = buffer.str();
+    }
+    {
+        std::istringstream stream(content);
+        checkDuplicateKeys(stream);
+    }
+    YAML::Node node;
+    try {
+        node = YAML::Load(content);
+    } catch (const std::exception& error) {
+        throw ContractError(pathText(path) + ": " + error.what());
+    }
+    return parseModuleIndexNode(node);
+}
+
+void validateModuleIndexYaml(const std::string& yamlContent) {
+    parseModuleIndexYaml(yamlContent);
+}
+
+void validateModuleIndexFile(const std::filesystem::path& path) {
+    parseModuleIndexFile(path);
+}
+
+} // namespace visionrt

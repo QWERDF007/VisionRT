@@ -1,8 +1,8 @@
 #include "core/ToolRegistry.h"
-#include "visionrt/contracts/SchemaYaml.h"
-#include "visionrt/contracts/Package.h"
+#include "core/ToolDeclarationYaml.h"
+#include "core/ToolPackage.h"
 
-#include <visionrt/contracts/ValueYaml.h>
+#include <core/ValueYaml.h>
 
 #include <algorithm>
 #include <cassert>

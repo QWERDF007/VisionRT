@@ -1,7 +1,7 @@
 #include "ui/AppController_p.h"
 #include "core/ValueJson.h"
 
-#include <visionrt/contracts/Contract.h>
+#include <core/ToolValueValidation.h>
 
 #include <cmath>
 #include <limits>

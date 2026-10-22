@@ -3,7 +3,7 @@
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
 
-#include <visionrt/contracts/Package.h>
+#include <core/ToolPackage.h>
 
 #include <QClipboard>
 #include <QCoreApplication>

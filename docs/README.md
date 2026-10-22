@@ -12,10 +12,11 @@
 | 构建与部署 | [脚本说明](../tools/README.md)、[CMake](../CMakeLists.txt) |
 | 共享契约 | [VisionRTContracts](../3rdparty/VisionRTContracts/README.md)、[公共头文件](../3rdparty/VisionRTContracts/include/visionrt/contracts) |
 | 工程与工具注册 | [core](../src/core) |
+| 工具声明、包读取与校验 | [ToolDefinition](../src/core/ToolDefinition.h)、[ToolPackage](../src/core/ToolPackage.h)、[校验器](../tools/visionrt_validate_tool.cpp) |
 | 值 JSON 编解码 | [ValueJson](../src/core/ValueJson.h) |
 | 工程 JSON 存取 | [ProjectStorage](../src/core/ProjectStorage.h)、[工程样例](../examples) |
 | 调度、快照与接收 | [runtime](../src/runtime) |
 | 模块加载与生命周期 | [plugins](../src/plugins) |
-| Python 实例适配 | [python](../src/python) |
+| Python 实例适配与值转换 | [PythonRuntime](../src/python/PythonRuntime.h)、[PythonInterop](../src/python/PythonInterop.h) |
 | 工作台 | [ui](../src/ui) |
 | 契约验证 | [tests](../tests)、[测试注册](../CMakeLists.txt) |

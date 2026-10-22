@@ -2,10 +2,10 @@
 #    undef NDEBUG
 #endif
 
-#include "visionrt/contracts/Schema.h"
+#include "core/ToolDefinition.h"
 
 #include <visionrt/contracts/Value.h>
-#include <visionrt/contracts/ValueYaml.h>
+#include <core/ValueYaml.h>
 
 #include <array>
 #include <cassert>

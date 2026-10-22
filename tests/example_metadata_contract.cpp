@@ -1,6 +1,6 @@
 #include "core/ProjectStorage.h"
 #include "core/ToolRegistry.h"
-#include <visionrt/contracts/Package.h>
+#include <core/ToolPackage.h>
 
 #include <algorithm>
 #include <filesystem>

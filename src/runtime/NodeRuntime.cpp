@@ -1,6 +1,6 @@
 #include "runtime/RuntimeInternal.h"
 
-#include <visionrt/contracts/Contract.h>
+#include <core/ToolValueValidation.h>
 
 #include <algorithm>
 #include <chrono>
