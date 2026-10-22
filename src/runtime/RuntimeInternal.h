@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <map>
+#include <stop_token>
 
 namespace visionrt::runtime_detail {
 class WaitBudget
@@ -52,10 +53,11 @@ struct FrozenRun
 
 struct RoundContext
 {
-    std::shared_ptr<const FrozenRun> frozen;
-    std::uint64_t                    generation;
-    std::uint64_t                    session;
-    std::uint64_t                    round;
+    std::shared_ptr<const FrozenRun>   frozen;
+    std::uint64_t                      generation;
+    std::uint64_t                      session;
+    std::uint64_t                      round;
+    std::shared_ptr<std::stop_source>  stop;
 };
 
 class NodeReader final : public IResultReader
@@ -105,7 +107,8 @@ struct NodeRuntime
     std::uint64_t                                  configurationSession = 0;
     std::uint64_t                                  publication          = 0;
     void                                           run(const std::shared_ptr<const RoundContext> &context);
-    void                                           release() noexcept;
+    // Returns the release failure when one was observed; success is nullopt.
+    std::optional<ToolStatus>                      release() noexcept;
     void                                           reset() noexcept;
 };
 } // namespace visionrt::runtime_detail

@@ -8,7 +8,7 @@ Rectangle {
     color: Theme.surfaceBg
     border.color: Theme.border
     border.width: 1
-    property bool expanded: true
+    property bool expanded: false
     property string selectedKey: ""
     property string selectedTool: ""
     signal toggleRequested()
@@ -44,7 +44,13 @@ Rectangle {
                             Layout.fillWidth: true
                             font: QuiFont.Body; color: QuiColor.FontPrimary; selectByMouse: true
                             verticalAlignment: Text.AlignVCenter
-                            onTextChanged: { app.filterTools(text); if (text.length) Qt.callLater(tree.allExpand) }
+                            onTextChanged: {
+                                app.filterTools(text)
+                                Qt.callLater(function() {
+                                    if (filterInput.text.length === 0) tree.allCollapse()
+                                    else tree.allExpand()
+                                })
+                            }
                             Text {
                                 anchors.fill: parent; text: "搜索工具名"
                                 color: Theme.iconMuted; font: QuiFont.Body
@@ -84,14 +90,6 @@ Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true
             model: app.toolModel; displayRole: "display"
             radius: 0; border.width: 0; cellHeight: Theme.treeRowHeight
-            Component.onCompleted: {
-                Qt.callLater(function() {
-                    tree.allExpand()
-                    if (typeof demoSelect !== "undefined" && demoSelect) {
-                        root.selectedKey = "处理"
-                    }
-                })
-            }
             view.delegate: ToolTreeDelegate {
                 treeView: tree.view
                 selectedKey: root.selectedKey

@@ -23,6 +23,8 @@ struct RoutedWire
     NodeId                    target;
     std::vector<PortRelation> ports;
     std::vector<QPointF>       points;
+    // Empty on success; otherwise a Chinese reason for this line only.
+    std::string               error;
 };
 
 class WireRouter

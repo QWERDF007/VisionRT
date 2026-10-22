@@ -15,12 +15,14 @@
 #else
 #    include <QLibrary>
 #endif
+#include <condition_variable>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace visionrt {
@@ -97,9 +99,19 @@ public:
     std::size_t loadedModuleCount() const;
 
 private:
+    std::shared_ptr<const LoadedModule> loadModuleFile(const std::filesystem::path &libraryPath,
+                                                       ToolStatus                  &status);
+    struct PendingLoad
+    {
+        std::thread::id owner;
+    };
+
     mutable std::mutex                                             mutex_;
+    std::condition_variable                                        loadedChanged_;
     std::map<std::string, std::filesystem::path, std::less<>>      index_;
     std::map<std::filesystem::path, std::shared_ptr<LoadedModule>> loadedModules_;
+    std::map<std::filesystem::path, PendingLoad>                   loading_;
+    std::map<std::filesystem::path, ToolStatus>                    failures_;
 };
 
 class DomainToolAdapter final : public IToolInstance

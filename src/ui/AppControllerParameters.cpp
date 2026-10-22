@@ -1,5 +1,6 @@
 #include "ui/AppController_p.h"
 
+#include <visionrt/contracts/Contract.h>
 #include <visionrt/contracts/ValueYaml.h>
 
 #include <QRegularExpression>
@@ -18,24 +19,14 @@ bool AppController::Impl::applyParameter(const QString &id, bool initialization,
     const auto signature = signatures.find(id.toStdString());
     if (signature == signatures.end())
         throw ContractError("Unknown parameter");
-    if (signature->second.type == Type::Float && !isMissing(value) && !std::isfinite(std::get<double>(value)))
-        throw ContractError("Numeric parameter must be finite");
-    if (const auto *declaration = parameter(id.toStdString(), initialization); declaration && !isMissing(value))
+    if (const auto *declaration = parameter(id.toStdString(), initialization))
     {
-        const auto less = [&](const PortValue &left, const PortValue &right)
-        {
-            return signature->second.type == Type::Int
-                     ? std::get<std::int64_t>(left) < std::get<std::int64_t>(right)
-                     : std::get<double>(left) < std::get<double>(right);
-        };
-        if ((declaration->minimum && less(value, *declaration->minimum))
-            || (declaration->maximum && less(*declaration->maximum, value)))
-            throw ContractError("Value is outside the declared range");
-        if (!declaration->options.empty()
-            && std::none_of(declaration->options.begin(), declaration->options.end(),
-                            [&](const auto &option) { return equalValues(value, option); }))
-            throw ContractError("Value is not a declared option");
+        if (!isMissing(value))
+            validateToolValues({portContractFromDefinition(*declaration)}, {{id.toStdString(), value}}, false);
     }
+    else if (signature->second.type == Type::Float && !isMissing(value)
+             && !std::isfinite(std::get<double>(value)))
+        throw ContractError("数值参数必须为有限值");
     return initialization
              ? editor.setInitParam(flow.toStdString(), node->id, id.toStdString(), std::move(value))
              : editor.setLiteral(flow.toStdString(), node->id, id.toStdString(), std::move(value));

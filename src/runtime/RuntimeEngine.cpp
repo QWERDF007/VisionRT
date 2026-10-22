@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <deque>
 #include <set>
 #include <thread>
 
@@ -51,6 +52,79 @@ double milliseconds(Clock::duration duration)
 {
     return std::chrono::duration<double, std::milli>(duration).count();
 }
+
+// Single-node execution may reuse a previous session, but only while every
+// consumed publication is still the current, successful and type-compatible
+// source. The result is the first node that must be rerun.
+std::optional<std::string> upstreamValidityError(
+    const FrozenRun &frozen, NodeId target, std::uint64_t generation,
+    const std::map<NodeId, std::shared_ptr<NodeRuntime>> &runtimes)
+{
+    std::set<NodeId> valid;
+    std::set<NodeId> visiting;
+    std::function<std::optional<std::string>(NodeId)> check = [&](NodeId id) -> std::optional<std::string>
+    {
+        if (valid.contains(id))
+            return std::nullopt;
+        if (!visiting.insert(id).second)
+            return std::string("上游依赖存在循环，无法执行");
+        const auto nodeIt = frozen.nodes.find(id);
+        if (nodeIt == frozen.nodes.end())
+            return std::string("上游节点不存在");
+        const auto &node        = *nodeIt->second;
+        const auto  runtimeIt   = runtimes.find(id);
+        const auto  snapshot    = runtimeIt == runtimes.end() ? ResultSlot::Snapshot{} : runtimeIt->second->slot.latest();
+        if (!snapshot || snapshot->generation != generation)
+            return "上游节点 " + node.title() + " 尚未运行，请先运行该节点";
+        if (snapshot->executionRevision != node.executionRevision)
+            return "上游节点 " + node.title() + " 的参数已修改，请先重新运行该节点";
+        if (snapshot->status.code != 0)
+            return "上游节点 " + node.title() + " 未成功运行，请先重新运行该节点";
+        if (snapshot->toolId != node.toolId)
+            return "上游节点 " + node.title() + " 的工具已变化，请先重新运行该节点";
+        for (const auto &use : snapshot->inputUses)
+        {
+            const auto binding = node.inputs.find(use.inputPort);
+            if (binding == node.inputs.end() || binding->second.mode != BindingMode::Upstream
+                || !binding->second.source || binding->second.source->node != use.sourceNode
+                || binding->second.source->port != use.sourcePort)
+                return "上游节点 " + node.title() + " 的输入关系已变化，请先重新运行该节点";
+            const auto sourceIt = frozen.nodes.find(use.sourceNode);
+            if (sourceIt == frozen.nodes.end())
+                return "上游节点 " + node.title() + " 引用的源节点不存在";
+            const auto sourceRuntime = runtimes.find(use.sourceNode);
+            const auto sourceSnapshot = sourceRuntime == runtimes.end() ? ResultSlot::Snapshot{}
+                                                                       : sourceRuntime->second->slot.latest();
+            if (!sourceSnapshot || sourceSnapshot->publication != use.sourcePublication)
+                return "上游节点 " + sourceIt->second->title() + " 已重新运行，请先重新运行节点 " + node.title();
+            const auto input = node.signatures.inputs.find(use.inputPort);
+            const auto output = sourceSnapshot->outputs.find(use.sourcePort);
+            if (input == node.signatures.inputs.end() || output == sourceSnapshot->outputs.end()
+                || isMissing(output->second))
+                return "上游节点 " + sourceIt->second->title() + " 的输出不可用，请先重新运行该节点";
+            const auto actual = typeOf(output->second);
+            if (!actual || !compatible(*actual, input->second))
+                return "上游节点 " + sourceIt->second->title() + " 的输出类型与 " + node.title() + " 的输入不匹配";
+            if (auto error = check(use.sourceNode))
+                return error;
+        }
+        visiting.erase(id);
+        valid.insert(id);
+        return std::nullopt;
+    };
+
+    const auto targetIt = frozen.nodes.find(target);
+    if (targetIt == frozen.nodes.end())
+        return std::string("目标节点不存在");
+    for (const auto &[input, binding] : targetIt->second->inputs)
+    {
+        if (binding.mode != BindingMode::Upstream || !binding.source)
+            continue;
+        if (auto error = check(binding.source->node))
+            return error;
+    }
+    return std::nullopt;
+}
 } // namespace
 
 struct RuntimeEngine::Impl
@@ -71,11 +145,15 @@ struct RuntimeEngine::Impl
 
     ~Impl()
     {
+        std::shared_ptr<std::stop_source> stop;
         {
             std::lock_guard lock(control);
             shutdown      = true;
             stopRequested = true;
+            stop          = activeStop;
         }
+        if (stop)
+            stop->request_stop();
         commandReady.notify_one();
         coordinator.join();
     }
@@ -102,15 +180,30 @@ struct RuntimeEngine::Impl
     std::function<void(RuntimeCompletion)>                            callback;
     std::vector<FlowTiming>                                           flowTiming;
     double                                                            roundMilliseconds = 0;
-    std::vector<std::string>                                          diagnostics;
+    std::deque<RuntimeDiagnostic>                                     diagnostics;
+    std::uint64_t                                                     nextDiagnosticSequence = 1;
+    std::uint64_t                                                     deliveredDiagnosticSequence = 0;
+    std::size_t                                                       droppedDiagnostics = 0;
+    std::shared_ptr<std::stop_source>                                 activeStop;
     std::thread                                                       coordinator;
 
     void diagnose(std::string message)
     {
         std::lock_guard lock(control);
         if (diagnostics.size() == 100)
-            diagnostics.erase(diagnostics.begin());
-        diagnostics.push_back(std::move(message));
+        {
+            diagnostics.pop_front();
+            ++droppedDiagnostics;
+        }
+        diagnostics.push_back({generation, nextDiagnosticSequence++, std::move(message)});
+    }
+
+    void resetDiagnostics()
+    {
+        diagnostics.clear();
+        nextDiagnosticSequence      = 1;
+        deliveredDiagnosticSequence = 0;
+        droppedDiagnostics          = 0;
     }
 
     std::vector<std::shared_ptr<CompiledFlow>> compile(const std::shared_ptr<FrozenRun> &frozen)
@@ -225,7 +318,8 @@ struct RuntimeEngine::Impl
                 if (stopRequested || shutdown)
                     break;
                 // Stop and the all-selected-flows commitment share this exact decision point.
-                context = std::make_shared<const RoundContext>(RoundContext{frozen, generation, session, ++round});
+                context = std::make_shared<const RoundContext>(
+                    RoundContext{frozen, generation, session, ++round, activeStop});
             }
 
             struct CompletionClock
@@ -327,6 +421,7 @@ struct RuntimeEngine::Impl
             round   = 0;
             flowTiming.clear();
             roundMilliseconds = 0;
+            resetDiagnostics();
         }
     }
 
@@ -492,12 +587,18 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
             return {1, "target node does not exist"};
         if (frozen->selected.empty() || !nonempty)
             return {1, "select at least one nonempty flow"};
+        if (mode == RunMode::Node)
+        {
+            if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
+                return {1, *error};
+        }
         impl_->state         = mode == RunMode::Node ? RuntimeState::RunningNode
                              : mode == RunMode::Loop ? RuntimeState::RunningLoop
                                                      : RuntimeState::RunningOnce;
         impl_->stopRequested = false;
+        impl_->activeStop    = std::make_shared<std::stop_source>();
         impl_->completion.reset();
-        impl_->diagnostics.clear();
+        impl_->resetDiagnostics();
         impl_->flowTiming.clear();
         impl_->roundMilliseconds = 0;
         ++impl_->session;
@@ -515,18 +616,24 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
 
 void RuntimeEngine::requestStop()
 {
-    std::lock_guard lock(impl_->control);
-    if (impl_->state == RuntimeState::RunningLoop || impl_->state == RuntimeState::RunningOnce
-        || impl_->state == RuntimeState::RunningNode)
+    std::shared_ptr<std::stop_source> stop;
     {
-        impl_->stopRequested = true;
-        impl_->state         = RuntimeState::Stopping;
+        std::lock_guard lock(impl_->control);
+        if (impl_->state == RuntimeState::RunningLoop || impl_->state == RuntimeState::RunningOnce
+            || impl_->state == RuntimeState::RunningNode)
+        {
+            impl_->stopRequested = true;
+            impl_->state         = RuntimeState::Stopping;
+            stop                 = impl_->activeStop;
+        }
     }
+    if (stop)
+        stop->request_stop();
 }
 
 ToolStatus RuntimeEngine::requestReset()
 {
-    std::lock_guard lock(impl_->control);
+    std::unique_lock lock(impl_->control);
     if (impl_->shutdown || impl_->finishing || impl_->management != Impl::Management::None || impl_->completion)
         return {1, "runtime management is already pending"};
     if (impl_->state == RuntimeState::Refreshing || impl_->state == RuntimeState::Resetting)
@@ -536,12 +643,39 @@ ToolStatus RuntimeEngine::requestReset()
     if (impl_->state == RuntimeState::Idle)
     {
         impl_->state = RuntimeState::Resetting;
-        impl_->diagnostics.clear();
+        impl_->resetDiagnostics();
         impl_->commandPending = true;
         impl_->commandReady.notify_one();
     }
     else
         impl_->state = RuntimeState::Stopping;
+    const auto stop = impl_->activeStop;
+    lock.unlock();
+    if (stop)
+        stop->request_stop();
+    return {};
+}
+
+ToolStatus RuntimeEngine::removeNodes(std::span<const NodeId> ids)
+{
+    std::vector<std::shared_ptr<NodeRuntime>> removed;
+    {
+        std::lock_guard lock(impl_->control);
+        if (impl_->state != RuntimeState::Idle || impl_->shutdown || impl_->finishing
+            || impl_->management != Impl::Management::None || impl_->completion)
+            return {1, "runtime is busy"};
+        for (const auto id : ids)
+        {
+            const auto found = impl_->nodes.find(id);
+            if (found == impl_->nodes.end())
+                continue;
+            removed.push_back(std::move(found->second));
+            impl_->nodes.erase(found);
+        }
+    }
+    for (const auto &runtime : removed)
+        if (auto status = runtime->release())
+            impl_->diagnose(status->message);
     return {};
 }
 
@@ -553,7 +687,7 @@ ToolStatus RuntimeEngine::requestRefresh(std::function<ToolStatus()> work)
     impl_->management     = Impl::Management::Refresh;
     impl_->managementWork = std::move(work);
     impl_->state          = RuntimeState::Refreshing;
-    impl_->diagnostics.clear();
+    impl_->resetDiagnostics();
     impl_->commandPending = true;
     impl_->commandReady.notify_one();
     return {};
@@ -569,8 +703,16 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.round             = impl_->round;
     update.flows             = impl_->flowTiming;
     update.roundMilliseconds = impl_->roundMilliseconds;
-    update.diagnostics       = impl_->diagnostics;
-    update.completion        = impl_->completion;
+    for (const auto &diagnostic : impl_->diagnostics)
+    {
+        if (diagnostic.sequence <= impl_->deliveredDiagnosticSequence)
+            continue;
+        update.diagnostics.push_back(diagnostic);
+        impl_->deliveredDiagnosticSequence = diagnostic.sequence;
+    }
+    update.droppedDiagnostics = impl_->droppedDiagnostics;
+    impl_->droppedDiagnostics = 0;
+    update.completion         = impl_->completion;
     update.nodes.reserve(impl_->nodes.size());
     for (const auto &[id, runtime] : impl_->nodes)
     {
@@ -581,6 +723,13 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     }
     return update;
 }
+
+#ifdef VISIONRT_TEST_PROBES
+void RuntimeEngine::injectDiagnosticForTest(std::string message)
+{
+    impl_->diagnose(std::move(message));
+}
+#endif
 
 bool RuntimeEngine::acknowledgeCompletion(RuntimeCompletion completion)
 {

@@ -18,6 +18,7 @@ namespace visionrt {
 void PluginLoader::registerModule(std::string registryName, std::filesystem::path libraryPath)
 {
     std::lock_guard lock(mutex_);
+    failures_.clear();
     index_[std::move(registryName)] = std::move(libraryPath);
 }
 
@@ -37,6 +38,7 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
                                 + tool.moduleLibrary.string());
     }
     std::lock_guard lock(mutex_);
+    failures_.clear();
     index_ = std::move(index);
 }
 
@@ -57,21 +59,75 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
 {
     if (libraryPath.empty())
     {
-        status = {-3, "Module library path is empty"};
+        status = {-3, "模块库路径为空"};
         return nullptr;
     }
-
-    std::lock_guard lock(mutex_);
-    const auto      it = loadedModules_.find(libraryPath);
-    if (it != loadedModules_.end())
+    const auto key = std::filesystem::absolute(libraryPath).lexically_normal();
+    std::unique_lock lock(mutex_);
+    for (;;)
     {
-        status = {};
-        return it->second;
+        if (const auto found = loadedModules_.find(key); found != loadedModules_.end())
+        {
+            status = {};
+            return found->second;
+        }
+        if (const auto failed = failures_.find(key); failed != failures_.end())
+        {
+            status = failed->second;
+            return nullptr;
+        }
+        const auto pending = loading_.find(key);
+        if (pending == loading_.end())
+        {
+            loading_.emplace(key, PendingLoad{std::this_thread::get_id()});
+            break;
+        }
+        if (pending->second.owner == std::this_thread::get_id())
+        {
+            status = {-3, "检测到同路径模块重入加载：" + key.string()};
+            return nullptr;
+        }
+        loadedChanged_.wait(lock);
+    }
+    lock.unlock();
+
+    ToolStatus                    local;
+    std::shared_ptr<LoadedModule> module;
+    try
+    {
+        module = std::const_pointer_cast<LoadedModule>(loadModuleFile(key, local));
+    }
+    catch (const std::exception &error)
+    {
+        local = {-3, "模块加载异常：" + std::string(error.what())};
+    }
+    catch (...)
+    {
+        local = {-3, "模块加载发生未知异常"};
     }
 
+    lock.lock();
+    loading_.erase(key);
+    if (module)
+    {
+        loadedModules_[key] = module;
+        status              = {};
+    }
+    else
+    {
+        failures_[key] = local;
+        status         = local;
+    }
+    loadedChanged_.notify_all();
+    return module;
+}
+
+std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::filesystem::path &libraryPath,
+                                                                 ToolStatus                  &status)
+{
     if (!std::filesystem::exists(libraryPath))
     {
-        status = {-3, "Module library file not found: " + libraryPath.string()};
+        status = {-3, "模块库文件不存在：" + libraryPath.string()};
         return nullptr;
     }
 
@@ -82,8 +138,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     }();
     if (directoryPolicyError != ERROR_SUCCESS)
     {
-        status = {-3, "Failed to configure runtime DLL search (Win32 error: "
-                          + std::to_string(directoryPolicyError) + ")"};
+        status = {-3, "无法配置运行时 DLL 搜索目录（Win32 错误：" + std::to_string(directoryPolicyError) + "）"};
         return nullptr;
     }
     const auto absPath = std::filesystem::absolute(libraryPath).lexically_normal();
@@ -92,8 +147,8 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     if (!loaded->directory)
     {
         const DWORD error = GetLastError();
-        status = {-3, "Failed to register runtime DLL directory " + libraryPath.parent_path().string()
-                          + " (Win32 error: " + std::to_string(error) + ")"};
+        status = {-3, "无法注册运行时 DLL 目录 " + libraryPath.parent_path().string()
+                          + "（Win32 错误：" + std::to_string(error) + "）"};
         return nullptr;
     }
     HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr,
@@ -101,8 +156,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     if (!handle)
     {
         const DWORD err = GetLastError();
-        status = {-3, "Failed to load dynamic library " + libraryPath.string() + " (Win32 error: " + std::to_string(err)
-                          + ")"};
+        status = {-3, "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(err) + "）"};
         return nullptr;
     }
     loaded->handle = handle;
@@ -110,7 +164,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     auto proc = GetProcAddress(handle, "visiontoolsModuleApi");
     if (!proc)
     {
-        status = {-3, "Entry symbol 'visiontoolsModuleApi' not found in " + libraryPath.string()};
+        status = {-3, "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string()};
         return nullptr;
     }
 
@@ -118,32 +172,31 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     const auto *api     = apiFunc();
     if (!api)
     {
-        status = {-3, "visiontoolsModuleApi() returned null in " + libraryPath.string()};
+        status = {-3, "visiontoolsModuleApi() 返回空：" + libraryPath.string()};
         return nullptr;
     }
 
     if (api->abi_major != MODULE_ABI_MAJOR)
     {
-        status = {-3, "Module ABI major mismatch (expected " + std::to_string(MODULE_ABI_MAJOR) + ", got "
-                          + std::to_string(api->abi_major) + ")"};
+        status = {-3, "模块 ABI 主版本不匹配（期望 " + std::to_string(MODULE_ABI_MAJOR) + "，实际 "
+                          + std::to_string(api->abi_major) + "）"};
         return nullptr;
     }
 
     if (api->struct_bytes < sizeof(ModuleApi))
     {
-        status = {-3, "ModuleApi struct size mismatch"};
+        status = {-3, "ModuleApi 结构体大小不匹配"};
         return nullptr;
     }
 
     if (!api->create || !api->destroy)
     {
-        status = {-3, "ModuleApi function pointers are incomplete"};
+        status = {-3, "ModuleApi 函数指针不完整"};
         return nullptr;
     }
 
     loaded->path   = libraryPath;
     loaded->api    = api;
-    loadedModules_.emplace(libraryPath, loaded);
     status = {};
     return loaded;
 #else
@@ -152,40 +205,40 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     if (!loadedOk)
     {
         status
-            = {-3, "Failed to load dynamic library " + libraryPath.string() + ": " + lib->errorString().toStdString()};
+            = {-3, "无法加载动态库 " + libraryPath.string() + "：" + lib->errorString().toStdString()};
         return nullptr;
     }
 
     auto apiFunc = reinterpret_cast<const ModuleApi *(VT_CALL *)() noexcept>(lib->resolve("visiontoolsModuleApi"));
     if (!apiFunc)
     {
-        status = {-3, "Entry symbol 'visiontoolsModuleApi' not found in " + libraryPath.string()};
+        status = {-3, "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string()};
         return nullptr;
     }
 
     const auto *api = apiFunc();
     if (!api)
     {
-        status = {-3, "visiontoolsModuleApi() returned null in " + libraryPath.string()};
+        status = {-3, "visiontoolsModuleApi() 返回空：" + libraryPath.string()};
         return nullptr;
     }
 
     if (api->abi_major != MODULE_ABI_MAJOR)
     {
-        status = {-3, "Module ABI major mismatch (expected " + std::to_string(MODULE_ABI_MAJOR) + ", got "
-                          + std::to_string(api->abi_major) + ")"};
+        status = {-3, "模块 ABI 主版本不匹配（期望 " + std::to_string(MODULE_ABI_MAJOR) + "，实际 "
+                          + std::to_string(api->abi_major) + "）"};
         return nullptr;
     }
 
     if (api->struct_bytes < sizeof(ModuleApi))
     {
-        status = {-3, "ModuleApi struct size mismatch"};
+        status = {-3, "ModuleApi 结构体大小不匹配"};
         return nullptr;
     }
 
     if (!api->create || !api->destroy)
     {
-        status = {-3, "ModuleApi function pointers are incomplete"};
+        status = {-3, "ModuleApi 函数指针不完整"};
         return nullptr;
     }
 
@@ -193,7 +246,6 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     loaded->path    = libraryPath;
     loaded->library = lib;
     loaded->api     = api;
-    loadedModules_.emplace(libraryPath, loaded);
     status = {};
     return loaded;
 #endif
@@ -271,7 +323,7 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     module_ = loader_->loadModule(libraryPath_, status);
     if (!module_ || !module_->api || status.code != 0)
     {
-        failureStatus_ = (status.code != 0 ? status : ToolStatus{-3, "Module load failed: " + libraryPath_.string()});
+        failureStatus_ = (status.code != 0 ? status : ToolStatus{-3, "模块加载失败：" + libraryPath_.string()});
         return failureStatus_;
     }
 
@@ -281,7 +333,7 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     {
         failureStatus_
             = (createStatus.code != 0 ? createStatus
-                                      : ToolStatus{-3, "Module create returned null instance: " + registryName_});
+                                      : ToolStatus{-3, "模块创建返回空实例：" + registryName_});
         return failureStatus_;
     }
 
@@ -305,11 +357,11 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     }
     catch (const std::exception &error)
     {
-        status = {-1, "Tool initialization exception: " + std::string(error.what())};
+        status = {-1, "工具初始化异常；技术详情：" + std::string(error.what())};
     }
     catch (...)
     {
-        status = {-1, "Tool initialization unknown exception"};
+        status = {-1, "工具初始化发生未知异常"};
     }
 
     if (!status)
@@ -340,20 +392,10 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
 {
     if (!raw_)
     {
-        if (failureStatus_.code == 0)
-        {
-            auto s = initialize({});
-            if (s.code != 0)
-            {
-                return ToolResult{s, {}};
-            }
-        }
-    }
-    if (!raw_)
-    {
-        const auto s = (failureStatus_.code != 0 ? failureStatus_
-                                                 : ToolStatus{-3, "Tool instance unavailable: " + registryName_});
-        return ToolResult{s, {}};
+        const auto status = failureStatus_.code != 0
+                              ? failureStatus_
+                              : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + registryName_};
+        return ToolResult{status, {}};
     }
     try
     {
@@ -362,14 +404,14 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     catch (const std::exception &error)
     {
         return ToolResult{
-            {-1, "Tool execute exception: " + std::string(error.what())},
+            {-1, "工具执行异常；技术详情：" + std::string(error.what())},
             {}
         };
     }
     catch (...)
     {
         return ToolResult{
-            {-1, "Tool execute unknown exception"},
+            {-1, "工具执行发生未知异常"},
             {}
         };
     }

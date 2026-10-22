@@ -55,8 +55,8 @@ struct AppController::Impl
     QString                                timing;
     std::deque<QString>                    diagnostics;
     QString                                diagnostic;
-    std::string                            copiedFlow;
-    std::vector<NodeId>                    copiedNodes;
+    std::optional<CopiedSelection>         clipboard;
+    std::set<std::string>                  routingErrors;
     enum class Pending
     {
         None,
@@ -157,6 +157,8 @@ struct AppController::Impl
     void      request(Pending action, QString path = {});
     void      advancePending();
     void      clearResults();
+    bool      nodeExists(NodeId id) const;
+    void      pruneDeletedNodes();
     void      refresh(bool rescan);
     void      loadToolsPackage();
     void      rescanTools();
@@ -167,6 +169,7 @@ struct AppController::Impl
     const PortValue *resolvedInputRef(const NodeDefinition &node, const std::string &input) const;
     PortValue resolvedInput(const NodeDefinition &node, const std::string &input) const;
     void      commitRoi(const RoiEditTarget &target, const Roi *value);
+    ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
     void      finishRoi();
     void      storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
 };

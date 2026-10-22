@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,13 @@ struct RuntimeCompletion
     std::uint64_t token      = 0;
 };
 
+struct RuntimeDiagnostic
+{
+    std::uint64_t generation = 0;
+    std::uint64_t sequence   = 0;
+    std::string   message;
+};
+
 struct RuntimeUpdate
 {
     RuntimeState                     state      = RuntimeState::Idle;
@@ -55,7 +63,10 @@ struct RuntimeUpdate
     std::vector<NodeUpdate>          nodes;
     std::vector<FlowTiming>          flows;
     double                           roundMilliseconds = 0;
-    std::vector<std::string>         diagnostics;
+    // Only events produced since the previous poll, ordered by sequence.
+    std::vector<RuntimeDiagnostic>   diagnostics;
+    // Events evicted before this poll; reported once by the consumer.
+    std::size_t                      droppedDiagnostics = 0;
     std::optional<RuntimeCompletion> completion;
 };
 
@@ -75,9 +86,15 @@ public:
     ToolStatus     requestReset();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);
+    // Idle only. Releases removed instances outside the control lock without
+    // discarding surviving node publications.
+    ToolStatus     removeNodes(std::span<const NodeId> ids);
     RuntimeUpdate  pollLatest();
     bool           acknowledgeCompletion(RuntimeCompletion completion);
     void           setCompletionCallback(std::function<void(RuntimeCompletion)> callback);
+#ifdef VISIONRT_TEST_PROBES
+    void injectDiagnosticForTest(std::string message);
+#endif
 
 private:
     struct Impl;

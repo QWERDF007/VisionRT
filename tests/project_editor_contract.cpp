@@ -206,8 +206,8 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
 {
     ProjectEditor editor;
     auto          tool = integerTool();
-    tool.initParams.push_back({"source_flow_name", "来源流程", {Type::String}, Utf8("流程1")});
-    tool.initParams.push_back({"source_node_name", "来源节点", {Type::String}, Utf8("整数-0")});
+    tool.initParams.push_back({"source_flow_id", "来源流程", {Type::String}, Utf8("flow_1")});
+    tool.initParams.push_back({"source_node_seq", "来源节点", {Type::String}, Utf8("0")});
     const auto external   = editor.addNode("flow_1", tool, {-1, 0});
     const auto a          = editor.addNode("flow_1", tool, {0, 0});
     const auto b          = editor.addNode("flow_1", tool, {0, 1});
@@ -230,7 +230,10 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
     });
     editor.setAlias("flow_1", a, "复制备注");
     editor.setInitParam("flow_1", a, "seed", std::int64_t{24});
-    const auto mapping = editor.copyNodes("flow_1", std::array{a, b}, "flow_1", {0, 0});
+    const auto snapshot = editor.copySelection("flow_1", std::array{a, b});
+    editor.setAlias("flow_1", a, "已修改");
+    editor.setLiteral("flow_1", a, "first", std::int64_t{99});
+    const auto mapping = editor.pasteSelection("flow_1", snapshot, {0, 0});
     const auto newA    = mapping.at(a);
     const auto newB    = mapping.at(b);
     assert(newA != a && newB != b && newA != newB);
@@ -254,8 +257,8 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
     assert(copied.nodes.size() == editor.project().flows.front().nodes.size());
     assert((copied.nodes[1].inputs.at("first").source == SourcePort{copied.nodes[0].id, "value"}));
     assert(std::get<std::int64_t>(copied.nodes[1].initParams.at("seed")) == 24);
-    assert(std::get<Utf8>(copied.nodes[1].initParams.at("source_flow_name")).str() == "流程1");
-    assert(std::get<Utf8>(copied.nodes[1].initParams.at("source_node_name")).str() == "整数-0");
+    assert(std::get<Utf8>(copied.nodes[1].initParams.at("source_flow_id")).str() == "flow_1");
+    assert(std::get<Utf8>(copied.nodes[1].initParams.at("source_node_seq")).str() == "0");
 }
 
 void movementAndDeletionAreAtomic()
@@ -323,7 +326,8 @@ void flowsAndBusyGuard()
     rejects([&] { editor.addNode("flow_1", tool, {0, 0}); });
     rejects([&] { editor.removeNodes("flow_1", std::array{a}); });
     rejects([&] { editor.moveNodes("flow_1", std::array{a}, {1, 0}); });
-    rejects([&] { editor.copyNodes("flow_1", std::array{a}, third, {0, 0}); });
+    rejects([&] { (void)editor.copySelection("flow_1", std::array{a}); });
+    rejects([&] { (void)editor.pasteSelection(third, CopiedSelection{}, {0, 0}); });
     rejects([&] { editor.setAlias("flow_1", a, "busy"); });
     rejects([&] { editor.setLiteral("flow_1", a, "first", std::int64_t{4}); });
     rejects([&] { editor.setInitParam("flow_1", a, "seed", std::int64_t{4}); });
@@ -347,11 +351,12 @@ void exhaustedCountersAndCoordinateOverflowRejectWithoutChanges()
     rejects([&] { editor.moveNodes("flow_1", std::array{a, b}, {1, 0}); });
     assert(!editor.project().dirty);
     assert((node(editor, b).position == GridPoint{0, 1}));
+    const auto snapshot = editor.copySelection("flow_1", std::array{a, b});
     auto exhausted       = editor.project();
     exhausted.nextNodeId = std::numeric_limits<NodeId>::max();
     editor.replaceProject(exhausted);
     rejects([&] { editor.addNode("flow_1", tool, {4, 0}); });
-    rejects([&] { editor.copyNodes("flow_1", std::array{a, b}, "flow_1", {0, 2}); });
+    rejects([&] { (void)editor.pasteSelection("flow_1", snapshot, {0, 2}); });
     rejects([&] { editor.copyFlow("flow_1"); });
     assert(!editor.project().dirty);
     assert(editor.project().nextNodeId == std::numeric_limits<NodeId>::max());
@@ -438,14 +443,14 @@ version: 1.0.0
 kind: cpp_class
 entry: {registry_name: visionrt.flow.receive}
 init_params:
-- {id: source_flow_name, name: 源流程, type: String, default: ''}
-- {id: source_node_name, name: 源节点, type: String, default: ''}
+- {id: source_flow_id, name: 源流程, type: String, default: ''}
+- {id: source_node_seq, name: 源节点, type: String, default: ''}
 - {id: source_port_id, name: 源端口, type: String, default: ''}
 inputs: []
 outputs:
 - id: value
   name: 数据
-  type_from: {flow: source_flow_name, node: source_node_name, port: source_port_id}
+  type_from: {flow: source_flow_id, node: source_node_seq, port: source_port_id}
 )"), {}, true);
     ProjectEditor editor;
     const auto sourceFlow = editor.addFlow("source");
@@ -456,8 +461,8 @@ outputs:
     const auto arraySender = editor.addNode(sourceFlow, arrays, {1, 0});
     const auto receive = editor.addNode("flow_1", receiver, {});
     assert(!node(editor, receive).signatures.outputs.contains("value"));
-    editor.setInitParam("flow_1", receive, "source_flow_name", Utf8("source"));
-    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, sender).title()));
+    editor.setInitParam("flow_1", receive, "source_flow_id", Utf8(sourceFlow));
+    editor.setInitParam("flow_1", receive, "source_node_seq", Utf8(std::to_string(sender)));
     editor.setInitParam("flow_1", receive, "source_port_id", Utf8("value"));
     assert(node(editor, receive).signatures.outputs.at("value") == TypeSpec{Type::Int});
     const auto sink = editor.addNode("flow_1", integerTool(), {1, 0});
@@ -469,7 +474,7 @@ outputs:
     editor.setBinding("flow_1", otherSink, "first",
                       {BindingMode::Upstream, Missing{}, SourcePort{receive, "value"}});
     const auto revision = node(editor, receive).executionRevision;
-    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, arraySender).title()));
+    editor.setInitParam("flow_1", receive, "source_node_seq", Utf8(std::to_string(arraySender)));
     assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
     assert(node(editor, receive).executionRevision > revision);
     rejects([&] { dependencyEdges(editor.project().flows.front()); });
@@ -493,18 +498,16 @@ outputs:
     editor.setInitParam("flow_1", receive, "source_port_id", Utf8("value"));
     assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
     editor.renameFlow(sourceFlow, "renamed");
-    assert(!node(editor, receive).signatures.outputs.contains("value"));
-    editor.setInitParam("flow_1", receive, "source_flow_name", Utf8("renamed"));
     assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
     editor.setAlias(sourceFlow, arraySender, "new source");
-    assert(!node(editor, receive).signatures.outputs.contains("value"));
-    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, arraySender).title()));
-    const auto copied = editor.copyNodes("flow_1", std::array{receive}, sourceFlow, {4, 0});
+    assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
+    const auto copied = editor.pasteSelection(
+        sourceFlow, editor.copySelection("flow_1", std::array{receive}), {4, 0});
     assert(!node(editor, copied.at(receive)).signatures.outputs.contains("value"));
     const auto chainFlow = editor.addFlow("chain");
     const auto chain = editor.addNode(chainFlow, receiver, {});
-    editor.setInitParam(chainFlow, chain, "source_flow_name", Utf8("流程1"));
-    editor.setInitParam(chainFlow, chain, "source_node_name", Utf8(node(editor, receive).title()));
+    editor.setInitParam(chainFlow, chain, "source_flow_id", Utf8("flow_1"));
+    editor.setInitParam(chainFlow, chain, "source_node_seq", Utf8(std::to_string(receive)));
     editor.setInitParam(chainFlow, chain, "source_port_id", Utf8("value"));
     assert(node(editor, chain).signatures.outputs.at("value") == arrays.outputs.front().type);
     auto exhausted = editor.project();
@@ -518,8 +521,8 @@ outputs:
     editor.removeNodes(sourceFlow, std::array{arraySender});
     assert(!node(editor, receive).signatures.outputs.contains("value"));
     assert(!node(editor, chain).signatures.outputs.contains("value"));
-    editor.setInitParam("flow_1", receive, "source_flow_name", Utf8("chain"));
-    editor.setInitParam("flow_1", receive, "source_node_name", Utf8(node(editor, chain).title()));
+    editor.setInitParam("flow_1", receive, "source_flow_id", Utf8(chainFlow));
+    editor.setInitParam("flow_1", receive, "source_node_seq", Utf8(std::to_string(chain)));
     assert(!node(editor, receive).signatures.outputs.contains("value"));
     assert(!node(editor, chain).signatures.outputs.contains("value"));
 }

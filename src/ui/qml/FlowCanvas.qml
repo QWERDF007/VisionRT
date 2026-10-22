@@ -21,6 +21,7 @@ FocusScope {
     property bool moved: false
     property string contextNode: ""
     property string contextFlow: ""
+    property point contextPoint: Qt.point(0, 0)
     property string nameOperation: ""
     property string nameDraft: ""
     property int searchIndex: 0
@@ -149,6 +150,12 @@ FocusScope {
         gesture = ""; dragX = 0; dragY = 0
     }
     function openName(operation, value) { nameOperation = operation; nameDraft = value || ""; nameDialog.open() }
+    function gridPointAt(x, y) {
+        return {
+            x: Math.round((x - panX) / zoom / cellWidth),
+            y: Math.round((y - panY) / zoom / cellHeight)
+        }
+    }
     function rememberView() {
         if (!viewedFlow) return
         let views = flowViews
@@ -221,11 +228,6 @@ FocusScope {
                     text: "流程图绘制区"
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
                     color: "#24292f"
-                }
-                QuiTextIconButton {
-                    iconSource: QuiFontIcon.Settings
-                    implicitWidth: 24; implicitHeight: 24
-                    text: "流程图设置"
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
@@ -332,7 +334,7 @@ FocusScope {
                     MouseArea {
                         id: addMouse; anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.openName("addFlow", "")
+                        onClicked: { app.addFlow(""); surface.forceActiveFocus() }
                     }
                 }
                 Flickable {
@@ -356,6 +358,17 @@ FocusScope {
                                     visible: flowTabItem.isActive
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                                     height: 2; color: QuiColor.Highlight
+                                }
+                                MouseArea {
+                                    anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: function(mouse) {
+                                        if (mouse.button === Qt.LeftButton) {
+                                            app.selectFlow(flowTabItem.modelData.id)
+                                        } else if (mouse.button === Qt.RightButton) {
+                                            root.contextFlow = flowTabItem.modelData.id
+                                            flowMenu.popup()
+                                        }
+                                    }
                                 }
                                 RowLayout {
                                     id: tabRow
@@ -388,17 +401,6 @@ FocusScope {
                                                 root.contextFlow = flowTabItem.modelData.id
                                                 deleteFlowDialog.open()
                                             }
-                                        }
-                                    }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: function(mouse) {
-                                        if (mouse.button === Qt.LeftButton) {
-                                            app.selectFlow(flowTabItem.modelData.id)
-                                        } else if (mouse.button === Qt.RightButton) {
-                                            root.contextFlow = flowTabItem.modelData.id
-                                            flowMenu.popup()
                                         }
                                     }
                                 }
@@ -468,6 +470,9 @@ FocusScope {
                             if (n.x * root.cellWidth + 156 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 52 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
                         root.selection = ids
                         if (ids.length) app.selectNode(ids[ids.length - 1])
+                    } else if (mouse.button === Qt.RightButton && !root.moved) {
+                        root.contextPoint = Qt.point(mouse.x, mouse.y)
+                        blankMenu.popup()
                     }
                     root.gesture = ""
                 }
@@ -490,7 +495,8 @@ FocusScope {
                         route: modelData.points
                         viewScale: root.zoom
                         connectionCount: modelData.count
-                        lineColor: root.selectedWire === modelData.source + ":" + modelData.target ? "#0969da"
+                        lineColor: modelData.error ? "#d97706"
+                            : root.selectedWire === modelData.source + ":" + modelData.target ? "#0969da"
                             : root.selected(modelData.target) ? "#f08800"
                             : root.selected(modelData.source) ? "#1677ff" : "#8c959f"
                         opacity: root.selection.length && !root.selected(modelData.target) && !root.selected(modelData.source) ? 0.35 : 1
@@ -650,8 +656,25 @@ FocusScope {
     QuiMenu {
         id: nodeMenu
         QuiMenuItem { text: "复制"; enabled: !app.busy; onTriggered: app.copyNodes(root.selection) }
+        QuiMenuItem {
+            text: "粘贴"; enabled: app.canPaste && !app.busy
+            onTriggered: {
+                let n = root.findNode(root.contextNode)
+                if (n) app.pasteNodes(n.x, n.y)
+            }
+        }
         QuiMenuItem { text: "删除"; enabled: !app.busy; onTriggered: { app.deleteNodes(root.selection); root.selection = [] } }
         QuiMenuItem { text: "重命名备注…"; enabled: !app.busy; onTriggered: { let n = root.findNode(root.contextNode); root.openName("node", n ? n.alias : "") } }
+    }
+    QuiMenu {
+        id: blankMenu
+        QuiMenuItem {
+            text: "粘贴"; enabled: app.canPaste && !app.busy
+            onTriggered: {
+                let p = root.gridPointAt(root.contextPoint.x, root.contextPoint.y)
+                app.pasteNodes(p.x, p.y)
+            }
+        }
     }
     QuiMenu {
         id: flowMenu
@@ -665,14 +688,13 @@ FocusScope {
     }
     WorkbenchDialog {
         id: nameDialog; title: root.nameOperation === "node" ? "节点备注" : "流程名称"
-        positiveButtonEnabled: !app.busy && (root.nameOperation === "node" || root.nameDraft.trim().length > 0)
+        positiveButtonEnabled: !app.busy && root.nameDraft.trim().length > 0
         contentDelegate: Component {
             QuiTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }
         }
         onPositiveClicked: {
             if (root.nameOperation === "node") app.renameNode(root.contextNode, root.nameDraft)
-            else if (root.nameOperation === "flow") app.renameFlow(root.contextFlow, root.nameDraft)
-            else app.addFlow(root.nameDraft)
+            else app.renameFlow(root.contextFlow, root.nameDraft)
         }
     }
 }

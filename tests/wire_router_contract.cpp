@@ -66,16 +66,15 @@ int main()
     assert(routes.size() == 1 && routes.front().ports.size() == 2);
     verify(routes);
     assert(router.route(nodes, {}).empty());
-    bool rejected = false;
-    try
-    {
-        nodes[0].rectangle.setX(std::numeric_limits<double>::quiet_NaN());
-        router.route(nodes, relations);
-    }
-    catch (const ContractError &)
-    {
-        rejected = true;
-    }
-    assert(rejected);
-    std::cout << "[Wire Router Contract Passed] Port groups, full-width IDs, changed obstacles, reverse routes and node geometry.\n";
+    relations.push_back({{sourceId, "value"}, {999, "value"}});
+    routes = router.route(nodes, relations);
+    assert(routes.size() == 2);
+    const auto broken = std::find_if(routes.begin(), routes.end(), [](const auto &wire) { return wire.target == 999; });
+    const auto valid  = std::find_if(routes.begin(), routes.end(), [](const auto &wire) { return wire.target == 3; });
+    assert(broken != routes.end() && !broken->error.empty());
+    assert(valid != routes.end() && valid->error.empty() && valid->points.size() >= 2);
+    nodes[0].rectangle.setX(std::numeric_limits<double>::quiet_NaN());
+    routes = router.route(nodes, relations);
+    assert(std::any_of(routes.begin(), routes.end(), [](const auto &wire) { return !wire.error.empty(); }));
+    std::cout << "[Wire Router Contract Passed] Per-line errors preserve valid routes; geometry failures stay diagnosable.\n";
 }

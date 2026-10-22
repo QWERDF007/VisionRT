@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 
 namespace visionrt {
 struct ExecutionMetrics
@@ -36,9 +37,18 @@ public:
     virtual ExecutionMetrics pythonMetrics() const = 0;
 };
 
+struct InputUse
+{
+    std::string   inputPort;
+    NodeId        sourceNode      = 0;
+    std::string   sourcePort;
+    std::uint64_t sourcePublication = 0;
+};
+
 struct NodeSnapshot
 {
     NodeId        node              = 0;
+    std::string   toolId;
     std::uint64_t generation        = 0;
     std::uint64_t session           = 0;
     std::uint64_t round             = 0;
@@ -48,6 +58,7 @@ struct NodeSnapshot
     Values        outputs;
     Timing        timing;
     Values        roiInputs;
+    std::vector<InputUse> inputUses;
 };
 
 class ResultSlot
@@ -84,9 +95,25 @@ public:
         return value && accepts(*value) ? value : Snapshot{};
     }
 
+    template<class Predicate>
+    Snapshot waitUntil(std::chrono::steady_clock::time_point deadline, Predicate accepts, std::stop_token stop)
+    {
+        std::unique_lock lock(mutex_);
+        Snapshot         value;
+        changed_.wait_until(lock, stop, deadline,
+                            [&]
+                            {
+                                value = latest();
+                                return value && accepts(*value);
+                            });
+        if (stop.stop_requested())
+            return {};
+        return value && accepts(*value) ? value : Snapshot{};
+    }
+
 private:
-    std::atomic<Snapshot>   latest_;
-    std::mutex              mutex_;
-    std::condition_variable changed_;
+    std::atomic<Snapshot>         latest_;
+    std::mutex                    mutex_;
+    std::condition_variable_any   changed_;
 };
 } // namespace visionrt

@@ -18,8 +18,15 @@ using namespace visionrt;
 namespace {
 ToolResult execute(ToolRegistry &registry, const char *id, Values inputs, const ToolServices &services = {})
 {
+    const auto *definition = registry.find(id);
+    assert(definition);
+    for (const auto &port : definition->inputs)
+        inputs.try_emplace(port.id, port.defaultValue);
+    Values parameters;
+    for (const auto &port : definition->initParams)
+        parameters.emplace(port.id, port.defaultValue);
     auto tool = registry.create(id, services);
-    assert(tool->initialize({}));
+    assert(tool->initialize(parameters));
     auto result = tool->execute(inputs);
     assert(tool->release());
     return result;

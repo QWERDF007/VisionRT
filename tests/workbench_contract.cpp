@@ -314,7 +314,7 @@ void nodeDiagnosticsContract()
 
     const auto map0 = nodes.at(0).toMap();
     require(map0.contains("state"), "node missing state");
-    require(map0.value("state").toString() == "gray", "initial node state is not gray");
+    require(map0.value("state").toString() == "idle", "initial node state is not idle");
     require(map0.contains("defMissing"), "node missing defMissing");
     require(map0.value("defMissing").toBool() == false, "registered node marked defMissing");
     require(map0.contains("implUnavailable"), "node missing implUnavailable");
@@ -341,7 +341,7 @@ void nodeDiagnosticsContract()
     const auto executedNodes = app.nodes();
     require(!executedNodes.isEmpty(), "executed node empty");
     const auto executedMap = executedNodes.first().toMap();
-    require(executedMap.value("state").toString() == "green", "executed node is not green");
+    require(executedMap.value("state").toString() == "succeeded", "executed node is not succeeded");
     require(executedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "executed node total timing is not measured");
     require(executedMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
@@ -352,12 +352,12 @@ void nodeDiagnosticsContract()
             "executed node fabricates postprocess timing");
 
     const auto unavailableMap = executedNodes.at(1).toMap();
-    require(unavailableMap.value("state").toString() == "red", "unavailable implementation is not red");
+    require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
     require(unavailableMap.value("timingOperatorText").toString() == QStringLiteral("—"),
             "implementation without a tool call must not report operator time");
 
     const auto failedMap = executedNodes.at(2).toMap();
-    require(failedMap.value("state").toString() == "red", "failing tool is not red");
+    require(failedMap.value("state").toString() == "failed", "failing tool is not failed");
     require(failedMap.value("statusCode").toLongLong() != 0, "failing tool lost its status code");
     require(!failedMap.value("statusMessage").toString().isEmpty(), "failing tool lost its diagnostic message");
     require(failedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
@@ -367,11 +367,12 @@ void nodeDiagnosticsContract()
     app.selectNode(pythonId);
     require(app.setParameter("x", false, "2"), "valid integer parameter change was rejected");
     const auto staleMap = app.nodes().first().toMap();
-    require(staleMap.value("state").toString() == "gray", "stale snapshot still colors the node");
-    require(staleMap.value("timingText").toString() == QStringLiteral("未运行"),
-            "stale snapshot still reports the previous total timing");
-    require(staleMap.value("timingOperatorText").toString() == QStringLiteral("未运行"),
-            "stale snapshot still reports the previous operator timing");
+    require(staleMap.value("state").toString() == "succeeded",
+            "parameter change discarded the last successful display state");
+    require(staleMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
+            "parameter change discarded the previous total timing");
+    require(staleMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
+            "parameter change discarded the previous operator timing");
     require(staleMap.value("statusCode").toLongLong() == 0, "stale snapshot still exposes an old status");
 
     app.runOnce();
@@ -599,7 +600,7 @@ void mainQmlContract(double scale)
 
     const auto nodesBeforeRun = app.nodes();
     require(!nodesBeforeRun.isEmpty(), "nodes empty after adding nodes. diag: " + app.diagnostic().toStdString());
-    require(nodesBeforeRun.first().toMap().value("state").toString() == "gray", "initial node state is not gray");
+    require(nodesBeforeRun.first().toMap().value("state").toString() == "idle", "initial node state is not idle");
 
     // Start continuous loop
     app.toggleLoop();
@@ -610,25 +611,25 @@ void mainQmlContract(double scale)
     }
     require(app.runState() == "RunningLoop", "app failed to enter RunningLoop state");
 
-    // Observe active running node state is "blue"
-    bool observedBlue = false;
+    // Observe active running node state is "running"
+    bool observedRunning = false;
     for (int i = 0; i < 50; ++i)
     {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         for (const auto &n : app.nodes())
         {
-            if (n.toMap().value("state").toString() == "blue")
+            if (n.toMap().value("state").toString() == "running")
             {
-                observedBlue = true;
+                observedRunning = true;
                 break;
             }
         }
-        if (observedBlue)
+        if (observedRunning)
             break;
     }
-    require(observedBlue, "Running node did not exhibit 'blue' active running state in RunningLoop");
-    std::cout << "[Evidence HS5-03] Node state 'blue' observed during RunningLoop execution.\n";
+    require(observedRunning, "Running node did not exhibit 'running' state in RunningLoop");
+    std::cout << "[Evidence HS5-03] Node state 'running' observed during RunningLoop execution.\n";
 
     // Drawer toggle while running: does not dirty project or mutate instance identities
     const auto *hostIdentityBefore    = leftHost;
@@ -657,8 +658,8 @@ void mainQmlContract(double scale)
     // Node state after successful run is green
     const auto nodesAfterRun = app.nodes();
     require(!nodesAfterRun.isEmpty(), "nodes empty after running loop");
-    require(nodesAfterRun.first().toMap().value("state").toString() == "green",
-            "node state after execution is not green");
+    require(nodesAfterRun.first().toMap().value("state").toString() == "succeeded",
+            "node state after execution is not succeeded");
 
     // Add failing node and verify red error state
     app.addNode("test.plugin.fail", 300, 100);
@@ -670,7 +671,7 @@ void mainQmlContract(double scale)
     }
     const auto nodesWithFail = app.nodes();
     require(nodesWithFail.size() == 3, "expected 3 nodes");
-    require(nodesWithFail.at(2).toMap().value("state").toString() == "red", "failing node state is not red");
+    require(nodesWithFail.at(2).toMap().value("state").toString() == "failed", "failing node state is not failed");
 
     // 7. Real ROI draft and parameter draft preservation across drawer collapse and expand
     {
@@ -935,11 +936,11 @@ void packageDrivenCatalogAndRefreshContract()
             "entry:\n"
             "  registry_name: test.custom.receiver\n"
             "init_params:\n"
-            "- id: source_flow_name\n"
+            "- id: source_flow_id\n"
             "  name: 源流程\n"
             "  type: String\n"
             "  default: ''\n"
-            "- id: source_node_name\n"
+            "- id: source_node_seq\n"
             "  name: 源节点\n"
             "  type: String\n"
             "  default: ''\n"
@@ -955,7 +956,7 @@ void packageDrivenCatalogAndRefreshContract()
             "outputs:\n"
             "- id: value\n"
             "  name: 接收值\n"
-              "  type_from: {flow: source_flow_name, node: source_node_name, port: source_port_id}\n"
+              "  type_from: {flow: source_flow_id, node: source_node_seq, port: source_port_id}\n"
             "- id: source_status_code\n"
             "  name: 源状态码\n"
             "  type: Int\n"
@@ -1062,6 +1063,7 @@ void packageDrivenCatalogAndRefreshContract()
         const auto initialFlows = app.flows();
         require(!initialFlows.isEmpty(), "flows must not be empty");
         const auto flow1Name = initialFlows.first().toMap().value("name").toString();
+        const auto flow1Id   = initialFlows.first().toMap().value("id").toString();
 
         app.addNode("test.pkg.function", 100, 100);
         app.addNode("test.pkg.counter", 200, 100);
@@ -1069,15 +1071,21 @@ void packageDrivenCatalogAndRefreshContract()
 
         QString funcNodeTitle;
         QString pythonNodeTitle;
+        QString funcNodeId;
+        QString pythonNodeId;
         for (const auto &n : app.nodes())
         {
             const auto m = n.toMap();
             if (m.value("toolId").toString() == "test.pkg.function")
             {
                 funcNodeTitle = m.value("title").toString();
+                funcNodeId    = m.value("id").toString();
             }
             if (m.value("toolId").toString() == "test.user.pythonA")
+            {
                 pythonNodeTitle = m.value("title").toString();
+                pythonNodeId    = m.value("id").toString();
+            }
         }
         require(!funcNodeTitle.isEmpty(), "missing function node title");
 
@@ -1100,26 +1108,31 @@ void packageDrivenCatalogAndRefreshContract()
         app.selectNode(recvNodeId);
         auto *receiverOutputs = qobject_cast<OutputModel *>(app.outputModel());
         require(receiverOutputs->get(2).value("type").toString() == QStringLiteral("未绑定"), "receiver is typed before source selection");
-        auto choices = [&](const QString &parameter)
+        auto choices = [&](const QString &parameter, const QString &field)
         {
+            QVariantList result;
             for (const auto &item : app.parameters())
             {
                 const auto row = item.toMap();
-                if (row.value("id").toString() == parameter) return row.value("options").toList();
+                if (row.value("id").toString() != parameter)
+                    continue;
+                for (const auto &option : row.value("options").toList())
+                    result.push_back(option.toMap().value(field));
             }
-            return QVariantList{};
+            return result;
         };
-        require(choices("source_flow_name").contains(flow1Name), "source flow choices are missing");
-        app.setParameter("source_flow_name", true, "\"" + flow1Name + "\"");
+        require(choices("source_flow_id", "label").contains(flow1Name), "source flow choices are missing");
+        require(choices("source_flow_id", "value").contains(flow1Id), "source flow identity is missing");
+        app.setParameter("source_flow_id", true, "\"" + flow1Id + "\"");
         require(!pythonNodeTitle.isEmpty(), "missing Python image source");
-        app.setParameter("source_node_name", true, "\"" + pythonNodeTitle + "\"");
+        app.setParameter("source_node_seq", true, "\"" + pythonNodeId + "\"");
         app.setParameter("source_port_id", true, "\"image\"");
         require(app.imageOutputs().size() == 1
                     && app.imageOutputs().first().toMap().value("id").toString() == "value",
                 "source-derived image output is missing from the viewport selector");
-        require(choices("source_node_name").contains(funcNodeTitle), "source node choices are missing");
-        app.setParameter("source_node_name", true, "\"" + funcNodeTitle + "\"");
-        require(choices("source_port_id").contains(QStringLiteral("y")), "source output choices are missing");
+        require(choices("source_node_seq", "label").contains(funcNodeTitle), "source node choices are missing");
+        app.setParameter("source_node_seq", true, "\"" + funcNodeId + "\"");
+        require(choices("source_port_id", "value").contains(QStringLiteral("y")), "source output choices are missing");
         app.setParameter("source_port_id", true, "\"y\"");
         require(receiverOutputs->get(2).value("type").toString() == typeText({Type::Int}), "receiver output not resolved after source selection");
         app.setParameter("timeout_ms", true, "1000");
@@ -1151,12 +1164,12 @@ void packageDrivenCatalogAndRefreshContract()
                     && relationPorts.front().toMap().value("input").toString() == "x",
                 "grouped wire discarded the source and target port identity");
         app.selectNode(recvNodeId);
-        app.setParameter("source_node_name", true, "\"" + pythonNodeTitle + "\"");
+        app.setParameter("source_node_seq", true, "\"" + pythonNodeId + "\"");
         app.setParameter("source_port_id", true, "\"image\"");
         require(app.wires().isEmpty(), "incompatible or unresolved receiver binding is still drawn as an active wire");
         require(outModel->get(2).value("count").toInt() == 0,
                 "invalid receiver relation is still counted as an active output reference");
-        app.setParameter("source_node_name", true, "\"" + funcNodeTitle + "\"");
+        app.setParameter("source_node_seq", true, "\"" + funcNodeId + "\"");
         app.setParameter("source_port_id", true, "\"y\"");
         require(app.wires().size() == 1 && outModel->get(2).value("count").toInt() == 1,
                 "restoring the source type did not restore the same input relation");
@@ -1222,11 +1235,11 @@ void packageDrivenCatalogAndRefreshContract()
                 "entry:\n"
                 "  registry_name: test.custom.renamed_recv\n"
                 "init_params:\n"
-                "- id: source_flow_name\n"
+                "- id: source_flow_id\n"
                 "  name: 源流程\n"
                 "  type: String\n"
                 "  default: ''\n"
-                "- id: source_node_name\n"
+                "- id: source_node_seq\n"
                 "  name: 源节点\n"
                 "  type: String\n"
                 "  default: ''\n"
@@ -1242,7 +1255,7 @@ void packageDrivenCatalogAndRefreshContract()
                 "outputs:\n"
                 "- id: value\n"
                 "  name: 接收值\n"
-                "  type_from: {flow: source_flow_name, node: source_node_name, port: source_port_id}\n"
+                "  type_from: {flow: source_flow_id, node: source_node_seq, port: source_port_id}\n"
                 "- id: source_status_code\n"
                 "  name: 源状态码\n"
                 "  type: Int\n"

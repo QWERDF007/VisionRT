@@ -845,8 +845,8 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
             << "kind: cpp_class\n"
             << "entry:\n  registry_name: platform.test_recv\n"
             << "init_params:\n"
-            << "  - id: source_flow_name\n    name: Source Flow\n    type: String\n    default: ''\n"
-            << "  - id: source_node_name\n    name: Source Node\n    type: String\n    default: ''\n"
+            << "  - id: source_flow_id\n    name: Source Flow\n    type: String\n    default: ''\n"
+            << "  - id: source_node_seq\n    name: Source Node\n    type: String\n    default: ''\n"
             << "  - id: source_port_id\n    name: Source Port\n    type: String\n    default: ''\n"
             << "  - id: timeout_ms\n    name: Timeout\n    type: Int\n    default: 1000\n"
             << "inputs: []\n"
@@ -951,13 +951,13 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
         n3.toolNameSnapshot = "Test Receiver";
         n3.position         = {100, 250};
         n3.initParams       = {
-            {"source_flow_name", Utf8("sender_flow")},
-            {"source_node_name",    Utf8(n2.title())},
+            {"source_flow_id", Utf8("sender_flow")},
+            {"source_node_seq",    Utf8(std::to_string(n2.id))},
             {  "source_port_id",         Utf8("res")},
             {      "timeout_ms",  std::int64_t{1000}}
         };
-        n3.signatures.initParams["source_flow_name"]   = {Type::String};
-        n3.signatures.initParams["source_node_name"]   = {Type::String};
+        n3.signatures.initParams["source_flow_id"]   = {Type::String};
+        n3.signatures.initParams["source_node_seq"]   = {Type::String};
         n3.signatures.initParams["source_port_id"]     = {Type::String};
         n3.signatures.initParams["timeout_ms"]         = {Type::Int};
         n3.signatures.outputs["value"]                 = {Type::Int};
@@ -1103,8 +1103,8 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
             << "kind: cpp_class\n"
             << "entry:\n  registry_name: platform.test_recv\n"
             << "init_params:\n"
-            << "  - id: source_flow_name\n    name: Source Flow\n    type: String\n    default: ''\n"
-            << "  - id: source_node_name\n    name: Source Node\n    type: String\n    default: ''\n"
+            << "  - id: source_flow_id\n    name: Source Flow\n    type: String\n    default: ''\n"
+            << "  - id: source_node_seq\n    name: Source Node\n    type: String\n    default: ''\n"
             << "  - id: source_port_id\n    name: Source Port\n    type: String\n    default: ''\n"
             << "  - id: timeout_ms\n    name: Timeout\n    type: Int\n    default: 1000\n"
             << "inputs: []\n"
