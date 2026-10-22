@@ -82,7 +82,7 @@ bool AppController::bindInput(const QVariantMap &context, const QString &node, c
         {
             const auto *target = impl_->currentNode();
             if (!target)
-                throw ContractError("No selected node");
+                throw ContractError("未选择节点");
             auto binding   = target->inputs.at(input.toStdString());
             binding.mode   = BindingMode::Upstream;
             binding.source = SourcePort{nodeId(node), output.toStdString()};
@@ -102,7 +102,7 @@ bool AppController::unbindInput(const QVariantMap &context)
         {
             const auto *node = impl_->currentNode();
             if (!node)
-                throw ContractError("No selected node");
+                throw ContractError("未选择节点");
             impl_->finishRoi();
             return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input.toStdString());
         });
@@ -176,12 +176,14 @@ bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &
         {
             const auto *source = impl_->currentNode();
             const auto *target = impl_->findNode(nodeId(node));
-            if (!source || !target)
-                throw ContractError("Node not found");
+            if (!source)
+                throw ContractError("未选择节点");
+            if (!target)
+                throw ContractError("找不到节点：" + node.toStdString());
             const auto binding = target->inputs.find(input.toStdString());
             if (binding == target->inputs.end() || binding->second.mode != BindingMode::Upstream
                 || binding->second.source != SourcePort{source->id, context.value("port").toString().toStdString()})
-                throw ContractError("Input is not connected to this output");
+                throw ContractError("输入端口未连接到当前输出：" + node.toStdString() + "." + input.toStdString());
             return impl_->editor.unbind(impl_->flow.toStdString(), target->id, input.toStdString());
         });
 }

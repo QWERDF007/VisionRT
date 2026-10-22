@@ -5,6 +5,10 @@
 - [三仓统一完整实施方案与工单](VisionRT_统一完整方案_Specs_Tickets.zip)：以包内 `00_README.md` 为入口，协议见 `02_跨仓行为约定.md`、`03_JSON与模块协议.md`，验收见 `06_验收矩阵.md`。
 - [任务账本](../WORKLOG.md)：本地工作恢复与验证证据入口，不随代码提交。
 
+## 界面约束
+
+重构沿用用户确认的三张 VisionRT V3 截图作为外观基准，保持既有布局、配色、间距、边框、图标、控件与节点外观；不另建样式体系，不将结构重构变成视觉改版。
+
 ## 构建与模块
 
 | 职责 | 唯一实现入口 |
@@ -25,5 +29,6 @@
 | 执行状态、阶段与独立生命周期诊断 | [快照与诊断模型](../src/runtime/Snapshot.h)、[最终发布](../src/runtime/NodeRuntime.cpp)、[界面上下文与 JSON](../src/ui/Diagnostics.h)、[输出预览与捕获](../src/ui/OutputModel.h)、[真实模块及工作台契约](../tests/plugin_contract.cpp) |
 | 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |
 | 应用提示与诊断导出 | [统一诊断模型](../src/ui/Diagnostics.h)、[控制器诊断入口](../src/ui/AppControllerDiagnostics.cpp)、[文本对话框](../src/ui/qml/WorkbenchTextDialog.qml)、[真实窗口契约](../tests/workbench_startup.cpp) |
-| 工作台 | [ui](../src/ui) |
+| 工作台结构与样式 | [主窗口](../src/ui/qml/Main.qml)、[主题](../src/ui/Theme.h)、[ui](../src/ui) |
+| ROI 编辑与拒绝诊断 | [编辑入口](../src/ui/AppControllerRoi.cpp)、[真实窗口契约](../tests/workbench_roi.cpp) |
 | 契约验证 | [tests](../tests)、[测试注册](../CMakeLists.txt) |

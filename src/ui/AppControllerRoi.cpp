@@ -86,22 +86,23 @@ bool AppController::editRoi(const QString &parameter, bool copyUpstream)
         const auto *declaration = impl_->parameter(parameter.toStdString(), false);
         if (!node || !declaration
             || (declaration->type.type != Type::RoiBatch && declaration->type.type != Type::Rect))
-            throw ContractError("Selected parameter is not an ROI input");
+            throw ContractError("参数不是可编辑的 ROI 输入：" + parameter.toStdString());
         if (declaration->imageInput.empty())
-            throw ContractError("ROI input has no image_input association");
+            throw ContractError("ROI 输入未声明 image_input 图像关联：" + parameter.toStdString());
         const auto  imageValue = impl_->resolvedInput(*node, declaration->imageInput);
         const auto *images     = std::get_if<ImageBatch>(&imageValue);
         if (declaration->type.type != Type::Rect && (!images || images->images().empty()))
-            throw ContractError("No input image cache; run the image source/upstream first");
+            throw ContractError("ROI 输入 " + parameter.toStdString() + " 的关联图像 " + declaration->imageInput
+                                + " 没有缓存，请先运行图像源或上游");
         auto roiValue = impl_->resolvedInput(*node, parameter.toStdString());
         if (isMissing(roiValue) && declaration->type.type == Type::RoiBatch)
             roiValue = RoiBatch{};
         validateValue(declaration->type, roiValue);
         const auto binding = node->inputs.find(parameter.toStdString());
         if (binding == node->inputs.end())
-            throw ContractError("Unknown ROI input");
+            throw ContractError("找不到 ROI 输入：" + parameter.toStdString());
         if (binding->second.mode == BindingMode::Upstream && !copyUpstream)
-            throw ContractError("Upstream ROI is read-only; explicitly copy current value for editing first");
+            throw ContractError("上游 ROI 输入只读，请先显式复制当前值再编辑：" + parameter.toStdString());
         impl_->finishRoi();
         impl_->roi = Impl::RoiPreview{++impl_->roiSerial, node->id, parameter.toStdString(), impl_->flow, declaration->type,
                                       binding->second, imageValue, std::move(roiValue), 0,
@@ -144,14 +145,16 @@ bool AppController::setRoiRectangle(const QString &session, const QVariantList &
     try
     {
         if (coordinates.size() != 5)
-            throw ContractError("Rectangle requires x, y, width, height and angle");
+            throw ContractError("矩形参数 " + impl_->roi->input + " 需要 x、y、width、height、angle 五个坐标，实际 "
+                                + std::to_string(coordinates.size()) + " 项");
         std::array<float, 5> values;
         for (std::size_t index = 0; index < values.size(); ++index)
         {
             bool valid = false;
             values[index] = coordinates[qsizetype(index)].toFloat(&valid);
             if (!valid || !std::isfinite(values[index]))
-                throw ContractError("Rectangle coordinates must be finite numbers");
+                throw ContractError("矩形参数 " + impl_->roi->input + " 的坐标[" + std::to_string(index)
+                                    + "] 必须为有限数值");
         }
         impl_->roi->draft = Roi::rectangle(values[0], values[1], values[2], values[3], values[4]);
         impl_->viewport->setDrawShape(0);
@@ -197,14 +200,14 @@ bool AppController::applyRoi()
         const auto *declaration = impl_->parameter(session.input, false);
         if (impl_->flow != session.flow || !node || node->id != session.node || !declaration
             || declaration->type != session.type)
-            throw ContractError("ROI edit target is no longer valid");
+            throw ContractError("ROI 编辑目标已失效：" + session.input);
         const auto binding = node->inputs.find(session.input);
         if (binding == node->inputs.end() || binding->second.mode != session.original.mode
             || binding->second.source != session.original.source
             || !equalValues(binding->second.literal, session.original.literal))
-            throw ContractError("ROI input binding changed during editing");
+            throw ContractError("ROI 输入绑定已在编辑期间改变：" + session.input);
         if (!equalValues(session.background, impl_->resolvedInput(*node, declaration->imageInput)))
-            throw ContractError("ROI background image changed during editing");
+            throw ContractError("ROI 背景图像已在编辑期间改变：" + session.input);
         validateValue(session.type, session.draft);
         InputBinding committed{BindingMode::Literal, session.draft, std::nullopt};
         const bool changed = impl_->editor.setBinding(session.flow.toStdString(), session.node, session.input,

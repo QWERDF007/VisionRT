@@ -22,6 +22,7 @@
 #include <QTest>
 #include <QtMath>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 
@@ -728,6 +729,18 @@ void roiParameterContract()
     require(app.setRoiRectangle(imageFreeSession, {7, 8, 9, 10, 25}),
             "Image-free background transition could not stage numeric geometry");
     const auto imageFreeDraft = app.roiEditor().value("rectangle").toList();
+    QSignalSpy rejectedRectangleChanges(&app, &AppController::parametersChanged);
+    require(!app.setRoiRectangle(imageFreeSession, {1, 2, 3, 4})
+                && app.diagnostic().contains(QStringLiteral("矩形参数 rect"))
+                && app.diagnostic().contains(QStringLiteral("实际 4 项")),
+            "Malformed rectangle lost its parameter identity or actual coordinate count");
+    require(!app.setRoiRectangle(imageFreeSession, {1, 2, std::numeric_limits<double>::infinity(), 4, 5})
+                && app.diagnostic().contains(QStringLiteral("矩形参数 rect 的坐标[2]"))
+                && app.diagnostic().contains(QStringLiteral("有限数值")),
+            "Non-finite rectangle lost its parameter identity or invalid coordinate index");
+    require(app.roiEditor().value("id").toString() == imageFreeSession
+                && app.roiEditor().value("rectangle").toList() == imageFreeDraft && rejectedRectangleChanges.isEmpty(),
+            "Rejected rectangle coordinates changed the active draft or committed a parameter");
     const auto beforeImageFreeDraw = rectangleGestures.count();
     viewport.setDrawShape(2);
     const auto emptyStart = viewport.mapToScene(QPointF(100, 100)).toPoint();
