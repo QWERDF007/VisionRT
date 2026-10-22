@@ -431,7 +431,12 @@ void AppController::Impl::poll()
             }
         }
         for (const auto &event : update.diagnostics)
-            report(event.nodeDiagnostic ? diagnosticMessage(*event.nodeDiagnostic) : workbench::q(event.message));
+        {
+            if (const auto *node = std::get_if<NodeDiagnostic>(&event.payload))
+                report(diagnosticMessage(*node));
+            else
+                report(workbench::q(event.status().message));
+        }
         if (update.droppedDiagnostics > 0)
             report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
         QString updatedTiming;
@@ -675,8 +680,9 @@ void AppController::Impl::refreshFinished()
         {
             const auto availability = registry.availability(definition.id);
             if (availability.state != ToolAvailability::Available)
-                report(QStringLiteral("定义已加载，实现不可用：") + workbench::q(availability.message)
-                       + (availability.detail.empty() ? QString() : "\n" + workbench::q(availability.detail)));
+                report(QStringLiteral("定义已加载，实现不可用：") + workbench::q(availability.status.message)
+                       + (availability.status.detail.empty() ? QString()
+                                                             : "\n" + workbench::q(availability.status.detail)));
         }
     for (auto &implementation : result->implementations)
     {

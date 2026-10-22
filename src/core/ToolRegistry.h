@@ -21,8 +21,7 @@ enum class ToolAvailability
 struct Availability
 {
     ToolAvailability state;
-    std::string      message;
-    std::string      detail;
+    ToolStatus       status;
 };
 
 class RegistryError : public std::runtime_error

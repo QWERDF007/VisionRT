@@ -1088,7 +1088,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     const auto state = registry.availability("test.plugin.a");
     if (state.state != ToolAvailability::Available)
     {
-        std::cerr << "Unavailable: " << state.message << "\n";
+        std::cerr << "Unavailable: " << state.status.message << "\n";
     }
     assert(state.state == ToolAvailability::Available);
 

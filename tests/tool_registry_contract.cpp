@@ -111,8 +111,20 @@ int main()
     assert(registry.availability(python.id).state == ToolAvailability::Available);
     registry.registerPackage(package(python));
     assert(registry.availability(python.id).state == ToolAvailability::ImplementationUnavailable);
-    registry.setPythonImplementation(python.id, {}, {-3, "import failed"});
-    assert(registry.availability(python.id).message.find("import failed") != std::string::npos);
+    registry.setPythonImplementation(python.id, {}, {-2, "Python 入口合同无效", "original import detail"});
+    const auto failed = registry.availability(python.id);
+    assert(failed.status.code == -2 && failed.status.message == "Python 入口合同无效");
+    assert(failed.status.detail == "original import detail");
+    try
+    {
+        registry.create(python.id, {});
+        assert(false);
+    }
+    catch (const RegistryError &error)
+    {
+        assert(error.status.code == -2 && error.status.message == failed.status.message);
+        assert(error.status.detail == failed.status.detail);
+    }
 
     auto host        = definition("test.receiver");
     host.kind        = ToolKind::Host;

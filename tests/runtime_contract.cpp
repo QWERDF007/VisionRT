@@ -824,7 +824,7 @@ void hostBindingReceiverContract()
 
     auto availUnknown = registry.availability("test.unknown.receiver");
     assert(availUnknown.state == ToolAvailability::ImplementationUnavailable);
-    assert(availUnknown.message.find("Unknown host_binding: visionrt.nonexistent_binding") != std::string::npos);
+    assert(availUnknown.status.message == "宿主绑定未注册：visionrt.nonexistent_binding");
 
     bool thrownUnknown = false;
     try
@@ -1201,6 +1201,36 @@ void explicitRequirednessAtExecution()
     std::cout << "Explicit requiredness governs input and initialization Missing values independently of defaults\n";
 }
 
+void managementDiagnosticsPreserveStatus()
+{
+    for (int scenario = 0; scenario < 3; ++scenario)
+    {
+        RuntimeEngine engine(1);
+        assert(engine.requestRefresh(
+            [scenario]() -> ToolStatus
+            {
+                if (scenario == 1)
+                    throw ContractError("管理配置无效");
+                if (scenario == 2)
+                    throw std::runtime_error("foreign management detail");
+                return {9, "资源刷新失败", "original refresh detail"};
+            }));
+        const auto completed = finish(engine);
+        assert(completed.diagnostics.size() == 1);
+        const auto &event = completed.diagnostics.front();
+        assert(event.generation == completed.generation && event.phase == RuntimePhase::Management);
+        const auto &status = event.status();
+        if (scenario == 0)
+            assert(status.code == 9 && status.message == "资源刷新失败" && status.detail == "original refresh detail");
+        else if (scenario == 1)
+            assert(status.code == -2 && status.message == "管理配置无效" && status.detail.empty());
+        else
+            assert(status.code == -1 && status.message == "运行时管理异常"
+                   && status.detail == "foreign management detail");
+        assert(engine.pollLatest().diagnostics.empty());
+    }
+}
+
 void diagnosticIdentityAndTruncation()
 {
     RuntimeEngine engine(1);
@@ -1210,7 +1240,7 @@ void diagnosticIdentityAndTruncation()
     assert(first.diagnostics.size() == 2);
     assert(first.diagnostics[0].generation == first.generation);
     assert(first.diagnostics[0].sequence < first.diagnostics[1].sequence);
-    assert(first.diagnostics[0].message == "同文本" && first.diagnostics[1].message == "同文本");
+    assert(first.diagnostics[0].status().message == "同文本" && first.diagnostics[1].status().message == "同文本");
     assert(first.droppedDiagnostics == 0);
     const auto unchanged = engine.pollLatest();
     assert(unchanged.diagnostics.empty() && unchanged.droppedDiagnostics == 0);
@@ -1232,6 +1262,7 @@ int main(int argc, char **argv)
     assert(argc == 2);
     explicitRequirednessAtExecution();
     diagnosticIdentityAndTruncation();
+    managementDiagnosticsPreserveStatus();
     singleNodeUpstreamValidity();
     stopWakesReceiverWait(argv[1]);
     branchesOverlapAndJoin();
