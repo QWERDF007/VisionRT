@@ -2,7 +2,7 @@
 
 ## 规格入口
 
-- [三仓统一完整实施方案与工单](VisionRT_统一完整方案_Specs_Tickets.zip)：以包内 `00_README.md` 为入口，协议见 `02_跨仓行为约定.md`、`03_JSON与模块协议.md`，验收见 `06_验收矩阵.md`。
+- [三仓统一完整实施方案与工单](VisionRT_统一完整方案_Specs_Tickets-新.zip)：以包内 `00_README.md` 为入口，协议见 `02_跨仓行为约定.md`、`03_JSON与模块协议.md`，验收见 `06_验收矩阵.md`。
 - [任务账本](../WORKLOG.md)：本地工作恢复与验证证据入口，不随代码提交。
 
 ## 界面约束
@@ -14,7 +14,7 @@
 | 职责 | 唯一实现入口 |
 | --- | --- |
 | 构建与部署 | [脚本说明](../tools/README.md)、[CMake](../CMakeLists.txt) |
-| 共享契约 | [VisionRTContracts](../3rdparty/VisionRTContracts/README.md)、[公共头文件](../3rdparty/VisionRTContracts/include/visionrt/contracts) |
+| 共享契约 | [VisionRTContracts](../3rdparty/VisionRTContracts/README.md)、[公共头文件](../3rdparty/VisionRTContracts/include/visionrt/contracts)、[共享数据与依赖保活](../3rdparty/VisionRTContracts/include/visionrt/contracts/DataRef.h) |
 | 工程与工具注册 | [core](../src/core) |
 | 工具声明 JSON | [DefinitionJson](../src/core/DefinitionJson.h)、[声明模型](../src/core/ToolDefinition.h)、[值约束](../src/core/ToolValueValidation.h) |
 | 包索引、目录与交付校验 | [ModuleIndex](../src/core/ModuleIndex.h)、[ToolPackage](../src/core/ToolPackage.h)、[校验器](../tools/visionrt_validate_tool.cpp)、[JSON ZIP 部署](../tools/package_app.py)、[部署契约](../tests/test_package_app.py) |
