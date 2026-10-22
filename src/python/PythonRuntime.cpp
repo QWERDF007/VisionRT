@@ -3,6 +3,7 @@
 #include <python/PythonInterop.h>
 
 #include "core/ToolRegistry.h"
+#include "core/ToolValueValidation.h"
 #include "runtime/Snapshot.h"
 
 #include <pybind11/embed.h>
@@ -339,17 +340,17 @@ public:
                     continue;
                 if (!dictionary.contains(py::str(output.id)))
                     throw ContractError("缺少声明的输出键：" + output.id);
+                PortValue value;
                 try
                 {
-                    auto value = fromPython(output.type, dictionary[py::str(output.id)]);
-                    if (result.status && isMissing(value))
-                        throw ContractError("成功输出不能为 Missing");
-                    result.outputs.emplace(output.id, std::move(value));
+                    value = fromPython(output.type, dictionary[py::str(output.id)]);
                 }
                 catch (const std::exception &error)
                 {
                     throw ContractError("输出端口 " + output.id + "：" + error.what());
                 }
+                validateToolOutput(output, value, result.status);
+                result.outputs.emplace(output.id, std::move(value));
             }
             outputTimer.stop();
         }

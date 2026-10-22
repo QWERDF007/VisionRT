@@ -7,6 +7,21 @@
 #include <set>
 
 namespace visionrt {
+TypeMap resolvedOutputTypes(const ToolDefinition &contract)
+{
+    TypeMap result{
+        {   "__status_code",    {Type::Int}},
+        {"__status_message", {Type::String}}
+    };
+    for (const auto &port : contract.outputs)
+    {
+        if (port.typeFrom)
+            throw ContractError("输出类型尚未解析：" + port.id);
+        result.insert_or_assign(port.id, port.type);
+    }
+    return result;
+}
+
 void setOutputDeclarations(NodeDefinition &node, const ToolDefinition &definition)
 {
     TypeMap outputs;

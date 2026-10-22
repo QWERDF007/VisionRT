@@ -1,5 +1,6 @@
 #include "core/ProjectEditor.h"
 #include "core/NodeContracts.h"
+#include "core/ToolValueValidation.h"
 #include "runtime/RuntimeInternal.h"
 
 #include <taskflow/taskflow.hpp>
@@ -95,6 +96,22 @@ std::optional<std::string> upstreamValidityError(
             return "上游节点 " + node.title() + " 未成功运行，请先重新运行该节点";
         if (snapshot->toolId != node.toolId)
             return "上游节点 " + node.title() + " 的工具已变化，请先重新运行该节点";
+        const auto *definition = frozen.registry.find(node.toolId);
+        if (!definition)
+            return "上游节点 " + node.title() + " 的工具定义缺失";
+        const auto contract = nodeContract(node, *definition);
+        if (snapshot->outputTypes != resolvedOutputTypes(contract))
+            return "上游节点 " + node.title() + " 的输出合同已变化，请先重新运行该节点";
+        try
+        {
+            validateToolValues(contract.outputs, snapshot->outputs);
+        }
+        catch (const ContractError &error)
+        {
+            return "上游节点 " + node.title() + " 的输出值不符合当前声明：" + error.what();
+        }
+        std::map<std::string, const PortDefinition *, std::less<>> inputs;
+        for (const auto &port : contract.inputs) inputs.emplace(port.id, &port);
         for (const auto &use : snapshot->inputUses)
         {
             const auto binding = node.inputs.find(use.inputPort);
@@ -110,14 +127,22 @@ std::optional<std::string> upstreamValidityError(
                                                                        : sourceRuntime->second->slot.latest();
             if (!sourceSnapshot || sourceSnapshot->publication != use.sourcePublication)
                 return "上游节点 " + sourceIt->second->title() + " 已重新运行，请先重新运行节点 " + node.title();
-            const auto input = node.signatures.inputs.find(use.inputPort);
+            const auto input      = inputs.find(use.inputPort);
             const auto output = sourceSnapshot->outputs.find(use.sourcePort);
-            if (input == node.signatures.inputs.end() || output == sourceSnapshot->outputs.end()
-                || isMissing(output->second))
+            const auto outputType = sourceSnapshot->outputTypes.find(use.sourcePort);
+            if (input == inputs.end() || output == sourceSnapshot->outputs.end()
+                || outputType == sourceSnapshot->outputTypes.end())
                 return "上游节点 " + sourceIt->second->title() + " 的输出不可用，请先重新运行该节点";
-            const auto actual = typeOf(output->second);
-            if (!actual || !compatible(*actual, input->second))
+            if (!compatible(outputType->second, input->second->type))
                 return "上游节点 " + sourceIt->second->title() + " 的输出类型与 " + node.title() + " 的输入不匹配";
+            try
+            {
+                validateToolValue(*input->second, output->second);
+            }
+            catch (const ContractError &error)
+            {
+                return "上游节点 " + node.title() + " 的输入值不符合当前声明：" + error.what();
+            }
             if (auto error = check(use.sourceNode))
                 return error;
         }

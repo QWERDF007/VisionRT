@@ -218,6 +218,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     const auto &config          = *frozen.nodes.at(id);
     const auto *definition      = &frozen.contracts.at(id);
     snapshot->toolId            = definition->id;
+    snapshot->outputTypes       = resolvedOutputTypes(*definition);
     snapshot->executionRevision = config.executionRevision;
     ToolResult  result;
     auto        phase            = NodePhase::Prepare;
@@ -257,7 +258,9 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                             const auto found = upstream->outputs.find(input.source->port);
                             if (found == upstream->outputs.end())
                                 throw ContractError("上游输出端口不存在");
-                            value = found->second;
+                            const bool systemOutput
+                                = input.source->port == "__status_code" || input.source->port == "__status_message";
+                            value = upstream->status || systemOutput ? found->second : PortValue{Missing{}};
                         }
                     }
                 }
@@ -361,9 +364,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 const auto output = result.outputs.find(port.id);
                 if (output == result.outputs.end())
                     throw ContractError("缺少输出端口：" + port.id);
-                validateValue(port.type, output->second);
-                if (result.status.code == 0 && isMissing(output->second))
-                    throw ContractError("成功输出不能为 Missing：" + port.id);
+                validateToolOutput(port, output->second, result.status);
             }
             for (const auto &output : definition->outputs)
             {

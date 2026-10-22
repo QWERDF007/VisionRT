@@ -1231,6 +1231,122 @@ void managementDiagnosticsPreserveStatus()
     }
 }
 
+void optionalOutputsAndCachedMissing()
+{
+    ToolRegistry registry;
+    auto         source        = definition("test.optional_output");
+    source.outputs[0].required = false;
+    source.kind                = ToolKind::Host;
+    source.hostBinding         = "test.optional_output";
+    registry.addDefinition(source);
+    registry.registerHostBinding(source.hostBinding,
+                                 [](const ToolDefinition &, const PlatformToolServices &)
+                                 {
+                                     auto instance = std::make_unique<Function>();
+                                     instance->run = [](const Values &)
+                                     {
+                                         return ToolResult{{}, {{"value", Missing{}}}};
+                                     };
+                                     return instance;
+                                 });
+    auto middle               = definition("test.optional_input", {"input"});
+    middle.inputs[0].required = false;
+    install(registry, middle,
+            [](const Values &inputs)
+            {
+                assert(isMissing(inputs.at("input")));
+                return ToolResult{{}, {{"value", std::int64_t{42}}}};
+            });
+    auto sink = definition("test.optional_sink", {"input"});
+    install(registry, sink, [](const Values &inputs) { return ToolResult{{}, {{"value", inputs.at("input")}}}; });
+    ProjectDefinition project;
+    auto              first = node(1, source), second = node(2, middle), third = node(3, sink);
+    bind(second, "input", 1);
+    bind(third, "input", 2);
+    project.flows.front().nodes = {first, second, third};
+    RuntimeEngine engine(1);
+    assert(engine.start(project, registry, RunMode::Once));
+    auto full = finish(engine);
+    assert(snapshot(full, 1)->status.code == 0 && isMissing(snapshot(full, 1)->outputs.at("value")));
+    assert(snapshot(full, 1)->outputTypes == first.signatures.outputs);
+    assert(snapshot(full, 2)->status.code == 0 && snapshot(full, 3)->status.code == 0);
+    assert(engine.start(project, registry, RunMode::Node, 3));
+    auto cached = finish(engine);
+    assert(snapshot(cached, 3)->status.code == 0);
+    assert(std::get<std::int64_t>(snapshot(cached, 3)->outputs.at("value")) == 42);
+    auto nowRequired                = source;
+    nowRequired.outputs[0].required = true;
+    registry.replaceDefinition(nowRequired);
+    const auto requiredRejected = engine.start(project, registry, RunMode::Node, 3);
+    assert(!requiredRejected && requiredRejected.message.find("value") != std::string::npos);
+    auto changed            = source;
+    changed.outputs[0].type = {Type::Float};
+    registry.replaceDefinition(changed);
+    const auto rejected = engine.start(project, registry, RunMode::Node, 3);
+    assert(!rejected && rejected.message.find("输出合同已变化") != std::string::npos);
+}
+
+void failedBusinessOutputsAreNotInputs()
+{
+    ToolRegistry registry;
+    const auto   source = definition("test.failed_publication");
+    install(registry, source,
+            [](const Values &)
+            {
+                return ToolResult{
+                    {7, "业务执行失败", "original failure detail"},
+                    {{"value", std::int64_t{99}}}
+                };
+            });
+    auto required      = definition("test.required_consumer", {"input"});
+    int  requiredCalls = 0;
+    install(registry, required,
+            [&](const Values &)
+            {
+                ++requiredCalls;
+                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+            });
+    auto optional               = definition("test.optional_consumer", {"input"});
+    optional.inputs[0].required = false;
+    install(registry, optional,
+            [](const Values &inputs)
+            {
+                assert(isMissing(inputs.at("input")));
+                return ToolResult{{}, {{"value", std::int64_t{42}}}};
+            });
+    auto observer           = definition("test.status_consumer", {"code", "message"});
+    observer.inputs[1].type = {Type::String};
+    install(registry, observer,
+            [](const Values &inputs)
+            {
+                assert(std::get<std::int64_t>(inputs.at("code")) == 7);
+                assert(std::get<Utf8>(inputs.at("message")).str() == "业务执行失败");
+                return ToolResult{{}, {{"value", inputs.at("code")}}};
+            });
+    auto first = node(1, source), second = node(2, required), third = node(3, optional), fourth = node(4, observer);
+    bind(second, "input", 1);
+    bind(third, "input", 1);
+    fourth.inputs["code"] = {
+        BindingMode::Upstream, Missing{},
+         SourcePort{1, "__status_code"}
+    };
+    fourth.inputs["message"] = {
+        BindingMode::Upstream, Missing{},
+         SourcePort{1, "__status_message"}
+    };
+    ProjectDefinition project;
+    project.flows.front().nodes = {first, second, third, fourth};
+    RuntimeEngine engine(1);
+    assert(engine.start(project, registry, RunMode::Once));
+    const auto result = finish(engine);
+    assert(snapshot(result, 1)->status.code == 7);
+    assert(snapshot(result, 1)->status.detail == "original failure detail");
+    assert(std::get<std::int64_t>(snapshot(result, 1)->outputs.at("value")) == 99);
+    assert(requiredCalls == 0 && snapshot(result, 2)->status.code == -2);
+    assert(isMissing(snapshot(result, 2)->outputs.at("value")));
+    assert(snapshot(result, 3)->status.code == 0 && snapshot(result, 4)->status.code == 0);
+}
+
 void diagnosticIdentityAndTruncation()
 {
     RuntimeEngine engine(1);
@@ -1260,6 +1376,8 @@ void diagnosticIdentityAndTruncation()
 int main(int argc, char **argv)
 {
     assert(argc == 2);
+    optionalOutputsAndCachedMissing();
+    failedBusinessOutputsAreNotInputs();
     explicitRequirednessAtExecution();
     diagnosticIdentityAndTruncation();
     managementDiagnosticsPreserveStatus();
