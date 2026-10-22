@@ -145,6 +145,39 @@ void flowCanvasContract()
     app.selectNode(QStringLiteral("3"));
     require(bypass->property("lineColor").value<QColor>() == QColor("#f08800"),
             "selected target does not distinguish its upstream relationship");
+    auto *invalid = findItem(findItem, canvas, QStringLiteral("flowNode_5"));
+    require(invalid != nullptr, "single failed-endpoint fixture is missing");
+    const auto originalWidth = invalid->width();
+    QSignalSpy routingWarnings(&app, &visionrt::AppController::diagnosticChanged);
+    invalid->setWidth(0);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    auto *failed    = findItem(findItem, canvas, QStringLiteral("flowWire_1_5"));
+                    auto *preserved = findItem(findItem, canvas, QStringLiteral("flowWire_1_3"));
+                    return failed && failed->property("lineColor").value<QColor>() == QColor("#d97706") && preserved
+                        && readRoute(preserved).size() >= 2;
+                },
+                1000),
+            "one failed endpoint cleared other canvas wires or lost its warning color");
+    require(routingWarnings.size() == 1 && app.diagnostic().contains(QStringLiteral("连线端点")),
+            "single failed wire did not produce exactly one routing diagnostic");
+    const auto geometryValue  = canvas->property("routeGeometry");
+    const auto failedGeometry = geometryValue.metaType() == QMetaType::fromType<QJSValue>()
+                                  ? geometryValue.value<QJSValue>().toVariant().toList()
+                                  : geometryValue.toList();
+    require(app.routeWires(failedGeometry).size() == app.wires().size() && routingWarnings.size() == 1,
+            "repeating unchanged failed geometry duplicated diagnostics or lost routes");
+    invalid->setWidth(originalWidth);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    auto *restored = findItem(findItem, canvas, QStringLiteral("flowWire_1_5"));
+                    return restored && restored->property("lineColor").value<QColor>() != QColor("#d97706")
+                        && readRoute(restored).size() >= 2;
+                },
+                1000),
+            "restoring endpoint geometry retained the failed cache result");
     auto *obstacle = findItem(findItem, canvas, QStringLiteral("flowNode_2"));
     require(obstacle != nullptr, "routing obstacle delegate disappeared");
     const auto center = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
