@@ -134,7 +134,7 @@ void pendingContract()
     app.resolveUnsaved("cancel");
     require(closes == 0 && app.dirty(), "cancel changes project or closes");
     app.requestClose();
-    app.resolveUnsaved("save", directory.path() + "/absent/project.vrt");
+    app.resolveUnsaved("save", directory.path() + "/absent/project.vrt.json");
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved("discard");
     require(closes == 1, "discard does not finish pending close exactly once");
@@ -539,7 +539,7 @@ void mainQmlContract(double scale)
 
     // 2. Initial state verification & drawer items
     require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
-    app.save(dirPath + "/test.vrt");
+    app.save(dirPath + "/test.vrt.json");
     require(app.dirty() == false, "project initially dirty after save");
 
     auto *leftHandle     = window->findChild<QQuickItem *>("leftHandle");
@@ -602,7 +602,7 @@ void mainQmlContract(double scale)
     // 6. Running state, loop execution, and drawer toggling
     app.addNode("test.plugin.sleep", 100, 100);
     app.addNode("test.plugin.counter", 200, 100);
-    app.save(dirPath + "/test.vrt");
+    app.save(dirPath + "/test.vrt.json");
     require(app.dirty() == false, "project dirty after save with nodes");
 
     const auto nodesBeforeRun = app.nodes();
@@ -1017,7 +1017,7 @@ void packageDrivenCatalogAndRefreshContract()
         indexFile.close();
     }
 
-    const QString projectFile = dirPath + "/test_project.vrt";
+    const QString projectFile = dirPath + "/test_project.vrt.json";
     {
         AppController app(1, dirPath);
         for (int i = 0; i < 50 && app.busy(); ++i)

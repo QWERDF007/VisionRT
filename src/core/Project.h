@@ -2,7 +2,7 @@
 
 #include "core/Tool.h"
 
-#include <yaml-cpp/yaml.h>
+#include <QJsonObject>
 
 #include <cstdint>
 #include <map>
@@ -62,7 +62,7 @@ struct NodeDefinition
     std::map<std::string, PortTypeReference, std::less<>> outputTypeSources;
     std::map<std::string, std::string, std::less<>> outputTypeErrors;
     std::uint64_t                                    executionRevision = 0;
-    YAML::Node                                       unresolved;
+    QJsonObject                                      unresolved;
     std::string                                      title() const;
 };
 

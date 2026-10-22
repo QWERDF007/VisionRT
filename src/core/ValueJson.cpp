@@ -2,8 +2,6 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QJsonParseError>
-#include <QRegularExpression>
 #include <cmath>
 #include <limits>
 
@@ -347,23 +345,10 @@ QJsonValue ValueJson::encode(const PortValue &value, const TypeSpec &type, Purpo
 
 PortValue ValueJson::parse(const QString &text, const TypeSpec &type)
 {
-    if (type.type == Type::Int || (type.type == Type::NumericArray && type.dtype == DType::Int64))
-    {
-        static const QRegularExpression tokens(QStringLiteral(
-            R"json("(?:[^"\\]|\\.)*"|(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?))json"));
-        auto matches = tokens.globalMatch(text);
-        while (matches.hasNext())
-        {
-            const auto match = matches.next();
-            if (match.hasCaptured(1))
-                (void)parseInt64(match.captured(1).toStdString());
-        }
-    }
-    QJsonParseError error;
-    const auto document = QJsonDocument::fromJson('[' + text.toUtf8() + ']', &error);
-    if (error.error != QJsonParseError::NoError || !document.isArray() || document.array().size() != 1)
-        throw ContractError("需要单个标准 JSON 值：" + error.errorString().toStdString());
-    return decode(document.array()[0], type);
+    const Document document('[' + text.toUtf8() + ']');
+    if (document.json().array().size() != 1)
+        throw ContractError("需要单个标准 JSON 值");
+    return document.decode({"0"}, type);
 }
 
 QString ValueJson::text(const PortValue &value, const TypeSpec &type, Purpose purpose)

@@ -4,7 +4,6 @@
 #include "ui/DurationText.h"
 
 #include <visionrt/contracts/Package.h>
-#include <visionrt/contracts/ValueYaml.h>
 
 #include <QClipboard>
 #include <QCoreApplication>

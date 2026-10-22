@@ -23,7 +23,7 @@ void startupProjectContract()
     {
         visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "startup catalog did not become ready");
-        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt"));
+        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
         app.resolveUnsaved(QStringLiteral("discard"));
         if (projectReadyBeforeWindow)
             require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),

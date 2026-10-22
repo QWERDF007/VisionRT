@@ -81,8 +81,8 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
     const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto tempProjectFile = tmpPath / "pipeline_cpu_python.vrt";
-    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", tempProjectFile);
+    const auto tempProjectFile = tmpPath / "pipeline_cpu_python.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt.json", tempProjectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
                           std::filesystem::copy_options::recursive);
 
@@ -144,7 +144,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert(std::abs(values[1] - 22.95) < 0.5);
 
     // Test Save As / Reopen consistency & re-execution output equality
-    const auto saveTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "reopened.vrt";
+    const auto saveTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "reopened.vrt.json";
     storage.save(loaded.project, saveTarget);
     auto reloaded = storage.load(saveTarget);
     assert(reloaded.diagnostics.empty());
@@ -164,11 +164,11 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert(std::abs(reloadedValues[1] - values[1]) < 1e-6);
 
     // Test corrupted input on a temp copy: must fail (exception or diagnostics) and not corrupt source file
-    const auto corruptTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "corrupted.vrt";
+    const auto corruptTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "corrupted.vrt.json";
     std::filesystem::copy_file(tempProjectFile, corruptTarget);
     {
         std::ofstream corruptOut(corruptTarget, std::ios::app);
-        corruptOut << "\n!@#$%^&*()INVALID_YAML_TAIL:\n";
+        corruptOut << "\nINVALID_JSON_TAIL\n";
     }
     bool corruptFailed = false;
     try
@@ -508,8 +508,8 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
     const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto projectFile = tmpPath / "pipeline_cpu_python.vrt";
-    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt", projectFile);
+    const auto projectFile = tmpPath / "pipeline_cpu_python.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt.json", projectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
                           std::filesystem::copy_options::recursive);
 
@@ -582,8 +582,8 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
     const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto tempProjectFile = tmpPath / "pipeline_error_diagnostic.vrt";
-    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt", tempProjectFile);
+    const auto tempProjectFile = tmpPath / "pipeline_error_diagnostic.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt.json", tempProjectFile);
     std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
                           std::filesystem::copy_options::recursive);
 
@@ -762,7 +762,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     // Test Save / Reopen consistency
     QTemporaryDir tmpDir;
     assert(tmpDir.isValid());
-    const auto     savePath = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "plugin_project.vrt";
+    const auto     savePath = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "plugin_project.vrt.json";
     ProjectStorage storage(registry);
     auto           reconciled = storage.reconcile(project);
     assert(reconciled.diagnostics.empty());
@@ -884,7 +884,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     }
 
     // Saved project path
-    const auto savedProjectFile = installRoot / "test_pipeline.vrt";
+    const auto savedProjectFile = installRoot / "test_pipeline.vrt.json";
 
     // 2. Package 1 execution: C++ domain DLL, Python tool, and Platform Receiver node in pipeline
     {

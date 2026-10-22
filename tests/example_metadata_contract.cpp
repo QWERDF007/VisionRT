@@ -19,7 +19,7 @@ int main(int argc, char **argv)
         std::size_t checked = 0;
         for (const auto &file : std::filesystem::directory_iterator(std::filesystem::u8path(argv[2])))
         {
-            if (file.path().extension() != ".vrt")
+            if (!file.path().filename().generic_string().ends_with(".vrt.json"))
                 continue;
             const auto loaded = storage.load(file.path());
             for (const auto &flow : loaded.project.flows)

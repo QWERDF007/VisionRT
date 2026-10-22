@@ -59,7 +59,7 @@ void flowCanvasContract()
     };
     auto *surface = findItem(findItem, canvas, QStringLiteral("flowSurface"));
     require(surface != nullptr, "canvas surface is missing");
-    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt"));
+    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
     app.resolveUnsaved(QStringLiteral("discard"));
     if (!QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000))
         throw std::runtime_error("canvas did not open the real example project: " + app.diagnostic().toStdString()
@@ -418,7 +418,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived catalog refresh");
     QTemporaryDir projectDirectory;
     require(projectDirectory.isValid(), "hover replacement fixture is unavailable");
-    const auto replacementPath = projectDirectory.filePath("hover.vrt");
+    const auto replacementPath = projectDirectory.filePath("hover.vrt.json");
     require(app.save(replacementPath), "cannot save hover replacement fixture");
     other = nodeItem(remainingId);
     QMetaObject::invokeMethod(canvas, "centerNode", Q_ARG(QVariant, remainingId));

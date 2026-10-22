@@ -1,0 +1,356 @@
+{
+  "format_version": 2,
+  "project": {
+    "name": "GPU-YOLO与缺陷过滤全链工程",
+    "next_node_seq": "4",
+    "next_flow_seq": "2"
+  },
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "深度学习检测流程",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "visionrt.image.read",
+          "tool_name_snapshot": "图像读取",
+          "alias": "读图",
+          "pos": [
+            60,
+            100
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "mode": {
+                "type": "String"
+              },
+              "path": {
+                "type": "String"
+              },
+              "color": {
+                "type": "String"
+              },
+              "limit": {
+                "type": "Int"
+              },
+              "max_batch_bytes": {
+                "type": "Int"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "paths": {
+                "type": "StringArray",
+                "rank": 1,
+                "layout": "dense"
+              }
+            }
+          },
+          "inputs": {
+            "mode": {
+              "mode": "literal",
+              "literal": "directory"
+            },
+            "path": {
+              "mode": "literal",
+              "literal": "images"
+            },
+            "color": {
+              "mode": "literal",
+              "literal": "bgr"
+            },
+            "limit": {
+              "mode": "literal",
+              "literal": 0
+            },
+            "max_batch_bytes": {
+              "mode": "literal",
+              "literal": 0
+            }
+          }
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "visionrt.dl.yolo",
+          "tool_name_snapshot": "YOLO目标检测",
+          "alias": "YOLO推理",
+          "pos": [
+            300,
+            100
+          ],
+          "init_params": {
+            "model_name": "yolov8n",
+            "load_mode": "build_wts",
+            "model_path": "models/yolov8n.wts",
+            "engine_output_path": "models/yolov8n.engine",
+            "labels_path": "",
+            "precision": "fp16",
+            "gpu_index": 0,
+            "input_width": 640,
+            "input_height": 640,
+            "num_classes": 80
+          },
+          "type_snapshot": {
+            "init_params": {
+              "model_name": {
+                "type": "String"
+              },
+              "load_mode": {
+                "type": "String"
+              },
+              "model_path": {
+                "type": "String"
+              },
+              "engine_output_path": {
+                "type": "String"
+              },
+              "labels_path": {
+                "type": "String"
+              },
+              "precision": {
+                "type": "String"
+              },
+              "gpu_index": {
+                "type": "Int"
+              },
+              "input_width": {
+                "type": "Int"
+              },
+              "input_height": {
+                "type": "Int"
+              },
+              "num_classes": {
+                "type": "Int"
+              }
+            },
+            "inputs": {
+              "images": {
+                "type": "ImageBatch"
+              },
+              "conf_threshold": {
+                "type": "Float"
+              },
+              "nms_threshold": {
+                "type": "Float"
+              },
+              "max_detections": {
+                "type": "Int"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "rois": {
+                "type": "RoiBatch"
+              },
+              "scores": {
+                "type": "NumericArray",
+                "dtype": "float32",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "classes": {
+                "type": "NumericArray",
+                "dtype": "int64",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "class_names": {
+                "type": "StringArray",
+                "rank": 2,
+                "layout": "batch_ragged"
+              }
+            }
+          },
+          "inputs": {
+            "images": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": "images"
+              }
+            },
+            "conf_threshold": {
+              "mode": "literal",
+              "literal": 0.25
+            },
+            "nms_threshold": {
+              "mode": "literal",
+              "literal": 0.45
+            },
+            "max_detections": {
+              "mode": "literal",
+              "literal": 300
+            }
+          }
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "visionrt.detection.filter",
+          "tool_name_snapshot": "缺陷过滤",
+          "alias": "结果过滤",
+          "pos": [
+            540,
+            100
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "images": {
+                "type": "ImageBatch"
+              },
+              "rois": {
+                "type": "RoiBatch"
+              },
+              "scores": {
+                "type": "NumericArray",
+                "dtype": "float32",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "classes": {
+                "type": "NumericArray",
+                "dtype": "int64",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "class_names": {
+                "type": "StringArray",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "min_score": {
+                "type": "Float"
+              },
+              "min_area": {
+                "type": "Float"
+              },
+              "allowed_classes": {
+                "type": "NumericArray",
+                "dtype": "int64",
+                "rank": 1,
+                "layout": "dense"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "rois": {
+                "type": "RoiBatch"
+              },
+              "scores": {
+                "type": "NumericArray",
+                "dtype": "float32",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "classes": {
+                "type": "NumericArray",
+                "dtype": "int64",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "class_names": {
+                "type": "StringArray",
+                "rank": 2,
+                "layout": "batch_ragged"
+              },
+              "counts": {
+                "type": "NumericArray",
+                "dtype": "int64",
+                "rank": 1,
+                "layout": "dense"
+              }
+            }
+          },
+          "inputs": {
+            "images": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": "images"
+              }
+            },
+            "rois": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": "rois"
+              }
+            },
+            "scores": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": "scores"
+              }
+            },
+            "classes": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": "classes"
+              }
+            },
+            "class_names": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": "class_names"
+              }
+            },
+            "min_score": {
+              "mode": "literal",
+              "literal": 0.5
+            },
+            "min_area": {
+              "mode": "literal",
+              "literal": 10.0
+            },
+            "allowed_classes": {
+              "mode": "literal",
+              "literal": {
+                "shape": [
+                  0
+                ],
+                "data": []
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

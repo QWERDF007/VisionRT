@@ -178,7 +178,7 @@ void parameterEditorsContract()
             pathSaved = row.value("valueText").toString() == path;
     }
     require(pathSaved, "text parameter did not preserve Unicode, whitespace and quotes");
-    const auto project = directory.path() + "/parameters.vrt";
+    const auto project = directory.path() + "/parameters.vrt.json";
     app.save(project);
     require(!app.dirty(), "parameter save failed");
     owner.reset();

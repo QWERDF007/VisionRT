@@ -535,12 +535,12 @@ ApplicationWindow {
     }
     FileDialog {
         id: openFile; title: "打开工程"
-        nameFilters: ["VisionRT 工程 (*.vrt)", "YAML 文件 (*.yaml *.yml)", "所有文件 (*)"]
+        nameFilters: ["VisionRT JSON 工程 (*.vrt.json *.json)"]
         onAccepted: app.requestOpen(window.localPath(selectedFile))
     }
     FileDialog {
         id: saveFile; title: "保存工程"; fileMode: FileDialog.SaveFile
-        nameFilters: ["VisionRT 工程文件 (*.vrt)"]; defaultSuffix: "vrt"
+        nameFilters: ["VisionRT JSON 工程 (*.vrt.json)"]; defaultSuffix: "vrt.json"
         onAccepted: {
             if (window.unsavedSaving) app.resolveUnsaved("save", window.localPath(selectedFile))
             else app.save(window.localPath(selectedFile))

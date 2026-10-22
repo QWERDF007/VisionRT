@@ -48,6 +48,24 @@ void arrays(DType dtype, std::span<const Element> elements)
 
 int main()
 {
+    const ValueJson::Document document(R"json({
+        "nodes": [{"integer": -9223372036854775809,
+                   "valid": -9223372036854775808,
+                   "real": -9223372036854775809,
+                   "array": {"shape": [1], "data": [-9223372036854775809]},
+                   "text": "quoted \\\"123\\\" and -9223372036854775809"}]
+    })json");
+    rejects([&] { document.decode({"nodes", "0", "integer"}, {Type::Int}); });
+    rejects([&] { document.decode({"nodes", "0", "array"}, {Type::NumericArray, DType::Int64, 1}); });
+    assert(std::get<std::int64_t>(document.decode({"nodes", "0", "valid"}, {Type::Int}))
+           == std::numeric_limits<std::int64_t>::min());
+    assert(std::isfinite(std::get<double>(document.decode({"nodes", "0", "real"}, {Type::Float}))));
+    assert(std::get<Utf8>(document.decode({"nodes", "0", "text"}, {Type::String})).str()
+           .ends_with("-9223372036854775809"));
+    rejects([&] { document.decode({"nodes", "2", "valid"}, {Type::Int}); });
+    rejects([] { ValueJson::Document(R"({"broken": [1,]})"); });
+    const ValueJson::Document ragged(R"({"array":[{"shape":[1],"data":[-9223372036854775809]}]})");
+    rejects([&] { ragged.decode({"array"}, {Type::NumericArray, DType::Int64, 2, Layout::BatchRagged}); });
     for (const auto number : {std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max(),
                               std::int64_t{9007199254740991}, std::int64_t{9007199254740993}})
     {
