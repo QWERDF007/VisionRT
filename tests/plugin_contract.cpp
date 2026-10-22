@@ -17,6 +17,7 @@ using namespace visionrt;
 #include "runtime/RuntimeEngine.h"
 #if defined(VISIONRT_BUILD_APP)
 #    include "ui/AppController.h"
+#    include "ui/OutputModel.h"
 #endif
 #include <QCoreApplication>
 #include <QDir>
@@ -830,26 +831,56 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(nodeAUnavailable);
     assert(nodeBAvailable);
 
-    // 4. Bad index rescan: corrupt module_index.json and rescan
+    QByteArray validIndex;
     {
-        QFile f(toQString(indexFile));
-        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *badJson = R"({"invalid": [)";
-        f.write(badJson);
+        QFile file(toQString(indexFile));
+        assert(file.open(QIODevice::ReadOnly));
+        validIndex = file.readAll();
     }
-    app.rescanTools();
-    // Bad index is rejected immediately; Tool B remains available!
-    defs   = app.toolDefinitions();
-    foundB = false;
-    for (const auto &d : defs)
+    app.selectNode(nodeBId);
+    assert(app.setParameterMode("x", false));
+    waitForIdle();
+    assert(app.setParameter("x", false, "21"));
+    waitForIdle();
+    const auto stableCatalog  = app.toolDefinitions();
+    auto       duplicateIndex = QJsonDocument::fromJson(validIndex).object();
+    auto       duplicateTools = duplicateIndex["tools"].toArray();
+    duplicateTools.append(duplicateTools.first());
+    duplicateIndex["tools"]          = duplicateTools;
+    auto escapedIndex                = QJsonDocument::fromJson(validIndex).object();
+    auto escapedTools                = escapedIndex["tools"].toArray();
+    auto escapedTool                 = escapedTools.first().toObject();
+    escapedTool["definition"]        = "../outside.json";
+    escapedTools[0]                  = escapedTool;
+    escapedIndex["tools"]            = escapedTools;
+    int        reportedRefreshErrors = 0;
+    const auto diagnosticConnection
+        = QObject::connect(&app, &AppController::diagnosticChanged, &app, [&] { ++reportedRefreshErrors; });
+    for (const auto &badIndex :
+         {QByteArray(R"({"invalid": [)"), QJsonDocument(duplicateIndex).toJson(QJsonDocument::Compact),
+          QJsonDocument(escapedIndex).toJson(QJsonDocument::Compact)})
     {
-        if (d.toMap().value("id").toString() == "test.plugin.function")
         {
-            foundB = true;
-            assert(d.toMap().value("available").toBool());
+            QFile file(toQString(indexFile));
+            assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            assert(file.write(badIndex) == badIndex.size());
         }
+        const auto beforeErrors = reportedRefreshErrors;
+        app.rescanTools();
+        waitForIdle();
+        assert(app.toolDefinitions() == stableCatalog);
+        assert(reportedRefreshErrors > beforeErrors && !app.diagnostic().isEmpty());
+        assert(app.nodes().size() == 2);
+        app.selectNode(nodeBId);
+        app.runNode();
+        waitForIdle();
+        auto *output = qobject_cast<OutputModel *>(app.outputModel());
+        assert(output);
+        const auto captured = output->capture("y");
+        assert(captured && std::get<std::int64_t>(captured->value) == 42);
+        std::cout << "Rejected package refresh preserves completed catalog and real DLL output=42\n";
     }
-    assert(foundB);
+    QObject::disconnect(diagnosticConnection);
 
     // 5. Restore valid index, test consecutive rescan idempotency
     {
