@@ -183,20 +183,11 @@ Rectangle {
         QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: root.queueAction("bind") }
     }
     BindingPopup { id: binding }
-    WorkbenchDialog {
+    WorkbenchTextDialog {
         id: dataDialog; objectName: "outputDataDialog"; title: "输出数据 · 点击时的快照"
-        width: Math.min(900, parent ? parent.width - 40 : 900)
-        useNegativeButton: false; positiveText: "关闭"
-        contentDelegate: Component {
-            ColumnLayout {
-                implicitHeight: Math.min(520, root.Window.window ? root.Window.window.height - 170 : 520)
-                QuiText { text: "超大数据会先提示预计体积；确认需要后关闭此窗，再次点击原“查看数据 / 复制数据”操作。"; wrapMode: Text.Wrap; Layout.fillWidth: true; color: QuiColor.FontCaption }
-                ScrollView {
-                    Layout.fillWidth: true; Layout.fillHeight: true
-                    QuiTextArea { text: root.fullText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap; font.family: "Consolas" }
-                }
-            }
-        }
+        text: root.fullText
+        monospace: true
+        description: "超大数据会先提示预计体积；确认需要后关闭此窗，再次点击原“查看数据 / 复制数据”操作。"
     }
     Connections {
         target: app

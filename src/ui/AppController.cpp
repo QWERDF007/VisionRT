@@ -2,7 +2,7 @@
 #include "runtime/Receiver.h"
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
-#include "ui/NodeDiagnostics.h"
+#include "ui/Diagnostics.h"
 
 #include <core/ToolPackage.h>
 
@@ -131,7 +131,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     }
     catch (const std::exception &error)
     {
-        report(QStringLiteral("Python 不可用：") + workbench::q(error.what()));
+        report(error, QStringLiteral("Python 不可用"));
     }
     runtime = std::make_unique<RuntimeEngine>(workers);
     runtime->setCompletionCallback(
@@ -249,17 +249,6 @@ bool AppController::Impl::idle()
     return false;
 }
 
-void AppController::Impl::report(const QString &text)
-{
-    if (text.isEmpty())
-        return;
-    const auto bounded = text.size() > 16384 ? text.left(16360) + QStringLiteral("…[诊断已截断]") : text;
-    diagnostics.push_back(bounded);
-    while (diagnostics.size() > 100) diagnostics.pop_front();
-    diagnostic = bounded;
-    emit q->diagnosticChanged();
-}
-
 void AppController::Impl::setState(RuntimeState value)
 {
     if (state == value)
@@ -336,7 +325,7 @@ void AppController::Impl::synchronizeNodes()
         return;
     const auto status = runtime->requestSynchronize(editor.project(), registry);
     if (!status)
-        report(workbench::q(status.message));
+        report(status);
     else
         setState(runtime->state());
 }
@@ -396,7 +385,7 @@ void AppController::Impl::poll()
                     lifecycleErrors[item.node]  = item.lifecycleDiagnostic;
                     nodesChanged                = true;
                     selectedChanged |= selected == QString::number(item.node);
-                    report(diagnosticMessage(*item.lifecycleDiagnostic));
+                    report(*item.lifecycleDiagnostic);
                 }
             }
             else if (lifecycleErrors.erase(item.node))
@@ -408,7 +397,7 @@ void AppController::Impl::poll()
                 {
                     instanceErrors[item.node] = item.instanceDiagnostic;
                     nodesChanged              = true;
-                    report(diagnosticMessage(*item.instanceDiagnostic));
+                    report(*item.instanceDiagnostic);
                 }
             }
             else if (instanceErrors.erase(item.node))
@@ -430,13 +419,7 @@ void AppController::Impl::poll()
                 }
             }
         }
-        for (const auto &event : update.diagnostics)
-        {
-            if (const auto *node = std::get_if<NodeDiagnostic>(&event.payload))
-                report(diagnosticMessage(*node));
-            else
-                report(workbench::q(event.status().message));
-        }
+        for (const auto &event : update.diagnostics) report(event);
         if (update.droppedDiagnostics > 0)
             report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
         QString updatedTiming;
@@ -485,7 +468,7 @@ void AppController::Impl::poll()
         }
         catch (const std::exception &error)
         {
-            report(workbench::q(error.what()));
+            report(error, QStringLiteral("完整输出生成失败"));
         }
     }
 }
@@ -509,7 +492,7 @@ void AppController::Impl::start(RunMode mode)
     const auto result = runtime->start(editor.project(), registry, mode, target);
     if (!result)
     {
-        report(workbench::q(result.message));
+        report(result);
         return;
     }
     active.clear();
@@ -580,14 +563,14 @@ void AppController::Impl::advancePending()
         }
         catch (const std::exception &error)
         {
-            report(workbench::q(error.what()));
+            report(error, QStringLiteral("工程打开失败"));
             pending = Pending::None;
             return;
         }
         const auto result = runtime->requestReset();
         if (!result)
         {
-            report(workbench::q(result.message));
+            report(result);
             pending = Pending::None;
             return;
         }
@@ -664,7 +647,7 @@ void AppController::Impl::refresh(bool rescan)
         tools.setRegistry(registry);
         changed(true);
         emit q->catalogChanged();
-        report(workbench::q(accepted.message));
+        report(accepted);
         return;
     }
     refreshResult    = std::move(result);
@@ -680,9 +663,7 @@ void AppController::Impl::refreshFinished()
         {
             const auto availability = registry.availability(definition.id);
             if (availability.state != ToolAvailability::Available)
-                report(QStringLiteral("定义已加载，实现不可用：") + workbench::q(availability.status.message)
-                       + (availability.status.detail.empty() ? QString()
-                                                             : "\n" + workbench::q(availability.status.detail)));
+                report(availability.status);
         }
     for (auto &implementation : result->implementations)
     {
@@ -693,7 +674,7 @@ void AppController::Impl::refreshFinished()
             factory = std::move(found->second);
         registry.setPythonImplementation(implementation.toolId, std::move(factory), implementation.status);
         if (!implementation.status)
-            report(QStringLiteral("定义已加载，实现不可用：") + workbench::q(implementation.status.message));
+            report(implementation.status);
     }
     if (refreshReconcile)
     {
@@ -705,7 +686,7 @@ void AppController::Impl::refreshFinished()
         }
         catch (const std::exception &error)
         {
-            report(workbench::q(error.what()));
+            report(error, QStringLiteral("工程工具定义同步失败"));
         }
     }
     refreshReconcile = false;
@@ -735,7 +716,7 @@ void AppController::Impl::loadToolsPackage()
         {
             registry.registerPackage({});
         }
-        report(workbench::pathText(candidate) + ": " + workbench::q(error.what()));
+        report(error, QStringLiteral("工具目录读取失败：") + workbench::pathText(candidate));
     }
 }
 
@@ -772,18 +753,6 @@ bool AppController::busy() const
 QString AppController::runState() const
 {
     return stateName(impl_->state);
-}
-
-QString AppController::diagnostic() const
-{
-    return impl_->diagnostic;
-}
-
-QStringList AppController::diagnostics() const
-{
-    QStringList result;
-    for (const auto &item : impl_->diagnostics) result.push_back(item);
-    return result;
 }
 
 QString AppController::currentFlow() const
@@ -1032,7 +1001,7 @@ void AppController::addNode(const QString &toolId, int x, int y)
             {
                 const auto *tool = impl_->registry.find(toolId.toStdString());
                 if (!tool)
-                    throw ContractError("Tool definition missing");
+                    throw ContractError("工具定义缺失：" + toolId.toStdString());
                 added = impl_->editor.addNode(impl_->flow.toStdString(), *tool, {x, y});
                 return true;
             },
@@ -1060,7 +1029,7 @@ void AppController::deleteNodes(const QVariantList &values)
     }
     catch (const std::exception &error)
     {
-        impl_->report(q(error.what()));
+        impl_->report(error, QStringLiteral("节点删除失败"));
     }
 }
 
@@ -1076,7 +1045,7 @@ void AppController::copyNodes(const QVariantList &values)
     }
     catch (const std::exception &error)
     {
-        impl_->report(q(error.what()));
+        impl_->report(error, QStringLiteral("节点复制失败"));
     }
 }
 
@@ -1279,7 +1248,7 @@ bool AppController::save(const QString &path)
     }
     catch (const std::exception &error)
     {
-        impl_->report(q(error.what()));
+        impl_->report(error, QStringLiteral("工程保存失败"));
         return false;
     }
 }

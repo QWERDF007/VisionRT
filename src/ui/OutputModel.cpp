@@ -1,7 +1,7 @@
 #include "ui/OutputModel.h"
 
 #include "core/ValueJson.h"
-#include "ui/NodeDiagnostics.h"
+#include "ui/Diagnostics.h"
 
 #include <algorithm>
 #include <limits>

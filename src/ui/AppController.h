@@ -18,6 +18,7 @@ class AppController : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY runtimeChanged)
     Q_PROPERTY(QString runState READ runState NOTIFY runtimeChanged)
     Q_PROPERTY(QString diagnostic READ diagnostic NOTIFY diagnosticChanged)
+    Q_PROPERTY(QStringList diagnostics READ diagnostics NOTIFY diagnosticChanged)
     Q_PROPERTY(QVariantList flows READ flows NOTIFY projectChanged)
     Q_PROPERTY(QVariantList nodes READ nodes NOTIFY nodesChanged)
     Q_PROPERTY(QVariantList wires READ wires NOTIFY nodesChanged)
@@ -47,6 +48,8 @@ public:
     QString             runState() const;
     QString             diagnostic() const;
     QStringList         diagnostics() const;
+    Q_INVOKABLE QString diagnosticsJson() const;
+    Q_INVOKABLE void    copyDiagnostics() const;
     QVariantList        flows() const;
     QVariantList        nodes() const;
     QVariantList        wires() const;

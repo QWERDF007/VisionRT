@@ -72,7 +72,7 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const Roi *valu
     }
     catch (const std::exception &error)
     {
-        report(workbench::q(error.what()));
+        report(error, QStringLiteral("ROI 编辑失败"));
     }
 }
 
@@ -114,7 +114,7 @@ bool AppController::editRoi(const QString &parameter, bool copyUpstream)
     }
     catch (const std::exception &error)
     {
-        impl_->report(workbench::q(error.what()));
+        impl_->report(error, QStringLiteral("ROI 编辑启动失败"));
         return false;
     }
 }
@@ -172,7 +172,7 @@ bool AppController::setRoiRectangle(const QString &session, const QVariantList &
     }
     catch (const std::exception &error)
     {
-        impl_->report(workbench::q(error.what()));
+        impl_->report(error, QStringLiteral("ROI 坐标更新失败"));
         return false;
     }
 }
@@ -218,7 +218,7 @@ bool AppController::applyRoi()
     }
     catch (const std::exception &error)
     {
-        impl_->report(workbench::q(error.what()));
+        impl_->report(error, QStringLiteral("ROI 应用失败"));
         return false;
     }
 }
