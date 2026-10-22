@@ -27,18 +27,12 @@ public:
     {
         if (!reader_)
             return {1, "结果读取通道不可用"};
-        // Legacy declarations used source_flow_name/source_node_name. Read the
-        // stable identity fields; fall back to the legacy names only so old
-        // packages produce a precise message instead of a parameter error.
         const auto flow = parameters.find("source_flow_id");
         const auto node = parameters.find("source_node_seq");
         const auto port = parameters.find("source_port_id");
         if (flow == parameters.end() || node == parameters.end() || port == parameters.end())
         {
-            const bool legacy = parameters.contains("source_flow_name")
-                || parameters.contains("source_node_name");
-            return {1, legacy ? "接收声明使用旧版名称字段，请更新工具包为 source_flow_id/source_node_seq/source_port_id"
-                              : "接收声明需要 source_flow_id、source_node_seq 与 source_port_id"};
+            return {1, "接收声明需要 source_flow_id、source_node_seq 与 source_port_id"};
         }
         request_.flowId       = std::get<Utf8>(flow->second).str();
         request_.nodeSequence = std::get<Utf8>(node->second).str();
@@ -79,7 +73,7 @@ void registerReceiveTools(ToolRegistry &registry)
                                                         [](const auto &port) { return port.id == "value"; });
                                      if (output == definition.outputs.end())
                                      {
-                                         throw ContractError("receiver value output is missing: " + definition.id);
+                                         throw ContractError("接收工具缺少 value 输出端口：" + definition.id);
                                      }
                                      return std::make_unique<ReceiveTool>(output->type, services.results);
                                  });
@@ -146,6 +140,7 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
     {
         cursor.publication                   = snapshot->publication;
         auto result                          = receiveError(3, "源节点执行失败：" + snapshot->status.message);
+        result.status.detail                    = snapshot->status.detail;
         result.outputs["source_status_code"] = snapshot->status.code;
         result.outputs["source_status_message"] = Utf8(snapshot->status.message);
         if (!snapshot->status)

@@ -63,7 +63,9 @@ void AppController::Impl::updateResults()
             for (const auto &relation : portRelations(*current).active)
                 if (relation.source.node == node->id)
                     ++references[relation.source.port];
-        outputs.setResult(tool, snapshot, references, &node->signatures.outputs);
+        const auto lifecycle = lifecycleErrors.find(node->id);
+        outputs.setResult(tool, snapshot, references, &node->signatures.outputs,
+                          lifecycle == lifecycleErrors.end() ? nullptr : lifecycle->second);
         std::vector<std::string> imagePorts;
         for (const auto &[id, type] : node->signatures.outputs)
             if (type.type == Type::ImageBatch)

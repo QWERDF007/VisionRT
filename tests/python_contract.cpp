@@ -2,6 +2,7 @@
 #include "core/DefinitionJson.h"
 #include <python/PythonInterop.h>
 #include "python/PythonRuntime.h"
+#include "runtime/Snapshot.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/numpy.h>
@@ -292,19 +293,27 @@ def partial(inputs):
 
     auto       failures       = runtime.factory(broken)(services);
     const auto initialization = failures->initialize({});
-    assert(initialization.code == -1 && initialization.message.find("initialization detail") != std::string::npos);
-    assert(initialization.message.find("entry.py") != std::string::npos);
+    assert(initialization.code == -1 && initialization.message == "Python 初始化异常");
+    assert(initialization.detail.find("initialization detail") != std::string::npos);
+    assert(initialization.detail.find("entry.py") != std::string::npos);
     const auto execution = failures->execute({});
-    assert(execution.status.code == -1 && execution.status.message.find("execution detail") != std::string::npos);
+    assert(execution.status.code == -1 && execution.status.message == "Python 执行异常");
+    assert(execution.status.detail.find("execution detail") != std::string::npos);
+    assert(dynamic_cast<IToolFailureContext &>(*failures).failurePhase() == NodePhase::Execute);
     assert(execution.outputs.size() == 1 && isMissing(execution.outputs.at("value")));
     const auto cleanup = failures->release();
-    assert(cleanup.code == -4 && cleanup.message.find("release detail") != std::string::npos);
+    assert(cleanup.code == -4 && cleanup.message == "Python 释放异常");
+    assert(cleanup.detail.find("release detail") != std::string::npos);
     failures.reset();
     for (const auto &definition : {missing, extra, wrong})
     {
         auto       instance = runtime.factory(definition)(services);
         const auto result   = instance->execute({});
         assert(result.status.code == -2 && result.outputs.size() == 1);
+        assert(dynamic_cast<IToolFailureContext &>(*instance).failurePhase() == NodePhase::Convert);
+        assert(result.status.message.find("技术详情") == std::string::npos && result.status.detail.empty());
+        if (definition.id == wrong.id)
+            assert(result.status.message.find("Int 需要 Python int") != std::string::npos);
         assert(isMissing(result.outputs.at("value")));
     }
     {
@@ -347,7 +356,8 @@ def execute(inputs):
     }
     sources.put("entry.py", "def execute(:\n");
     const auto invalid = runtime.refresh(std::span<const ToolDefinition>(&function, 1));
-    assert(invalid[0].status.code == -3 && invalid[0].status.message.find("SyntaxError") != std::string::npos);
+    assert(invalid[0].status.code == -3 && invalid[0].status.message == "Python 加载异常");
+    assert(invalid[0].status.detail.find("SyntaxError") != std::string::npos);
     {
         rejects([&] { oldFactory(services); });
     }

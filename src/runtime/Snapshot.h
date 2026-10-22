@@ -10,6 +10,31 @@
 #include <stop_token>
 
 namespace visionrt {
+enum class NodePhase
+{
+    Create,
+    Prepare,
+    Initialize,
+    Execute,
+    Convert,
+    Release
+};
+
+struct NodeDiagnostic
+{
+    NodeId      node;
+    std::string toolId;
+    NodePhase   phase;
+    ToolStatus  status;
+};
+
+class IToolFailureContext
+{
+public:
+    virtual ~IToolFailureContext()                  = default;
+    virtual NodePhase failurePhase() const noexcept = 0;
+};
+
 struct ExecutionMetrics
 {
     double totalMs          = 0; // 总墙钟
@@ -55,6 +80,7 @@ struct NodeSnapshot
     std::uint64_t publication       = 0;
     std::uint64_t executionRevision = 0;
     ToolStatus    status;
+    NodePhase             phase = NodePhase::Execute;
     Values        outputs;
     Timing        timing;
     Values        roiInputs;

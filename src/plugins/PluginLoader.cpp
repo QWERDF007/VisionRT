@@ -220,7 +220,7 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     const bool loadedOk = lib->load();
     if (!loadedOk)
     {
-        status = {-3, "无法加载动态库 " + libraryPath.string() + "：" + lib->errorString().toStdString()};
+        status = {-3, "无法加载动态库 " + libraryPath.string(), lib->errorString().toStdString()};
         return nullptr;
     }
 

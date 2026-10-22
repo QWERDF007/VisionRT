@@ -326,6 +326,30 @@ void popupSessionsContract()
     require(QTest::qWaitFor([&] { return textReady.count() == 1; }, 1000)
                 && textReady.last().front().toString() == QStringLiteral("0"),
             "current output context cannot display the real execution status");
+    auto *dataDialog = panel->findChild<QObject *>(QStringLiteral("outputDataDialog"));
+    require(dataDialog && QMetaObject::invokeMethod(dataDialog, "close"), "cannot close output data dialog");
+    require(QTest::qWaitFor([&] { return !dataDialog->property("visible").toBool(); }, 1000),
+            "output data dialog remains visible");
+    auto *statusCell = visibleText(panel, QStringLiteral("状态消息"));
+    require(statusCell != nullptr, "status message cell is missing");
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
+                      statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "status menu did not open");
+    auto *viewDiagnostic = visibleText(window.contentItem(), QStringLiteral("查看诊断 JSON"));
+    require(viewDiagnostic != nullptr && viewDiagnostic->isEnabled(), "diagnostic action is unavailable");
+    textReady.clear();
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                      viewDiagnostic->mapToScene(QPointF(viewDiagnostic->width() / 2, viewDiagnostic->height() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return textReady.count() == 1 && dataDialog->property("opened").toBool(); }, 1500),
+            "diagnostic menu did not open the frozen JSON result");
+    const auto diagnostic = QJsonDocument::fromJson(textReady.last().front().toString().toUtf8()).object();
+    require(diagnostic.value("phase") == "execute" && diagnostic.value("message") == "运行成功"
+                && diagnostic.contains("detail"), "diagnostic menu loses execution status fields");
+    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/workbench_diagnostic_json.png")),
+            "cannot capture the real diagnostic JSON dialog");
+    require(QMetaObject::invokeMethod(dataDialog, "close"), "cannot close diagnostic JSON dialog");
+    require(QTest::qWaitFor([&] { return !dataDialog->property("visible").toBool(); }, 1000),
+            "diagnostic dialog remains visible after closing");
 
     visionrt::ImageViewport viewport(window.contentItem());
     viewport.setWidth(300);

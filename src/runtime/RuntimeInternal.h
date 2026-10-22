@@ -107,8 +107,8 @@ struct NodeRuntime
     NodeId                                         id;
     ResultSlot                                     slot;
     std::atomic<bool>                              active{false};
-    std::atomic<std::shared_ptr<const ToolStatus>> lifecycle;
-    std::atomic<std::shared_ptr<const ToolStatus>> preparation;
+    std::atomic<std::shared_ptr<const NodeDiagnostic>> lifecycle;
+    std::atomic<std::shared_ptr<const NodeDiagnostic>> preparation;
     std::shared_ptr<NodeReader>                    reader;
     std::unique_ptr<IToolInstance>                 instance;
     std::optional<InstanceConfiguration>           configuration;
@@ -117,7 +117,7 @@ struct NodeRuntime
     void                                           run(const std::shared_ptr<const RoundContext> &context);
     void configure(const NodeDefinition &node, const ToolRegistry &registry, InstanceConfiguration next, bool retry);
     // Returns the release failure when one was observed; success is nullopt.
-    std::optional<ToolStatus>                      release() noexcept;
+    std::shared_ptr<const NodeDiagnostic>          release() noexcept;
     void                                           reset() noexcept;
 };
 } // namespace visionrt::runtime_detail

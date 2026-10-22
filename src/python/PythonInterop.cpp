@@ -20,7 +20,7 @@ py::dtype numpyDtype(DType dtype) {
     case DType::Float64: return py::dtype::of<double>();
     case DType::Bool: return py::dtype::of<bool>();
     }
-    throw ContractError("Unsupported NumericArray dtype");
+    throw ContractError("NumericArray 数据类型不受支持");
 }
 
 py::dtype imageDtype(int depth) {
@@ -34,7 +34,7 @@ py::dtype imageDtype(int depth) {
     case CV_64F: return py::dtype::of<double>();
     case CV_16F: return py::dtype("float16");
     }
-    throw ContractError("Unsupported ImageBatch OpenCV depth");
+    throw ContractError("ImageBatch 的 OpenCV 深度不受支持");
 }
 
 struct RetainedStorage {
@@ -63,7 +63,7 @@ py::array readonlyArray(py::dtype dtype, const std::vector<py::ssize_t>& shape,
         const auto count = static_cast<std::size_t>(shape[axis] - 1);
         const auto stride = static_cast<std::size_t>(strides[axis]);
         if (count && stride > (std::numeric_limits<std::size_t>::max() - bytes) / count)
-            throw ContractError("Input view stride extent overflows address range");
+            throw ContractError("输入视图步幅范围超出地址空间");
         bytes += count * stride;
     }
     // A null pointer would make NumPy allocate even for a zero-element view.
@@ -81,7 +81,7 @@ std::vector<py::ssize_t> arrayShape(std::span<const std::int64_t> dimensions) {
     for (const auto dimension : dimensions) {
         if (dimension < 0 || static_cast<std::uint64_t>(dimension) >
                 static_cast<std::uint64_t>(std::numeric_limits<py::ssize_t>::max()))
-            throw ContractError("Array dimension is outside NumPy's index range");
+            throw ContractError("数组维度超出 NumPy 索引范围");
         shape.push_back(static_cast<py::ssize_t>(dimension));
     }
     return shape;
@@ -94,7 +94,7 @@ py::array numericView(const NumericBuffer& buffer) {
     for (std::size_t i = shape.size(); i-- > 0;) {
         strides[i] = stride;
         if (shape[i] != 0 && stride > std::numeric_limits<py::ssize_t>::max() / shape[i])
-            throw ContractError("NumericArray strides overflow NumPy index range");
+            throw ContractError("NumericArray 步幅超出 NumPy 索引范围");
         stride *= shape[i];
     }
     return readonlyArray(numpyDtype(buffer.dtype()), shape, strides, buffer.data(), buffer.owner());
@@ -112,14 +112,16 @@ py::array stringView(const StringBuffer& buffer) {
 }
 
 py::array requireArray(py::handle value, int rank, bool contiguous) {
-    if (!py::isinstance<py::array>(value)) throw ContractError("Expected a NumPy ndarray, not an implicit conversion");
+    if (!py::isinstance<py::array>(value))
+        throw ContractError("需要 NumPy ndarray，不接受隐式转换");
     auto array = py::reinterpret_borrow<py::array>(value);
-    if (array.ndim() != rank) throw ContractError("NumPy rank mismatch: expected " + std::to_string(rank) +
-                                               ", received " + std::to_string(array.ndim()));
+    if (array.ndim() != rank)
+        throw ContractError("NumPy 维数不匹配：期望 " + std::to_string(rank) + "，实际 "
+                            + std::to_string(array.ndim()));
     if (contiguous && !(array.flags() & py::array::c_style))
-        throw ContractError("Array output must be C-contiguous");
+        throw ContractError("数组输出必须为 C 连续布局");
     if (!array.dtype().attr("isnative").cast<bool>())
-        throw ContractError("NumPy dtype must use native byte order");
+        throw ContractError("NumPy dtype 必须使用本机字节序");
     return array;
 }
 
@@ -130,7 +132,7 @@ std::vector<std::int64_t> checkedShape(const py::array& array) {
     if (array.itemsize() <= 0 ||
         checkedByteCount(shape, static_cast<std::size_t>(array.itemsize())) >
             static_cast<std::size_t>(std::numeric_limits<py::ssize_t>::max()))
-        throw ContractError("NumPy shape byte count overflows the buffer range");
+        throw ContractError("NumPy 形状的字节数超出缓冲区范围");
     return shape;
 }
 
@@ -142,7 +144,7 @@ void validateStorage(const py::array& array, py::ssize_t low, py::ssize_t high) 
     std::vector<PyObject*> visited;
     for (;;) {
         if (std::find(visited.begin(), visited.end(), base.ptr()) != visited.end())
-            throw ContractError("NumPy buffer owner chain is cyclic");
+            throw ContractError("NumPy 缓冲区所有权链存在循环");
         visited.push_back(base.ptr());
         if (PyCapsule_IsValid(base.ptr(), ownerCapsuleName)) {
             const auto* retained = static_cast<const RetainedStorage*>(
@@ -176,7 +178,7 @@ void validateStorage(const py::array& array, py::ssize_t low, py::ssize_t high) 
             PyBuffer_Release(&buffer);
             break;
         }
-        throw ContractError("NumPy output has no verifiable backing buffer owner");
+        throw ContractError("NumPy 输出没有可验证的底层缓冲区所有者");
     }
     const auto address = reinterpret_cast<std::uintptr_t>(array.data());
     const auto start = reinterpret_cast<std::uintptr_t>(origin);
@@ -186,7 +188,7 @@ void validateStorage(const py::array& array, py::ssize_t low, py::ssize_t high) 
         bytes > std::numeric_limits<std::uintptr_t>::max() - start ||
         address - static_cast<std::uintptr_t>(-low) < start ||
         address + static_cast<std::uintptr_t>(high) > start + bytes)
-        throw ContractError("NumPy shape/strides exceed the backing buffer range");
+        throw ContractError("NumPy 形状或步幅超出底层缓冲区范围");
 }
 
 #if defined(VISIONRT_TEST_PROBES)
@@ -197,7 +199,7 @@ std::atomic<std::size_t> g_leafNumericCopyCount{0};
 NumericBuffer numericCopy(py::handle value, DType dtype, int rank) {
     auto array = requireArray(value, rank, true);
     if (!array.dtype().equal(numpyDtype(dtype)))
-        throw ContractError("NumericArray dtype mismatch: received " + py::str(array.dtype()).cast<std::string>());
+        throw ContractError("NumericArray 数据类型不匹配：实际 " + py::str(array.dtype()).cast<std::string>());
     auto shape = checkedShape(array);
     const auto size = checkedByteCount(shape, dtypeSize(dtype));
     validateStorage(array, 0, static_cast<py::ssize_t>(size));
@@ -212,41 +214,44 @@ NumericBuffer numericCopy(py::handle value, DType dtype, int rank) {
 StringBuffer stringCopy(py::handle value, int rank) {
     auto array = requireArray(value, rank, true);
     if (array.dtype().kind() != 'U')
-        throw ContractError("StringArray requires Unicode dtype; object and bytes arrays are not accepted");
+        throw ContractError("StringArray 需要 Unicode dtype，不接受 object 或 bytes 数组");
     auto shape = checkedShape(array);
     validateStorage(array, 0, static_cast<py::ssize_t>(
         checkedByteCount(shape, static_cast<std::size_t>(array.itemsize()))));
     std::vector<std::string> strings;
     strings.reserve(checkedElementCount(shape));
     for (auto item : array.attr("flat")) {
-        if (!PyUnicode_Check(item.ptr())) throw ContractError("StringArray element is not Unicode");
+        if (!PyUnicode_Check(item.ptr()))
+            throw ContractError("StringArray 元素必须为 Unicode");
         strings.push_back(py::cast<std::string>(item));
     }
     return StringBuffer(std::move(shape), std::move(strings));
 }
 
 py::list requireList(py::handle value, const char* description) {
-    if (!py::isinstance<py::list>(value)) throw ContractError(std::string(description) + " requires a list");
+    if (!py::isinstance<py::list>(value))
+        throw ContractError(std::string(description) + " 需要 list");
     return py::reinterpret_borrow<py::list>(value);
 }
 
 OwnedImage imageCopy(py::handle value) {
-    if (!py::isinstance<py::array>(value)) throw ContractError("ImageBatch element requires a NumPy ndarray");
+    if (!py::isinstance<py::array>(value))
+        throw ContractError("ImageBatch 元素需要 NumPy ndarray");
     auto array = py::reinterpret_borrow<py::array>(value);
     if (array.ndim() != 2 && array.ndim() != 3)
-        throw ContractError("ImageBatch image must have shape HxW or HxWxC");
+        throw ContractError("ImageBatch 图像形状必须为 HxW 或 HxWxC");
     array = requireArray(value, static_cast<int>(array.ndim()), false);
     auto shape = checkedShape(array);
     const auto channels = array.ndim() == 3 ? shape[2] : 1;
     if (shape[0] <= 0 || shape[1] <= 0 || shape[0] > std::numeric_limits<int>::max() ||
         shape[1] > std::numeric_limits<int>::max() || channels <= 0 || channels > CV_CN_MAX ||
         (array.ndim() == 3 && channels == 1))
-        throw ContractError("ImageBatch requires positive OpenCV dimensions; single-channel images must be HxW");
+        throw ContractError("ImageBatch 的 OpenCV 维度必须为正数，单通道图像必须使用 HxW");
     int depth = -1;
     for (const int candidate : {CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_32F, CV_64F, CV_16F})
         if (array.dtype().equal(imageDtype(candidate))) { depth = candidate; break; }
-    if (depth < 0) throw ContractError("ImageBatch dtype is not supported by OpenCV: " +
-                                      py::str(array.dtype()).cast<std::string>());
+    if (depth < 0)
+        throw ContractError("ImageBatch 数据类型不受 OpenCV 支持：" + py::str(array.dtype()).cast<std::string>());
     // Bound every signed strided offset before pointer arithmetic, including
     // reversed and transposed image outputs.
     py::ssize_t low = 0;
@@ -256,15 +261,15 @@ OwnedImage imageCopy(py::handle value) {
         const auto stride = array.strides(axis);
         if (stride == std::numeric_limits<py::ssize_t>::min() ||
             (count && (stride < 0 ? -stride : stride) > std::numeric_limits<py::ssize_t>::max() / count))
-            throw ContractError("ImageBatch stride extent overflows address range");
+            throw ContractError("ImageBatch 步幅范围超出地址空间");
         const auto extent = count * stride;
         if (extent >= 0) {
             if (high > std::numeric_limits<py::ssize_t>::max() - extent)
-                throw ContractError("ImageBatch stride extent overflows address range");
+                throw ContractError("ImageBatch 步幅范围超出地址空间");
             high += extent;
         } else {
             if (low < std::numeric_limits<py::ssize_t>::min() - extent)
-                throw ContractError("ImageBatch stride extent overflows address range");
+                throw ContractError("ImageBatch 步幅范围超出地址空间");
             low += extent;
         }
     }
@@ -295,7 +300,8 @@ OwnedImage imageCopy(py::handle value) {
 
 Roi roiCopy(py::handle value) {
     auto array = requireArray(value, 1, true);
-    if (!array.dtype().equal(py::dtype::of<float>())) throw ContractError("ROI dtype must be float32");
+    if (!array.dtype().equal(py::dtype::of<float>()))
+        throw ContractError("ROI 数据类型必须为 float32");
     auto shape = checkedShape(array);
     validateStorage(array, 0, static_cast<py::ssize_t>(checkedByteCount(shape, sizeof(float))));
     return Roi::decode({static_cast<const float*>(array.data()), checkedElementCount(shape)});
@@ -361,16 +367,19 @@ PortValue fromPython(const TypeSpec& expected, py::handle value) {
     switch (expected.type) {
     case Type::Int:
         if (!PyLong_Check(value.ptr()) || PyBool_Check(value.ptr()))
-            throw ContractError("Int requires a Python int, not bool or an implicit conversion");
+            throw ContractError("Int 需要 Python int，不接受 bool 或隐式转换");
         return py::cast<std::int64_t>(value);
     case Type::Float:
-        if (!PyFloat_Check(value.ptr())) throw ContractError("Float requires a Python float, not int");
+        if (!PyFloat_Check(value.ptr()))
+            throw ContractError("Float 需要 Python float，不接受 int");
         return py::cast<double>(value);
     case Type::Bool:
-        if (!PyBool_Check(value.ptr())) throw ContractError("Bool requires a Python bool");
+        if (!PyBool_Check(value.ptr()))
+            throw ContractError("Bool 需要 Python bool");
         return py::cast<bool>(value);
     case Type::String:
-        if (!PyUnicode_Check(value.ptr())) throw ContractError("String requires Unicode str, not bytes");
+        if (!PyUnicode_Check(value.ptr()))
+            throw ContractError("String 需要 Unicode str，不接受 bytes");
         return Utf8(py::cast<std::string>(value));
     case Type::ImageBatch: {
         std::vector<OwnedImage> images;
@@ -408,7 +417,7 @@ PortValue fromPython(const TypeSpec& expected, py::handle value) {
         return RoiBatch(std::move(images));
     }
     }
-    throw ContractError("Unsupported TypeSpec");
+    throw ContractError("TypeSpec 不受支持");
 }
 
 #if defined(VISIONRT_TEST_PROBES)

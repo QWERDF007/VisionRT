@@ -30,22 +30,24 @@ bool sameParameters(const Values &a, const Values &b)
     return true;
 }
 
-std::string phaseText(const char *phase)
+const char *exceptionSummary(NodePhase phase)
 {
-    const std::string_view value = phase ? phase : "";
-    if (value == "prepare") return "准备输入";
-    if (value == "create")
-        return "创建实例";
-    if (value == "initialize") return "初始化";
-    if (value == "execute") return "执行";
-    if (value == "convert") return "校验输出";
-    if (value == "release") return "释放";
-    return std::string(value);
-}
-
-std::string location(NodeId node, const std::string &tool, const char *phase, const std::string &message)
-{
-    return "节点 " + std::to_string(node) + "（" + tool + "）" + phaseText(phase) + "失败：" + message;
+    switch (phase)
+    {
+    case NodePhase::Create:
+        return "工具实例创建异常";
+    case NodePhase::Prepare:
+        return "准备输入异常";
+    case NodePhase::Initialize:
+        return "工具初始化异常";
+    case NodePhase::Execute:
+        return "工具执行异常";
+    case NodePhase::Convert:
+        return "输出校验异常";
+    case NodePhase::Release:
+        return "工具释放异常";
+    }
+    std::terminate();
 }
 } // namespace
 
@@ -98,11 +100,11 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
     }
     catch (const ContractError &error)
     {
-        status = {-2, "节点工具合同不可用", error.what()};
+        status = {-2, error.what()};
     }
     catch (const std::exception &error)
     {
-        status = {-1, "工具实例创建异常", error.what()};
+        status = {-1, exceptionSummary(NodePhase::Create), error.what()};
     }
     catch (...)
     {
@@ -110,16 +112,17 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
     }
     if (!status)
     {
-        status.message = location(id, node.toolId, "create", status.message);
-        preparation.store(std::make_shared<const ToolStatus>(std::move(status)), std::memory_order_release);
+        preparation.store(std::make_shared<const NodeDiagnostic>(
+                              NodeDiagnostic{id, node.toolId, NodePhase::Create, std::move(status)}),
+                          std::memory_order_release);
     }
 }
 
-std::optional<ToolStatus> NodeRuntime::release() noexcept
+std::shared_ptr<const NodeDiagnostic> NodeRuntime::release() noexcept
 {
     initialized = false;
     if (!instance)
-        return std::nullopt;
+        return {};
     ToolStatus status;
     try
     {
@@ -127,21 +130,22 @@ std::optional<ToolStatus> NodeRuntime::release() noexcept
     }
     catch (const std::exception &error)
     {
-        status = {-4, error.what()};
+        status = {-4, exceptionSummary(NodePhase::Release), error.what()};
     }
     catch (...)
     {
-        status = {-4, "unknown release exception"};
+        status = {-4, "工具释放发生未知异常"};
     }
     instance.reset();
     if (!status)
     {
         status.code    = -4;
-        status.message = location(id, configuration->toolId, "release", status.message);
-        lifecycle.store(std::make_shared<const ToolStatus>(status), std::memory_order_release);
-        return status;
+        auto diagnostic = std::make_shared<const NodeDiagnostic>(
+            NodeDiagnostic{id, configuration->toolId, NodePhase::Release, std::move(status)});
+        lifecycle.store(diagnostic, std::memory_order_release);
+        return diagnostic;
     }
-    return std::nullopt;
+    return {};
 }
 
 void NodeRuntime::reset() noexcept
@@ -216,7 +220,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->toolId            = definition->id;
     snapshot->executionRevision = config.executionRevision;
     ToolResult  result;
-    const char *phase            = "prepare";
+    auto        phase            = NodePhase::Prepare;
     bool        frameworkFailure = false;
     bool        enteredExecute   = false;
     try
@@ -262,7 +266,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             validateToolValues(definition->inputs, inputs);
             prepareTimer.stop();
         }
-        phase = "initialize";
+        phase = NodePhase::Initialize;
         reader->bind(context);
         const auto &parameters = configuration->parameters;
         if (instance && !initialized)
@@ -286,7 +290,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 catch (const std::exception &error)
                 {
-                    status = {-1, error.what()};
+                    status = {-1, exceptionSummary(NodePhase::Initialize), error.what()};
                 }
                 catch (...)
                 {
@@ -296,14 +300,15 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             }
             if (!status)
             {
-                status.message = location(id, config.toolId, "initialize", status.message);
                 release();
-                preparation.store(std::make_shared<const ToolStatus>(std::move(status)), std::memory_order_release);
+                preparation.store(std::make_shared<const NodeDiagnostic>(
+                                      NodeDiagnostic{id, config.toolId, NodePhase::Initialize, std::move(status)}),
+                                  std::memory_order_release);
             }
             else
                 initialized = true;
         }
-        phase = "execute";
+        phase = NodePhase::Execute;
         if (instance)
         {
             enteredExecute = true;
@@ -312,6 +317,11 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 ScopeTimer execTimer(snapshot->timing.executeMs);
                 result = instance->execute(inputs);
                 execTimer.stop();
+            }
+            if (!result.status)
+            {
+                if (const auto *diagnostics = dynamic_cast<const IToolFailureContext *>(instance.get()))
+                    phase = diagnostics->failurePhase();
             }
             snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
             if (auto *py = dynamic_cast<IPythonExecutionMetrics *>(instance.get()))
@@ -325,21 +335,20 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         }
         else
         {
-            result.status    = *preparation.load(std::memory_order_acquire);
-            frameworkFailure = true;
+            const auto diagnostic = preparation.load(std::memory_order_acquire);
+            result.status         = diagnostic->status;
+            phase                 = diagnostic->phase;
+            frameworkFailure      = true;
         }
         snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
-        if (result.status.code < 0)
-        {
-            frameworkFailure = true;
-            if (instance && result.status.code != kCancelledStatus)
-                result.status.message = location(id, config.toolId, "execute", result.status.message);
-        }
-        phase = "convert";
+        frameworkFailure = frameworkFailure || result.status.code < 0;
         if (!frameworkFailure)
         {
+            const auto invocationPhase = phase;
+            phase                      = NodePhase::Convert;
             ScopeTimer convertTimer(snapshot->timing.convertMs);
             validateUtf8(result.status.message);
+            validateUtf8(result.status.detail);
             const auto businessCount
                 = std::count_if(definition->outputs.begin(), definition->outputs.end(), [](const auto &port)
                                 { return port.id != "__status_code" && port.id != "__status_message"; });
@@ -368,28 +377,28 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
             }
             convertTimer.stop();
+            phase = invocationPhase;
         }
         snapshot->timing.validateMs = snapshot->timing.convertMs;
     }
     catch (const RegistryError &error)
     {
         result.status         = error.status;
-        result.status.message = location(id, config.toolId, phase, result.status.message);
         frameworkFailure      = true;
     }
     catch (const ContractError &error)
     {
-        result.status    = {-2, location(id, config.toolId, phase, error.what())};
+        result.status    = {-2, error.what()};
         frameworkFailure = true;
     }
     catch (const std::exception &error)
     {
-        result.status    = {-1, location(id, config.toolId, phase, error.what())};
+        result.status    = {-1, exceptionSummary(phase), error.what()};
         frameworkFailure = true;
     }
     catch (...)
     {
-        result.status    = {-1, location(id, config.toolId, phase, "未知异常")};
+        result.status    = {-1, exceptionSummary(phase), "未知异常"};
         frameworkFailure = true;
     }
     snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
@@ -415,6 +424,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     result.outputs.emplace(port.id, Missing{});
     }
     snapshot->status  = normalizeExecutionStatus(std::move(result.status));
+    snapshot->phase   = phase;
     snapshot->outputs = std::move(result.outputs);
     snapshot->outputs.emplace("__status_code", snapshot->status.code);
     snapshot->outputs.emplace("__status_message", Utf8(snapshot->status.message));

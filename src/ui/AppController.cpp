@@ -2,6 +2,7 @@
 #include "runtime/Receiver.h"
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
+#include "ui/NodeDiagnostics.h"
 
 #include <core/ToolPackage.h>
 
@@ -390,23 +391,24 @@ void AppController::Impl::poll()
             if (item.lifecycleDiagnostic)
             {
                 const auto previous = lifecycleErrors.find(item.node);
-                if (previous == lifecycleErrors.end() || previous->second.code != item.lifecycleDiagnostic->code
-                    || previous->second.message != item.lifecycleDiagnostic->message)
+                if (previous == lifecycleErrors.end() || previous->second != item.lifecycleDiagnostic)
                 {
-                    lifecycleErrors[item.node] = *item.lifecycleDiagnostic;
+                    lifecycleErrors[item.node]  = item.lifecycleDiagnostic;
                     nodesChanged                = true;
+                    selectedChanged |= selected == QString::number(item.node);
+                    report(diagnosticMessage(*item.lifecycleDiagnostic));
                 }
             }
+            else if (lifecycleErrors.erase(item.node))
+                nodesChanged = true;
             if (item.instanceDiagnostic)
             {
                 const auto previous = instanceErrors.find(item.node);
-                if (previous == instanceErrors.end() || previous->second.code != item.instanceDiagnostic->code
-                    || previous->second.message != item.instanceDiagnostic->message
-                    || previous->second.detail != item.instanceDiagnostic->detail)
+                if (previous == instanceErrors.end() || previous->second != item.instanceDiagnostic)
                 {
-                    instanceErrors[item.node] = *item.instanceDiagnostic;
+                    instanceErrors[item.node] = item.instanceDiagnostic;
                     nodesChanged              = true;
-                    report(workbench::q(item.instanceDiagnostic->message));
+                    report(diagnosticMessage(*item.instanceDiagnostic));
                 }
             }
             else if (instanceErrors.erase(item.node))
@@ -428,7 +430,8 @@ void AppController::Impl::poll()
                 }
             }
         }
-        for (const auto &event : update.diagnostics) report(workbench::q(event.message));
+        for (const auto &event : update.diagnostics)
+            report(event.nodeDiagnostic ? diagnosticMessage(*event.nodeDiagnostic) : workbench::q(event.message));
         if (update.droppedDiagnostics > 0)
             report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
         QString updatedTiming;
@@ -505,7 +508,6 @@ void AppController::Impl::start(RunMode mode)
         return;
     }
     active.clear();
-    lifecycleErrors.clear();
     setState(mode == RunMode::Once   ? RuntimeState::RunningOnce
              : mode == RunMode::Loop ? RuntimeState::RunningLoop
                                      : RuntimeState::RunningNode);
@@ -860,23 +862,30 @@ QVariantList AppController::nodes() const
                       : snapshot->status.code == kCancelledStatus ? "cancelled" : "failed";
             std::int64_t statusCode = 0;
             QString      statusMessage;
+            QString      statusDetail;
             if (snapshot && snapshot->status.code != 0)
             {
                 statusCode    = snapshot->status.code;
-                statusMessage = q(snapshot->status.message);
+                statusMessage
+                    = diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status});
+                statusDetail = q(snapshot->status.detail);
             }
             const auto timing = nodeTimingText(snapshot.get(), running);
             if (impl_->instanceErrors.contains(node.id))
             {
                 state         = "failed";
-                statusCode    = impl_->instanceErrors.at(node.id).code;
-                statusMessage = q(impl_->instanceErrors.at(node.id).message);
+                const auto &diagnostic = *impl_->instanceErrors.at(node.id);
+                statusCode             = diagnostic.status.code;
+                statusMessage          = diagnosticMessage(diagnostic);
+                statusDetail           = q(diagnostic.status.detail);
             }
+            QString lifecycleMessage;
+            QString lifecycleDetail;
             if (impl_->lifecycleErrors.contains(node.id))
             {
-                state         = "failed";
-                statusCode    = impl_->lifecycleErrors.at(node.id).code;
-                statusMessage = q(impl_->lifecycleErrors.at(node.id).message);
+                const auto &diagnostic = *impl_->lifecycleErrors.at(node.id);
+                lifecycleMessage       = diagnosticMessage(diagnostic);
+                lifecycleDetail        = q(diagnostic.status.detail);
             }
             const auto   *def             = impl_->registry.find(node.toolId);
             const QString version         = def ? q(def->version) : QStringLiteral("1.0");
@@ -888,24 +897,27 @@ QVariantList AppController::nodes() const
                && (avail.state != ToolAvailability::Available || impl_->instanceErrors.contains(node.id));
             const bool    missing         = defMissing || implUnavailable;
             result.push_back(QVariantMap{
-                {             "id", QString::number(node.id)},
-                {          "title",          q(node.title())},
-                {          "alias",            q(node.alias)},
-                {         "toolId",           q(node.toolId)},
-                {        "version",                  version},
-                {       "category",                 category},
-                {              "x",          node.position.x},
-                {              "y",          node.position.y},
-                {          "state",                    state},
-                {      "timingText",                timing.total},
-                {"timingOperatorText",             timing.toolCall},
-                {"timingPreprocessText",         timing.preprocess},
-                {"timingPostprocessText",        timing.postprocess},
-                {        "missing",                  missing},
-                {     "defMissing",               defMissing},
-                {"implUnavailable",          implUnavailable},
-                {     "statusCode",               statusCode},
-                {  "statusMessage",            statusMessage}
+                {                   "id", QString::number(node.id)},
+                {                "title",          q(node.title())},
+                {                "alias",            q(node.alias)},
+                {               "toolId",           q(node.toolId)},
+                {              "version",                  version},
+                {             "category",                 category},
+                {                    "x",          node.position.x},
+                {                    "y",          node.position.y},
+                {                "state",                    state},
+                {           "timingText",             timing.total},
+                {   "timingOperatorText",          timing.toolCall},
+                { "timingPreprocessText",        timing.preprocess},
+                {"timingPostprocessText",       timing.postprocess},
+                {              "missing",                  missing},
+                {           "defMissing",               defMissing},
+                {      "implUnavailable",          implUnavailable},
+                {           "statusCode",               statusCode},
+                {        "statusMessage",            statusMessage},
+                {         "statusDetail",             statusDetail},
+                {     "lifecycleMessage",         lifecycleMessage},
+                {      "lifecycleDetail",          lifecycleDetail}
             });
         }
     return result;
@@ -1266,7 +1278,7 @@ bool AppController::save(const QString &path)
     }
 }
 
-void AppController::requestOutputText(const QVariantMap &context, bool copy)
+void AppController::requestOutputText(const QVariantMap &context, bool copy, bool diagnostic)
 {
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return;
@@ -1278,19 +1290,34 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy)
     auto captured = impl_->outputs.capture(context.value("port").toString());
     if (!captured)
         return;
-    const auto estimated = OutputModel::estimatedTextBytes(*captured);
+    if (diagnostic && !captured->diagnostic && !captured->lifecycle)
+        return;
+    auto estimated
+        = diagnostic && captured->diagnostic
+            ? (captured->diagnostic->status.message.size() + captured->diagnostic->status.detail.size()) * 6 + 1024
+            : OutputModel::estimatedTextBytes(*captured);
+    if (diagnostic && captured->lifecycle)
+        estimated
+            += (captured->lifecycle->status.message.size() + captured->lifecycle->status.detail.size()) * 6 + 1024;
     if (estimated > 16 * 1024 * 1024
-        && (impl_->approvedTextContext != context || impl_->approvedCopy != copy))
+        && (impl_->approvedTextContext != context || impl_->approvedCopy != copy
+            || impl_->approvedDiagnostic != diagnostic))
     {
         impl_->approvedTextContext = context;
-        impl_->approvedCopy = copy;
+        impl_->approvedCopy        = copy;
+        impl_->approvedDiagnostic  = diagnostic;
         emit outputTextReady(QStringLiteral("完整数据预计约 %1 MiB。再次点击同一查看/复制操作以确认；不会截断全文。")
                                  .arg(static_cast<double>(estimated) / (1024 * 1024), 0, 'f', 1));
         return;
     }
     impl_->approvedTextContext.clear();
     const auto generation = impl_->generation;
-    impl_->textTask       = std::async(std::launch::async, [captured = std::move(*captured), copy, generation, context]
-                                       { return Impl::TextResult{OutputModel::fullText(captured), copy, generation, context}; });
+    impl_->textTask = std::async(
+        std::launch::async,
+        [captured = std::move(*captured), copy, generation, context, diagnostic]
+        {
+            auto text = diagnostic ? OutputModel::diagnosticText(captured) : OutputModel::fullText(captured);
+            return Impl::TextResult{std::move(text), copy, generation, context};
+        });
 }
 } // namespace visionrt

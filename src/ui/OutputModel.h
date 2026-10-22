@@ -19,6 +19,7 @@ public:
         TooltipRole,
         CountRole,
         SystemRole,
+        DiagnosticRole,
         RowIndexRole
     };
 
@@ -28,16 +29,19 @@ public:
         TypeSpec      type;
         std::uint64_t publication = 0;
         QString       port;
+        std::optional<NodeDiagnostic>         diagnostic;
+        std::shared_ptr<const NodeDiagnostic> lifecycle;
     };
 
     explicit OutputModel(QObject *parent = nullptr);
     void                    clear();
     void                    setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                                       const std::map<std::string, std::size_t, std::less<>> &references,
-                                      const TypeMap                                         *nodeOutputs = nullptr);
+                                      const TypeMap *nodeOutputs = nullptr, std::shared_ptr<const NodeDiagnostic> lifecycle = {});
     std::optional<Captured> capture(int row) const;
     std::optional<Captured> capture(const QString &port) const;
     static QString          fullText(const Captured &captured);
+    static QString          diagnosticText(const Captured &captured);
     static std::size_t      estimatedTextBytes(const Captured &captured);
     Q_INVOKABLE QVariantMap get(int row) const;
     int                     rowCount(const QModelIndex &parent = {}) const override;

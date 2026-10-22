@@ -1084,8 +1084,8 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         require(u3.nodes.size() == 1 && u3.nodes[0].snapshot != nullptr, "Round 3 snapshot missing");
         const auto &s3 = *u3.nodes[0].snapshot;
         require(s3.status.code < 0, "Round 3 must fail with exception");
-        require(s3.status.message.find("simulated python execution failure") != std::string::npos,
-                "Round 3 message mismatch");
+        require(s3.status.detail.find("simulated python execution failure") != std::string::npos,
+                "Round 3 exception detail mismatch");
         require(isMissing(s3.outputs.at("out")), "Round 3 output must be Missing");
         require(s3.timing.pythonCallMs > 0.0, "Round 3 pythonCallMs must retain real error timing");
         require(s3.timing.adapterExecuteMs > 0.0, "Round 3 adapterExecuteMs must be > 0");

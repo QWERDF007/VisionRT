@@ -102,14 +102,9 @@ bool isBusinessOutput(const PortDefinition &output)
     return output.id != "__status_code" && output.id != "__status_message";
 }
 
-ToolStatus errorStatus(const ToolDefinition &, std::int64_t code, const char *phase, const std::string &detail)
+ToolStatus errorStatus(std::int64_t code, const char *summary, const std::string &detail)
 {
-    const std::string_view value = phase ? phase : "";
-    const char *summary = value == "initialize" ? "Python 初始化异常"
-                        : value == "release"    ? "Python 释放异常"
-                        : value == "import"     ? "Python 加载异常"
-                                                : "Python 执行异常";
-    return {code, std::string(summary) + "；技术详情：" + detail};
+    return {code, summary, detail};
 }
 
 py::dict inputDictionary(const Values &values, const std::vector<PortDefinition> &declarations,
@@ -167,6 +162,7 @@ ToolStatus lifecycleStatus(py::handle returned)
 class PythonTool final
     : public IToolInstance
     , public IPythonExecutionMetrics
+    , public IToolFailureContext
 {
 public:
     PythonTool(std::shared_ptr<RuntimeState> state, std::shared_ptr<const ToolDefinition> definition,
@@ -219,34 +215,41 @@ public:
         return metrics_;
     }
 
+    NodePhase failurePhase() const noexcept override
+    {
+        return phase_;
+    }
+
     ToolStatus initialize(const Values &parameters) override
     {
         py::gil_scoped_acquire gil;
         if (released_)
-            return errorStatus(definition_, -1, "initialize", "Instance was released");
+            return {-1, "Python 实例已释放，不能初始化"};
         if (definition_.kind == ToolKind::PythonFunction)
             return {};
         try
         {
             auto inputs = inputDictionary(parameters, definition_.initParams, services_);
-            auto result = lifecycleStatus(objects_->instance.attr("initialize")(inputs));
-            if (!result)
-                result.message = errorStatus(definition_, result.code, "initialize", result.message).message;
-            return result;
+            return lifecycleStatus(objects_->instance.attr("initialize")(inputs));
         }
         catch (const py::error_already_set &error)
         {
-            return errorStatus(definition_, -1, "initialize", error.what());
+            return errorStatus(-1, "Python 初始化异常", error.what());
+        }
+        catch (const ContractError &error)
+        {
+            return {-2, error.what()};
         }
         catch (const std::exception &error)
         {
-            return errorStatus(definition_, -1, "initialize", error.what());
+            return errorStatus(-1, "Python 初始化异常", error.what());
         }
     }
 
     ToolResult execute(const Values &inputs) override
     {
         metrics_                       = {};
+        phase_                         = NodePhase::Execute;
         const auto             waiting = std::chrono::steady_clock::now();
         py::gil_scoped_acquire gil;
         metrics_.waitGilMs
@@ -262,7 +265,7 @@ public:
             return std::move(result);
         };
         if (released_)
-            return fail(errorStatus(definition_, -1, "execute", "Instance was released"));
+            return fail({-1, "Python 实例已释放，不能执行"});
 
         struct ScopeTimer
         {
@@ -294,6 +297,7 @@ public:
         };
 
         py::object returned;
+        phase_ = NodePhase::Prepare;
         try
         {
             {
@@ -302,18 +306,26 @@ public:
                 inputTimer.stop();
 
                 ScopeTimer callTimer(metrics_.pythonCallMs);
+                phase_   = NodePhase::Execute;
                 returned = objects_->execute(parameters);
                 callTimer.stop();
             }
         }
         catch (const py::error_already_set &error)
         {
-            return fail(errorStatus(definition_, -1, "execute", error.what()));
+            return fail(errorStatus(-1, phase_ == NodePhase::Prepare ? "Python 输入转换异常" : "Python 执行异常",
+                                    error.what()));
+        }
+        catch (const ContractError &error)
+        {
+            return fail({-2, error.what()});
         }
         catch (const std::exception &error)
         {
-            return fail(errorStatus(definition_, -1, "execute", error.what()));
+            return fail(errorStatus(-1, phase_ == NodePhase::Prepare ? "Python 输入转换异常" : "Python 执行异常",
+                                    error.what()));
         }
+        phase_ = NodePhase::Convert;
         try
         {
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
@@ -336,19 +348,24 @@ public:
                 }
                 catch (const std::exception &error)
                 {
-                    throw ContractError("Output " + output.id + ": " + error.what());
+                    throw ContractError("输出端口 " + output.id + "：" + error.what());
                 }
             }
             outputTimer.stop();
         }
         catch (const py::error_already_set &error)
         {
-            return fail(errorStatus(definition_, -2, "convert", error.what()));
+            return fail(errorStatus(-2, "Python 输出转换异常", error.what()));
+        }
+        catch (const ContractError &error)
+        {
+            return fail({-2, error.what()});
         }
         catch (const std::exception &error)
         {
-            return fail(errorStatus(definition_, -2, "convert", error.what()));
+            return fail(errorStatus(-2, "Python 输出转换异常", error.what()));
         }
+        phase_ = NodePhase::Execute;
         return result;
     }
 
@@ -374,18 +391,20 @@ private:
         {
             if (objects_->instance)
             {
-                auto status = lifecycleStatus(objects_->instance.attr("release")());
-                if (!status)
-                    return errorStatus(definition_, -4, "release", status.message);
+                return lifecycleStatus(objects_->instance.attr("release")());
             }
         }
         catch (const py::error_already_set &error)
         {
-            return errorStatus(definition_, -4, "release", error.what());
+            return errorStatus(-4, "Python 释放异常", error.what());
+        }
+        catch (const ContractError &error)
+        {
+            return {-4, error.what()};
         }
         catch (const std::exception &error)
         {
-            return errorStatus(definition_, -4, "release", error.what());
+            return errorStatus(-4, "Python 释放异常", error.what());
         }
         return {};
     }
@@ -398,6 +417,7 @@ private:
     ToolServices             services_;
     std::unique_ptr<Objects> objects_;
     ExecutionMetrics         metrics_;
+    NodePhase                phase_    = NodePhase::Execute;
     bool                     released_ = false;
 };
 
@@ -520,30 +540,35 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
                 root, py::str(reinterpret_cast<const char *>(directory.data()), directory.size()),
                 py::str(reinterpret_cast<const char *>(script.data()), script.size()), definition.symbol);
             if (!PyCallable_Check(implementation.symbol.ptr()))
-                throw ContractError("Python entry is not callable");
+                throw ContractError("Python 入口不可调用");
             if (definition.kind == ToolKind::PythonClass)
             {
                 if (!PyType_Check(implementation.symbol.ptr()))
-                    throw ContractError("Python class entry is not a class");
+                    throw ContractError("Python 类入口不是类");
                 for (const char *method : {"initialize", "execute", "release"})
                     if (!py::hasattr(implementation.symbol, method)
                         || !PyCallable_Check(implementation.symbol.attr(method).ptr()))
-                        throw ContractError(std::string("Python class is missing callable ") + method);
+                        throw ContractError(std::string("Python 类缺少可调用方法：") + method);
             }
             else if (PyType_Check(implementation.symbol.ptr()))
             {
-                throw ContractError("Python function entry must not be a class");
+                throw ContractError("Python 函数入口不能是类");
             }
         }
         catch (const py::error_already_set &error)
         {
             implementation.symbol = py::object{};
-            implementation.status = errorStatus(definition, -3, "import", error.what());
+            implementation.status = errorStatus(-3, "Python 加载异常", error.what());
+        }
+        catch (const ContractError &error)
+        {
+            implementation.status = {-3, error.what()};
+            implementation.symbol = py::object{};
         }
         catch (const std::exception &error)
         {
             implementation.symbol = py::object{};
-            implementation.status = errorStatus(definition, -3, "import", error.what());
+            implementation.status = errorStatus(-3, "Python 加载异常", error.what());
         }
         statuses.push_back({definition.id, implementation.status});
         state.implementations.insert_or_assign(definition.id, std::move(implementation));
