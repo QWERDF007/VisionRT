@@ -1,6 +1,6 @@
 #include "visionrt/contracts/Module.h"
 
-#include <cstring>
+#include <exception>
 
 extern "C"
 {
@@ -36,18 +36,27 @@ public:
     }
 };
 
-visionrt::IToolInstance *VT_CALL pluginCreate(const char           *registry_name, const visionrt::ToolServices *,
-                                              visionrt::ToolStatus *status) noexcept
+visionrt::IToolInstance *VT_CALL pluginCreate(const visionrt::ToolServices *, visionrt::ToolStatus *status) noexcept
 {
-    if (registry_name && std::strcmp(registry_name, "test.plugin.a") == 0)
+    try
     {
+        auto *instance = new PluginATool();
         if (status)
             *status = {};
-        return new PluginATool();
+        return instance;
     }
-    if (status)
-        *status = {-3, "unknown registry name"};
-    return nullptr;
+    catch (const std::exception &error)
+    {
+        if (status)
+            *status = {-3, "测试工具创建失败", error.what()};
+        return nullptr;
+    }
+    catch (...)
+    {
+        if (status)
+            *status = {-3, "测试工具创建发生未知异常"};
+        return nullptr;
+    }
 }
 
 void VT_CALL pluginDestroy(visionrt::IToolInstance *instance) noexcept
@@ -55,7 +64,12 @@ void VT_CALL pluginDestroy(visionrt::IToolInstance *instance) noexcept
     delete instance;
 }
 
-const visionrt::ModuleApi g_api{visionrt::MODULE_ABI_MAJOR, sizeof(visionrt::ModuleApi), pluginCreate, pluginDestroy};
+visionrt::ToolStatus VT_CALL registerTools(visionrt::IToolRegistry &registry) noexcept
+{
+    return registry.add({"test.plugin.a", pluginCreate, pluginDestroy});
+}
+
+const visionrt::ModuleApi g_api{visionrt::MODULE_ABI_MAJOR, sizeof(visionrt::ModuleApi), registerTools};
 } // namespace
 
 extern "C" VT_EXPORT const visionrt::ModuleApi *VT_CALL visiontoolsModuleApi() noexcept

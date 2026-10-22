@@ -1,8 +1,9 @@
 #pragma once
 
 #include "core/Tool.h"
-#include "visionrt/contracts/Module.h"
 #include "core/ToolPackage.h"
+#include "core/ToolRegistry.h"
+#include "visionrt/contracts/Module.h"
 
 #ifdef _WIN32
 #    ifndef WIN32_LEAN_AND_MEAN
@@ -31,7 +32,7 @@ struct LoadedModule
 {
     std::filesystem::path path;
 #ifdef _WIN32
-    HMODULE handle = nullptr;
+    HMODULE                                              handle = nullptr;
     std::unique_ptr<void, decltype(&RemoveDllDirectory)> directory{nullptr, &RemoveDllDirectory};
     LoadedModule() = default;
 
@@ -46,36 +47,10 @@ struct LoadedModule
 
     LoadedModule(const LoadedModule &)            = delete;
     LoadedModule &operator=(const LoadedModule &) = delete;
-
-    LoadedModule(LoadedModule &&other) noexcept
-        : path(std::move(other.path))
-        , handle(other.handle)
-        , directory(std::move(other.directory))
-        , api(other.api)
-    {
-        other.handle = nullptr;
-        other.api    = nullptr;
-    }
-
-    LoadedModule &operator=(LoadedModule &&other) noexcept
-    {
-        if (this != &other)
-        {
-            path = std::move(other.path);
-            if (handle)
-                FreeLibrary(handle);
-            directory    = std::move(other.directory);
-            handle       = other.handle;
-            other.handle = nullptr;
-            api          = other.api;
-            other.api    = nullptr;
-        }
-        return *this;
-    }
 #else
     std::shared_ptr<QLibrary> library;
 #endif
-    const ModuleApi *api = nullptr;
+    ToolRegistry registry;
 };
 
 class PluginLoader : public std::enable_shared_from_this<PluginLoader>
@@ -87,20 +62,19 @@ public:
     // Low-level seam for registering a single known module (tests, embedded modules).
     void registerModule(std::string toolId, std::filesystem::path libraryPath);
 
-    // Replaces the factory mapping with the modules of a package read by the SDK.
     void registerPackage(const ToolsPackage &package);
 
     std::filesystem::path resolveModulePath(std::string_view toolId) const;
     bool                  hasModule(std::string_view toolId) const;
 
     std::shared_ptr<const LoadedModule> loadModule(const std::filesystem::path &libraryPath, ToolStatus &status);
-    std::unique_ptr<IToolInstance> createAdapter(std::string_view toolId, const PlatformToolServices &services);
+    std::unique_ptr<IToolInstance>      createAdapter(std::string_view toolId, const PlatformToolServices &services);
 
     std::size_t loadedModuleCount() const;
 
 private:
-    std::shared_ptr<const LoadedModule> loadModuleFile(const std::filesystem::path &libraryPath,
-                                                       ToolStatus                  &status);
+    std::shared_ptr<LoadedModule> loadModuleFile(const std::filesystem::path &libraryPath, ToolStatus &status);
+
     struct PendingLoad
     {
         std::thread::id owner;
@@ -131,7 +105,8 @@ private:
     std::string                         toolId_;
     PlatformToolServices                services_;
     std::shared_ptr<const LoadedModule> module_;
-    IToolInstance                      *raw_ = nullptr;
+    const ToolRegistry::NativeFactory  *factory_ = nullptr;
+    IToolInstance                      *raw_     = nullptr;
     ToolStatus                          failureStatus_;
 };
 
