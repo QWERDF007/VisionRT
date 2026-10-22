@@ -1,6 +1,6 @@
 #pragma once
 
-#include "visionrt/contracts/Schema.h"
+#include "core/ToolDefinition.h"
 #include "visionrt/contracts/Tool.h"
 
 #include <filesystem>

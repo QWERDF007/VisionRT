@@ -4,7 +4,7 @@
 #include "core/ToolRegistry.h"
 #include "core/ValueJson.h"
 
-#include <visionrt/contracts/Contract.h>
+#include <core/ToolValueValidation.h>
 
 #include <QFile>
 #include <QJsonArray>
