@@ -2,14 +2,15 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstring>
+#include <exception>
 #include <thread>
+#include <type_traits>
 
 namespace {
 
 std::atomic<int> g_instanceCount{0};
-std::atomic<int> g_createCalls{0};
 std::atomic<int> g_destroyCalls{0};
+std::atomic<int> g_counterReleaseCalls{0};
 
 class SleepTool final : public visionrt::IToolInstance
 {
@@ -86,6 +87,7 @@ public:
 
     visionrt::ToolStatus release() override
     {
+        ++g_counterReleaseCalls;
         return {};
     }
 
@@ -229,67 +231,30 @@ public:
     }
 };
 
-visionrt::IToolInstance *VT_CALL pluginCreate(const char           *registry_name, const visionrt::ToolServices *,
-                                              visionrt::ToolStatus *status) noexcept
+template<class Tool = void, std::int64_t StatusCode = 0>
+visionrt::IToolInstance *VT_CALL pluginCreate(const visionrt::ToolServices *, visionrt::ToolStatus *status) noexcept
 {
-    ++g_createCalls;
-    if (!registry_name)
+    try
+    {
+        visionrt::IToolInstance *instance = nullptr;
+        if constexpr (!std::is_void_v<Tool>)
+            instance = new Tool();
+        if (status)
+            *status = {StatusCode, StatusCode == 0 ? "" : "Simulated factory creation failure"};
+        return instance;
+    }
+    catch (const std::exception &error)
     {
         if (status)
-            *status = {-3, "null registry_name"};
+            *status = {-3, "测试工具创建失败", error.what()};
         return nullptr;
     }
-    if (std::strcmp(registry_name, "test.plugin.counter") == 0)
+    catch (...)
     {
         if (status)
-            *status = {};
-        return new CounterTool();
-    }
-    if (std::strcmp(registry_name, "test.plugin.fail_init") == 0)
-    {
-        if (status)
-            *status = {};
-        return new FailInitTool();
-    }
-    if (std::strcmp(registry_name, "test.plugin.function") == 0)
-    {
-        if (status)
-            *status = {};
-        return new FunctionTool();
-    }
-    if (std::strcmp(registry_name, "test.plugin.sleep") == 0)
-    {
-        if (status)
-            *status = {};
-        return new SleepTool();
-    }
-    if (std::strcmp(registry_name, "test.plugin.create_null_success") == 0)
-    {
-        if (status)
-            *status = {};
+            *status = {-3, "测试工具创建发生未知异常"};
         return nullptr;
     }
-    if (std::strcmp(registry_name, "test.plugin.create_nonnull_fail") == 0)
-    {
-        if (status)
-            *status = {5, "Simulated factory creation failure"};
-        return new CounterTool();
-    }
-    if (std::strcmp(registry_name, "test.plugin.init_throw") == 0)
-    {
-        if (status)
-            *status = {};
-        return new ThrowInitTool();
-    }
-    if (std::strcmp(registry_name, "test.plugin.release_fail") == 0)
-    {
-        if (status)
-            *status = {};
-        return new FailReleaseTool();
-    }
-    if (status)
-        *status = {-3, std::string("Unknown registry name: ") + registry_name};
-    return nullptr;
 }
 
 void VT_CALL pluginDestroy(visionrt::IToolInstance *instance) noexcept
@@ -298,7 +263,25 @@ void VT_CALL pluginDestroy(visionrt::IToolInstance *instance) noexcept
     delete instance;
 }
 
-const visionrt::ModuleApi g_api{visionrt::MODULE_ABI_MAJOR, sizeof(visionrt::ModuleApi), pluginCreate, pluginDestroy};
+visionrt::ToolStatus VT_CALL registerTools(visionrt::IToolRegistry &registry) noexcept
+{
+    const visionrt::ToolFactoryDescriptor descriptors[]{
+        {"test.plugin.counter", pluginCreate<CounterTool>, pluginDestroy},
+        {"test.plugin.fail_init", pluginCreate<FailInitTool>, pluginDestroy},
+        {"test.plugin.function", pluginCreate<FunctionTool>, pluginDestroy},
+        {"test.plugin.sleep", pluginCreate<SleepTool>, pluginDestroy},
+        {"test.plugin.create_null_success", pluginCreate<>, pluginDestroy},
+        {"test.plugin.create_nonnull_fail", pluginCreate<CounterTool, 5>, pluginDestroy},
+        {"test.plugin.init_throw", pluginCreate<ThrowInitTool>, pluginDestroy},
+        {"test.plugin.release_fail", pluginCreate<FailReleaseTool>, pluginDestroy},
+    };
+    for (const auto &descriptor : descriptors)
+        if (auto status = registry.add(descriptor); !status)
+            return status;
+    return {};
+}
+
+const visionrt::ModuleApi g_api{visionrt::MODULE_ABI_MAJOR, sizeof(visionrt::ModuleApi), registerTools};
 
 } // namespace
 
@@ -315,4 +298,9 @@ extern "C" VT_EXPORT int VT_CALL testPluginInstanceCount() noexcept
 extern "C" VT_EXPORT int VT_CALL testPluginDestroyCalls() noexcept
 {
     return g_destroyCalls.load();
+}
+
+extern "C" VT_EXPORT int VT_CALL testPluginCounterReleaseCalls() noexcept
+{
+    return g_counterReleaseCalls.load();
 }

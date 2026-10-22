@@ -48,6 +48,31 @@ ToolDefinition parseDefinition(const std::filesystem::path &path, bool builtin)
     return parseToolDefinitionFile(path, builtin);
 }
 
+ToolStatus ToolRegistry::add(const ToolFactoryDescriptor &descriptor) noexcept
+{
+    if (!registrationStatus_)
+        return registrationStatus_;
+    try
+    {
+        if (!descriptor.tool_id || isBlankMessage(descriptor.tool_id))
+            registrationStatus_ = {-3, "工具工厂 ID 不能为空"};
+        else if (!descriptor.create || !descriptor.destroy)
+            registrationStatus_ = {-3, "工具工厂函数不完整：" + std::string(descriptor.tool_id)};
+        else if (!nativeFactories_.emplace(descriptor.tool_id, NativeFactory{descriptor.create, descriptor.destroy})
+                      .second)
+            registrationStatus_ = {-3, "工具工厂 ID 重复：" + std::string(descriptor.tool_id)};
+    }
+    catch (const std::exception &error)
+    {
+        registrationStatus_ = {-3, "工具工厂注册失败", error.what()};
+    }
+    catch (...)
+    {
+        registrationStatus_ = {-3, "工具工厂注册发生未知异常"};
+    }
+    return registrationStatus_;
+}
+
 void ToolRegistry::registerPackage(const ToolsPackage &package)
 {
     std::vector<ToolDefinition>                     definitions;

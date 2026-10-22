@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Tool.h"
+#include "visionrt/contracts/Registry.h"
 
 #include <stdexcept>
 #include <string_view>
@@ -38,9 +39,27 @@ class PluginLoader;
 struct ToolsPackage;
 
 // Mutate only between runs; definitions and their factories form a runtime snapshot.
-class ToolRegistry
+class ToolRegistry : public IToolRegistry
 {
 public:
+    struct NativeFactory
+    {
+        decltype(ToolFactoryDescriptor::create)  create;
+        decltype(ToolFactoryDescriptor::destroy) destroy;
+    };
+
+    ToolStatus add(const ToolFactoryDescriptor &descriptor) noexcept override;
+
+    const std::map<std::string, NativeFactory, std::less<>> &nativeFactories() const noexcept
+    {
+        return nativeFactories_;
+    }
+
+    const ToolStatus &registrationStatus() const noexcept
+    {
+        return registrationStatus_;
+    }
+
     // Replaces the tool set with a validated package: inside the package root the index is the single discovery source.
     void registerPackage(const ToolsPackage &package);
     void addDefinition(ToolDefinition definition);
@@ -74,6 +93,9 @@ public:
     }
 
 private:
+    std::map<std::string, NativeFactory, std::less<>> nativeFactories_;
+    ToolStatus                                        registrationStatus_;
+
     struct CppImplementation
     {
         ToolDefinition contract;

@@ -251,6 +251,21 @@ if(BUILD_TESTING)
     target_compile_definitions(test_plugin_legacy PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     set_target_properties(test_plugin_legacy PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_legacy)
 
+    foreach(_registration_fixture IN ITEMS valid duplicate short null collision)
+        add_library(test_registration_${_registration_fixture} SHARED tests/fixtures/test_plugin_registration.cpp)
+        target_link_libraries(test_registration_${_registration_fixture} PRIVATE VisionRT::Contracts)
+        target_compile_definitions(test_registration_${_registration_fixture} PRIVATE VISIONRT_CONTRACTS_EXPORTS)
+    endforeach()
+    target_compile_definitions(test_registration_duplicate PRIVATE VISIONRT_DUPLICATE_REGISTRATION)
+    target_compile_definitions(test_registration_short PRIVATE VISIONRT_SHORT_MODULE)
+    target_compile_definitions(test_registration_null PRIVATE VISIONRT_NULL_REGISTRATION)
+    visionrt_contract(module_registration_contract visionrt_core
+        "$<TARGET_FILE:test_registration_valid>" "$<TARGET_FILE:test_registration_duplicate>"
+        "$<TARGET_FILE:test_registration_short>" "$<TARGET_FILE:test_registration_null>"
+        "$<TARGET_FILE:test_registration_collision>")
+    add_dependencies(module_registration_contract test_registration_valid test_registration_duplicate
+        test_registration_short test_registration_null test_registration_collision)
+
     add_executable(plugin_contract tests/plugin_contract.cpp)
     if(VISIONRT_BUILD_APP)
         target_link_libraries(plugin_contract PRIVATE visionrt_ui)

@@ -1,5 +1,7 @@
 #include "plugins/PluginLoader.h"
 
+#include <algorithm>
+
 #ifndef NOMINMAX
 #    define NOMINMAX
 #endif
@@ -17,6 +19,8 @@ namespace visionrt {
 
 void PluginLoader::registerModule(std::string toolId, std::filesystem::path libraryPath)
 {
+    if (!libraryPath.empty())
+        libraryPath = std::filesystem::absolute(libraryPath).lexically_normal();
     std::lock_guard lock(mutex_);
     failures_.clear();
     index_[std::move(toolId)] = std::move(libraryPath);
@@ -29,13 +33,13 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
     {
         if (tool.moduleLibrary.empty())
             continue;
-        const auto inserted = index.emplace(tool.definition.id, tool.moduleLibrary);
+        const auto path     = std::filesystem::absolute(tool.moduleLibrary).lexically_normal();
+        const auto inserted = index.emplace(tool.definition.id, path);
         // Two modules claiming one factory name would make the second tool silently
         // load the wrong library, so the combination is rejected instead (D-04).
-        if (!inserted.second && inserted.first->second != tool.moduleLibrary)
-            throw ContractError("tool_id '" + tool.definition.id
-                                + "' is provided by two different modules: " + inserted.first->second.string() + " and "
-                                + tool.moduleLibrary.string());
+        if (!inserted.second && inserted.first->second != path)
+            throw ContractError("tool_id '" + tool.definition.id + "' is provided by two different modules: "
+                                + inserted.first->second.string() + " and " + tool.moduleLibrary.string());
     }
     std::lock_guard lock(mutex_);
     failures_.clear();
@@ -62,7 +66,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
         status = {-3, "模块库路径为空"};
         return nullptr;
     }
-    const auto key = std::filesystem::absolute(libraryPath).lexically_normal();
+    const auto       key = std::filesystem::absolute(libraryPath).lexically_normal();
     std::unique_lock lock(mutex_);
     for (;;)
     {
@@ -95,11 +99,11 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     std::shared_ptr<LoadedModule> module;
     try
     {
-        module = std::const_pointer_cast<LoadedModule>(loadModuleFile(key, local));
+        module = loadModuleFile(key, local);
     }
     catch (const std::exception &error)
     {
-        local = {-3, "模块加载异常：" + std::string(error.what())};
+        local = {-3, "模块加载异常", error.what()};
     }
     catch (...)
     {
@@ -108,6 +112,27 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
 
     lock.lock();
     loading_.erase(key);
+    if (module)
+    {
+        for (const auto &[path, active] : loadedModules_)
+        {
+            const bool referenced
+                = std::any_of(index_.begin(), index_.end(), [&](const auto &entry) { return entry.second == path; });
+            if (!referenced)
+                continue;
+            for (const auto &[id, factory] : module->registry.nativeFactories())
+            {
+                if (active->registry.nativeFactories().contains(id))
+                {
+                    local = {-3, "不同模块注册了重复的工具工厂 ID：" + id};
+                    break;
+                }
+            }
+            if (!local)
+                break;
+        }
+    }
+    auto rejected = !local ? std::move(module) : nullptr;
     if (module)
     {
         loadedModules_[key] = module;
@@ -119,11 +144,11 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
         status         = local;
     }
     loadedChanged_.notify_all();
+    lock.unlock();
     return module;
 }
 
-std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::filesystem::path &libraryPath,
-                                                                 ToolStatus                  &status)
+std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem::path &libraryPath, ToolStatus &status)
 {
     if (!std::filesystem::exists(libraryPath))
     {
@@ -131,6 +156,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::file
         return nullptr;
     }
 
+    auto loaded = std::make_shared<LoadedModule>();
 #ifdef _WIN32
     static const DWORD directoryPolicyError = []
     {
@@ -142,13 +168,12 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::file
         return nullptr;
     }
     const auto absPath = std::filesystem::absolute(libraryPath).lexically_normal();
-    auto loaded = std::make_shared<LoadedModule>();
     loaded->directory.reset(AddDllDirectory(absPath.parent_path().wstring().c_str()));
     if (!loaded->directory)
     {
         const DWORD error = GetLastError();
-        status = {-3, "无法注册运行时 DLL 目录 " + libraryPath.parent_path().string()
-                          + "（Win32 错误：" + std::to_string(error) + "）"};
+        status = {-3, "无法注册运行时 DLL 目录 " + libraryPath.parent_path().string() + "（Win32 错误："
+                          + std::to_string(error) + "）"};
         return nullptr;
     }
     HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr,
@@ -168,44 +193,13 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::file
         return nullptr;
     }
 
-    auto        apiFunc = reinterpret_cast<const ModuleApi *(VT_CALL *)() noexcept>(proc);
-    const auto *api     = apiFunc();
-    if (!api)
-    {
-        status = {-3, "visiontoolsModuleApi() 返回空：" + libraryPath.string()};
-        return nullptr;
-    }
-
-    if (api->abi_major != MODULE_ABI_MAJOR)
-    {
-        status = {-3, "模块 ABI 主版本不匹配（期望 " + std::to_string(MODULE_ABI_MAJOR) + "，实际 "
-                          + std::to_string(api->abi_major) + "）"};
-        return nullptr;
-    }
-
-    if (api->struct_bytes < sizeof(ModuleApi))
-    {
-        status = {-3, "ModuleApi 结构体大小不匹配"};
-        return nullptr;
-    }
-
-    if (!api->create || !api->destroy)
-    {
-        status = {-3, "ModuleApi 函数指针不完整"};
-        return nullptr;
-    }
-
-    loaded->path   = libraryPath;
-    loaded->api    = api;
-    status = {};
-    return loaded;
+    auto apiFunc = reinterpret_cast<const ModuleApi *(VT_CALL *)() noexcept>(proc);
 #else
     auto       lib      = std::make_shared<QLibrary>(QString::fromStdString(libraryPath.string()));
     const bool loadedOk = lib->load();
     if (!loadedOk)
     {
-        status
-            = {-3, "无法加载动态库 " + libraryPath.string() + "：" + lib->errorString().toStdString()};
+        status = {-3, "无法加载动态库 " + libraryPath.string() + "：" + lib->errorString().toStdString()};
         return nullptr;
     }
 
@@ -215,7 +209,8 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::file
         status = {-3, "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string()};
         return nullptr;
     }
-
+    loaded->library = lib;
+#endif
     const auto *api = apiFunc();
     if (!api)
     {
@@ -236,19 +231,19 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModuleFile(const std::file
         return nullptr;
     }
 
-    if (!api->create || !api->destroy)
+    if (!api->register_tools)
     {
-        status = {-3, "ModuleApi 函数指针不完整"};
+        status = {-3, "ModuleApi 缺少工具注册函数"};
         return nullptr;
     }
-
-    auto loaded     = std::make_shared<LoadedModule>();
-    loaded->path    = libraryPath;
-    loaded->library = lib;
-    loaded->api     = api;
-    status = {};
+    status = api->register_tools(loaded->registry);
+    if (!loaded->registry.registrationStatus())
+        status = loaded->registry.registrationStatus();
+    if (!status)
+        return nullptr;
+    loaded->path = libraryPath;
+    status       = {};
     return loaded;
-#endif
 }
 
 std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view            toolId,
@@ -275,27 +270,7 @@ DomainToolAdapter::DomainToolAdapter(std::shared_ptr<PluginLoader> loader, std::
 
 DomainToolAdapter::~DomainToolAdapter()
 {
-    if (raw_)
-    {
-        try
-        {
-            raw_->release();
-        }
-        catch (...)
-        {
-        }
-        try
-        {
-            if (module_ && module_->api && module_->api->destroy)
-            {
-                module_->api->destroy(raw_);
-            }
-        }
-        catch (...)
-        {
-        }
-        raw_ = nullptr;
-    }
+    release();
 }
 
 ToolStatus DomainToolAdapter::initialize(const Values &initParams)
@@ -305,48 +280,42 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
 
     if (raw_)
     {
-        try
+        if (const auto status = release(); !status)
         {
-            raw_->release();
+            failureStatus_ = status;
+            return failureStatus_;
         }
-        catch (...)
-        {
-        }
-        if (module_ && module_->api && module_->api->destroy)
-        {
-            module_->api->destroy(raw_);
-        }
-        raw_ = nullptr;
     }
 
     ToolStatus status;
     module_ = loader_->loadModule(libraryPath_, status);
-    if (!module_ || !module_->api || status.code != 0)
+    if (!module_ || !status)
     {
         failureStatus_ = (status.code != 0 ? status : ToolStatus{-3, "模块加载失败：" + libraryPath_.string()});
         return failureStatus_;
     }
 
+    const auto found = module_->registry.nativeFactories().find(toolId_);
+    if (found == module_->registry.nativeFactories().end())
+    {
+        failureStatus_ = {-3, "指定模块未注册工具工厂：" + toolId_};
+        module_.reset();
+        return failureStatus_;
+    }
+    factory_ = &found->second;
     ToolStatus createStatus;
-    raw_ = module_->api->create(toolId_.c_str(), &services_, &createStatus);
+    raw_ = factory_->create(&services_, &createStatus);
     if (!raw_)
     {
-        failureStatus_
-            = (createStatus.code != 0 ? createStatus
-                                      : ToolStatus{-3, "模块创建返回空实例：" + toolId_});
+        failureStatus_ = (createStatus.code != 0 ? createStatus : ToolStatus{-3, "模块创建返回空实例：" + toolId_});
+        factory_ = nullptr;
+        module_.reset();
         return failureStatus_;
     }
 
     if (createStatus.code != 0)
     {
-        try
-        {
-            module_->api->destroy(raw_);
-        }
-        catch (...)
-        {
-        }
-        raw_           = nullptr;
+        release();
         failureStatus_ = createStatus;
         return failureStatus_;
     }
@@ -357,7 +326,7 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     }
     catch (const std::exception &error)
     {
-        status = {-1, "工具初始化异常；技术详情：" + std::string(error.what())};
+        status = {-1, "工具初始化异常", error.what()};
     }
     catch (...)
     {
@@ -366,21 +335,7 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
 
     if (!status)
     {
-        try
-        {
-            raw_->release();
-        }
-        catch (...)
-        {
-        }
-        try
-        {
-            module_->api->destroy(raw_);
-        }
-        catch (...)
-        {
-        }
-        raw_           = nullptr;
+        release();
         failureStatus_ = status;
         return failureStatus_;
     }
@@ -392,9 +347,8 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
 {
     if (!raw_)
     {
-        const auto status = failureStatus_.code != 0
-                              ? failureStatus_
-                              : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
+        const auto status
+            = failureStatus_.code != 0 ? failureStatus_ : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
         return ToolResult{status, {}};
     }
     try
@@ -404,7 +358,7 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     catch (const std::exception &error)
     {
         return ToolResult{
-            {-1, "工具执行异常；技术详情：" + std::string(error.what())},
+            {-1, "工具执行异常", error.what()},
             {}
         };
     }
@@ -428,23 +382,16 @@ ToolStatus DomainToolAdapter::release()
     }
     catch (const std::exception &error)
     {
-        status = {-4, "Tool release exception: " + std::string(error.what())};
+        status = {-4, "工具释放异常", error.what()};
     }
     catch (...)
     {
-        status = {-4, "Tool release unknown exception"};
+        status = {-4, "工具释放发生未知异常"};
     }
-    try
-    {
-        if (module_ && module_->api && module_->api->destroy)
-        {
-            module_->api->destroy(raw_);
-        }
-    }
-    catch (...)
-    {
-    }
-    raw_ = nullptr;
+    factory_->destroy(raw_);
+    raw_     = nullptr;
+    factory_ = nullptr;
+    module_.reset();
     return status;
 }
 

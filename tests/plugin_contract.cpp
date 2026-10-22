@@ -161,6 +161,12 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
 {
     auto                 loader = std::make_shared<PluginLoader>();
     PlatformToolServices services;
+    QLibrary             probe(QString::fromStdString(modulePath.string()));
+    assert(probe.load());
+    const auto releaseCalls
+        = reinterpret_cast<int(VT_CALL *)() noexcept>(probe.resolve("testPluginCounterReleaseCalls"));
+    assert(releaseCalls);
+    const auto before = releaseCalls();
 
     // 1. create returns nullptr + code 0 -> host converts to -3
     loader->registerModule("test.plugin.create_null_success", modulePath);
@@ -171,11 +177,16 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
     loader->registerModule("test.plugin.create_nonnull_fail", modulePath);
     auto nonnullFailAdapter = loader->createAdapter("test.plugin.create_nonnull_fail", services);
     assert(nonnullFailAdapter->initialize({}).code == 5);
+    assert(releaseCalls() == before + 1);
+    assert(nonnullFailAdapter->release());
+    assert(releaseCalls() == before + 1);
 
     // 3. initialize throws exception -> host catches, returns -1
     loader->registerModule("test.plugin.init_throw", modulePath);
-    auto throwAdapter = loader->createAdapter("test.plugin.init_throw", services);
-    assert(throwAdapter->initialize({}).code == -1);
+    auto       throwAdapter = loader->createAdapter("test.plugin.init_throw", services);
+    const auto thrown       = throwAdapter->initialize({});
+    assert(thrown.code == -1 && thrown.message == "工具初始化异常");
+    assert(thrown.detail == "Simulated init exception in plugin");
 
     // 4. release failure
     loader->registerModule("test.plugin.release_fail", modulePath);
@@ -1067,7 +1078,7 @@ int main(int argc, char **argv)
             const auto module = loader.loadModule(std::filesystem::u8path(argv[2]), status);
             assert(!module && !status);
             assert(status.message.find("ABI 主版本不匹配") != std::string::npos);
-            assert(status.message.find("实际 1") != std::string::npos);
+            assert(status.message.find("实际 2") != std::string::npos);
             assert(loader.loadedModuleCount() == 0);
         }
         return 0;
