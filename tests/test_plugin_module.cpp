@@ -229,7 +229,7 @@ public:
 
     visionrt::ToolStatus release() override
     {
-        return {6, "Simulated release failure"};
+        return {6, "释放资源失败", "native release detail"};
     }
 };
 

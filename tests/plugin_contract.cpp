@@ -21,6 +21,8 @@ using namespace visionrt;
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLibrary>
 #include <QProcess>
 #include <QTemporaryDir>
@@ -314,8 +316,9 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     project.flows.front().nodes.front().toolId = def.id;
     assert(engine.requestSynchronize(project, registry));
     prepared = finish(engine);
-    assert(prepared.nodes.front().instanceDiagnostic->code == 5);
-    assert(prepared.nodes.front().instanceDiagnostic->detail == "factory diagnostic");
+    assert(prepared.nodes.front().instanceDiagnostic->status.code == 5);
+    assert(prepared.nodes.front().instanceDiagnostic->status.detail == "factory diagnostic");
+    assert(prepared.nodes.front().instanceDiagnostic->phase == NodePhase::Create);
     assert(instanceCount() == 0);
     assert(engine.requestSynchronize(project, registry));
     assert(engine.state() == RuntimeState::Idle);
@@ -323,6 +326,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     snap = snapshot(finish(engine), 1);
     assert(snap && snap->status.code == 5);
     assert(snap->status.detail == "factory diagnostic");
+    assert(snap->phase == NodePhase::Create && snap->status.message.find("节点") == std::string::npos);
     assert(isMissing(snap->outputs.at("y")));
 }
 
@@ -832,6 +836,65 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.runState() == "Idle");
     assert(app.nodes().isEmpty() && instances() == 0);
+    {
+        QFile definition(toQString(jsonDir / "release.json"));
+        assert(definition.open(QIODevice::WriteOnly));
+        definition.write(R"({"schema_version":1,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
+                            "version":"1.0.0","kind":"cpp","init_params":[],"inputs":[],"outputs":[]})");
+        QFile index(toQString(indexFile));
+        assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        index.write(
+            R"({"schema_version":1,"variant":"cpu","modules":[{"id":"test_module","library":"bin/test_module.dll"}],
+                        "tools":[{"tool_id":"test.plugin.release_fail","module":"test_module",
+                                  "definition":"assets/tools/builtin/测试/数学/release.json"}],"runtime_files":[]})");
+    }
+    app.rescanTools();
+    waitForIdle();
+    app.addNode("test.plugin.release_fail", 100, 100);
+    waitForIdle();
+    app.runOnce();
+    waitForIdle();
+    assert(app.nodes().first().toMap().value("state") == "succeeded");
+    QString diagnosticJson;
+    QObject::connect(&app, &AppController::outputTextReady, &app, [&](const QString &text) { diagnosticJson = text; });
+    app.requestOutputText(app.portContext("__status_message", true), false, true);
+    for (int attempt = 0; attempt < 100 && diagnosticJson.isEmpty(); ++attempt)
+    {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(5ms);
+    }
+    const auto exported = QJsonDocument::fromJson(diagnosticJson.toUtf8()).object();
+    assert(exported.value("code").toInt() == 0 && exported.value("message") == "ok");
+    assert(exported.value("phase") == "execute" && exported.value("tool_id") == "test.plugin.release_fail");
+    assert(QDir(temp.path()).mkpath("moved"));
+    assert(app.save(temp.filePath("moved/lifecycle.vrt.json")));
+    waitForIdle();
+    const auto released = app.nodes().first().toMap();
+    assert(released.value("state") == "succeeded" && released.value("statusCode").toInt() == 0);
+    assert(released.value("statusMessage").toString().isEmpty());
+    assert(released.value("lifecycleMessage").toString().contains("释放资源失败"));
+    assert(released.value("lifecycleDetail") == "native release detail");
+    diagnosticJson.clear();
+    app.requestOutputText(app.portContext("__status_message", true), false, true);
+    for (int attempt = 0; attempt < 100 && diagnosticJson.isEmpty(); ++attempt)
+    {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(5ms);
+    }
+    const auto lifecycleExport = QJsonDocument::fromJson(diagnosticJson.toUtf8()).object();
+    assert(lifecycleExport.value("code").toInt() == 0 && lifecycleExport.value("message") == "ok");
+    assert(lifecycleExport.value("lifecycle").toObject().value("detail") == "native release detail");
+    const auto reported = app.diagnostics().size();
+    for (int attempt = 0; attempt < 10; ++attempt)
+    {
+        QCoreApplication::processEvents();
+        std::this_thread::sleep_for(5ms);
+    }
+    assert(app.diagnostics().size() == reported);
+    assert(QDir(temp.path()).mkpath("again"));
+    assert(app.save(temp.filePath("again/lifecycle.vrt.json")));
+    waitForIdle();
+    assert(app.diagnostics().size() == reported + 1);
 }
 #endif
 

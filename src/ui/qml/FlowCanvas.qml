@@ -617,6 +617,22 @@ FocusScope {
                             }
                         }
                     }
+                    QuiText {
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.hoverNode ? root.hoverNode.statusMessage || "" : ""
+                        wrapMode: Text.Wrap
+                        color: Theme.error
+                        font: QuiFont.Caption
+                    }
+                    QuiText {
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        text: root.hoverNode ? root.hoverNode.lifecycleMessage || "" : ""
+                        wrapMode: Text.Wrap
+                        color: Theme.error
+                        font: QuiFont.Caption
+                    }
                 }
             }
             Rectangle {

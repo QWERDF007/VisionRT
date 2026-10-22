@@ -276,12 +276,13 @@ void initializationSuppressionRetryAndReset()
     assert(engine.start(project, registry, RunMode::Once));
     auto changed = finish(engine);
     assert(initializations == 3 && executions == 3 && releases == 2);
-    assert(changed.nodes.front().lifecycleDiagnostic->code == -4);
+    assert(changed.nodes.front().lifecycleDiagnostic->status.code == -4);
+    assert(changed.nodes.front().lifecycleDiagnostic->phase == NodePhase::Release);
     const auto generation = changed.generation;
     assert(engine.requestReset());
     auto reset = finish(engine);
     assert(reset.generation == generation + 1 && !snapshot(reset, 1));
-    assert(reset.nodes.front().lifecycleDiagnostic->code == -4);
+    assert(reset.nodes.front().lifecycleDiagnostic->status.code == -4);
     assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at("resource")) == 2);
     assert(releases == 3);
 }
@@ -408,7 +409,7 @@ void receiverConsumesFailures()
             [](const Values &)
             {
                 return ToolResult{
-                    {12, "source failed"},
+                    {12, "源执行失败", "source detail"},
                     {{"value", Missing{}}}
                 };
             });
@@ -426,7 +427,7 @@ void receiverConsumesFailures()
                                  request.timeout       = 0ms;
                                  auto       next       = reader->receive(request, cursor);
                                  const bool consumed
-                                     = failed.status.code == 3
+                                     = failed.status.code == 3 && failed.status.detail == "source detail"
                                     && std::get<std::int64_t>(failed.outputs.at("source_status_code")) == 12
                                     && isMissing(failed.outputs.at("value")) && next.status.code == 4
                                     && isMissing(next.outputs.at("source_status_code"));
@@ -444,6 +445,57 @@ void receiverConsumesFailures()
     assert(engine.start(project, registry, RunMode::Once));
     auto received = finish(engine);
     assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 1);
+}
+
+void executionDiagnostics()
+{
+    for (int scenario = 0; scenario < 4; ++scenario)
+    {
+        RuntimeEngine engine(1);
+        ToolRegistry  registry;
+        const auto    tool = definition("test.diagnostic");
+        install(
+            registry, tool,
+            [scenario](const Values &) -> ToolResult
+            {
+                if (scenario == 0)
+                    throw std::runtime_error("third-party detail");
+                if (scenario == 1)
+                    return {{}, {{"value", Utf8("wrong type")}}};
+                return {
+                    {7, "业务条件未满足", "business detail"},
+                    {{"value", std::int64_t{42}}}
+                };
+            },
+            [scenario] { return scenario == 3 ? ToolStatus{6, "资源未准备", "init detail"} : ToolStatus{}; });
+        ProjectDefinition project;
+        project.flows.front().nodes = {node(1, tool)};
+        assert(engine.start(project, registry, RunMode::Once));
+        const auto result = snapshot(finish(engine), 1);
+        assert(result->status.message.find("节点") == std::string::npos);
+        assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == result->status.code);
+        assert(std::get<Utf8>(result->outputs.at("__status_message")).str() == result->status.message);
+        if (scenario == 0)
+        {
+            assert(result->phase == NodePhase::Execute && result->status.code == -1);
+            assert(result->status.message == "工具执行异常" && result->status.detail == "third-party detail");
+        }
+        else if (scenario == 1)
+        {
+            assert(result->phase == NodePhase::Convert && result->status.code == -2);
+            assert(!result->status.message.empty() && isMissing(result->outputs.at("value")));
+        }
+        else if (scenario == 2)
+        {
+            assert(result->phase == NodePhase::Execute && result->status.code == 7);
+            assert(result->status.message == "业务条件未满足" && result->status.detail == "business detail");
+        }
+        else
+        {
+            assert(result->phase == NodePhase::Initialize && result->status.code == 6);
+            assert(result->status.message == "资源未准备" && result->status.detail == "init detail");
+        }
+    }
 }
 
 void managementWaitsForActiveInvocation()
@@ -796,7 +848,7 @@ void hostBindingReceiverContract()
     catch (const ContractError &error)
     {
         thrownMissingVal = true;
-        assert(std::string(error.what()).find("receiver value output is missing") != std::string::npos);
+        assert(std::string(error.what()).find("接收工具缺少 value 输出端口") != std::string::npos);
     }
     assert(thrownMissingVal);
 
@@ -1191,6 +1243,7 @@ int main(int argc, char **argv)
     singleReceiverResolvesAllValueTypes(argv[1]);
     receiverConsumesFailures();
     hostBindingReceiverContract();
+    executionDiagnostics();
     managementWaitsForActiveInvocation();
     executionMetricsAndTimingSeparation();
     timingRecordedOnFailure();

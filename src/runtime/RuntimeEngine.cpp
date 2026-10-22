@@ -183,7 +183,7 @@ struct RuntimeEngine::Impl
     std::shared_ptr<std::stop_source>                                 activeStop;
     std::thread                                                       coordinator;
 
-    void diagnose(std::string message)
+    void diagnose(std::string message, std::optional<NodeDiagnostic> nodeDiagnostic = {})
     {
         std::lock_guard lock(control);
         if (diagnostics.size() == 100)
@@ -191,7 +191,7 @@ struct RuntimeEngine::Impl
             diagnostics.pop_front();
             ++droppedDiagnostics;
         }
-        diagnostics.push_back({generation, nextDiagnosticSequence++, std::move(message)});
+        diagnostics.push_back({generation, nextDiagnosticSequence++, std::move(message), std::move(nodeDiagnostic)});
     }
 
     void resetDiagnostics()
@@ -239,7 +239,7 @@ struct RuntimeEngine::Impl
                       });
         for (auto &runtime : removed)
             if (auto status = runtime->release())
-                diagnose(status->message);
+                diagnose({}, *status);
         for (const auto &[runtime, node] : configured)
             runtime->configure(*node, registry, InstanceConfiguration(*node, registry, project.path.parent_path()),
                                retry.contains(node->id));
@@ -760,9 +760,9 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     {
         NodeUpdate item{id, runtime->active.load(std::memory_order_acquire), runtime->slot.latest(), {}};
         if (const auto status = runtime->lifecycle.load(std::memory_order_acquire))
-            item.lifecycleDiagnostic = *status;
+            item.lifecycleDiagnostic = status;
         if (const auto status = runtime->preparation.load(std::memory_order_acquire))
-            item.instanceDiagnostic = *status;
+            item.instanceDiagnostic = status;
         update.nodes.push_back(std::move(item));
     }
     return update;

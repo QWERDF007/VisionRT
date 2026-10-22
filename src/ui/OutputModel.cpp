@@ -1,6 +1,7 @@
 #include "ui/OutputModel.h"
 
 #include "core/ValueJson.h"
+#include "ui/NodeDiagnostics.h"
 
 #include <algorithm>
 #include <limits>
@@ -281,7 +282,7 @@ void OutputModel::clear()
 
 void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                             const std::map<std::string, std::size_t, std::less<>> &references,
-                            const TypeMap                                         *nodeOutputs)
+                            const TypeMap *nodeOutputs, std::shared_ptr<const NodeDiagnostic> lifecycle)
 {
     beginResetModel();
     rows_.clear();
@@ -299,6 +300,12 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
         }
         const auto count = references.find(id);
         Captured   captured{std::move(value), type, snapshot ? snapshot->publication : 0, q(id)};
+        if (system && snapshot)
+        {
+            captured.diagnostic = NodeDiagnostic{snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status};
+        }
+        if (system)
+            captured.lifecycle = lifecycle;
         Row        row{q(id),
                        q(name),
                        typeText(type),
@@ -309,6 +316,14 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                        std::move(captured)};
         row.preview = preview(row.captured.value, 256);
         row.tooltip = preview(row.captured.value, 4096);
+        if (id == "__status_message" && row.captured.diagnostic)
+        {
+            const auto &diagnostic = *row.captured.diagnostic;
+            row.tooltip            = (diagnosticMessage(diagnostic) + "\n" + q(diagnostic.status.detail)).left(4096);
+            if (lifecycle)
+                row.tooltip = (row.tooltip + "\n" + diagnosticMessage(*lifecycle) + "\n" + q(lifecycle->status.detail))
+                                  .left(4096);
+        }
         rows_.push_back(std::move(row));
     };
     add("__status_code", "状态码", {Type::Int}, true);
@@ -363,6 +378,13 @@ QString OutputModel::fullText(const Captured &captured)
     return ValueJson::text(captured.value, captured.type, ValueJson::Purpose::Display);
 }
 
+QString OutputModel::diagnosticText(const Captured &captured)
+{
+    if (captured.diagnostic)
+        return diagnosticJson(*captured.diagnostic, captured.lifecycle.get());
+    return captured.lifecycle ? diagnosticJson(*captured.lifecycle) : QString{};
+}
+
 std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
 {
     return std::visit(
@@ -406,15 +428,16 @@ QVariantMap OutputModel::get(int row) const
         return {};
     const auto &item = rows_[row];
     return {
-        {  "portId",                             item.id},
-        { "port_id",                             item.id},
-        {    "name",                           item.name},
-        {    "type",                           item.type},
-        { "preview",                        item.preview},
-        { "tooltip",                        item.tooltip},
-        {   "count", static_cast<qulonglong>(item.count)},
-        {  "system",                         item.system},
-        {"rowIndex",                                 row}
+        {    "portId",                                                                item.id},
+        {   "port_id",                                                                item.id},
+        {      "name",                                                              item.name},
+        {      "type",                                                              item.type},
+        {   "preview",                                                           item.preview},
+        {   "tooltip",                                                           item.tooltip},
+        {     "count",                                    static_cast<qulonglong>(item.count)},
+        {    "system",                                                            item.system},
+        {"diagnostic", static_cast<bool>(item.captured.diagnostic || item.captured.lifecycle)},
+        {  "rowIndex",                                                                    row}
     };
 }
 
@@ -464,6 +487,8 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
         return static_cast<qulonglong>(row.count);
     case SystemRole:
         return row.system;
+    case DiagnosticRole:
+        return static_cast<bool>(row.captured.diagnostic || row.captured.lifecycle);
     case RowIndexRole:
         return index.row();
     default:
@@ -483,15 +508,16 @@ QVariant OutputModel::headerData(int section, Qt::Orientation orientation, int r
 QHash<int, QByteArray> OutputModel::roleNames() const
 {
     return {
-        {Qt::DisplayRole,  "display"},
-        {     PortIdRole,   "portId"},
-        {       NameRole,     "name"},
-        {       TypeRole,     "type"},
-        {    PreviewRole,  "preview"},
-        {    TooltipRole,  "tooltip"},
-        {      CountRole,    "count"},
-        {     SystemRole,   "system"},
-        {   RowIndexRole, "rowIndex"}
+        {Qt::DisplayRole,    "display"},
+        {     PortIdRole,     "portId"},
+        {       NameRole,       "name"},
+        {       TypeRole,       "type"},
+        {    PreviewRole,    "preview"},
+        {    TooltipRole,    "tooltip"},
+        {      CountRole,      "count"},
+        {     SystemRole,     "system"},
+        { DiagnosticRole, "diagnostic"},
+        {   RowIndexRole,   "rowIndex"}
     };
 }
 } // namespace visionrt

@@ -122,7 +122,7 @@ public:
     Q_INVOKABLE bool         setRoiRectangle(const QString &session, const QVariantList &coordinates);
     Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
     Q_INVOKABLE void         endRoiPreview();
-    Q_INVOKABLE void         requestOutputText(const QVariantMap &context, bool copy);
+    Q_INVOKABLE void         requestOutputText(const QVariantMap &context, bool copy, bool diagnostic = false);
     Q_INVOKABLE QVariantList toolDefinitions() const;
     Q_INVOKABLE QVariantMap  toolMetadata(const QString &toolId) const;
 signals:

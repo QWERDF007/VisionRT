@@ -31,8 +31,8 @@ struct NodeUpdate
     NodeId                    node   = 0;
     bool                      active = false;
     ResultSlot::Snapshot      snapshot;
-    std::optional<ToolStatus> lifecycleDiagnostic;
-    std::optional<ToolStatus> instanceDiagnostic;
+    std::shared_ptr<const NodeDiagnostic> lifecycleDiagnostic;
+    std::shared_ptr<const NodeDiagnostic> instanceDiagnostic;
 };
 
 struct FlowTiming
@@ -52,6 +52,7 @@ struct RuntimeDiagnostic
     std::uint64_t generation = 0;
     std::uint64_t sequence   = 0;
     std::string   message;
+    std::optional<NodeDiagnostic> nodeDiagnostic;
 };
 
 struct RuntimeUpdate

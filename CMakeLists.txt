@@ -89,6 +89,8 @@ if(VISIONRT_BUILD_APP)
         src/ui/ToolTreeModel.h
         src/ui/OutputModel.cpp
         src/ui/OutputModel.h
+        src/ui/NodeDiagnostics.cpp
+        src/ui/NodeDiagnostics.h
         src/ui/ImageViewport.cpp
         src/ui/ImageViewport.h
         src/ui/DisplayConverter.cpp

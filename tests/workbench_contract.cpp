@@ -9,6 +9,8 @@
 
 #include <QGuiApplication>
 #include <QImage>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -95,7 +97,10 @@ void outputContract()
     port.type = {Type::String};
     tool.outputs.push_back(port);
     auto snapshot    = std::make_shared<NodeSnapshot>();
-    snapshot->status = {-2, "conversion failed"};
+    snapshot->node   = 18446744073709551614ULL;
+    snapshot->toolId = "test.output";
+    snapshot->phase  = NodePhase::Convert;
+    snapshot->status = {-2, "输出合同错误", "third-party \"detail\"\n完整详情"};
     snapshot->outputs.emplace("value", Utf8(std::string(10000, 'x')));
     OutputModel model;
     model.setResult(&tool, snapshot,
@@ -105,6 +110,15 @@ void outputContract()
     require(model.get(0).value("portId").toString() == "__status_code", "status code is not first");
     require(model.get(1).value("portId").toString() == "__status_message", "status message is not second");
     require(model.get(0).value("preview").toString() == "-2", "status not taken from completed snapshot");
+    require(model.get(1).value("preview").toString() == "输出合同错误", "status preview must contain only summary");
+    require(model.get(1).value("tooltip").toString().contains("完整详情"), "status tooltip lost technical detail");
+    const auto diagnostic = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
+    require(diagnostic.value("node").toString() == "18446744073709551614", "diagnostic JSON loses node precision");
+    require(diagnostic.value("tool_id").toString() == "test.output" && diagnostic.value("phase") == "convert",
+            "diagnostic JSON loses typed context");
+    require(diagnostic.value("message") == "输出合同错误"
+                && diagnostic.value("detail") == "third-party \"detail\"\n完整详情",
+            "diagnostic JSON loses raw summary/detail");
     require(model.get(2).value("preview").toString().size() <= 256, "preview is unbounded");
     require(model.get(2).value("tooltip").toString().size() <= 4096, "tooltip is unbounded");
     require(model.get(2).value("count").toInt() == 2, "relationship count is not input binding count");
@@ -120,6 +134,17 @@ void outputContract()
     const TypeMap outputs{{"value", resolved}};
     model.setResult(&tool, {}, {}, &outputs);
     require(model.get(2).value("type").toString() == typeText(resolved), "resolved dtype/rank/layout not displayed");
+    const auto lifecycle = std::make_shared<const NodeDiagnostic>(NodeDiagnostic{
+        1,
+        "test.output",
+        NodePhase::Release,
+        {-4, "释放失败", "uninitialized release detail"}
+    });
+    model.setResult(&tool, {}, {}, &outputs, lifecycle);
+    require(isMissing(model.capture(0)->value), "release failure must not create an execution status");
+    const auto releaseJson = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
+    require(releaseJson.value("phase") == "release" && releaseJson.value("detail") == "uninitialized release detail",
+            "release diagnostics without execution must remain independently exportable");
 }
 
 void pendingContract()

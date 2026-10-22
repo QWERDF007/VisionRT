@@ -48,8 +48,8 @@ struct AppController::Impl
     std::uint64_t                          projectEpoch = 1;
     std::map<NodeId, ResultSlot::Snapshot> snapshots;
     std::set<NodeId>                       active;
-    std::map<NodeId, ToolStatus>           lifecycleErrors;
-    std::map<NodeId, ToolStatus>           instanceErrors;
+    std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> lifecycleErrors;
+    std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> instanceErrors;
     QString                                flow = "flow_1";
     QString                                selected;
     QString                                search;
@@ -133,6 +133,7 @@ struct AppController::Impl
     std::future<TextResult>              textTask;
     QVariantMap                         approvedTextContext;
     bool                                 approvedCopy = false;
+    bool                                 approvedDiagnostic = false;
     const FlowDefinition                *currentFlow() const;
     const NodeDefinition                *currentNode() const;
     const NodeDefinition                *findNode(NodeId id) const;

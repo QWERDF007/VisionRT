@@ -13,11 +13,13 @@ Rectangle {
     property var pendingAction: null
     property string selectedName: ""
     property bool selectedSystem: true
+    property bool selectedDiagnostic: false
     property string fullText: ""
     function showMenu(options, item, point) {
         selectedContext = app.portContext(options.portId, true)
         if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
+        selectedDiagnostic = options.diagnostic || false
         pendingAction = null
         let position = item.mapToItem(root, point.x, point.y)
         outputMenu.popup(root, position.x, position.y)
@@ -100,6 +102,7 @@ Rectangle {
                     name: data.name || "",
                     type: data.type || "",
                     tooltip: data.tooltip || "",
+                    diagnostic: data.diagnostic || false,
                     count: data.count || 0,
                     system: data.system === true
                 }
@@ -171,15 +174,17 @@ Rectangle {
             root.pendingAction = null; root.selectedContext = ({})
             if (!pending || !app.portContextCurrent(pending.context)) return
             if (pending.action === "bind") binding.openOutput(pending.context, pending.name)
-            else app.requestOutputText(pending.context, pending.action === "copy")
+            else app.requestOutputText(pending.context, pending.action.endsWith("copy"), pending.action.startsWith("diagnostic"))
         }
         QuiMenuItem { text: "查看数据"; enabled: app.portContextCurrent(root.selectedContext); onTriggered: root.queueAction("view") }
         QuiMenuItem { text: "复制数据"; enabled: app.portContextCurrent(root.selectedContext); onTriggered: root.queueAction("copy") }
+        QuiMenuItem { text: "查看诊断 JSON"; visible: root.selectedSystem; enabled: app.portContextCurrent(root.selectedContext) && root.selectedDiagnostic; onTriggered: root.queueAction("diagnostic-view") }
+        QuiMenuItem { text: "复制诊断 JSON"; visible: root.selectedSystem; enabled: app.portContextCurrent(root.selectedContext) && root.selectedDiagnostic; onTriggered: root.queueAction("diagnostic-copy") }
         QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: root.queueAction("bind") }
     }
     BindingPopup { id: binding }
     WorkbenchDialog {
-        id: dataDialog; title: "输出数据 · 点击时的快照"
+        id: dataDialog; objectName: "outputDataDialog"; title: "输出数据 · 点击时的快照"
         width: Math.min(900, parent ? parent.width - 40 : 900)
         useNegativeButton: false; positiveText: "关闭"
         contentDelegate: Component {
