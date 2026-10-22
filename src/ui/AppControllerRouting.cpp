@@ -18,7 +18,7 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
             const auto id = workbench::nodeId(value.value("id").toString());
             if (std::none_of(flow->nodes.begin(), flow->nodes.end(),
                              [id](const auto &node) { return node.id == id; }))
-                throw ContractError("Wire geometry does not belong to the current flow");
+                throw ContractError("连线几何节点不属于当前流程 " + flow->id + "：" + std::to_string(id));
             nodes.push_back({id, value.value("rectangle").toRectF()});
         }
         QVariantList result;

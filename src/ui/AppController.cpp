@@ -41,7 +41,7 @@ NodeId nodeId(const QString &text)
     bool       okay = false;
     const auto id   = text.toULongLong(&okay);
     if (!okay || text.isEmpty() || text.startsWith('-'))
-        throw ContractError("Invalid node ID");
+        throw ContractError("节点标识无效：" + text.toStdString());
     return id;
 }
 
@@ -1126,7 +1126,7 @@ bool AppController::setParameterMode(const QString &id, bool upstream)
         {
             const auto *node = impl_->currentNode();
             if (!node)
-                throw ContractError("No selected node");
+                throw ContractError("未选择节点");
             const auto *tool = impl_->currentTool();
             if (tool)
             {

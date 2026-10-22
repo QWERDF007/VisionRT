@@ -128,6 +128,9 @@ void popupSessionsContract()
             "output connection accepted an incompatible input");
     require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".rect"),
             "incompatible input rejection lost its precise reason or stable target identity");
+    require(!app.bindOutputTo(sourceContext, QStringLiteral("not-a-node"), QStringLiteral("images"))
+                && app.diagnostic() == QStringLiteral("节点标识无效：not-a-node"),
+            "invalid output target lost its original node identifier or concrete Chinese reason");
     require(app.wires() == beforeRejectedBinding && rejectedProjectChanges.isEmpty()
                 && rejectedParameterChanges.isEmpty() && popup->property("visible").toBool()
                 && popup->property("context").toMap() == sourceContext,
@@ -219,6 +222,8 @@ void popupSessionsContract()
     require(!app.unbindOutputFrom(app.portContext(QStringLiteral("images"), true), target, QStringLiteral("images"))
                 && app.wires() == replacementWires && replacementChanges.isEmpty(),
             "disconnecting the former output removed a replacement connection");
+    require(app.diagnostic() == QStringLiteral("输入端口未连接到当前输出：%1.images").arg(target),
+            "disconnect rejection lost its actual connection mismatch or target identity");
     for (const auto &entry : app.relationTargets(app.portContext(QStringLiteral("images"), true)))
         require(entry.toMap().value("node").toString() != target
                     || entry.toMap().value("port").toString() != "images",
