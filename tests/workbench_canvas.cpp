@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "WorkbenchFixtures.h"
 #include "ui/Theme.h"
 #include <quickui/Color.h>
 
@@ -27,7 +28,8 @@ void flowCanvasContract()
         if (!condition)
             throw std::runtime_error(message);
     };
-    visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
+    visionrt::testing::WorkbenchInstallation installation;
+    visionrt::AppController                  app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "canvas catalog did not become ready");
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
@@ -231,7 +233,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
             for (auto *item : parent->childItems())
             {
                 const QVariant value = item->property("text");
-                if (value.isValid() && value.canConvert<QString>())
+                if (item->isVisible() && value.isValid() && value.canConvert<QString>())
                     values << value.toString();
                 self(self, item);
             }

@@ -34,9 +34,9 @@ public:
         {
             return {1, "接收声明需要 source_flow_id、source_node_seq 与 source_port_id"};
         }
-        request_.flowId       = std::get<Utf8>(flow->second).str();
-        request_.nodeSequence = std::get<Utf8>(node->second).str();
-        request_.port         = std::get<Utf8>(port->second).str();
+        request_.flowId       = std::get<std::string>(flow->second);
+        request_.nodeSequence = std::get<std::string>(node->second);
+        request_.port         = std::get<std::string>(port->second);
         const auto timeout    = std::get<std::int64_t>(parameters.at("timeout_ms"));
         if (timeout < 0)
             return {1, "timeout_ms 必须为非负整数"};
@@ -142,7 +142,7 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
         auto result                          = receiveError(3, "源节点执行失败：" + snapshot->status.message);
         result.status.detail                    = snapshot->status.detail;
         result.outputs["source_status_code"] = snapshot->status.code;
-        result.outputs["source_status_message"] = Utf8(snapshot->status.message);
+        result.outputs["source_status_message"] = std::string(snapshot->status.message);
         if (!snapshot->status)
             return result;
         const auto output = snapshot->outputs.find(request.port);

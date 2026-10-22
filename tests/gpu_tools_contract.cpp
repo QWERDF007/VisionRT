@@ -47,16 +47,16 @@ int main(int argc, char **argv)
         auto &nodes = loaded.project.flows[0].nodes;
         auto &reader = nodes[0];
         auto &detector = nodes[1];
-        if (std::get<Utf8>(detector.initParams.at("load_mode")).str() != "build_wts")
+        if (std::get<std::string>(detector.initParams.at("load_mode")) != "build_wts")
             throw std::runtime_error("GPU example must build its native WTS model before loading the saved engine");
         QTemporaryDir temporary;
         if (!temporary.isValid())
             throw std::runtime_error("Cannot create the GPU project directory");
         loaded.project.path = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / "gpu.vrt.json";
-        reader.inputs.at("mode").literal = Utf8("file");
-        reader.inputs.at("path").literal = Utf8(image.generic_string());
-        detector.initParams.at("model_path") = Utf8(weights.generic_string());
-        detector.initParams.at("engine_output_path") = Utf8(enginePath.generic_string());
+        reader.inputs.at("mode").literal             = std::string("file");
+        reader.inputs.at("path").literal             = std::string(image.generic_string());
+        detector.initParams.at("model_path")         = std::string(weights.generic_string());
+        detector.initParams.at("engine_output_path") = std::string(enginePath.generic_string());
         struct Reference
         {
             cv::Rect2f rectangle;
@@ -76,8 +76,8 @@ int main(int argc, char **argv)
             {
                 if (!std::filesystem::is_regular_file(enginePath) || std::filesystem::file_size(enginePath) == 0)
                     throw std::runtime_error("Native model build did not save an engine");
-                detector.initParams.at("load_mode") = Utf8("engine");
-                detector.initParams.at("model_path") = Utf8(enginePath.generic_string());
+                detector.initParams.at("load_mode")  = std::string("engine");
+                detector.initParams.at("model_path") = std::string(enginePath.generic_string());
             }
             const auto phase = pass == 0 ? "build_wts" : "engine";
             std::cout << "[YOLO] " << phase << std::endl;
@@ -112,25 +112,27 @@ int main(int argc, char **argv)
                                              + (results.contains(node.id) ? results.at(node.id)->status.message
                                                                          : "missing result"));
             const auto &outputs = results.at(detector.id)->outputs;
-            const auto &regions = std::get<RoiBatch>(outputs.at("rois")).images();
-            const auto &scores = std::get<NumericArray>(outputs.at("scores"));
-            const auto &classes = std::get<NumericArray>(outputs.at("classes"));
-            const auto &names = std::get<StringArray>(outputs.at("class_names"));
+            const auto &regions = std::get<DataRef<ROI>>(outputs.at("rois")).get();
+            const auto &scores  = std::get<Array>(outputs.at("scores"));
+            const auto &classes = std::get<Array>(outputs.at("classes"));
+            const auto &names   = std::get<Array>(outputs.at("class_names"));
             if (regions.size() != 1 || regions[0].size() != reference.size()
-                || scores.rank() != 2 || scores.layout() != Layout::BatchRagged
-                || scores.buffers().size() != 1 || classes.buffers().size() != 1 || names.buffers().size() != 1)
+                || scores.type() != TypeSpec{Type::Array, DType::Float32, 2}
+                || scores.get<NestedVector<float, 2>>().size() != 1
+                || classes.get<NestedVector<std::int64_t, 2>>().size() != 1
+                || names.get<NestedVector<std::string, 2>>().size() != 1)
                 throw std::runtime_error("YOLO detection batch/shape differs from the independent PyTorch reference");
-            const auto actualScores = scores.buffers()[0].values<float>();
-            const auto actualClasses = classes.buffers()[0].values<std::int64_t>();
-            const auto actualNames = names.buffers()[0].values();
+            const auto actualScores  = scores.get<NestedVector<float, 2>>()[0];
+            const auto actualClasses = classes.get<NestedVector<std::int64_t, 2>>()[0];
+            const auto actualNames   = names.get<NestedVector<std::string, 2>>()[0];
             if (actualScores.size() != reference.size() || actualClasses.size() != reference.size()
                 || actualNames.size() != reference.size())
                 throw std::runtime_error("YOLO fields do not share the same ragged detection count");
             std::array<bool, 5> matched{};
             for (std::size_t index = 0; index < regions[0].size(); ++index)
             {
-                const auto encoded = regions[0][index].encoded();
-                if (regions[0][index].kind() != RoiKind::Rectangle || encoded.size() != 6)
+                const auto encoded = regions[0][index];
+                if (roiKind(regions[0][index]) != RoiKind::Rectangle || encoded.size() != 6)
                     throw std::runtime_error("YOLO did not produce rectangle regions");
                 const cv::Rect2f rectangle(encoded[1], encoded[2], encoded[3], encoded[4]);
                 bool accepted = false;
@@ -149,7 +151,7 @@ int main(int argc, char **argv)
                     throw std::runtime_error("YOLO result differs from independent PyTorch class/box/score reference");
             }
             const auto &filtered = results.at(nodes[2].id)->outputs;
-            if (std::get<RoiBatch>(filtered.at("rois")).images()[0].size() != 4)
+            if (std::get<DataRef<ROI>>(filtered.at("rois")).get()[0].size() != 4)
                 throw std::runtime_error("Downstream filter did not remove the low-confidence person");
             std::cout << "[PASS] Native YOLO matches five PyTorch detections; downstream filter retains four." << std::endl;
             std::cout << "[YOLO] " << phase << " completed in "

@@ -372,8 +372,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     continue;
                 for (const auto &input : definition->inputs)
                 {
-                    if ((input.type.type == Type::RoiBatch || input.type.type == Type::Rect)
-                        && input.imageInput == output.sameGeometryAsInput)
+                    if (input.type.type == Type::ROI && input.imageInput == output.sameGeometryAsInput)
                         snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
                 }
             }
@@ -428,7 +427,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->phase   = phase;
     snapshot->outputs = std::move(result.outputs);
     snapshot->outputs.emplace("__status_code", snapshot->status.code);
-    snapshot->outputs.emplace("__status_message", Utf8(snapshot->status.message));
+    snapshot->outputs.emplace("__status_message", std::string(snapshot->status.message));
     snapshot->timing.totalMs = milliseconds(Clock::now() - started);
     slot.publish(std::move(snapshot));
 }

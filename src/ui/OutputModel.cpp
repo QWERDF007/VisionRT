@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <type_traits>
 
 namespace visionrt {
 namespace {
@@ -53,22 +54,42 @@ struct Preview
     }
 };
 
-template<class T>
-void numbers(Preview &out, std::span<const T> values)
+QString stringPreview(const std::string &value, qsizetype limit, bool quoted, bool &truncated)
 {
-    for (std::size_t index = 0; index < values.size() && !out.full(); ++index)
+    const auto bytes = std::min(value.size(), static_cast<std::size_t>(limit) * 4 + 4);
+    truncated |= bytes < value.size();
+    const auto prefix = QString::fromUtf8(value.data(), static_cast<qsizetype>(bytes));
+    if (!quoted)
+        return prefix;
+    return ValueJson::text(prefix.toUtf8().toStdString(), {Type::String});
+}
+
+template<class Vector>
+void appendNested(Preview &out, const Vector &values)
+{
+    using Element = typename Vector::value_type;
+    out.append(QStringLiteral("["));
+    for (std::size_t index = 0; index < values.size(); ++index)
     {
+        if (out.full())
+        {
+            out.truncated = true;
+            return;
+        }
         if (index)
             out.append(QStringLiteral(", "));
-        if constexpr (std::is_same_v<T, bool>)
+        if constexpr (std::is_same_v<Element, std::string>)
+            out.append(stringPreview(values[index], out.limit - out.text.size(), true, out.truncated));
+        else if constexpr (std::is_same_v<Element, bool>)
             out.append(values[index] ? QStringLiteral("true") : QStringLiteral("false"));
-        else if constexpr (std::is_floating_point_v<T>)
-            out.append(QString::number(values[index], 'g', std::numeric_limits<T>::max_digits10));
-        else
+        else if constexpr (std::is_integral_v<Element>)
             out.append(QString::number(static_cast<qlonglong>(values[index])));
-        if (index + 1 < values.size() && out.full())
-            out.truncated = true;
+        else if constexpr (std::is_floating_point_v<Element>)
+            out.append(QString::number(values[index], 'g', std::numeric_limits<Element>::max_digits10));
+        else
+            appendNested(out, values[index]);
     }
+    out.append(QStringLiteral("]"));
 }
 
 QString preview(const PortValue &value, qsizetype limit)
@@ -77,188 +98,70 @@ QString preview(const PortValue &value, qsizetype limit)
     std::visit(
         [&](const auto &item)
         {
-            using T = std::decay_t<decltype(item)>;
-            if constexpr (std::is_same_v<T, Missing>)
-            {
-                // Missing previews stay blank; fullText/valueText retain the Missing contract.
-            }
-            else if constexpr (std::is_same_v<T, Utf8>)
-            {
-                const auto bytes = std::min<std::size_t>(item.str().size(), static_cast<std::size_t>(limit) * 4 + 4);
-                out.append(QString::fromUtf8(item.str().data(), static_cast<qsizetype>(bytes)));
-                out.truncated |= bytes < item.str().size();
-            }
-            else if constexpr (std::is_same_v<T, ImageBatch>)
-            {
+            using Element = std::decay_t<decltype(item)>;
+            if constexpr (std::is_same_v<Element, Missing>)
+                return;
+            else if constexpr (std::is_same_v<Element, std::string>)
+                out.append(stringPreview(item, limit, false, out.truncated));
+            else if constexpr (std::is_same_v<Element, DataRef<Image>>)
                 out.append(QStringLiteral("非显示型数据"));
-            }
-            else if constexpr (std::is_same_v<T, NumericArray>)
-            {
-                auto appendBuffer = [&](const auto &buffer)
-                {
-                    switch (buffer.dtype())
-                    {
-                    case DType::UInt8:
-                        numbers(out, buffer.template values<std::uint8_t>());
-                        break;
-                    case DType::Int32:
-                        numbers(out, buffer.template values<std::int32_t>());
-                        break;
-                    case DType::Int64:
-                        numbers(out, buffer.template values<std::int64_t>());
-                        break;
-                    case DType::Float32:
-                        numbers(out, buffer.template values<float>());
-                        break;
-                    case DType::Float64:
-                        numbers(out, buffer.template values<double>());
-                        break;
-                    case DType::Bool:
-                        numbers(out, buffer.template values<bool>());
-                        break;
-                    }
-                };
-
-                if (item.buffers().empty())
-                {
-                    out.append(QStringLiteral("[]"));
-                }
-                else if (item.buffers().size() == 1)
-                {
-                    out.append(QStringLiteral("["));
-                    appendBuffer(item.buffers().front());
-                    out.append(QStringLiteral("]"));
-                }
-                else
-                {
-                    out.append(QStringLiteral("["));
-                    for (std::size_t b = 0; b < item.buffers().size() && !out.full(); ++b)
-                    {
-                        if (b)
-                            out.append(QStringLiteral(", "));
-                        out.append(QStringLiteral("["));
-                        appendBuffer(item.buffers()[b]);
-                        out.append(QStringLiteral("]"));
-                    }
-                    out.append(QStringLiteral("]"));
-                }
-            }
-            else if constexpr (std::is_same_v<T, StringArray>)
-            {
-                if (item.buffers().empty())
-                {
-                    out.append(QStringLiteral("[]"));
-                }
-                else if (item.buffers().size() == 1)
-                {
-                    out.append(QStringLiteral("["));
-                    const auto &values = item.buffers().front().values();
-                    for (std::size_t i = 0; i < values.size() && !out.full(); ++i)
-                    {
-                        if (i)
-                            out.append(QStringLiteral(", "));
-                        const auto &string = values[i];
-                        const auto  bytes
-                            = std::min<std::size_t>(string.size(), static_cast<std::size_t>(limit) * 4 + 4);
-                        out.append(QString::fromUtf8(string.data(), static_cast<qsizetype>(bytes)));
-                        out.truncated |= bytes < string.size();
-                    }
-                    out.append(QStringLiteral("]"));
-                }
-                else
-                {
-                    out.append(QStringLiteral("["));
-                    for (std::size_t b = 0; b < item.buffers().size() && !out.full(); ++b)
-                    {
-                        if (b)
-                            out.append(QStringLiteral(", "));
-                        out.append(QStringLiteral("["));
-                        const auto &values = item.buffers()[b].values();
-                        for (std::size_t i = 0; i < values.size() && !out.full(); ++i)
-                        {
-                            if (i)
-                                out.append(QStringLiteral(", "));
-                            const auto &string = values[i];
-                            const auto  bytes
-                                = std::min<std::size_t>(string.size(), static_cast<std::size_t>(limit) * 4 + 4);
-                            out.append(QString::fromUtf8(string.data(), static_cast<qsizetype>(bytes)));
-                            out.truncated |= bytes < string.size();
-                        }
-                        out.append(QStringLiteral("]"));
-                    }
-                    out.append(QStringLiteral("]"));
-                }
-            }
-            else if constexpr (std::is_same_v<T, Roi>)
-            {
-                out.append(QStringLiteral("["));
-                numbers(out, item.encoded());
-                out.append(QStringLiteral("]"));
-            }
-            else if constexpr (std::is_same_v<T, RoiBatch>)
-            {
-                if (item.images().empty())
-                {
-                    out.append(QStringLiteral("[]"));
-                }
-                else if (item.images().size() == 1)
-                {
-                    out.append(QStringLiteral("["));
-                    const auto &rois = item.images().front();
-                    for (std::size_t i = 0; i < rois.size() && !out.full(); ++i)
-                    {
-                        if (i)
-                            out.append(QStringLiteral(", "));
-                        out.append(QStringLiteral("["));
-                        numbers(out, rois[i].encoded());
-                        out.append(QStringLiteral("]"));
-                    }
-                    out.append(QStringLiteral("]"));
-                }
-                else
-                {
-                    out.append(QStringLiteral("["));
-                    for (std::size_t img = 0; img < item.images().size() && !out.full(); ++img)
-                    {
-                        if (img)
-                            out.append(QStringLiteral(", "));
-                        out.append(QStringLiteral("["));
-                        const auto &rois = item.images()[img];
-                        for (std::size_t i = 0; i < rois.size() && !out.full(); ++i)
-                        {
-                            if (i)
-                                out.append(QStringLiteral(", "));
-                            out.append(QStringLiteral("["));
-                            numbers(out, rois[i].encoded());
-                            out.append(QStringLiteral("]"));
-                        }
-                        out.append(QStringLiteral("]"));
-                    }
-                    out.append(QStringLiteral("]"));
-                }
-            }
-            else if constexpr (std::is_same_v<T, bool>)
+            else if constexpr (std::is_same_v<Element, Array>)
+                item.visit([&](const auto &data) { appendNested(out, data.get()); });
+            else if constexpr (std::is_same_v<Element, DataRef<ROI>>)
+                appendNested(out, item.get());
+            else if constexpr (std::is_same_v<Element, bool>)
                 out.append(item ? QStringLiteral("true") : QStringLiteral("false"));
-            else if constexpr (std::is_same_v<T, std::int64_t>)
+            else if constexpr (std::is_same_v<Element, std::int64_t>)
                 out.append(QString::number(static_cast<qlonglong>(item)));
             else
-                out.append(QString::number(item, 'g', 17));
+                out.append(QString::number(item, 'g', std::numeric_limits<Element>::max_digits10));
         },
         value);
     return out.finish();
+}
+
+std::size_t estimatedStringBytes(const std::string &value)
+{
+    const auto maximum = std::numeric_limits<std::size_t>::max();
+    return value.size() > (maximum - 128) / 6 ? maximum : value.size() * 6 + 128;
+}
+
+template<class Vector>
+std::size_t estimatedNestedBytes(const Vector &values)
+{
+    using Element      = typename Vector::value_type;
+    const auto maximum = std::numeric_limits<std::size_t>::max();
+    if constexpr (std::is_arithmetic_v<Element>)
+        return values.size() > (maximum - 128) / 128 ? maximum : values.size() * 128 + 128;
+    else
+    {
+        std::size_t size = 128;
+        for (const auto &value : values)
+        {
+            const auto bytes = [&]
+            {
+                if constexpr (std::is_same_v<Element, std::string>)
+                    return estimatedStringBytes(value);
+                else
+                    return estimatedNestedBytes(value);
+            }();
+            if (bytes >= maximum - size)
+                return maximum;
+            size += bytes + 1;
+        }
+        return size;
+    }
 }
 } // namespace
 
 QString typeText(const TypeSpec &type)
 {
     QString text = QString::fromLatin1(typeName(type.type));
-    if (type.type == Type::NumericArray || type.type == Type::StringArray)
+    if (type.type == Type::Array)
     {
         if (type.dtype)
             text += "<" + QString::fromLatin1(dtypeName(*type.dtype)) + ">";
-        text += QStringLiteral(" rank=%1 %2")
-                    .arg(type.rank)
-                    .arg(type.layout == Layout::Dense ? "dense" : "batch_ragged");
+        text += QStringLiteral(" rank=%1").arg(type.rank);
     }
     return text;
 }
@@ -294,7 +197,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
             if (id == "__status_code")
                 value = snapshot->status.code;
             else if (id == "__status_message")
-                value = Utf8(snapshot->status.message);
+                value = snapshot->status.message;
             else if (const auto found = snapshot->outputs.find(id); found != snapshot->outputs.end())
                 value = found->second;
         }
@@ -390,32 +293,13 @@ std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
     return std::visit(
         [](const auto &value) -> std::size_t
         {
-            using T = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<T, NumericArray>)
-            {
-                std::size_t size = 128;
-                for (const auto &buffer : value.buffers())
-                    size += (buffer.byteSize() / dtypeSize(buffer.dtype())) * 32 + 128;
-                return size;
-            }
-            else if constexpr (std::is_same_v<T, Utf8>)
-                return value.str().size() * 6 + 2;
-            else if constexpr (std::is_same_v<T, StringArray>)
-            {
-                std::size_t size = 128;
-                for (const auto &buffer : value.buffers())
-                    for (const auto &string : buffer.values()) size += string.size() * 6 + 4;
-                return size;
-            }
-            else if constexpr (std::is_same_v<T, RoiBatch>)
-            {
-                std::size_t size = 128;
-                for (const auto &image : value.images())
-                    for (const auto &roi : image) size += roi.encoded().size() * 24 + 4;
-                return size;
-            }
-            else if constexpr (std::is_same_v<T, ImageBatch>)
-                return value.images().size() * 128;
+            using Element = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<Element, Array>)
+                return value.visit([](const auto &data) { return estimatedNestedBytes(data.get()); });
+            else if constexpr (std::is_same_v<Element, std::string>)
+                return estimatedStringBytes(value);
+            else if constexpr (std::is_same_v<Element, DataRef<ROI>>)
+                return estimatedNestedBytes(value.get());
             else
                 return 128;
         },

@@ -6,13 +6,11 @@
 
 #include <core/ToolPackage.h>
 
-#include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
 #include <QGuiApplication>
 #include <QUrl>
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <limits>
 
@@ -134,6 +132,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
         report(error, QStringLiteral("Python 不可用"));
     }
     runtime = std::make_unique<RuntimeEngine>(workers);
+    runtime->setReadbackEnabled(true);
     runtime->setCompletionCallback(
         [owner](RuntimeCompletion completion)
         {
@@ -172,11 +171,11 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                                  target->setDisplayFrame(frame);
                                  if (target == viewport)
                                  {
-                                     presentedRequest = frame.requestId;
                                      applyOverlays();
                                  }
                              }
                          }
+                         updateReadback();
                      });
     tools.setRegistry(registry);
     if (!editor.project().flows.empty())
@@ -190,9 +189,21 @@ AppController::Impl::~Impl()
 {
     timer.stop();
     runtime->setCompletionCallback({});
+    runtime->requestStop();
+    drainReaders();
+    runtime->setReadbackEnabled(false);
     runtime.reset();
-    if (textTask.valid())
-        textTask.wait();
+    textTask = {};
+    readRequests.clear();
+    if (viewport)
+        viewport->endRoiEdit();
+    roi.reset();
+    outputs.clear();
+    snapshots.clear();
+    displayInputs.clear();
+    displayOutputs.clear();
+    clipboard.reset();
+    replacement.reset();
     refreshResult.reset();
     for (const auto &tool : registry.definitions())
         if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
@@ -323,6 +334,7 @@ void AppController::Impl::synchronizeNodes()
 {
     if (state != RuntimeState::Idle)
         return;
+    drainReaders();
     const auto status = runtime->requestSynchronize(editor.project(), registry);
     if (!status)
         report(status);
@@ -337,6 +349,9 @@ void AppController::Impl::storageDiagnostics(const std::vector<ProjectStorageDia
 
 void AppController::Impl::clearResults()
 {
+    readback.reset();
+    parameterRows.clear();
+    parameterRowsNode = 0;
     snapshots.clear();
     active.clear();
     lifecycleErrors.clear();
@@ -359,6 +374,9 @@ void AppController::Impl::poll()
             generation = update.generation;
             clearResults();
         }
+        const bool enteringReadback = update.readback && readback != update.readback;
+        if (enteringReadback)
+            readback = update.readback;
         bool nodesChanged = false, selectedChanged = false, parametersChanged = false;
         for (auto &item : update.nodes)
         {
@@ -437,40 +455,27 @@ void AppController::Impl::poll()
         setState(update.state);
         if (nodesChanged)
             emit q->nodesChanged();
-        if (parametersChanged)
+        if (parametersChanged || enteringReadback)
         {
             if (roi)
                 updateDisplay();
             emit q->parametersChanged();
         }
-        if (selectedChanged)
+        if (selectedChanged || enteringReadback)
             updateResults();
+        if (enteringReadback)
+            q->parameters();
         if (update.completion && runtime->acknowledgeCompletion(*update.completion))
         {
             setState(RuntimeState::Idle);
+            updateResults();
+            emit q->parametersChanged();
             if (refreshResult)
                 refreshFinished();
             advancePending();
         }
     }
-    using namespace std::chrono_literals;
-    if (textTask.valid() && textTask.wait_for(0ms) == std::future_status::ready)
-    {
-        try
-        {
-            auto result = textTask.get();
-            if (result.generation == generation && q->portContextCurrent(result.context))
-            {
-                if (result.copy)
-                    QGuiApplication::clipboard()->setText(result.text);
-                emit q->outputTextReady(result.text);
-            }
-        }
-        catch (const std::exception &error)
-        {
-            report(error, QStringLiteral("完整输出生成失败"));
-        }
-    }
+    updateReadback();
 }
 
 void AppController::Impl::start(RunMode mode)
@@ -478,6 +483,8 @@ void AppController::Impl::start(RunMode mode)
     if (!idle())
         return;
     finishRoi();
+    q->parameters();
+    drainReaders();
     std::optional<NodeId> target;
     if (mode == RunMode::Node)
     {
@@ -567,6 +574,7 @@ void AppController::Impl::advancePending()
             pending = Pending::None;
             return;
         }
+        drainReaders();
         const auto result = runtime->requestReset();
         if (!result)
         {
@@ -616,6 +624,7 @@ void AppController::Impl::refresh(bool rescan)
     auto        definitions   = registry.definitions();
     auto       *pythonRuntime = python.get();
     const auto *catalog       = &registry;
+    drainReaders();
     const auto  accepted      = runtime->requestRefresh(
         [result, definitions = std::move(definitions), pythonRuntime, catalog]
         {
@@ -1132,7 +1141,7 @@ bool AppController::setParameterMode(const QString &id, bool upstream)
             {
                 if (const auto *port = workbench::port(tool->inputs, id.toStdString()))
                 {
-                    if (port->type.type == Type::ImageBatch && !upstream)
+                    if (port->type.type == Type::Image && !upstream)
                         return false;
                 }
             }
@@ -1222,20 +1231,26 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
 
 bool AppController::save(const QString &path)
 {
-    auto candidate   = impl_->editor.project();
-    auto destination = path.isEmpty() ? candidate.path : workbench::localPath(path);
+    auto destination = path.isEmpty() ? impl_->editor.project().path : workbench::localPath(path);
     if (destination.empty())
     {
         emit savePathRequired();
         return false;
     }
-    if (busy() && destination != candidate.path)
+    if (busy() && destination != impl_->editor.project().path)
     {
         impl_->report(QStringLiteral("运行期间不能另存为；可保存当前已命名工程"));
         return false;
     }
     try
     {
+        if (!impl_->readsAllowed())
+        {
+            impl_->readRequests.push_back(Impl::SaveRequest{workbench::pathText(destination), impl_->projectEpoch});
+            impl_->report(QStringLiteral("工程保存已排队，等待本轮读取阶段"));
+            return false;
+        }
+        auto candidate   = impl_->editor.project();
         auto diagnostics = ProjectStorage(impl_->registry).save(candidate, destination);
         if (busy())
             impl_->editor.markSaved();
@@ -1253,46 +1268,4 @@ bool AppController::save(const QString &path)
     }
 }
 
-void AppController::requestOutputText(const QVariantMap &context, bool copy, bool diagnostic)
-{
-    if (!context.value("output").toBool() || !portContextCurrent(context))
-        return;
-    if (impl_->textTask.valid())
-    {
-        impl_->report(QStringLiteral("正在生成完整输出，请稍候"));
-        return;
-    }
-    auto captured = impl_->outputs.capture(context.value("port").toString());
-    if (!captured)
-        return;
-    if (diagnostic && !captured->diagnostic && !captured->lifecycle)
-        return;
-    auto estimated
-        = diagnostic && captured->diagnostic
-            ? (captured->diagnostic->status.message.size() + captured->diagnostic->status.detail.size()) * 6 + 1024
-            : OutputModel::estimatedTextBytes(*captured);
-    if (diagnostic && captured->lifecycle)
-        estimated
-            += (captured->lifecycle->status.message.size() + captured->lifecycle->status.detail.size()) * 6 + 1024;
-    if (estimated > 16 * 1024 * 1024
-        && (impl_->approvedTextContext != context || impl_->approvedCopy != copy
-            || impl_->approvedDiagnostic != diagnostic))
-    {
-        impl_->approvedTextContext = context;
-        impl_->approvedCopy        = copy;
-        impl_->approvedDiagnostic  = diagnostic;
-        emit outputTextReady(QStringLiteral("完整数据预计约 %1 MiB。再次点击同一查看/复制操作以确认；不会截断全文。")
-                                 .arg(static_cast<double>(estimated) / (1024 * 1024), 0, 'f', 1));
-        return;
-    }
-    impl_->approvedTextContext.clear();
-    const auto generation = impl_->generation;
-    impl_->textTask = std::async(
-        std::launch::async,
-        [captured = std::move(*captured), copy, generation, context, diagnostic]
-        {
-            auto text = diagnostic ? OutputModel::diagnosticText(captured) : OutputModel::fullText(captured);
-            return Impl::TextResult{std::move(text), copy, generation, context};
-        });
-}
 } // namespace visionrt

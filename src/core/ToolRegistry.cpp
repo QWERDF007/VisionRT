@@ -46,7 +46,7 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
 
 ToolDefinition parseDefinition(const std::filesystem::path &path, bool builtin)
 {
-    return parseToolDefinitionFile(path, builtin);
+    return parseToolDefinitionFile(path, {builtin ? ToolOrigin::Builtin : ToolOrigin::Custom, {}});
 }
 
 ToolStatus ToolRegistry::add(const ToolFactoryDescriptor &descriptor) noexcept

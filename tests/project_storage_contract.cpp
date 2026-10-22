@@ -24,7 +24,7 @@ void require(bool condition, const char *message)
 
 std::filesystem::path path(const QString &value)
 {
-    return std::filesystem::u8path(value.toUtf8().toStdString());
+    return std::filesystem::path(value.toStdWString());
 }
 
 std::string utf8Path(const std::filesystem::path &value)
@@ -87,7 +87,7 @@ QJsonObject savedNode(const QString &id = "7", const QString &source = "7")
 QJsonObject savedProject(const QJsonArray &nodes, const QString &nextNode = "8", const QString &nextFlow = "2")
 {
     return {
-        {"format_version",                                                                     2                          },
+        {"format_version",                                                                     3                          },
         {       "project", QJsonObject{{"name", "缺失工具"}, {"next_node_seq", nextNode}, {"next_flow_seq", nextFlow}}},
         {         "flows",
          QJsonArray{QJsonObject{{"flow_id", "flow_1"}, {"name", "流程1"}, {"run_selected", true}, {"nodes", nodes}}}    }
@@ -121,9 +121,10 @@ void knownFailureDiagnostics(const QString &directory)
     ToolRegistry registry;
     const auto   filename = directory + "/错误 工程.vrt.json";
     for (const auto &[document, reason] : {
-             std::pair{R"json({"format_version":2,"project":{},"flows":{}})json",                             "flows 必须是数组"},
-             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 2，实际 1"},
-             std::pair{                      R"json({"format_version":"2"})json",                    "format_version 必须是整数"},
+             std::pair{R"json({"format_version":3,"project":{},"flows":{}})json",                             "flows 必须是数组"},
+             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 3，实际 1"},
+             std::pair{                        R"json({"format_version":2})json", "format_version 不受支持，要求 3，实际 2"},
+             std::pair{                      R"json({"format_version":"3"})json",                    "format_version 必须是整数"},
              std::pair{                                                  "[1,2]",              "工程 JSON 根节点必须是对象"}
     })
     {
@@ -145,6 +146,21 @@ void knownFailureDiagnostics(const QString &directory)
         }
         require(rejected, "known project failure did not use ContractError");
     }
+    for (const auto extension : {".yaml", ".YML"})
+    {
+        const auto legacy = directory + "/旧工程" + extension;
+        put(legacy, "format_version: 2\nproject: {}\nflows: []\n");
+        bool rejected = false;
+        try
+        {
+            ProjectStorage(registry).load(path(legacy));
+        }
+        catch (const ContractError &error)
+        {
+            rejected = std::string(error.what()).find("工程格式不受支持，请使用 JSON 工程") != std::string::npos;
+        }
+        require(rejected, "legacy YAML did not report the JSON project requirement");
+    }
 }
 
 void candidateAndRawPreservation(const QString &directory)
@@ -162,7 +178,7 @@ void candidateAndRawPreservation(const QString &directory)
     storage.save(loaded.project, path(saved));
     const auto root = QJsonDocument::fromJson(get(saved)).object();
     const auto raw  = root.value("flows").toArray()[0].toObject().value("nodes").toArray()[0].toObject();
-    require(root.value("format_version").toInteger() == 2 && raw.value("node_seq").isString(),
+    require(root.value("format_version").toInteger() == 3 && raw.value("node_seq").isString(),
             "project version or identity encoding is wrong");
     require(raw.value("vendor_extension").toObject().value("opaque").toArray()[1].toObject().value("two") == "three",
             "extension lost");
@@ -238,7 +254,7 @@ void reconciliationAndIdentities(const QString &directory)
     put(file, QJsonDocument(document).toJson());
     auto        recovered = storage.load(path(file));
     const auto &node      = recovered.project.flows[0].nodes[0];
-    require(node.unresolved.isEmpty() && std::get<Utf8>(node.initParams.at("unknown")).str() == "保留中文",
+    require(node.unresolved.isEmpty() && std::get<std::string>(node.initParams.at("unknown")) == "保留中文",
             "definition did not recover");
     require(node.id == 7 && recovered.project.nextNodeId == 8 && recovered.project.nextFlowId == 2
                 && recovered.project.dirty && has(recovered.diagnostics, ProjectStorageCode::CounterRepaired),
@@ -327,22 +343,20 @@ void typedArraysAndRanges(const QString &directory)
 {
     auto node = savedNode();
     node.insert("init_params", QJsonObject{});
-    node.insert("type_snapshot", QJsonObject{
-                                     {"init_params",                                                                                           QJsonObject{}},
-                                     {    "outputs",                                                                                           QJsonObject{}},
-                                     {     "inputs", QJsonObject{{"value", QJsonObject{{"type", "NumericArray"},
- {"dtype", "float32"},
- {"rank", 2},
- {"layout", "dense"}}}}                                                                                 }
+    node.insert(
+        "type_snapshot",
+        QJsonObject{
+            {"init_params",                                                                             QJsonObject{}},
+            {    "outputs",                                                                             QJsonObject{}},
+            {     "inputs", QJsonObject{{"value", QJsonObject{{"type", "Array"}, {"dtype", "float32"}, {"rank", 2}}}}}
     });
-    node.insert("inputs",
-                QJsonObject{
-                    {"value", savedInput("", QJsonObject{{"shape", QJsonArray{0, 2}}, {"data", QJsonArray{}}})}
+    node.insert("inputs", QJsonObject{
+                              {"value", savedInput("", QJsonArray{QJsonArray{}, QJsonArray{}})}
     });
     auto tool = scalarTool();
     tool.initParams.clear();
     tool.outputs.clear();
-    tool.inputs[0].type         = {Type::NumericArray, DType::Int64, 2, Layout::Dense};
+    tool.inputs[0].type         = {Type::Array, DType::Int64, 2};
     tool.inputs[0].defaultValue = Missing{};
     ToolRegistry registry;
     registry.addDefinition(tool);
@@ -355,8 +369,9 @@ void typedArraysAndRanges(const QString &directory)
     ToolRegistry oldRegistry;
     oldRegistry.addDefinition(tool);
     const auto  old   = ProjectStorage(oldRegistry).load(path(file));
-    const auto &array = std::get<NumericArray>(old.project.flows[0].nodes[0].inputs.at("value").literal);
-    require(array.buffers()[0].shape()[0] == 0 && array.buffers()[0].shape()[1] == 2, "empty array shape lost");
+    const auto &array = std::get<Array>(old.project.flows[0].nodes[0].inputs.at("value").literal);
+    const auto &rows  = array.get<NestedVector<float, 2>>();
+    require(rows.size() == 2 && rows[0].empty() && rows[1].empty(), "empty nested rows lost");
     auto rangedTool              = scalarTool();
     rangedTool.inputs[0].maximum = std::int64_t{10};
     ToolRegistry rangedRegistry;
@@ -422,16 +437,16 @@ void saveAsPaths(const QString &directory)
     node.id                         = 0;
     node.toolId                     = tool.id;
     node.toolNameSnapshot           = tool.displayName;
-    node.inputs["path"]             = {BindingMode::Upstream, Utf8("图像/不存在.png"), std::nullopt};
-    node.inputs["text"].literal     = Utf8("图像/不存在.png");
-    node.inputs["empty"].literal    = Utf8("");
-    node.inputs["remote"].literal   = Utf8("Z:/异盘/资源.png");
-    node.inputs["dynamic"].literal  = Utf8("动态/图像.png");
-    node.initParams["folder"]       = Utf8("目录");
+    node.inputs["path"]             = {BindingMode::Upstream, std::string("图像/不存在.png"), std::nullopt};
+    node.inputs["text"].literal     = std::string("图像/不存在.png");
+    node.inputs["empty"].literal    = std::string("");
+    node.inputs["remote"].literal   = std::string("Z:/异盘/资源.png");
+    node.inputs["dynamic"].literal  = std::string("动态/图像.png");
+    node.initParams["folder"]       = std::string("目录");
     const auto oldDirectory         = directory + "/旧位置";
     const auto newDirectory         = directory + "/新位置";
     const auto absolutePath         = utf8Path(path(oldDirectory) / std::filesystem::path(u8"绝对.png"));
-    node.inputs["absolute"].literal = Utf8(absolutePath);
+    node.inputs["absolute"].literal = std::string(absolutePath);
     for (const auto &port : tool.inputs) node.signatures.inputs.emplace(port.id, port.type);
     node.signatures.initParams.emplace(folder.id, folder.type);
     project.flows[0].nodes.push_back(node);
@@ -440,29 +455,29 @@ void saveAsPaths(const QString &directory)
     storage.save(project, path(oldDirectory + "/首次"));
     require(project.path.filename() == std::filesystem::path(u8"首次.vrt.json") && !project.dirty,
             "first save did not append extension or clear dirty");
-    require(std::get<Utf8>(project.flows[0].nodes[0].inputs.at("path").literal).str() == "图像/不存在.png",
+    require(std::get<std::string>(project.flows[0].nodes[0].inputs.at("path").literal) == "图像/不存在.png",
             "unnamed relative path was resolved using a fabricated old directory");
-    require(std::get<Utf8>(project.flows[0].nodes[0].inputs.at("absolute").literal).str() == absolutePath,
+    require(std::get<std::string>(project.flows[0].nodes[0].inputs.at("absolute").literal) == absolutePath,
             "unnamed project guessed a relative base for an absolute path");
     project.dirty = true;
     storage.save(project, path(newDirectory + "/另存.vrt.json"));
     const auto &saved = project.flows[0].nodes[0];
-    require(std::get<Utf8>(saved.inputs.at("path").literal).str() == "../旧位置/图像/不存在.png",
+    require(std::get<std::string>(saved.inputs.at("path").literal) == "../旧位置/图像/不存在.png",
             "hidden upstream literal path did not rebase");
-    require(std::get<Utf8>(saved.initParams.at("folder")).str() == "../旧位置/目录",
+    require(std::get<std::string>(saved.initParams.at("folder")) == "../旧位置/目录",
             "directory init parameter did not rebase");
-    require(std::get<Utf8>(saved.inputs.at("dynamic").literal).str() == "../旧位置/动态/图像.png",
+    require(std::get<std::string>(saved.inputs.at("dynamic").literal) == "../旧位置/动态/图像.png",
             "dynamic path input did not rebase");
-    require(std::get<Utf8>(saved.inputs.at("text").literal).str() == "图像/不存在.png"
-                && std::get<Utf8>(saved.inputs.at("empty").literal).str().empty(),
+    require(std::get<std::string>(saved.inputs.at("text").literal) == "图像/不存在.png"
+                && std::get<std::string>(saved.inputs.at("empty").literal).empty(),
             "save-as rewrote non-path String or empty path");
-    require(std::get<Utf8>(saved.inputs.at("remote").literal).str() == "Z:/异盘/资源.png",
+    require(std::get<std::string>(saved.inputs.at("remote").literal) == "Z:/异盘/资源.png",
             "cross-drive resource lost its absolute path");
     auto reopened = storage.load(project.path);
-    require(std::get<Utf8>(reopened.project.flows[0].nodes[0].inputs.at("path").literal).str()
+    require(std::get<std::string>(reopened.project.flows[0].nodes[0].inputs.at("path").literal)
                 == "../旧位置/图像/不存在.png",
             "saved path differs from installed candidate");
-    const auto before  = std::get<Utf8>(saved.inputs.at("path").literal).str();
+    const auto before  = std::get<std::string>(saved.inputs.at("path").literal);
     const auto oldPath = project.path;
     project.dirty      = true;
     bool failed        = false;
@@ -475,7 +490,7 @@ void saveAsPaths(const QString &directory)
         failed = true;
     }
     require(failed && project.dirty && project.path == oldPath
-                && std::get<Utf8>(project.flows[0].nodes[0].inputs.at("path").literal).str() == before,
+                && std::get<std::string>(project.flows[0].nodes[0].inputs.at("path").literal) == before,
             "failed save-as installed rebased candidate");
 }
 

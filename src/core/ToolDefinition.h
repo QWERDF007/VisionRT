@@ -12,6 +12,34 @@ namespace visionrt {
 
 enum class ToolKind { Cpp, PythonFunction, PythonClass, Host };
 
+enum class ToolOrigin
+{
+    Builtin,
+    Custom
+};
+
+struct ToolRoots
+{
+    std::filesystem::path declarations;
+    std::filesystem::path python;
+    bool                  operator==(const ToolRoots &) const = default;
+};
+
+struct ToolSource
+{
+    ToolOrigin origin = ToolOrigin::Custom;
+    ToolRoots  roots;
+    bool       operator==(const ToolSource &) const = default;
+};
+
+struct PythonEntry
+{
+    std::filesystem::path package;
+    std::filesystem::path file;
+    std::string           symbol;
+    bool                  operator==(const PythonEntry &) const = default;
+};
+
 struct PortTypeReference {
     std::string flowParameter;
     std::string nodeParameter;
@@ -43,7 +71,7 @@ struct PortDefinition {
 };
 
 struct ToolDefinition {
-    int schemaVersion = 1;
+    int                                schemaVersion = 2;
     std::string id;
     std::string displayName;
     std::string version = "1.0.0";
@@ -51,14 +79,16 @@ struct ToolDefinition {
     std::filesystem::path definitionPath;
     std::string category;
     std::string subcategory;
-    bool builtin = false;
+    ToolSource                         source;
     std::string hostBinding;
-    std::filesystem::path script;
-    std::string symbol;
+    PythonEntry                        entry;
     std::vector<std::filesystem::path> resources;
     std::vector<PortDefinition> initParams;
     std::vector<PortDefinition> inputs;
     std::vector<PortDefinition> outputs;
+
+    std::filesystem::path pythonPackage() const;
+    std::filesystem::path pythonScript() const;
 };
 
 // True only for String ports whose editor selects a resource path (file, directory, path).

@@ -37,12 +37,12 @@ def main():
             return result
 
         tool = {
-            "schema_version": 1, "tool_id": "test.cli", "display_name": "校验工具",
+            "schema_version": 2, "tool_id": "test.cli", "display_name": "校验工具",
             "version": "1", "kind": "cpp", "init_params": [],
             "inputs": [{"id": "count", "name": "数量", "type": "Int", "default": 9007199254740993}],
             "outputs": [{"id": "value", "name": "值", "type": "Int"}]
         }
-        path = write("tools/工具.json", tool)
+        path = write("tools/builtin/工具.json", tool)
         run(path)
         normalized = json.loads(run("--emit-normalized-json", path).stdout)
         assert normalized["inputs"][0]["default"] == 9007199254740993
@@ -58,7 +58,7 @@ def main():
         index = {
             "schema_version": 1, "variant": "cpu",
             "modules": [{"id": "module", "library": "module.dll"}],
-            "tools": [{"tool_id": "test.cli", "definition": "tools/工具.json", "module": "module"}],
+            "tools": [{"tool_id": "test.cli", "definition": "tools/builtin/工具.json", "module": "module"}],
             "runtime_files": []
         }
         index_path = write("module_index.json", index)
@@ -73,26 +73,26 @@ def main():
         native_tool["tool_id"] = "test.registration.first"
         native_index = copy.deepcopy(index)
         native_index["tools"][0]["tool_id"] = native_tool["tool_id"]
-        write("tools/工具.json", native_tool)
+        write("tools/builtin/工具.json", native_tool)
         write("module_index.json", native_index)
         loaded = run("--package", str(root), "--load")
         assert "Native factory available: test.registration.first" in loaded.stdout
         native_tool["tool_id"] = "test.missing.factory"
         native_index["tools"][0]["tool_id"] = native_tool["tool_id"]
-        write("tools/工具.json", native_tool)
+        write("tools/builtin/工具.json", native_tool)
         write("module_index.json", native_index)
         run("--package", str(root))
         missing = run("--package", str(root), "--load", valid=False)
         assert "test.missing.factory" in missing.stderr
         native_tool["tool_id"] = "test.registration.first"
         native_index["tools"][0]["tool_id"] = native_tool["tool_id"]
-        write("tools/工具.json", native_tool)
+        write("tools/builtin/工具.json", native_tool)
         write("module_index.json", native_index)
         shutil.copyfile(args.bad_module, root / "module.dll")
         run("--package", str(root))
         incompatible = run("--load", "--package", str(root), valid=False)
         assert "ABI" in incompatible.stderr
-        write("tools/工具.json", tool)
+        write("tools/builtin/工具.json", tool)
         write("module_index.json", index)
         run("--load", path, valid=False)
         run("--unknown", path, valid=False)
@@ -108,9 +108,9 @@ def main():
         run("--index", write("bad.json", bad), valid=False)
         bad = copy.deepcopy(tool)
         bad["tool_id"] = "different.id"
-        write("tools/工具.json", bad)
+        write("tools/builtin/工具.json", bad)
         run("--package", str(root), valid=False)
-        write("tools/工具.json", tool)
+        write("tools/builtin/工具.json", tool)
         (root / "module_index.json").unlink()
         write("module_index.yaml", index)
         run("--package", str(root), valid=False)

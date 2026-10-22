@@ -28,17 +28,17 @@ class ToolsDeploymentContract(unittest.TestCase):
         (self.package / "old.txt").write_text("old installation", encoding="utf-8")
         self.source = self.root / "source"
         (self.source / "bin").mkdir(parents=True)
-        (self.source / "assets/tools").mkdir(parents=True)
+        (self.source / "tools/builtin").mkdir(parents=True)
         (self.source / "bin/plugin.dll").write_bytes(b"metadata-only module")
         (self.source / "bin/runtime.dll").write_bytes(b"runtime dependency")
         self.definition = {
-            "schema_version": 1, "tool_id": "test.plugin", "display_name": "部署测试",
+            "schema_version": 2, "tool_id": "test.plugin", "display_name": "部署测试",
             "version": "1.0.0", "kind": "cpp", "init_params": [], "inputs": [], "outputs": [],
         }
         self.index = {
             "schema_version": 1, "variant": "cpu",
             "modules": [{"id": "test_module", "library": "bin/plugin.dll"}],
-            "tools": [{"tool_id": "test.plugin", "module": "test_module", "definition": "assets/tools/test.json"}],
+            "tools": [{"tool_id": "test.plugin", "module": "test_module", "definition": "tools/builtin/test.json"}],
             "runtime_files": ["bin/runtime.dll"],
         }
         self.validator = Path(os.environ.get(
@@ -48,7 +48,7 @@ class ToolsDeploymentContract(unittest.TestCase):
 
     def write_source(self) -> None:
         (self.source / "module_index.json").write_text(json.dumps(self.index), encoding="utf-8")
-        (self.source / "assets/tools/test.json").write_text(json.dumps(self.definition), encoding="utf-8")
+        (self.source / "tools/builtin/test.json").write_text(json.dumps(self.definition), encoding="utf-8")
 
     def archive(self) -> Path:
         archive = self.root / "tools.zip"
@@ -112,12 +112,12 @@ class ToolsDeploymentContract(unittest.TestCase):
         self.assertTrue((self.package / "old.txt").is_file())
 
     def test_duplicate_json_members_are_rejected_before_installation(self) -> None:
-        for name in ("module_index.json", "assets/tools/test.json"):
+        for name in ("module_index.json", "tools/builtin/test.json"):
             with self.subTest(name=name):
                 self.write_source()
                 source = self.source / name
                 source.write_text(source.read_text(encoding="utf-8").replace(
-                    '"schema_version": 1', '"schema_version": 1, "schema_version": 1'), encoding="utf-8")
+                    '"schema_version":', '"schema_version": 1, "schema_version":'), encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, "duplicate JSON member"):
                     package_app.deploy_tools_package(self.install, self.archive(), self.validator)
                 self.assertTrue((self.package / "old.txt").is_file())

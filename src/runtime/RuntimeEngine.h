@@ -48,6 +48,14 @@ struct RuntimeCompletion
     std::uint64_t token      = 0;
 };
 
+struct RuntimeReadback
+{
+    std::uint64_t generation                                = 0;
+    std::uint64_t session                                   = 0;
+    std::uint64_t round                                     = 0;
+    bool          operator==(const RuntimeReadback &) const = default;
+};
+
 enum class RuntimePhase
 {
     Setup,
@@ -88,6 +96,7 @@ struct RuntimeUpdate
     // Events evicted before this poll; reported once by the consumer.
     std::size_t                      droppedDiagnostics = 0;
     std::optional<RuntimeCompletion> completion;
+    std::optional<RuntimeReadback>   readback;
 };
 
 // No QObject access. Poll at <=30 Hz; the one completion callback only wakes the GUI.
@@ -104,6 +113,8 @@ public:
     ToolStatus     start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
                          std::optional<NodeId> target = {});
     void           requestStop();
+    void           setReadbackEnabled(bool enabled);
+    bool           acknowledgeReadback(RuntimeReadback readback);
     ToolStatus     requestReset();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);

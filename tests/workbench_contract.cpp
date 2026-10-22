@@ -7,6 +7,9 @@
 #include "runtime/Snapshot.h"
 #include "core/ValueJson.h"
 
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QGuiApplication>
 #include <QImage>
 #include <QJsonDocument>
@@ -59,8 +62,7 @@ void treeContract()
     tool.displayName = "精确整数";
     tool.version     = "1.0";
     tool.kind        = ToolKind::PythonFunction;
-    tool.script      = "precise.py";
-    tool.symbol      = "execute";
+    tool.entry       = PythonEntry{"fixture", "precise.py", "execute"};
     tool.category    = "数据";
     tool.subcategory = "整数";
     registry.addDefinition(tool);
@@ -80,14 +82,14 @@ void treeContract()
 void outputContract()
 {
     require(OutputModel::fullText({Missing{}, {Type::Int}}) == "null", "Missing must copy as JSON null");
-    const auto quoted = OutputModel::fullText({Utf8("中文 \"引号\"\n路径"), {Type::String}});
-    require(std::get<Utf8>(ValueJson::parse(quoted, {Type::String})).str() == "中文 \"引号\"\n路径",
+    const auto quoted = OutputModel::fullText({std::string("中文 \"引号\"\n路径"), {Type::String}});
+    require(std::get<std::string>(ValueJson::parse(quoted, {Type::String})) == "中文 \"引号\"\n路径",
             "output text must escape strings as JSON");
     require(OutputModel::fullText({std::numeric_limits<double>::infinity(), {Type::Float}}).contains("non_finite"),
             "nonfinite output must have an explicit JSON description");
-    require(typeText({Type::Rect}) == QStringLiteral("Rect"), "scalar rectangle type must be displayed safely");
-    const auto rectangle = Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F);
-    const OutputModel::Captured rectangleCapture{rectangle, {Type::Rect}};
+    require(typeText({Type::ROI}) == QStringLiteral("ROI"), "scalar rectangle type must be displayed safely");
+    const auto                  rectangle = DataRef<ROI>(ROI{{{2, 1.25, -2.5, 3.75, 4.5, 17.5}}});
+    const OutputModel::Captured rectangleCapture{rectangle, {Type::ROI}};
     require(OutputModel::fullText(rectangleCapture).contains("1.25"),
             "scalar rectangle output must retain floating geometry in full text");
     ToolDefinition tool;
@@ -101,7 +103,7 @@ void outputContract()
     snapshot->toolId = "test.output";
     snapshot->phase  = NodePhase::Convert;
     snapshot->status = {-2, "输出合同错误", "third-party \"detail\"\n完整详情"};
-    snapshot->outputs.emplace("value", Utf8(std::string(10000, 'x')));
+    snapshot->outputs.emplace("value", std::string(std::string(10000, 'x')));
     OutputModel model;
     model.setResult(&tool, snapshot,
                     {
@@ -130,7 +132,7 @@ void outputContract()
     model.setResult(&tool, {}, {});
     require(model.get(2).value("type").toString() == QStringLiteral("未绑定"), "unbound output pretends to have a concrete type");
     require(!model.capture(2), "unbound output can be captured as a typed value");
-    const TypeSpec resolved{Type::NumericArray, DType::Float32, 2, Layout::BatchRagged};
+    const TypeSpec resolved{Type::Array, DType::Float32, 2};
     const TypeMap outputs{{"value", resolved}};
     model.setResult(&tool, {}, {}, &outputs);
     require(model.get(2).value("type").toString() == typeText(resolved), "resolved dtype/rank/layout not displayed");
@@ -231,31 +233,32 @@ void durationTextContract()
 void nodeDiagnosticsContract()
 {
     QTemporaryDir directory;
-    QDir(directory.path()).mkpath("tools-package/assets/tools/custom/test_category/test_diag");
-    QFile pyFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.py");
+    QDir(directory.path()).mkpath("tools-package/tools/custom/test_category/test_diag");
+    QFile pyFile(directory.path() + "/tools-package/python/custom/test_category/test_diag/test_diag.py");
+    require(QDir().mkpath(QFileInfo(pyFile).absolutePath()), "cannot create Python fixture directory");
     if (pyFile.open(QIODevice::WriteOnly))
     {
         pyFile.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'value': 42}\n");
         pyFile.close();
     }
-    QFile failPyFile(directory.path()
-                     + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.py");
+    QFile failPyFile(directory.path() + "/tools-package/python/custom/test_category/test_diag/test_diag_fail.py");
+    require(QDir().mkpath(QFileInfo(failPyFile).absolutePath()), "cannot create Python fixture directory");
     if (failPyFile.open(QIODevice::WriteOnly))
     {
         failPyFile.write("def run(inputs):\n    raise RuntimeError('diag boom')\n");
         failPyFile.close();
     }
-    QFile jsonFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.json");
+    QFile jsonFile(directory.path() + "/tools-package/tools/custom/test_category/test_diag/test_diag.json");
     if (jsonFile.open(QIODevice::WriteOnly))
     {
         jsonFile.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.diag.python",
   "display_name": "诊断测试",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "test_diag.py", "symbol": "run"},
+  "entry": {"package": "test_category/test_diag", "file": "test_diag.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
     {"id": "x", "name": "输入", "type": "Int", "default": 1, "min": 0, "max": 100, "step": 1}
@@ -266,18 +269,17 @@ void nodeDiagnosticsContract()
 })json");
         jsonFile.close();
     }
-    QFile failJsonFile(directory.path()
-                       + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.json");
+    QFile failJsonFile(directory.path() + "/tools-package/tools/custom/test_category/test_diag/test_diag_fail.json");
     if (failJsonFile.open(QIODevice::WriteOnly))
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.diag.fail",
   "display_name": "诊断失败",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "test_diag_fail.py", "symbol": "run"},
+  "entry": {"package": "test_category/test_diag", "file": "test_diag_fail.py", "symbol": "run"},
   "init_params": [],
   "inputs": [],
   "outputs": [
@@ -286,13 +288,12 @@ void nodeDiagnosticsContract()
 })json");
         failJsonFile.close();
     }
-    QFile unfulfilledJson(directory.path()
-                          + "/tools-package/assets/tools/custom/test_category/test_diag/unfulfilled.json");
+    QFile unfulfilledJson(directory.path() + "/tools-package/tools/custom/test_category/test_diag/unfulfilled.json");
     if (unfulfilledJson.open(QIODevice::WriteOnly))
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.diag.unfulfilled",
   "display_name": "未提供实现测试",
   "version": "1.0.0",
@@ -312,13 +313,11 @@ void nodeDiagnosticsContract()
   "schema_version": 1,
   "variant": "cpu",
   "tools": [
-    {"tool_id": "test.diag.python", "definition": "assets/tools/custom/test_category/test_diag/test_diag.json"},
-    {"tool_id": "test.diag.fail", "definition": "assets/tools/custom/test_category/test_diag/test_diag_fail.json"},
-    {"tool_id": "test.diag.unfulfilled", "definition": "assets/tools/custom/test_category/test_diag/unfulfilled.json", "module": "missing"}
+    {"tool_id": "test.diag.python", "definition": "tools/custom/test_category/test_diag/test_diag.json"},
+    {"tool_id": "test.diag.fail", "definition": "tools/custom/test_category/test_diag/test_diag_fail.json"},
+    {"tool_id": "test.diag.unfulfilled", "definition": "tools/custom/test_category/test_diag/unfulfilled.json"}
   ],
-  "modules": [
-    {"id": "missing", "library": "bin/notbuilt.dll"}
-  ],
+  "modules": [],
   "runtime_files": []
 })json");
         indexFile.close();
@@ -444,22 +443,22 @@ void mainQmlContract(double scale)
     {"id": "test_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/counter.json"},
-    {"tool_id": "test.plugin.sleep", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/sleep.json"},
-    {"tool_id": "test.plugin.fail_init", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/fail.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/counter.json"},
+    {"tool_id": "test.plugin.sleep", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/sleep.json"},
+    {"tool_id": "test.plugin.fail_init", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/fail.json"}
   ],
   "runtime_files": []
 })json");
         indexFile.close();
     }
 
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/Plugin/Basic");
-    QFile sleepJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/sleep.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/Plugin/Basic");
+    QFile sleepJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/sleep.json");
     if (sleepJson.open(QIODevice::WriteOnly))
     {
         sleepJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.sleep",
   "display_name": "Plugin Sleep",
   "version": "1.0.0",
@@ -473,12 +472,12 @@ void mainQmlContract(double scale)
         sleepJson.close();
     }
 
-    QFile counterJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.json");
+    QFile counterJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/counter.json");
     if (counterJson.open(QIODevice::WriteOnly))
     {
         counterJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.counter",
   "display_name": "Plugin Counter",
   "version": "1.0.0",
@@ -494,12 +493,12 @@ void mainQmlContract(double scale)
         counterJson.close();
     }
 
-    QFile failJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/fail.json");
+    QFile failJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/fail.json");
     if (failJson.open(QIODevice::WriteOnly))
     {
         failJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.fail_init",
   "display_name": "Fail Init Tool",
   "version": "1.0.0",
@@ -814,13 +813,13 @@ void packageDrivenCatalogAndRefreshContract()
         std::cout << "[Evidence T-05] Empty catalog on startup without package verified.\n";
 
         // 2. Placing JSON into old host directories without package does NOT populate tools
-        QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
-        QFile legacyJson(dirPath + "/assets/tools/builtin/flow/func/platform_func.json");
+        QDir(dirPath).mkpath("tools/builtin/flow/func");
+        QFile legacyJson(dirPath + "/tools/builtin/flow/func/platform_func.json");
         if (legacyJson.open(QIODevice::WriteOnly))
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.legacy.func",
   "display_name": "遗留函数",
   "version": "1.0.0",
@@ -843,7 +842,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.legacy.python",
   "display_name": "遗留脚本",
   "version": "1.0.0",
@@ -877,13 +876,13 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Package builtin C++ counter
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/counter");
-    QFile rootCounterJson(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/pkg/counter");
+    QFile rootCounterJson(dirPath + "/tools-package/tools/builtin/pkg/counter/counter.json");
     if (rootCounterJson.open(QIODevice::WriteOnly))
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.counter",
   "display_name": "计数器插件",
   "version": "1.0.0",
@@ -900,13 +899,13 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Package builtin C++ function
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/function");
-    QFile rootFunctionJson(dirPath + "/tools-package/assets/tools/builtin/pkg/function/function.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/pkg/function");
+    QFile rootFunctionJson(dirPath + "/tools-package/tools/builtin/pkg/function/function.json");
     if (rootFunctionJson.open(QIODevice::WriteOnly))
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -923,8 +922,9 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Package Python tool
-    QDir(dirPath).mkpath("tools-package/assets/tools/custom/user/py");
-    QFile pyScriptA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.py");
+    QDir(dirPath).mkpath("tools-package/tools/custom/user/py");
+    QFile pyScriptA(dirPath + "/tools-package/python/custom/user/py/user_node_a.py");
+    require(QDir().mkpath(QFileInfo(pyScriptA).absolutePath()), "cannot create Python fixture directory");
     if (pyScriptA.open(QIODevice::WriteOnly))
     {
         pyScriptA.write(
@@ -932,35 +932,35 @@ void packageDrivenCatalogAndRefreshContract()
             "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111, 'image': []}\n");
         pyScriptA.close();
     }
-    QFile root3JsonA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.json");
+    QFile root3JsonA(dirPath + "/tools-package/tools/custom/user/py/user_node_a.json");
     if (root3JsonA.open(QIODevice::WriteOnly))
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.user.pythonA",
   "display_name": "用户脚本A",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "user_node_a.py", "symbol": "run"},
+  "entry": {"package": "user/py", "file": "user_node_a.py", "symbol": "run"},
   "init_params": [],
   "inputs": [],
   "outputs": [
     {"id": "result", "name": "结果", "type": "Int"},
-    {"id": "image", "name": "图像", "type": "ImageBatch"}
+    {"id": "image", "name": "图像", "type": "Image"}
   ]
 })json");
         root3JsonA.close();
     }
 
     // Platform receiver tool with host_binding
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/flow/recv");
-    QFile recvJson(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/flow/recv");
+    QFile recvJson(dirPath + "/tools-package/tools/builtin/flow/recv/receiver.json");
     if (recvJson.open(QIODevice::WriteOnly))
     {
         recvJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.custom.receiver",
   "display_name": "动态接收器",
   "version": "1.0.0",
@@ -983,13 +983,13 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Unindexed JSON inside package
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/unindexed");
-    QFile unindexedJson(dirPath + "/tools-package/assets/tools/builtin/unindexed/unindexed.json");
+    QDir(dirPath).mkpath("tools-package/unindexed");
+    QFile unindexedJson(dirPath + "/tools-package/unindexed/unindexed.json");
     if (unindexedJson.open(QIODevice::WriteOnly))
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.unindexed.tool",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -1013,10 +1013,10 @@ void packageDrivenCatalogAndRefreshContract()
     {"id": "test_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/pkg/counter/counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/pkg/function/function.json"},
-    {"tool_id": "test.user.pythonA", "definition": "assets/tools/custom/user/py/user_node_a.json"},
-    {"tool_id": "test.custom.receiver", "definition": "assets/tools/builtin/flow/recv/receiver.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/pkg/counter/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/pkg/function/function.json"},
+    {"tool_id": "test.user.pythonA", "definition": "tools/custom/user/py/user_node_a.json"},
+    {"tool_id": "test.custom.receiver", "definition": "tools/builtin/flow/recv/receiver.json"}
   ],
   "runtime_files": []
 })json");
@@ -1256,13 +1256,13 @@ void packageDrivenCatalogAndRefreshContract()
 
         // 4. Change receiver declaration only (metadata-only identity change)
         std::cout << "[Evidence T-05] Changing receiver declaration identity and display name...\n";
-        QFile::remove(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.json");
-        QFile renamedJson(dirPath + "/tools-package/assets/tools/builtin/flow/recv/renamed.json");
+        QFile::remove(dirPath + "/tools-package/tools/builtin/flow/recv/receiver.json");
+        QFile renamedJson(dirPath + "/tools-package/tools/builtin/flow/recv/renamed.json");
         if (renamedJson.open(QIODevice::WriteOnly))
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.custom.renamed_recv",
   "display_name": "改名接收器",
   "version": "1.0.0",
@@ -1295,10 +1295,10 @@ void packageDrivenCatalogAndRefreshContract()
     {"id": "test_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/pkg/counter/counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/pkg/function/function.json"},
-    {"tool_id": "test.user.pythonA", "definition": "assets/tools/custom/user/py/user_node_a.json"},
-    {"tool_id": "test.custom.renamed_recv", "definition": "assets/tools/builtin/flow/recv/renamed.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/pkg/counter/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/pkg/function/function.json"},
+    {"tool_id": "test.user.pythonA", "definition": "tools/custom/user/py/user_node_a.json"},
+    {"tool_id": "test.custom.renamed_recv", "definition": "tools/builtin/flow/recv/renamed.json"}
   ],
   "runtime_files": []
 })json");

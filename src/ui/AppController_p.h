@@ -16,6 +16,7 @@
 #include <deque>
 #include <future>
 #include <set>
+#include <variant>
 
 namespace visionrt {
 namespace workbench {
@@ -93,11 +94,8 @@ struct AppController::Impl
     QPointer<ImageViewport>              viewport;
     std::vector<QPointer<ImageViewport>> thumbnails;
     std::vector<QPointer<ImageViewport>> displayTargets;
-    std::vector<OwnedImage>              displayImages;
-    QString                              displayColor;
-    std::vector<Roi>                     displayInputs, displayOutputs;
+    ROI::value_type                      displayInputs, displayOutputs;
     std::optional<RoiEditTarget>         displayRoiTarget;
-    quint64                              presentedRequest = 0;
     quint64                              displayRequest   = 0;
     QString                              imageOutput;
     int                                  index = 0;
@@ -110,6 +108,7 @@ struct AppController::Impl
         std::string              input;
         QString                  flow;
         TypeSpec                 type;
+        bool                     singleRectangle;
         InputBinding             original;
         PortValue                background;
         PortValue                draft;
@@ -121,6 +120,24 @@ struct AppController::Impl
 
     std::optional<RoiPreview> roi;
     std::uint64_t            roiSerial = 0;
+
+    struct TextRequest
+    {
+        QVariantMap context;
+        bool        copy;
+        bool        diagnostic;
+    };
+
+    struct SaveRequest
+    {
+        QString       path;
+        std::uint64_t project;
+    };
+
+    std::deque<std::variant<TextRequest, SaveRequest>> readRequests;
+    std::optional<RuntimeReadback>                     readback;
+    QVariantList                                       parameterRows;
+    NodeId                                             parameterRowsNode = 0;
 
     struct TextResult
     {
@@ -165,6 +182,9 @@ struct AppController::Impl
     }
 
     void      setState(RuntimeState value);
+    bool                 readsAllowed() const noexcept;
+    void                 drainReaders();
+    void                 updateReadback();
     void      poll();
     void      start(RunMode mode);
     void      request(Pending action, QString path = {});
@@ -182,7 +202,7 @@ struct AppController::Impl
     void      applyOverlays();
     const PortValue *resolvedInputRef(const NodeDefinition &node, const std::string &input) const;
     PortValue resolvedInput(const NodeDefinition &node, const std::string &input) const;
-    void      commitRoi(const RoiEditTarget &target, const Roi *value);
+    void                 commitRoi(const RoiEditTarget &target, const ROI::value_type::value_type *value);
     ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
     void      finishRoi();
     void      storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);

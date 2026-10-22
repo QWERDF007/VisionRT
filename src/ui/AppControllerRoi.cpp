@@ -20,7 +20,7 @@ void AppController::Impl::finishRoi()
     }
 }
 
-void AppController::Impl::commitRoi(const RoiEditTarget &target, const Roi *value)
+void AppController::Impl::commitRoi(const RoiEditTarget &target, const ROI::value_type::value_type *value)
 {
     if (!idle() || !roi || target.session != roi->id || target.nodeSeq != roi->node || target.inputPortId != roi->input
         || target.imageIndex != roi->index)
@@ -28,22 +28,19 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const Roi *valu
     const auto *node = currentNode();
     if (!node || node->id != target.nodeSeq)
         return;
-    const auto *images = std::get_if<ImageBatch>(&roi->background);
-    if (!images || target.imageIndex < 0 || static_cast<std::size_t>(target.imageIndex) >= images->images().size())
+    const auto *images = std::get_if<DataRef<Image>>(&roi->background);
+    if (!images || target.imageIndex < 0 || static_cast<std::size_t>(target.imageIndex) >= images->get().size())
         return;
     try
     {
-        if (roi->type.type == Type::Rect)
+        if (roi->singleRectangle)
         {
-            PortValue rectangle = value ? PortValue{*value} : PortValue{Missing{}};
-            validateValue(roi->type, rectangle);
-            roi->draft = std::move(rectangle);
+            roi->draft = DataRef<ROI>(value ? ROI{{*value}} : ROI{});
             viewport->setDrawShape(value ? 0 : 2);
         }
         else
         {
-            auto draft = std::get<RoiBatch>(roi->draft).images();
-            std::vector<std::vector<Roi>> updated(draft.begin(), draft.end());
+            auto updated = std::get<DataRef<ROI>>(roi->draft).get();
             updated.resize(std::max(updated.size(), static_cast<std::size_t>(target.imageIndex) + 1));
             auto &current = updated[target.imageIndex];
             if (target.roiIndex < 0 && value)
@@ -57,7 +54,7 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const Roi *valu
             }
             else
                 return;
-            roi->draft = RoiBatch(std::move(updated));
+            roi->draft = DataRef<ROI>(std::move(updated));
         }
         validateValue(roi->type, roi->draft);
         InputBinding committed{BindingMode::Literal, roi->draft, std::nullopt};
@@ -84,19 +81,18 @@ bool AppController::editRoi(const QString &parameter, bool copyUpstream)
     {
         const auto *node        = impl_->currentNode();
         const auto *declaration = impl_->parameter(parameter.toStdString(), false);
-        if (!node || !declaration
-            || (declaration->type.type != Type::RoiBatch && declaration->type.type != Type::Rect))
+        if (!node || !declaration || declaration->type.type != Type::ROI)
             throw ContractError("参数不是可编辑的 ROI 输入：" + parameter.toStdString());
         if (declaration->imageInput.empty())
             throw ContractError("ROI 输入未声明 image_input 图像关联：" + parameter.toStdString());
         const auto  imageValue = impl_->resolvedInput(*node, declaration->imageInput);
-        const auto *images     = std::get_if<ImageBatch>(&imageValue);
-        if (declaration->type.type != Type::Rect && (!images || images->images().empty()))
+        const auto *images     = std::get_if<DataRef<Image>>(&imageValue);
+        if (declaration->editor != "rect" && (!images || images->get().empty()))
             throw ContractError("ROI 输入 " + parameter.toStdString() + " 的关联图像 " + declaration->imageInput
                                 + " 没有缓存，请先运行图像源或上游");
         auto roiValue = impl_->resolvedInput(*node, parameter.toStdString());
-        if (isMissing(roiValue) && declaration->type.type == Type::RoiBatch)
-            roiValue = RoiBatch{};
+        if (isMissing(roiValue))
+            roiValue = DataRef<ROI>(ROI{});
         validateValue(declaration->type, roiValue);
         const auto binding = node->inputs.find(parameter.toStdString());
         if (binding == node->inputs.end())
@@ -104,11 +100,20 @@ bool AppController::editRoi(const QString &parameter, bool copyUpstream)
         if (binding->second.mode == BindingMode::Upstream && !copyUpstream)
             throw ContractError("上游 ROI 输入只读，请先显式复制当前值再编辑：" + parameter.toStdString());
         impl_->finishRoi();
-        impl_->roi = Impl::RoiPreview{++impl_->roiSerial, node->id, parameter.toStdString(), impl_->flow, declaration->type,
-                                      binding->second, imageValue, std::move(roiValue), 0,
-                                      impl_->index, impl_->viewport->viewState()};
-        if (declaration->type.type == Type::Rect)
-            impl_->viewport->setDrawShape(isMissing(impl_->roi->draft) ? 2 : 0);
+        impl_->roi = Impl::RoiPreview{++impl_->roiSerial,
+                                      node->id,
+                                      parameter.toStdString(),
+                                      impl_->flow,
+                                      declaration->type,
+                                      declaration->editor == "rect",
+                                      binding->second,
+                                      imageValue,
+                                      copyProjectLiteral(roiValue),
+                                      0,
+                                      impl_->index,
+                                      impl_->viewport->viewState()};
+        if (declaration->editor == "rect")
+            impl_->viewport->setDrawShape(std::get<DataRef<ROI>>(impl_->roi->draft).get().empty() ? 2 : 0);
         impl_->updateDisplay();
         emit resultsChanged();
         return true;
@@ -122,41 +127,46 @@ bool AppController::editRoi(const QString &parameter, bool copyUpstream)
 
 QVariantMap AppController::roiEditor() const
 {
-    if (!impl_->roi || impl_->roi->type.type != Type::Rect)
+    if (!impl_->roi || !impl_->roi->singleRectangle)
         return {};
     const auto &session = *impl_->roi;
     QVariantList coordinates;
-    if (const auto *rectangle = std::get_if<Roi>(&session.draft))
-        for (const auto component : rectangle->encoded().subspan(1))
-            coordinates.push_back(double(component));
-    const auto *images = std::get_if<ImageBatch>(&session.background);
-    const auto *image = images && !images->images().empty() ? &images->images()[session.index] : nullptr;
-    return {{"id", QString::number(session.id)},
-            {"node", QString::number(session.node)}, {"input", workbench::q(session.input)},
-            {"rectangle", coordinates}, {"imageWidth", image ? image->cols() : 0},
-            {"imageHeight", image ? image->rows() : 0}};
+    const auto  &regions = std::get<DataRef<ROI>>(session.draft).get();
+    if (!regions.empty() && !regions[0].empty())
+        for (const auto component : std::span<const double>(regions[0][0]).subspan(1)) coordinates.push_back(component);
+    const auto *images = std::get_if<DataRef<Image>>(&session.background);
+    const auto *image  = images && !images->get().empty() ? &images->get()[session.index] : nullptr;
+    return {
+        {         "id",   QString::number(session.id)},
+        {       "node", QString::number(session.node)},
+        {      "input",   workbench::q(session.input)},
+        {  "rectangle",                   coordinates},
+        { "imageWidth",       image ? image->cols : 0},
+        {"imageHeight",       image ? image->rows : 0}
+    };
 }
 
 bool AppController::setRoiRectangle(const QString &session, const QVariantList &coordinates)
 {
-    if (!impl_->idle() || !impl_->roi || impl_->roi->type.type != Type::Rect
-        || session != QString::number(impl_->roi->id))
+    if (!impl_->idle() || !impl_->roi || !impl_->roi->singleRectangle || session != QString::number(impl_->roi->id))
         return false;
     try
     {
         if (coordinates.size() != 5)
             throw ContractError("矩形参数 " + impl_->roi->input + " 需要 x、y、width、height、angle 五个坐标，实际 "
                                 + std::to_string(coordinates.size()) + " 项");
-        std::array<float, 5> values;
+        std::array<double, 5> values;
         for (std::size_t index = 0; index < values.size(); ++index)
         {
             bool valid = false;
-            values[index] = coordinates[qsizetype(index)].toFloat(&valid);
+            values[index] = coordinates[qsizetype(index)].toDouble(&valid);
             if (!valid || !std::isfinite(values[index]))
                 throw ContractError("矩形参数 " + impl_->roi->input + " 的坐标[" + std::to_string(index)
                                     + "] 必须为有限数值");
         }
-        impl_->roi->draft = Roi::rectangle(values[0], values[1], values[2], values[3], values[4]);
+        DataRef<ROI> rectangle(ROI{{{2., values[0], values[1], values[2], values[3], values[4]}}});
+        validateValue(impl_->roi->type, rectangle);
+        impl_->roi->draft = std::move(rectangle);
         impl_->viewport->setDrawShape(0);
         if (impl_->roi->original.mode != BindingMode::Upstream)
         {
@@ -269,7 +279,9 @@ bool AppController::clearRoi(const QString &parameter)
     const auto *declaration = impl_->parameter(parameter.toStdString(), false);
     if (!node || !declaration)
         return false;
-    PortValue emptyVal = declaration->type.type == Type::Rect ? PortValue{Missing{}} : PortValue{RoiBatch{}};
+    if (declaration->type.type != Type::ROI)
+        return false;
+    PortValue    emptyVal = DataRef<ROI>(ROI{});
     InputBinding committed{BindingMode::Literal, std::move(emptyVal), {}};
     const bool changed = impl_->editor.setBinding(impl_->flow.toStdString(), node->id, parameter.toStdString(), std::move(committed));
     if (impl_->roi && impl_->roi->input == parameter.toStdString() && impl_->roi->node == node->id)

@@ -18,7 +18,7 @@ int main()
     QFile      file(name);
     assert(file.open(QIODevice::WriteOnly));
     file.write(R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.json",
   "display_name": "JSON 声明",
   "version": "1.0.0",
@@ -66,8 +66,26 @@ int main()
     {
         rejects(QJsonDocument(object).toJson().toStdString());
     };
+    auto crop      = emitted;
+    crop["inputs"] = QJsonArray{
+        QJsonObject{{"id", "images"}, {"name", "图像"}, {"type", "Image"}},
+        QJsonObject{{"id", "rect"}, {"name", "矩形"}, {"type", "ROI"}, {"editor", "rect"}, {"image_input", "images"}}
+    };
+    const auto cropDefinition = parseToolDefinitionJson(QJsonDocument(crop).toJson().toStdString());
+    assert(cropDefinition.inputs[1].type.type == Type::ROI && cropDefinition.inputs[1].editor == "rect");
+    assert(parseToolDefinitionJson(emitNormalizedToolJson(cropDefinition)).inputs[1].editor == "rect");
+    crop["inputs"] = QJsonArray{
+        QJsonObject{{"id", "text"}, {"name", "文本"}, {"type", "String"}, {"editor", "rect"}}
+    };
+    rejectObject(crop);
     auto invalid     = emitted;
     invalid["extra"] = 1;
+    rejectObject(invalid);
+    invalid            = emitted;
+    invalid["builtin"] = true;
+    rejectObject(invalid);
+    invalid                   = emitted;
+    invalid["schema_version"] = 1;
     rejectObject(invalid);
     invalid                   = emitted;
     invalid["schema_version"] = "1";
@@ -126,12 +144,25 @@ int main()
     auto python     = emitted;
     python["kind"]  = "python_class";
     python["entry"] = QJsonObject{
-        {  "file", "../shared/script.py"},
-        {"symbol",                "Tool"}
+        {"package", "示例 包/shared"},
+        {   "file",         "script.py"},
+        { "symbol",              "Tool"}
     };
     const auto pythonText       = QJsonDocument(python).toJson().toStdString();
     const auto pythonDefinition = parseToolDefinitionJson(pythonText, "/package/tools/tool.json");
-    assert(pythonDefinition.script == pythonDefinition.definitionPath.parent_path().parent_path() / "shared/script.py");
+    assert(pythonDefinition.entry.package == std::filesystem::u8path("示例 包/shared"));
+    assert(pythonDefinition.entry.file == "script.py");
+    assert(pythonDefinition.source.origin == ToolOrigin::Custom && pythonDefinition.source.roots.python.empty());
+    const auto pythonRoundtrip = parseToolDefinitionJson(emitNormalizedToolJson(pythonDefinition));
+    assert(pythonRoundtrip.entry == pythonDefinition.entry);
+    for (const auto field : {"package", "file", "symbol"})
+    {
+        auto missing = python;
+        auto entry   = missing["entry"].toObject();
+        entry.remove(field);
+        missing["entry"] = entry;
+        rejectObject(missing);
+    }
     python["kind"] = "python_function";
     rejectObject(python);
     python["init_params"] = QJsonArray{};

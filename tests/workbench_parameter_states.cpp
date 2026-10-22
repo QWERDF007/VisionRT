@@ -21,6 +21,12 @@ void parameterStatesContract(visionrt::AppController &app)
     {
         if (!condition) throw std::runtime_error(message);
     };
+    require(
+        app.setParameter(
+            "labels", false,
+            R"json(["用于验证窄字段省略显示的超长中文标签内容用于验证窄字段省略显示的超长中文标签内容用于验证窄字段省略显示的超长中文标签内容", "b"])json"),
+        "cannot set the long structure field fixture");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "long structure field synchronization did not finish");
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
@@ -66,7 +72,7 @@ void parameterStatesContract(visionrt::AppController &app)
     require(labelsRow != nullptr, "structure row is missing from actual field state review");
     QQuickItem *structureText = nullptr;
     for (auto *candidate : labelsRow->findChildren<QQuickItem *>())
-        if (candidate->property("text").toString().startsWith("StringArray")
+        if (candidate->property("text").toString().startsWith("Array<string>")
             && candidate->metaObject()->indexOfSignal("clicked()") >= 0)
             structureText = qobject_cast<QQuickItem *>(candidate->property("contentItem").value<QObject *>());
     require(structureText && structureText->property("truncated").toBool(),

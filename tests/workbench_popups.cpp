@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "WorkbenchFixtures.h"
 #include "ui/Theme.h"
 #include "ui/OutputModel.h"
 #include "ui/ImageViewport.h"
@@ -7,6 +8,7 @@
 #include <QQmlComponent>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -42,7 +44,8 @@ void popupSessionsContract()
         if (!condition)
             throw std::runtime_error(message);
     };
-    visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
+    visionrt::testing::WorkbenchInstallation installation;
+    visionrt::AppController                  app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "popup catalog did not become ready");
     app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
     app.resolveUnsaved(QStringLiteral("discard"));
@@ -329,8 +332,8 @@ void popupSessionsContract()
     require(QTest::qWaitFor([&] { return !menu->property("visible").toBool(); }, 1000),
             "new publication leaves its old output menu visible");
     const auto captured = model->capture(QStringLiteral("images"));
-    const auto *batch = captured ? std::get_if<visionrt::ImageBatch>(&captured->value) : nullptr;
-    if (!batch || batch->images().size() != 1)
+    const auto *batch    = captured ? std::get_if<visionrt::DataRef<visionrt::Image>>(&captured->value) : nullptr;
+    if (!batch || batch->get().size() != 1)
         throw std::runtime_error("real image publication has no image batch: "
             + visionrt::OutputModel::fullText(*model->capture(QStringLiteral("__status_message"))).toStdString());
     app.requestOutputText(app.portContext(QStringLiteral("__status_code"), true), false);
@@ -436,10 +439,11 @@ void outputCellReuseContract()
     QTemporaryDir manyDirectory;
     require(manyDirectory.isValid(), "many-output fixture directory is invalid");
     const auto package = manyDirectory.path() + "/tools-package/";
-    require(QDir().mkpath(package + "assets"), "cannot create the many-output package");
+    require(QDir().mkpath(package + "tools/custom"), "cannot create the many-output package");
     const auto write = [&](const QString &path, const QByteArray &bytes)
     {
         QFile file(package + path);
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "cannot write the many-output fixture");
     };
     write("module_index.json", R"json({
@@ -447,25 +451,31 @@ void outputCellReuseContract()
   "variant": "test",
   "modules": [],
   "tools": [
-    {"tool_id": "test.outputs", "definition": "assets/outputs.json"}
+    {"tool_id": "test.outputs", "definition": "tools/custom/outputs.json"}
   ],
   "runtime_files": []
 })json");
-    write("assets/outputs.py",
+    write("python/custom/outputs/outputs.py",
           "def run(inputs):\n"
           "    values = {'value_' + str(index): index for index in range(64)}\n"
           "    values.update(__status_code=0, __status_message='')\n"
           "    return values\n");
-    QJsonObject definition{{"schema_version", 1}, {"tool_id", "test.outputs"}, {"display_name", "Many outputs"},
-        {"version", "1.0.0"}, {"kind", "python_function"},
-        {"entry", QJsonObject{{"file", "outputs.py"}, {"symbol", "run"}}},
-        {"init_params", QJsonArray{}}, {"inputs", QJsonArray{}}};
+    QJsonObject definition{
+        {"schema_version",                                                                              2},
+        {       "tool_id",                                                                 "test.outputs"},
+        {  "display_name",                                                                 "Many outputs"},
+        {       "version",                                                                        "1.0.0"},
+        {          "kind",                                                              "python_function"},
+        {         "entry", QJsonObject{{"package", "outputs"}, {"file", "outputs.py"}, {"symbol", "run"}}},
+        {   "init_params",                                                                   QJsonArray{}},
+        {        "inputs",                                                                   QJsonArray{}}
+    };
     QJsonArray ports;
     for (int number = 0; number < 64; ++number)
         ports.append(QJsonObject{{"id", "value_" + QString::number(number)},
             {"name", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "Int"}});
     definition["outputs"] = ports;
-    write("assets/outputs.json", QJsonDocument(definition).toJson());
+    write("tools/custom/outputs.json", QJsonDocument(definition).toJson());
     visionrt::AppController manyApp(1, manyDirectory.path());
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output catalog did not become ready");
     manyApp.addNode("test.outputs", 0, 0);

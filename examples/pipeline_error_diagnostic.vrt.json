@@ -1,5 +1,5 @@
 {
-  "format_version": 2,
+  "format_version": 3,
   "project": {
     "name": "节点错误诊断复现工程",
     "next_node_seq": "5",
@@ -42,12 +42,18 @@
             },
             "outputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "paths": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 1,
-                "layout": "dense"
+                "dtype": "string"
+              },
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
               }
             }
           },
@@ -88,10 +94,10 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rect": {
-                "type": "Rect"
+                "type": "ROI"
               }
             },
             "outputs": {
@@ -102,13 +108,12 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "origins": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float64",
-                "rank": 2,
-                "layout": "dense"
+                "rank": 2
               }
             }
           },
@@ -118,7 +123,8 @@
               "source": {
                 "node_seq": "1",
                 "port_id": "images"
-              }
+              },
+              "literal": null
             },
             "rect": {
               "mode": "literal",
@@ -182,7 +188,7 @@
             },
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "conf_threshold": {
                 "type": "Float"
@@ -196,27 +202,31 @@
             },
             "outputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               },
               "scores": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float32",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "classes": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "class_names": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 2,
-                "layout": "batch_ragged"
+                "dtype": "string"
+              },
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
               }
             }
           },
@@ -226,7 +236,8 @@
               "source": {
                 "node_seq": "1",
                 "port_id": "images"
-              }
+              },
+              "literal": null
             },
             "conf_threshold": {
               "mode": "literal",
@@ -263,12 +274,12 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             },
             "outputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             }
           },
@@ -278,7 +289,8 @@
               "source": {
                 "node_seq": "1",
                 "port_id": "images"
-              }
+              },
+              "literal": null
             }
           }
         }

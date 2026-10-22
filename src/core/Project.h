@@ -86,4 +86,7 @@ struct ProjectDefinition
     std::filesystem::path path;
     bool                  dirty = true;
 };
+
+PortValue      copyProjectLiteral(const PortValue &value);
+NodeDefinition copyNodeConfiguration(const NodeDefinition &node);
 } // namespace visionrt

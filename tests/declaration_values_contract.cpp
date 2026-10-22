@@ -57,7 +57,7 @@ int main()
     // CT-01: a single classification for every resource-path editor.
     {
         const auto definition = parseToolDefinitionJson(R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "runtime.paths",
   "display_name": "路径分类",
   "version": "1.0.0",
@@ -86,7 +86,7 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "runtime.paths.bad.file",
   "display_name": "错误文件端口",
   "version": "1.0.0",
@@ -103,7 +103,7 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "runtime.paths.bad.directory",
   "display_name": "错误目录端口",
   "version": "1.0.0",
@@ -250,14 +250,14 @@ int main()
         },
             {{"ratio", std::numeric_limits<double>::quiet_NaN()}});
 
-        rejects([&] { validateToolValues({port("image", {Type::ImageBatch})}, {}); }, "image");
-        validateToolValues({port("image", {Type::ImageBatch}, false)}, {});
+        rejects([&] { validateToolValues({port("image", {Type::Image})}, {}); }, "image");
+        validateToolValues({port("image", {Type::Image}, false)}, {});
         rejects(
             [&]
             {
                 validateToolValues(
                     {
-                        port("image", {Type::ImageBatch}
+                        port("image", {Type::Image}
                          )
                 },
                     {{"image", Missing{}}});
@@ -289,14 +289,14 @@ int main()
         validateToolValue(declared, Missing{});
         rejects([&] { validateToolValue(declared, std::int64_t{0}); }, "limit");
         rejects([&] { validateToolValue(declared, std::int64_t{6}); }, "limit");
-        auto optional = port("optional", {Type::ImageBatch}, false);
-        validateToolValue(optional, ImageBatch{});
+        auto optional = port("optional", {Type::Image}, false);
+        validateToolValue(optional, DataRef<Image>(Image{}));
         rejects([&] { validateToolValue(optional, std::int64_t{0}); }, "optional");
     }
 
     {
         const auto declared = parseToolDefinitionJson(R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "runtime.required",
   "display_name": "必填声明",
   "version": "1.0.0",

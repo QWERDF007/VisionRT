@@ -1,4 +1,5 @@
 #include "core/ToolDefinition.h"
+#include "core/ToolPaths.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -6,6 +7,16 @@
 #include <set>
 
 namespace visionrt {
+
+std::filesystem::path ToolDefinition::pythonPackage() const
+{
+    return resolveToolPath(source.roots.python, entry.package);
+}
+
+std::filesystem::path ToolDefinition::pythonScript() const
+{
+    return resolveToolPath(pythonPackage(), entry.file);
+}
 
 namespace {
 
@@ -90,13 +101,16 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
         }
 
         if (!port.editor.empty()) {
-            const std::set<std::string> validEditors = {"number", "text", "bool", "file", "directory", "path", "array", "roi"};
+            const std::set<std::string> validEditors
+                = {"number", "text", "bool", "file", "directory", "path", "array", "roi", "rect"};
             if (!validEditors.contains(port.editor)) {
                 throw ContractError("Unknown editor: " + port.editor + " on port " + port.id);
             }
         }
 
         const bool pathEditor = port.editor == "file" || port.editor == "directory" || port.editor == "path";
+        if (port.editor == "rect" && port.type.type != Type::ROI)
+            throw ContractError("矩形编辑器要求 ROI 类型端口：" + port.id);
         if (pathEditor && port.type != TypeSpec{Type::String})
             throw ContractError("路径编辑器要求 String 类型端口：" + port.id);
 
@@ -179,20 +193,23 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
         }
 
         if (!port.imageInput.empty()) {
-            if (direction != "inputs" || (port.type.type != Type::RoiBatch && port.type.type != Type::Rect)) {
-                throw ContractError("image_input requires a RoiBatch or Rect input: " + port.id);
+            if (direction != "inputs" || port.type.type != Type::ROI)
+            {
+                throw ContractError("image_input requires an ROI input: " + port.id);
             }
         }
 
         if (!port.imagePort.empty()) {
-            if (port.type.type != Type::RoiBatch && port.type.type != Type::Rect) {
-                throw ContractError("image_port requires a RoiBatch or Rect output: " + port.id);
+            if (port.type.type != Type::ROI)
+            {
+                throw ContractError("image_port requires an ROI output: " + port.id);
             }
         }
 
         if (!port.colorOrder.empty()) {
-            if (port.type.type != Type::ImageBatch) {
-                throw ContractError("display.color_order requires an ImageBatch output: " + port.id);
+            if (port.type.type != Type::Image)
+            {
+                throw ContractError("display.color_order requires an Image output: " + port.id);
             }
             const std::set<std::string> validColors = {"Gray", "BGR", "BGRA", "RGB", "RGBA"};
             if (!validColors.contains(port.colorOrder)) {
@@ -201,8 +218,9 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
         }
 
         if (!port.sameGeometryAsInput.empty()) {
-            if (port.type.type != Type::ImageBatch) {
-                throw ContractError("display.same_geometry_as_input requires an ImageBatch output: " + port.id);
+            if (port.type.type != Type::Image)
+            {
+                throw ContractError("display.same_geometry_as_input requires an Image output: " + port.id);
             }
         }
     }
@@ -221,7 +239,8 @@ std::span<const std::string_view> toolTabs() noexcept {
 }
 
 void validateToolDefinition(const ToolDefinition& def) {
-    if (def.schemaVersion != 1) {
+    if (def.schemaVersion != 2)
+    {
         throw ContractError("Unsupported schema_version: " + std::to_string(def.schemaVersion));
     }
     validateIdentifier(def.id, false);
@@ -238,10 +257,22 @@ void validateToolDefinition(const ToolDefinition& def) {
     }
 
     if (def.kind == ToolKind::PythonFunction || def.kind == ToolKind::PythonClass) {
-        if (def.script.empty() || def.symbol.empty()) {
-            throw ContractError("Python tool requires non-empty entry.file and entry.symbol: " + def.id);
+        if (def.entry.package.empty() || def.entry.file.empty() || def.entry.symbol.empty())
+        {
+            throw ContractError("Python tool requires entry.package, entry.file and entry.symbol: " + def.id);
         }
+        for (const auto &path : {def.entry.package, def.entry.file})
+            if (path.is_absolute() || path.has_root_name() || path.has_root_directory()
+                || *path.lexically_normal().begin() == "..")
+                throw ContractError("Python entry paths must remain inside their selected root: " + def.id);
+        if (def.entry.file.extension() != ".py")
+            throw ContractError("Python entry.file must name a .py source: " + def.id);
     }
+    else if (!def.entry.package.empty() || !def.entry.file.empty() || !def.entry.symbol.empty())
+        throw ContractError("Non-Python tool cannot declare a Python entry: " + def.id);
+    for (const auto &resource : def.resources)
+        if (resource.empty() || resource.is_absolute() || resource.has_root_name() || resource.has_root_directory())
+            throw ContractError("resources must contain relative paths: " + def.id);
     if (def.kind == ToolKind::Host && def.hostBinding.empty())
         throw ContractError("宿主工具必须声明 entry.binding：" + def.id);
     if (def.kind != ToolKind::Host && !def.hostBinding.empty())
@@ -265,8 +296,9 @@ void validateToolDefinition(const ToolDefinition& def) {
     const auto checkImageRef = [](const std::vector<PortDefinition>& ports, const std::string& id, const char* context) {
         if (id.empty()) return;
         const auto* target = findPort(ports, id);
-        if (!target || target->type.type != Type::ImageBatch) {
-            throw ContractError(std::string(context) + " must reference an ImageBatch port: " + id);
+        if (!target || target->type.type != Type::Image)
+        {
+            throw ContractError(std::string(context) + " must reference an Image port: " + id);
         }
     };
 

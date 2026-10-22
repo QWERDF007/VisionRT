@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -31,10 +32,11 @@ void pathEditorsContract()
     QTemporaryDir directory;
     require(directory.isValid(), "path fixture directory is invalid");
     QDir root(directory.path());
-    require(root.mkpath("tools-package/assets/tools/custom/Test"), "cannot create path tool directory");
+    require(root.mkpath("tools-package/tools/custom/Test"), "cannot create path tool directory");
     const auto write = [&](const QString &path, const QByteArray &content)
     {
         QFile file(root.filePath(path));
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly), "cannot create path fixture file");
         require(file.write(content) == content.size(), "path fixture write failed");
     };
@@ -43,20 +45,21 @@ void pathEditorsContract()
   "schema_version": 1,
   "variant": "test",
   "tools": [
-    {"tool_id": "test.paths", "definition": "assets/tools/custom/Test/paths.json"}
+    {"tool_id": "test.paths", "definition": "tools/custom/Test/paths.json"}
   ],
   "modules": [],
   "runtime_files": []
 })json");
-    write("tools-package/assets/tools/custom/Test/run.py", "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
-    write("tools-package/assets/tools/custom/Test/paths.json",
+    write("tools-package/python/custom/Test/run.py",
+          "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
+    write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.paths",
   "display_name": "路径测试",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "run.py", "symbol": "run"},
+  "entry": {"package": "Test", "file": "run.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
     {"id": "file", "name": "文件", "type": "String", "default": "original file", "editor": "file"},

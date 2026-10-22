@@ -39,21 +39,21 @@ QPointF rotated(QPointF point, double degrees)
     return {point.x() * c - point.y() * s, point.x() * s + point.y() * c};
 }
 
-QPointF rectangleCenter(const Roi &roi)
+QPointF rectangleCenter(const ROI::value_type::value_type &roi)
 {
-    const auto data = roi.encoded();
+    const auto &data = roi;
     return {data[1] + data[3] / 2.0, data[2] + data[4] / 2.0};
 }
 
-std::vector<QPointF> contour(const Roi &roi)
+std::vector<QPointF> contour(const ROI::value_type::value_type &roi)
 {
     std::vector<QPointF> points;
-    const auto           data = roi.encoded();
-    if (roi.kind() == RoiKind::Rectangle)
+    const auto          &data = roi;
+    if (roiKind(roi) == RoiKind::Rectangle)
     {
-        for (const auto &point : roi.rectangleCorners()) points.emplace_back(point.x, point.y);
+        for (const auto &point : rectangleCorners(roi)) points.emplace_back(point.x, point.y);
     }
-    else if (roi.kind() == RoiKind::Circle)
+    else if (roiKind(roi) == RoiKind::Circle)
     {
         points.reserve(96);
         for (int i = 0; i < 96; ++i)
@@ -169,10 +169,10 @@ struct Lines
             segment(points.back(), points.front());
     }
 
-    void roi(const Roi &roi)
+    void roi(const ROI::value_type::value_type &roi)
     {
         const auto points = contour(roi);
-        if (roi.kind() == RoiKind::PointSet)
+        if (roiKind(roi) == RoiKind::Point || roiKind(roi) == RoiKind::PointSet)
         {
             for (const auto &point : points)
             {
@@ -181,7 +181,7 @@ struct Lines
             }
         }
         else
-            path(points, roi.kind() != RoiKind::Segment);
+            path(points, roiKind(roi) != RoiKind::Segment);
     }
 
     QSGNode *node(QQuickWindow *window, QColor color)
@@ -276,8 +276,6 @@ void ImageViewport::setGeneration(quint64 generation)
         return;
     generation_ = generation;
     requested_  = false;
-    if (converter_)
-        converter_->invalidate(generation);
     endRoiEdit();
     inputs_.clear();
     outputs_.clear();
@@ -291,33 +289,12 @@ void ImageViewport::setGeneration(quint64 generation)
     emit imageChanged();
 }
 
-void ImageViewport::setImage(OwnedImage image, const QString &colorOrder, quint64 requestId)
-{
-    Q_ASSERT(QThread::currentThread() == thread());
-    if (requested_ && requestId <= requestId_)
-        return;
-    requested_ = true;
-    requestId_ = requestId;
-    if (!converter_)
-    {
-        converter_ = std::make_unique<DisplayConverter>();
-        connect(converter_.get(), &DisplayConverter::converted, this, &ImageViewport::applyFrame);
-    }
-    if (image.empty())
-    {
-        converter_->invalidate(generation_);
-        DisplayFrame empty;
-        empty.requestId  = requestId;
-        empty.generation = generation_;
-        applyFrame(empty);
-    }
-    else
-        converter_->request(std::move(image), colorOrder, requestId, generation_);
-}
-
 void ImageViewport::clearImage(quint64 requestId)
 {
-    setImage({}, {}, requestId);
+    DisplayFrame empty;
+    empty.requestId  = requestId;
+    empty.generation = generation_;
+    setDisplayFrame(empty);
 }
 
 void ImageViewport::setDisplayFrame(const DisplayFrame &frame)
@@ -329,8 +306,6 @@ void ImageViewport::setDisplayFrame(const DisplayFrame &frame)
         setGeneration(frame.generation);
     if (requested_ && frame.requestId <= requestId_)
         return;
-    if (converter_)
-        converter_->invalidate(generation_);
     requested_ = true;
     requestId_ = frame.requestId;
     applyFrame(frame);
@@ -363,7 +338,7 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
     emit imagePresented(frame.requestId);
 }
 
-void ImageViewport::setOverlays(std::vector<Roi> inputs, std::vector<Roi> outputs)
+void ImageViewport::setOverlays(ROI::value_type inputs, ROI::value_type outputs)
 {
     inputs_  = std::move(inputs);
     outputs_ = std::move(outputs);
@@ -480,10 +455,15 @@ bool ImageViewport::event(QEvent *event)
     return QQuickItem::event(event);
 }
 
-void ImageViewport::beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRois, bool readOnly, Type type)
+void ImageViewport::beginRoiEdit(RoiEditTarget target, ROI::value_type targetRois, bool readOnly, bool singleRectangle)
 {
+    if (target_ && *target_ == target && editable_ == targetRois && singleRectangle_ == singleRectangle)
+    {
+        setReadOnly(readOnly);
+        return;
+    }
     cancelDraft();
-    editType_ = type;
+    singleRectangle_ = singleRectangle;
     target_   = std::move(target);
     editable_ = std::move(targetRois);
     selectRoi(target_->roiIndex >= 0 && target_->roiIndex < static_cast<int>(editable_.size()) ? target_->roiIndex
@@ -576,17 +556,17 @@ void ImageViewport::clearGesture()
     overlaysUpdated();
 }
 
-std::vector<QPointF> ImageViewport::handles(const Roi &roi) const
+std::vector<QPointF> ImageViewport::handles(const ROI::value_type::value_type &roi) const
 {
-    const auto data = roi.encoded();
-    if (roi.kind() == RoiKind::Circle)
+    const auto &data = roi;
+    if (roiKind(roi) == RoiKind::Circle)
     {
         const QPointF center(data[1], data[2]);
         return {center + QPointF(data[3], 0), center + QPointF(0, data[3]), center - QPointF(data[3], 0),
                 center - QPointF(0, data[3])};
     }
     auto points = contour(roi);
-    if (roi.kind() == RoiKind::Rectangle)
+    if (roiKind(roi) == RoiKind::Rectangle)
     {
         points.push_back(rectangleCenter(roi) + rotated({0, -data[4] / 2.0 - 24 / scale_}, data[5]));
     }
@@ -599,15 +579,15 @@ int ImageViewport::hitRoi(QPointF point) const
     for (int i = static_cast<int>(editable_.size()) - 1; i >= 0; --i)
     {
         const auto &roi = editable_[i];
-        if (roi.kind() == RoiKind::Circle)
+        if (roiKind(roi) == RoiKind::Circle)
         {
-            const auto data = roi.encoded();
+            const auto &data = roi;
             if (length(point - QPointF(data[1], data[2])) <= data[3] + tolerance)
                 return i;
             continue;
         }
         const auto points = contour(roi);
-        if (roi.kind() == RoiKind::PointSet)
+        if (roiKind(roi) == RoiKind::Point || roiKind(roi) == RoiKind::PointSet)
         {
             for (const auto &candidate : points)
                 if (length(point - candidate) <= tolerance)
@@ -618,7 +598,7 @@ int ImageViewport::hitRoi(QPointF point) const
             for (std::size_t j = 1; j < points.size(); ++j)
                 if (segmentDistance(point, points[j - 1], points[j]) <= tolerance)
                     return i;
-            if (roi.kind() != RoiKind::Segment)
+            if (roiKind(roi) != RoiKind::Segment)
             {
                 if (segmentDistance(point, points.back(), points.front()) <= tolerance)
                     return i;
@@ -715,72 +695,76 @@ void ImageViewport::changeDraft(QPointF point)
             const auto delta = point - anchor_;
             draft_.reset();
             if (drawShape_ == 1 && length(delta) > epsilon)
-                draft_ = Roi::segment({float(anchor_.x()), float(anchor_.y())}, {float(point.x()), float(point.y())});
+                draft_ = ROI::value_type::value_type{1., anchor_.x(), anchor_.y(), point.x(), point.y()};
             else if (drawShape_ == 2 && std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
-                draft_
-                    = Roi::rectangle(float(std::min(anchor_.x(), point.x())), float(std::min(anchor_.y(), point.y())),
-                                     float(std::abs(delta.x())), float(std::abs(delta.y())), 0);
+                draft_ = ROI::value_type::value_type{2.,
+                                                     std::min(anchor_.x(), point.x()),
+                                                     std::min(anchor_.y(), point.y()),
+                                                     std::abs(delta.x()),
+                                                     std::abs(delta.y()),
+                                                     0.};
             else if (drawShape_ == 3 && length(delta) > epsilon)
-                draft_ = Roi::circle(float(anchor_.x()), float(anchor_.y()), float(length(delta)));
+                draft_ = ROI::value_type::value_type{3., anchor_.x(), anchor_.y(), length(delta)};
         }
         else if (original_ && gesture_ == Gesture::Move)
         {
-            const auto         delta   = point - anchor_;
-            auto               encoded = original_->encoded();
-            std::vector<float> data(encoded.begin(), encoded.end());
-            const std::size_t  end
-                = (original_->kind() == RoiKind::Rectangle || original_->kind() == RoiKind::Circle) ? 3 : data.size();
-            for (std::size_t i = 1; i < end; i += 2)
+            const auto        delta = point - anchor_;
+            auto              data  = *original_;
+            const std::size_t end
+                = (roiKind(data) == RoiKind::Rectangle || roiKind(data) == RoiKind::Circle) ? 3 : data.size();
+            for (std::size_t index = 1; index < end; index += 2)
             {
-                data[i] += float(delta.x());
-                data[i + 1] += float(delta.y());
+                data[index] += delta.x();
+                data[index + 1] += delta.y();
             }
-            draft_ = Roi::decode(data);
+            draft_ = std::move(data);
         }
         else if (original_ && gesture_ == Gesture::Handle)
         {
             draft_.reset();
-            const auto data = original_->encoded();
-            if (original_->kind() == RoiKind::Rectangle)
+            const auto &data = *original_;
+            if (roiKind(data) == RoiKind::Rectangle)
             {
-                const auto center = rectangleCenter(*original_);
+                const auto center = rectangleCenter(data);
                 if (handle_ == 4)
                 {
                     const auto delta = point - center;
                     if (length(delta) > epsilon)
-                        draft_ = Roi::rectangle(data[1], data[2], data[3], data[4],
-                                                float(std::atan2(delta.y(), delta.x()) * 180 / pi + 90));
+                        draft_ = ROI::value_type::value_type{
+                            2., data[1], data[2], data[3], data[4], std::atan2(delta.y(), delta.x()) * 180 / pi + 90};
                 }
                 else
                 {
-                    const auto corners   = contour(*original_);
+                    const auto corners   = contour(data);
                     const auto opposite  = corners[(handle_ + 2) % 4];
                     const auto delta     = rotated(point - opposite, -data[5]);
                     const auto newCenter = (point + opposite) / 2;
                     if (std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
-                        draft_ = Roi::rectangle(float(newCenter.x() - std::abs(delta.x()) / 2),
-                                                float(newCenter.y() - std::abs(delta.y()) / 2),
-                                                float(std::abs(delta.x())), float(std::abs(delta.y())), data[5]);
+                        draft_ = ROI::value_type::value_type{2.,
+                                                             newCenter.x() - std::abs(delta.x()) / 2,
+                                                             newCenter.y() - std::abs(delta.y()) / 2,
+                                                             std::abs(delta.x()),
+                                                             std::abs(delta.y()),
+                                                             data[5]};
                 }
             }
-            else if (original_->kind() == RoiKind::Circle)
+            else if (roiKind(data) == RoiKind::Circle)
             {
                 const double radius = length(point - QPointF(data[1], data[2]));
                 if (radius > epsilon)
-                    draft_ = Roi::circle(data[1], data[2], float(radius));
+                    draft_ = ROI::value_type::value_type{3., data[1], data[2], radius};
             }
             else
             {
-                std::vector<float> updated(data.begin(), data.end());
-                updated[1 + handle_ * 2] = float(point.x());
-                updated[2 + handle_ * 2] = float(point.y());
-                draft_                   = Roi::decode(updated);
+                auto updated             = data;
+                updated[1 + handle_ * 2] = point.x();
+                updated[2 + handle_ * 2] = point.y();
+                draft_                   = std::move(updated);
             }
         }
-        draftChanged_ = draft_.has_value()
-                     && (!original_
-                         || !std::equal(original_->encoded().begin(), original_->encoded().end(),
-                                        draft_->encoded().begin(), draft_->encoded().end()));
+        if (draft_)
+            validateRoi(*draft_);
+        draftChanged_ = draft_.has_value() && (!original_ || *original_ != *draft_);
     }
     catch (const ContractError &)
     {
@@ -855,24 +839,30 @@ void ImageViewport::mouseUngrabEvent()
         cancelDraft();
 }
 
-std::optional<Roi> ImageViewport::completedDraft() const
+std::optional<ROI::value_type::value_type> ImageViewport::completedDraft() const
 {
     if (gesture_ != Gesture::Vertices)
         return draft_;
-    std::vector<cv::Point2f> points;
-    points.reserve(vertices_.size());
-    for (const auto &point : vertices_) points.emplace_back(float(point.x()), float(point.y()));
-    if (drawShape_ == 4 && points.size() > 1 && length(vertices_.front() - vertices_.back()) * scale_ <= 4)
-        points.pop_back();
-    try
+    auto count = vertices_.size();
+    if (drawShape_ == 4 && count > 1 && length(vertices_.front() - vertices_.back()) * scale_ <= 4)
+        --count;
+    if ((drawShape_ == 4 && count >= 3) || (drawShape_ == 5 && count > 0))
     {
-        if (drawShape_ == 4 && points.size() >= 3)
-            return Roi::polygon(points);
-        if (drawShape_ == 5 && !points.empty())
-            return Roi::points(points);
-    }
-    catch (const ContractError &)
-    {
+        ROI::value_type::value_type record{static_cast<double>(drawShape_)};
+        record.reserve(1 + count * 2);
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            record.push_back(vertices_[index].x());
+            record.push_back(vertices_[index].y());
+        }
+        try
+        {
+            validateRoi(record);
+            return record;
+        }
+        catch (const ContractError &)
+        {
+        }
     }
     return {};
 }
@@ -1041,7 +1031,7 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             const auto &roi      = draft_ ? *draft_ : editable_[selected_];
             const auto  controls = handles(roi);
             for (const auto &point : controls) edit.square(point, 3.5 / scale_);
-            if (roi.kind() == RoiKind::Rectangle)
+            if (roiKind(roi) == RoiKind::Rectangle)
                 edit.segment((controls[0] + controls[1]) / 2, controls[4]);
         }
         if (auto *geometry = input.node(window(), QColor(255, 220, 0)))

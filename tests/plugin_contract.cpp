@@ -224,7 +224,7 @@ void nativeOutputRequiredness(const std::filesystem::path &modulePath)
             const auto declaration
                 = QJsonDocument(
                       QJsonObject{
-                          {"schema_version",                                   1                                            },
+                          {"schema_version",                                   2                                            },
                           {       "tool_id",                                                       "test.plugin.publication"},
                           {  "display_name",                                                                  "输出发布"},
                           {       "version",                                                                         "1.0.0"},
@@ -394,13 +394,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(temp.isValid());
     const auto base           = std::filesystem::u8path(temp.path().toUtf8().toStdString());
     const auto pkgDir         = base / std::filesystem::path(u8"工具 包 with space");
-    const auto declarationDir = pkgDir / std::filesystem::path(u8"assets/tools/builtin/测试/数学");
+    const auto declarationDir = pkgDir / std::filesystem::path(u8"tools/builtin/测试/数学");
     std::filesystem::create_directories(pkgDir / "bin");
     std::filesystem::copy_file(modulePath, pkgDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
 
     writeText(declarationDir / "counter.json", R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.counter",
   "display_name": "打包计数器",
   "version": "1.0.0",
@@ -414,7 +414,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
   ]
 })json");
     writeText(declarationDir / "function.json", R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.function",
   "display_name": "打包函数",
   "version": "1.0.0",
@@ -427,9 +427,9 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {"id": "y", "name": "输出Y", "type": "Int"}
   ]
 })json");
-    // Present on disk but absent from the index: must never be discovered.
+    // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.ghost.packaged",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -447,11 +447,23 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/function.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/测试/数学/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/function.json"}
   ],
   "runtime_files": ["bin/test_module.dll"]
 })json");
+
+    bool unindexedRejected = false;
+    try
+    {
+        readToolsPackage(pkgDir);
+    }
+    catch (const ContractError &)
+    {
+        unindexedRejected = true;
+    }
+    assert(unindexedRejected);
+    std::filesystem::remove(declarationDir / "ghost.json");
 
     const auto package = readToolsPackage(pkgDir);
     assert(package.tools.size() == 2);
@@ -475,7 +487,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
     writeText(legacyDir / "legacy.json", R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.legacy",
   "display_name": "旧目录工具",
   "version": "1.0.0",
@@ -494,7 +506,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
     writeText(duplicateDir / "counter.json", R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.counter",
   "display_name": "重复计数器",
   "version": "2.0.0",
@@ -540,8 +552,8 @@ void packageRegistration(const std::filesystem::path &modulePath)
     std::filesystem::create_directories(otherDir / "bin");
     std::filesystem::copy_file(modulePath, otherDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
-    writeText(otherDir / std::filesystem::path(u8"assets/tools/custom/Python/示例/function.json"), R"json({
-  "schema_version": 1,
+    writeText(otherDir / std::filesystem::path(u8"tools/custom/Python/示例/function.json"), R"json({
+  "schema_version": 2,
   "tool_id": "test.plugin.function",
   "display_name": "另一包函数",
   "version": "1.0.0",
@@ -561,7 +573,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/custom/Python/示例/function.json"}
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/custom/Python/示例/function.json"}
   ],
   "runtime_files": []
 })json");
@@ -572,7 +584,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(registry.find("test.plugin.counter") == nullptr);
     assert(registry.find("test.plugin.legacy") == nullptr);
     const auto *relocated = registry.find("test.plugin.function");
-    assert(relocated->builtin);
+    assert(relocated->source.origin == ToolOrigin::Custom);
     assert(registry.availability("test.plugin.function").state == ToolAvailability::Available);
 
     // A package that fails validation leaves the registered tool set untouched.
@@ -601,7 +613,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     // Create tools-package directory structure
     const auto pkgDir  = appDir / "tools-package";
     const auto binDir  = pkgDir / "bin";
-    const auto jsonDir = pkgDir / std::filesystem::path(u8"assets/tools/builtin/测试/数学");
+    const auto jsonDir = pkgDir / std::filesystem::path(u8"tools/builtin/测试/数学");
     std::filesystem::create_directories(binDir);
     std::filesystem::create_directories(jsonDir);
 
@@ -621,7 +633,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.counter.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.counter.json"}
   ],
   "runtime_files": []
 })json";
@@ -632,7 +644,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
         const char *jsonContent = R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.counter",
   "display_name": "实际打包插件",
   "version": "1.0.0",
@@ -715,7 +727,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(funcJsonFile));
         assert(f.open(QIODevice::WriteOnly));
         const char *funcJsonContent = R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -740,8 +752,8 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.function.json"}
   ],
   "runtime_files": []
 })json";
@@ -777,7 +789,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         assert(n.toMap().value("state").toString() == "succeeded");
     }
 
-    // 3. Delete Tool A mapping from module_index.json and rescan
+    assert(std::filesystem::remove(jsonDir / "test.plugin.counter.json"));
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -788,7 +800,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.function.json"}
   ],
   "runtime_files": []
 })json";
@@ -850,7 +862,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.function.json"}
   ],
   "runtime_files": []
 })json";
@@ -885,22 +897,25 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.runState() == "Idle");
     assert(app.nodes().isEmpty() && instances() == 0);
+    assert(std::filesystem::remove(funcJsonFile));
     {
         QFile definition(toQString(jsonDir / "release.json"));
         assert(definition.open(QIODevice::WriteOnly));
-        definition.write(R"({"schema_version":1,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
+        definition.write(R"({"schema_version":2,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
                             "version":"1.0.0","kind":"cpp","init_params":[],"inputs":[],"outputs":[]})");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
         index.write(
             R"({"schema_version":1,"variant":"cpu","modules":[{"id":"test_module","library":"bin/test_module.dll"}],
                         "tools":[{"tool_id":"test.plugin.release_fail","module":"test_module",
-                                  "definition":"assets/tools/builtin/测试/数学/release.json"}],"runtime_files":[]})");
+                                  "definition":"tools/builtin/测试/数学/release.json"}],"runtime_files":[]})");
     }
     app.rescanTools();
     waitForIdle();
+    assert(!app.toolMetadata("test.plugin.release_fail").isEmpty());
     app.addNode("test.plugin.release_fail", 100, 100);
     waitForIdle();
+    assert(app.nodes().size() == 1);
     app.runOnce();
     waitForIdle();
     assert(app.nodes().first().toMap().value("state") == "succeeded");
@@ -1118,9 +1133,9 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     std::filesystem::copy_file(pluginAPath, targetDll, std::filesystem::copy_options::overwrite_existing);
     std::filesystem::copy_file(depAPath, targetDep, std::filesystem::copy_options::overwrite_existing);
 
-    writeText(unicodeDir / std::filesystem::path(u8"assets/tools/builtin/测试/示例") / "plugin_a.json",
+    writeText(unicodeDir / std::filesystem::path(u8"tools/builtin/测试/示例") / "plugin_a.json",
               R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.a",
   "display_name": "插件甲",
   "version": "1.0.0",
@@ -1138,7 +1153,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     {"id": "mod_a", "library": "bin/plugin_a.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.a", "module": "mod_a", "definition": "assets/tools/builtin/测试/示例/plugin_a.json"}
+    {"tool_id": "test.plugin.a", "module": "mod_a", "definition": "tools/builtin/测试/示例/plugin_a.json"}
   ],
   "runtime_files": []
 })json");

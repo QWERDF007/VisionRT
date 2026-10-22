@@ -11,11 +11,11 @@ ColumnLayout {
     objectName: "parameter_" + parameter.id
     property string structureDraft: ""
     property string structureError: ""
-    readonly property bool alwaysUpstream: parameter.type === "ImageBatch"
+    readonly property bool alwaysUpstream: parameter.type === "Image"
     readonly property bool upstream: (alwaysUpstream || parameter.mode === "upstream") && !parameter.init
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && !app.busy
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
-    readonly property bool structured: ["NumericArray", "StringArray", "RoiBatch", "Rect"].indexOf(parameter.type) >= 0
+    readonly property bool structured: ["Array", "ROI"].indexOf(parameter.type) >= 0
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
     readonly property string pathKind: parameter.editor || ""
     readonly property real numberValue: Number(root.valueText)
@@ -107,8 +107,8 @@ ColumnLayout {
                                        : root.parameter.type === "Bool" ? boolEditor
                                        : root.parameter.type === "Int" ? integerEditor
                                        : root.parameter.type === "Float" ? floatEditor
-                                       : root.parameter.type === "Rect" ? rectEditor
-                                       : root.parameter.type === "RoiBatch" ? roiBatchEditor
+                                       : (root.parameter.type === "ROI" && root.parameter.editor === "rect") ? rectEditor
+                                       : root.parameter.type === "ROI" ? regionsEditor
                                        : root.structured ? structureEditor
                                        : textEditor
                     }
@@ -171,7 +171,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: root.labelWidth + 6
         readonly property bool hasImage: session && session.imageWidth > 0
-        visible: root.parameter.type === "Rect" && !root.parameter.init
+        visible: (root.parameter.type === "ROI" && root.parameter.editor === "rect") && !root.parameter.init
             && app.roiEditor.node === root.nodeId && app.roiEditor.input === root.parameter.id
         opacity: hasImage ? 0 : 1
         Layout.preferredHeight: hasImage ? 0 : -1
@@ -449,7 +449,7 @@ ColumnLayout {
     }
 
     Component {
-        id: roiBatchEditor
+        id: regionsEditor
         ParameterTextField {
             id: field
             backgroundColor: Theme.paramInputReadOnlyBg

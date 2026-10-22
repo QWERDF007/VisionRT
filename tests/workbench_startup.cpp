@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "WorkbenchFixtures.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
@@ -32,7 +33,8 @@ void startupProjectContract()
     qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", visionrt::Theme::instance());
     for (const bool projectReadyBeforeWindow : {false, true})
     {
-        visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
+        visionrt::testing::WorkbenchInstallation installation;
+        visionrt::AppController                  app(1, installation.directory());
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "startup catalog did not become ready");
         app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
         app.resolveUnsaved(QStringLiteral("discard"));
@@ -102,7 +104,7 @@ void startupProjectContract()
             const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
             QFile      badProject(badPath);
             require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
-            require(badProject.write(R"json({"format_version":2,"project":{},"flows":{}})json") > 0,
+            require(badProject.write(R"json({"format_version":3,"project":{},"flows":{}})json") > 0,
                     "cannot populate malformed project fixture");
             badProject.close();
             const auto oldNodes   = app.nodes();

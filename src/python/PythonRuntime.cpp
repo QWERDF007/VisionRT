@@ -1,5 +1,7 @@
 #include "python/PythonRuntime.h"
 
+#include "PythonLoader.h"
+
 #include <python/PythonInterop.h>
 
 #include "core/ToolRegistry.h"
@@ -19,71 +21,6 @@ namespace py = pybind11;
 
 namespace {
 
-// This finder owns only explicitly registered namespaces. Both entry modules
-// and every relative import compile the current source, never timestamp pyc.
-constexpr const char *loaderSource = R"PY(
-import importlib.abc
-import importlib.machinery
-import importlib.util
-import importlib
-import pathlib
-import sys
-
-class FreshSourceLoader(importlib.machinery.SourceFileLoader):
-    def get_code(self, fullname):
-        return self.source_to_code(self.get_data(self.path), self.path)
-
-class ManagedFinder(importlib.abc.MetaPathFinder):
-    def __init__(self):
-        self.roots = {}
-    def find_spec(self, fullname, path=None, target=None):
-        root, _, suffix = fullname.partition('.')
-        directory = self.roots.get(root)
-        if directory is None:
-            return None
-        location = directory.joinpath(*suffix.split('.')) if suffix else directory
-        package = location / '__init__.py'
-        if package.is_file():
-            return importlib.util.spec_from_file_location(fullname, str(package),
-                loader=FreshSourceLoader(fullname, str(package)),
-                submodule_search_locations=[str(location)])
-        source = location.with_suffix('.py')
-        if suffix and source.is_file():
-            return importlib.util.spec_from_file_location(fullname, str(source),
-                loader=FreshSourceLoader(fullname, str(source)))
-        if location.is_dir():
-            spec = importlib.machinery.ModuleSpec(fullname, loader=None, is_package=True)
-            spec.submodule_search_locations = [str(location)]
-            return spec
-        # Do not allow PathFinder to recover an old pyc or native module from
-        # a managed namespace after a source file has disappeared.
-        raise ModuleNotFoundError('Managed Python source is missing: ' + fullname)
-    def clear(self):
-        roots = tuple(self.roots)
-        for name in tuple(sys.modules):
-            if any(name == root or name.startswith(root + '.') for root in roots):
-                del sys.modules[name]
-        self.roots.clear()
-    def load(self, root, directory, script, symbol):
-        directory = pathlib.Path(directory).resolve()
-        entry = (directory / script).resolve()
-        relative = entry.relative_to(directory)
-        if entry.suffix != '.py':
-            raise ImportError('Managed entry must be a Python source file')
-        parts = list(relative.with_suffix('').parts)
-        if parts[-1] == '__init__':
-            parts.pop()
-        if any(not part.isidentifier() for part in parts):
-            raise ImportError('Managed package path components must be identifiers')
-        self.roots[root] = directory
-        fullname = '.'.join([root] + parts)
-        module = importlib.import_module(fullname)
-        return getattr(module, symbol)
-
-finder = ManagedFinder()
-sys.meta_path.insert(0, finder)
-)PY";
-
 struct Implementation
 {
     ToolStatus status;
@@ -94,6 +31,8 @@ struct RuntimeState
 {
     py::dict                                           loader;
     std::map<std::string, Implementation, std::less<>> implementations;
+    PythonStorage                                      storage;
+    std::uint64_t                                      generation = 0;
     std::size_t instances = 0; // Accessed only while holding the interpreter GIL.
     bool        alive     = true;
 };
@@ -119,26 +58,27 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
         if (definition != declarations.end())
         {
             validateValue(definition->type, value);
-            if (isPathPort(*definition)
-                && std::holds_alternative<Utf8>(value) && !std::get<Utf8>(value).str().empty())
+            if (isPathPort(*definition) && std::holds_alternative<std::string>(value)
+                && !std::get<std::string>(value).empty())
             {
-                const auto resolved = services.paths.resolve(std::get<Utf8>(value).str()).u8string();
+                const auto resolved = services.paths.resolve(std::get<std::string>(value)).u8string();
                 result[py::str(id)] = py::str(reinterpret_cast<const char *>(resolved.data()), resolved.size());
                 continue;
             }
         }
-        result[py::str(id)] = toPythonReadonly(value);
+        result[py::str(id)] = toPython(value);
     }
     return result;
 }
 
-ToolStatus parseStatus(const py::dict &result)
+ToolStatus parseStatus(const py::dict &result, const PythonStorage &storage)
 {
     if (!result.contains("__status_code") || !result.contains("__status_message"))
         throw ContractError("工具返回值必须包含 __status_code 与 __status_message");
     ToolStatus status;
-    status.code    = std::get<std::int64_t>(fromPython({Type::Int}, result["__status_code"]));
-    status.message = std::get<Utf8>(fromPython({Type::String}, result["__status_message"])).str();
+    status.code = std::get<std::int64_t>(fromPython({Type::Int}, result["__status_code"], storage, "__status_code"));
+    status.message
+        = std::get<std::string>(fromPython({Type::String}, result["__status_message"], storage, "__status_message"));
     if (status.code < 0)
         throw ContractError("工具不得返回负状态码，负状态码由宿主框架保留");
     return status;
@@ -151,10 +91,10 @@ py::dict resultDictionary(py::handle result)
     return py::reinterpret_borrow<py::dict>(result);
 }
 
-ToolStatus lifecycleStatus(py::handle returned)
+ToolStatus lifecycleStatus(py::handle returned, const PythonStorage &storage)
 {
     auto result = resultDictionary(returned);
-    auto status = parseStatus(result);
+    auto status = parseStatus(result, storage);
     if (result.size() != 2)
         throw ContractError("initialize/release 只能返回两个状态键");
     return status;
@@ -231,7 +171,7 @@ public:
         try
         {
             auto inputs = inputDictionary(parameters, definition_.initParams, services_);
-            return lifecycleStatus(objects_->instance.attr("initialize")(inputs));
+            return lifecycleStatus(objects_->instance.attr("initialize")(inputs), state_->storage);
         }
         catch (const py::error_already_set &error)
         {
@@ -331,7 +271,7 @@ public:
         {
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
             auto       dictionary = resultDictionary(returned);
-            result.status         = parseStatus(dictionary);
+            result.status         = parseStatus(dictionary, state_->storage);
             if (dictionary.size() != businessOutputCount_ + 2)
                 throw ContractError("输出键必须与声明端口及两个状态键完全一致");
             for (const auto &output : definition_.outputs)
@@ -343,7 +283,7 @@ public:
                 PortValue value;
                 try
                 {
-                    value = fromPython(output.type, dictionary[py::str(output.id)]);
+                    value = fromPython(output.type, dictionary[py::str(output.id)], state_->storage, output.id);
                 }
                 catch (const std::exception &error)
                 {
@@ -392,7 +332,7 @@ private:
         {
             if (objects_->instance)
             {
-                return lifecycleStatus(objects_->instance.attr("release")());
+                return lifecycleStatus(objects_->instance.attr("release")(), state_->storage);
             }
         }
         catch (const py::error_already_set &error)
@@ -470,7 +410,10 @@ struct PythonRuntime::Impl
         try
         {
             state = std::make_shared<RuntimeState>();
-            py::exec(loaderSource, state->loader);
+            static std::atomic<std::uint64_t> nextRuntime{0};
+            py::exec(python::loaderSource, state->loader);
+            state->loader["finder"] = state->loader["ManagedPackages"](nextRuntime.fetch_add(1));
+            py::module_::import("sys").attr("meta_path").attr("insert")(0, state->loader["finder"]);
             releaseMainGil = std::make_unique<py::gil_scoped_release>();
         }
         catch (const py::error_already_set &error)
@@ -488,23 +431,28 @@ struct PythonRuntime::Impl
 
     ~Impl()
     {
-        // Violating this order cannot be repaired after interpreter finalization.
         if (std::this_thread::get_id() != ownerThread)
             std::terminate();
+        {
+            py::gil_scoped_acquire gil;
+            if (state->instances != 0)
+                std::terminate();
+            state->alive = false;
+            state->implementations.clear();
+            try
+            {
+                state->loader["finder"].attr("clear")();
+                py::module_::import("sys").attr("meta_path").attr("remove")(state->loader["finder"]);
+                state->loader.clear();
+                py::module_::import("gc").attr("collect")();
+            }
+            catch (py::error_already_set &error)
+            {
+                error.discard_as_unraisable("PythonRuntime shutdown");
+            }
+        }
+        state->storage.waitForRelease();
         releaseMainGil.reset();
-        if (state->instances != 0)
-            std::terminate();
-        state->alive = false;
-        state->implementations.clear();
-        try
-        {
-            state->loader["finder"].attr("clear")();
-            py::module_::import("sys").attr("meta_path").attr("remove")(state->loader["finder"]);
-        }
-        catch (py::error_already_set &error)
-        {
-            error.discard_as_unraisable("PythonRuntime shutdown");
-        }
         state.reset();
         interpreter.reset();
     }
@@ -525,61 +473,23 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
         throw std::logic_error("Python refresh requires all Python instances to be destroyed");
     state.implementations.clear();
     state.loader["finder"].attr("clear")();
+    ++state.generation;
     std::vector<PythonImplementation> statuses;
-    static std::atomic<std::uint64_t> nextNamespace{0};
     for (const auto &definition : definitions)
     {
         if (definition.kind != ToolKind::PythonFunction && definition.kind != ToolKind::PythonClass)
             continue;
-        Implementation implementation;
-        try
-        {
-            const auto root       = "_visionrt_tool_" + std::to_string(nextNamespace.fetch_add(1));
-            const auto directory  = std::filesystem::absolute(definition.definitionPath).parent_path().u8string();
-            const auto script     = std::filesystem::absolute(definition.script).u8string();
-            implementation.symbol = state.loader["finder"].attr("load")(
-                root, py::str(reinterpret_cast<const char *>(directory.data()), directory.size()),
-                py::str(reinterpret_cast<const char *>(script.data()), script.size()), definition.symbol);
-            if (!PyCallable_Check(implementation.symbol.ptr()))
-                throw ContractError("Python 入口不可调用");
-            if (definition.kind == ToolKind::PythonClass)
-            {
-                if (!PyType_Check(implementation.symbol.ptr()))
-                    throw ContractError("Python 类入口不是类");
-                for (const char *method : {"initialize", "execute", "release"})
-                    if (!py::hasattr(implementation.symbol, method)
-                        || !PyCallable_Check(implementation.symbol.attr(method).ptr()))
-                        throw ContractError(std::string("Python 类缺少可调用方法：") + method);
-            }
-            else if (PyType_Check(implementation.symbol.ptr()))
-            {
-                throw ContractError("Python 函数入口不能是类");
-            }
-        }
-        catch (const py::error_already_set &error)
-        {
-            implementation.symbol = py::object{};
-            implementation.status = errorStatus(-3, "Python 加载异常", error.what());
-        }
-        catch (const ContractError &error)
-        {
-            implementation.status = {-3, error.what()};
-            implementation.symbol = py::object{};
-        }
-        catch (const std::exception &error)
-        {
-            implementation.symbol = py::object{};
-            implementation.status = errorStatus(-3, "Python 加载异常", error.what());
-        }
-        statuses.push_back({definition.id, implementation.status});
-        state.implementations.insert_or_assign(definition.id, std::move(implementation));
+        if (!state.implementations.emplace(definition.id, Implementation{}).second)
+            throw ContractError("Python 目录有重复工具 ID：" + definition.id);
+        statuses.push_back({definition.id, {}});
     }
     return statuses;
 }
 
 ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
 {
-    return [weak       = std::weak_ptr<RuntimeState>(impl_->state),
+    py::gil_scoped_acquire gil;
+    return [weak = std::weak_ptr<RuntimeState>(impl_->state), generation = impl_->state->generation,
             definition = std::make_shared<const ToolDefinition>(definition)](
                const ToolServices &services) -> std::unique_ptr<IToolInstance>
     {
@@ -588,8 +498,43 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
             throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 运行时已关闭：" + definition->id);
         py::gil_scoped_acquire gil;
         const auto             implementation = state->implementations.find(definition->id);
-        if (!state->alive || implementation == state->implementations.end())
+        if (!state->alive || state->generation != generation || implementation == state->implementations.end())
             throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 实现未加载：" + definition->id);
+        auto &loaded = implementation->second;
+        if (!loaded.symbol && loaded.status)
+        {
+            try
+            {
+                const auto directory = definition->pythonPackage().u8string();
+                const auto script    = definition->entry.file.u8string();
+                loaded.symbol        = state->loader["finder"].attr("load")(
+                    definition->source.origin == ToolOrigin::Builtin ? "builtin" : "custom",
+                    py::str(reinterpret_cast<const char *>(directory.data()), directory.size()),
+                    py::str(reinterpret_cast<const char *>(script.data()), script.size()), definition->entry.symbol);
+                if (!PyCallable_Check(loaded.symbol.ptr()))
+                    throw ContractError("Python 入口不可调用");
+                if (definition->kind == ToolKind::PythonClass)
+                {
+                    if (!PyType_Check(loaded.symbol.ptr()))
+                        throw ContractError("Python 类入口不是类");
+                    for (const char *method : {"initialize", "execute", "release"})
+                        if (!py::hasattr(loaded.symbol, method) || !PyCallable_Check(loaded.symbol.attr(method).ptr()))
+                            throw ContractError(std::string("Python 类缺少可调用方法：") + method);
+                }
+                else if (PyType_Check(loaded.symbol.ptr()))
+                    throw ContractError("Python 函数入口不能是类");
+            }
+            catch (const py::error_already_set &error)
+            {
+                loaded.status = errorStatus(-3, "Python 加载异常", error.what());
+                loaded.symbol = py::object{};
+            }
+            catch (const std::exception &error)
+            {
+                loaded.status = errorStatus(-3, "Python 加载异常", error.what());
+                loaded.symbol = py::object{};
+            }
+        }
         if (!implementation->second.status)
             throw RegistryError(ToolAvailability::ImplementationUnavailable, implementation->second.status);
         return std::make_unique<PythonTool>(std::move(state), definition, services, implementation->second);

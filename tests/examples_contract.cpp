@@ -32,7 +32,7 @@ RuntimeUpdate finish(RuntimeEngine &engine)
         auto update = engine.pollLatest();
         if (update.completion)
         {
-            assert(engine.acknowledgeCompletion(*update.completion));
+            assert((engine.acknowledgeCompletion(*update.completion)));
             return update;
         }
         std::this_thread::sleep_for(2ms);
@@ -79,7 +79,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
                                     PythonRuntime &python)
 {
     QTemporaryDir tmpDir;
-    assert(tmpDir.isValid());
+    assert((tmpDir.isValid()));
     const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
     const auto tempProjectFile = tmpPath / "pipeline_cpu_python.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt.json", tempProjectFile);
@@ -101,67 +101,66 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
         std::cerr << "LOAD DIAGNOSTIC: node=" << (d.node ? *d.node : 0) << " code=" << static_cast<int>(d.code)
                   << " field=" << d.field << " msg=" << d.message << std::endl;
     }
-    assert(loaded.diagnostics.empty());
-    assert(loaded.project.flows.size() == 1);
-    assert(loaded.project.flows[0].nodes.size() == 5);
+    assert((loaded.diagnostics.empty()));
+    assert((loaded.project.flows.size() == 1));
+    assert((loaded.project.flows[0].nodes.size() == 5));
 
     RuntimeEngine engine(4);
-    assert(engine.start(loaded.project, registry, RunMode::Once).code == 0);
+    assert((engine.start(loaded.project, registry, RunMode::Once).code == 0));
     auto update = finish(engine);
 
     auto s1 = snapshot(update, 1);
-    assert(s1 && s1->status.code == 0);
-    const auto &images1 = std::get<ImageBatch>(s1->outputs.at("images"));
-    assert(images1.images().size() >= 2);
+    assert((s1 && s1->status.code == 0));
+    const auto &images1 = std::get<DataRef<Image>>(s1->outputs.at("images"));
+    assert((images1.get().size() >= 2));
 
     auto s2 = snapshot(update, 2);
-    assert(s2 && s2->status.code == 0);
-    const auto &rois2 = std::get<RoiBatch>(s2->outputs.at("rois"));
-    assert(rois2.images().size() == images1.images().size());
+    assert((s2 && s2->status.code == 0));
+    const auto &rois2 = std::get<DataRef<ROI>>(s2->outputs.at("rois"));
+    assert((rois2.get().size() == images1.get().size()));
 
     auto s3 = snapshot(update, 3);
-    assert(s3 && s3->status.code == 0);
-    const auto &croppedImages = std::get<ImageBatch>(s3->outputs.at("images"));
-    assert(croppedImages.images().size() == images1.images().size());
-    for (const auto &image : croppedImages.images())
-        assert(image.rows() == 40 && image.cols() == 20);
-    assert(!s3->outputs.contains("source_indices"));
+    assert((s3 && s3->status.code == 0));
+    const auto &croppedImages = std::get<DataRef<Image>>(s3->outputs.at("images"));
+    assert((croppedImages.get().size() == images1.get().size()));
+    for (const auto &image : croppedImages.get()) assert((image.rows == 40 && image.cols == 20));
+    assert((!s3->outputs.contains("source_indices")));
 
     auto s4 = snapshot(update, 4);
-    assert(s4 && s4->status.code == 0);
-    const auto &preprocessed = std::get<ImageBatch>(s4->outputs.at("images"));
-    assert(preprocessed.images().size() == croppedImages.images().size());
+    assert((s4 && s4->status.code == 0));
+    const auto &preprocessed = std::get<DataRef<Image>>(s4->outputs.at("images"));
+    assert((preprocessed.get().size() == croppedImages.get().size()));
 
     // Node 5: python mean
     auto s5 = snapshot(update, 5);
-    assert(s5 && s5->status.code == 0);
-    const auto &means = std::get<NumericArray>(s5->outputs.at("means"));
-    assert(means.buffers().size() == 1);
-    assert(means.buffers()[0].shape()[0] == static_cast<std::int64_t>(images1.images().size()));
-    const auto values = means.buffers()[0].values<double>();
-    assert(values.size() == 2);
-    assert(std::abs(values[0] - 51.0) < 0.5);
-    assert(std::abs(values[1] - 22.95) < 0.5);
+    assert((s5 && s5->status.code == 0));
+    const auto &means = std::get<Array>(s5->outputs.at("means"));
+    assert(((means.type() == TypeSpec{Type::Array, DType::Float64, 1})));
+    assert((means.get<std::vector<double>>().size() == static_cast<std::int64_t>(images1.get().size())));
+    const auto values = means.get<std::vector<double>>();
+    assert((values.size() == 2));
+    assert((std::abs(values[0] - 51.0) < 0.5));
+    assert((std::abs(values[1] - 22.95) < 0.5));
 
     // Test Save As / Reopen consistency & re-execution output equality
     const auto saveTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "reopened.vrt.json";
     storage.save(loaded.project, saveTarget);
     auto reloaded = storage.load(saveTarget);
-    assert(reloaded.diagnostics.empty());
-    assert(reloaded.project.flows[0].nodes.size() == 5);
+    assert((reloaded.diagnostics.empty()));
+    assert((reloaded.project.flows[0].nodes.size() == 5));
     for (size_t i = 0; i < 5; ++i)
     {
-        assert(reloaded.project.flows[0].nodes[i].toolId == loaded.project.flows[0].nodes[i].toolId);
+        assert((reloaded.project.flows[0].nodes[i].toolId == loaded.project.flows[0].nodes[i].toolId));
     }
-    assert(engine.start(reloaded.project, registry, RunMode::Once).code == 0);
+    assert((engine.start(reloaded.project, registry, RunMode::Once).code == 0));
     auto reloadedUpdate = finish(engine);
     auto reloadedS5     = snapshot(reloadedUpdate, 5);
-    assert(reloadedS5 && reloadedS5->status.code == 0);
-    const auto &reloadedMeans  = std::get<NumericArray>(reloadedS5->outputs.at("means"));
-    const auto  reloadedValues = reloadedMeans.buffers()[0].values<double>();
-    assert(reloadedValues.size() == 2);
-    assert(std::abs(reloadedValues[0] - values[0]) < 1e-6);
-    assert(std::abs(reloadedValues[1] - values[1]) < 1e-6);
+    assert((reloadedS5 && reloadedS5->status.code == 0));
+    const auto &reloadedMeans  = std::get<Array>(reloadedS5->outputs.at("means"));
+    const auto  reloadedValues = reloadedMeans.get<std::vector<double>>();
+    assert((reloadedValues.size() == 2));
+    assert((std::abs(reloadedValues[0] - values[0]) < 1e-6));
+    assert((std::abs(reloadedValues[1] - values[1]) < 1e-6));
 
     // Test corrupted input on a temp copy: must fail (exception or diagnostics) and not corrupt source file
     const auto corruptTarget = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "corrupted.vrt.json";
@@ -181,7 +180,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
         std::cout << "Corrupted project loading correctly rejected with exception: " << e.what() << std::endl;
         corruptFailed = true;
     }
-    assert(corruptFailed);
+    assert((corruptFailed));
 }
 
 void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
@@ -192,20 +191,18 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
 
     PlatformToolServices services{PathResolver(toolsPkg), nullptr};
     auto                 inst = loader->createAdapter("visionrt.detection.filter", services);
-    assert(inst != nullptr);
-    assert(inst->initialize({}).code == 0);
+    assert((inst != nullptr));
+    assert((inst->initialize({}).code == 0));
 
     // 1. Scenario: 0 targets (empty rois/scores/classes)
     {
         cv::Mat      mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
-        ImageBatch   imgBatch({OwnedImage::copyOf(mat)});
-        RoiBatch     emptyRois(std::vector<std::vector<Roi>>{{}});
-        NumericArray emptyScores(DType::Float32, 2, Layout::BatchRagged,
-                                 {NumericBuffer::copy(DType::Float32, {0}, {})});
-        NumericArray emptyClasses(DType::Int64, 2, Layout::BatchRagged, {NumericBuffer::copy(DType::Int64, {0}, {})});
-        StringArray  emptyNames(2, Layout::BatchRagged,
-                                {StringBuffer(std::vector<std::int64_t>{0}, std::vector<std::string>{})});
-        NumericArray allowed(DType::Int64, 1, Layout::Dense, {NumericBuffer::copy(DType::Int64, {0}, {})});
+        DataRef<Image> imgBatch(Image{(mat)});
+        DataRef<ROI>   emptyRois(ROI{{}});
+        Array          emptyScores(NestedVector<float, 2>{{}});
+        Array          emptyClasses(NestedVector<std::int64_t, 2>{{}});
+        Array          emptyNames(NestedVector<std::string, 2>{std::vector<std::string>{}});
+        Array          allowed(std::vector<std::int64_t>{});
 
         Values inputs;
         inputs.emplace("images", std::move(imgBatch));
@@ -218,25 +215,25 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         inputs.emplace("min_area", 0.0);
 
         auto res = inst->execute(inputs);
-        assert(res.status.code == 0);
-        const auto *outCounts = std::get_if<NumericArray>(&res.outputs["counts"]);
-        assert(outCounts && !outCounts->buffers().empty());
-        assert(outCounts->buffers()[0].values<std::int64_t>()[0] == 0);
+        assert((res.status.code == 0));
+        const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
+        assert((outCounts && !outCounts->get<NestedVector<std::int64_t, 1>>().empty()));
+        assert((outCounts->get<NestedVector<std::int64_t, 1>>()[0] == 0));
 
-        const auto *outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
-        assert(outRois && outRois->images().size() == 1 && outRois->images()[0].empty());
+        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
+        assert((outRois && outRois->get().size() == 1 && outRois->get()[0].empty()));
 
-        const auto *outScores = std::get_if<NumericArray>(&res.outputs["scores"]);
-        assert(outScores && !outScores->buffers().empty());
-        assert(outScores->buffers()[0].shape().size() == 1 && outScores->buffers()[0].shape()[0] == 0);
+        const auto *outScores = std::get_if<Array>(&res.outputs["scores"]);
+        assert((outScores && !outScores->get<NestedVector<float, 2>>().empty()));
+        assert((outScores->get<NestedVector<float, 2>>()[0].empty()));
 
-        const auto *outClasses = std::get_if<NumericArray>(&res.outputs["classes"]);
-        assert(outClasses && !outClasses->buffers().empty());
-        assert(outClasses->buffers()[0].shape().size() == 1 && outClasses->buffers()[0].shape()[0] == 0);
+        const auto *outClasses = std::get_if<Array>(&res.outputs["classes"]);
+        assert((outClasses && !outClasses->get<NestedVector<std::int64_t, 2>>().empty()));
+        assert((outClasses->get<NestedVector<std::int64_t, 2>>()[0].empty()));
 
-        const auto *outNames = std::get_if<StringArray>(&res.outputs["class_names"]);
-        assert(outNames && !outNames->buffers().empty());
-        assert(outNames->buffers()[0].values().empty());
+        const auto *outNames = std::get_if<Array>(&res.outputs["class_names"]);
+        assert((outNames && !outNames->get<NestedVector<std::string, 2>>().empty()));
+        assert((outNames->get<NestedVector<std::string, 2>>()[0].empty()));
     }
 
     // 2. Scenario: 3 distinct targets (different class, name, score, coords, angle)
@@ -245,23 +242,21 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
     // Target 2: (50, 50, 60, 60, 30), score=0.95, class=30, name="dent"    -> passes
     {
         cv::Mat          mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
-        ImageBatch       imgBatch({OwnedImage::copyOf(mat)});
-        std::vector<Roi> rois3;
-        rois3.push_back(Roi::rectangle(10.0f, 10.0f, 20.0f, 20.0f, 5.0f));
-        rois3.push_back(Roi::rectangle(30.0f, 30.0f, 40.0f, 40.0f, 15.0f));
-        rois3.push_back(Roi::rectangle(50.0f, 50.0f, 60.0f, 60.0f, 30.0f));
-        RoiBatch roiBatch({rois3});
+        DataRef<Image>   imgBatch(Image{(mat)});
+        ROI::value_type  rois3;
+        rois3.push_back(std::vector<double>{2, 10.0f, 10.0f, 20.0f, 20.0f, 5.0f});
+        rois3.push_back(std::vector<double>{2, 30.0f, 30.0f, 40.0f, 40.0f, 15.0f});
+        rois3.push_back(std::vector<double>{2, 50.0f, 50.0f, 60.0f, 60.0f, 30.0f});
+        DataRef<ROI> roiBatch(ROI{rois3});
 
         std::vector<float>        scoreVals = {0.20f, 0.70f, 0.95f};
         std::vector<std::int64_t> classVals = {10, 20, 30};
         std::vector<std::string>  nameVals  = {"scratch", "crack", "dent"};
 
-        NumericArray scores(DType::Float32, 2, Layout::BatchRagged,
-                            {NumericBuffer::copy(DType::Float32, {3}, std::as_bytes(std::span(scoreVals)))});
-        NumericArray classes(DType::Int64, 2, Layout::BatchRagged,
-                             {NumericBuffer::copy(DType::Int64, {3}, std::as_bytes(std::span(classVals)))});
-        StringArray  names(2, Layout::BatchRagged, {StringBuffer(std::vector<std::int64_t>{3}, nameVals)});
-        NumericArray allowed(DType::Int64, 1, Layout::Dense, {NumericBuffer::copy(DType::Int64, {0}, {})});
+        Array scores(NestedVector<float, 2>{scoreVals});
+        Array classes(NestedVector<std::int64_t, 2>{classVals});
+        Array names(NestedVector<std::string, 2>{nameVals});
+        Array allowed(std::vector<std::int64_t>{});
 
         Values inputs;
         inputs.emplace("images", std::move(imgBatch));
@@ -274,63 +269,63 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         inputs.emplace("min_area", 0.0);
 
         auto res = inst->execute(inputs);
-        assert(res.status.code == 0);
-        const auto *outCounts = std::get_if<NumericArray>(&res.outputs["counts"]);
-        assert(outCounts && !outCounts->buffers().empty());
-        assert(outCounts->buffers()[0].values<std::int64_t>()[0] == 2);
+        assert((res.status.code == 0));
+        const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
+        assert((outCounts && !outCounts->get<NestedVector<std::int64_t, 1>>().empty()));
+        assert((outCounts->get<NestedVector<std::int64_t, 1>>()[0] == 2));
 
-        const auto *outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
-        assert(outRois && outRois->images().size() == 1 && outRois->images()[0].size() == 2);
+        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
+        assert((outRois && outRois->get().size() == 1 && outRois->get()[0].size() == 2));
 
         // Target 1 ROI geometric fields
-        const auto &r1 = outRois->images()[0][0];
-        assert(r1.kind() == RoiKind::Rectangle);
-        assert(r1.encoded().size() == 6);
-        assert(r1.encoded()[0] == static_cast<float>(RoiKind::Rectangle));
-        assert(std::abs(r1.encoded()[1] - 30.0f) < 1e-4f); // x
-        assert(std::abs(r1.encoded()[2] - 30.0f) < 1e-4f); // y
-        assert(std::abs(r1.encoded()[3] - 40.0f) < 1e-4f); // width
-        assert(std::abs(r1.encoded()[4] - 40.0f) < 1e-4f); // height
-        assert(std::abs(r1.encoded()[5] - 15.0f) < 1e-4f); // angle
-        const auto corners1 = r1.rectangleCorners();
-        assert(corners1.size() == 4);
+        const auto &r1 = outRois->get()[0][0];
+        assert((roiKind(r1) == RoiKind::Rectangle));
+        assert((r1.size() == 6));
+        assert((r1[0] == static_cast<float>(RoiKind::Rectangle)));
+        assert((std::abs(r1[1] - 30.0f) < 1e-4f)); // x
+        assert((std::abs(r1[2] - 30.0f) < 1e-4f)); // y
+        assert((std::abs(r1[3] - 40.0f) < 1e-4f)); // width
+        assert((std::abs(r1[4] - 40.0f) < 1e-4f)); // height
+        assert((std::abs(r1[5] - 15.0f) < 1e-4f)); // angle
+        const auto corners1 = rectangleCorners(r1);
+        assert((corners1.size() == 4));
 
         // Target 2 ROI geometric fields
-        const auto &r2 = outRois->images()[0][1];
-        assert(r2.kind() == RoiKind::Rectangle);
-        assert(r2.encoded().size() == 6);
-        assert(r2.encoded()[0] == static_cast<float>(RoiKind::Rectangle));
-        assert(std::abs(r2.encoded()[1] - 50.0f) < 1e-4f); // x
-        assert(std::abs(r2.encoded()[2] - 50.0f) < 1e-4f); // y
-        assert(std::abs(r2.encoded()[3] - 60.0f) < 1e-4f); // width
-        assert(std::abs(r2.encoded()[4] - 60.0f) < 1e-4f); // height
-        assert(std::abs(r2.encoded()[5] - 30.0f) < 1e-4f); // angle
-        const auto corners2 = r2.rectangleCorners();
-        assert(corners2.size() == 4);
+        const auto &r2 = outRois->get()[0][1];
+        assert((roiKind(r2) == RoiKind::Rectangle));
+        assert((r2.size() == 6));
+        assert((r2[0] == static_cast<float>(RoiKind::Rectangle)));
+        assert((std::abs(r2[1] - 50.0f) < 1e-4f)); // x
+        assert((std::abs(r2[2] - 50.0f) < 1e-4f)); // y
+        assert((std::abs(r2[3] - 60.0f) < 1e-4f)); // width
+        assert((std::abs(r2[4] - 60.0f) < 1e-4f)); // height
+        assert((std::abs(r2[5] - 30.0f) < 1e-4f)); // angle
+        const auto corners2 = rectangleCorners(r2);
+        assert((corners2.size() == 4));
 
-        const auto *outScores = std::get_if<NumericArray>(&res.outputs["scores"]);
-        assert(outScores && !outScores->buffers().empty());
-        const auto outScoreVals = outScores->buffers()[0].values<float>();
-        assert(outScoreVals.size() == 2);
-        assert(std::abs(outScoreVals[0] - 0.70f) < 1e-4f);
-        assert(std::abs(outScoreVals[1] - 0.95f) < 1e-4f);
+        const auto *outScores = std::get_if<Array>(&res.outputs["scores"]);
+        assert((outScores && !outScores->get<NestedVector<float, 2>>().empty()));
+        const auto outScoreVals = outScores->get<NestedVector<float, 2>>()[0];
+        assert((outScoreVals.size() == 2));
+        assert((std::abs(outScoreVals[0] - 0.70f) < 1e-4f));
+        assert((std::abs(outScoreVals[1] - 0.95f) < 1e-4f));
 
-        const auto *outClasses = std::get_if<NumericArray>(&res.outputs["classes"]);
-        assert(outClasses && !outClasses->buffers().empty());
-        const auto outClassVals = outClasses->buffers()[0].values<std::int64_t>();
-        assert(outClassVals.size() == 2);
-        assert(outClassVals[0] == 20);
-        assert(outClassVals[1] == 30);
+        const auto *outClasses = std::get_if<Array>(&res.outputs["classes"]);
+        assert((outClasses && !outClasses->get<NestedVector<std::int64_t, 2>>().empty()));
+        const auto outClassVals = outClasses->get<NestedVector<std::int64_t, 2>>()[0];
+        assert((outClassVals.size() == 2));
+        assert((outClassVals[0] == 20));
+        assert((outClassVals[1] == 30));
 
-        const auto *outNames = std::get_if<StringArray>(&res.outputs["class_names"]);
-        assert(outNames && !outNames->buffers().empty());
-        const auto &outNameVals = outNames->buffers()[0].values();
-        assert(outNameVals.size() == 2);
-        assert(outNameVals[0] == "crack");
-        assert(outNameVals[1] == "dent");
+        const auto *outNames = std::get_if<Array>(&res.outputs["class_names"]);
+        assert((outNames && !outNames->get<NestedVector<std::string, 2>>().empty()));
+        const auto &outNameVals = outNames->get<NestedVector<std::string, 2>>()[0];
+        assert((outNameVals.size() == 2));
+        assert((outNameVals[0] == "crack"));
+        assert((outNameVals[1] == "dent"));
     }
 
-    assert(inst->release().code == 0);
+    assert((inst->release().code == 0));
 }
 
 void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
@@ -343,35 +338,35 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     registry.loadNativeImplementations();
 
     const auto *def = registry.find("visiontools.preprocess.adaptive_binary");
-    assert(def != nullptr);
-    assert(def->id == "visiontools.preprocess.adaptive_binary");
-    assert(def->kind == ToolKind::Cpp);
-    assert(registry.availability("visiontools.preprocess.adaptive_binary").state == ToolAvailability::Available);
+    assert((def != nullptr));
+    assert((def->id == "visiontools.preprocess.adaptive_binary"));
+    assert((def->kind == ToolKind::Cpp));
+    assert((registry.availability("visiontools.preprocess.adaptive_binary").state == ToolAvailability::Available));
 
     PlatformToolServices services;
     auto                 inst = registry.create("visiontools.preprocess.adaptive_binary", services);
-    assert(inst != nullptr);
-    assert(inst->initialize({}).code == 0);
+    assert((inst != nullptr));
+    assert((inst->initialize({}).code == 0));
 
     // Fixed input: a grayscale 10x10 image with half 50 and half 200
     cv::Mat mat(10, 10, CV_8UC1);
     mat(cv::Rect(0, 0, 5, 10)).setTo(50);
     mat(cv::Rect(5, 0, 5, 10)).setTo(200);
 
-    ImageBatch imgBatch({OwnedImage::copyOf(mat)});
+    DataRef<Image> imgBatch(Image{(mat)});
     Values     inputs;
     inputs.emplace("images", std::move(imgBatch));
     inputs.emplace("block_size", std::int64_t{3});
     inputs.emplace("constant_offset", 5.0);
 
     auto res = inst->execute(inputs);
-    assert(res.status.code == 0);
-    const auto *outImages = std::get_if<ImageBatch>(&res.outputs["images"]);
-    assert(outImages && !outImages->images().empty());
-    const auto &outImg = outImages->images()[0];
-    assert(outImg.rows() == 10 && outImg.cols() == 10 && outImg.type() == CV_8UC1);
+    assert((res.status.code == 0));
+    const auto *outImages = std::get_if<DataRef<Image>>(&res.outputs["images"]);
+    assert((outImages && !outImages->get().empty()));
+    const auto &outImg = outImages->get()[0];
+    assert((outImg.rows == 10 && outImg.cols == 10 && outImg.type() == CV_8UC1));
 
-    assert(inst->release().code == 0);
+    assert((inst->release().code == 0));
 }
 
 void testRoiProjection(const std::filesystem::path &toolsPkg)
@@ -384,23 +379,23 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     registry.loadNativeImplementations();
 
     const auto *def = registry.find("visionrt.roi.projection");
-    assert(def != nullptr);
-    assert(registry.availability("visionrt.roi.projection").state == ToolAvailability::Available);
+    assert((def != nullptr));
+    assert((registry.availability("visionrt.roi.projection").state == ToolAvailability::Available));
 
     PlatformToolServices services;
     auto                 inst = registry.create("visionrt.roi.projection", services);
-    assert(inst != nullptr);
-    assert(inst->initialize({}).code == 0);
+    assert((inst != nullptr));
+    assert((inst->initialize({}).code == 0));
 
     // Fixed input: 100x100 black image with a 20x20 bright square (255) from x=40..60, y=30..50
     cv::Mat mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
     mat(cv::Rect(40, 30, 20, 20)).setTo(cv::Scalar(255, 255, 255));
-    ImageBatch imgBatch({OwnedImage::copyOf(mat)});
+    DataRef<Image> imgBatch(Image{(mat)});
 
     Values inputs;
     inputs.emplace("images", std::move(imgBatch));
-    inputs.emplace("axis", Utf8{"x"});
-    inputs.emplace("polarity", Utf8{"bright"});
+    inputs.emplace("axis", std::string{"x"});
+    inputs.emplace("polarity", std::string{"bright"});
     inputs.emplace("threshold", std::int64_t{128});
     inputs.emplace("min_pixels", std::int64_t{1});
     inputs.emplace("min_extent", std::int64_t{5});
@@ -412,27 +407,26 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     {
         std::cerr << "ROI projection execute failed: " << res.status.message << std::endl;
     }
-    assert(res.status.code == 0);
-    const auto *outRois = std::get_if<RoiBatch>(&res.outputs["rois"]);
-    assert(outRois && outRois->images().size() == 1 && !outRois->images()[0].empty());
-    const auto &r = outRois->images()[0][0];
-    assert(r.kind() == RoiKind::Rectangle);
-    assert(std::abs(r.encoded()[1] - 40.0f) < 1.0f);
-    assert(std::abs(r.encoded()[3] - 20.0f) < 1.0f);
+    assert((res.status.code == 0));
+    const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
+    assert((outRois && outRois->get().size() == 1 && !outRois->get()[0].empty()));
+    const auto &r = outRois->get()[0][0];
+    assert((roiKind(r) == RoiKind::Rectangle));
+    assert((std::abs(r[1] - 40.0f) < 1.0f));
+    assert((std::abs(r[3] - 20.0f) < 1.0f));
 
-    assert(inst->release().code == 0);
+    assert((inst->release().code == 0));
 }
 
 void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const std::filesystem::path &toolsPkg)
 {
     QTemporaryDir temp;
-    assert(temp.isValid());
+    assert((temp.isValid()));
     const auto testPkg = std::filesystem::u8path(temp.path().toUtf8().toStdString()) / "package_missing_dep";
     std::filesystem::create_directories(testPkg / "bin");
-    std::filesystem::create_directories(testPkg / "assets" / "tools");
+    std::filesystem::create_directories(testPkg / "tools" / "builtin");
     std::filesystem::copy_file(toolsPkg / "module_index.json", testPkg / "module_index.json");
-    std::filesystem::copy(toolsPkg / "assets" / "tools", testPkg / "assets" / "tools",
-                          std::filesystem::copy_options::recursive);
+    std::filesystem::copy(toolsPkg / "tools", testPkg / "tools", std::filesystem::copy_options::recursive);
     for (const auto &entry : std::filesystem::directory_iterator(toolsPkg / "bin"))
     {
         std::filesystem::copy_file(entry.path(), testPkg / "bin" / entry.path().filename());
@@ -463,18 +457,18 @@ void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const 
     // 1. Verify valid real Tools package plugin loads successfully
     ToolStatus statusOk;
     const auto cropModPath = loader->resolveModulePath("visionrt.image.crop");
-    assert(!cropModPath.empty());
+    assert((!cropModPath.empty()));
     auto cropMod = loader->loadModule(cropModPath, statusOk);
-    assert(cropMod != nullptr);
-    assert(statusOk.code == 0);
+    assert((cropMod != nullptr));
+    assert((statusOk.code == 0));
 
     // 2. Loading test_plugin_a.dll must fail because test_dep_a.dll is missing!
     ToolStatus statusMissing;
     auto       failMod = loader->loadModule(targetPluginA, statusMissing);
-    assert(failMod == nullptr);
-    assert(statusMissing.code != 0);
+    assert((failMod == nullptr));
+    assert((statusMissing.code != 0));
     // Diagnostic must contain the module path and the system error
-    assert(statusMissing.message.find("test_plugin_a.dll") != std::string::npos);
+    assert((statusMissing.message.find("test_plugin_a.dll") != std::string::npos));
 #ifdef _WIN32
     assert(statusMissing.message.find("126") != std::string::npos
            || statusMissing.message.find("Win32 error") != std::string::npos);
@@ -489,8 +483,8 @@ void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const 
     loaderRecovered->registerPackage(package);
     ToolStatus statusRecovered;
     auto       recoveredMod = loaderRecovered->loadModule(targetPluginA, statusRecovered);
-    assert(recoveredMod != nullptr);
-    assert(statusRecovered.code == 0);
+    assert((recoveredMod != nullptr));
+    assert((statusRecovered.code == 0));
 }
 
 void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
@@ -505,7 +499,7 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     setupPython(registry, python);
 
     QTemporaryDir tmpDir;
-    assert(tmpDir.isValid());
+    assert((tmpDir.isValid()));
     const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
     const auto projectFile = tmpPath / "pipeline_cpu_python.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt.json", projectFile);
@@ -514,7 +508,7 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
 
     ProjectStorage storage(registry);
     auto           loaded = storage.load(projectFile);
-    assert(loaded.diagnostics.empty());
+    assert((loaded.diagnostics.empty()));
 
     // Prepare 2 projects with different inputs (Engine 1: 2 images; Engine 2: 1 image via limit=1)
     ProjectDefinition project1                 = loaded.project;
@@ -528,13 +522,13 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     auto f1 = std::async(std::launch::async,
                          [&]
                          {
-                             assert(engine1.start(project1, registry, RunMode::Once).code == 0);
+                             assert((engine1.start(project1, registry, RunMode::Once).code == 0));
                              return finish(engine1);
                          });
     auto f2 = std::async(std::launch::async,
                          [&]
                          {
-                             assert(engine2.start(project2, registry, RunMode::Once).code == 0);
+                             assert((engine2.start(project2, registry, RunMode::Once).code == 0));
                              return finish(engine2);
                          });
 
@@ -543,43 +537,43 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
 
     auto s1_node5 = snapshot(u1, 5);
     auto s2_node5 = snapshot(u2, 5);
-    assert(s1_node5 && s1_node5->status.code == 0);
-    assert(s2_node5 && s2_node5->status.code == 0);
+    assert((s1_node5 && s1_node5->status.code == 0));
+    assert((s2_node5 && s2_node5->status.code == 0));
 
     // Verify output isolation: Engine 1 produced 2 mean values, Engine 2 produced 1 mean value
-    const auto v1 = std::get<NumericArray>(s1_node5->outputs.at("means")).buffers()[0].values<double>();
-    const auto v2 = std::get<NumericArray>(s2_node5->outputs.at("means")).buffers()[0].values<double>();
-    assert(v1.size() == 2);
-    assert(v2.size() == 1);
-    assert(std::abs(v1[0] - v2[0]) < 1e-6);
+    const auto v1 = std::get<Array>(s1_node5->outputs.at("means")).get<std::vector<double>>();
+    const auto v2 = std::get<Array>(s2_node5->outputs.at("means")).get<std::vector<double>>();
+    assert((v1.size() == 2));
+    assert((v2.size() == 1));
+    assert((std::abs(v1[0] - v2[0]) < 1e-6));
 
     // Cross-release snapshot check: engine resets, snapshot retains historical output & pixel memory
     auto s1_node1 = snapshot(u1, 1);
-    assert(s1_node1 && s1_node1->status.code == 0);
-    assert(engine1.requestReset().code == 0);
+    assert((s1_node1 && s1_node1->status.code == 0));
+    assert((engine1.requestReset().code == 0));
     finish(engine1);
-    assert(s1_node5->status.code == 0);
-    const auto &retainedImg = std::get<ImageBatch>(s1_node1->outputs.at("images")).images()[0];
-    assert(retainedImg.cols() > 0 && retainedImg.rows() > 0);
-    const auto *pxPtr = retainedImg.data();
-    assert(pxPtr != nullptr);
+    assert((s1_node5->status.code == 0));
+    const auto &retainedImg = std::get<DataRef<Image>>(s1_node1->outputs.at("images")).get()[0];
+    assert((retainedImg.cols > 0 && retainedImg.rows > 0));
+    const auto *pxPtr = retainedImg.data;
+    assert((pxPtr != nullptr));
     volatile std::uint8_t pxVal = *pxPtr;
-    assert(pxVal == *pxPtr);
+    assert((pxVal == *pxPtr));
 
     // Success-then-failure isolation: 2nd run with invalid path outputs Missing, not stale value
-    project1.flows[0].nodes[0].inputs["path"] = {BindingMode::Literal, Utf8{"nonexistent_images_dir"}, {}};
-    assert(engine1.start(project1, registry, RunMode::Once).code == 0);
+    project1.flows[0].nodes[0].inputs["path"] = {BindingMode::Literal, std::string{"nonexistent_images_dir"}, {}};
+    assert((engine1.start(project1, registry, RunMode::Once).code == 0));
     auto u1_fail       = finish(engine1);
     auto s1_fail_node1 = snapshot(u1_fail, 1);
-    assert(s1_fail_node1 && s1_fail_node1->status.code != 0);
-    assert(isMissing(s1_fail_node1->outputs.at("images")));
+    assert((s1_fail_node1 && s1_fail_node1->status.code != 0));
+    assert((isMissing(s1_fail_node1->outputs.at("images"))));
 }
 
 void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
                             PythonRuntime &python)
 {
     QTemporaryDir tmpDir;
-    assert(tmpDir.isValid());
+    assert((tmpDir.isValid()));
     const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
     const auto tempProjectFile = tmpPath / "pipeline_error_diagnostic.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt.json", tempProjectFile);
@@ -606,7 +600,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
             break;
         }
     }
-    assert(foundMissingDef);
+    assert((foundMissingDef));
 
     RuntimeEngine engine(2);
     const bool inferenceIncluded = registry.find("visionrt.dl.yolo") != nullptr;
@@ -614,7 +608,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     {
         assert(std::any_of(loaded.diagnostics.begin(), loaded.diagnostics.end(), [](const auto &diagnostic)
                           { return diagnostic.node == 3 && diagnostic.code == ProjectStorageCode::DefinitionMissing; }));
-        assert(!engine.start(loaded.project, registry, RunMode::Once));
+        assert((!engine.start(loaded.project, registry, RunMode::Once)));
         std::erase_if(loaded.project.flows[0].nodes, [](const auto &node) { return node.id == 3; });
         std::cout << "[NOT_RUN] Model-file negative execution: visionrt.dl.yolo is not included in this package.\n";
     }
@@ -624,35 +618,35 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
         std::cerr << "Diagnostic pipeline engine.start failed: code=" << startRes.code << " msg=" << startRes.message
                   << std::endl;
     }
-    assert(startRes.code == 0);
+    assert((startRes.code == 0));
     auto update = finish(engine);
 
     // Node 1: read succeeds
     auto s1 = snapshot(update, 1);
-    assert(s1 && s1->status.code == 0);
+    assert((s1 && s1->status.code == 0));
 
     auto s2 = snapshot(update, 2);
-    assert(s2);
-    assert(!s2->status);
-    assert(isMissing(s2->outputs.at("images")));
+    assert((s2));
+    assert((!s2->status));
+    assert((isMissing(s2->outputs.at("images"))));
 
     // Node 3: yolo fails because nonexistent model weights
     if (inferenceIncluded)
     {
         auto s3 = snapshot(update, 3);
-        assert(s3);
-        assert(s3->status.code != 0);
-        assert(!s3->status.message.empty());
+        assert((s3));
+        assert((s3->status.code != 0));
+        assert((!s3->status.message.empty()));
     }
 
     // Try starting the flow containing Node 4 (definition missing)
     loaded.project.flows[0].runSelected = false;
     loaded.project.flows[1].runSelected = true;
     const auto missingStartStatus       = engine.start(loaded.project, registry, RunMode::Once);
-    assert(!missingStartStatus);
-    assert(missingStartStatus.code == -2);
-    assert(missingStartStatus.message == "执行节点的工具定义缺失：unavailable.custom.plugin");
-    assert(missingStartStatus.detail.empty());
+    assert((!missingStartStatus));
+    assert((missingStartStatus.code == -2));
+    assert((missingStartStatus.message == "执行节点的工具定义缺失：unavailable.custom.plugin"));
+    assert((missingStartStatus.detail.empty()));
 }
 
 void testRealPluginModulePipeline(PythonRuntime &python)
@@ -663,7 +657,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     {
         pluginDll = appDir / "bin" / "test_plugin_module.dll";
     }
-    assert(std::filesystem::exists(pluginDll));
+    assert((std::filesystem::exists(pluginDll)));
 
     auto loader = std::make_shared<PluginLoader>();
     loader->registerModule("test.plugin.counter", pluginDll);
@@ -750,34 +744,35 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     RuntimeEngine engine(2);
     const auto    startRes = engine.start(project, registry, RunMode::Once);
-    assert(startRes.code == 0);
+    assert((startRes.code == 0));
     const auto update = finish(engine);
 
     auto s1 = snapshot(update, 1);
-    assert(s1 && s1->status.code == 0);
-    assert(std::get<std::int64_t>(s1->outputs.at("y")) == 50);
+    assert((s1 && s1->status.code == 0));
+    assert((std::get<std::int64_t>(s1->outputs.at("y")) == 50));
 
     auto s2 = snapshot(update, 2);
-    assert(s2 && s2->status.code == 0);
-    assert(std::get<std::int64_t>(s2->outputs.at("count")) == 11);
+    assert((s2 && s2->status.code == 0));
+    assert((std::get<std::int64_t>(s2->outputs.at("count")) == 11));
 
     // Test Save / Reopen consistency
     QTemporaryDir tmpDir;
-    assert(tmpDir.isValid());
+    assert((tmpDir.isValid()));
     const auto     savePath = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / "plugin_project.vrt.json";
     ProjectStorage storage(registry);
     auto           reconciled = storage.reconcile(project);
-    assert(reconciled.diagnostics.empty());
+    assert((reconciled.diagnostics.empty()));
     project = std::move(reconciled.project);
     storage.save(project, savePath);
     const auto reloaded = storage.load(savePath);
-    assert(reloaded.diagnostics.empty());
-    assert(engine.start(reloaded.project, registry, RunMode::Once).code == 0);
+    assert((reloaded.diagnostics.empty()));
+    assert((engine.start(reloaded.project, registry, RunMode::Once).code == 0));
     const auto reloadedUpdate = finish(engine);
     auto       rs1            = snapshot(reloadedUpdate, 1);
-    assert(rs1 && std::get<std::int64_t>(rs1->outputs.at("y")) == std::get<std::int64_t>(s1->outputs.at("y")));
+    assert((rs1 && std::get<std::int64_t>(rs1->outputs.at("y")) == std::get<std::int64_t>(s1->outputs.at("y"))));
     auto rs2 = snapshot(reloadedUpdate, 2);
-    assert(rs2 && std::get<std::int64_t>(rs2->outputs.at("count")) == std::get<std::int64_t>(s2->outputs.at("count")));
+    assert(
+        (rs2 && std::get<std::int64_t>(rs2->outputs.at("count")) == std::get<std::int64_t>(s2->outputs.at("count"))));
 }
 
 void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*repoRoot*/, PythonRuntime &python)
@@ -791,25 +786,25 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         pluginDll = appDir / "bin" / "test_plugin_module.dll";
     }
-    assert(std::filesystem::exists(pluginDll));
+    assert((std::filesystem::exists(pluginDll)));
 
     // 1. Create temporary deployment root with Chinese characters and spaces
     QTemporaryDir deployTemp;
-    assert(deployTemp.isValid());
+    assert((deployTemp.isValid()));
     const auto installRoot
         = std::filesystem::u8path(deployTemp.path().toUtf8().toStdString()) / "测试 部署 路径 with space";
     const auto toolsPackageDir = installRoot / "tools-package";
     std::filesystem::create_directories(toolsPackageDir / "bin");
-    std::filesystem::create_directories(toolsPackageDir / "assets" / "tools");
+    std::filesystem::create_directories(toolsPackageDir / "tools" / "builtin");
 
     // Copy plugin DLL to bin
     std::filesystem::copy_file(pluginDll, toolsPackageDir / "bin" / "test_plugin_module.dll");
 
     // Write C++ tool declaration (func.json)
     {
-        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "func.json");
+        std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "func.json");
         ofs << R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.function",
   "display_name": "Plugin Function",
   "version": "1.0.0",
@@ -826,18 +821,19 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
     // Write Python tool declaration and script (calc.py, calc.json)
     {
-        std::ofstream py(toolsPackageDir / "assets" / "tools" / "calc.py");
+        std::filesystem::create_directories(toolsPackageDir / "python" / "builtin" / "calc");
+        std::ofstream py(toolsPackageDir / "python" / "builtin" / "calc" / "calc.py");
         py << "def execute(inputs):\n"
            << "    return {'res': int(inputs['val']) + 5, '__status_code': 0, '__status_message': 'ok'}\n";
 
-        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "calc.json");
+        std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "calc.json");
         ofs << R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "custom.py_math",
   "display_name": "Python Calc",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "calc.py", "symbol": "execute"},
+  "entry": {"package": "calc", "file": "calc.py", "symbol": "execute"},
   "init_params": [],
   "inputs": [
     {"id": "val", "name": "Val", "type": "Int"}
@@ -850,9 +846,9 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
     // Write Platform Receiver node declaration (recv.json)
     {
-        std::ofstream ofs(toolsPackageDir / "assets" / "tools" / "recv.json");
+        std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "platform.test_recv",
   "display_name": "Test Receiver",
   "version": "1.0.0",
@@ -883,16 +879,16 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {"id": "test_plugin_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_plugin_module", "definition": "assets/tools/func.json"},
-    {"tool_id": "custom.py_math", "definition": "assets/tools/calc.json"},
-    {"tool_id": "platform.test_recv", "definition": "assets/tools/recv.json"}
+    {"tool_id": "test.plugin.function", "module": "test_plugin_module", "definition": "tools/builtin/func.json"},
+    {"tool_id": "custom.py_math", "definition": "tools/builtin/calc.json"},
+    {"tool_id": "platform.test_recv", "definition": "tools/builtin/recv.json"}
   ],
   "runtime_files": []
 })json";
     }
 
     // Add unique Package 1 sentinel file
-    const auto pkg1Sentinel = toolsPackageDir / "assets" / "tools" / "pkg1_sentinel.txt";
+    const auto pkg1Sentinel = toolsPackageDir / "tools" / "builtin" / "pkg1_sentinel.txt";
     {
         std::ofstream ofs(pkg1Sentinel);
         ofs << "PACKAGE_1_FILE";
@@ -966,10 +962,10 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
         n3.toolNameSnapshot = "Test Receiver";
         n3.position         = {100, 250};
         n3.initParams       = {
-            {"source_flow_id", Utf8("sender_flow")},
-            {"source_node_seq",    Utf8(std::to_string(n2.id))},
-            {  "source_port_id",         Utf8("res")},
-            {      "timeout_ms",  std::int64_t{1000}}
+            { "source_flow_id",         std::string("sender_flow")},
+            {"source_node_seq", std::string(std::to_string(n2.id))},
+            { "source_port_id",                 std::string("res")},
+            {     "timeout_ms",                 std::int64_t{1000}}
         };
         n3.signatures.initParams["source_flow_id"]   = {Type::String};
         n3.signatures.initParams["source_node_seq"]   = {Type::String};
@@ -983,12 +979,12 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
         project.nextNodeId = 4;
 
         RuntimeEngine engine1(2);
-        assert(engine1.start(project, registry1, RunMode::Once).code == 0);
+        assert((engine1.start(project, registry1, RunMode::Once).code == 0));
         auto update1 = finish(engine1);
 
         auto s1 = snapshot(update1, 1);
-        assert(s1 && s1->status.code == 0);
-        assert(std::get<std::int64_t>(s1->outputs.at("y")) == 20);
+        assert((s1 && s1->status.code == 0));
+        assert((std::get<std::int64_t>(s1->outputs.at("y")) == 20));
 
         auto s2 = snapshot(update1, 2);
         if (!s2 || s2->status.code != 0)
@@ -996,8 +992,8 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
             std::cerr << "Node 2 status failed: code=" << (s2 ? s2->status.code : -999)
                       << " msg=" << (s2 ? s2->status.message : "null") << std::endl;
         }
-        assert(s2 && s2->status.code == 0);
-        assert(std::get<std::int64_t>(s2->outputs.at("res")) == 25);
+        assert((s2 && s2->status.code == 0));
+        assert((std::get<std::int64_t>(s2->outputs.at("res")) == 25));
 
         auto s3 = snapshot(update1, 3);
         if (!s3 || s3->status.code != 0)
@@ -1005,8 +1001,8 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
             std::cerr << "Node 3 status failed: code=" << (s3 ? s3->status.code : -999)
                       << " msg=" << (s3 ? s3->status.message : "null") << std::endl;
         }
-        assert(s3 && s3->status.code == 0);
-        assert(std::get<std::int64_t>(s3->outputs.at("value")) == 25);
+        assert((s3 && s3->status.code == 0));
+        assert((std::get<std::int64_t>(s3->outputs.at("value")) == 25));
         std::cout << "[Evidence T-08] Pipeline with C++ domain DLL, Python tool, and Receiver node executed with exact "
                      "numerical value (25) in unicode path.\n";
 
@@ -1028,12 +1024,12 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
             std::cerr << "RELOAD DIAGNOSTIC: node=" << (d.node ? *d.node : 0) << " code=" << static_cast<int>(d.code)
                       << " field=" << d.field << " msg=" << d.message << std::endl;
         }
-        assert(reloaded1.diagnostics.empty());
+        assert((reloaded1.diagnostics.empty()));
         RuntimeEngine engineReload(2);
-        assert(engineReload.start(reloaded1.project, registry1, RunMode::Once).code == 0);
+        assert((engineReload.start(reloaded1.project, registry1, RunMode::Once).code == 0));
         auto updateReload = finish(engineReload);
         auto r_s3         = snapshot(updateReload, 3);
-        assert(r_s3 && std::get<std::int64_t>(r_s3->outputs.at("value")) == 25);
+        assert((r_s3 && std::get<std::int64_t>(r_s3->outputs.at("value")) == 25));
         std::cout << "[Evidence T-08] Save / reopen consistency and numerical equality verified.\n";
     }
 
@@ -1041,7 +1037,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     // Existing installation must not be altered or corrupted!
     QTemporaryDir badPkgTemp;
     const auto    badPkgDir = std::filesystem::u8path(badPkgTemp.path().toUtf8().toStdString()) / "bad_pkg";
-    std::filesystem::create_directories(badPkgDir / "assets" / "tools");
+    std::filesystem::create_directories(badPkgDir / "tools" / "builtin");
     {
         std::ofstream ofs(badPkgDir / "module_index.json");
         ofs << R"json({
@@ -1051,7 +1047,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {"id": "nonexistent_mod", "library": "bin/nonexistent.dll"}
   ],
   "tools": [
-    {"tool_id": "broken.tool", "module": "nonexistent_mod", "definition": "assets/tools/missing.json"}
+    {"tool_id": "broken.tool", "module": "nonexistent_mod", "definition": "tools/builtin/missing.json"}
   ],
   "runtime_files": []
 })json";
@@ -1065,16 +1061,16 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         badDeployFailed = true;
     }
-    assert(badDeployFailed);
+    assert((badDeployFailed));
     // Package 1 on disk remains untouched
-    assert(std::filesystem::exists(pkg1Sentinel));
-    assert(std::filesystem::exists(toolsPackageDir / "bin" / "test_plugin_module.dll"));
+    assert((std::filesystem::exists(pkg1Sentinel)));
+    assert((std::filesystem::exists(toolsPackageDir / "bin" / "test_plugin_module.dll")));
 
     // 4. Test locked-file protection:
     // When a process has an open file in tools-package, replacement must fail without deleting target
     const auto    lockedPath = toolsPackageDir / "bin" / "test_plugin_module.dll";
     std::ifstream lockFile(lockedPath, std::ios::binary);
-    assert(lockFile.is_open());
+    assert((lockFile.is_open()));
 
     // Attempt renaming directory while file is locked
     const auto      backupDir = installRoot / ".tools-package-backup-test";
@@ -1082,9 +1078,9 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     std::filesystem::rename(toolsPackageDir, backupDir, ecRename);
 #ifdef _WIN32
     // On Windows NTFS, renaming directory with open file fails
-    assert(ecRename);
-    assert(std::filesystem::exists(toolsPackageDir));
-    assert(std::filesystem::exists(pkg1Sentinel));
+    assert((ecRename));
+    assert((std::filesystem::exists(toolsPackageDir)));
+    assert((std::filesystem::exists(pkg1Sentinel)));
 #endif
     lockFile.close();
 
@@ -1093,14 +1089,14 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     // Deploy Package 2 to toolsPackageDir:
     const auto stagingDir = installRoot / ".tools-package-staging-test";
     std::filesystem::create_directories(stagingDir / "bin");
-    std::filesystem::create_directories(stagingDir / "assets" / "tools");
+    std::filesystem::create_directories(stagingDir / "tools" / "builtin");
     std::filesystem::copy_file(pluginDll, stagingDir / "bin" / "test_plugin_module.dll");
 
     // Write counter declaration
     {
-        std::ofstream ofs(stagingDir / "assets" / "tools" / "counter.json");
+        std::ofstream ofs(stagingDir / "tools" / "builtin" / "counter.json");
         ofs << R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.plugin.counter",
   "display_name": "Plugin Counter",
   "version": "1.0.0",
@@ -1116,9 +1112,9 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     }
     // Write platform receiver declaration
     {
-        std::ofstream ofs(stagingDir / "assets" / "tools" / "recv.json");
+        std::ofstream ofs(stagingDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "platform.test_recv",
   "display_name": "Test Receiver",
   "version": "1.0.0",
@@ -1148,8 +1144,8 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {"id": "test_plugin_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_plugin_module", "definition": "assets/tools/counter.json"},
-    {"tool_id": "platform.test_recv", "definition": "assets/tools/recv.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_plugin_module", "definition": "tools/builtin/counter.json"},
+    {"tool_id": "platform.test_recv", "definition": "tools/builtin/recv.json"}
   ],
   "runtime_files": []
 })json";
@@ -1160,10 +1156,10 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     std::filesystem::rename(stagingDir, toolsPackageDir);
 
     // Verify Package 1 unique sentinel is completely gone (no leftover files)
-    assert(!std::filesystem::exists(pkg1Sentinel));
-    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "func.json"));
-    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "calc.py"));
-    assert(!std::filesystem::exists(toolsPackageDir / "assets" / "tools" / "calc.json"));
+    assert((!std::filesystem::exists(pkg1Sentinel)));
+    assert((!std::filesystem::exists(toolsPackageDir / "tools" / "builtin" / "func.json")));
+    assert((!std::filesystem::exists(toolsPackageDir / "python" / "builtin" / "calc" / "calc.py")));
+    assert((!std::filesystem::exists(toolsPackageDir / "tools" / "builtin" / "calc.json")));
     std::cout << "[Evidence T-08] Package replacement verified: Package 1 unique files and scripts do not linger.\n";
 
     // 6. Simulate restart with Package 2:
@@ -1177,9 +1173,9 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     setupPython(registry2, python);
 
     // Verify new tool test.plugin.counter is available
-    assert(registry2.find("test.plugin.counter") != nullptr);
-    assert(registry2.find("test.plugin.function") == nullptr);
-    assert(registry2.find("custom.py_math") == nullptr);
+    assert((registry2.find("test.plugin.counter") != nullptr));
+    assert((registry2.find("test.plugin.function") == nullptr));
+    assert((registry2.find("custom.py_math") == nullptr));
 
     // Load original project:
     ProjectStorage storage2(registry2);
@@ -1198,15 +1194,15 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
             foundMissingN2 = true;
         }
     }
-    assert(foundMissingN1);
-    assert(foundMissingN2);
+    assert((foundMissingN1));
+    assert((foundMissingN2));
     std::cout << "[Evidence T-08] Reopening project after package replacement: removed tools diagnosed with "
                  "DefinitionMissing.\n";
 
     // Running flow with missing definition is rejected
     RuntimeEngine engine2(2);
     const auto    startResult = engine2.start(loadedOldProject.project, registry2, RunMode::Once);
-    assert(startResult.code != 0);
+    assert((startResult.code != 0));
 
     std::cout << "[PASS] Offline package replacement and failure protection test passed successfully." << std::endl;
 }
@@ -1255,7 +1251,7 @@ int main(int argc, char **argv)
 
     // Test in a temporary installation directory with Chinese characters and spaces
     QTemporaryDir unicodeTemp;
-    assert(unicodeTemp.isValid());
+    assert((unicodeTemp.isValid()));
     const auto unicodePkg
         = std::filesystem::u8path(unicodeTemp.path().toUtf8().toStdString()) / "测试 工具 目录 with space";
     std::filesystem::copy(toolsPkg, unicodePkg, std::filesystem::copy_options::recursive);

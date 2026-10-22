@@ -3,6 +3,7 @@
 #include "ui/Theme.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QFont>
 #include <QDir>
 #include <QGuiApplication>
@@ -31,10 +32,11 @@ void parameterEditorsContract()
     };
     QTemporaryDir directory;
     require(directory.isValid(), "parameter fixture directory is invalid");
-    QDir(directory.path()).mkpath("tools-package/assets/tools/custom/Test/Parameters");
+    QDir(directory.path()).mkpath("tools-package/tools/custom/Test/Parameters");
     const auto write = [&](const QString &name, const QByteArray &content)
     {
         QFile file(directory.path() + "/tools-package/" + name);
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly), "cannot create parameter fixture");
         require(file.write(content) == content.size(), "parameter fixture write failed");
     };
@@ -43,22 +45,22 @@ void parameterEditorsContract()
   "schema_version": 1,
   "variant": "test",
   "tools": [
-    {"tool_id": "test.parameters", "definition": "assets/tools/custom/Test/Parameters/tool.json"}
+    {"tool_id": "test.parameters", "definition": "tools/custom/Test/Parameters/tool.json"}
   ],
   "modules": [],
   "runtime_files": []
 })json");
-    write("assets/tools/custom/Test/Parameters/run.py",
+    write("python/custom/Test/Parameters/run.py",
           "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', "
           "'ratio': inputs['ratio'], 'count': inputs['count']}\n");
-    write("assets/tools/custom/Test/Parameters/tool.json",
+    write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.parameters",
   "display_name": "参数测试",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "run.py", "symbol": "run"},
+  "entry": {"package": "Test/Parameters", "file": "run.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
     {"id": "ratio", "name": "比例", "type": "Float", "default": 0.15, "min": 0, "max": 1, "step": 0.05, "decimals": 2},
@@ -66,12 +68,12 @@ void parameterEditorsContract()
     {"id": "path", "name": "路径", "type": "String", "default": "原始路径", "editor": "file"},
     {"id": "enabled", "name": "启用", "type": "Bool", "default": true},
     {"id": "mode", "name": "色彩", "type": "String", "default": "bgr", "options": ["bgr", "gray"]},
-    {"id": "labels", "name": "标签列表", "type": "StringArray", "rank": 1, "default": {"shape": [2], "data": ["a", "b"]}},
+    {"id": "labels", "name": "标签列表", "type": "Array", "dtype": "string", "rank": 1, "default": ["a", "b"]},
     {"id": "note", "name": "备注", "type": "String", "default": "中文备注"},
     {"id": "directory", "name": "数据目录", "type": "String", "default": "F:/tmp", "editor": "directory"},
-    {"id": "weights", "name": "数值数组", "type": "NumericArray", "dtype": "float64", "rank": 1, "default": {"shape": [2], "data": [0, 1]}},
-    {"id": "images", "name": "图像", "type": "ImageBatch", "default": [], "required": false},
-    {"id": "rois", "name": "区域", "type": "RoiBatch", "default": [], "image_input": "images"}
+    {"id": "weights", "name": "数值数组", "type": "Array", "dtype": "float64", "rank": 1, "default": [0, 1]},
+    {"id": "images", "name": "图像", "type": "Image", "default": [], "required": false},
+    {"id": "rois", "name": "区域", "type": "ROI", "default": [], "image_input": "images"}
   ],
   "outputs": [
     {"id": "ratio", "name": "比例", "type": "Float"},
@@ -420,7 +422,7 @@ void parameterEditorsContract()
     require(labelsRow != nullptr, "parameter panel did not render the structure row");
     QQuickItem *structureButton = nullptr;
     for (auto *item : labelsRow->findChildren<QQuickItem *>())
-        if (item->property("text").toString().startsWith("StringArray")
+        if (item->property("text").toString().startsWith("Array<string>")
             && item->metaObject()->indexOfSignal("clicked()") >= 0)
             structureButton = item;
     require(structureButton != nullptr, "structured parameter editor is missing");
@@ -485,7 +487,7 @@ void parameterEditorsContract()
     require(value("labels") == originalLabels, "invalid structure replaced a typed parameter");
     require(dialog->property("visible").toBool() && !labelsRow->property("structureError").toString().isEmpty(),
             "invalid structure did not keep the draft and report its validation error");
-    structureInput->setProperty("text", "{\"shape\": [2], \"data\": [\"中文\", \"with spaces\"]}");
+    structureInput->setProperty("text", "[\"中文\", \"with spaces\"]");
     click(confirm);
     require(!dialog->property("visible").toBool(), "valid structure did not close its dialog");
     const auto committedLabels = value("labels");
@@ -616,8 +618,8 @@ void parameterEditorsContract()
         QMap<QString, QString> boundaryResults;
         for (int row = 0; row < outputs->rowCount(); ++row)
         {
-            const auto output = outputs->get(row);
-            boundaryResults.insert(output.value("portId").toString(), output.value("preview").toString());
+            const auto result = outputs->get(row);
+            boundaryResults.insert(result.value("portId").toString(), result.value("preview").toString());
         }
         require(boundaryResults.value("__status_code") == "0" && boundaryResults.value("count") == integer,
                 "integer boundary changed during Python execution");

@@ -5,6 +5,21 @@
 #include <QRegularExpression>
 
 namespace visionrt {
+namespace {
+template<class Vector>
+void validateIntegerLiterals(const QJsonValue &json)
+{
+    using Element = typename Vector::value_type;
+    if constexpr (std::is_integral_v<Element> && !std::is_same_v<Element, bool>)
+    {
+        for (const auto value : json.toArray()) (void)parseInt64(value.toString().toStdString());
+    }
+    else if constexpr (!std::is_arithmetic_v<Element> && !std::is_same_v<Element, std::string>)
+    {
+        for (const auto value : json.toArray()) validateIntegerLiterals<Element>(value);
+    }
+}
+}
 ValueJson::Document::Document(const QByteArray &bytes)
 {
     QJsonParseError error;
@@ -64,13 +79,15 @@ PortValue ValueJson::Document::decode(const QStringList &path, const TypeSpec &t
         return result;
     if (type.type == Type::Int)
         (void)parseInt64(locate(numberText_).toString().toStdString());
-    else if (type.type == Type::NumericArray && type.dtype == DType::Int64)
+    else if (type.type == Type::Array)
     {
-        const auto source  = locate(numberText_);
-        const auto buffers = type.layout == Layout::Dense ? QJsonArray{source} : source.toArray();
-        for (const auto buffer : buffers)
-            for (const auto value : buffer.toObject().value("data").toArray())
-                (void)parseInt64(value.toString().toStdString());
+        const auto source = locate(numberText_);
+        std::get<Array>(result).visit(
+            [&](const auto &reference)
+            {
+                using Vector = std::remove_cvref_t<decltype(reference.get())>;
+                validateIntegerLiterals<Vector>(source);
+            });
     }
     return result;
 }

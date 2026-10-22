@@ -336,16 +336,16 @@ void test200NodesExecution()
 }
 
 // -------------------------------------------------------------
-// 2. 真实 Taskflow DAG 100 消费者扇出与 Python 单次复制叶输出 (HS2-05 / B05 / RT-07)
+// 2. 真实 Taskflow DAG 100 消费者扇出与 Python 可写零复制互操作 (HS2-05 / B05 / RT-07)
 // -------------------------------------------------------------
 void test10x4KZeroCopyAndPythonPassthrough()
 {
-    std::cout << "[Test 2] Real Taskflow DAG 100-Consumer Fan-Out & Python Single-Copy Leaf Output...\n";
+    std::cout << "[Test 2] Real Taskflow DAG 100-Consumer Fan-Out & Python Writable Zero-Copy Interop...\n";
     const int kImageCount = 10;
     const int kWidth      = 3840;
     const int kHeight     = 2160;
 
-    std::vector<OwnedImage> imgs;
+    Image imgs;
     imgs.reserve(kImageCount);
     std::vector<const void *> originalPointers;
     originalPointers.reserve(kImageCount);
@@ -353,11 +353,11 @@ void test10x4KZeroCopyAndPythonPassthrough()
     for (int i = 0; i < kImageCount; ++i)
     {
         cv::Mat mat(kHeight, kWidth, CV_8UC3, cv::Scalar(i * 20, 100 + i * 5, 200 - i * 10));
-        imgs.push_back(OwnedImage::copyOf(mat));
-        originalPointers.push_back(imgs.back().data());
+        imgs.push_back(mat);
+        originalPointers.push_back(imgs.back().data);
     }
 
-    ImageBatch batch(std::move(imgs));
+    DataRef<Image> batch(std::move(imgs));
     auto       batchOwner = batch.owner();
     std::cout << "  -> Initial batchOwner.use_count() = " << batchOwner.use_count() << "\n";
     require(batchOwner.use_count() == 2, "Initial batch owner count must be 2 (batch + batchOwner)");
@@ -373,14 +373,14 @@ void test10x4KZeroCopyAndPythonPassthrough()
     srcDef.displayName  = "10x4K Source";
     srcDef.version      = "1.0";
     srcDef.kind         = ToolKind::Cpp;
-    srcDef.outputs.push_back({"batch", "batch", {Type::ImageBatch}});
+    srcDef.outputs.push_back({"batch", "batch", {Type::Image}});
 
     class SourceTool final : public IToolInstance
     {
-        ImageBatch batch_;
+        DataRef<Image> batch_;
 
     public:
-        explicit SourceTool(ImageBatch b)
+        explicit SourceTool(DataRef<Image> b)
             : batch_(std::move(b))
         {
         }
@@ -401,7 +401,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         }
     };
 
-    ImageBatch batchForSource = batch;
+    DataRef<Image> batchForSource = batch;
     registry.registerCpp(srcDef, [batchForSource](const ToolServices &)
                          { return std::make_unique<SourceTool>(batchForSource); });
     registry.addDefinition(srcDef);
@@ -412,7 +412,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     consDef.displayName  = "Batch Consumer";
     consDef.version      = "1.0";
     consDef.kind         = ToolKind::Cpp;
-    consDef.inputs.push_back({"batch", "batch", {Type::ImageBatch}});
+    consDef.inputs.push_back({"batch", "batch", {Type::Image}});
     consDef.outputs.push_back({"matched", "matched", {Type::Int}});
 
     std::atomic<int>  consumerExecCount{0};
@@ -447,8 +447,8 @@ void test10x4KZeroCopyAndPythonPassthrough()
                     {{"matched", std::int64_t{0}}}
                 };
             }
-            const auto &b = std::get<ImageBatch>(in.at("batch"));
-            if (static_cast<int>(b.images().size()) != 10)
+            const auto &b = std::get<DataRef<Image>>(in.at("batch"));
+            if (static_cast<int>(b.get().size()) != 10)
             {
                 mismatch_ = true;
             }
@@ -456,7 +456,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
             {
                 for (int k = 0; k < 10; ++k)
                 {
-                    if (b.images()[k].data() != expectedPointers_[k])
+                    if (b.get()[k].data != expectedPointers_[k])
                     {
                         mismatch_ = true;
                     }
@@ -487,7 +487,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     srcNode.id               = 1;
     srcNode.toolId           = srcDef.id;
     srcNode.toolNameSnapshot = srcDef.displayName;
-    srcNode.signatures.outputs.emplace("batch", TypeSpec{Type::ImageBatch});
+    srcNode.signatures.outputs.emplace("batch", TypeSpec{Type::Image});
     srcNode.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     srcNode.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
     flow.nodes.push_back(srcNode);
@@ -498,7 +498,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         cNode.id               = i;
         cNode.toolId           = consDef.id;
         cNode.toolNameSnapshot = consDef.displayName;
-        cNode.signatures.inputs.emplace("batch", TypeSpec{Type::ImageBatch});
+        cNode.signatures.inputs.emplace("batch", TypeSpec{Type::Image});
         cNode.signatures.outputs.emplace("matched", TypeSpec{Type::Int});
         cNode.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
         cNode.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
@@ -542,13 +542,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         // Saturated burst submission to observe queue high-water marks
         for (quint64 reqId = 1; reqId <= 5; ++reqId)
         {
-            std::vector<OwnedImage> displayImages;
-            displayImages.reserve(kImageCount);
-            for (const auto &img : batch.images())
-            {
-                displayImages.push_back(img);
-            }
-            converter.requestBatch(std::move(displayImages), "BGR", reqId, 1);
+            converter.requestBatch(batch, "BGR", reqId, 1);
             const std::size_t inFlight = converter.isBusy() ? 1 : 0;
             const std::size_t pending  = converter.hasPending() ? 1 : 0;
             maxInFlight                = std::max(maxInFlight, inFlight);
@@ -585,112 +579,79 @@ void test10x4KZeroCopyAndPythonPassthrough()
                   << " [PASS]\n";
     }
 
-    // Part C: Python Passthrough & Single-Copy Leaf Output Verification
     {
         pybind11::gil_scoped_acquire gil;
-        PortValue                    upstreamValue = batch;
-        // In Python read-only view: data pointer wraps original raw buffer
-        pybind11::object             pyBatch = toPythonReadonly(upstreamValue);
-        require(pybind11::isinstance<pybind11::list>(pyBatch), "Python object is not a list");
-        pybind11::list pyList = pybind11::reinterpret_borrow<pybind11::list>(pyBatch);
-        require(static_cast<int>(pyList.size()) == kImageCount, "Python list size mismatch");
-
-        for (int k = 0; k < kImageCount; ++k)
+        PythonStorage                storage;
+        auto                         pyBatch = toPython(PortValue{batch});
+        require(pybind11::isinstance<pybind11::list>(pyBatch), "Python image batch is not a list");
+        auto pyList = pyBatch.cast<pybind11::list>();
+        require(pyList.size() == kImageCount, "Python image batch size mismatch");
+        auto        returned = fromPython({Type::Image}, pyBatch, storage);
+        const auto &images   = std::get<DataRef<Image>>(returned).get();
+        for (int index = 0; index < kImageCount; ++index)
         {
-            pybind11::array pyArr = pybind11::cast<pybind11::array>(pyList[k]);
-            require(pyArr.data() == originalPointers[k], "Python read-only array data pointer mismatch");
+            auto image = pyList[index].cast<pybind11::array>();
+            require(image.writeable() && image.data() == originalPointers[index],
+                    "Python image must share writable native storage");
+            require(images[index].data == originalPointers[index] && images[index].cols == kWidth
+                        && images[index].rows == kHeight,
+                    "Returned Python image must retain the same storage and dimensions");
+            image.attr("__setitem__")(pybind11::make_tuple(0, 0, 0), 17);
+            require(images[index].at<cv::Vec3b>(0, 0)[0] == 17, "Python mutation did not reach native storage");
         }
-
-        // Return from Python as leaf output (contiguous input case)
-        resetPythonLeafImageCopyCount();
-        PortValue fromPy = fromPython(TypeSpec{Type::ImageBatch}, pyBatch);
-        require(std::holds_alternative<ImageBatch>(fromPy), "fromPython failed to produce ImageBatch");
-        const auto &leafBatch  = std::get<ImageBatch>(fromPy);
-        const auto &leafImages = leafBatch.images();
-        require(static_cast<int>(leafImages.size()) == kImageCount, "Leaf image batch size mismatch");
-
-        const std::size_t contiguousCopies = pythonLeafImageCopyCount();
-        require(contiguousCopies == static_cast<std::size_t>(kImageCount),
-                "Contiguous input leaf copies must be exactly 1 per image");
-
-        // Verify copy point: each leaf image has newly allocated data buffer (1 copy from numpy to Mat)
-        // and exactly 1 internal owner holding it (2 when including temporary return value).
-        require(leafBatch.owner().use_count() == 2, "Leaf batch should have single internal owner");
-        for (int k = 0; k < kImageCount; ++k)
+        pybind11::list padded;
+        for (const auto &item : pyList)
+            padded.append(
+                item[pybind11::make_tuple(pybind11::slice(0, kHeight, 2), pybind11::slice(0, kWidth / 2, 1))]);
+        auto        paddedValue  = fromPython({Type::Image}, padded, storage);
+        const auto &paddedImages = std::get<DataRef<Image>>(paddedValue).get();
+        require(paddedImages.size() == kImageCount && paddedImages[0].cols == kWidth / 2
+                    && paddedImages[0].rows == kHeight / 2 && paddedImages[0].data == originalPointers[0]
+                    && paddedImages[0].step == static_cast<std::size_t>(kWidth * 3 * 2),
+                "Padded-row numpy images must retain their zero-copy layout");
+        bool rejectedStride = false;
+        try
         {
-            require(leafImages[k].cols() == kWidth && leafImages[k].rows() == kHeight, "Leaf image dimension mismatch");
-            require(leafImages[k].data() != originalPointers[k], "Leaf output should have newly allocated buffer");
-            require(std::memcmp(leafImages[k].data(), originalPointers[k], kWidth * 3) == 0, "Pixel contents mismatch");
+            pybind11::list invalid;
+            invalid.append(
+                pyList[0][pybind11::make_tuple(pybind11::slice(0, kHeight, 1), pybind11::slice(0, kWidth, 2))]);
+            fromPython({Type::Image}, invalid, storage);
         }
-
-        // Non-contiguous input case: strided / sliced array (step 2)
-        pybind11::list nonContigList;
-        for (int k = 0; k < kImageCount; ++k)
+        catch (const ContractError &)
         {
-            pybind11::object pyArr = pyList[k];
-            pybind11::object sliced
-                = pyArr[pybind11::make_tuple(pybind11::slice(0, kHeight, 2), pybind11::slice(0, kWidth, 2))];
-            nonContigList.append(sliced);
+            rejectedStride = true;
         }
-
-        resetPythonLeafImageCopyCount();
-        PortValue fromNonContig = fromPython(TypeSpec{Type::ImageBatch}, nonContigList);
-        require(std::holds_alternative<ImageBatch>(fromNonContig), "fromPython failed on non-contiguous array");
-        const auto &nonContigBatch  = std::get<ImageBatch>(fromNonContig);
-        const auto &nonContigImages = nonContigBatch.images();
-        require(static_cast<int>(nonContigImages.size()) == kImageCount, "Non-contiguous leaf batch size mismatch");
-
-        const std::size_t nonContigCopies = pythonLeafImageCopyCount();
-        require(nonContigCopies == static_cast<std::size_t>(kImageCount),
-                "Non-contiguous input leaf copies must be exactly 1 per image");
-        require(nonContigImages[0].cols() == kWidth / 2 && nonContigImages[0].rows() == kHeight / 2,
-                "Non-contiguous leaf image dimension mismatch");
-
-        std::cout << "  -> Python Passthrough: Contiguous copy count = " << contiguousCopies
-                  << " (<= 1/leaf), Non-contiguous copy count = " << nonContigCopies << " (<= 1/leaf) [PASS]\n";
-
-        // NumericArray leaf output copy count and invalid input probe isolation
+        require(rejectedStride, "Unrepresentable column strides must be rejected, not copied");
+        auto           numpy  = pybind11::module_::import("numpy");
+        auto           matrix = numpy.attr("zeros")(pybind11::make_tuple(10, 20), "float32");
+        const TypeSpec type{Type::Array, DType::Float32, 2};
+        auto           array  = fromPython(type, matrix.attr("tolist")(), storage);
+        const auto    &native = std::get<Array>(array).get<NestedVector<float, 2>>();
+        require(native.size() == 10 && native[0].size() == 20 && native[0][0] == 0.0f,
+                "Python Array must use the declared native nested-vector type");
+        bool rejectedArray = false;
+        try
         {
-            resetPythonLeafNumericCopyCount();
-            pybind11::module_ np       = pybind11::module_::import("numpy");
-            pybind11::object  validArr = np.attr("zeros")(pybind11::make_tuple(10, 20), "float32");
-            TypeSpec          numSpec{Type::NumericArray, DType::Float32, 2, Layout::Dense};
-            PortValue         validNumVal = fromPython(numSpec, validArr);
-            require(std::holds_alternative<NumericArray>(validNumVal), "fromPython failed to produce NumericArray");
-            require(pythonLeafNumericCopyCount() == 1, "NumericArray leaf copy count must be exactly 1");
-
-            // Invalid input probe isolation: invalid dtype must throw and NOT increment probe
-            bool badThrew = false;
-            try
-            {
-                pybind11::object badArr = np.attr("zeros")(pybind11::make_tuple(10, 20), "int32");
-                fromPython(numSpec, badArr);
-            }
-            catch (const ContractError &)
-            {
-                badThrew = true;
-            }
-            require(badThrew, "fromPython with mismatched dtype should throw ContractError");
-            require(pythonLeafNumericCopyCount() == 1, "Invalid NumericArray input must not increment copy probe");
-
-            // Invalid ImageBatch input probe isolation: invalid shape must throw and NOT increment probe
-            resetPythonLeafImageCopyCount();
-            bool imgBadThrew = false;
-            try
-            {
-                pybind11::object badImg = np.attr("zeros")(pybind11::make_tuple(10), "uint8");
-                pybind11::list   badList;
-                badList.append(badImg);
-                fromPython(TypeSpec{Type::ImageBatch}, badList);
-            }
-            catch (const ContractError &)
-            {
-                imgBadThrew = true;
-            }
-            require(imgBadThrew, "fromPython with 1D image must throw ContractError");
-            require(pythonLeafImageCopyCount() == 0, "Invalid ImageBatch input must not increment copy probe");
-            std::cout << "  -> Python NumericArray leaf copy & invalid input probe isolation [PASS]\n";
+            fromPython(type, matrix, storage);
         }
+        catch (const ContractError &)
+        {
+            rejectedArray = true;
+        }
+        require(rejectedArray, "Array must reject ndarray instead of adding a second representation");
+        bool rejectedShape = false;
+        try
+        {
+            pybind11::list invalid;
+            invalid.append(numpy.attr("zeros")(pybind11::make_tuple(10), "uint8"));
+            fromPython({Type::Image}, invalid, storage);
+        }
+        catch (const ContractError &)
+        {
+            rejectedShape = true;
+        }
+        require(rejectedShape, "One-dimensional image must be rejected");
+        std::cout << "  -> Python writable round-trip and padded rows share all 10x4K buffers [PASS]\n";
     }
 }
 
@@ -713,7 +674,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     genDef.version      = "1.0";
     genDef.kind         = ToolKind::Cpp;
     genDef.outputs.push_back({"val", "val", {Type::Int}});
-    genDef.outputs.push_back({"image", "image", {Type::ImageBatch}});
+    genDef.outputs.push_back({"image", "image", {Type::Image}});
 
     class GenTool final : public IToolInstance
     {
@@ -729,11 +690,11 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         {
             ++step_;
             cv::Mat                 mat(720, 1280, CV_8UC3, cv::Scalar(step_ % 256, 120, 200));
-            std::vector<OwnedImage> imgs;
-            imgs.push_back(OwnedImage::copyOf(mat));
+            Image                   imgs;
+            imgs.push_back(mat);
             return ToolResult{
                 {},
-                {{"val", step_}, {"image", ImageBatch(std::move(imgs))}}
+                {{"val", step_}, {"image", DataRef<Image>(std::move(imgs))}}
             };
         }
 
@@ -753,9 +714,9 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     procDef.version      = "1.0";
     procDef.kind         = ToolKind::Cpp;
     procDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
-    procDef.inputs.push_back({"in_image", "in_image", {Type::ImageBatch}});
+    procDef.inputs.push_back({"in_image", "in_image", {Type::Image}});
     procDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
-    procDef.outputs.push_back({"out_image", "out_image", {Type::ImageBatch}});
+    procDef.outputs.push_back({"out_image", "out_image", {Type::Image}});
 
     class ProcTool final : public IToolInstance
     {
@@ -768,11 +729,11 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         ToolResult execute(const Values &in) override
         {
             std::int64_t v       = std::get<std::int64_t>(in.at("in_val"));
-            const auto  &inBatch = std::get<ImageBatch>(in.at("in_image"));
+            const auto  &inBatch = std::get<DataRef<Image>>(in.at("in_image"));
             // Trigger real display conversion within tool execution pipeline
-            if (!inBatch.images().empty())
+            if (!inBatch.get().empty())
             {
-                auto frame = DisplayConverter::convert(inBatch.images().front(), "BGR");
+                auto frame = DisplayConverter::convert(inBatch.get().front(), "BGR");
                 require(!frame.image.isNull(), "Display conversion in loop returned null image");
             }
             return ToolResult{
@@ -801,7 +762,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     n1.id     = 1;
     n1.toolId = genDef.id;
     n1.signatures.outputs.emplace("val", TypeSpec{Type::Int});
-    n1.signatures.outputs.emplace("image", TypeSpec{Type::ImageBatch});
+    n1.signatures.outputs.emplace("image", TypeSpec{Type::Image});
     n1.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     n1.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
     flow.nodes.push_back(n1);
@@ -810,9 +771,9 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     n2.id     = 2;
     n2.toolId = procDef.id;
     n2.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
-    n2.signatures.inputs.emplace("in_image", TypeSpec{Type::ImageBatch});
+    n2.signatures.inputs.emplace("in_image", TypeSpec{Type::Image});
     n2.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
-    n2.signatures.outputs.emplace("out_image", TypeSpec{Type::ImageBatch});
+    n2.signatures.outputs.emplace("out_image", TypeSpec{Type::Image});
     n2.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     n2.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
     n2.inputs["in_val"] = {
@@ -826,9 +787,12 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     flow.nodes.push_back(n2);
 
     QTemporaryDir tempPyDir;
-    if (pyRuntime && tempPyDir.isValid())
+    require(pyRuntime && tempPyDir.isValid(), "Python runtime and fixture are required for stability testing");
+    if (pyRuntime)
     {
-        const auto    scriptPath = std::filesystem::path(tempPyDir.path().toStdString()) / "loop_tool.py";
+        const auto packageRoot = std::filesystem::path(tempPyDir.path().toStdString());
+        std::filesystem::create_directory(packageRoot / "loop");
+        const auto    scriptPath = packageRoot / "loop/loop_tool.py";
         std::ofstream ofs(scriptPath);
         ofs << "def execute(inputs):\n"
             << "    v = inputs.get('in_val', 0)\n"
@@ -840,14 +804,15 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         pyToolDef.displayName    = "Loop Python Tool";
         pyToolDef.version        = "1.0.0";
         pyToolDef.kind           = ToolKind::PythonFunction;
-        pyToolDef.script         = scriptPath.string();
+        pyToolDef.source.roots.python = packageRoot;
+        pyToolDef.entry               = {"loop", "loop_tool.py", "execute"};
         pyToolDef.definitionPath = scriptPath.parent_path() / "loop_tool.json";
-        pyToolDef.symbol         = "execute";
         pyToolDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
         pyToolDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
 
         auto st = pyRuntime->refresh(std::vector<ToolDefinition>{pyToolDef});
-        if (!st.empty() && st[0].status.code == 0)
+        require(!st.empty() && st[0].status.code == 0, "Python stability fixture could not load");
+        if (st[0].status.code == 0)
         {
             registry.addDefinition(pyToolDef);
             registry.setPythonImplementation(pyToolDef.id, pyRuntime->factory(pyToolDef));
@@ -988,7 +953,8 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     require(tempDir.isValid(), "Failed to create temp directory for Python timing test");
     const auto tempPath = std::filesystem::path(tempDir.path().toStdString());
 
-    const auto scriptPath = tempPath / "timing_test.py";
+    std::filesystem::create_directory(tempPath / "timing");
+    const auto scriptPath = tempPath / "timing/timing_test.py";
     {
         std::ofstream ofs(scriptPath);
         ofs << "def execute(inputs):\n"
@@ -1006,9 +972,9 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     pyDef.displayName    = "Python Timing Test Tool";
     pyDef.version        = "1.0.0";
     pyDef.kind           = ToolKind::PythonFunction;
-    pyDef.script         = scriptPath.string();
+    pyDef.source.roots.python = tempPath;
+    pyDef.entry               = {"timing", "timing_test.py", "execute"};
     pyDef.definitionPath = tempPath / "timing_test.json";
-    pyDef.symbol         = "execute";
     pyDef.inputs.push_back({"val", "val", {Type::Int}});
     pyDef.outputs.push_back({"out", "out", {Type::Int}});
 
@@ -1362,6 +1328,7 @@ int main(int argc, char **argv)
 
     try
     {
+        require(app.pythonRuntime() != nullptr, "Performance contract requires the real Python runtime");
         test200NodesExecution();
         test10x4KZeroCopyAndPythonPassthrough();
         if (app.pythonRuntime())

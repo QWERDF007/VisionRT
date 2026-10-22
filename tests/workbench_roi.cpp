@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QJSValue>
@@ -36,10 +37,11 @@ void roiParameterContract()
     QTemporaryDir directory;
     require(directory.isValid(), "ROI fixture directory is unavailable");
     const auto package = directory.path() + "/tools-package/";
-    require(QDir().mkpath(package + "assets/roi"), "cannot create the ROI package fixture");
+    require(QDir().mkpath(package + "tools/custom/roi"), "cannot create the ROI package fixture");
     const auto write = [&](const QString &name, const QByteArray &bytes)
     {
         QFile file(package + name);
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "cannot write the ROI fixture");
     };
     write("module_index.json",
@@ -47,67 +49,68 @@ void roiParameterContract()
   "schema_version": 1,
   "variant": "test",
   "tools": [
-    {"tool_id": "test.roi.source", "definition": "assets/roi/source.json"},
-    {"tool_id": "test.roi.editor", "definition": "assets/roi/editor.json"}
+    {"tool_id": "test.roi.source", "definition": "tools/custom/roi/source.json"},
+    {"tool_id": "test.roi.editor", "definition": "tools/custom/roi/editor.json"}
   ],
   "modules": [],
   "runtime_files": []
 })json");
-    write("assets/roi/source.py",
+    write("python/custom/roi/source.py",
           "import numpy as np\ndef run(inputs):\n"
-          "    return {'__status_code': 0, '__status_message': '', 'images': [np.zeros((96, 128, 3), dtype=np.uint8), np.ones((24, 32, 3), dtype=np.uint8)], "
-          "'rect': np.array([2, 1.25, 2.5, 3.75, 4.5, 17.5], dtype=np.float32), "
-          "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float32)]]}\n");
-    write("assets/roi/source.json",
+          "    return {'__status_code': 0, '__status_message': '', 'images': [np.zeros((96, 128, 3), dtype=np.uint8), "
+          "np.ones((24, 32, 3), dtype=np.uint8)], "
+          "'rect': [[np.array([2, 1.25, 2.5, 3.75, 4.5, 17.5], dtype=np.float64).tolist()]], "
+          "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float64).tolist()]]}\n");
+    write("tools/custom/roi/source.json",
           R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.roi.source",
   "display_name": "ROI图像源",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "source.py", "symbol": "run"},
+  "entry": {"package": "roi", "file": "source.py", "symbol": "run"},
   "init_params": [],
   "inputs": [],
   "outputs": [
-    {"id": "images", "name": "图像", "type": "ImageBatch", "display": {"color_order": "BGR"}},
-    {"id": "rois", "name": "源区域", "type": "RoiBatch"},
-    {"id": "rect", "name": "源矩形", "type": "Rect", "image_port": "images"}
+    {"id": "images", "name": "图像", "type": "Image", "display": {"color_order": "BGR"}},
+    {"id": "rois", "name": "源区域", "type": "ROI"},
+    {"id": "rect", "name": "源矩形", "type": "ROI", "image_port": "images"}
   ]
 })json");
-    write("assets/roi/editor.py",
+    write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
           "    return {'__status_code': 0, '__status_message': '', 'count': len(inputs['rois'][0]), "
-          "'images': inputs['images'], 'regions': [[np.array([2, 60, 75, 15, 10, 0], dtype=np.float32)], []], "
+          "'images': inputs['images'], 'regions': [[np.array([2, 60, 75, 15, 10, 0], dtype=np.float64).tolist()], []], "
           "'unrelated_images': inputs['images'][:1], 'unavailable_images': [], "
           "'cropped_images': [image[5:, 10:] for image in inputs['images']], "
-          "'crop_regions': [[np.array([2, 25, 20, 10, 10, 0], dtype=np.float32)], []], "
-          "'origins': np.array([[10, 5] for image in inputs['images']], dtype=np.float64), "
-          "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float32)]]}\n");
-    write("assets/roi/editor.json",
+          "'crop_regions': [[np.array([2, 25, 20, 10, 10, 0], dtype=np.float64).tolist()], []], "
+          "'origins': np.array([[10, 5] for image in inputs['images']], dtype=np.float64).tolist(), "
+          "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float64).tolist()]]}\n");
+    write("tools/custom/roi/editor.json",
           R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "tool_id": "test.roi.editor",
   "display_name": "ROI编辑",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "editor.py", "symbol": "run"},
+  "entry": {"package": "roi", "file": "editor.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
-    {"id": "images", "name": "图像", "type": "ImageBatch"},
-    {"id": "rois", "name": "区域", "type": "RoiBatch", "default": [[]], "image_input": "images"},
-    {"id": "rect", "name": "矩形", "type": "Rect", "default": [2, 1.234567881, 2.5, 3.75, 4.5, 17.5], "image_input": "images"},
-    {"id": "guide", "name": "参考区域", "type": "Rect", "default": [2, 80, 50, 20, 20, 0], "image_input": "images"}
+    {"id": "images", "name": "图像", "type": "Image"},
+    {"id": "rois", "name": "区域", "type": "ROI", "default": [[]], "image_input": "images"},
+    {"id": "rect", "name": "矩形", "type": "ROI", "editor": "rect", "default": [[[2, 1.234567881, 2.5, 3.75, 4.5, 17.5]]], "image_input": "images"},
+    {"id": "guide", "name": "参考区域", "type": "ROI", "editor": "rect", "default": [[[2, 80, 50, 20, 20, 0]]], "image_input": "images"}
   ],
   "outputs": [
     {"id": "count", "name": "区域数量", "type": "Int"},
-    {"id": "images", "name": "图像", "type": "ImageBatch", "display": {"color_order": "BGR", "same_geometry_as_input": "images"}},
-    {"id": "regions", "name": "结果区域", "type": "RoiBatch", "image_port": "images"},
-    {"id": "unrelated_images", "name": "其他坐标图像", "type": "ImageBatch"},
-    {"id": "unavailable_images", "name": "空图像输出", "type": "ImageBatch"},
-    {"id": "cropped_images", "name": "裁剪坐标图像", "type": "ImageBatch"},
-    {"id": "crop_regions", "name": "裁剪坐标区域", "type": "RoiBatch", "image_port": "cropped_images"},
-    {"id": "origins", "name": "原点坐标", "type": "NumericArray", "dtype": "float64", "rank": 2, "layout": "dense"},
-    {"id": "unrelated_regions", "name": "其他坐标区域", "type": "RoiBatch", "image_port": "unrelated_images"}
+    {"id": "images", "name": "图像", "type": "Image", "display": {"color_order": "BGR", "same_geometry_as_input": "images"}},
+    {"id": "regions", "name": "结果区域", "type": "ROI", "image_port": "images"},
+    {"id": "unrelated_images", "name": "其他坐标图像", "type": "Image"},
+    {"id": "unavailable_images", "name": "空图像输出", "type": "Image"},
+    {"id": "cropped_images", "name": "裁剪坐标图像", "type": "Image"},
+    {"id": "crop_regions", "name": "裁剪坐标区域", "type": "ROI", "image_port": "cropped_images"},
+    {"id": "origins", "name": "原点坐标", "type": "Array", "dtype": "float64", "rank": 2},
+    {"id": "unrelated_regions", "name": "其他坐标区域", "type": "ROI", "image_port": "unrelated_images"}
   ]
 })json");
 
@@ -235,12 +238,20 @@ void roiParameterContract()
     draw(true);
     require(literal() == initial && !app.dirty() && changes.isEmpty(), "Escape saved an unfinished ROI draft");
     draw(false);
-    require(literal() != initial && app.dirty() && !changes.isEmpty(),
-            "A completed gesture writes directly to the parameter");
+    if (!(literal() != initial && app.dirty() && !changes.isEmpty()))
+        throw std::runtime_error(
+            (QStringLiteral("Completed ROI gesture was not committed: editing=%1, shape=%2, active=%3, dirty=%4, "
+                            "signals=%5, initial=%6, actual=%7, diagnostic=%8")
+                 .arg(viewport.editing())
+                 .arg(viewport.drawShape())
+                 .arg(app.activeRoiParameter())
+                 .arg(app.dirty())
+                 .arg(changes.count())
+                 .arg(initial, literal(), app.diagnostic()))
+                .toStdString());
     auto committed = literal();
-    const auto rois = std::get<RoiBatch>(ValueJson::parse(committed, {Type::RoiBatch}));
-    require(rois.images().size() == 1 && rois.images()[0].size() == 1
-                && rois.images()[0][0].kind() == RoiKind::Rectangle,
+    const auto rois      = std::get<DataRef<ROI>>(ValueJson::parse(committed, {Type::ROI}));
+    require(rois.get().size() == 1 && rois.get()[0].size() == 1 && roiKind(rois.get()[0][0]) == RoiKind::Rectangle,
             "ROI parameter lost its typed rectangle representation");
     require(app.save(project) && !app.dirty(), "ROI project could not be saved");
     changes.clear();
@@ -275,8 +286,8 @@ void roiParameterContract()
             "Deleting a copied ROI detached its upstream binding");
     viewport.setDrawShape(2);
     draw(false);
-    const auto edited = std::get<RoiBatch>(ValueJson::parse(literal(), {Type::RoiBatch}));
-    require(edited.images().size() == 1 && edited.images()[0].size() == 2,
+    const auto edited = std::get<DataRef<ROI>>(ValueJson::parse(literal(), {Type::ROI}));
+    require(edited.get().size() == 1 && edited.get()[0].size() == 2,
             "copied ROI input could not be edited independently");
     committed = literal();
     require(app.save(project), "copied ROI project could not be saved");
@@ -519,11 +530,10 @@ void roiParameterContract()
     editCoordinate(verticalInput, "7.75", false);
     changes.clear();
     require(app.applyRoi() && changes.count() == 1, "Apply did not flush the valid focused numeric field exactly once");
-    const auto numericRectangle = std::get<Roi>(ValueJson::parse(rectLiteral(), {Type::Rect}));
-    const auto originalGeometry = std::get<Roi>(ValueJson::parse(originalRectangle, {Type::Rect}));
-    require(numericRectangle.encoded()[2] == 7.75f && numericRectangle.encoded()[1] == originalGeometry.encoded()[1]
-                && numericRectangle.encoded()[3] == originalGeometry.encoded()[3]
-                && numericRectangle.encoded()[5] == originalGeometry.encoded()[5],
+    const auto numericRectangle = std::get<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI})).get()[0][0];
+    const auto originalGeometry = std::get<DataRef<ROI>>(ValueJson::parse(originalRectangle, {Type::ROI})).get()[0][0];
+    require(numericRectangle[2] == 7.75f && numericRectangle[1] == originalGeometry[1]
+                && numericRectangle[3] == originalGeometry[3] && numericRectangle[5] == originalGeometry[5],
             "Numeric Apply lost an unedited component or committed stale text");
     require(app.setParameter("rect", false, originalRectangle) && app.save(project), "Rect fixture could not reset");
     require(app.editRoi("rect", false), "Rect could not reopen after numeric Apply");
@@ -576,8 +586,9 @@ void roiParameterContract()
     draw(false, {15, 15}, {25, 25});
     require(rectangleGestures.count() == 2, "Explicit Rect redraw did not complete its gesture");
     const auto &redrawValue = rectangleGestures.last().at(1);
-    require(redrawValue.metaType() == QMetaType::fromType<Roi>(), "Rect gesture did not carry typed geometry");
-    const auto overlappingRedraw = static_cast<const Roi *>(redrawValue.constData())->encoded();
+    require(redrawValue.metaType() == QMetaType::fromType<ROI::value_type::value_type>(),
+            "Rect gesture did not carry typed geometry");
+    const auto overlappingRedraw = *static_cast<const ROI::value_type::value_type *>(redrawValue.constData());
     require(std::abs(overlappingRedraw[1] - 15) < 1 && std::abs(overlappingRedraw[3] - 10) < 1,
             "Explicit redraw inside the old Rect must create replacement geometry, not resize a handle");
     viewport.setDrawShape(2);
@@ -596,8 +607,8 @@ void roiParameterContract()
     if (!applied)
         throw std::runtime_error((QStringLiteral("Rect Apply=%1: ").arg(applied)
                                  + app.diagnostic()).toStdString());
-    const auto scalar = ValueJson::parse(rectLiteral(), {Type::Rect});
-    const auto geometry = std::get<Roi>(scalar).encoded();
+    const auto scalar   = ValueJson::parse(rectLiteral(), {Type::ROI});
+    const auto geometry = std::get<DataRef<ROI>>(scalar).get()[0][0];
     if (!(geometry.size() == 6 && std::abs(geometry[1] - 60) < 1 && std::abs(geometry[2] - 60) < 1
           && std::abs(geometry[3] - 30) < 1 && std::abs(geometry[4] - 20) < 1))
         throw std::runtime_error((QStringLiteral("Rect redraw/batch switch geometry=%1, gestures=%2")
@@ -628,7 +639,8 @@ void roiParameterContract()
         if (entry.toMap().value("id").toString() == "rect") rectangleBound = entry.toMap().value("mode") == "upstream";
     require(rectangleBound, "Cancel removed the scalar Rect upstream binding");
     const auto previousTarget = rectangleGestures.first().at(0).value<RoiEditTarget>();
-    const auto previousGeometry = *static_cast<const Roi *>(rectangleGestures.first().at(1).constData());
+    const auto previousGeometry
+        = *static_cast<const ROI::value_type::value_type *>(rectangleGestures.first().at(1).constData());
     require(app.editRoi("rect", true), "Scalar Rect could not reopen the same upstream-copy input");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Reopened scalar Rect background was not presented");
@@ -678,8 +690,8 @@ void roiParameterContract()
     require(rectLiteral() != imageFreeOriginal && app.dirty(), "Image-free fields saved directly");
     changes.clear();
     require(app.applyRoi(), "Image-free numeric Apply succeeded");
-    const auto imageFreeValue = std::get<Roi>(ValueJson::parse(rectLiteral(), {Type::Rect}));
-    require(imageFreeValue.encoded()[2] == 9.25f, "Image-free numeric geometry was lost");
+    const auto imageFreeValue = std::get<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI})).get()[0][0];
+    require(imageFreeValue[2] == 9.25f, "Image-free numeric geometry was lost");
     require(app.save(project) && app.editRoi("rect", false), "Image-free Rect could not reopen");
     const auto previousImageFreeSession = app.roiEditor().value("id").toString();
     app.endRoiPreview();
@@ -695,8 +707,8 @@ void roiParameterContract()
             "Image-free draft could change");
     require(app.dirty(), "Image-free numeric edit directly updated project");
     app.endRoiPreview();
-    require(app.setParameter("rect", false, "null") && app.save(project) && app.editRoi("rect", false),
-            "Missing Rect could not enter image-free numeric editing");
+    require(app.setParameter("rect", false, "[]") && app.save(project) && app.editRoi("rect", false),
+            "Empty ROI rectangle could not enter image-free numeric editing");
     QQuickItem *createRectangle = nullptr;
     pending = {panel};
     while (!pending.isEmpty())
@@ -706,7 +718,7 @@ void roiParameterContract()
             createRectangle = item;
         pending.append(item->childItems());
     }
-    require(createRectangle, "Missing Rect did not offer numeric creation");
+    require(createRectangle, "Empty ROI rectangle did not offer numeric creation");
     click(createRectangle);
     const auto rectList = app.property("roiEditor").toMap().value("rectangle").toList();
     const bool hasApplied = app.applyRoi();
@@ -715,7 +727,7 @@ void roiParameterContract()
     app.requestOpen(project);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Image-free rectangle reopen did not finish");
     app.selectNode(withoutImage);
-    require(std::holds_alternative<Roi>(ValueJson::parse(rectLiteral(), {Type::Rect})),
+    require(std::holds_alternative<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI})),
             "Saved image-free Rect lost its scalar type");
     const auto beforeBackground = rectLiteral();
     app.selectNode(source);
@@ -768,11 +780,15 @@ void roiParameterContract()
     require(acquiredSession != imageFreeSession && !app.setRoiRectangle(imageFreeSession, {50, 50, 5, 5, 0}),
             "New background accepted the old image-free numeric session");
     bool oldBackgroundDelivered = false;
-    QMetaObject::invokeMethod(&viewport, [&] {
-        emit viewport.roiCommitted(oldBackgroundTarget, Roi::rectangle(50, 50, 5, 5, 0));
-        emit viewport.roiDeleted(oldBackgroundTarget);
-        oldBackgroundDelivered = true;
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        &viewport,
+        [&]
+        {
+            emit viewport.roiCommitted(oldBackgroundTarget, ROI::value_type::value_type{2, 50, 50, 5, 5, 0});
+            emit viewport.roiDeleted(oldBackgroundTarget);
+            oldBackgroundDelivered = true;
+        },
+        Qt::QueuedConnection);
     require(QTest::qWaitFor([&] { return oldBackgroundDelivered; }, 1000)
                 && app.roiEditor().value("rectangle").toList() == acquiredRectangle
                 && rectLiteral() == currentRect && !app.dirty(),
@@ -799,13 +815,13 @@ void roiParameterContract()
     require(!app.setRoiRectangle(beforeExecutionSession, {99, 99, 1, 1, 0})
                 && app.dirty() && rectLiteral() != currentRect,
             "A pre-execution gesture or numeric callback changed the saved rectangle after new results");
-    require(app.setParameter("rect", false, "null") && app.save(project) && !app.dirty(),
-            "Missing rectangle mode baseline could not be saved");
+    require(app.setParameter("rect", false, "[]") && app.save(project) && !app.dirty(),
+            "Empty rectangle mode baseline could not be saved");
     const auto missingRectangle = rectLiteral();
-    require(app.editRoi("rect", false), "Missing rectangle could not enter image drawing mode");
+    require(app.editRoi("rect", false), "Empty rectangle could not enter image drawing mode");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
                 && viewport.singleRectangle() && viewport.drawShape() == 2 && viewport.selectedRoi() == -1,
-            "Missing rectangle did not start with one pending rectangle and no selection");
+            "Empty rectangle did not start with one pending rectangle and no selection");
     const auto beforeModeGestures = rectangleGestures.count();
     draw(true, {10, 10}, {30, 30});
     draw(false, {10, 10}, {10, 30});
@@ -848,15 +864,15 @@ void roiParameterContract()
     app.endRoiPreview();
     require(!viewport.editing() && viewport.selectedRoi() == -1 && viewport.drawShape() == 0
                 && app.roiEditor().isEmpty() && rectLiteral() == missingRectangle && !app.dirty(),
-            "Canceling a Missing rectangle left drawing mode or editing attachments active");
-    require(app.editRoi("rect", false), "Missing rectangle could not reopen after Cancel");
+            "Canceling a Empty rectangle left drawing mode or editing attachments active");
+    require(app.editRoi("rect", false), "Empty rectangle could not reopen after Cancel");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
                 && viewport.drawShape() == 2 && app.applyRoi(),
-            "Unchanged Missing rectangle could not apply without drawing");
+            "Unchanged Empty rectangle could not apply without drawing");
     require(!viewport.editing() && viewport.selectedRoi() == -1 && viewport.drawShape() == 0
                 && app.roiEditor().isEmpty() && rectLiteral() == missingRectangle && !app.dirty()
                 && output("__status_code") == "0" && !app.busy(),
-            "Applying an unchanged Missing rectangle retained drawing mode, executed or replaced the publication");
+            "Applying an unchanged Empty rectangle retained drawing mode, executed or replaced the publication");
     require(app.editRoi("rect", false), "Rectangle could not reopen for window deactivation");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Window deactivation editor did not present its background");

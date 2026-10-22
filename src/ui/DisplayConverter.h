@@ -23,17 +23,16 @@ struct DisplayFrame
 };
 
 // GUI-owned scheduler: one conversion and one replaceable latest request.
-// Conversion never touches a QObject, QSG resource, or the original pixels.
 class DisplayConverter final : public QObject
 {
     Q_OBJECT
 public:
     explicit DisplayConverter(QObject *parent = nullptr);
-    void requestBatch(std::vector<OwnedImage> images, QString colorOrder, quint64 requestId, quint64 generation);
+    void requestBatch(DataRef<Image> images, QString colorOrder, quint64 requestId, quint64 generation);
     ~DisplayConverter() override;
-    void                request(OwnedImage image, QString colorOrder, quint64 requestId, quint64 generation);
     void                invalidate(quint64 generation);
-    static DisplayFrame convert(const OwnedImage &image, const QString &colorOrder = {});
+    void                waitForReads();
+    static DisplayFrame convert(const cv::Mat &image, const QString &colorOrder = {});
 
     bool isBusy() const noexcept
     {
@@ -46,13 +45,12 @@ public:
     }
 
 signals:
-    void converted(const visionrt::DisplayFrame &frame);
     void batchConverted(const std::vector<visionrt::DisplayFrame> &frames);
 
 private:
     struct Request
     {
-        std::vector<OwnedImage> images;
+        DataRef<Image>          images;
         QString                 colorOrder;
         quint64                 requestId;
         quint64                 generation;
@@ -66,8 +64,10 @@ private:
     quint64                     generation_      = 0;
     quint64                     latestRequestId_ = 0;
     quint64                     serial_          = 0;
+    quint64                     activeSerial_    = 0;
     bool                        hasRequest_      = false;
     bool                        busy_            = false;
+    bool                        reading_         = false;
     std::optional<Request>      pending_;
     std::mutex                  mutex_;
     std::condition_variable_any changed_;

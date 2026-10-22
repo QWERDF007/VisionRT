@@ -22,9 +22,6 @@ public:
     PythonRuntime(const PythonRuntime &)            = delete;
     PythonRuntime &operator=(const PythonRuntime &) = delete;
 
-    // Management thread only, while idle and after all Python instances have
-    // been released/destroyed. Clears only this runtime's managed packages.
-    // Import failure replaces the old implementation with unavailable status.
     std::vector<PythonImplementation> refresh(std::span<const ToolDefinition> definitions);
     ToolFactory                       factory(const ToolDefinition &definition) const;
 

@@ -68,7 +68,7 @@ QuiSplitView {
         if (!root.enabled || app.busy) return
         roiNodeId = app.selectedNode
         for (let p of app.parameters) {
-            if ((p.type === "RoiBatch" || p.type === "Rect") && !p.init) {
+            if (p.type === "ROI" && !p.init) {
                 currentTab = Math.max(0, tabs.indexOf(p.tab || "基本输入"))
                 app.startRoiDraw(p.id, 2)
                 return

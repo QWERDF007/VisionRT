@@ -40,7 +40,7 @@ bool samePorts(const std::vector<PortDefinition> &a, const std::vector<PortDefin
 bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
 {
     return a.id == b.id && a.version == b.version && a.kind == b.kind && a.hostBinding == b.hostBinding
-        && a.script == b.script && a.symbol == b.symbol && samePorts(a.inputs, b.inputs)
+        && a.entry == b.entry && a.source == b.source && samePorts(a.inputs, b.inputs)
         && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
 }
 
@@ -217,6 +217,8 @@ struct RuntimeEngine::Impl
     std::uint64_t                                                     completionToken = 0;
     std::optional<RuntimeCompletion>                                  completion;
     std::function<void(RuntimeCompletion)>                            callback;
+    bool                                                              readbackEnabled = false;
+    std::optional<RuntimeReadback>                                    readback;
     std::vector<FlowTiming>                                           flowTiming;
     double                                                            roundMilliseconds = 0;
     std::deque<RuntimeDiagnostic>                                     diagnostics;
@@ -421,7 +423,7 @@ struct RuntimeEngine::Impl
             std::vector<Submission> submitted;
             submitted.reserve(selected.size());
             const auto roundStart = Clock::now();
-            auto       roundEnd   = roundStart;
+
             for (const auto &plan : selected)
             {
                 if (!attempt(RuntimePhase::Submission,
@@ -448,15 +450,19 @@ struct RuntimeEngine::Impl
                 {
                     timings.push_back(
                         {submission.plan->id, milliseconds(submission.clock->end - submission.clock->start)});
-                    roundEnd = std::max(roundEnd, submission.clock->end);
                 }
             }
             for (const auto &plan : selected) plan->activeRound.reset();
             {
-                std::lock_guard lock(control);
-                flowTiming        = std::move(timings);
-                roundMilliseconds = milliseconds(roundEnd - roundStart);
+                std::unique_lock lock(control);
+                flowTiming = std::move(timings);
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
+                if (readbackEnabled && !shutdown)
+                {
+                    readback = RuntimeReadback{generation, session, round};
+                    commandReady.wait(lock, [&] { return !readback || shutdown; });
+                }
+                roundMilliseconds = milliseconds(Clock::now() - roundStart);
             }
             if (infrastructureError || frozen->mode != RunMode::Loop)
                 break;
@@ -655,6 +661,29 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
     }
 }
 
+void RuntimeEngine::setReadbackEnabled(bool enabled)
+{
+    {
+        std::lock_guard lock(impl_->control);
+        impl_->readbackEnabled = enabled;
+        if (!enabled)
+            impl_->readback.reset();
+    }
+    impl_->commandReady.notify_one();
+}
+
+bool RuntimeEngine::acknowledgeReadback(RuntimeReadback readback)
+{
+    {
+        std::lock_guard lock(impl_->control);
+        if (!impl_->readback || *impl_->readback != readback)
+            return false;
+        impl_->readback.reset();
+    }
+    impl_->commandReady.notify_one();
+    return true;
+}
+
 void RuntimeEngine::requestStop()
 {
     std::shared_ptr<std::stop_source> stop;
@@ -779,6 +808,7 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.droppedDiagnostics = impl_->droppedDiagnostics;
     impl_->droppedDiagnostics = 0;
     update.completion         = impl_->completion;
+    update.readback           = impl_->readback;
     update.nodes.reserve(impl_->nodes.size());
     for (const auto &[id, runtime] : impl_->nodes)
     {

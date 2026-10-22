@@ -56,7 +56,7 @@ const InputBinding &inputBinding(const NodeDefinition &node, std::string_view in
 void validateLiteral(const TypeSpec &type, const PortValue &value)
 {
     validateValue(type, value);
-    if (const auto *images = std::get_if<ImageBatch>(&value); images && !images->images().empty())
+    if (const auto *images = std::get_if<DataRef<Image>>(&value); images && !images->get().empty())
         throw ContractError("图像字面量只能是 Missing 或空批次");
 }
 
@@ -246,7 +246,7 @@ CopiedNodes duplicateNodes(std::span<const NodeDefinition *const> selected, Node
     for (const auto *node : selected) result.mapping.emplace(node->id, next++);
     for (const auto *original : selected)
     {
-        auto node              = *original;
+        auto node              = copyNodeConfiguration(*original);
         node.id                = result.mapping.at(original->id);
         node.position          = translated(node.position, dx, dy);
         node.executionRevision = 0;
@@ -435,7 +435,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
         validateLiteral(parameter.type, parameter.defaultValue);
         if (!node.signatures.initParams.emplace(parameter.id, parameter.type).second)
             throw ContractError("初始化参数标识重复");
-        node.initParams.emplace(parameter.id, parameter.defaultValue);
+        node.initParams.emplace(parameter.id, copyProjectLiteral(parameter.defaultValue));
     }
     for (const auto &input : tool.inputs)
     {
@@ -444,8 +444,10 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
             || !node.signatures.inputs.emplace(input.id, input.type).second)
             throw ContractError("输入参数标识重复");
         const bool hasDefault = !isMissing(input.defaultValue);
-        const bool canBeLiteral = input.type.type != Type::ImageBatch && hasDefault;
-        node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream, input.defaultValue, {}});
+        const bool canBeLiteral = input.type.type != Type::Image && hasDefault;
+        node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
+                                                   copyProjectLiteral(input.defaultValue),
+                                                   {}});
     }
     for (const auto &output : tool.outputs)
     {
@@ -507,6 +509,7 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
         requireIncrement(target.structureRevision);
     if (executionChanged)
         requireIncrement(node.executionRevision);
+    binding.literal                 = copyProjectLiteral(binding.literal);
     node.inputs.find(input)->second = std::move(binding);
     if (structureChanged)
         ++target.structureRevision;
@@ -521,7 +524,7 @@ bool ProjectEditor::setMode(std::string_view flowId, NodeId id, std::string_view
     requireIdle();
     const auto &n = findNode(flow(flowId), id);
     const auto typeIt = n.signatures.inputs.find(std::string(input));
-    if (typeIt != n.signatures.inputs.end() && typeIt->second.type == Type::ImageBatch && mode != BindingMode::Upstream)
+    if (typeIt != n.signatures.inputs.end() && typeIt->second.type == Type::Image && mode != BindingMode::Upstream)
         return false;
     auto binding = inputBinding(n, input);
     binding.mode = mode;
@@ -563,7 +566,7 @@ bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string
     if (equalValues(found->second, value))
         return false;
     requireIncrement(node.executionRevision);
-    found->second = std::move(value);
+    found->second = copyProjectLiteral(value);
     ++node.executionRevision;
     commit(std::move(edit.project_));
     return true;
@@ -781,7 +784,7 @@ CopiedSelection ProjectEditor::copySelection(std::string_view flowId, std::span<
 {
     requireIdle();
     CopiedSelection result;
-    for (const auto *node : selection(flow(flowId), nodes)) result.nodes.push_back(*node);
+    for (const auto *node : selection(flow(flowId), nodes)) result.nodes.push_back(copyNodeConfiguration(*node));
     return result;
 }
 

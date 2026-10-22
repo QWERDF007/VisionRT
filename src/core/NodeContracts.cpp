@@ -85,8 +85,8 @@ void resolveOutputTypes(ProjectDefinition &project)
         auto parameter = [&](const std::string &id)
         {
             const auto value = node.initParams.find(id);
-            const auto *text = value == node.initParams.end() ? nullptr : std::get_if<Utf8>(&value->second);
-            return text ? text->str() : std::string{};
+            const auto *text  = value == node.initParams.end() ? nullptr : std::get_if<std::string>(&value->second);
+            return text ? *text : std::string{};
         };
         const auto flowId     = parameter(reference->second.flowParameter);
         const auto nodeSeq    = parameter(reference->second.nodeParameter);

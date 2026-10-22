@@ -49,13 +49,12 @@ public:
     // All methods belong to the GUI thread. Request ids increase within a generation.
     // For a shared converter serving the main view and all visible thumbnails.
     void setDisplayFrame(const DisplayFrame &frame);
-    void setImage(OwnedImage image, const QString &colorOrder, quint64 requestId);
     void clearImage(quint64 requestId);
     void setGeneration(quint64 generation);
-    void setOverlays(std::vector<Roi> inputs, std::vector<Roi> outputs);
+    void setOverlays(ROI::value_type inputs, ROI::value_type outputs);
     // Caller freezes the matching background and performs the project edit command.
-    void beginRoiEdit(RoiEditTarget target, std::vector<Roi> targetRois, bool readOnly = false,
-                      Type type = Type::RoiBatch);
+    void beginRoiEdit(RoiEditTarget target, ROI::value_type targetRois, bool readOnly = false,
+                      bool singleRectangle = false);
     void endRoiEdit();
 
     bool hasImage() const noexcept
@@ -83,7 +82,10 @@ public:
         return target_.has_value();
     }
 
-    bool singleRectangle() const noexcept { return editType_ == Type::Rect; }
+    bool singleRectangle() const noexcept
+    {
+        return singleRectangle_;
+    }
 
     bool readOnly() const noexcept
     {
@@ -139,7 +141,7 @@ signals:
     void drawShapeChanged();
     void selectedRoiChanged();
     void imagePresented(quint64 requestId);
-    void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::Roi &roi);
+    void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::ROI::value_type::value_type &roi);
     void roiDeleted(const visionrt::RoiEditTarget &target);
     void roiEditCanceled();
 
@@ -175,8 +177,8 @@ private:
     void                 selectRoi(int index);
     bool                 canEdit() const;
     void                 changeDraft(QPointF imagePoint);
-    std::optional<Roi>   completedDraft() const;
-    std::vector<QPointF> handles(const Roi &roi) const;
+    std::optional<ROI::value_type::value_type> completedDraft() const;
+    std::vector<QPointF>                       handles(const ROI::value_type::value_type &roi) const;
     int                  hitRoi(QPointF imagePoint) const;
     void                 commitDraft();
     void                 clearGesture();
@@ -184,7 +186,6 @@ private:
     void                 updateCursor();
     void                 overlaysUpdated();
 
-    std::unique_ptr<DisplayConverter> converter_;
     QMetaObject::Connection           windowActiveConnection_;
     QImage                            display_;
     QSize                             imageSize_;
@@ -198,11 +199,11 @@ private:
     ViewMode                          mode_            = Contain;
     double                            scale_           = 1;
     QPointF                           center_;
-    std::vector<Roi>                  inputs_;
-    std::vector<Roi>                  outputs_;
-    std::vector<Roi>                  editable_;
+    ROI::value_type                            inputs_;
+    ROI::value_type                            outputs_;
+    ROI::value_type                            editable_;
     std::optional<RoiEditTarget>      target_;
-    Type                             editType_ = Type::RoiBatch;
+    bool                                       singleRectangle_ = false;
     bool                              readOnly_  = true;
     int                               drawShape_ = 0;
     int                               selected_  = -1;
@@ -211,13 +212,13 @@ private:
     QPointF                           anchor_;
     QPointF                           lastPointer_;
     int                               handle_ = -1;
-    std::optional<Roi>                original_;
-    std::optional<Roi>                draft_;
+    std::optional<ROI::value_type::value_type> original_;
+    std::optional<ROI::value_type::value_type> draft_;
     std::vector<QPointF>              vertices_;
     bool                              draftChanged_ = false;
 };
 
 } // namespace visionrt
 
-Q_DECLARE_METATYPE(visionrt::Roi)
+Q_DECLARE_METATYPE(visionrt::ROI::value_type::value_type)
 Q_DECLARE_METATYPE(visionrt::RoiEditTarget)

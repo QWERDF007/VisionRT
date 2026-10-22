@@ -18,7 +18,7 @@
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 2;
+constexpr int projectFormatVersion = 3;
 
 QString qtPath(const std::filesystem::path &path)
 {
@@ -109,7 +109,7 @@ void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const N
 PortValue defaultValue(const PortDefinition &port)
 {
     validateValue(port.type, port.defaultValue);
-    return port.defaultValue;
+    return copyProjectLiteral(port.defaultValue);
 }
 
 void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node, const QJsonObject &raw,
@@ -549,21 +549,24 @@ void rewritePath(PortValue &value, const PortDefinition &port, const std::filesy
 {
     if (!isPathPort(port))
         return;
-    auto *string = std::get_if<Utf8>(&value);
-    if (!string || string->str().empty())
+    auto *string = std::get_if<std::string>(&value);
+    if (!string || string->empty())
         return;
-    const auto original = std::filesystem::u8path(string->str());
+    const auto original = std::filesystem::u8path(*string);
     if (original.is_relative() && oldDirectory.empty())
         return;
     const auto absolute = (original.is_absolute() ? original : oldDirectory / original).lexically_normal();
     const auto relative = absolute.lexically_relative(newDirectory);
-    value               = Utf8(utf8Path(relative.empty() ? absolute : relative));
+    value               = utf8Path(relative.empty() ? absolute : relative);
 }
 } // namespace
 
 ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
 {
     const auto absolute = std::filesystem::absolute(path).lexically_normal();
+    const auto extension = qtPath(absolute.extension()).toLower();
+    if (extension == ".yaml" || extension == ".yml")
+        invalid("工程格式不受支持，请使用 JSON 工程：" + utf8Path(absolute));
     QFile      file(qtPath(absolute));
     if (!file.open(QIODevice::ReadOnly))
         throw std::runtime_error("无法打开工程 " + utf8Path(absolute) + "：" + file.errorString().toStdString());

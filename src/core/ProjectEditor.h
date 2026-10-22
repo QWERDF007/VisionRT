@@ -67,7 +67,6 @@ public:
 
     void replaceProject(ProjectDefinition project);
 
-    // Only call after a successful ordinary save commit; frozen configuration may be saved busy.
     void markSaved() noexcept
     {
         project_.dirty = false;

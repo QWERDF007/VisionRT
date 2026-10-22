@@ -103,8 +103,7 @@ int main()
 
     auto python   = definition("test.python");
     python.kind   = ToolKind::PythonFunction;
-    python.script = "tool.py";
-    python.symbol = "execute";
+    python.entry  = PythonEntry{"fixture", "tool.py", "execute"};
     registry.registerPackage(package(python));
     registry.setPythonImplementation(python.id,
                                      [](const PlatformToolServices &) { return std::make_unique<PassTool>(); });

@@ -1,5 +1,5 @@
 {
-  "format_version": 2,
+  "format_version": 3,
   "project": {
     "name": "CPU与Python全链示例工程",
     "next_node_seq": "6",
@@ -48,12 +48,12 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "paths": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 1,
-                "layout": "dense"
+                "dtype": "string"
               }
             }
           },
@@ -97,7 +97,7 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "merge_gap": {
                 "type": "Int"
@@ -126,10 +126,10 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               }
             }
           },
@@ -186,10 +186,10 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rect": {
-                "type": "Rect"
+                "type": "ROI"
               }
             },
             "outputs": {
@@ -200,13 +200,12 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "origins": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float64",
-                "rank": 2,
-                "layout": "dense"
+                "rank": 2
               }
             }
           },
@@ -222,12 +221,16 @@
             "rect": {
               "mode": "literal",
               "literal": [
-                2,
-                10,
-                10,
-                20,
-                40,
-                0
+                [
+                  [
+                    2,
+                    10,
+                    10,
+                    20,
+                    40,
+                    0
+                  ]
+                ]
               ]
             }
           }
@@ -246,7 +249,7 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "kernel": {
                 "type": "Int"
@@ -266,7 +269,7 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             }
           },
@@ -307,7 +310,7 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             },
             "outputs": {
@@ -318,10 +321,9 @@
                 "type": "String"
               },
               "means": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float64",
-                "rank": 1,
-                "layout": "dense"
+                "rank": 1
               }
             }
           },

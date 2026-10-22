@@ -4,22 +4,22 @@
 
 namespace visionrt {
 namespace {
-std::vector<Roi> imageRois(const PortValue &value, int index)
+ROI::value_type imageRois(const PortValue &value, int index, bool singleRectangle = false)
 {
-    if (const auto *rectangle = std::get_if<Roi>(&value))
-        return {*rectangle};
-    const auto *rois = std::get_if<RoiBatch>(&value);
-    if (!rois || index < 0 || static_cast<std::size_t>(index) >= rois->images().size())
+    const auto *regions = std::get_if<DataRef<ROI>>(&value);
+    if (singleRectangle)
+        index = 0;
+    if (!regions || index < 0 || static_cast<std::size_t>(index) >= regions->get().size())
         return {};
-    return rois->images()[index];
+    return regions->get()[index];
 }
 
-const ImageBatch *images(const ResultSlot::Snapshot &snapshot, const std::string &port)
+const DataRef<Image> *images(const ResultSlot::Snapshot &snapshot, const std::string &port)
 {
     if (!snapshot)
         return nullptr;
     const auto value = snapshot->outputs.find(port);
-    return value == snapshot->outputs.end() ? nullptr : std::get_if<ImageBatch>(&value->second);
+    return value == snapshot->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
 }
 } // namespace
 
@@ -47,6 +47,8 @@ ResultSlot::Snapshot AppController::Impl::displaySnapshot(const NodeDefinition &
 
 void AppController::Impl::updateResults()
 {
+    if (!readsAllowed())
+        return;
     const auto *node = currentNode();
     const auto *tool = currentTool();
     if (!node)
@@ -68,7 +70,7 @@ void AppController::Impl::updateResults()
                           lifecycle == lifecycleErrors.end() ? nullptr : lifecycle->second);
         std::vector<std::string> imagePorts;
         for (const auto &[id, type] : node->signatures.outputs)
-            if (type.type == Type::ImageBatch)
+            if (type.type == Type::Image)
                 imagePorts.push_back(id);
         if (std::find(imagePorts.begin(), imagePorts.end(), imageOutput.toStdString()) == imagePorts.end())
             imageOutput = imagePorts.empty() ? QString{} : workbench::q(imagePorts.front());
@@ -83,14 +85,16 @@ void AppController::Impl::applyOverlays()
         return;
     viewport->setOverlays(displayInputs, displayOutputs);
     if (displayRoiTarget)
-        viewport->beginRoiEdit(*displayRoiTarget, imageRois(roi->draft, roi->index), state != RuntimeState::Idle,
-                               roi->type.type);
+        viewport->beginRoiEdit(*displayRoiTarget, imageRois(roi->draft, roi->index, roi->singleRectangle),
+                               state != RuntimeState::Idle, roi->singleRectangle);
     else
         viewport->endRoiEdit();
 }
 
 void AppController::Impl::updateDisplay()
 {
+    if (!readsAllowed())
+        return;
     if (roi)
     {
         const auto *node = currentNode();
@@ -99,7 +103,7 @@ void AppController::Impl::updateDisplay()
             || !equalValues(roi->background, resolvedInput(*node, declaration->imageInput)))
             finishRoi();
     }
-    const ImageBatch    *batch = nullptr;
+    const DataRef<Image> *batch = nullptr;
     ResultSlot::Snapshot snapshot;
     QString              color;
     std::string          imageInput;
@@ -114,7 +118,7 @@ void AppController::Impl::updateDisplay()
     {
         batch = images(snapshot, imageOutput.toStdString());
         const bool executionFailed = snapshot && snapshot->status.code != 0;
-        if ((!batch || batch->images().empty()) && executionFailed && currentNode())
+        if ((!batch || batch->get().empty()) && executionFailed && currentNode())
         {
             const auto *node = currentNode();
             if (const auto *tool = currentTool())
@@ -124,22 +128,24 @@ void AppController::Impl::updateDisplay()
                 {
                     if (const auto *val = resolvedInputRef(*node, selectedImage->sameGeometryAsInput))
                     {
-                        if (const auto *inputBatch = std::get_if<ImageBatch>(val); inputBatch && !inputBatch->images().empty())
+                        if (const auto *inputBatch = std::get_if<DataRef<Image>>(val);
+                            inputBatch && !inputBatch->get().empty())
                         {
                             batch = inputBatch;
                             fallbackInputPort = selectedImage->sameGeometryAsInput;
                         }
                     }
                 }
-                if (!batch || batch->images().empty())
+                if (!batch || batch->get().empty())
                 {
                     for (const auto &port : tool->inputs)
                     {
-                        if (port.type.type == Type::ImageBatch)
+                        if (port.type.type == Type::Image)
                         {
                             if (const auto *val = resolvedInputRef(*node, port.id))
                             {
-                                if (const auto *inputBatch = std::get_if<ImageBatch>(val); inputBatch && !inputBatch->images().empty())
+                                if (const auto *inputBatch = std::get_if<DataRef<Image>>(val);
+                                    inputBatch && !inputBatch->get().empty())
                                 {
                                     batch = inputBatch;
                                     fallbackInputPort = port.id;
@@ -151,25 +157,25 @@ void AppController::Impl::updateDisplay()
                 }
             }
         }
-        count = batch ? static_cast<int>(batch->images().size()) : 0;
+        count         = batch ? static_cast<int>(batch->get().size()) : 0;
         index = std::clamp(index, 0, std::max(0, count - 1));
         selectedIndex = index;
     }
     if (roi)
     {
-        batch            = std::get_if<ImageBatch>(&roi->background);
+        batch            = std::get_if<DataRef<Image>>(&roi->background);
         selectedIndex    = roi->index;
-        displayRoiTarget = RoiEditTarget{roi->node, roi->input, selectedIndex,
-                                        std::holds_alternative<Roi>(roi->draft) ? 0 : -1, roi->id};
+        displayRoiTarget = RoiEditTarget{
+            roi->node, roi->input, selectedIndex,
+            roi->singleRectangle && !std::get<DataRef<ROI>>(roi->draft).get().empty() ? 0 : -1, roi->id};
         const auto *declaration = parameter(roi->input, false);
         const auto *node = currentNode();
         imageInput = declaration->imageInput;
         if (const auto *tool = currentTool())
             for (const auto &port : tool->inputs)
-                if (port.id != roi->input && (port.type.type == Type::RoiBatch || port.type.type == Type::Rect)
-                    && port.imageInput == imageInput)
+                if (port.id != roi->input && port.type.type == Type::ROI && port.imageInput == imageInput)
                 {
-                    auto values = imageRois(resolvedInput(*node, port.id), selectedIndex);
+                    auto values = imageRois(resolvedInput(*node, port.id), selectedIndex, port.editor == "rect");
                     displayInputs.insert(displayInputs.end(), values.begin(), values.end());
                 }
     }
@@ -190,22 +196,21 @@ void AppController::Impl::updateDisplay()
                 }
                 for (const auto &port : tool->inputs)
                 {
-                    if ((port.type.type == Type::RoiBatch || port.type.type == Type::Rect)
-                        && port.imageInput == fallbackInputPort)
+                    if (port.type.type == Type::ROI && port.imageInput == fallbackInputPort)
                     {
                         if (snapshot)
                         {
                             const auto value = snapshot->roiInputs.find(port.id);
                             if (value != snapshot->roiInputs.end())
                             {
-                                auto values = imageRois(value->second, selectedIndex);
+                                auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
                                 displayInputs.insert(displayInputs.end(), values.begin(), values.end());
                                 continue;
                             }
                         }
                         if (const auto *val = resolvedInputRef(*node, port.id))
                         {
-                            auto values = imageRois(*val, selectedIndex);
+                            auto values = imageRois(*val, selectedIndex, port.editor == "rect");
                             displayInputs.insert(displayInputs.end(), values.begin(), values.end());
                         }
                     }
@@ -215,13 +220,12 @@ void AppController::Impl::updateDisplay()
             {
                 if (!image->sameGeometryAsInput.empty() && snapshot)
                     for (const auto &port : tool->inputs)
-                        if ((port.type.type == Type::RoiBatch || port.type.type == Type::Rect)
-                            && port.imageInput == image->sameGeometryAsInput)
+                        if (port.type.type == Type::ROI && port.imageInput == image->sameGeometryAsInput)
                         {
                             const auto value = snapshot->roiInputs.find(port.id);
                             if (value != snapshot->roiInputs.end())
                             {
-                                auto values = imageRois(value->second, selectedIndex);
+                                auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
                                 displayInputs.insert(displayInputs.end(), values.begin(), values.end());
                             }
                         }
@@ -231,7 +235,7 @@ void AppController::Impl::updateDisplay()
     if (const auto *tool = currentTool(); tool && snapshot)
         for (const auto &port : tool->outputs)
         {
-            if (port.type.type != Type::RoiBatch && port.type.type != Type::Rect)
+            if (port.type.type != Type::ROI)
                 continue;
             const auto *image = workbench::port(tool->outputs, port.imagePort);
             if (!image || (roi ? image->sameGeometryAsInput != imageInput : image->id != imageOutput.toStdString()))
@@ -239,11 +243,11 @@ void AppController::Impl::updateDisplay()
             const auto value = snapshot->outputs.find(port.id);
             if (value != snapshot->outputs.end())
             {
-                auto values = imageRois(value->second, selectedIndex);
+                auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
                 displayOutputs.insert(displayOutputs.end(), values.begin(), values.end());
             }
         }
-    std::vector<OwnedImage>              requestedImages;
+    Image                                requestedImages;
     std::vector<QPointer<ImageViewport>> targets;
     std::vector<QPointer<ImageViewport>> empty;
     auto                                 append = [&](QPointer<ImageViewport> target, int itemIndex)
@@ -251,12 +255,12 @@ void AppController::Impl::updateDisplay()
         if (!target)
             return;
         target->setGeneration(generation);
-        if (!batch || itemIndex < 0 || static_cast<std::size_t>(itemIndex) >= batch->images().size())
+        if (!batch || itemIndex < 0 || static_cast<std::size_t>(itemIndex) >= batch->get().size())
         {
             empty.push_back(target);
             return;
         }
-        requestedImages.push_back(batch->images()[itemIndex]);
+        requestedImages.push_back(batch->get()[itemIndex]);
         targets.push_back(target);
     };
     append(viewport, selectedIndex);
@@ -266,30 +270,8 @@ void AppController::Impl::updateDisplay()
         if (target->isVisible())
             append(target, target->property("thumbnailIndex").toInt());
     }
-    const bool identical = targets == displayTargets && color == displayColor
-                        && requestedImages.size() == displayImages.size()
-                        && std::equal(requestedImages.begin(), requestedImages.end(), displayImages.begin(),
-                                      [](const auto &a, const auto &b)
-                                      {
-                                          return a.owner() == b.owner() && a.data() == b.data() && a.rows() == b.rows()
-                                              && a.cols() == b.cols();
-                                      });
-    if (identical)
-    {
-        for (const auto &target : empty)
-        {
-            target->clearImage(displayRequest);
-            target->setOverlays({}, {});
-            target->endRoiEdit();
-        }
-        if (presentedRequest == displayRequest && std::find(targets.begin(), targets.end(), viewport) != targets.end())
-            applyOverlays();
-        return;
-    }
     ++displayRequest;
     displayTargets = std::move(targets);
-    displayImages  = requestedImages;
-    displayColor   = color;
     for (const auto &target : empty)
     {
         target->clearImage(displayRequest);
@@ -299,9 +281,11 @@ void AppController::Impl::updateDisplay()
     if (requestedImages.empty())
     {
         converter.invalidate(generation);
+        applyOverlays();
         return;
     }
-    converter.requestBatch(std::move(requestedImages), std::move(color), displayRequest, generation);
+    converter.requestBatch(DataRef<Image>(std::move(requestedImages), {batch->owner()}), std::move(color),
+                           displayRequest, generation);
 }
 
 const PortValue *AppController::Impl::resolvedInputRef(const NodeDefinition &node, const std::string &input) const
@@ -348,7 +332,8 @@ void AppController::attachViewport(QObject *object)
             QObject::disconnect(impl_->viewport, nullptr, this, nullptr);
         impl_->viewport = target;
         QObject::connect(target, &ImageViewport::roiCommitted, this,
-                         [this](const RoiEditTarget &key, const Roi &roi) { impl_->commitRoi(key, &roi); });
+                         [this](const RoiEditTarget &key, const ROI::value_type::value_type &roi)
+                         { impl_->commitRoi(key, &roi); });
         QObject::connect(target, &ImageViewport::roiDeleted, this,
                          [this](const RoiEditTarget &key) { impl_->commitRoi(key, nullptr); });
         QObject::connect(target, &ImageViewport::roiEditCanceled, this, &AppController::endRoiPreview);
@@ -373,7 +358,7 @@ QVariantList AppController::imageOutputs() const
         const auto *node = impl_->currentNode();
         for (const auto &output : tool->outputs)
             if (node && node->signatures.outputs.contains(output.id)
-                && node->signatures.outputs.at(output.id).type == Type::ImageBatch)
+                && node->signatures.outputs.at(output.id).type == Type::Image)
                 result.push_back(QVariantMap{
                     {  "id",   workbench::q(output.id)},
                     {"name", workbench::q(output.name)}
@@ -381,7 +366,7 @@ QVariantList AppController::imageOutputs() const
     }
     else if (const auto *node = impl_->currentNode())
         for (const auto &[id, type] : node->signatures.outputs)
-            if (type.type == Type::ImageBatch)
+            if (type.type == Type::Image)
                 result.push_back(QVariantMap{
                     {  "id", workbench::q(id)},
                     {"name", workbench::q(id)}
@@ -398,8 +383,8 @@ int AppController::imageCount() const
 {
     if (!impl_->roi)
         return impl_->count;
-    const auto *images = std::get_if<ImageBatch>(&impl_->roi->background);
-    return images ? static_cast<int>(images->images().size()) : 0;
+    const auto *images = std::get_if<DataRef<Image>>(&impl_->roi->background);
+    return images ? static_cast<int>(images->get().size()) : 0;
 }
 
 QString AppController::selectedImageOutput() const

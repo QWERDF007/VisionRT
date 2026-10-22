@@ -365,7 +365,10 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     }
     try
     {
-        return raw_->execute(inputs);
+        auto        result     = raw_->execute(inputs);
+        const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
+        for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
+        return result;
     }
     catch (const std::exception &error)
     {

@@ -41,8 +41,8 @@ bool AppController::setParameter(const QString &id, bool initialization, const Q
         const auto signature = signatures.find(id.toStdString());
         if (signature == signatures.end())
             throw ContractError("参数不存在：" + id.toStdString());
-        auto value = signature->second.type == Type::String && !jsonInput
-            ? PortValue{Utf8(text.toUtf8().toStdString())} : ValueJson::parse(text, signature->second);
+        auto value = signature->second.type == Type::String && !jsonInput ? PortValue{text.toUtf8().toStdString()}
+                                                                          : ValueJson::parse(text, signature->second);
         return impl_->applyParameter(id, initialization, std::move(value));
     });
 }
@@ -50,13 +50,9 @@ bool AppController::setParameter(const QString &id, bool initialization, const Q
 bool AppController::setRectParameter(const QString &id, bool initialization, double x, double y, double width,
                                     double height, double angle)
 {
-    return impl_->command([&]
-    {
-        return impl_->applyParameter(id, initialization,
-                                     Roi::rectangle(static_cast<float>(x), static_cast<float>(y),
-                                                    static_cast<float>(width), static_cast<float>(height),
-                                                    static_cast<float>(angle)));
-    });
+    return impl_->command(
+        [&]
+        { return impl_->applyParameter(id, initialization, DataRef<ROI>(ROI{{{2., x, y, width, height, angle}}})); });
 }
 
 bool AppController::setParameterPath(const QString &id, bool initialization, const QUrl &url)
@@ -65,7 +61,7 @@ bool AppController::setParameterPath(const QString &id, bool initialization, con
     {
         if (!url.isLocalFile())
             throw ContractError("参数路径必须是本地文件或目录：" + id.toStdString());
-        return impl_->applyParameter(id, initialization, Utf8(url.toLocalFile().toUtf8().toStdString()));
+        return impl_->applyParameter(id, initialization, url.toLocalFile().toUtf8().toStdString());
     });
 }
 

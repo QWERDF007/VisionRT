@@ -361,10 +361,10 @@ void receiverCapacityAndSessionIsolation(const std::filesystem::path &toolsRoot)
     assert(receive);
     auto receiver       = node(2, *receive);
     receiver.initParams = {
-        {"source_flow_id",       Utf8("sender")},
-        {"source_node_seq", Utf8(std::to_string(sender.id))},
-        {  "source_port_id",        Utf8("value")},
-        {      "timeout_ms",     std::int64_t{50}}
+        { "source_flow_id",                  std::string("sender")},
+        {"source_node_seq", std::string(std::to_string(sender.id))},
+        { "source_port_id",                   std::string("value")},
+        {     "timeout_ms",                       std::int64_t{50}}
     };
     ProjectDefinition project;
     project.flows = {
@@ -461,7 +461,7 @@ void executionDiagnostics()
                 if (scenario == 0)
                     throw std::runtime_error("third-party detail");
                 if (scenario == 1)
-                    return {{}, {{"value", Utf8("wrong type")}}};
+                    return {{}, {{"value", std::string("wrong type")}}};
                 return {
                     {7, "业务条件未满足", "business detail"},
                     {{"value", std::int64_t{42}}}
@@ -474,7 +474,7 @@ void executionDiagnostics()
         const auto result = snapshot(finish(engine), 1);
         assert(result->status.message.find("节点") == std::string::npos);
         assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == result->status.code);
-        assert(std::get<Utf8>(result->outputs.at("__status_message")).str() == result->status.message);
+        assert(std::get<std::string>(result->outputs.at("__status_message")) == result->status.message);
         if (scenario == 0)
         {
             assert(result->phase == NodePhase::Execute && result->status.code == -1);
@@ -744,7 +744,7 @@ void crossRoundPythonMetricIsolation()
     assert(snap1->timing.adapterExecuteMs >= 10.0);
     assert(snap1->timing.pythonCallMs == 15.0);
 
-    project.flows.front().nodes.front().inputs["in"].literal = Utf8("not_an_int");
+    project.flows.front().nodes.front().inputs["in"].literal = std::string("not_an_int");
     assert(engine.start(project, registry, RunMode::Once));
     auto r2    = finish(engine);
     auto snap2 = snapshot(r2, 1);
@@ -779,11 +779,11 @@ void hostBindingReceiverContract()
     recvDef.version      = "1.0.0";
     recvDef.kind         = ToolKind::Host;
 
-    recvDef.initParams   = {
-        {"source_flow_id", "源流程", {Type::String},          Utf8{""}},
-        {"source_node_seq", "源节点", {Type::String},          Utf8{""}},
-        {  "source_port_id", "源端口", {Type::String},          Utf8{""}},
-        {      "timeout_ms",   "超时",    {Type::Int}, std::int64_t{500}}
+    recvDef.initParams = {
+        { "source_flow_id", "源流程", {Type::String},   std::string{""}},
+        {"source_node_seq", "源节点", {Type::String},   std::string{""}},
+        { "source_port_id", "源端口", {Type::String},   std::string{""}},
+        {     "timeout_ms",    "超时",    {Type::Int}, std::int64_t{500}}
     };
     recvDef.outputs = {
         {                "value",   "接收值",    {Type::Int}},
@@ -857,10 +857,10 @@ void hostBindingReceiverContract()
     auto senderNode         = node(1, source);
     auto receiverNode       = node(2, *registry.find("test.custom.receiver"));
     receiverNode.initParams = {
-        {"source_flow_id",      Utf8("sender_flow")},
-        {"source_node_seq", Utf8(std::to_string(senderNode.id))},
-        {  "source_port_id",            Utf8("value")},
-        {      "timeout_ms",        std::int64_t{500}}
+        { "source_flow_id",                 std::string("sender_flow")},
+        {"source_node_seq", std::string(std::to_string(senderNode.id))},
+        { "source_port_id",                       std::string("value")},
+        {     "timeout_ms",                          std::int64_t{500}}
     };
     ProjectDefinition project;
     project.flows = {
@@ -897,14 +897,14 @@ void hostBindingReceiverContract()
     auto strSource            = definition("test.str_sender");
     strSource.outputs[0].type = {Type::String};
     install(strRegistry, strSource,
-            [](const Values &) { return ToolResult{{}, {{"value", Utf8("dynamic host binding works")}}}; });
+            [](const Values &) { return ToolResult{{}, {{"value", std::string("dynamic host binding works")}}}; });
     auto strSenderNode         = node(1, strSource);
     auto strReceiverNode       = node(2, *strRegistry.find("test.str.receiver"));
     strReceiverNode.initParams = {
-        {"source_flow_id",     Utf8("flow_str_sender")},
-        {"source_node_seq", Utf8(std::to_string(strSenderNode.id))},
-        {  "source_port_id",               Utf8("value")},
-        {      "timeout_ms",           std::int64_t{500}}
+        { "source_flow_id",                std::string("flow_str_sender")},
+        {"source_node_seq", std::string(std::to_string(strSenderNode.id))},
+        { "source_port_id",                          std::string("value")},
+        {     "timeout_ms",                             std::int64_t{500}}
     };
     ProjectDefinition strProject;
     strProject.flows = {
@@ -917,7 +917,7 @@ void hostBindingReceiverContract()
     auto strSnap      = snapshot(strCompleted, 2);
     assert(strSnap != nullptr);
     assert(strSnap->status.code == 0);
-    assert(std::get<Utf8>(strSnap->outputs.at("value")).str() == "dynamic host binding works");
+    assert(std::get<std::string>(strSnap->outputs.at("value")) == "dynamic host binding works");
 }
 } // namespace
 
@@ -927,29 +927,21 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         {{Type::Int}, std::int64_t{25}},
         {{Type::Float}, 2.5},
         {{Type::Bool}, true},
-        {{Type::String}, Utf8("跨流程数据")},
-        {{Type::ImageBatch}, ImageBatch({OwnedImage::copyOf(cv::Mat::ones(2, 3, CV_8UC1))})},
-        {{Type::RoiBatch}, RoiBatch({{Roi::circle(2, 3, 1)}})},
-        {{Type::StringArray, {}, 1}, StringArray(1, Layout::Dense, {StringBuffer({2}, {"中文", "text"})})},
-        {{Type::StringArray, {}, 2, Layout::BatchRagged},
-            StringArray(2, Layout::BatchRagged, {StringBuffer({2}, {"中文", "text"}), StringBuffer({0}, {})})}
+        {{Type::String}, std::string("跨流程数据")},
+        {{Type::Image}, DataRef<Image>(Image{cv::Mat::ones(2, 3, CV_8UC1)})},
+        {{Type::ROI}, DataRef<ROI>(ROI{{{3., 2., 3., 1.}}})},
+        {{Type::Array, DType::String, 1}, Array(NestedVector<std::string, 1>{"中文", "text"})},
+        {{Type::Array, DType::String, 2}, Array(NestedVector<std::string, 2>{{"中文", "text"}, {}})},
+        {{Type::Array, DType::Int64, 2}, Array(NestedVector<std::int64_t, 2>{{9007199254740993LL, -17}, {}})},
+        {{Type::Array, DType::Float64, 1}, Array(NestedVector<double, 1>{1.5, 2.5})},
+        {{Type::Array, DType::Float32, 2}, Array(NestedVector<float, 2>{{0.25f, 0.75f}, {}})}
     };
-    for (const auto dtype : {DType::Int64, DType::Float64})
-        for (const auto &[rank, layout] : std::vector<std::pair<int, Layout>>{
-            {1, Layout::Dense}, {2, Layout::Dense}, {2, Layout::BatchRagged}})
-        {
-            const auto shape = rank == 2 && layout == Layout::Dense
-                ? std::vector<std::int64_t>{1, 2} : std::vector<std::int64_t>{2};
-            const std::int64_t integers[]{17, 29};
-            const double floats[]{1.5, 2.5};
-            const auto bytes = dtype == DType::Int64 ? std::as_bytes(std::span(integers)) : std::as_bytes(std::span(floats));
-            cases.emplace_back(TypeSpec{Type::NumericArray, dtype, rank, layout},
-                NumericArray(dtype, rank, layout, {NumericBuffer::copy(dtype, shape, bytes)}));
-        }
-    const float scores[]{0.25f, 0.75f};
-    cases.emplace_back(TypeSpec{Type::NumericArray, DType::Float32, 2, Layout::BatchRagged},
-        NumericArray(DType::Float32, 2, Layout::BatchRagged,
-            {NumericBuffer::copy(DType::Float32, {2}, std::as_bytes(std::span(scores)))}));
+    for (const auto &type : Array::supportedTypes())
+    {
+        auto value = Array::empty(*type.dtype, type.rank);
+        value.visit([](const auto &data) { data.get().resize(2); });
+        cases.emplace_back(type, std::move(value));
+    }
     RuntimeEngine engine(2);
     for (const auto &[type, value] : cases)
     {
@@ -965,9 +957,9 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         const auto sender = editor.addNode(sourceFlow, source, {});
         const auto receiver = editor.addNode("flow_1", *registry.find("visionrt.flow.receive"), {});
         assert(!engine.start(editor.project(), registry, RunMode::Once));
-        editor.setInitParam("flow_1", receiver, "source_flow_id", Utf8(sourceFlow));
-        editor.setInitParam("flow_1", receiver, "source_node_seq", Utf8(std::to_string(sender)));
-        editor.setInitParam("flow_1", receiver, "source_port_id", Utf8("value"));
+        editor.setInitParam("flow_1", receiver, "source_flow_id", std::string(sourceFlow));
+        editor.setInitParam("flow_1", receiver, "source_node_seq", std::string(std::to_string(sender)));
+        editor.setInitParam("flow_1", receiver, "source_port_id", std::string("value"));
         editor.setInitParam("flow_1", receiver, "timeout_ms", std::int64_t{1000});
         ProjectStorage storage(registry);
         QTemporaryDir temporary;
@@ -994,7 +986,8 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
             changedRegistry.registerPackage(readToolsPackage(toolsRoot));
             changedRegistry.loadNativeImplementations();
             registerReceiveTools(changedRegistry);
-            install(changedRegistry, source, [](const Values &) { return ToolResult{{}, {{"value", Utf8("changed")}}}; });
+            install(changedRegistry, source,
+                    [](const Values &) { return ToolResult{{}, {{"value", std::string("changed")}}}; });
             install(changedRegistry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
             const auto rejected = engine.start(editor.project(), changedRegistry, RunMode::Once);
             assert(!rejected && rejected.message.find("类型不兼容") != std::string::npos);
@@ -1027,10 +1020,10 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
     auto receiver = node(2, typed);
     receiver.signatures.outputs.emplace("value", TypeSpec{Type::Int});
     receiver.initParams = {
-        {"source_flow_id",       Utf8("sender")},
-        {"source_node_seq", Utf8(std::to_string(sender.id))},
-        {  "source_port_id",        Utf8("value")},
-        {      "timeout_ms", std::int64_t{10000}}
+        { "source_flow_id",                  std::string("sender")},
+        {"source_node_seq", std::string(std::to_string(sender.id))},
+        { "source_port_id",                   std::string("value")},
+        {     "timeout_ms",                    std::int64_t{10000}}
     };
     ProjectDefinition project;
     project.flows = {
@@ -1329,7 +1322,7 @@ void failedBusinessOutputsAreNotInputs()
             [](const Values &inputs)
             {
                 assert(std::get<std::int64_t>(inputs.at("code")) == 7);
-                assert(std::get<Utf8>(inputs.at("message")).str() == "业务执行失败");
+                assert(std::get<std::string>(inputs.at("message")) == "业务执行失败");
                 return ToolResult{{}, {{"value", inputs.at("code")}}};
             });
     auto first = node(1, source), second = node(2, required), third = node(3, optional), fourth = node(4, observer);

@@ -68,7 +68,6 @@ public:
         return registrationStatus_;
     }
 
-    // Replaces the tool set with a validated package: inside the package root the index is the single discovery source.
     void registerPackage(const ToolsPackage &package);
     void loadNativeImplementations() const;
     void addDefinition(ToolDefinition definition);
