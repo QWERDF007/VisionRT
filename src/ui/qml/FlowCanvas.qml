@@ -36,7 +36,8 @@ FocusScope {
     readonly property var hoverNode: hoverNodeId === "" ? null : findNode(hoverNodeId)
     readonly property int cellWidth: 180
     readonly property int cellHeight: 80
-    readonly property var routedWires: {
+    property var routedWires: []
+    readonly property var routeGeometry: {
         if (app.wires.length === 0) return []
         const geometry = []
         for (let index = 0; index < nodeRepeater.count; ++index) {
@@ -45,8 +46,11 @@ FocusScope {
             const item = loader.item
             geometry.push({id: loader.modelData, rectangle: Qt.rect(item.x, item.y, item.width, item.height)})
         }
-        return app.routeWires(geometry)
+        return geometry
     }
+
+    onRouteGeometryChanged: Qt.callLater(root.updateRoutes)
+    function updateRoutes() { routedWires = app.routeWires(routeGeometry) }
 
     function selected(id) { return selection.indexOf(id) !== -1 }
     function findNode(id) { for (let n of app.nodes) if (n.id === id) return n; return null }

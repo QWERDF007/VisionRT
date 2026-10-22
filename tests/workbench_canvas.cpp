@@ -150,6 +150,19 @@ void flowCanvasContract()
     const auto center = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
     const auto finish = center + QPoint(qRound(180 * canvas->property("zoom").toDouble()), 0);
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, center);
+    QSignalSpy routingChanges(canvas, SIGNAL(routedWiresChanged()));
+    require(routingChanges.isValid(), "canvas routing publication signal is missing");
+    for (int offset = 1; offset <= 4; ++offset)
+    {
+        const auto dragPoint
+            = surface->mapFromScene(center + QPointF(180 * canvas->property("zoom").toDouble() * offset, 0));
+        require(QMetaObject::invokeMethod(canvas, "updateGesture", Q_ARG(QVariant, dragPoint)),
+                "canvas drag update is missing");
+    }
+    std::cout << "[Routing burst] publications before event-loop return: " << routingChanges.size() << std::endl;
+    require(routingChanges.isEmpty(), "drag geometry was routed synchronously instead of coalescing pending updates");
+    require(QTest::qWaitFor([&] { return routingChanges.size() == 1; }, 1000),
+            "pending drag updates did not publish exactly one current route");
     QTest::mouseMove(&window, finish, 30);
     QTest::qWait(30);
     auto *movingWire = findItem(findItem, canvas, QStringLiteral("flowWire_1_3"));
@@ -186,7 +199,68 @@ void flowCanvasContract()
     }
     require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/workbench_project_fit.png")),
             "cannot save fitted canvas evidence");
-    std::cout << "[Canvas Contract Passed] Loaded example and translated bounds remain visible after fitting.\n";
+    const auto currentRoutes = [&]
+    {
+        const auto value = canvas->property("routedWires");
+        return value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant().toList()
+                                                                   : value.toList();
+    };
+    const auto originalFlow = app.currentFlow();
+    app.addFlow(QStringLiteral("路由切换"));
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "alternate flow did not become ready");
+    const auto alternateFlow = app.currentFlow();
+    require(alternateFlow != originalFlow, "alternate routing flow was not created");
+    app.selectFlow(originalFlow);
+    require(QTest::qWaitFor([&] { return currentRoutes().size() == app.wires().size() && !currentRoutes().isEmpty(); },
+                            1000),
+            "original flow did not restore its routes");
+    obstacle = findItem(findItem, canvas, QStringLiteral("flowNode_2"));
+    require(obstacle != nullptr, "flow-switch drag fixture is missing");
+    const auto switchingStart = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, switchingStart);
+    require(QMetaObject::invokeMethod(
+                canvas, "updateGesture",
+                Q_ARG(QVariant,
+                      surface->mapFromScene(switchingStart + QPointF(180 * canvas->property("zoom").toDouble(), 0)))),
+            "flow switch drag update is missing");
+    require(canvas->property("gesture").toString() == "nodes" && canvas->property("dragX").toDouble() != 0,
+            "flow switch did not interrupt a pending node drag");
+    app.selectFlow(alternateFlow);
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, switchingStart);
+    require(QTest::qWaitFor([&] { return currentRoutes().isEmpty(); }, 1000),
+            "queued geometry from the old flow was published into the empty flow");
+    app.selectFlow(originalFlow);
+    require(QTest::qWaitFor([&] { return !currentRoutes().isEmpty(); }, 1000), "returning flow lost its routes");
+    obstacle = findItem(findItem, canvas, QStringLiteral("flowNode_2"));
+    require(obstacle != nullptr, "delete-during-drag fixture is missing");
+    const auto deletionStart = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, deletionStart);
+    require(QMetaObject::invokeMethod(
+                canvas, "updateGesture",
+                Q_ARG(QVariant,
+                      surface->mapFromScene(deletionStart + QPointF(180 * canvas->property("zoom").toDouble(), 0)))),
+            "delete drag update is missing");
+    require(canvas->property("gesture").toString() == "nodes" && canvas->property("dragX").toDouble() != 0,
+            "deletion did not interrupt a pending node drag");
+    app.deleteNodes({QStringLiteral("2")});
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, deletionStart);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    if (app.busy() || app.nodes().size() != 4 || currentRoutes().size() != app.wires().size())
+                        return false;
+                    for (const auto &entry : currentRoutes())
+                        if (entry.toMap().value("source").toString() == "2"
+                            || entry.toMap().value("target").toString() == "2")
+                            return false;
+                    return true;
+                },
+                5000),
+            "queued geometry restored a deleted node's routes");
+    QTest::qWait(50);
+    require(currentRoutes().size() == app.wires().size(), "obsolete route publication overwrote the current graph");
+    std::cout << "[Canvas Contract Passed] Fit, coalesced drag, final endpoints, flow switch and pending deletion "
+                 "verified.\n";
 }
 
 void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, double scale)
