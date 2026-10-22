@@ -248,6 +248,8 @@ def business(inputs):
     return {'__status_code': 5, '__status_message': 'expected failure', 'value': 7}
 def partial(inputs):
     return {'__status_code': 0, '__status_message': '', 'value': 9, 'other': True}
+def absent(inputs):
+    return {'__status_code': 0, '__status_message': '', 'value': None}
 )");
     auto function = sources.definition("python.function", ToolKind::PythonFunction, "execute");
     auto counter  = sources.definition("python.counter", ToolKind::PythonClass, "Counter");
@@ -258,8 +260,13 @@ def partial(inputs):
     auto wrong    = sources.definition("python.wrong", ToolKind::PythonFunction, "wrong");
     auto business = sources.definition("python.business", ToolKind::PythonFunction, "business");
     auto partial  = sources.definition("python.partial", ToolKind::PythonFunction, "partial", true);
+    auto optional    = sources.definition("python.optional", ToolKind::PythonFunction, "absent");
+    for (auto &port : optional.outputs)
+        if (port.id == "value")
+            port.required = false;
+    sources.put("python.optional.json", emitNormalizedToolJson(optional));
     std::vector<ToolDefinition> definitions{function, counter, broken,   constructor, missing,
-                                            extra,    wrong,   business, partial};
+                                            extra,    wrong,   business, partial,     optional};
     std::uintptr_t              numpyIdentity;
     {
         py::gil_scoped_acquire gil;
@@ -270,6 +277,12 @@ def partial(inputs):
     const auto loaded = runtime.refresh(definitions);
     for (const auto &record : loaded) assert(record.status.code == 0);
     const ToolServices services;
+    {
+        auto       instance = runtime.factory(optional)(services);
+        const auto result   = instance->execute({});
+        assert(result.status.code == 0 && isMissing(result.outputs.at("value")));
+        assert(instance->release());
+    }
     try
     {
         runtime.factory(constructor)(services);

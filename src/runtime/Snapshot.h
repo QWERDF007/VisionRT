@@ -81,6 +81,7 @@ struct NodeSnapshot
     std::uint64_t executionRevision = 0;
     ToolStatus    status;
     NodePhase             phase = NodePhase::Execute;
+    TypeMap               outputTypes;
     Values        outputs;
     Timing        timing;
     Values        roiInputs;

@@ -3,6 +3,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
+#include "core/DefinitionJson.h"
 #include "plugins/PluginLoader.h"
 
 #include <core/ToolPackage.h>
@@ -213,6 +214,53 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
     assert(getDestroyCalls != nullptr);
     assert(getInstCount() == 0); // No leaked plugin instances!
     assert(getDestroyCalls() > 0);
+}
+
+void nativeOutputRequiredness(const std::filesystem::path &modulePath)
+{
+    for (const bool required : {false, true})
+        for (const std::int64_t code : {0, 7})
+        {
+            const auto declaration
+                = QJsonDocument(
+                      QJsonObject{
+                          {"schema_version",                                   1                                            },
+                          {       "tool_id",                                                       "test.plugin.publication"},
+                          {  "display_name",                                                                  "输出发布"},
+                          {       "version",                                                                         "1.0.0"},
+                          {          "kind",                                                                           "cpp"},
+                          {   "init_params", QJsonArray{QJsonObject{{"id", "code"}, {"name", "状态码"}, {"type", "Int"}}}},
+                          {        "inputs",                                                                    QJsonArray{}},
+                          {       "outputs",
+                           QJsonArray{
+                           QJsonObject{{"id", "value"}, {"name", "值"}, {"type", "Int"}, {"required", required}}}          }
+            })
+                      .toJson(QJsonDocument::Compact)
+                      .toStdString();
+            const auto definition = parseToolDefinitionJson(declaration);
+            auto       loader     = std::make_shared<PluginLoader>();
+            loader->registerModule(definition.id, modulePath);
+            ToolRegistry registry;
+            registry.setPluginLoader(loader);
+            registry.addDefinition(definition);
+            registry.loadNativeImplementations();
+            NodeDefinition node;
+            node.id               = 1;
+            node.toolId           = definition.id;
+            node.toolNameSnapshot = definition.displayName;
+            node.signatures.initParams.emplace("code", TypeSpec{Type::Int});
+            node.initParams.emplace("code", code);
+            for (const auto &output : definition.outputs) node.signatures.outputs.emplace(output.id, output.type);
+            ProjectDefinition project;
+            project.flows.front().nodes = {node};
+            RuntimeEngine engine(1);
+            assert(engine.start(project, registry, RunMode::Once));
+            const auto result   = snapshot(finish(engine), 1);
+            const auto expected = code == 0 && required ? -2 : code;
+            assert(result->status.code == expected && isMissing(result->outputs.at("value")));
+            assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == expected);
+            assert(result->outputTypes.at("value") == TypeSpec{Type::Int});
+        }
 }
 
 void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
@@ -1318,6 +1366,7 @@ int main(int argc, char **argv)
 #if defined(VISIONRT_BUILD_APP)
         appControllerToolsPackageIntegration(modulePath);
 #endif
+        nativeOutputRequiredness(modulePath);
         registryIntegration(modulePath);
         std::cout << "plugin contracts passed\n";
         return 0;

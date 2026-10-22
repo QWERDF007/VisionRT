@@ -233,6 +233,32 @@ public:
     }
 };
 
+class PublicationTool final : public visionrt::IToolInstance
+{
+public:
+    visionrt::ToolStatus initialize(const visionrt::Values &parameters) override
+    {
+        code = std::get<std::int64_t>(parameters.at("code"));
+        return {};
+    }
+
+    visionrt::ToolResult execute(const visionrt::Values &) override
+    {
+        return {
+            {code, code == 0 ? "" : "业务输出缺失"},
+            {{"value", visionrt::Missing{}}}
+        };
+    }
+
+    visionrt::ToolStatus release() override
+    {
+        return {};
+    }
+
+private:
+    std::int64_t code = 0;
+};
+
 template<class Tool = void, std::int64_t StatusCode = 0>
 visionrt::IToolInstance *VT_CALL pluginCreate(const visionrt::ToolServices *, visionrt::ToolStatus *status) noexcept
 {
@@ -277,6 +303,7 @@ visionrt::ToolStatus VT_CALL registerTools(visionrt::IToolRegistry &registry) no
         {"test.plugin.create_nonnull_fail", pluginCreate<CounterTool, 5>, pluginDestroy},
         {"test.plugin.init_throw", pluginCreate<ThrowInitTool>, pluginDestroy},
         {"test.plugin.release_fail", pluginCreate<FailReleaseTool>, pluginDestroy},
+        {"test.plugin.publication", pluginCreate<PublicationTool>, pluginDestroy},
     };
     for (const auto &descriptor : descriptors)
         if (auto status = registry.add(descriptor); !status)

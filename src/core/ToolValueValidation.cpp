@@ -84,4 +84,11 @@ void validateToolValues(const std::vector<PortDefinition> &ports, const Values &
     }
 }
 
+void validateToolOutput(const PortDefinition &port, const PortValue &value, const ToolStatus &status)
+{
+    if (!status && isMissing(value))
+        return;
+    validateToolValue(port, value);
+}
+
 } // namespace visionrt
