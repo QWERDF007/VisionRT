@@ -69,16 +69,17 @@ ResultSlot::Snapshot snapshot(const RuntimeUpdate &update, NodeId id)
         throw std::runtime_error(found->snapshot->status.message + ": " + found->snapshot->status.detail);
     return found->snapshot;
 }
-}
 
-int main()
-try
+void nativeGraphSharing(std::size_t batchSize)
 {
-    cv::Mat parent(4, 6, CV_8UC1, cv::Scalar(7));
-    Values  values{
-         {"images", DataRef<Image>(Image{parent(cv::Rect(1, 1, 3, 2))})},
-         {"numbers", Array(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
-         {"regions", DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
+    cv::Mat parent(static_cast<int>(batchSize) * 4, 6, CV_8UC1, cv::Scalar(7));
+    Image   initialImages;
+    for (std::size_t batch = 0; batch < batchSize; ++batch)
+        initialImages.push_back(parent(cv::Rect(1, static_cast<int>(batch) * 4 + 1, 3, 2)));
+    Values values{
+        {"images", DataRef<Image>(std::move(initialImages))},
+        {"numbers", Array(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
+        {"regions", DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
     };
     ToolDefinition source;
     source.id          = "test.shared.source";
@@ -112,8 +113,10 @@ try
                     auto &regions = std::get<DataRef<ROI>>(inputs.at("regions")).get();
                     require(&images == &std::get<DataRef<Image>>(values.at("images")).get(),
                             "runtime copied Image collection");
-                    require(images[0].data == parent.ptr(1) + 1 && images[0].step[0] == parent.step[0],
-                            "runtime copied padded pixels");
+                    for (std::size_t batch = 0; batch < batchSize; ++batch)
+                        require(images[batch].data == parent.ptr(static_cast<int>(batch) * 4 + 1) + 1
+                                    && images[batch].step[0] == parent.step[0],
+                                "runtime copied padded pixels");
                     require(&numbers == &std::get<Array>(values.at("numbers")).get<NestedVector<std::int64_t, 2>>(),
                             "runtime copied Array container");
                     require(&regions == &std::get<DataRef<ROI>>(values.at("regions")).get(),
@@ -143,7 +146,7 @@ try
     const auto oldSource   = snapshot(first, producer);
     const auto firstResult = snapshot(first, consumer);
     require(parent.at<std::uint8_t>(1, 1) == 8, "tool mutation did not reach producer storage");
-    require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == 2,
+    require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == batchSize + 1,
             "source publication froze mutable Image collection");
     require(std::get<Array>(oldSource->outputs.at("numbers")).get<NestedVector<std::int64_t, 2>>().size() == 3,
             "source publication froze mutable Array");
@@ -158,10 +161,20 @@ try
     require(next->publication != firstResult->publication, "new execution did not publish a fresh result");
     require(snapshot(second, producer)->publication == oldSource->publication, "manual consumer reran its source");
     require(parent.at<std::uint8_t>(1, 1) == 9, "second tool mutation did not share producer storage");
-    require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == 3,
+    require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == batchSize + 2,
             "old publication incorrectly claims frozen payloads");
     require(std::get<DataRef<ROI>>(oldSource->outputs.at("regions")).get().size() == 3, "ROI shared mutation lost");
-    std::cout << "Runtime forwards writable Image/Array/ROI storage, padded pixels and publication provenance\n";
+    std::cout << "Runtime forwards " << batchSize
+              << " writable images, Array/ROI storage, padded pixels and publication provenance\n";
+}
+
+}
+
+int main()
+try
+{
+    for (const auto count : {1, 8, 32}) nativeGraphSharing(count);
+    return 0;
 }
 catch (const std::exception &error)
 {

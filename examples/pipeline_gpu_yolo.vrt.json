@@ -17,8 +17,8 @@
           "tool_name_snapshot": "图像读取",
           "alias": "读图",
           "pos": [
-            60,
-            100
+            0,
+            0
           ],
           "init_params": {},
           "type_snapshot": {
@@ -86,8 +86,8 @@
           "tool_name_snapshot": "YOLO目标检测",
           "alias": "YOLO推理",
           "pos": [
-            300,
-            100
+            2,
+            0
           ],
           "init_params": {
             "model_name": "yolov8n",
@@ -207,8 +207,8 @@
           "tool_name_snapshot": "缺陷过滤",
           "alias": "结果过滤",
           "pos": [
-            540,
-            100
+            2,
+            2
           ],
           "init_params": {},
           "type_snapshot": {

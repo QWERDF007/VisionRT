@@ -3,6 +3,7 @@
 #include <core/ToolPackage.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -29,6 +30,12 @@ int main(int argc, char **argv)
             for (const auto &flow : loaded.project.flows)
                 for (const auto &node : flow.nodes)
                 {
+                    const auto &anchor = flow.nodes.front().position;
+                    if (std::abs(static_cast<long long>(node.position.x) - anchor.x) > 4
+                        || std::abs(static_cast<long long>(node.position.y) - anchor.y) > 4)
+                        throw std::runtime_error(
+                            file.path().filename().string()
+                            + ": compact examples must use canvas grid cells, not pixel coordinates");
                     const auto *definition = registry.find(node.toolId);
                     if (!definition)
                         continue;
