@@ -20,9 +20,6 @@ include(ConfigPython)
 include(ConfigQuickUI)
 
 # 独立通用工具 SDK（Git 子模块）
-if(BUILD_TESTING)
-    add_compile_definitions(VISIONRT_TEST_PROBES)
-endif()
 add_subdirectory(3rdparty/VisionRTContracts)
 
 # 核心通用库
@@ -203,6 +200,7 @@ if(BUILD_TESTING)
     visionrt_contract(installed_pipeline_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}")
     target_link_libraries(installed_pipeline_contract PRIVATE visionrt_python)
     visionrt_contract(runtime_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    visionrt_contract(runtime_diagnostics_contract visionrt_runtime)
     visionrt_contract(runtime_value_contract visionrt_runtime)
     visionrt_contract(runtime_readback_contract visionrt_runtime)
 

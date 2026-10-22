@@ -1349,39 +1349,12 @@ void failedBusinessOutputsAreNotInputs()
     assert(snapshot(result, 3)->status.code == 0 && snapshot(result, 4)->status.code == 0);
 }
 
-void diagnosticIdentityAndTruncation()
-{
-    RuntimeEngine engine(1);
-    engine.injectDiagnosticForTest("同文本");
-    engine.injectDiagnosticForTest("同文本");
-    const auto first = engine.pollLatest();
-    assert(first.diagnostics.size() == 2);
-    assert(first.diagnostics[0].generation == first.generation);
-    assert(first.diagnostics[0].sequence < first.diagnostics[1].sequence);
-    assert(first.diagnostics[0].status().message == "同文本" && first.diagnostics[1].status().message == "同文本");
-    assert(first.droppedDiagnostics == 0);
-    const auto unchanged = engine.pollLatest();
-    assert(unchanged.diagnostics.empty() && unchanged.droppedDiagnostics == 0);
-
-    for (int i = 0; i < 101; ++i)
-        engine.injectDiagnosticForTest("事件 " + std::to_string(i));
-    const auto truncated = engine.pollLatest();
-    assert(truncated.droppedDiagnostics == 3);
-    assert(truncated.diagnostics.size() == 100);
-    assert(truncated.diagnostics.front().sequence == 4);
-    assert(truncated.diagnostics.back().sequence == 103);
-    const auto drained = engine.pollLatest();
-    assert(drained.diagnostics.empty() && drained.droppedDiagnostics == 0);
-    std::cout << "Diagnostic events are incremental, identity-stable and truncation-aware\n";
-}
-
 int main(int argc, char **argv)
 {
     assert(argc == 2);
     optionalOutputsAndCachedMissing();
     failedBusinessOutputsAreNotInputs();
     explicitRequirednessAtExecution();
-    diagnosticIdentityAndTruncation();
     managementDiagnosticsPreserveStatus();
     singleNodeUpstreamValidity();
     stopWakesReceiverWait(argv[1]);

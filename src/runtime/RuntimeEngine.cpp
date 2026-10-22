@@ -223,7 +223,6 @@ struct RuntimeEngine::Impl
     double                                                            roundMilliseconds = 0;
     std::deque<RuntimeDiagnostic>                                     diagnostics;
     std::uint64_t                                                     nextDiagnosticSequence = 1;
-    std::uint64_t                                                     deliveredDiagnosticSequence = 0;
     std::size_t                                                       droppedDiagnostics = 0;
     std::shared_ptr<std::stop_source>                                 activeStop;
     std::thread                                                       coordinator;
@@ -264,14 +263,6 @@ struct RuntimeEngine::Impl
             diagnose(phase, ToolStatus{-1, exceptionSummary(phase), "未知异常"});
         }
         return false;
-    }
-
-    void resetDiagnostics()
-    {
-        diagnostics.clear();
-        nextDiagnosticSequence      = 1;
-        deliveredDiagnosticSequence = 0;
-        droppedDiagnostics          = 0;
     }
 
     void synchronize(const ProjectDefinition &project, const ToolRegistry &registry, const std::set<NodeId> &retry = {})
@@ -495,7 +486,9 @@ struct RuntimeEngine::Impl
             round   = 0;
             flowTiming.clear();
             roundMilliseconds = 0;
-            resetDiagnostics();
+            diagnostics.clear();
+            nextDiagnosticSequence = 1;
+            droppedDiagnostics     = 0;
         }
     }
 
@@ -637,7 +630,6 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
         impl_->stopRequested = false;
         impl_->activeStop    = std::make_shared<std::stop_source>();
         impl_->completion.reset();
-        impl_->resetDiagnostics();
         impl_->flowTiming.clear();
         impl_->roundMilliseconds = 0;
         ++impl_->session;
@@ -713,7 +705,6 @@ ToolStatus RuntimeEngine::requestReset()
     if (impl_->state == RuntimeState::Idle)
     {
         impl_->state = RuntimeState::Resetting;
-        impl_->resetDiagnostics();
         impl_->commandPending = true;
         impl_->commandReady.notify_one();
     }
@@ -782,7 +773,6 @@ ToolStatus RuntimeEngine::requestRefresh(std::function<ToolStatus()> work)
     impl_->management     = Impl::Management::Refresh;
     impl_->managementWork = std::move(work);
     impl_->state          = RuntimeState::Refreshing;
-    impl_->resetDiagnostics();
     impl_->commandPending = true;
     impl_->commandReady.notify_one();
     return {};
@@ -798,13 +788,9 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.round             = impl_->round;
     update.flows             = impl_->flowTiming;
     update.roundMilliseconds = impl_->roundMilliseconds;
-    for (const auto &diagnostic : impl_->diagnostics)
-    {
-        if (diagnostic.sequence <= impl_->deliveredDiagnosticSequence)
-            continue;
-        update.diagnostics.push_back(diagnostic);
-        impl_->deliveredDiagnosticSequence = diagnostic.sequence;
-    }
+    update.diagnostics.reserve(impl_->diagnostics.size());
+    for (auto &diagnostic : impl_->diagnostics) update.diagnostics.push_back(std::move(diagnostic));
+    impl_->diagnostics.clear();
     update.droppedDiagnostics = impl_->droppedDiagnostics;
     impl_->droppedDiagnostics = 0;
     update.completion         = impl_->completion;
@@ -821,13 +807,6 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     }
     return update;
 }
-
-#ifdef VISIONRT_TEST_PROBES
-void RuntimeEngine::injectDiagnosticForTest(std::string message)
-{
-    impl_->diagnose(RuntimePhase::Management, ToolStatus{0, std::move(message)});
-}
-#endif
 
 bool RuntimeEngine::acknowledgeCompletion(RuntimeCompletion completion)
 {

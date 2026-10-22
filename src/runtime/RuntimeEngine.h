@@ -122,9 +122,6 @@ public:
     RuntimeUpdate  pollLatest();
     bool           acknowledgeCompletion(RuntimeCompletion completion);
     void           setCompletionCallback(std::function<void(RuntimeCompletion)> callback);
-#ifdef VISIONRT_TEST_PROBES
-    void injectDiagnosticForTest(std::string message);
-#endif
 
 private:
     struct Impl;
