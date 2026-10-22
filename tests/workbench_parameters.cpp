@@ -68,6 +68,9 @@ void parameterEditorsContract()
     if (app.nodes().size() != 1)
         throw std::runtime_error("parameter fixture tool was not discovered: " + app.diagnostic().toStdString());
     app.selectNode(app.nodes().front().toMap().value("id").toString());
+    require(!app.setParameter("count", false, "-9223372036854775809"), "overflowing negative integer was rounded");
+    require(!app.setParameter("ratio", false, ".nan"), "YAML numeric syntax must not be accepted");
+    require(!app.setParameter("weights", false, "{shape: [2], data: [0, 1]}"), "YAML arrays must not be accepted");
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
@@ -104,10 +107,19 @@ void parameterEditorsContract()
         {
             const auto row = item.toMap();
             if (row.value("id").toString() == id)
-                return row.value("literal").toString();
+                return row.value("valueText").toString();
         }
         return QString{};
     };
+    for (const auto &raw : {QString{}, QStringLiteral("null"), QStringLiteral("~"), QStringLiteral("[1]"),
+                            QStringLiteral("\"原始引号\"\n中文")})
+    {
+        require(app.setParameter("note", false, raw), "raw string parameter was rejected");
+        require(value("note") == raw, "raw strings were parsed as JSON or YAML literals");
+    }
+    require(app.setParameter("note", false, "\"JSON 文本\"", true) && value("note") == QStringLiteral("JSON 文本"),
+            "explicit JSON string entry failed");
+    require(!app.setParameter("note", false, "unquoted", true), "raw JSON mode accepted an unquoted string");
     require(value("ratio") == "0.2", "Float keyboard step was not committed to the real parameter");
     input->setProperty("text", "0.4");
     QTest::keyClick(&window, Qt::Key_Escape);
@@ -120,6 +132,15 @@ void parameterEditorsContract()
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     require(value("count") == "9007199254740994", "integer keyboard step lost precision or did not commit");
+    input->setProperty("text", "9007199254740996");
+    QTest::keyClick(&window, Qt::Key_Up);
+    require(value("count") == "9007199254740997", "integer step ignored the uncommitted draft");
+    input->setProperty("text", "-9223372036854775809");
+    QTest::keyClick(&window, Qt::Key_Up);
+    require(value("count") == "9007199254740997"
+                && input->property("text").toString() == "-9223372036854775809",
+            "invalid integer draft was rounded, discarded or stepped from the old value");
+    QTest::keyClick(&window, Qt::Key_Escape);
     require(app.setParameter("count", false, "9223372036854775807"), "Int64 maximum was rejected");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
@@ -439,7 +460,7 @@ void parameterEditorsContract()
     require(value("labels") == originalLabels, "invalid structure replaced a typed parameter");
     require(dialog->property("visible").toBool() && !labelsRow->property("structureError").toString().isEmpty(),
             "invalid structure did not keep the draft and report its validation error");
-    structureInput->setProperty("text", "{shape: [2], data: [中文, 'with spaces']}");
+    structureInput->setProperty("text", "{\"shape\": [2], \"data\": [\"中文\", \"with spaces\"]}");
     click(confirm);
     require(!dialog->property("visible").toBool(), "valid structure did not close its dialog");
     const auto committedLabels = value("labels");

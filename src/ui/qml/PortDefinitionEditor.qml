@@ -62,7 +62,7 @@ ColumnLayout {
         QuiTextField { Layout.fillWidth: true; text: root.currentPort.name || ""; onTextEdited: root.update("name", text) }
         QuiText { text: "类型" }
         QuiComboBox { Layout.fillWidth: true; model: root.types; currentIndex: model.indexOf(root.currentPort.type); enabled: !root.signatureLocked; onActivated: root.update("type", currentText) }
-        QuiText { text: "默认值（YAML）"; visible: !root.outputs }
+        QuiText { text: "默认值（JSON）"; visible: !root.outputs }
         QuiTextField { Layout.fillWidth: true; visible: !root.outputs; text: root.currentPort.default || ""; onTextEdited: root.update("default", text) }
         QuiText { text: "dtype"; visible: root.currentPort.type === "NumericArray" }
         QuiComboBox {

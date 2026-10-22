@@ -189,7 +189,7 @@ void pathEditorsContract()
     require(QTest::qWaitFor([&] { return !filePicker->property("visible").toBool(); }, 1500)
                 && value("path") == selectedPath,
             "changing path mode left the old picker alive or submitted its selection");
-    require(app.setParameter("mode", false, "null") && editorKind().isEmpty(),
+    require(app.setParameter("mode", false, "null", true) && editorKind().isEmpty(),
             "Missing path mode must not silently select the file picker");
     const auto localPath = root.filePath(QStringLiteral("文本 %2f # 路径.txt"));
     require(app.setParameterPath("path", false, QUrl::fromLocalFile(localPath)) && value("path") == localPath,
@@ -222,7 +222,7 @@ void pathEditorsContract()
                 && value("file") == unsavedPath && app.dirty() && saveRequested.isEmpty(),
             "Selecting a local path in an unsaved project required saving or damaged the path");
     const auto relativePath = nested + "/" + fileName;
-    require(app.setParameter("file", false, "'" + relativePath + "'") && value("file") == relativePath,
+    require(app.setParameter("file", false, relativePath) && value("file") == relativePath,
             "Text editing implicitly resolved a relative path instead of preserving its value");
     const auto unsavedProject = root.filePath("unsaved_paths.vrt");
     require(app.save(unsavedProject), "Unsaved path project could not save");

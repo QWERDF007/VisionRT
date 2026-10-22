@@ -568,7 +568,7 @@ ColumnLayout {
         contentDelegate: Component {
             ColumnLayout {
                 implicitHeight: 340; spacing: 8
-                QuiText { text: (root.parameter.typeDetail || root.parameter.type) + " · YAML；图像不可进行像素编辑"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                QuiText { text: (root.parameter.typeDetail || root.parameter.type) + " · JSON"; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 ScrollView {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     QuiTextArea { text: root.structureDraft; readOnly: !root.editable; selectByMouse: true; wrapMode: TextEdit.NoWrap; onTextChanged: root.structureDraft = text; font.family: "Consolas" }
@@ -577,7 +577,7 @@ ColumnLayout {
             }
         }
         onPositiveClickListener: function() {
-            if (root.commit(root.structureDraft)) structureDialog.close()
+            if (root.editable && app.setParameter(root.parameter.id, root.parameter.init, root.structureDraft, true)) structureDialog.close()
             else root.structureError = app.diagnostic
         }
     }

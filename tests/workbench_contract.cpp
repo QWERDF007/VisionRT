@@ -5,6 +5,7 @@
 #include "ui/Theme.h"
 #include "ui/ToolTreeModel.h"
 #include "runtime/Snapshot.h"
+#include "core/ValueJson.h"
 
 #include <QGuiApplication>
 #include <QImage>
@@ -76,6 +77,12 @@ void treeContract()
 
 void outputContract()
 {
+    require(OutputModel::fullText({Missing{}, {Type::Int}}) == "null", "Missing must copy as JSON null");
+    const auto quoted = OutputModel::fullText({Utf8("中文 \"引号\"\n路径"), {Type::String}});
+    require(std::get<Utf8>(ValueJson::parse(quoted, {Type::String})).str() == "中文 \"引号\"\n路径",
+            "output text must escape strings as JSON");
+    require(OutputModel::fullText({std::numeric_limits<double>::infinity(), {Type::Float}}).contains("non_finite"),
+            "nonfinite output must have an explicit JSON description");
     require(typeText({Type::Rect}) == QStringLiteral("Rect"), "scalar rectangle type must be displayed safely");
     const auto rectangle = Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F);
     const OutputModel::Captured rectangleCapture{rectangle, {Type::Rect}};
@@ -1123,17 +1130,17 @@ void packageDrivenCatalogAndRefreshContract()
         };
         require(choices("source_flow_id", "label").contains(flow1Name), "source flow choices are missing");
         require(choices("source_flow_id", "value").contains(flow1Id), "source flow identity is missing");
-        app.setParameter("source_flow_id", true, "\"" + flow1Id + "\"");
+        app.setParameter("source_flow_id", true, flow1Id);
         require(!pythonNodeTitle.isEmpty(), "missing Python image source");
-        app.setParameter("source_node_seq", true, "\"" + pythonNodeId + "\"");
-        app.setParameter("source_port_id", true, "\"image\"");
+        app.setParameter("source_node_seq", true, pythonNodeId);
+        app.setParameter("source_port_id", true, "image");
         require(app.imageOutputs().size() == 1
                     && app.imageOutputs().first().toMap().value("id").toString() == "value",
                 "source-derived image output is missing from the viewport selector");
         require(choices("source_node_seq", "label").contains(funcNodeTitle), "source node choices are missing");
-        app.setParameter("source_node_seq", true, "\"" + funcNodeId + "\"");
+        app.setParameter("source_node_seq", true, funcNodeId);
         require(choices("source_port_id", "value").contains(QStringLiteral("y")), "source output choices are missing");
-        app.setParameter("source_port_id", true, "\"y\"");
+        app.setParameter("source_port_id", true, "y");
         require(receiverOutputs->get(2).value("type").toString() == typeText({Type::Int}), "receiver output not resolved after source selection");
         app.setParameter("timeout_ms", true, "1000");
 
@@ -1164,13 +1171,13 @@ void packageDrivenCatalogAndRefreshContract()
                     && relationPorts.front().toMap().value("input").toString() == "x",
                 "grouped wire discarded the source and target port identity");
         app.selectNode(recvNodeId);
-        app.setParameter("source_node_seq", true, "\"" + pythonNodeId + "\"");
-        app.setParameter("source_port_id", true, "\"image\"");
+        app.setParameter("source_node_seq", true, pythonNodeId);
+        app.setParameter("source_port_id", true, "image");
         require(app.wires().isEmpty(), "incompatible or unresolved receiver binding is still drawn as an active wire");
         require(outModel->get(2).value("count").toInt() == 0,
                 "invalid receiver relation is still counted as an active output reference");
-        app.setParameter("source_node_seq", true, "\"" + funcNodeId + "\"");
-        app.setParameter("source_port_id", true, "\"y\"");
+        app.setParameter("source_node_seq", true, funcNodeId);
+        app.setParameter("source_port_id", true, "y");
         require(app.wires().size() == 1 && outModel->get(2).value("count").toInt() == 1,
                 "restoring the source type did not restore the same input relation");
         app.deleteNodes({relationTarget});

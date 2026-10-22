@@ -1,7 +1,5 @@
 #include "ui/AppController_p.h"
 
-#include <visionrt/contracts/ValueYaml.h>
-
 #include <limits>
 
 namespace visionrt {
