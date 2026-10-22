@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob
+import json
 import locale
 import os
 import re
@@ -11,8 +12,6 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable
-
-import yaml
 
 PROJECT_NAME = "VisionRT"
 PROJECT_NAME_LONG = "VisionRT"
@@ -34,7 +33,7 @@ def warn(message: str) -> None:
 
 
 def platform_key() -> str:
-    """Return platform key for dependencies.yaml."""
+    """Return platform key for dependencies.json."""
     if os.name == "nt":
         return "windows"
     if sys.platform == "darwin":
@@ -53,29 +52,39 @@ def resolve_project_path(path: str | Path, repo_root: Path = REPO_ROOT) -> Path:
 
 
 def normalize_list(value: Any) -> list[str]:
-    """Convert scalar or list in YAML into a list of strings."""
+    """Read an optional string array from the dependency manifest."""
     if value is None:
         return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    return [str(value)]
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError("dependency patterns, destinations and env must be string arrays")
+    return value
 
 
-def load_yaml_file(path: Path) -> dict[str, Any]:
-    """Read YAML file and verify top-level object is a dict."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"invalid YAML root in {path}")
-    return data
+def load_json_file(path: Path) -> Any:
+    """Read JSON, rejecting duplicate members and non-JSON numeric constants."""
+    def unique_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON member '{key}' in {path}")
+            result[key] = value
+        return result
+
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"invalid JSON number '{value}' in {path}")
+
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_members, parse_constant=reject_constant)
 
 
 def load_dependencies(path: Path) -> list[dict[str, Any]]:
-    """Read dependencies list from dependencies.yaml."""
-    data = load_yaml_file(path)
-    deps = data.get("dependencies", [])
-    if not isinstance(deps, list):
-        raise ValueError(f"dependencies must be a list in {path}")
-    return [dep for dep in deps if isinstance(dep, dict)]
+    """Read the dependency objects from the JSON manifest."""
+    data = load_json_file(path)
+    if not isinstance(data, dict) or set(data) != {"dependencies"}:
+        raise ValueError(f"dependency manifest requires a dependencies array in {path}")
+    deps = data["dependencies"]
+    if not isinstance(deps, list) or any(not isinstance(dep, dict) for dep in deps):
+        raise ValueError(f"dependencies must be an array of objects in {path}")
+    return deps
 
 
 def dependency_matches_config(dep: dict[str, Any], config: str) -> bool:
@@ -91,7 +100,7 @@ def dependency_patterns(dep: dict[str, Any], platform: str) -> list[str]:
 
 def dependency_destinations(dep: dict[str, Any]) -> list[str]:
     """Return link destination directories."""
-    return normalize_list(dep.get("destinations", dep.get("dest")))
+    return normalize_list(dep.get("destinations"))
 
 
 def build_config_directory(config: str) -> str:

@@ -3,6 +3,8 @@
 #include "core/JsonFields.h"
 #include "core/ValueJson.h"
 
+#include <algorithm>
+
 namespace visionrt {
 namespace {
 std::string packagePath(const QJsonValue &value, const QString &context)
@@ -49,6 +51,9 @@ ModuleIndex parseModuleIndexJson(const std::string &content)
         if (!result.tools.emplace(id, std::move(entry)).second)
             throw ContractError("重复 tool_id：" + id);
     }
+    for (const auto &[id, module] : result.modules)
+        if (std::ranges::none_of(result.tools, [&](const auto &tool) { return tool.second.module == id; }))
+            throw ContractError("模块没有对应工具：" + id);
     for (const auto &value : json::array(root.value("runtime_files"), "runtime_files"))
         result.runtimeFiles.push_back(packagePath(value, "runtime_files"));
     return result;

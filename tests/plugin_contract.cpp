@@ -496,11 +496,10 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         f.write(indexContent);
     }
 
-    // Create tool yaml
     {
         QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
-        const char *yamlContent = R"json({
+        const char *jsonContent = R"json({
   "schema_version": 1,
   "tool_id": "test.plugin.counter",
   "display_name": "实际打包插件",
@@ -514,7 +513,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "count", "name": "计数值", "type": "Int"}
   ]
 })json";
-        f.write(yamlContent);
+        f.write(jsonContent);
     }
 
     // Initialize AppController pointing to appDir
@@ -658,7 +657,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *badJson = R"(invalid: [ broken yaml)";
+        const char *badJson = R"({"invalid": [)";
         f.write(badJson);
     }
     app.rescanTools();

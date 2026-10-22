@@ -2,7 +2,7 @@
 
 Packages release runtime into a standalone directory:
 Collects executable, project DLLs, QML modules, Python runtime,
-third-party dependencies from dependencies.yaml, system runtimes, and Qt plugins.
+third-party dependencies from dependencies.json, system runtimes, and Qt plugins.
 """
 
 from __future__ import annotations
@@ -19,20 +19,20 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dependency_utils import (
-    BUILD_CONFIG_DIRECTORIES,
     MARKER_FILE,
-    PROJECT_DLL_PREFIX,
     PROJECT_NAME,
     PROJECT_NAME_LONG,
     REPO_ROOT,
     build_dll_variant_sets,
     build_config_directory,
     copy_file,
+    dependency_default_value,
     dependency_matches_config,
     dependency_patterns,
     dll_matches_config,
     expand_dependency_pattern,
     load_dependencies,
+    load_json_file,
     platform_key,
     read_cmake_cache_value,
     resolve_dependency_root,
@@ -40,16 +40,13 @@ from dependency_utils import (
     warn,
 )
 
-LOCAL_BIN_DLL_NAMES = {"quickui.dll"}
-
-
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Package VisionRT release runtime.")
     parser.add_argument("--build-dir", "-BuildDir", default="build", help="CMake build directory.")
     parser.add_argument("--install-dir", "-InstallDir", default=None, help="Installation output directory.")
     parser.add_argument("--config", "-Config", type=str.lower, choices=["release", "debug"], default="release", help="Build configuration.")
-    parser.add_argument("--dependencies", default="tools/dependencies.yaml", help="Path to dependencies.yaml.")
+    parser.add_argument("--dependencies", default="tools/dependencies.json", help="Path to dependencies.json.")
     parser.add_argument("--windeployqt", "-WinDeployQt", default="", help="Explicit path to windeployqt.exe.")
     parser.add_argument("--qt-root", "-QtRoot", default="", help="Explicit Qt root directory.")
     parser.add_argument("--skip-windeployqt", "-SkipWinDeployQt", "--skip-qt", action="store_true", help="Skip windeployqt deployment.")
@@ -63,10 +60,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--parallel", type=int, default=4, help="Build parallelism (default: 4).")
     parser.add_argument("--skip-verify", action="store_true", help="Skip post-package verification.")
     parser.add_argument("--tools-package", default=None, help="External VisionTools ZIP package to deploy into install_dir/tools-package.")
-    parser.add_argument("--tools-index", default=None, help="Optional external module_index.yaml to assert byte-by-byte consistency with package.")
+    parser.add_argument("--tools-index", default=None, help="Optional external module_index.json to assert byte-by-byte consistency with package.")
     parser.add_argument("--validator", default=None, help="Explicit path to visionrt_validate_tool executable.")
     parser.add_argument("--deploy-tools-only", action="store_true", help="Deploy or replace tools package in existing installation without full repackaging.")
-    parser.add_argument("--test-verify", action="store_true", help="Run automated negative tests for package verification.")
     return parser.parse_args()
 
 
@@ -119,6 +115,17 @@ def find_executable(build_dir: Path) -> Path:
     if matches:
         return matches[0].resolve(strict=True)
     raise RuntimeError(f"cannot find {exe_name} under {build_dir}")
+
+
+def find_validator(build_dir: Path, config: str, explicit: str | None) -> Path | None:
+    """Use an explicit validator or the one from the selected build tree."""
+    if explicit:
+        return resolve_project_path(explicit)
+    name = "visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"
+    return next((candidate for candidate in (
+        build_dir / "bin" / name,
+        build_dir / "bin" / build_config_directory(config) / name,
+    ) if candidate.is_file()), None)
 
 
 def target_architecture(build_dir: Path) -> str:
@@ -272,13 +279,13 @@ def deploy_tools_package(
             ext_path = Path(external_index).resolve()
             if not ext_path.is_file():
                 raise RuntimeError(f"external tools index file was not found: {ext_path}")
-            pkg_index = tmp_dir / "module_index.yaml"
+            pkg_index = tmp_dir / "module_index.json"
             if not pkg_index.is_file():
-                raise RuntimeError(f"tools package missing module_index.yaml in {tmp_dir}")
+                raise RuntimeError(f"tools package missing module_index.json in {tmp_dir}")
             if ext_path.read_bytes() != pkg_index.read_bytes():
-                raise RuntimeError("external tools index does not match package internal module_index.yaml byte-by-byte")
+                raise RuntimeError("external tools index does not match package internal module_index.json byte-by-byte")
 
-        # 3. Validate extracted package using unified SDK validator (D-06)
+        # 3. Validate extracted package using host JSON validator (D-06)
         verify_tools_package(tmp_dir, validator)
 
         # 4. Atomic installation: if validation succeeded, cleanly replace target_pkg
@@ -380,14 +387,14 @@ def copy_python_runtime(build_dir: Path, install_dir: Path) -> None:
             shutil.copytree(numpy_libs, target_site / "numpy.libs", dirs_exist_ok=True)
 
 
-def copy_yaml_dependencies(
+def copy_dependencies(
     build_dir: Path,
     install_dir: Path,
     dependency_file: Path,
     config: str,
     allow_missing: bool,
 ) -> None:
-    """Copy external dependencies declared in dependencies.yaml."""
+    """Copy external dependencies declared in dependencies.json."""
     platform = platform_key()
     target_dir = install_dir if platform == "windows" else install_dir / "lib"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -509,17 +516,6 @@ def copy_windows_sdk_dependencies(install_dir: Path, architecture: str) -> None:
 def qt_roots(build_dir: Path) -> list[Path]:
     """Collect Qt6 root candidates."""
     roots: list[Path] = []
-    dep_file = REPO_ROOT / "tools" / "dependencies.yaml"
-    if dep_file.is_file():
-        try:
-            for dep in load_dependencies(dep_file):
-                if dep.get("name") in ("qt", "qt6"):
-                    val = dep.get("default")
-                    if val:
-                        roots.append(Path(val))
-        except Exception:
-            pass
-
     for key in ("Qt6Core_DIR", "Qt6_DIR"):
         value = read_cmake_cache_value(build_dir / "CMakeCache.txt", key)
         if value:
@@ -531,6 +527,14 @@ def qt_roots(build_dir: Path) -> list[Path]:
         val = os.environ.get(env_name)
         if val:
             roots.append(Path(val))
+
+    dep_file = REPO_ROOT / "tools" / "dependencies.json"
+    if dep_file.is_file():
+        for dep in load_dependencies(dep_file):
+            if dep.get("name") in ("qt", "qt6"):
+                default = dependency_default_value(dep)
+                if default:
+                    roots.append(Path(default))
 
     unique: list[Path] = []
     seen: set[str] = set()
@@ -627,31 +631,22 @@ def is_reparse_point(path: Path) -> bool:
 
 
 def verify_tools_package(tools_pkg: Path, validator: Path | None = None) -> None:
-    """Verify external tools package using unified SDK validator (--package)."""
+    """Verify external tools package using the host JSON validator (--package)."""
     if not tools_pkg.is_dir():
         raise RuntimeError(f"tools package directory was not found: {tools_pkg}")
 
-    # 1. Reject deprecated JSON/XML/old index files
-    deprecated_names = {"module_index.json", "module_index.xml", "tools.json", "tools.xml", "module_index.yml"}
-    for f in tools_pkg.rglob("*"):
-        if f.is_file():
-            low = f.name.lower()
-            if low in deprecated_names:
-                raise RuntimeError(f"tools package contains deprecated or invalid index format: {f.relative_to(tools_pkg)}")
+    for source in tools_pkg.rglob("*.json"):
+        try:
+            load_json_file(source)
+        except (OSError, ValueError) as error:
+            raise RuntimeError(f"Tools package JSON lint failed: {source}: {error}") from error
 
-    # 2. Check module_index.yaml exists
-    index_file = tools_pkg / "module_index.yaml"
-    if not index_file.is_file():
-        raise RuntimeError(f"tools package missing module_index.yaml in {tools_pkg}")
-
-    # 3. Require valid SDK validator executable
     if validator is None or not Path(validator).is_file():
         raise RuntimeError(
-            f"SDK validator executable is required for tools package verification, "
+            f"Host validator executable is required for tools package verification, "
             f"but was not found or not specified: {validator}"
         )
 
-    # 4. Invoke SDK validator --package
     cmd = [str(validator), "--package", str(tools_pkg)]
     env = os.environ.copy()
     bin_dir = tools_pkg / "bin"
@@ -660,10 +655,10 @@ def verify_tools_package(tools_pkg: Path, validator: Path | None = None) -> None
     res = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if res.returncode != 0:
         err = res.stderr.strip() or res.stdout.strip()
-        raise RuntimeError(f"SDK tools package validation failed via validator:\n{err}")
+        raise RuntimeError(f"Host tools package validation failed via validator:\n{err}")
 
 
-def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None = None, validator: Path | None = None) -> None:
+def verify_package(install_dir: Path, require_qt: bool, validator: Path | None = None) -> None:
     """Verify package completeness strictly according to RS-06 and RT-04."""
     required_files = [
         install_dir / f"{PROJECT_NAME}.exe",
@@ -718,359 +713,9 @@ def verify_package(install_dir: Path, require_qt: bool, build_dir: Path | None =
     print(f"package verification complete: {count} files")
 
 
-def test_verify_package_negatives() -> None:
-    """Run automated negative tests for RT-04 resource verification."""
-    import tempfile
-    with tempfile.TemporaryDirectory(prefix="vrt_verify_neg_") as tmp:
-        root = Path(tmp)
-        selected_python = root / "selected-python"
-        selected_python.mkdir()
-        (selected_python / "python.exe").touch()
-        build_metadata = root / "build"
-        build_metadata.mkdir()
-        (build_metadata / "CMakeCache.txt").write_text(
-            f"VISIONRT_PYTHON_HOME:PATH={selected_python.as_posix()}\n", encoding="utf-8")
-        assert resolve_python_home(build_metadata) == selected_python
-        # Create baseline valid mock package
-        (root / f"{PROJECT_NAME}.exe").touch()
-        (root / MARKER_FILE).touch()
-        (root / "quickui.dll").touch()
-        (root / "python312.dll").touch()
-        (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
-        (root / "python" / "DLLs").mkdir(parents=True)
-
-        # Baseline check (without Qt)
-        verify_package(root, require_qt=False)
-
-        # Case 1: Missing quickui.dll
-        (root / "quickui.dll").unlink()
-        try:
-            verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail when quickui.dll is missing")
-        except RuntimeError as e:
-            assert "quickui.dll" in str(e), f"Unexpected error: {e}"
-        (root / "quickui.dll").touch()
-
-        # Case 2: Missing Python DLL
-        (root / "python312.dll").unlink()
-        try:
-            verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail when python3*.dll is missing")
-        except RuntimeError as e:
-            assert "missing Python DLL" in str(e), f"Unexpected error: {e}"
-        (root / "python312.dll").touch()
-
-        # Case 3: Missing NumPy
-        shutil.rmtree(root / "python" / "Lib" / "site-packages" / "numpy")
-        try:
-            verify_package(root, require_qt=False)
-            raise AssertionError("verify_package did not fail when numpy directory is missing")
-        except RuntimeError as e:
-            assert "numpy" in str(e), f"Unexpected error: {e}"
-        (root / "python" / "Lib" / "site-packages" / "numpy").mkdir(parents=True)
-
-        # External Tools Package Negatives & Coverage
-        tools_pkg = root / "tools-package"
-        tools_pkg.mkdir(parents=True)
-        (tools_pkg / "bin").mkdir(parents=True)
-        (tools_pkg / "bin" / "plugin.dll").touch()
-        (tools_pkg / "bin" / "runtime_dep.dll").touch()
-        (tools_pkg / "assets" / "tools").mkdir(parents=True)
-        (tools_pkg / "assets" / "tools" / "test.yaml").write_text(
-            "schema_version: 1\ntool_id: test.plugin\ndisplay_name: Test Tool\nversion: 1.0.0\nkind: cpp_function\nentry:\n  registry_name: test.plugin\ninit_params: []\ninputs: []\noutputs: []\n",
-            encoding="utf-8"
-        )
-        (tools_pkg / "module_index.yaml").write_text(
-            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-
-        # Locate built visionrt_validate_tool
-        validator = None
-        for c in [
-            REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-        ]:
-            if c.is_file():
-                validator = c
-                break
-        if not validator:
-            raise RuntimeError("test_verify_package_negatives requires built visionrt_validate_tool executable")
-
-        # Case 3b: Missing validator when tools package is present must fail
-        try:
-            verify_package(root, require_qt=False, validator=None)
-            raise AssertionError("verify_package did not fail when validator is missing")
-        except RuntimeError as e:
-            assert "validator executable is required" in str(e).lower(), f"Unexpected error: {e}"
-
-        # Baseline: Valid tools package passes with validator
-        verify_package(root, require_qt=False, validator=validator)
-
-        # Case 4: Deprecated JSON index file
-        (tools_pkg / "module_index.json").touch()
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when deprecated JSON index is present")
-        except RuntimeError as e:
-            assert "deprecated" in str(e).lower(), f"Unexpected error: {e}"
-        (tools_pkg / "module_index.json").unlink()
-
-        # Case 4b: Old module_index.yml rejected
-        (tools_pkg / "module_index.yml").touch()
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when old module_index.yml is present")
-        except RuntimeError as e:
-            assert "deprecated" in str(e).lower(), f"Unexpected error: {e}"
-        (tools_pkg / "module_index.yml").unlink()
-
-        # Case 5: Missing module_index.yaml
-        (tools_pkg / "module_index.yaml").unlink()
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when module_index.yaml is missing")
-        except RuntimeError as e:
-            assert "missing module_index.yaml" in str(e), f"Unexpected error: {e}"
-
-        # Case 6a: Missing schema_version in module_index.yaml
-        (tools_pkg / "module_index.yaml").write_text(
-            "variant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when schema_version is missing")
-        except RuntimeError as e:
-            assert "schema_version" in str(e).lower(), f"Unexpected error: {e}"
-
-        # Case 6b: Missing variant
-        (tools_pkg / "module_index.yaml").write_text(
-            "schema_version: 2\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when variant is missing")
-        except RuntimeError as e:
-            assert "variant" in str(e).lower(), f"Unexpected error: {e}"
-
-        # Case 6c: Unknown field in module_index.yaml
-        (tools_pkg / "module_index.yaml").write_text(
-            "schema_version: 2\nvariant: cpu\nunknown_key: bad\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail on unknown field in module_index.yaml")
-        except RuntimeError as e:
-            assert "unknown" in str(e).lower(), f"Unexpected error: {e}"
-
-        # Case 7: Dangling module reference in module_index.yaml
-        (tools_pkg / "module_index.yaml").write_text(
-            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: nonexistent_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail on dangling module reference in module_index.yaml")
-        except RuntimeError as e:
-            assert "undeclared module" in str(e).lower(), f"Unexpected error: {e}"
-
-        # Case 7b: Unreferenced module in modules
-        (tools_pkg / "module_index.yaml").write_text(
-            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\n  unused_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail on unreferenced module in module_index.yaml")
-        except RuntimeError as e:
-            assert "not referenced" in str(e).lower(), f"Unexpected error: {e}"
-
-        # Restore valid module_index.yaml
-        (tools_pkg / "module_index.yaml").write_text(
-            "schema_version: 2\nvariant: cpu\nmodules:\n  test_module:\n    library: bin/plugin.dll\ntools:\n  test.plugin:\n    module: test_module\n    definition: assets/tools/test.yaml\nruntime_files:\n  - bin/runtime_dep.dll\n",
-            encoding="utf-8"
-        )
-
-        # Case 8: Missing mapped DLL
-        (tools_pkg / "bin" / "plugin.dll").unlink()
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when mapped library is missing")
-        except RuntimeError as e:
-            assert "library file does not exist" in str(e).lower(), f"Unexpected error: {e}"
-        (tools_pkg / "bin" / "plugin.dll").touch()
-
-        # Case 8b: RT-F01 counterexample: missing definition file
-        (tools_pkg / "assets" / "tools" / "test.yaml").unlink()
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when definition file is missing")
-        except RuntimeError as e:
-            assert "definition file does not exist" in str(e).lower(), f"Unexpected error: {e}"
-        (tools_pkg / "assets" / "tools" / "test.yaml").write_text(
-            "schema_version: 1\ntool_id: test.plugin\ndisplay_name: Test Tool\nversion: 1.0.0\nkind: cpp_function\nentry:\n  registry_name: test.plugin\ninit_params: []\ninputs: []\noutputs: []\n",
-            encoding="utf-8"
-        )
-
-        # Case 8c: RT-F01 counterexample: missing runtime file
-        (tools_pkg / "bin" / "runtime_dep.dll").unlink()
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when runtime file is missing")
-        except RuntimeError as e:
-            assert "runtime_files entry does not exist" in str(e).lower(), f"Unexpected error: {e}"
-        (tools_pkg / "bin" / "runtime_dep.dll").touch()
-
-        # Case 8d: Tool ID mismatch (declaration declares mismatched.id, but index lists test.plugin)
-        (tools_pkg / "assets" / "tools" / "test.yaml").write_text(
-            "schema_version: 1\ntool_id: mismatched.tool.id\ndisplay_name: Test Tool\nversion: 1.0.0\nkind: cpp_function\nentry:\n  registry_name: test.plugin\ninit_params: []\ninputs: []\noutputs: []\n",
-            encoding="utf-8"
-        )
-        try:
-            verify_package(root, require_qt=False, validator=validator)
-            raise AssertionError("verify_package did not fail when tool_id mismatches")
-        except RuntimeError as e:
-            assert "does not match" in str(e).lower(), f"Unexpected error: {e}"
-        (tools_pkg / "assets" / "tools" / "test.yaml").write_text(
-            "schema_version: 1\ntool_id: test.plugin\ndisplay_name: Test Tool\nversion: 1.0.0\nkind: cpp_function\nentry:\n  registry_name: test.plugin\ninit_params: []\ninputs: []\noutputs: []\n",
-            encoding="utf-8"
-        )
-
-        # Case 9: deploy_tools_package ZIP deployment, atomic protection, and zip-slip prevention
-        import zipfile
-        tools_zip = root / "valid_tools.zip"
-        with zipfile.ZipFile(tools_zip, "w") as zf:
-            zf.writestr("module_index.yaml", (tools_pkg / "module_index.yaml").read_bytes())
-            zf.writestr("bin/plugin.dll", b"MOCK_PLUGIN")
-            zf.writestr("bin/runtime_dep.dll", b"MOCK_DEP")
-            zf.writestr("assets/tools/test.yaml", (tools_pkg / "assets" / "tools" / "test.yaml").read_bytes())
-
-        # Pre-populate tools-package with sentinel file that must be cleanly replaced
-        sentinel_old = tools_pkg / "old_stale.txt"
-        sentinel_old.write_text("OLD", encoding="utf-8")
-
-        ext_idx = root / "external_index.yaml"
-        ext_idx.write_bytes((tools_pkg / "module_index.yaml").read_bytes())
-
-        deploy_tools_package(root, tools_zip, validator=validator, external_index=ext_idx)
-        assert not sentinel_old.exists(), "Old stale file did not disappear after deploy!"
-        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == b"MOCK_PLUGIN"
-
-        # Case 9b: External index mismatch rejected without altering installation
-        bad_ext_idx = root / "bad_ext.yaml"
-        bad_ext_idx.write_text("schema_version: 2\nvariant: cpu\nmodules: {}\ntools: {}\n", encoding="utf-8")
-        marker_before = (tools_pkg / "bin" / "plugin.dll").read_bytes()
-        try:
-            deploy_tools_package(root, tools_zip, validator=validator, external_index=bad_ext_idx)
-            raise AssertionError("deploy_tools_package did not fail on mismatched external index")
-        except RuntimeError as e:
-            assert "byte-by-byte" in str(e).lower(), f"Unexpected error: {e}"
-        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == marker_before, "Target installation altered on failed deploy!"
-
-        # Case 9c: Zip-slip path traversal rejected without altering installation
-        slip_zip = root / "slip.zip"
-        with zipfile.ZipFile(slip_zip, "w") as zf:
-            zf.writestr("../escaped.txt", b"EVIL")
-        try:
-            deploy_tools_package(root, slip_zip, validator=validator)
-            raise AssertionError("deploy_tools_package did not fail on zip-slip traversal")
-        except RuntimeError as e:
-            assert "path traversal" in str(e).lower(), f"Unexpected error: {e}"
-        assert not (root / "escaped.txt").exists(), "Zip-slip created escaped file!"
-        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == marker_before, "Target installation altered on zip-slip failure!"
-
-        # Case 9d: Corrupted ZIP rejected without altering installation
-        bad_bytes_zip = root / "corrupted.zip"
-        bad_bytes_zip.write_bytes(b"PK\x03\x04NOT_A_VALID_ZIP_ARCHIVE_DATA")
-        try:
-            deploy_tools_package(root, bad_bytes_zip, validator=validator)
-            raise AssertionError("deploy_tools_package did not fail on corrupted ZIP")
-        except RuntimeError as e:
-            assert "corrupt" in str(e).lower() or "invalid" in str(e).lower(), f"Unexpected error: {e}"
-        assert (tools_pkg / "bin" / "plugin.dll").read_bytes() == marker_before, "Target installation altered on corrupt ZIP failure!"
-
-        # Case 9e: Locked file in target directory prevents replacement without corrupting files or killing process
-        locked_file = tools_pkg / "bin" / "plugin.dll"
-        f_lock = open(locked_file, "rb")
-        try:
-            # Prepare new package V2
-            new_v2_zip = root / "tools_v2.zip"
-            with zipfile.ZipFile(new_v2_zip, "w") as zf:
-                zf.writestr("module_index.yaml", (tools_pkg / "module_index.yaml").read_bytes())
-                zf.writestr("bin/plugin.dll", b"MOCK_PLUGIN_V2")
-                zf.writestr("bin/runtime_dep.dll", b"MOCK_DEP")
-                zf.writestr("assets/tools/test.yaml", (tools_pkg / "assets" / "tools" / "test.yaml").read_bytes())
-
-            try:
-                deploy_tools_package(root, new_v2_zip, validator=validator)
-                raise AssertionError("deploy_tools_package did not fail when target file is locked")
-            except RuntimeError as e:
-                assert "in use" in str(e).lower() or "locked" in str(e).lower(), f"Unexpected error: {e}"
-            # Assert file is still open and untouched!
-            assert locked_file.read_bytes() == marker_before, "Locked installation altered or corrupted!"
-        finally:
-            f_lock.close()
-
-        # After releasing lock, deploying new package V2 succeeds
-        deploy_tools_package(root, new_v2_zip, validator=validator)
-        assert locked_file.read_bytes() == b"MOCK_PLUGIN_V2", "Deployment did not update file after releasing lock!"
-
-        # Case 9f: Clean replacement: deploying Package B cleanly removes files unique to Package A
-        pkg_b_zip = root / "tools_pkg_b.zip"
-        decl_b = (
-            "schema_version: 1\n"
-            "tool_id: tool.pkg_b\n"
-            "display_name: Tool Pkg B\n"
-            "version: 1.0.0\n"
-            "kind: cpp_function\n"
-            "entry:\n  registry_name: tool.pkg_b\n"
-            "init_params: []\ninputs: []\noutputs: []\n"
-        )
-        index_b = (
-            "schema_version: 2\n"
-            "variant: cpu\n"
-            "modules:\n  module_b:\n    library: bin/module_b.dll\n"
-            "tools:\n  tool.pkg_b:\n    module: module_b\n    definition: assets/tools/tool_b.yaml\n"
-            "runtime_files:\n  - bin/runtime_dep_b.dll\n"
-        )
-        with zipfile.ZipFile(pkg_b_zip, "w") as zf:
-            zf.writestr("module_index.yaml", index_b.encode("utf-8"))
-            zf.writestr("bin/module_b.dll", b"MODULE_B_DLL")
-            zf.writestr("bin/runtime_dep_b.dll", b"DEP_B_DLL")
-            zf.writestr("assets/tools/tool_b.yaml", decl_b.encode("utf-8"))
-
-        deploy_tools_package(root, pkg_b_zip, validator=validator)
-
-        # Verify Package B files exist
-        assert (tools_pkg / "bin" / "module_b.dll").read_bytes() == b"MODULE_B_DLL"
-        assert (tools_pkg / "bin" / "runtime_dep_b.dll").read_bytes() == b"DEP_B_DLL"
-        assert (tools_pkg / "assets" / "tools" / "tool_b.yaml").exists()
-
-        # Verify Package A unique files are COMPLETELY ABSENT (no leftovers)
-        assert not (tools_pkg / "bin" / "plugin.dll").exists(), "Old Package A DLL still lingers!"
-        assert not (tools_pkg / "bin" / "runtime_dep.dll").exists(), "Old Package A runtime dep still lingers!"
-        assert not (tools_pkg / "assets" / "tools" / "test.yaml").exists(), "Old Package A declaration still lingers!"
-
-        # Case 10: Refuse cleaning repository root / source dirs
-        try:
-            clear_install_directory(REPO_ROOT, clean=True, force=True)
-            raise AssertionError("clear_install_directory did not fail when pointing to REPO_ROOT")
-        except RuntimeError as e:
-            assert "refusing to clean" in str(e), f"Unexpected error: {e}"
-
-        print("all RT-04 negative verification tests passed successfully!")
-
-
 def main() -> int:
     """Main package entry point."""
     args = parse_args()
-    if args.test_verify:
-        test_verify_package_negatives()
-        return 0
-
     build_dir = resolve_project_path(args.build_dir)
     raw_install_dir = resolve_project_path(args.install_dir) if args.install_dir else default_install_dir()
 
@@ -1091,17 +736,7 @@ def main() -> int:
         if not marker.is_file() and not exe_file.is_file():
             raise RuntimeError(f"specified directory is not a valid VisionRT installation: {install_dir}")
 
-        validator_path = resolve_project_path(args.validator) if args.validator else None
-        if not validator_path:
-            for c in [
-                build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            ]:
-                if c.is_file():
-                    validator_path = c
-                    break
+        validator_path = find_validator(build_dir, args.config, args.validator)
 
         ext_index = resolve_project_path(args.tools_index) if args.tools_index else None
         deploy_tools_package(
@@ -1121,6 +756,7 @@ def main() -> int:
         build_release(build_dir, args.config, args.parallel)
 
     source_exe = find_executable(build_dir)
+    validator_path = find_validator(build_dir, args.config, args.validator)
     version = project_version()
     clear_install_directory(install_dir, not args.no_clean, args.force_clean)
     write_package_marker(install_dir, build_dir, version, ("state=incomplete",))
@@ -1129,19 +765,6 @@ def main() -> int:
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb)
     copy_python_runtime(build_dir, install_dir)
-
-    # Resolve validator path
-    validator_path = resolve_project_path(args.validator) if args.validator else None
-    if not validator_path:
-        for c in [
-            build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-        ]:
-            if c.is_file():
-                validator_path = c
-                break
 
     if args.tools_package:
         ext_index = resolve_project_path(args.tools_index) if args.tools_index else None
@@ -1155,7 +778,7 @@ def main() -> int:
     if args.skip_dependencies:
         print("skip manifest dependencies")
     elif dependency_file.is_file():
-        copy_yaml_dependencies(build_dir, install_dir, dependency_file, args.config, args.allow_missing_dependencies)
+        copy_dependencies(build_dir, install_dir, dependency_file, args.config, args.allow_missing_dependencies)
     else:
         msg = f"dependency manifest was not found: {dependency_file}"
         if args.allow_missing_dependencies:
@@ -1174,37 +797,15 @@ def main() -> int:
         cleanup_release_debug_artifacts(install_dir)
         write_qt_conf(install_dir)
         write_windows_marker(install_dir, build_dir, arch, version, args.skip_dependencies)
-        validator_path = resolve_project_path(args.validator) if args.validator else None
-        if not validator_path:
-            for c in [
-                build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            ]:
-                if c.is_file():
-                    validator_path = c
-                    break
         if not args.skip_verify:
-            verify_package(install_dir, not args.skip_windeployqt, build_dir, validator=validator_path)
+            verify_package(install_dir, not args.skip_windeployqt, validator=validator_path)
         print(f"\npackage complete: {install_dir}")
         print(f"double-click to run: {packaged_exe}")
     else:
         write_qt_conf(install_dir)
         write_package_marker(install_dir, build_dir, version)
-        validator_path = resolve_project_path(args.validator) if args.validator else None
-        if not validator_path:
-            for c in [
-                build_dir / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                build_dir / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                REPO_ROOT / "build" / "bin" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-                REPO_ROOT / "build" / "bin" / "Release" / ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"),
-            ]:
-                if c.is_file():
-                    validator_path = c
-                    break
         if not args.skip_verify:
-            verify_package(install_dir, not args.skip_windeployqt, build_dir, validator=validator_path)
+            verify_package(install_dir, not args.skip_windeployqt, validator=validator_path)
         print(f"\npackage complete: {install_dir}")
 
     return 0

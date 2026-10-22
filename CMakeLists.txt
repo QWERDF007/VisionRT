@@ -158,6 +158,14 @@ if(BUILD_TESTING)
         "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
         --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}")
     visionrt_apply_test_environment(validator_cli_contract)
+    add_test(NAME package_app_contract COMMAND "${CMAKE_COMMAND}" -E env
+        "VISIONTOOLS_VALIDATOR=$<TARGET_FILE:visionrt_validate_tool>"
+        "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_package_app.py")
+    visionrt_apply_test_environment(package_app_contract)
+    add_test(NAME dependency_manifest_contract COMMAND "${CMAKE_COMMAND}" -E env
+        "CMAKE_COMMAND=${CMAKE_COMMAND}" "${Python3_EXECUTABLE}" -S
+        "${CMAKE_SOURCE_DIR}/tests/dependency_manifest_contract.py")
+    visionrt_apply_test_environment(dependency_manifest_contract)
     visionrt_contract(value_json_contract visionrt_core)
     visionrt_contract(project_editor_contract visionrt_core)
     visionrt_contract(project_storage_contract visionrt_core)

@@ -1316,7 +1316,7 @@ void packageDrivenCatalogAndRefreshContract()
         QFile brokenIndex(dirPath + "/tools-package/module_index.json");
         if (brokenIndex.open(QIODevice::WriteOnly))
         {
-            brokenIndex.write("unclosed_yaml: [invalid");
+            brokenIndex.write("{\"invalid\": [");
             brokenIndex.close();
         }
         app.rescanTools();
