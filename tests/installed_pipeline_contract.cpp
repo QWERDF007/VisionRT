@@ -11,6 +11,7 @@
 #include <QTemporaryDir>
 #include <opencv2/imgcodecs.hpp>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -123,8 +124,45 @@ def execute(inputs):
         names[0] += '中文'
     return dict(inputs, rect=[inputs['rois'][0]], __status_code=0, __status_message='')
 )");
+    ToolDefinition generated;
+    generated.id          = "test.installed.generated";
+    generated.displayName = "Python-owned padded image";
+    generated.kind        = ToolKind::PythonFunction;
+    generated.entry       = {"examples/ownership", "tool.py", "execute"};
+    generated.outputs     = {
+        {"images", "Images", {Type::Image}}
+    };
+    write(root / "tools/custom/generated.json", emitNormalizedToolJson(generated));
+    auto counter         = generated;
+    counter.id           = "test.installed.ownership_counter";
+    counter.entry.symbol = "counter";
+    counter.outputs      = {
+        {"allocated", "Allocated", {Type::Int}},
+        { "released",  "Released", {Type::Int}}
+    };
+    write(root / "tools/custom/ownership_counter.json", emitNormalizedToolJson(counter));
+    write(root / "python/custom/examples/ownership/tool.py", R"(
+import numpy as np
+import weakref
+allocated = 0
+released = 0
+
+def finalized():
+    global released
+    released += 1
+
+def execute(inputs):
+    global allocated
+    storage = np.arange(8 * 16, dtype=np.uint8)
+    allocated += 1
+    weakref.finalize(storage, finalized)
+    return {'images': [storage.reshape(8, 16)[:, 2:12]], '__status_code': 0, '__status_message': ''}
+
+def counter(inputs):
+    return {'allocated': allocated, 'released': released, '__status_code': 0, '__status_message': ''}
+)");
     const auto augmented = readToolsPackage(root);
-    require(augmented.tools.size() == published.tools.size() + 1 && !augmented.index.tools.contains(relay.id),
+    require(augmented.tools.size() == published.tools.size() + 3 && !augmented.index.tools.contains(relay.id),
             "Custom discovery required an index rebuild");
 
     for (int batch = 0; batch < 2; ++batch)
@@ -218,6 +256,64 @@ def execute(inputs):
         require((std::get<Array>(sizes->outputs.at("sizes")).get<NestedVector<std::int64_t, 2>>()
                     == NestedVector<std::int64_t, 2>{{8, 10}, {8, 10}}), "Builtin/custom same-name packages collided");
     }
+    auto probe = python.factory(*registry.find(counter.id))(PlatformToolServices{});
+    require(probe->initialize({}).code == 0, "Ownership probe initialization failed");
+    const auto released = [&]
+    {
+        const auto counts = probe->execute({});
+        require(counts.status.code == 0, "Ownership probe execution failed");
+        require(std::get<std::int64_t>(counts.outputs.at("allocated")) == 1, "Python allocation count differs");
+        return std::get<std::int64_t>(counts.outputs.at("released"));
+    };
+    cv::Mat retainedCrop;
+    {
+        ProjectEditor ownership;
+        const auto    ownershipFlow = ownership.project().flows.front().id;
+        const auto    parent        = ownership.addNode(ownershipFlow, *registry.find(generated.id), {0, 0});
+        const auto    child         = ownership.addNode(ownershipFlow, *registry.find("visionrt.image.crop"), {2, 0});
+        ownership.bindFreeInput(ownershipFlow, {parent, "images"}, {child, "images"});
+        ownership.setLiteral(ownershipFlow, child, "rect", DataRef<ROI>(ROI{{{2., 1., 2., 4., 3., 0.}}}));
+        ownership.setMode(ownershipFlow, child, "rect", BindingMode::Literal);
+        RuntimeEngine ownerRuntime(2);
+        require(ownerRuntime.start(ownership.project(), registry, RunMode::Once).code == 0,
+                "Python allocation pipeline start failed");
+        {
+            const auto  update      = finish(ownerRuntime);
+            const auto  original    = snapshot(update, parent);
+            const auto  cropped     = snapshot(update, child);
+            const auto &sourceImage = std::get<DataRef<Image>>(original->outputs.at("images")).get().at(0);
+            retainedCrop            = std::get<DataRef<Image>>(cropped->outputs.at("images")).get().at(0);
+            require(sourceImage.rows == 8 && sourceImage.cols == 10 && sourceImage.step[0] == 16,
+                    "Python padded image layout differs");
+            require(retainedCrop.rows == 3 && retainedCrop.cols == 4 && retainedCrop.step[0] == 16
+                        && retainedCrop.data == sourceImage.data + 33,
+                    "C++ crop copied or lost Python image stride");
+            require(released() == 0, "Python allocation released before parent deletion");
+            std::cout << "[OWNERSHIP] allocated=1 released=0 source=" << static_cast<const void *>(sourceImage.data)
+                      << " crop=" << static_cast<const void *>(retainedCrop.data) << " stride=" << retainedCrop.step[0]
+                      << " offset=" << retainedCrop.data - sourceImage.data << '\n';
+        }
+        const std::array<NodeId, 1> removed{parent};
+        require(ownership.removeNodes(ownershipFlow, removed), "Python parent deletion failed");
+        require(ownerRuntime.requestSynchronize(ownership.project(), registry).code == 0,
+                "Parent deletion synchronization failed");
+        finish(ownerRuntime);
+        require(released() == 0, "Deleting the Python parent released the live C++ crop");
+        std::cout << "[OWNERSHIP] parent_deleted released=0\n";
+        for (int row = 0; row < retainedCrop.rows; ++row)
+            for (int column = 0; column < retainedCrop.cols; ++column)
+                require(retainedCrop.at<unsigned char>(row, column) == 35 + row * 16 + column,
+                        "Cropped Python pixels differ after parent deletion");
+    }
+    require(released() == 0, "Runtime destruction released the externally retained crop");
+    std::cout << "[OWNERSHIP] runtime_destroyed released=0\n";
+    retainedCrop.release();
+    const auto releaseDeadline = std::chrono::steady_clock::now() + 5s;
+    while (released() == 0 && std::chrono::steady_clock::now() < releaseDeadline) std::this_thread::sleep_for(1ms);
+    require(released() == 1, "Last crop release did not finalize the Python allocation exactly once");
+    std::cout << "[OWNERSHIP] last_crop_released released=1\n";
+    require(probe->release().code == 0, "Ownership probe release failed");
+    std::cout << "Python allocation -> native cropped view -> parent deletion -> final owner release passed\n";
     std::cout << "Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed\n";
     return 0;
 }
