@@ -226,6 +226,7 @@ if(BUILD_TESTING)
             tests/workbench_parameters.cpp
             tests/workbench_parameter_states.cpp
             tests/workbench_canvas.cpp
+            tests/workbench_cancellation.cpp
             tests/workbench_startup.cpp
             tests/workbench_paths.cpp
             tests/workbench_popups.cpp
@@ -234,7 +235,7 @@ if(BUILD_TESTING)
         add_dependencies(workbench_contract test_plugin_module)
         set_tests_properties(workbench_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
         set_property(TEST workbench_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
-        foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse)
+        foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse cancellation)
             add_test(NAME workbench_${_scenario}_contract COMMAND workbench_contract --${_scenario}-child)
             visionrt_apply_test_environment(workbench_${_scenario}_contract)
             set_tests_properties(workbench_${_scenario}_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

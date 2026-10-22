@@ -37,6 +37,7 @@ void roiParameterContract();
 void pathEditorsContract();
 void flowCanvasContract();
 void startupProjectContract();
+void cancellationWindowContract();
 void popupSessionsContract();
 void outputCellReuseContract();
 void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, double scale);
@@ -1479,11 +1480,12 @@ void shortWindowContract()
 
 int main(int argc, char **argv)
 {
-    if (argc >= 2 && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
-                      || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"
-                      || std::string(argv[1]) == "--canvas-child" || std::string(argv[1]) == "--startup-child"
-                      || std::string(argv[1]) == "--catalog-child"
-                      || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"))
+    if (argc >= 2
+        && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
+            || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"
+            || std::string(argv[1]) == "--canvas-child" || std::string(argv[1]) == "--startup-child"
+            || std::string(argv[1]) == "--catalog-child" || std::string(argv[1]) == "--cancellation-child"
+            || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"))
     {
         QGuiApplication qt(argc, argv);
         try
@@ -1498,6 +1500,8 @@ int main(int argc, char **argv)
                 flowCanvasContract();
             else if (std::string(argv[1]) == "--startup-child")
                 startupProjectContract();
+            else if (std::string(argv[1]) == "--cancellation-child")
+                cancellationWindowContract();
             else if (std::string(argv[1]) == "--popups-child")
                 popupSessionsContract();
             else if (std::string(argv[1]) == "--output-reuse-child")

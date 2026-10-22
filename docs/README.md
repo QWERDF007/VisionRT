@@ -28,7 +28,7 @@
 | Python 实例适配与包加载 | [PythonRuntime](../src/python/PythonRuntime.h)、[包加载器](../src/python/managed_packages.py)、[适配器契约](../tests/python_adapter_contract.cpp)、[惰性包加载契约](../tests/python_loading_contract.cpp)、[真实发行消费契约](../tests/python_contract.cpp)、[独立安装跨语言链路与裁剪所有权](../tests/installed_pipeline_contract.cpp) |
 | Python 值桥接与生命周期 | [PythonInterop](../src/python/PythonInterop.h)、[图像存储桥接](../src/python/PythonImages.cpp)、[Python 对象保活](../src/python/PythonStorage.h)、[值契约](../tests/python_value_contract.cpp)、[解释器关闭契约](../tests/python_shutdown_contract.cpp) |
 | 执行状态、阶段与独立生命周期诊断 | [快照与诊断模型](../src/runtime/Snapshot.h)、[最终发布](../src/runtime/NodeRuntime.cpp)、[界面上下文与 JSON](../src/ui/Diagnostics.h)、[输出预览与捕获](../src/ui/OutputModel.h)、[真实模块及工作台契约](../tests/plugin_contract.cpp) |
-| 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |
+| 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[真实停止与关窗事件](../tests/workbench_cancellation.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |
 | 应用提示与诊断导出 | [统一诊断模型](../src/ui/Diagnostics.h)、[控制器诊断入口](../src/ui/AppControllerDiagnostics.cpp)、[文本对话框](../src/ui/qml/WorkbenchTextDialog.qml)、[真实窗口契约](../tests/workbench_startup.cpp) |
 | 画布避障与请求合流 | [路由器](../src/ui/WireRouter.h)、[画布](../src/ui/qml/FlowCanvas.qml)、[路由契约](../tests/wire_router_contract.cpp)、[真实窗口契约](../tests/workbench_canvas.cpp) |
 | 工作台结构与样式 | [主窗口](../src/ui/qml/Main.qml)、[主题](../src/ui/Theme.h)、[ui](../src/ui) |
