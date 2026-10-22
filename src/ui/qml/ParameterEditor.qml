@@ -331,9 +331,14 @@ ColumnLayout {
             font: root.editorFont
             implicitHeight: Theme.paramEditorHeight
             model: root.parameter.options
-            currentIndex: model.indexOf(root.valueText)
-            displayText: currentIndex < 0 ? root.valueText + "（当前不可用）" : currentText
-            onActivated: root.commit(currentText)
+            textRole: "label"
+            currentIndex: {
+                for (let index = 0; index < model.length; ++index)
+                    if (model[index].value === root.valueText) return index
+                return -1
+            }
+            displayText: currentIndex < 0 ? root.valueText + "（当前不可用）" : model[currentIndex].label
+            onActivated: function(index) { root.commit(model[index].value) }
             HoverHandler { id: choiceHover }
             QuiToolTip {
                 visible: choiceHover.hovered && text.length > 0 && choice.contentItem && choice.contentItem.truncated

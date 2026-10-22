@@ -20,28 +20,25 @@ Rectangle {
     color: "#ffffff"
     objectName: "flowNode_" + node.id
 
-    readonly property string nodeState: root.node.state || "gray"
-    readonly property bool isError: root.nodeState === "red" || root.node.missing === true
+    readonly property string nodeState: root.node.state || "idle"
+    readonly property bool isError: root.nodeState === "failed" || root.node.missing === true
     readonly property color statusDotColor: {
-        if (root.nodeState === "green") return Theme.nodeStateGreen
-        if (root.nodeState === "blue") return Theme.nodeStateBlue
-        if (root.nodeState === "red") return Theme.nodeStateRed
+        if (root.nodeState === "running") return Theme.nodeStateGreen
+        if (root.nodeState === "failed") return Theme.nodeStateRed
         return Theme.nodeStateGray
     }
     readonly property color headerBg: {
-        if (root.nodeState === "green") return Theme.nodeHeaderGreen
-        if (root.nodeState === "blue") return Theme.nodeHeaderBlue
-        if (root.nodeState === "red") return Theme.nodeHeaderRed
+        if (root.nodeState === "running") return Theme.nodeHeaderGreen
+        if (root.nodeState === "failed") return Theme.nodeHeaderRed
         return Theme.nodeHeaderGray
     }
     readonly property color headerText: {
-        if (root.nodeState === "green") return Theme.nodeHeaderTextGreen
-        if (root.nodeState === "blue") return Theme.nodeHeaderTextBlue
-        if (root.nodeState === "red") return Theme.nodeHeaderTextRed
+        if (root.nodeState === "running") return Theme.nodeHeaderTextGreen
+        if (root.nodeState === "failed") return Theme.nodeHeaderTextRed
         return Theme.nodeHeaderTextGray
     }
 
-    border.color: root.selected ? "transparent" : (root.isError ? Theme.nodeStateRed : (root.nodeState === "green" ? Theme.nodeStateGreen : "#c0c6cf"))
+    border.color: root.selected ? "transparent" : (root.isError ? Theme.nodeStateRed : (root.nodeState === "running" ? Theme.nodeStateGreen : "#c0c6cf"))
     border.width: root.selected ? 0 : 1
 
     function getIcon(title, category) {
@@ -90,7 +87,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignVCenter
             }
             QuiText {
-                visible: !root.node.defMissing && !root.node.implUnavailable && root.nodeState === "red"
+                visible: !root.node.defMissing && !root.node.implUnavailable && root.nodeState === "failed"
                 text: "执行错误"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
@@ -117,7 +114,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             iconSource: root.getIcon(root.node.title, root.node.category || "")
             iconSize: Theme.iconSizeBase
-            iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "green" ? Theme.nodeStateGreen : Theme.nodeStateBlue)
+            iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "running" ? Theme.nodeStateGreen : Theme.nodeStateGray)
             renderType: Text.QtRendering
         }
         ColumnLayout {

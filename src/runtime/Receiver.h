@@ -8,8 +8,8 @@
 namespace visionrt {
 struct ReceiveRequest
 {
-    std::string               flowName;
-    std::string               nodeName;
+    std::string               flowId;
+    std::string               nodeSequence;
     std::string               port;
     TypeSpec                  type;
     std::chrono::milliseconds timeout{1000};

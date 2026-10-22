@@ -24,6 +24,12 @@ std::filesystem::path path(const QString &value)
     return std::filesystem::u8path(utf8.constData(), utf8.constData() + utf8.size());
 }
 
+std::string utf8Path(const std::filesystem::path &value)
+{
+    const auto text = value.generic_u8string();
+    return {reinterpret_cast<const char *>(text.data()), text.size()};
+}
+
 void put(const QString &filename, const std::string &text)
 {
     QFile file(filename);
@@ -310,6 +316,8 @@ void typedArraysAndRanges(const QString &directory)
     document["flows"][0]["nodes"][0]["init_params"]                  = YAML::Node(YAML::NodeType::Map);
     document["flows"][0]["nodes"][0]["type_snapshot"]["init_params"] = YAML::Node(YAML::NodeType::Map);
     put(file, YAML::Dump(document));
+    document["flows"][0]["nodes"][0]["inputs"]["value"]["mode"] = "literal";
+    put(file, YAML::Dump(document));
     auto ranged = ProjectStorage(rangeRegistry).load(path(file));
     require(std::get<std::int64_t>(ranged.project.flows[0].nodes[0].inputs.at("value").literal) == 9007199254740993LL
                 && has(ranged.diagnostics, ProjectStorageCode::RangeWarning),
@@ -322,7 +330,7 @@ void saveAsPaths(const QString &directory)
     auto         tool = scalarTool("path_tool");
     tool.outputs.clear();
     tool.inputs.clear();
-    for (const auto &id : {"path", "text", "empty", "remote"})
+    for (const auto &id : {"path", "text", "empty", "remote", "absolute"})
     {
         PortDefinition port;
         port.id     = id;
@@ -331,6 +339,19 @@ void saveAsPaths(const QString &directory)
         port.editor = std::string(id) == "text" ? "text" : "file";
         tool.inputs.push_back(port);
     }
+    PortDefinition mode;
+    mode.id     = "mode";
+    mode.name   = "模式";
+    mode.type   = {Type::String};
+    mode.editor = "text";
+    tool.inputs.push_back(mode);
+    PortDefinition dynamic;
+    dynamic.id           = "dynamic";
+    dynamic.name         = "动态路径";
+    dynamic.type         = {Type::String};
+    dynamic.editor       = "path";
+    dynamic.pathModeFrom = "mode";
+    tool.inputs.push_back(dynamic);
     PortDefinition folder = tool.inputs[0];
     folder.id             = "folder";
     folder.editor         = "directory";
@@ -346,18 +367,23 @@ void saveAsPaths(const QString &directory)
     node.inputs["text"].literal   = Utf8("图像/不存在.png");
     node.inputs["empty"].literal  = Utf8("");
     node.inputs["remote"].literal = Utf8("Z:/异盘/资源.png");
+    node.inputs["dynamic"].literal  = Utf8("动态/图像.png");
     node.initParams["folder"]     = Utf8("目录");
+    const auto oldDirectory = directory + "/旧位置";
+    const auto newDirectory = directory + "/新位置";
+    const auto absolutePath = utf8Path(path(oldDirectory) / std::filesystem::path(u8"绝对.png"));
+    node.inputs["absolute"].literal = Utf8(absolutePath);
     for (const auto &port : tool.inputs) node.signatures.inputs.emplace(port.id, port.type);
     node.signatures.initParams.emplace(folder.id, folder.type);
     project.flows[0].nodes.push_back(node);
     project.nextNodeId      = 1;
-    const auto oldDirectory = directory + "/旧位置";
-    const auto newDirectory = directory + "/新位置";
     require(QDir().mkpath(oldDirectory) && QDir().mkpath(newDirectory), "cannot create save-as directories");
     storage.save(project, path(oldDirectory + "/首次"));
     require(project.path.extension() == ".vrt" && !project.dirty, "first save did not append extension or clear dirty");
     require(std::get<Utf8>(project.flows[0].nodes[0].inputs.at("path").literal).str() == "图像/不存在.png",
             "unnamed relative path was resolved using a fabricated old directory");
+    require(std::get<Utf8>(project.flows[0].nodes[0].inputs.at("absolute").literal).str() == absolutePath,
+            "unnamed project guessed a relative base for an absolute path");
     project.dirty = true;
     storage.save(project, path(newDirectory + "/另存.vrt"));
     const auto &saved = project.flows[0].nodes[0];
@@ -365,6 +391,8 @@ void saveAsPaths(const QString &directory)
             "hidden upstream literal path did not rebase");
     require(std::get<Utf8>(saved.initParams.at("folder")).str() == "../旧位置/目录",
             "directory init parameter did not rebase");
+    require(std::get<Utf8>(saved.inputs.at("dynamic").literal).str() == "../旧位置/动态/图像.png",
+            "dynamic path input did not rebase");
     require(std::get<Utf8>(saved.inputs.at("text").literal).str() == "图像/不存在.png"
                 && std::get<Utf8>(saved.inputs.at("empty").literal).str().empty(),
             "save-as rewrote non-path String or empty path");

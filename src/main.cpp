@@ -112,6 +112,7 @@ int main(int argc, char *argv[])
             QTimer::singleShot(delay,
                                [&engine, screenshotPath]()
                                {
+                                   int result = 1;
                                    const auto roots = engine.rootObjects();
                                    if (!roots.isEmpty())
                                    {
@@ -120,11 +121,10 @@ int main(int argc, char *argv[])
                                            QImage    img = window->grabWindow();
                                            QFileInfo fi(screenshotPath);
                                            QDir().mkpath(fi.absolutePath());
-                                           img.save(screenshotPath);
-                                           std::exit(0);
+                                           result = img.save(screenshotPath) ? 0 : 1;
                                        }
                                    }
-                                   std::exit(0);
+                                   QCoreApplication::exit(result);
                                });
         }
 

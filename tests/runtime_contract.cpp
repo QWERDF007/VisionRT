@@ -213,8 +213,9 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(snapshot(failed, 1)->status.code == -2);
     assert(std::get<std::int64_t>(snapshot(failed, 1)->outputs.at("__status_code")) == -2);
     assert(isMissing(snapshot(failed, 1)->outputs.at("value")));
-    assert(snapshot(failed, 2)->status.code == 0);
-    assert(std::get<std::int64_t>(snapshot(failed, 2)->outputs.at("value")) == -99);
+    assert(snapshot(failed, 2)->status.code == -2);
+    assert(isMissing(snapshot(failed, 2)->outputs.at("value")));
+    assert(snapshot(failed, 2)->status.message.find("端口值缺失") != std::string::npos);
     assert(snapshot(failed, 1)->round == snapshot(failed, 2)->round);
     assert(snapshot(failed, 1)->session == snapshot(failed, 2)->session);
 }
@@ -245,6 +246,7 @@ void initializationSuppressionRetryAndReset()
             return ToolStatus{9, "release diagnostic"};
         });
     auto observer = definition("test.observer", {"input"});
+    observer.inputs[0].defaultValue = std::int64_t{0};
     install(registry, observer,
             [&](const Values &)
             {
@@ -355,8 +357,8 @@ void receiverCapacityAndSessionIsolation(const std::filesystem::path &toolsRoot)
     assert(receive);
     auto receiver       = node(2, *receive);
     receiver.initParams = {
-        {"source_flow_name",       Utf8("sender")},
-        {"source_node_name", Utf8(sender.title())},
+        {"source_flow_id",       Utf8("sender")},
+        {"source_node_seq", Utf8(std::to_string(sender.id))},
         {  "source_port_id",        Utf8("value")},
         {      "timeout_ms",     std::int64_t{50}}
     };
@@ -410,7 +412,7 @@ void receiverConsumesFailures()
     auto sender   = node(1, source);
     auto consumer = definition("test.cursor");
     registry.registerCpp(consumer.registryName, consumer,
-                         [name = sender.title()](const PlatformToolServices &services)
+                         [name = std::to_string(sender.id)](const PlatformToolServices &services)
                          {
                              auto instance = std::make_unique<Function>();
                              instance->run = [reader = services.results, name](const Values &)
@@ -710,8 +712,8 @@ void hostBindingReceiverContract()
     recvDef.kind         = ToolKind::CppClass;
     recvDef.registryName = "test.custom.receiver";
     recvDef.initParams   = {
-        {"source_flow_name", "源流程", {Type::String},          Utf8{""}},
-        {"source_node_name", "源节点", {Type::String},          Utf8{""}},
+        {"source_flow_id", "源流程", {Type::String},          Utf8{""}},
+        {"source_node_seq", "源节点", {Type::String},          Utf8{""}},
         {  "source_port_id", "源端口", {Type::String},          Utf8{""}},
         {      "timeout_ms",   "超时",    {Type::Int}, std::int64_t{500}}
     };
@@ -789,8 +791,8 @@ void hostBindingReceiverContract()
     auto senderNode         = node(1, source);
     auto receiverNode       = node(2, *registry.find("test.custom.receiver"));
     receiverNode.initParams = {
-        {"source_flow_name",      Utf8("sender_flow")},
-        {"source_node_name", Utf8(senderNode.title())},
+        {"source_flow_id",      Utf8("sender_flow")},
+        {"source_node_seq", Utf8(std::to_string(senderNode.id))},
         {  "source_port_id",            Utf8("value")},
         {      "timeout_ms",        std::int64_t{500}}
     };
@@ -833,8 +835,8 @@ void hostBindingReceiverContract()
     auto strSenderNode         = node(1, strSource);
     auto strReceiverNode       = node(2, *strRegistry.find("test.str.receiver"));
     strReceiverNode.initParams = {
-        {"source_flow_name",     Utf8("flow_str_sender")},
-        {"source_node_name", Utf8(strSenderNode.title())},
+        {"source_flow_id",     Utf8("flow_str_sender")},
+        {"source_node_seq", Utf8(std::to_string(strSenderNode.id))},
         {  "source_port_id",               Utf8("value")},
         {      "timeout_ms",           std::int64_t{500}}
     };
@@ -896,8 +898,8 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         const auto sender = editor.addNode(sourceFlow, source, {});
         const auto receiver = editor.addNode("flow_1", *registry.find("visionrt.flow.receive"), {});
         assert(!engine.start(editor.project(), registry, RunMode::Once));
-        editor.setInitParam("flow_1", receiver, "source_flow_name", Utf8("source"));
-        editor.setInitParam("flow_1", receiver, "source_node_name", Utf8(source.displayName + "-" + std::to_string(sender)));
+        editor.setInitParam("flow_1", receiver, "source_flow_id", Utf8(sourceFlow));
+        editor.setInitParam("flow_1", receiver, "source_node_seq", Utf8(std::to_string(sender)));
         editor.setInitParam("flow_1", receiver, "source_port_id", Utf8("value"));
         editor.setInitParam("flow_1", receiver, "timeout_ms", std::int64_t{1000});
         ProjectStorage storage(registry);
@@ -937,8 +939,180 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
     std::cout << "Single receiver executed " << cases.size() << " concrete type contracts after save/reopen\n";
 }
 
+void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
+{
+    ToolRegistry registry;
+    registry.registerPackage(readToolsPackage(toolsRoot));
+    registerReceiveTools(registry);
+    auto source = definition("test.waiting_sender");
+    install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{1}}}}; });
+    auto sender = node(1, source);
+    auto typed = *registry.find("visionrt.flow.receive");
+    for (auto &port : typed.outputs)
+        if (port.typeFrom)
+        {
+            port.type = {Type::Int};
+            port.typeFrom.reset();
+        }
+    registry.replaceDefinition(typed);
+    auto receiver = node(2, typed);
+    receiver.signatures.outputs.emplace("value", TypeSpec{Type::Int});
+    receiver.initParams = {
+        {"source_flow_id",       Utf8("sender")},
+        {"source_node_seq", Utf8(std::to_string(sender.id))},
+        {  "source_port_id",        Utf8("value")},
+        {      "timeout_ms", std::int64_t{10000}}
+    };
+    ProjectDefinition project;
+    project.flows = {
+        {  "sender",   "sender", false,   {sender}},
+        {"receiver", "receiver",  true, {receiver}}
+    };
+    enum class Termination { Stop, Reset, Destruction };
+    for (const auto termination : {Termination::Stop, Termination::Reset, Termination::Destruction})
+    {
+        auto engine = std::make_unique<RuntimeEngine>(2);
+        assert(engine->start(project, registry, RunMode::Loop));
+        bool waiting = false;
+        for (int attempt = 0; attempt < 100 && !waiting; ++attempt)
+        {
+            const auto update = engine->pollLatest();
+            for (const auto &item : update.nodes)
+                waiting = item.node == 2 && item.active;
+            if (!waiting)
+                std::this_thread::sleep_for(10ms);
+        }
+        assert(waiting);
+        const auto started = std::chrono::steady_clock::now();
+        if (termination == Termination::Destruction)
+            engine.reset();
+        else
+        {
+            if (termination == Termination::Reset)
+                assert(engine->requestReset());
+            else
+                engine->requestStop();
+            const auto result = finish(*engine);
+            if (termination == Termination::Reset)
+                assert(result.generation == 2 && !snapshot(result, 2));
+            else
+            {
+                const auto cancelled = snapshot(result, 2);
+                assert(cancelled && cancelled->status.code == kCancelledStatus);
+                assert(cancelled->status.message == "运行已取消");
+            }
+        }
+        const auto elapsed = std::chrono::steady_clock::now() - started;
+        assert(elapsed < 1s);
+    }
+    std::cout << "Stop, reset and destruction wake receiver waits\n";
+}
+
+void singleNodeUpstreamValidity()
+{
+    RuntimeEngine engine(2);
+    ToolRegistry  registry;
+    int           executions[3] = {0, 0, 0};
+    auto          first = definition("test.chain.first");
+    install(registry, first,
+            [&](const Values &)
+            {
+                ++executions[0];
+                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+            });
+    auto middle = definition("test.chain.middle", {"input"});
+    install(registry, middle,
+            [&](const Values &in)
+            {
+                ++executions[1];
+                return ToolResult{{}, {{"value", std::get<std::int64_t>(in.at("input")) + 1}}};
+            });
+    auto last = definition("test.chain.last", {"input"});
+    install(registry, last,
+            [&](const Values &in)
+            {
+                ++executions[2];
+                return ToolResult{{}, {{"value", std::get<std::int64_t>(in.at("input")) + 1}}};
+            });
+    auto a = node(1, first), b = node(2, middle), c = node(3, last);
+    bind(b, "input", 1);
+    bind(c, "input", 2);
+    ProjectDefinition project;
+    project.flows.front().nodes = {a, b, c};
+    assert(engine.start(project, registry, RunMode::Once));
+    finish(engine);
+    assert(executions[0] == 1 && executions[1] == 1 && executions[2] == 1);
+
+    project.flows.front().nodes[0].executionRevision = 1;
+    const auto rejected = engine.start(project, registry, RunMode::Node, 3);
+    assert(!rejected && rejected.message.find("参数已修改") != std::string::npos);
+    const auto rejectedMiddle = engine.start(project, registry, RunMode::Node, 2);
+    assert(!rejectedMiddle && rejectedMiddle.message.find("参数已修改") != std::string::npos);
+    assert(executions[1] == 1 && executions[2] == 1);
+
+    assert(engine.start(project, registry, RunMode::Node, 1));
+    finish(engine);
+    assert(executions[0] == 2);
+    assert(engine.start(project, registry, RunMode::Node, 2));
+    finish(engine);
+    assert(executions[1] == 2);
+    assert(engine.start(project, registry, RunMode::Node, 3));
+    finish(engine);
+    assert(executions[2] == 2);
+
+    project.flows.front().nodes[0].executionRevision = 2;
+    assert(engine.start(project, registry, RunMode::Node, 1));
+    finish(engine);
+    assert(executions[0] == 3);
+    const auto staleMiddle = engine.start(project, registry, RunMode::Node, 3);
+    assert(!staleMiddle && staleMiddle.message.find("已重新运行") != std::string::npos);
+    assert(executions[2] == 2);
+    assert(engine.start(project, registry, RunMode::Node, 2));
+    finish(engine);
+    assert(engine.start(project, registry, RunMode::Node, 3));
+    finish(engine);
+    assert(executions[2] == 3);
+
+    project.flows.front().nodes[1].alias = "重命名不影响结果";
+    project.flows.front().nodes[1].position = {4, 5};
+    assert(engine.start(project, registry, RunMode::Node, 3));
+    finish(engine);
+    assert(executions[2] == 4);
+    std::cout << "Single-node execution rejects stale upstream publications and ignores layout changes\n";
+}
+
+void diagnosticIdentityAndTruncation()
+{
+    RuntimeEngine engine(1);
+    engine.injectDiagnosticForTest("同文本");
+    engine.injectDiagnosticForTest("同文本");
+    const auto first = engine.pollLatest();
+    assert(first.diagnostics.size() == 2);
+    assert(first.diagnostics[0].generation == first.generation);
+    assert(first.diagnostics[0].sequence < first.diagnostics[1].sequence);
+    assert(first.diagnostics[0].message == "同文本" && first.diagnostics[1].message == "同文本");
+    assert(first.droppedDiagnostics == 0);
+    const auto unchanged = engine.pollLatest();
+    assert(unchanged.diagnostics.empty() && unchanged.droppedDiagnostics == 0);
+
+    for (int i = 0; i < 101; ++i)
+        engine.injectDiagnosticForTest("事件 " + std::to_string(i));
+    const auto truncated = engine.pollLatest();
+    assert(truncated.droppedDiagnostics == 3);
+    assert(truncated.diagnostics.size() == 100);
+    assert(truncated.diagnostics.front().sequence == 4);
+    assert(truncated.diagnostics.back().sequence == 103);
+    const auto drained = engine.pollLatest();
+    assert(drained.diagnostics.empty() && drained.droppedDiagnostics == 0);
+    std::cout << "Diagnostic events are incremental, identity-stable and truncation-aware\n";
+}
+
 int main(int argc, char **argv)
 {
+    assert(argc == 2);
+    diagnosticIdentityAndTruncation();
+    singleNodeUpstreamValidity();
+    stopWakesReceiverWait(argv[1]);
     branchesOverlapAndJoin();
     failureReplacesOldValueAndManualUsesCache();
     initializationSuppressionRetryAndReset();

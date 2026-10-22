@@ -22,6 +22,7 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
             nodes.push_back({id, value.value("rectangle").toRectF()});
         }
         QVariantList result;
+        std::set<std::string> currentErrors;
         for (const auto &wire : impl_->wireRouter.route(nodes, portRelations(*flow).active))
         {
             QVariantList points;
@@ -31,11 +32,20 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
             for (const auto &relation : wire.ports)
                 ports.push_back(QVariantMap{{"output", workbench::q(relation.source.port)},
                                              {"input", workbench::q(relation.target.port)}});
+            if (!wire.error.empty())
+            {
+                const auto key = wire.error + ":" + std::to_string(wire.source) + ":" + std::to_string(wire.target);
+                currentErrors.insert(key);
+                if (!impl_->routingErrors.contains(key))
+                    impl_->report(workbench::q(wire.error));
+            }
             result.push_back(QVariantMap{{"source", QString::number(wire.source)},
                                          {"target", QString::number(wire.target)},
                                          {"count", static_cast<int>(wire.ports.size())},
-                                         {"ports", ports}, {"points", points}});
+                                         {"ports", ports}, {"points", points},
+                                         {"error", workbench::q(wire.error)}});
         }
+        impl_->routingErrors = std::move(currentErrors);
         return result;
     }
     catch (const std::exception &error)

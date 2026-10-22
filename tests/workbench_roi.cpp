@@ -796,8 +796,8 @@ void roiParameterContract()
     const auto afterDeletion = colorAt(renderedFrame(), {20, 15});
     require(afterDeletion.red() < 10 && afterDeletion.green() < 10 && afterDeletion.blue() < 10,
             "Deleting a rectangle left its old handle on the image");
-    require(rectLiteral() == missingRectangle && app.dirty() && output("__status_code") == "Missing" && !app.busy(),
-            "Rectangle preview executed the tool or wrote its temporary geometry to the project");
+    require(rectLiteral() == missingRectangle && app.dirty() && output("__status_code") == "0" && !app.busy(),
+            "Rectangle preview executed the tool or replaced the last successful publication");
     require(app.save(project) && !app.dirty(), "Save after delete");
     app.endRoiPreview();
     require(!viewport.editing() && viewport.selectedRoi() == -1 && viewport.drawShape() == 0
@@ -809,8 +809,8 @@ void roiParameterContract()
             "Unchanged Missing rectangle could not apply without drawing");
     require(!viewport.editing() && viewport.selectedRoi() == -1 && viewport.drawShape() == 0
                 && app.roiEditor().isEmpty() && rectLiteral() == missingRectangle && !app.dirty()
-                && output("__status_code") == "Missing" && !app.busy(),
-            "Applying an unchanged Missing rectangle retained drawing mode, executed or changed the project");
+                && output("__status_code") == "0" && !app.busy(),
+            "Applying an unchanged Missing rectangle retained drawing mode, executed or replaced the publication");
     require(app.editRoi("rect", false), "Rectangle could not reopen for window deactivation");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Window deactivation editor did not present its background");

@@ -24,6 +24,7 @@ class AppController : public QObject
     Q_PROPERTY(QString currentFlow READ currentFlow WRITE selectFlow NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedNode READ selectedNode NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList parameters READ parameters NOTIFY parametersChanged)
+    Q_PROPERTY(QVariantList parameterTabs READ parameterTabs CONSTANT)
     Q_PROPERTY(QVariantList imageOutputs READ imageOutputs NOTIFY resultsChanged)
     Q_PROPERTY(QVariantMap roiEditor READ roiEditor NOTIFY resultsChanged)
     Q_PROPERTY(QString activeRoiParameter READ activeRoiParameter NOTIFY resultsChanged)
@@ -36,6 +37,7 @@ class AppController : public QObject
     Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
     Q_PROPERTY(QString timingText READ timingText NOTIFY runtimeChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY projectChanged)
+    Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
     Q_PROPERTY(QString aboutText READ aboutText CONSTANT)
 public:
     AppController(std::size_t workers, const QString &applicationDirectory, QObject *parent = nullptr);
@@ -51,6 +53,7 @@ public:
     QString             currentFlow() const;
     QString             selectedNode() const;
     QVariantList        parameters() const;
+    QVariantList        parameterTabs() const;
     QVariantList        imageOutputs() const;
     QVariantMap         roiEditor() const;
     QString             activeRoiParameter() const;
@@ -63,6 +66,7 @@ public:
     QVariantList        searchResults() const;
     QString             timingText() const;
     bool                dirty() const;
+    bool                canPaste() const;
     QString             aboutText() const;
     PythonRuntime      *pythonRuntime() const;
 
@@ -138,6 +142,7 @@ signals:
     void nodeLocated(const QString &node);
     void outputTextReady(const QString &text);
     void catalogChanged();
+    void pasteChanged();
 
 private:
     struct Impl;

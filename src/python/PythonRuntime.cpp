@@ -100,10 +100,14 @@ bool isBusinessOutput(const PortDefinition &output)
     return output.id != "__status_code" && output.id != "__status_message";
 }
 
-ToolStatus errorStatus(const ToolDefinition &definition, std::int64_t code, const char *phase,
-                       const std::string &detail)
+ToolStatus errorStatus(const ToolDefinition &, std::int64_t code, const char *phase, const std::string &detail)
 {
-    return {code, "tool " + definition.id + " / " + phase + ": " + detail};
+    const std::string_view value = phase ? phase : "";
+    const char *summary = value == "initialize" ? "Python 初始化异常"
+                        : value == "release"    ? "Python 释放异常"
+                        : value == "import"     ? "Python 加载异常"
+                                                : "Python 执行异常";
+    return {code, std::string(summary) + "；技术详情：" + detail};
 }
 
 py::dict inputDictionary(const Values &values, const std::vector<PortDefinition> &declarations,
@@ -117,7 +121,7 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
         if (definition != declarations.end())
         {
             validateValue(definition->type, value);
-            if ((definition->editor == "file" || definition->editor == "directory")
+            if (isPathPort(*definition)
                 && std::holds_alternative<Utf8>(value) && !std::get<Utf8>(value).str().empty())
             {
                 const auto resolved = services.paths.resolve(std::get<Utf8>(value).str()).u8string();
@@ -133,19 +137,19 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
 ToolStatus parseStatus(const py::dict &result)
 {
     if (!result.contains("__status_code") || !result.contains("__status_message"))
-        throw ContractError("Tool return requires __status_code and __status_message");
+        throw ContractError("工具返回值必须包含 __status_code 与 __status_message");
     ToolStatus status;
     status.code    = std::get<std::int64_t>(fromPython({Type::Int}, result["__status_code"]));
     status.message = std::get<Utf8>(fromPython({Type::String}, result["__status_message"])).str();
     if (status.code < 0)
-        throw ContractError("Negative status codes are reserved for framework errors");
+        throw ContractError("工具不得返回负状态码，负状态码由宿主框架保留");
     return status;
 }
 
 py::dict resultDictionary(py::handle result)
 {
     if (!py::isinstance<py::dict>(result))
-        throw ContractError("Tool return must be a dict");
+        throw ContractError("工具返回值必须是字典");
     return py::reinterpret_borrow<py::dict>(result);
 }
 
@@ -154,7 +158,7 @@ ToolStatus lifecycleStatus(py::handle returned)
     auto result = resultDictionary(returned);
     auto status = parseStatus(result);
     if (result.size() != 2)
-        throw ContractError("initialize/release may return only the two status keys");
+        throw ContractError("initialize/release 只能返回两个状态键");
     return status;
 }
 
@@ -316,18 +320,18 @@ public:
             auto       dictionary = resultDictionary(returned);
             result.status         = parseStatus(dictionary);
             if (dictionary.size() != businessOutputCount_ + 2)
-                throw ContractError("Output keys must exactly match all declared ports and the two status keys");
+                throw ContractError("输出键必须与声明端口及两个状态键完全一致");
             for (const auto &output : definition_.outputs)
             {
                 if (!isBusinessOutput(output))
                     continue;
                 if (!dictionary.contains(py::str(output.id)))
-                    throw ContractError("Missing declared output key: " + output.id);
+                    throw ContractError("缺少声明的输出键：" + output.id);
                 try
                 {
                     auto value = fromPython(output.type, dictionary[py::str(output.id)]);
                     if (result.status && isMissing(value))
-                        throw ContractError("Successful output cannot be Missing");
+                        throw ContractError("成功输出不能为 Missing");
                     result.outputs.emplace(output.id, std::move(value));
                 }
                 catch (const std::exception &error)

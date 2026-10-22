@@ -763,19 +763,33 @@ bool ProjectEditor::moveNodes(std::string_view flowId, std::span<const NodeId> n
     return true;
 }
 
-std::map<NodeId, NodeId> ProjectEditor::copyNodes(std::string_view sourceFlow, std::span<const NodeId> nodes,
-                                                  std::string_view targetFlow, GridPoint preferredOffset)
+CopiedSelection ProjectEditor::copySelection(std::string_view flowId, std::span<const NodeId> nodes) const
 {
     requireIdle();
+    CopiedSelection result;
+    for (const auto *node : selection(flow(flowId), nodes)) result.nodes.push_back(*node);
+    return result;
+}
+
+std::map<NodeId, NodeId> ProjectEditor::pasteSelection(std::string_view targetFlow,
+                                                       const CopiedSelection &selection,
+                                                       GridPoint preferredOffset)
+{
+    requireIdle();
+    if (selection.nodes.empty())
+        throw ContractError("No copied nodes to paste");
     ProjectEditor edit(project_);
-    const auto selected = selection(flow(sourceFlow), nodes);
-    auto      &target   = edit.flow(targetFlow);
-    if (selected.empty())
-        return {};
+    auto         &target = edit.flow(targetFlow);
     requireIncrement(target.structureRevision);
-    std::vector<GridPoint> points;
-    points.reserve(selected.size());
-    for (const auto *node : selected) points.push_back(node->position);
+    std::vector<const NodeDefinition *> selected;
+    std::vector<GridPoint>              points;
+    selected.reserve(selection.nodes.size());
+    points.reserve(selection.nodes.size());
+    for (const auto &node : selection.nodes)
+    {
+        selected.push_back(&node);
+        points.push_back(node.position);
+    }
     const auto [dx, dy] = nearestTranslation(points, target, preferredOffset);
     auto copied         = duplicateNodes(selected, project_.nextNodeId, dx, dy);
     target.nodes.reserve(target.nodes.size() + copied.nodes.size());
@@ -783,7 +797,7 @@ std::map<NodeId, NodeId> ProjectEditor::copyNodes(std::string_view sourceFlow, s
     edit.project_.nextNodeId += copied.nodes.size();
     ++target.structureRevision;
     commit(std::move(edit.project_));
-    return std::move(copied.mapping);
+    return copied.mapping;
 }
 
 bool ProjectEditor::setAlias(std::string_view flowId, NodeId id, std::string alias)

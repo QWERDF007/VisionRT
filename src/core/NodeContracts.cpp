@@ -1,5 +1,7 @@
 #include "core/NodeContracts.h"
 
+#include <algorithm>
+#include <charconv>
 #include <functional>
 #include <limits>
 #include <set>
@@ -71,40 +73,45 @@ void resolveOutputTypes(ProjectDefinition &project)
             const auto *text = value == node.initParams.end() ? nullptr : std::get_if<Utf8>(&value->second);
             return text ? text->str() : std::string{};
         };
-        const auto flowName = parameter(reference->second.flowParameter);
-        const auto nodeName = parameter(reference->second.nodeParameter);
+        const auto flowId     = parameter(reference->second.flowParameter);
+        const auto nodeSeq    = parameter(reference->second.nodeParameter);
         const auto sourcePort = parameter(reference->second.portParameter);
         std::optional<TypeSpec> type;
-        if (flowName.empty() || nodeName.empty() || sourcePort.empty())
-            fail("Source flow, node and output port must be selected");
+        if (flowId.empty() || nodeSeq.empty() || sourcePort.empty())
+            fail("需要选择源流程、源节点和输出端口");
+        else if (!std::all_of(nodeSeq.begin(), nodeSeq.end(), [](char c) { return c >= '0' && c <= '9'; }))
+            fail("源节点序号必须是无符号十进制文本：" + nodeSeq);
         else
         {
+            std::uint64_t sourceNode = 0;
+            const auto    parsed     = std::from_chars(nodeSeq.data(), nodeSeq.data() + nodeSeq.size(), sourceNode);
             const FlowDefinition *sourceFlow = nullptr;
-            bool ambiguous = false;
             for (const auto &flow : project.flows)
-                if (flow.name == flowName)
+                if (flow.id == flowId)
                 {
-                    ambiguous |= sourceFlow != nullptr;
                     sourceFlow = &flow;
+                    break;
                 }
-            if (!sourceFlow || ambiguous || sourceFlow == resolution.flow)
-                fail("Source flow is missing, ambiguous or is the receiving flow: " + flowName);
+            if (parsed.ec != std::errc{} || parsed.ptr != nodeSeq.data() + nodeSeq.size())
+                fail("源节点序号超出 uint64 范围：" + nodeSeq);
+            else if (!sourceFlow || sourceFlow == resolution.flow)
+                fail("源流程不存在或就是接收流程：" + flowId);
             else
             {
                 const NodeDefinition *source = nullptr;
                 for (const auto &candidate : sourceFlow->nodes)
-                    if (candidate.title() == nodeName)
+                    if (candidate.id == sourceNode)
                     {
-                        ambiguous |= source != nullptr;
                         source = &candidate;
+                        break;
                     }
-                if (!source || ambiguous)
-                    fail("Source node is missing or ambiguous: " + nodeName);
+                if (!source)
+                    fail("源节点不存在：" + flowId + "/" + nodeSeq);
                 else
                 {
                     type = resolve(*source, sourcePort);
                     if (!type)
-                        fail("Source output is missing or its type cannot be resolved: " + nodeName + "." + sourcePort);
+                        fail("源输出端口不存在或类型无法解析：" + nodeSeq + "." + sourcePort);
                 }
             }
         }

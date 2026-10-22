@@ -3,6 +3,7 @@
 
 #include "core/ToolRegistry.h"
 
+#include <visionrt/contracts/Contract.h>
 #include <visionrt/contracts/ValueYaml.h>
 
 #include <QFile>
@@ -97,17 +98,15 @@ void diagnose(ProjectLoadResult &result, ProjectStorageCode code, const FlowDefi
 void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const NodeDefinition &node,
                   const PortDefinition &port, const PortValue &value)
 {
-    const auto outside = [&]<typename T>(const T *number)
+    try
     {
-        if (!number)
-            return false;
-        const auto *minimum = port.minimum ? std::get_if<T>(&*port.minimum) : nullptr;
-        const auto *maximum = port.maximum ? std::get_if<T>(&*port.maximum) : nullptr;
-        return (minimum && *number < *minimum) || (maximum && *number > *maximum);
-    };
-    if (outside(std::get_if<std::int64_t>(&value)) || outside(std::get_if<double>(&value)))
+        validateToolValues({portContractFromDefinition(port)}, {{port.id, value}}, false);
+    }
+    catch (const ContractError &error)
+    {
         diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.id,
-                 "Saved value is outside the current editor range; the value was retained");
+                 "保存的值不符合当前约束，已保留原值：" + std::string(error.what()));
+    }
 }
 
 PortValue defaultValue(const PortDefinition &port)
@@ -185,7 +184,8 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
                      "Missing or incompatible input was reset; its old source was cleared", true);
         }
-        rangeWarning(result, flow, node, port, binding.literal);
+        if (binding.mode == BindingMode::Literal || !binding.source)
+            rangeWarning(result, flow, node, port, binding.literal);
         inputs.emplace(port.id, std::move(binding));
     }
     for (const auto &[id, binding] : node.inputs)
@@ -546,7 +546,7 @@ YAML::Node encodeProject(const ProjectDefinition &project)
 void rewritePath(PortValue &value, const PortDefinition &port, const std::filesystem::path &oldDirectory,
                  const std::filesystem::path &newDirectory)
 {
-    if (port.type.type != Type::String || (port.editor != "file" && port.editor != "directory"))
+    if (!isPathPort(port))
         return;
     auto *string = std::get_if<Utf8>(&value);
     if (!string || string->str().empty())
@@ -653,7 +653,7 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
     const auto oldDirectory = project.path.empty()
                                 ? std::filesystem::path{}
                                 : std::filesystem::absolute(project.path).lexically_normal().parent_path();
-    if (project.path.empty() || target != std::filesystem::absolute(project.path).lexically_normal())
+    if (!project.path.empty() && target != std::filesystem::absolute(project.path).lexically_normal())
     {
         for (auto &flow : candidate.flows)
         {

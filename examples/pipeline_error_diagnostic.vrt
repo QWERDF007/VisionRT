@@ -27,6 +27,8 @@ flows:
           type: String
         limit:
           type: Int
+        max_batch_bytes:
+          type: Int
       outputs:
         images:
           type: ImageBatch
@@ -45,6 +47,9 @@ flows:
         mode: literal
         literal: bgr
       limit:
+        mode: literal
+        literal: 0
+      max_batch_bytes:
         mode: literal
         literal: 0
   - node_seq: 2

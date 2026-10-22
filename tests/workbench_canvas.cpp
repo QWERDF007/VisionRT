@@ -306,7 +306,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     app.toggleLoop();
     const bool runningVisible = QTest::qWaitFor([&]
     {
-        return nodeMap(id).value("state").toString() == QStringLiteral("blue")
+        return nodeMap(id).value("state").toString() == QStringLiteral("running")
             && nodeMap(id).value("timingText").toString() == QStringLiteral("运行中")
             && texts().contains(QStringLiteral("运行中"));
     }, 3000);
@@ -502,12 +502,12 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(QTest::qWaitFor([&]
     {
         return canvas->property("hoverCardVisible").toBool()
-            && nodeMap(remainingId).value("state").toString() == QStringLiteral("gray")
-            && texts().contains(QStringLiteral("未运行"));
-    }, 1000), "visible hover card retained measurements from an invalidated execution revision");
+            && nodeMap(remainingId).value("state").toString() == QStringLiteral("idle")
+            && nodeMap(remainingId).value("timingText").toString() == QStringLiteral("未运行");
+    }, 1000), "visible hover card fabricated an execution result before the first run");
     app.runNode();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "long-name rendering fixture did not execute");
-    require(nodeMap(remainingId).value("state").toString() == "green"
+    require(nodeMap(remainingId).value("state").toString() == "succeeded"
                 && nodeMap(remainingId).value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "long-name rendering fixture has no successful measured execution");
     canvas->setProperty("zoom", 3.0);

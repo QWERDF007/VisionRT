@@ -35,6 +35,14 @@ struct PortRelations
 
 PortRelations portRelations(const FlowDefinition &flow);
 
+// Immutable node configuration captured at copy time. It holds no snapshot,
+// runtime instance, image output or source identity, so later source edits or
+// deletion cannot change a paste.
+struct CopiedSelection
+{
+    std::vector<NodeDefinition> nodes;
+};
+
 // GUI-thread owned. Rejected commands throw ContractError without changing configuration.
 // Successful bool commands return whether persistent configuration actually changed.
 class ProjectEditor
@@ -76,8 +84,9 @@ public:
     NodeId                   addNode(std::string_view flowId, const ToolDefinition &tool, GridPoint preferred);
     bool                     removeNodes(std::string_view flowId, std::span<const NodeId> nodes);
     bool                     moveNodes(std::string_view flowId, std::span<const NodeId> nodes, GridPoint delta);
-    std::map<NodeId, NodeId> copyNodes(std::string_view sourceFlow, std::span<const NodeId> nodes,
-                                       std::string_view targetFlow, GridPoint preferredOffset);
+    CopiedSelection          copySelection(std::string_view flowId, std::span<const NodeId> nodes) const;
+    std::map<NodeId, NodeId> pasteSelection(std::string_view targetFlow, const CopiedSelection &selection,
+                                            GridPoint preferredOffset);
     bool                     setAlias(std::string_view flowId, NodeId node, std::string alias);
 
     bool setBinding(std::string_view flowId, NodeId node, std::string_view input, InputBinding binding);

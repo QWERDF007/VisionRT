@@ -23,6 +23,28 @@ const ImageBatch *images(const ResultSlot::Snapshot &snapshot, const std::string
 }
 } // namespace
 
+ResultSlot::Snapshot AppController::Impl::displaySnapshot(const NodeDefinition &node) const
+{
+    const auto found = snapshots.find(node.id);
+    if (found == snapshots.end())
+        return {};
+    const auto &snapshot = found->second;
+    if (snapshot->toolId != node.toolId)
+        return {};
+    for (const auto &[port, value] : snapshot->outputs)
+    {
+        const auto declaration = node.signatures.outputs.find(port);
+        if (declaration == node.signatures.outputs.end())
+            return {};
+        if (isMissing(value))
+            continue;
+        const auto actual = typeOf(value);
+        if (!actual || !compatible(*actual, declaration->second))
+            return {};
+    }
+    return snapshot;
+}
+
 void AppController::Impl::updateResults()
 {
     const auto *node = currentNode();
@@ -35,9 +57,7 @@ void AppController::Impl::updateResults()
     }
     else
     {
-        const auto found    = snapshots.find(node->id);
-        const auto snapshot = found == snapshots.end() || found->second->executionRevision != node->executionRevision
-            ? ResultSlot::Snapshot{} : found->second;
+        const auto snapshot = displaySnapshot(*node);
         std::map<std::string, std::size_t, std::less<>> references;
         if (const auto *current = currentFlow())
             for (const auto &relation : portRelations(*current).active)
@@ -86,11 +106,7 @@ void AppController::Impl::updateDisplay()
     displayRoiTarget.reset();
     int selectedIndex = index;
     if (const auto *node = currentNode())
-    {
-        const auto found = snapshots.find(node->id);
-        if (found != snapshots.end() && found->second->executionRevision == node->executionRevision)
-            snapshot = found->second;
-    }
+        snapshot = displaySnapshot(*node);
     std::string fallbackInputPort;
     if (!roi)
     {

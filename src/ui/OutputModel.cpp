@@ -78,7 +78,9 @@ QString preview(const PortValue &value, const TypeSpec &type, qsizetype limit)
         {
             using T = std::decay_t<decltype(item)>;
             if constexpr (std::is_same_v<T, Missing>)
-                out.append(QStringLiteral("Missing"));
+            {
+                // Missing previews stay blank; fullText/valueText retain the Missing contract.
+            }
             else if constexpr (std::is_same_v<T, Utf8>)
             {
                 const auto bytes = std::min<std::size_t>(item.str().size(), static_cast<std::size_t>(limit) * 4 + 4);

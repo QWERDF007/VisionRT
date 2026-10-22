@@ -558,7 +558,7 @@ outputs:
     const auto nodeAId = app.nodes().first().toMap().value("id").toString();
     app.runOnce();
     waitForIdle();
-    assert(app.nodes().first().toMap().value("state").toString() == "green");
+    assert(app.nodes().first().toMap().value("state").toString() == "succeeded");
 
     // 2. Add Tool B (test.plugin.function) into module_index.yaml & declaration YAML
     const auto funcYamlFile = yamlDir / "test.plugin.function.yaml";
@@ -628,7 +628,7 @@ tools:
     waitForIdle();
     for (const auto &n : app.nodes())
     {
-        assert(n.toMap().value("state").toString() == "green");
+        assert(n.toMap().value("state").toString() == "succeeded");
     }
 
     // 3. Delete Tool A mapping from module_index.yaml and rescan
@@ -1094,8 +1094,8 @@ int main(int argc, char **argv)
             ToolStatus status;
             const auto module = loader.loadModule(std::filesystem::u8path(argv[2]), status);
             assert(!module && !status);
-            assert(status.message.find("ABI major mismatch") != std::string::npos);
-            assert(status.message.find("got 1") != std::string::npos);
+            assert(status.message.find("ABI 主版本不匹配") != std::string::npos);
+            assert(status.message.find("实际 1") != std::string::npos);
             assert(loader.loadedModuleCount() == 0);
         }
         return 0;

@@ -1,0 +1,4 @@
+#pragma once
+
+// Generated build metadata consumed only by Version.cpp.
+#define @LIBPREFIX@_BUILD_TIME "@BUILD_TIME@"

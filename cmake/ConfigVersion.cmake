@@ -54,6 +54,8 @@ function(configure_version target LIBPREFIX incpath VERSION_FULL)
     # 由模板生成版本头文件
     configure_file(${config_version_script_path}/VersionDef.h.in
         ${CMAKE_CURRENT_BINARY_DIR}/include/${incpath}/VersionDef.h @ONLY ESCAPE_QUOTES)
+    configure_file(${config_version_script_path}/VersionBuildTime.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/include/${incpath}/detail/BuildTime.h @ONLY ESCAPE_QUOTES)
     configure_file(${config_version_script_path}/VersionUtils.h.in
         ${CMAKE_CURRENT_BINARY_DIR}/include/${incpath}/detail/VersionUtils.h @ONLY ESCAPE_QUOTES)
 

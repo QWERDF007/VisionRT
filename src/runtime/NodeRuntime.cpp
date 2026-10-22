@@ -1,5 +1,7 @@
 #include "runtime/RuntimeInternal.h"
 
+#include <visionrt/contracts/Contract.h>
+
 #include <algorithm>
 #include <chrono>
 #include <stdexcept>
@@ -27,16 +29,27 @@ bool sameParameters(const Values &a, const Values &b)
     return true;
 }
 
+std::string phaseText(const char *phase)
+{
+    const std::string_view value = phase ? phase : "";
+    if (value == "prepare") return "准备输入";
+    if (value == "initialize") return "初始化";
+    if (value == "execute") return "执行";
+    if (value == "convert") return "校验输出";
+    if (value == "release") return "释放";
+    return std::string(value);
+}
+
 std::string location(NodeId node, const std::string &tool, const char *phase, const std::string &message)
 {
-    return "node " + std::to_string(node) + " / " + tool + " / " + phase + ": " + message;
+    return "节点 " + std::to_string(node) + "（" + tool + "）" + phaseText(phase) + "失败：" + message;
 }
 } // namespace
 
-void NodeRuntime::release() noexcept
+std::optional<ToolStatus> NodeRuntime::release() noexcept
 {
     if (!instance)
-        return;
+        return std::nullopt;
     ToolStatus status;
     try
     {
@@ -55,8 +68,10 @@ void NodeRuntime::release() noexcept
     {
         status.code    = -4;
         status.message = location(id, toolId, "release", status.message);
-        lifecycle.store(std::make_shared<const ToolStatus>(std::move(status)), std::memory_order_release);
+        lifecycle.store(std::make_shared<const ToolStatus>(status), std::memory_order_release);
+        return status;
     }
+    return std::nullopt;
 }
 
 void NodeRuntime::reset() noexcept
@@ -75,6 +90,13 @@ void NodeRuntime::reset() noexcept
 void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
 {
     active.store(true, std::memory_order_release);
+    // A stop that landed before this task started must not enter execute or
+    // publish a fabricated result for a node the user never observed running.
+    if (context->stop && context->stop->stop_requested())
+    {
+        active.store(false, std::memory_order_release);
+        return;
+    }
 
     struct Activity
     {
@@ -124,6 +146,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     const auto &frozen          = *context->frozen;
     const auto &config          = *frozen.nodes.at(id);
     const auto *definition      = &frozen.contracts.at(id);
+    snapshot->toolId            = definition->id;
     snapshot->executionRevision = config.executionRevision;
     ToolResult  result;
     const char *phase            = "prepare";
@@ -148,11 +171,13 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     else
                     {
                         const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
+                        snapshot->inputUses.push_back(
+                            {port.id, input.source->node, input.source->port, upstream ? upstream->publication : 0});
                         if (frozen.mode != RunMode::Node
                             && (!upstream || upstream->generation != context->generation
                                 || upstream->session != context->session || upstream->round != context->round))
                         {
-                            throw ContractError("predecessor is not from this session/round");
+                            throw ContractError("上游结果不属于本次执行轮次");
                         }
                         if (!upstream)
                             value = Missing{};
@@ -160,14 +185,17 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                         {
                             const auto found = upstream->outputs.find(input.source->port);
                             if (found == upstream->outputs.end())
-                                throw ContractError("predecessor output is absent");
+                                throw ContractError("上游输出端口不存在");
                             value = found->second;
                         }
                     }
                 }
-                validateValue(port.type, value);
                 inputs.emplace(port.id, std::move(value));
             }
+            std::vector<PortContract> contracts;
+            contracts.reserve(definition->inputs.size());
+            for (const auto &port : definition->inputs) contracts.push_back(portContractFromDefinition(port));
+            validateToolValues(contracts, inputs, false);
             prepareTimer.stop();
         }
         phase = "initialize";
@@ -175,7 +203,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         const auto &parameters = frozen.initParameters.at(id);
         if (configurationSession != context->session)
         {
-            for (const auto &port : definition->initParams) validateValue(port.type, parameters.at(port.id));
+            std::vector<PortContract> contracts;
+            contracts.reserve(definition->initParams.size());
+            for (const auto &port : definition->initParams) contracts.push_back(portContractFromDefinition(port));
+            validateToolValues(contracts, parameters, false);
             const auto directory = frozen.project.path.parent_path();
             if (toolId != config.toolId || kind != definition->kind || toolVersion != definition->version
                 || servicesDirectory != directory || !sameParameters(initializedWith, parameters)
@@ -227,7 +258,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 catch (...)
                 {
-                    status = {-1, "unknown initialization exception"};
+                    status = {-1, "未知的初始化异常"};
                 }
                 initTimer.stop();
             }
@@ -268,7 +299,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         if (result.status.code < 0)
         {
             frameworkFailure = true;
-            if (instance)
+            if (instance && result.status.code != kCancelledStatus)
                 result.status.message = location(id, config.toolId, "execute", result.status.message);
         }
         phase = "convert";
@@ -280,17 +311,17 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 = std::count_if(definition->outputs.begin(), definition->outputs.end(), [](const auto &port)
                                 { return port.id != "__status_code" && port.id != "__status_message"; });
             if (result.outputs.size() != static_cast<std::size_t>(businessCount))
-                throw ContractError("output keys do not exactly match declared business ports");
+                throw ContractError("输出端口与声明不一致");
             for (const auto &port : definition->outputs)
             {
                 if (port.id == "__status_code" || port.id == "__status_message")
                     continue;
                 const auto output = result.outputs.find(port.id);
                 if (output == result.outputs.end())
-                    throw ContractError("missing output key: " + port.id);
+                    throw ContractError("缺少输出端口：" + port.id);
                 validateValue(port.type, output->second);
                 if (result.status.code == 0 && isMissing(output->second))
-                    throw ContractError("success output is Missing: " + port.id);
+                    throw ContractError("成功输出不能为 Missing：" + port.id);
             }
             for (const auto &output : definition->outputs)
             {
@@ -324,7 +355,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     catch (...)
     {
-        result.status    = {-1, location(id, config.toolId, phase, "unknown exception")};
+        result.status    = {-1, location(id, config.toolId, phase, "未知异常")};
         frameworkFailure = true;
     }
     snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
@@ -349,7 +380,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 if (port.id != "__status_code" && port.id != "__status_message")
                     result.outputs.emplace(port.id, Missing{});
     }
-    snapshot->status  = std::move(result.status);
+    snapshot->status  = normalizeExecutionStatus(std::move(result.status));
     snapshot->outputs = std::move(result.outputs);
     snapshot->outputs.emplace("__status_code", snapshot->status.code);
     snapshot->outputs.emplace("__status_message", Utf8(snapshot->status.message));

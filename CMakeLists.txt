@@ -46,7 +46,7 @@ target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core yaml-cpp::y
 
 # Python 运行时及交互桥接库
 add_library(visionrt_python src/python/PythonRuntime.cpp)
-target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed VisionRT::PythonInterop)
+target_link_libraries(visionrt_python PUBLIC visionrt_core pybind11::embed VisionRT::ContractsPython)
 target_compile_definitions(visionrt_python PUBLIC
     VISIONRT_PYTHON_DEFAULT_HOME="${VISIONRT_PYTHON_HOME}")
 

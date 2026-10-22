@@ -1,3 +1,4 @@
+#include "common/Version.h"
 #include "runtime/Receiver.h"
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
@@ -253,8 +254,7 @@ void AppController::Impl::report(const QString &text)
     if (text.isEmpty())
         return;
     const auto bounded = text.size() > 16384 ? text.left(16360) + QStringLiteral("…[诊断已截断]") : text;
-    if (diagnostics.empty() || diagnostics.back() != bounded)
-        diagnostics.push_back(bounded);
+    diagnostics.push_back(bounded);
     while (diagnostics.size() > 100) diagnostics.pop_front();
     diagnostic = bounded;
     emit q->diagnosticChanged();
@@ -271,8 +271,50 @@ void AppController::Impl::setState(RuntimeState value)
     emit q->runtimeChanged();
 }
 
+bool AppController::Impl::nodeExists(NodeId id) const
+{
+    for (const auto &flow : editor.project().flows)
+        for (const auto &node : flow.nodes)
+            if (node.id == id)
+                return true;
+    return false;
+}
+
+void AppController::Impl::pruneDeletedNodes()
+{
+    std::set<NodeId> existing;
+    for (const auto &flow : editor.project().flows)
+        for (const auto &node : flow.nodes)
+            existing.insert(node.id);
+    std::vector<NodeId> removed;
+    for (auto it = snapshots.begin(); it != snapshots.end();)
+    {
+        if (existing.contains(it->first))
+        {
+            ++it;
+            continue;
+        }
+        removed.push_back(it->first);
+        it = snapshots.erase(it);
+    }
+    for (auto it = lifecycleErrors.begin(); it != lifecycleErrors.end();)
+        it = existing.contains(it->first) ? std::next(it) : lifecycleErrors.erase(it);
+    for (auto it = active.begin(); it != active.end();)
+        it = existing.contains(*it) ? std::next(it) : active.erase(it);
+    if (!removed.empty())
+    {
+        if (auto status = runtime->removeNodes(removed); !status)
+            report(workbench::q(status.message));
+        if (roi && !existing.contains(roi->node))
+            finishRoi();
+        updateResults();
+    }
+}
+
 void AppController::Impl::changed(bool structure)
 {
+    if (structure)
+        pruneDeletedNodes();
     if (!currentNode() && !selected.isEmpty())
     {
         finishRoi();
@@ -318,19 +360,38 @@ void AppController::Impl::poll()
         bool nodesChanged = false, selectedChanged = false, parametersChanged = false;
         for (auto &item : update.nodes)
         {
-            nodesChanged = true;
-            if (item.active)
-                active.insert(item.node);
-            else
+            if (!nodeExists(item.node))
+            {
+                snapshots.erase(item.node);
                 active.erase(item.node);
+                lifecycleErrors.erase(item.node);
+                continue;
+            }
+            if (item.active != active.contains(item.node))
+            {
+                nodesChanged = true;
+                if (item.active)
+                    active.insert(item.node);
+                else
+                    active.erase(item.node);
+            }
             if (item.lifecycleDiagnostic)
-                lifecycleErrors[item.node] = *item.lifecycleDiagnostic;
+            {
+                const auto previous = lifecycleErrors.find(item.node);
+                if (previous == lifecycleErrors.end() || previous->second.code != item.lifecycleDiagnostic->code
+                    || previous->second.message != item.lifecycleDiagnostic->message)
+                {
+                    lifecycleErrors[item.node] = *item.lifecycleDiagnostic;
+                    nodesChanged                = true;
+                }
+            }
             if (item.snapshot && item.snapshot->generation == generation)
             {
                 const auto previous = snapshots.find(item.node);
                 if (previous == snapshots.end() || previous->second != item.snapshot)
                 {
                     snapshots[item.node] = std::move(item.snapshot);
+                    nodesChanged         = true;
                     selectedChanged |= QString::number(item.node) == selected;
                     if (const auto *node = currentNode())
                         parametersChanged |= std::any_of(node->inputs.begin(), node->inputs.end(), [&](const auto &input)
@@ -341,12 +402,19 @@ void AppController::Impl::poll()
                 }
             }
         }
-        for (const auto &message : update.diagnostics) report(workbench::q(message));
+        for (const auto &event : update.diagnostics) report(workbench::q(event.message));
+        if (update.droppedDiagnostics > 0)
+            report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
+        QString updatedTiming;
         if (update.roundMilliseconds > 0)
         {
-            timing = QStringLiteral("本轮 %1 ms").arg(update.roundMilliseconds, 0, 'f', 2);
+            updatedTiming = QStringLiteral("本轮 %1 ms").arg(update.roundMilliseconds, 0, 'f', 2);
             for (const auto &item : update.flows)
-                timing += QStringLiteral(" · %1 %2 ms").arg(workbench::q(item.flow)).arg(item.milliseconds, 0, 'f', 2);
+                updatedTiming += QStringLiteral(" · %1 %2 ms").arg(workbench::q(item.flow)).arg(item.milliseconds, 0, 'f', 2);
+        }
+        if (timing != updatedTiming)
+        {
+            timing = updatedTiming;
             emit q->runtimeChanged();
         }
         setState(update.state);
@@ -499,8 +567,8 @@ void AppController::Impl::advancePending()
         replacement.reset();
         flow = editor.project().flows.empty() ? QString{} : workbench::q(editor.project().flows.front().id);
         selected.clear();
-        copiedNodes.clear();
-        copiedFlow.clear();
+        clipboard.reset();
+        emit q->pasteChanged();
         search.clear();
         clearResults();
         changed(true);
@@ -638,7 +706,8 @@ AppController::~AppController() = default;
 
 QString AppController::title() const
 {
-    return q(impl_->editor.project().name) + (dirty() ? " *" : "") + " — VisionRT V3";
+    return q(impl_->editor.project().name) + (dirty() ? " *" : "") + " — VisionRT "
+        + q(GetVersionString());
 }
 
 bool AppController::busy() const
@@ -683,10 +752,16 @@ bool AppController::dirty() const
     return impl_->editor.project().dirty;
 }
 
+bool AppController::canPaste() const
+{
+    return impl_->clipboard.has_value();
+}
+
 QString AppController::aboutText() const
 {
-    return QStringLiteral("VisionRT V3\nCopyright © VisionRT contributors\nQt %1\nPython: %2")
-        .arg(QString::fromLatin1(qVersion()), impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"));
+    return QStringLiteral("VisionRT %1\nCopyright © VisionRT contributors\nQt %2\nPython: %3")
+        .arg(q(GetVersionString()), QString::fromLatin1(qVersion()),
+             impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"));
 }
 
 QAbstractItemModel *AppController::toolModel() const
@@ -716,35 +791,38 @@ QVariantList AppController::flows() const
     return result;
 }
 
+QVariantList AppController::parameterTabs() const
+{
+    QVariantList result;
+    for (const auto tab : toolTabs()) result.push_back(QString::fromUtf8(tab.data(), static_cast<qsizetype>(tab.size())));
+    return result;
+}
+
 QVariantList AppController::nodes() const
 {
     QVariantList result;
     if (const auto *flow = impl_->currentFlow())
         for (const auto &node : flow->nodes)
         {
-            const bool  running = impl_->active.contains(node.id);
-            QString     state   = running ? "blue" : "gray";
-            const auto  found   = impl_->snapshots.find(node.id);
-            const auto *snapshot = found != impl_->snapshots.end()
-                                       && found->second->executionRevision == node.executionRevision
-                                     ? found->second.get()
-                                     : nullptr;
+            const bool running = impl_->active.contains(node.id);
+            const auto snapshot = impl_->displaySnapshot(node);
+            QString state = "idle";
+            if (running)
+                state = "running";
+            else if (snapshot)
+                state = snapshot->status.code == 0 ? "succeeded"
+                      : snapshot->status.code == kCancelledStatus ? "cancelled" : "failed";
             std::int64_t statusCode = 0;
             QString      statusMessage;
-            if (snapshot)
+            if (snapshot && snapshot->status.code != 0)
             {
-                if (!running)
-                    state = snapshot->status ? "green" : "red";
-                if (!snapshot->status)
-                {
-                    statusCode    = snapshot->status.code;
-                    statusMessage = q(snapshot->status.message);
-                }
+                statusCode    = snapshot->status.code;
+                statusMessage = q(snapshot->status.message);
             }
-            const auto timing = nodeTimingText(snapshot, running);
+            const auto timing = nodeTimingText(snapshot.get(), running);
             if (impl_->lifecycleErrors.contains(node.id))
             {
-                state         = "red";
+                state         = "failed";
                 statusCode    = impl_->lifecycleErrors.at(node.id).code;
                 statusMessage = q(impl_->lifecycleErrors.at(node.id).message);
             }
@@ -911,8 +989,11 @@ void AppController::copyNodes(const QVariantList &values)
 {
     try
     {
-        impl_->copiedNodes = ids(values);
-        impl_->copiedFlow  = impl_->flow.toStdString();
+        const auto nodes = ids(values);
+        if (nodes.empty())
+            return;
+        impl_->clipboard = impl_->editor.copySelection(impl_->flow.toStdString(), nodes);
+        emit pasteChanged();
     }
     catch (const std::exception &error)
     {
@@ -925,25 +1006,10 @@ void AppController::pasteNodes(int x, int y)
     impl_->command(
         [&]
         {
-            if (impl_->copiedNodes.empty())
+            if (!impl_->clipboard)
                 return false;
-            int minimumX = std::numeric_limits<int>::max(), minimumY = minimumX;
-            for (const auto id : impl_->copiedNodes)
-                if (const auto *node = impl_->findNode(id))
-                {
-                    minimumX = std::min(minimumX, node->position.x);
-                    minimumY = std::min(minimumY, node->position.y);
-                }
-            if (minimumX == std::numeric_limits<int>::max())
-                throw ContractError("Copied nodes no longer exist");
-            const auto dx = static_cast<std::int64_t>(x) - minimumX, dy = static_cast<std::int64_t>(y) - minimumY;
-            if (dx < std::numeric_limits<int>::min() || dx > std::numeric_limits<int>::max()
-                || dy < std::numeric_limits<int>::min() || dy > std::numeric_limits<int>::max())
-                throw ContractError("Paste grid offset is outside int range");
-            return !impl_->editor
-                        .copyNodes(impl_->copiedFlow, impl_->copiedNodes, impl_->flow.toStdString(),
-                                   {static_cast<int>(dx), static_cast<int>(dy)})
-                        .empty();
+            impl_->editor.pasteSelection(impl_->flow.toStdString(), *impl_->clipboard, {x, y});
+            return true;
         },
         true);
 }

@@ -164,39 +164,43 @@ QVariantList AppController::parameters() const
             text = q(error.what());
         }
         QVariantList options;
+        const auto   addOption = [&](const QString &label, const QString &value)
+        {
+            const auto exists = std::any_of(options.begin(), options.end(), [&](const auto &entry)
+            { return entry.toMap().value("value").toString() == value; });
+            if (!exists) options.push_back(QVariantMap{{"label", label}, {"value", value}});
+        };
         if (declaration)
             for (const auto &value : declaration->options)
             {
                 const auto *stringValue = std::get_if<Utf8>(&value);
-                options.push_back(stringValue ? q(stringValue->str()) : valueText(value, type));
+                const auto  text        = stringValue ? q(stringValue->str()) : valueText(value, type);
+                addOption(text, text);
             }
         if (initialization && tool)
             for (const auto &output : tool->outputs)
                 if (output.typeFrom)
                 {
                     const auto &reference = *output.typeFrom;
-                    auto selected = [&](const std::string &parameter)
+                    auto selected = [&](const std::string &parameter) -> QString
                     {
                         const auto found = node->initParams.find(parameter);
                         const auto *value = found == node->initParams.end() ? nullptr : std::get_if<Utf8>(&found->second);
-                        return value ? value->str() : std::string{};
-                    };
-                    auto option = [&](const std::string &value)
-                    {
-                        const auto optionText = q(value);
-                        if (!options.contains(optionText)) options.push_back(optionText);
+                        return value ? q(value->str()) : QString{};
                     };
                     for (const auto &sourceFlow : impl_->editor.project().flows)
                     {
                         if (sourceFlow.id == impl_->flow.toStdString()) continue;
-                        if (id == reference.flowParameter) option(sourceFlow.name);
-                        if (sourceFlow.name != selected(reference.flowParameter)) continue;
+                        if (id == reference.flowParameter) addOption(q(sourceFlow.name), q(sourceFlow.id));
+                        if (q(sourceFlow.id) != selected(reference.flowParameter)) continue;
                         for (const auto &sourceNode : sourceFlow.nodes)
                         {
-                            if (id == reference.nodeParameter) option(sourceNode.title());
-                            if (sourceNode.title() != selected(reference.nodeParameter)) continue;
+                            const auto sequence = QString::number(sourceNode.id);
+                            if (id == reference.nodeParameter) addOption(q(sourceNode.title()), sequence);
+                            if (sequence != selected(reference.nodeParameter)) continue;
                             if (id == reference.portParameter)
-                                for (const auto &[port, signature] : sourceNode.signatures.outputs) option(port);
+                                for (const auto &[port, signature] : sourceNode.signatures.outputs)
+                                    addOption(q(port), q(port));
                         }
                     }
                 }

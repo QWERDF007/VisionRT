@@ -621,6 +621,68 @@ void packagePythonExecutionDemonstration(PythonRuntime &runtime)
     // Cleanup
     std::filesystem::remove_all(tempBase);
 }
+
+void pathInputs(PythonRuntime &runtime)
+{
+    Sources sources;
+    sources.put("entry.py", R"(
+class PathProbe:
+    def initialize(self, params):
+        self.base = params['base_dir']
+        return {'__status_code': 0, '__status_message': 'ok'}
+    def execute(self, inputs):
+        return {'__status_code': 0, '__status_message': 'ok',
+                'resolved': self.base + '|' + inputs['input_path']}
+    def release(self):
+        return {'__status_code': 0, '__status_message': 'ok'}
+)");
+    sources.put("paths.yaml", R"(
+schema_version: 1
+tool_id: python.paths
+display_name: Path probe
+version: 1.0.0
+kind: python_class
+entry: {file: entry.py, symbol: PathProbe}
+init_params:
+  - {id: init_mode, name: Mode, type: String, editor: text}
+  - {id: base_dir, name: Base, type: String, editor: path, path_mode_from: init_mode}
+inputs:
+  - {id: input_mode, name: Mode, type: String, editor: text}
+  - {id: input_path, name: Input, type: String, editor: path, path_mode_from: input_mode}
+outputs:
+  - {id: resolved, name: Resolved, type: String}
+)");
+    const auto definition = parseDefinition(sources.directory / "paths.yaml", false);
+    const auto loaded = runtime.refresh(std::span<const ToolDefinition>(&definition, 1));
+    assert(loaded.size() == 1 && loaded[0].status.code == 0);
+
+    const auto project = sources.directory / std::filesystem::path(u8"工程 目录");
+    std::filesystem::create_directories(project);
+    const auto text = [](const std::filesystem::path &value) {
+        const auto utf8 = value.u8string();
+        return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+    };
+    const auto expectedBase = text(project / std::filesystem::path(L"数据") / L"模型.bin");
+    const auto expectedInput = text(project / std::filesystem::path(L"图像") / L"输入.png");
+    const ToolServices services{PathResolver(project)};
+    auto instance = runtime.factory(definition)(services);
+    assert(instance->initialize({
+        {"init_mode", Utf8("file")},
+        {"base_dir", Utf8("数据/模型.bin")}}).code == 0);
+    const auto result = instance->execute({
+        {"input_mode", Utf8("file")},
+        {"input_path", Utf8("图像/输入.png")}});
+    assert(result.status.code == 0);
+    assert(std::get<Utf8>(result.outputs.at("resolved")).str() == expectedBase + "|" + expectedInput);
+
+    const auto empty = instance->execute({
+        {"input_mode", Utf8("file")},
+        {"input_path", Utf8("")}});
+    assert(empty.status.code == 0);
+    assert(std::get<Utf8>(empty.outputs.at("resolved")).str() == expectedBase + "|");
+    instance.reset();
+    runtime.refresh({});
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -640,6 +702,7 @@ int main(int argc, char **argv)
                                  strictConversions();
                                  adaptersAndRefresh(runtime);
                                  exampleTools(runtime, packageRoot);
+                                 pathInputs(runtime);
                                  packagePythonExecutionDemonstration(runtime);
                                       });
     try

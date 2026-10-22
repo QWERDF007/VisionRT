@@ -25,6 +25,8 @@ flows:
               type: String
             limit:
               type: Int
+            max_batch_bytes:
+              type: Int
             mode:
               type: String
             path:
@@ -45,6 +47,9 @@ flows:
             mode: literal
             literal: bgr
           limit:
+            mode: literal
+            literal: 0
+          max_batch_bytes:
             mode: literal
             literal: 0
           mode:

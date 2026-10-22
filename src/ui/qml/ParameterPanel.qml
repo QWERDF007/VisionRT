@@ -17,7 +17,7 @@ QuiSplitView {
         }
     }
     property int currentTab: 0
-    readonly property var tabs: ["基本输入", "预处理", "检测", "结果处理"]
+    readonly property var tabs: app.parameterTabs
     property var collapsedGroups: ({})
     property var parameterGroups: []
     property string roiNodeId: ""
