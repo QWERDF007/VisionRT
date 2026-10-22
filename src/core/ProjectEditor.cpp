@@ -19,7 +19,7 @@ void requireIncrement(std::uint64_t value)
 
 void requireEditable(const NodeDefinition &node)
 {
-    if (node.unresolved.IsDefined() && !node.unresolved.IsNull())
+    if (!node.unresolved.isEmpty())
         throw ContractError("Missing tool definition: parameters are read-only");
 }
 
@@ -576,7 +576,7 @@ std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId
     std::vector<SourcePort> result;
     for (const auto &source : target.nodes)
     {
-        if (source.id == id || (source.unresolved.IsDefined() && !source.unresolved.IsNull()))
+        if (source.id == id || !source.unresolved.isEmpty())
             continue;
         for (const auto &[port, output] : source.signatures.outputs)
         {
@@ -599,7 +599,7 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
     std::vector<InputPort> result;
     for (const auto &node : target.nodes)
     {
-        if (node.id == source.node || (node.unresolved.IsDefined() && !node.unresolved.IsNull()))
+        if (node.id == source.node || !node.unresolved.isEmpty())
             continue;
         for (const auto &[input, binding] : node.inputs)
         {

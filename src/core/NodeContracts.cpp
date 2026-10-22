@@ -52,7 +52,7 @@ void resolveOutputTypes(ProjectDefinition &project)
     resolve = [&](const NodeDefinition &node, const std::string &port) -> std::optional<TypeSpec>
     {
         auto &resolution = resolutions.at(node.id);
-        if (node.unresolved.IsMap())
+        if (!node.unresolved.isEmpty())
             return {};
         if (const auto found = resolution.outputs.find(port); found != resolution.outputs.end())
             return found->second;

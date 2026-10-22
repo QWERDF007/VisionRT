@@ -114,7 +114,7 @@ void pathEditorsContract()
                 return entry.toMap().value("valueText").toString();
         return QString{};
     };
-    const auto project = root.filePath("paths.vrt");
+    const auto project = root.filePath("paths.vrt.json");
     for (const auto &id : {QStringLiteral("file"), QStringLiteral("folder"), QStringLiteral("path")})
     {
         if (id == "path") require(app.setParameter("mode", false, "directory"), "dynamic path mode did not change");
@@ -224,7 +224,7 @@ void pathEditorsContract()
     const auto relativePath = nested + "/" + fileName;
     require(app.setParameter("file", false, relativePath) && value("file") == relativePath,
             "Text editing implicitly resolved a relative path instead of preserving its value");
-    const auto unsavedProject = root.filePath("unsaved_paths.vrt");
+    const auto unsavedProject = root.filePath("unsaved_paths.vrt.json");
     require(app.save(unsavedProject), "Unsaved path project could not save");
     app.requestOpen(unsavedProject);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "Relative path project did not reopen");

@@ -176,7 +176,7 @@ void roiParameterContract()
                       viewport.mapToScene(viewport.imageToItem({90, 60})).toPoint());
     require(viewport.selectedRoi() == -1, "read-only input geometry entered the editable selection");
     viewport.setDrawShape(2);
-    const auto project = directory.filePath("roi.vrt");
+    const auto project = directory.filePath("roi.vrt.json");
     require(app.save(project) && !app.dirty(), "ROI baseline could not be saved");
     const auto initial = literal();
     QSignalSpy changes(&app, &AppController::parametersChanged);

@@ -1,12 +1,13 @@
 #include "core/ProjectStorage.h"
-#include "core/NodeContracts.h"
 
+#include "core/NodeContracts.h"
 #include "core/ToolRegistry.h"
+#include "core/ValueJson.h"
 
 #include <visionrt/contracts/Contract.h>
-#include <visionrt/contracts/ValueYaml.h>
 
 #include <QFile>
+#include <QJsonArray>
 #include <QSaveFile>
 #include <QString>
 #include <algorithm>
@@ -34,25 +35,18 @@ std::string utf8Path(const std::filesystem::path &path)
     throw std::runtime_error(message);
 }
 
-void map(const YAML::Node &node, std::string_view context)
+QJsonObject map(const QJsonValue &node, std::string_view context)
 {
-    if (!node.IsMap())
-        invalid(std::string(context) + " must be a mapping");
-    std::set<std::string, std::less<>> keys;
-    for (const auto &entry : node)
-    {
-        if (!entry.first.IsScalar())
-            invalid(std::string(context) + " has a non-scalar key");
-        if (!keys.insert(entry.first.Scalar()).second)
-            invalid(std::string(context) + " has a duplicate key: " + entry.first.Scalar());
-    }
+    if (!node.isObject())
+        invalid(std::string(context) + " must be a JSON object");
+    return node.toObject();
 }
 
-std::string text(const YAML::Node &node, std::string_view context, bool nonempty = false)
+std::string text(const QJsonValue &node, std::string_view context, bool nonempty = false)
 {
-    if (!node.IsScalar())
+    if (!node.isString())
         invalid(std::string(context) + " must be a string");
-    auto value = node.Scalar();
+    auto value = node.toString().toStdString();
     validateUtf8(value);
     if (nonempty
         && (value.empty()
@@ -61,7 +55,7 @@ std::string text(const YAML::Node &node, std::string_view context, bool nonempty
     return value;
 }
 
-std::uint64_t sequence(const YAML::Node &node, std::string_view context)
+std::uint64_t sequence(const QJsonValue &node, std::string_view context)
 {
     const auto value = text(node, context, true);
     if (!std::all_of(value.begin(), value.end(), [](char c) { return c >= '0' && c <= '9'; }))
@@ -73,11 +67,12 @@ std::uint64_t sequence(const YAML::Node &node, std::string_view context)
     return result;
 }
 
-TypeMap decodeTypes(const YAML::Node &node, std::string_view context)
+TypeMap decodeTypes(const QJsonValue &node, std::string_view context)
 {
-    map(node, context);
-    TypeMap result;
-    for (const auto &entry : node) result.emplace(text(entry.first, context, true), decodeTypeSpec(entry.second));
+    const auto entries = map(node, context);
+    TypeMap    result;
+    for (auto entry = entries.begin(); entry != entries.end(); ++entry)
+        result.emplace(text(entry.key(), context, true), ValueJson::decodeType(map(entry.value(), context)));
     return result;
 }
 
@@ -100,7 +95,11 @@ void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const N
 {
     try
     {
-        validateToolValues({portContractFromDefinition(port)}, {{port.id, value}}, false);
+        validateToolValues(
+            {
+                portContractFromDefinition(port)
+        },
+            {{port.id, value}}, false);
     }
     catch (const ContractError &error)
     {
@@ -115,14 +114,14 @@ PortValue defaultValue(const PortDefinition &port)
     return port.defaultValue;
 }
 
-void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node, const YAML::Node &raw,
+void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node, const QJsonObject &raw,
                    const ToolDefinition &definition, std::set<std::string, std::less<>> &changedOutputs)
 {
-    auto initTypes   = types(definition.initParams);
-    auto inputTypes  = types(definition.inputs);
+    auto       initTypes    = types(definition.initParams);
+    auto       inputTypes   = types(definition.inputs);
     const auto savedOutputs = node.signatures.outputs;
     setOutputDeclarations(node, definition);
-    auto outputTypes = std::move(node.signatures.outputs);
+    auto outputTypes        = std::move(node.signatures.outputs);
     node.signatures.outputs = savedOutputs;
     for (const auto &[id, previous] : node.signatures.outputs)
     {
@@ -144,8 +143,8 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         const auto old       = node.initParams.find(port.id);
         const auto signature = node.signatures.initParams.find(port.id);
         const bool retain    = old != node.initParams.end() && signature != node.signatures.initParams.end()
-                            && compatible(signature->second, port.type);
-        auto       value     = retain ? old->second : defaultValue(port);
+                         && compatible(signature->second, port.type);
+        auto value = retain ? old->second : defaultValue(port);
         if (!retain)
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + port.id,
                      "Missing or incompatible parameter was replaced with its declared default", true);
@@ -161,15 +160,15 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     std::map<std::string, InputBinding, std::less<>> inputs;
     for (const auto &port : definition.inputs)
     {
-        const auto   old       = node.inputs.find(port.id);
-        const auto   signature = node.signatures.inputs.find(port.id);
-        const bool   retain    = old != node.inputs.end() && signature != node.signatures.inputs.end()
-                              && compatible(signature->second, port.type);
+        const auto old       = node.inputs.find(port.id);
+        const auto signature = node.signatures.inputs.find(port.id);
+        const bool retain    = old != node.inputs.end() && signature != node.signatures.inputs.end()
+                         && compatible(signature->second, port.type);
         InputBinding binding;
         if (retain)
         {
             binding = old->second;
-            if (!raw["inputs"][port.id]["literal"].IsDefined())
+            if (!raw.value("inputs").toObject().value(QString::fromStdString(port.id)).toObject().contains("literal"))
             {
                 binding.literal = defaultValue(port);
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
@@ -264,31 +263,35 @@ void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
             visit(visit, i);
 }
 
-ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &registry)
+ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolRegistry &registry)
 {
-    map(root, "project root");
-    if (sequence(root["format_version"], "format_version") != 1)
-        invalid("Unsupported project format_version");
-    map(root["project"], "project");
-    if (!root["flows"].IsSequence())
-        invalid("flows must be a sequence");
+    if (!document.json().isObject())
+        invalid("工程格式不受支持，请使用 JSON 工程");
+    const auto root = document.json().object();
+    if (!root.value("format_version").isDouble()
+        || std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int})) != 2)
+        invalid("工程格式不受支持，请使用 JSON 工程");
+    const auto metadata = map(root.value("project"), "project");
+    if (!root.value("flows").isArray())
+        invalid("flows must be an array");
     ProjectLoadResult result;
     auto             &project = result.project;
     project.flows.clear();
     project.dirty      = false;
-    project.name       = text(root["project"]["name"], "project.name");
-    project.nextNodeId = sequence(root["project"]["next_node_seq"], "next_node_seq");
-    project.nextFlowId = sequence(root["project"]["next_flow_seq"], "next_flow_seq");
+    project.name       = text(metadata.value("name"), "project.name");
+    project.nextNodeId = sequence(metadata.value("next_node_seq"), "next_node_seq");
+    project.nextFlowId = sequence(metadata.value("next_flow_seq"), "next_flow_seq");
     std::set<std::string, std::less<>>                   flowIds, flowNames;
     std::set<NodeId>                                     nodeIds;
     std::map<NodeId, std::set<std::string, std::less<>>> changedOutputs;
     NodeId                                               minimumNode = 0;
     std::uint64_t                                        minimumFlow = 1;
-    for (const auto &rawFlow : root["flows"])
+    const auto                                           flows       = root.value("flows").toArray();
+    for (qsizetype flowIndex = 0; flowIndex < flows.size(); ++flowIndex)
     {
-        map(rawFlow, "flow");
+        const auto     rawFlow = map(flows[flowIndex], "flow");
         FlowDefinition flow;
-        flow.id = text(rawFlow["flow_id"], "flow_id", true);
+        flow.id = text(rawFlow.value("flow_id"), "flow_id", true);
         if (!flowIds.insert(flow.id).second)
             invalid("Duplicate flow_id: " + flow.id);
         if (flow.id.starts_with("flow_"))
@@ -308,24 +311,30 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
                                                   "Flow identity sequence is exhausted; creating flows is disabled"});
             }
         }
-        flow.name = text(rawFlow["name"], "flow.name");
+        flow.name = text(rawFlow.value("name"), "flow.name");
         if (!flowNames.insert(flow.name).second)
             result.diagnostics.push_back({ProjectStorageCode::DuplicateFlowName,
                                           flow.id,
                                           {},
                                           {},
                                           "Duplicate flow display name; rename before name-based lookup"});
-        if (!rawFlow["run_selected"].IsScalar())
+        if (!rawFlow.value("run_selected").isBool())
             invalid("run_selected must be a boolean");
-        flow.runSelected = rawFlow["run_selected"].as<bool>();
-        if (!rawFlow["nodes"].IsSequence())
-            invalid("flow.nodes must be a sequence");
+        flow.runSelected = rawFlow.value("run_selected").toBool();
+        if (!rawFlow.value("nodes").isArray())
+            invalid("flow.nodes must be an array");
         std::map<std::pair<int, int>, NodeId> positions;
-        for (const auto &raw : rawFlow["nodes"])
+        const auto                            nodes = rawFlow.value("nodes").toArray();
+        for (qsizetype nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
         {
-            map(raw, "node");
+            const auto        raw = map(nodes[nodeIndex], "node");
+            const QStringList nodePath{"flows", QString::number(flowIndex), "nodes", QString::number(nodeIndex)};
+            const auto        literal = [&](const QStringList &path, const TypeSpec &type)
+            {
+                return document.decode(nodePath + path, type);
+            };
             NodeDefinition node;
-            node.id = sequence(raw["node_seq"], "node_seq");
+            node.id = sequence(raw.value("node_seq"), "node_seq");
             if (!nodeIds.insert(node.id).second)
                 invalid("Duplicate project-wide node_seq");
             const bool exhausted = node.id == std::numeric_limits<NodeId>::max();
@@ -333,69 +342,65 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
             if (exhausted)
                 diagnose(result, ProjectStorageCode::SequenceExhausted, flow, node, "node_seq",
                          "Node identity sequence is exhausted; creating nodes is disabled");
-            node.toolId           = text(raw["tool_id"], "tool_id", true);
-            node.toolNameSnapshot = text(raw["tool_name_snapshot"], "tool_name_snapshot");
-            node.alias            = text(raw["alias"], "alias");
-            if (!raw["pos"].IsSequence() || raw["pos"].size() != 2)
+            node.toolId           = text(raw.value("tool_id"), "tool_id", true);
+            node.toolNameSnapshot = text(raw.value("tool_name_snapshot"), "tool_name_snapshot");
+            node.alias            = text(raw.value("alias"), "alias");
+            if (!raw.value("pos").isArray() || raw.value("pos").toArray().size() != 2)
                 invalid("node.pos must contain two integer coordinates");
-            node.position                   = {raw["pos"][0].as<int>(), raw["pos"][1].as<int>()};
+            const auto x = std::get<std::int64_t>(literal({"pos", "0"}, {Type::Int}));
+            const auto y = std::get<std::int64_t>(literal({"pos", "1"}, {Type::Int}));
+            if (x < std::numeric_limits<int>::min() || x > std::numeric_limits<int>::max()
+                || y < std::numeric_limits<int>::min() || y > std::numeric_limits<int>::max())
+                invalid("node.pos exceeds signed coordinate range");
+            node.position                   = {static_cast<int>(x), static_cast<int>(y)};
             const auto [position, inserted] = positions.emplace(std::pair{node.position.x, node.position.y}, node.id);
             if (!inserted)
-            {
                 diagnose(result, ProjectStorageCode::LayoutConflict, flow, node, "pos",
                          "Node overlaps node " + std::to_string(position->second) + "; position was retained");
-            }
-            map(raw["type_snapshot"], "type_snapshot");
-            node.signatures        = {decodeTypes(raw["type_snapshot"]["init_params"], "init signature"),
-                                      decodeTypes(raw["type_snapshot"]["inputs"], "input signature"),
-                                      decodeTypes(raw["type_snapshot"]["outputs"], "output signature")};
+            const auto signatures  = map(raw.value("type_snapshot"), "type_snapshot");
+            node.signatures        = {decodeTypes(signatures.value("init_params"), "init signature"),
+                                      decodeTypes(signatures.value("inputs"), "input signature"),
+                                      decodeTypes(signatures.value("outputs"), "output signature")};
             const auto *definition = registry.find(node.toolId);
-            map(raw["init_params"], "init_params");
-            for (const auto &entry : raw["init_params"])
+            const auto  parameters = map(raw.value("init_params"), "init_params");
+            for (auto entry = parameters.begin(); entry != parameters.end(); ++entry)
             {
-                const auto id        = text(entry.first, "init parameter ID", true);
+                const auto id        = text(entry.key(), "init parameter ID", true);
                 const auto signature = node.signatures.initParams.find(id);
                 if (signature == node.signatures.initParams.end())
-                {
-                    if (definition)
-                        invalid("Saved init parameter has no type_snapshot: " + id);
-                }
-                else
-                    node.initParams.emplace(id, decodeValue(entry.second, signature->second));
+                    invalid("Saved init parameter has no type_snapshot: " + id);
+                node.initParams.emplace(id, literal({"init_params", entry.key()}, signature->second));
             }
-            map(raw["inputs"], "inputs");
-            for (const auto &entry : raw["inputs"])
+            const auto inputs = map(raw.value("inputs"), "inputs");
+            for (auto entry = inputs.begin(); entry != inputs.end(); ++entry)
             {
-                const auto id = text(entry.first, "input ID", true);
-                map(entry.second, "input binding");
+                const auto   id    = text(entry.key(), "input ID", true);
+                const auto   saved = map(entry.value(), "input binding");
                 InputBinding binding;
-                const auto   mode = text(entry.second["mode"], "binding mode");
+                const auto   mode = text(saved.value("mode"), "binding mode");
                 if (mode == "upstream")
                     binding.mode = BindingMode::Upstream;
                 else if (mode != "literal")
                     invalid("Unknown input binding mode: " + mode);
                 const auto signature = node.signatures.inputs.find(id);
                 if (signature == node.signatures.inputs.end())
+                    invalid("Saved input has no type_snapshot: " + id);
+                if (saved.contains("literal"))
+                    binding.literal = literal({"inputs", entry.key(), "literal"}, signature->second);
+                const auto source = saved.value("source");
+                if (!source.isUndefined() && !source.isNull())
                 {
-                    if (definition)
-                        invalid("Saved input has no type_snapshot: " + id);
-                }
-                else if (entry.second["literal"].IsDefined())
-                {
-                    binding.literal = decodeValue(entry.second["literal"], signature->second);
-                }
-                const auto source = entry.second["source"];
-                if (source.IsDefined() && !source.IsNull())
-                {
-                    map(source, "binding source");
-                    binding.source = SourcePort{sequence(source["node_seq"], "source.node_seq"),
-                                                text(source["port_id"], "source.port_id", true)};
+                    const auto reference = map(source, "binding source");
+                    if (binding.mode != BindingMode::Upstream)
+                        invalid("Literal binding must not contain an active source");
+                    binding.source = SourcePort{sequence(reference.value("node_seq"), "source.node_seq"),
+                                                text(reference.value("port_id"), "source.port_id", true)};
                 }
                 node.inputs.emplace(id, std::move(binding));
             }
             if (!definition)
             {
-                node.unresolved = YAML::Clone(raw);
+                node.unresolved = raw;
                 diagnose(result, ProjectStorageCode::DefinitionMissing, flow, node, {},
                          "Tool definition is missing; original configuration was retained: " + node.toolId);
             }
@@ -418,8 +423,7 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
     }
     std::map<NodeId, TypeMap> savedOutputs;
     for (const auto &flow : project.flows)
-        for (const auto &node : flow.nodes)
-            savedOutputs.emplace(node.id, node.signatures.outputs);
+        for (const auto &node : flow.nodes) savedOutputs.emplace(node.id, node.signatures.outputs);
     resolveOutputTypes(project);
     for (auto &flow : project.flows)
     {
@@ -435,14 +439,14 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
         for (const auto &node : flow.nodes) nodes.emplace(node.id, &node);
         for (auto &node : flow.nodes)
         {
-            if (node.unresolved.IsMap())
+            if (!node.unresolved.isEmpty())
                 continue;
             for (auto &[id, binding] : node.inputs)
             {
                 if (!binding.source)
                     continue;
                 const auto source = nodes.find(binding.source->node);
-                if (source != nodes.end() && source->second->unresolved.IsMap())
+                if (source != nodes.end() && !source->second->unresolved.isEmpty())
                 {
                     diagnose(result, ProjectStorageCode::PendingReference, flow, node, "inputs." + id,
                              "Source definition is missing; reference was retained for recovery");
@@ -453,8 +457,8 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
                 {
                     const auto output = source->second->signatures.outputs.find(binding.source->port);
                     valid             = output != source->second->signatures.outputs.end()
-                                     && compatible(output->second, node.signatures.inputs.at(id))
-                                     && !changedOutputs[source->second->id].contains(binding.source->port);
+                         && compatible(output->second, node.signatures.inputs.at(id))
+                         && !changedOutputs[source->second->id].contains(binding.source->port);
                 }
                 if (!valid)
                 {
@@ -469,78 +473,84 @@ ProjectLoadResult decodeProject(const YAML::Node &root, const ToolRegistry &regi
     return result;
 }
 
-YAML::Node encodeTypes(const TypeMap &types)
+QJsonObject encodeTypes(const TypeMap &types)
 {
-    YAML::Node result(YAML::NodeType::Map);
-    for (const auto &[id, type] : types) result[id] = encodeTypeSpec(type);
+    QJsonObject result;
+    for (const auto &[id, type] : types) result.insert(QString::fromStdString(id), ValueJson::encodeType(type));
     return result;
 }
 
-YAML::Node encodeProject(const ProjectDefinition &project)
+QJsonObject encodeProject(const ProjectDefinition &project)
 {
-    YAML::Node root(YAML::NodeType::Map);
-    root["format_version"]           = 1;
-    root["project"]["name"]          = project.name;
-    root["project"]["next_node_seq"] = project.nextNodeId;
-    root["project"]["next_flow_seq"] = project.nextFlowId;
-    root["flows"]                    = YAML::Node(YAML::NodeType::Sequence);
+    QJsonArray flows;
     for (const auto &flow : project.flows)
     {
-        YAML::Node rawFlow(YAML::NodeType::Map);
-        rawFlow["flow_id"]      = flow.id;
-        rawFlow["name"]         = flow.name;
-        rawFlow["run_selected"] = flow.runSelected;
-        rawFlow["nodes"]        = YAML::Node(YAML::NodeType::Sequence);
+        QJsonArray nodes;
         for (const auto &node : flow.nodes)
         {
-            const bool unresolved     = node.unresolved.IsMap();
-            YAML::Node raw            = unresolved ? YAML::Clone(node.unresolved) : YAML::Node(YAML::NodeType::Map);
-            raw["node_seq"]           = node.id;
-            raw["tool_id"]            = node.toolId;
-            raw["tool_name_snapshot"] = node.toolNameSnapshot;
-            raw["alias"]              = node.alias;
-            raw["pos"]                = YAML::Node(YAML::NodeType::Sequence);
-            raw["pos"].push_back(node.position.x);
-            raw["pos"].push_back(node.position.y);
+            const bool  unresolved = !node.unresolved.isEmpty();
+            QJsonObject raw        = node.unresolved;
+            raw.insert("node_seq", QString::number(node.id));
+            raw.insert("tool_id", QString::fromStdString(node.toolId));
+            raw.insert("tool_name_snapshot", QString::fromStdString(node.toolNameSnapshot));
+            raw.insert("alias", QString::fromStdString(node.alias));
+            raw.insert("pos", QJsonArray{node.position.x, node.position.y});
             if (!unresolved)
             {
-                raw["init_params"] = YAML::Node(YAML::NodeType::Map);
+                QJsonObject parameters;
                 for (const auto &[id, value] : node.initParams)
                 {
                     const auto signature = node.signatures.initParams.find(id);
                     if (signature == node.signatures.initParams.end())
                         invalid("Cannot save parameter without type_snapshot: " + id);
-                    raw["init_params"][id] = encodeValue(value, signature->second);
+                    parameters.insert(QString::fromStdString(id), ValueJson::encode(value, signature->second));
                 }
-                raw["type_snapshot"]["init_params"] = encodeTypes(node.signatures.initParams);
-                raw["type_snapshot"]["inputs"]      = encodeTypes(node.signatures.inputs);
-                raw["type_snapshot"]["outputs"]     = encodeTypes(node.signatures.outputs);
-                raw["inputs"]                       = YAML::Node(YAML::NodeType::Map);
+                raw.insert("init_params", parameters);
+                raw.insert("type_snapshot", QJsonObject{
+                                                {"init_params", encodeTypes(node.signatures.initParams)},
+                                                {     "inputs",     encodeTypes(node.signatures.inputs)},
+                                                {    "outputs",    encodeTypes(node.signatures.outputs)}
+                });
             }
+            auto inputs = unresolved ? raw.value("inputs").toObject() : QJsonObject{};
             for (const auto &[id, binding] : node.inputs)
             {
-                auto saved    = raw["inputs"][id];
-                saved["mode"] = binding.mode == BindingMode::Upstream ? "upstream" : "literal";
+                const auto key   = QString::fromStdString(id);
+                auto       saved = inputs.value(key).toObject();
+                saved.insert("mode", binding.mode == BindingMode::Upstream ? "upstream" : "literal");
                 if (!unresolved)
                 {
                     const auto signature = node.signatures.inputs.find(id);
                     if (signature == node.signatures.inputs.end())
                         invalid("Cannot save input without type_snapshot: " + id);
-                    saved["literal"] = encodeValue(binding.literal, signature->second);
+                    saved.insert("literal", ValueJson::encode(binding.literal, signature->second));
                 }
-                if (binding.source)
-                {
-                    saved["source"]["node_seq"] = binding.source->node;
-                    saved["source"]["port_id"]  = binding.source->port;
-                }
+                if (binding.mode == BindingMode::Upstream && binding.source)
+                    saved.insert("source", QJsonObject{
+                                               {"node_seq",        QString::number(binding.source->node)},
+                                               { "port_id", QString::fromStdString(binding.source->port)}
+                    });
                 else
                     saved.remove("source");
+                inputs.insert(key, saved);
             }
-            rawFlow["nodes"].push_back(raw);
+            raw.insert("inputs", inputs);
+            nodes.append(raw);
         }
-        root["flows"].push_back(rawFlow);
+        flows.append(QJsonObject{
+            {     "flow_id",   QString::fromStdString(flow.id)},
+            {        "name", QString::fromStdString(flow.name)},
+            {"run_selected",                  flow.runSelected},
+            {       "nodes",                             nodes}
+        });
     }
-    return root;
+    return {
+        {"format_version",                                                                                      2},
+        {       "project", QJsonObject{{"name", QString::fromStdString(project.name)},
+ {"next_node_seq", QString::number(project.nextNodeId)},
+ {"next_flow_seq", QString::number(project.nextFlowId)}}                               },
+        {         "flows",                                                                                  flows}
+    };
 }
 
 void rewritePath(PortValue &value, const PortDefinition &port, const std::filesystem::path &oldDirectory,
@@ -571,21 +581,23 @@ ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
         invalid("Cannot read project " + utf8Path(absolute) + ": " + file.errorString().toStdString());
     try
     {
-        auto result         = decodeProject(YAML::Load(bytes.toStdString()), registry_);
-        result.project.path = absolute;
+        const ValueJson::Document document(bytes);
+        auto                      result = decodeProject(document, registry_);
+        result.project.path              = absolute;
         return result;
     }
     catch (const std::exception &error)
     {
-        invalid("Cannot load project " + utf8Path(absolute) + ": " + error.what());
+        invalid("工程格式不受支持，请使用 JSON 工程：" + utf8Path(absolute) + ": " + error.what());
     }
 }
 
 ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) const
 {
-    auto result          = decodeProject(encodeProject(project), registry_);
-    result.project.path  = project.path;
-    result.project.dirty = result.project.dirty || project.dirty;
+    const ValueJson::Document document(QJsonDocument(encodeProject(project)).toJson(QJsonDocument::Compact));
+    auto                      result = decodeProject(document, registry_);
+    result.project.path              = project.path;
+    result.project.dirty             = result.project.dirty || project.dirty;
     for (std::size_t f = 0; f < project.flows.size(); ++f)
     {
         auto &updatedFlow             = result.project.flows[f];
@@ -596,12 +608,12 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
             auto       &updated        = updatedFlow.nodes[n];
             const auto &original       = project.flows[f].nodes[n];
             updated.executionRevision  = original.executionRevision;
-            const bool contractChanged = original.unresolved.IsMap() != updated.unresolved.IsMap()
+            const bool contractChanged = original.unresolved.isEmpty() != updated.unresolved.isEmpty()
                                       || original.signatures.initParams != updated.signatures.initParams
                                       || original.signatures.inputs != updated.signatures.inputs
                                       || original.signatures.outputs != updated.signatures.outputs;
-            changedStructure           = changedStructure || contractChanged;
-            bool changedExecution      = contractChanged;
+            changedStructure      = changedStructure || contractChanged;
+            bool changedExecution = contractChanged;
             for (const auto &[id, binding] : updated.inputs)
             {
                 const auto previous = original.inputs.find(id);
@@ -646,13 +658,15 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
     if (target.empty())
         invalid("An unnamed project requires a save destination");
     if (!target.has_extension())
-        target += ".vrt";
+        target += ".vrt.json";
+    if (target.extension() != ".json")
+        invalid("工程格式不受支持，请使用 JSON 工程");
     target                                          = std::filesystem::absolute(target).lexically_normal();
     ProjectDefinition                     candidate = project;
     std::vector<ProjectStorageDiagnostic> diagnostics;
-    const auto oldDirectory = project.path.empty()
-                                ? std::filesystem::path{}
-                                : std::filesystem::absolute(project.path).lexically_normal().parent_path();
+    const auto                            oldDirectory = project.path.empty()
+                                                           ? std::filesystem::path{}
+                                                           : std::filesystem::absolute(project.path).lexically_normal().parent_path();
     if (!project.path.empty() && target != std::filesystem::absolute(project.path).lexically_normal())
     {
         for (auto &flow : candidate.flows)
@@ -660,7 +674,7 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
             for (auto &node : flow.nodes)
             {
                 const auto *definition = registry_.find(node.toolId);
-                if (!definition || node.unresolved.IsMap())
+                if (!definition || !node.unresolved.isEmpty())
                 {
                     diagnostics.push_back(
                         {ProjectStorageCode::UnknownPaths,
@@ -687,12 +701,12 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
     }
     candidate.path        = target;
     candidate.dirty       = false;
-    const auto serialized = YAML::Dump(encodeProject(candidate));
+    const auto serialized = QJsonDocument(encodeProject(candidate)).toJson(QJsonDocument::Indented);
     QSaveFile  file(qtPath(target));
     file.setDirectWriteFallback(false);
     if (!file.open(QIODevice::WriteOnly))
         invalid("Cannot save project " + utf8Path(target) + ": " + file.errorString().toStdString());
-    if (file.write(serialized.data(), static_cast<qint64>(serialized.size())) != static_cast<qint64>(serialized.size()))
+    if (file.write(serialized) != serialized.size())
     {
         const auto error = file.errorString().toStdString();
         file.cancelWriting();

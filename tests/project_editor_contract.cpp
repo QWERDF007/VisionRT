@@ -1,5 +1,6 @@
 #include "core/ProjectEditor.h"
 #include "core/ToolRegistry.h"
+#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
 #include <array>

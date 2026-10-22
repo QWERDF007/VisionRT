@@ -3,6 +3,9 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <algorithm>
 #include <iostream>
@@ -20,8 +23,7 @@ void require(bool condition, const char *message)
 
 std::filesystem::path path(const QString &value)
 {
-    const auto utf8 = value.toUtf8();
-    return std::filesystem::u8path(utf8.constData(), utf8.constData() + utf8.size());
+    return std::filesystem::u8path(value.toUtf8().toStdString());
 }
 
 std::string utf8Path(const std::filesystem::path &value)
@@ -30,19 +32,18 @@ std::string utf8Path(const std::filesystem::path &value)
     return {reinterpret_cast<const char *>(text.data()), text.size()};
 }
 
-void put(const QString &filename, const std::string &text)
+void put(const QString &filename, const QByteArray &text)
 {
     QFile file(filename);
     require(file.open(QIODevice::WriteOnly), "cannot create contract fixture");
-    require(file.write(text.data(), static_cast<qint64>(text.size())) == static_cast<qint64>(text.size()),
-            "cannot write contract fixture");
+    require(file.write(text) == text.size(), "cannot write contract fixture");
 }
 
-std::string get(const QString &filename)
+QByteArray get(const QString &filename)
 {
     QFile file(filename);
     require(file.open(QIODevice::ReadOnly), "cannot read saved project");
-    return file.readAll().toStdString();
+    return file.readAll();
 }
 
 bool has(const std::vector<ProjectStorageDiagnostic> &diagnostics, ProjectStorageCode code)
@@ -51,83 +52,121 @@ bool has(const std::vector<ProjectStorageDiagnostic> &diagnostics, ProjectStorag
                        [code](const auto &diagnostic) { return diagnostic.code == code; });
 }
 
-const char *missingDocument = R"(format_version: 1
-project: {name: 缺失工具, next_node_seq: 8, next_flow_seq: 2}
-flows:
-- flow_id: flow_1
-  name: 流程1
-  run_selected: true
-  nodes:
-  - node_seq: 7
-    tool_id: unavailable
-    tool_name_snapshot: 原始名称
-    alias: ''
-    pos: [0, 0]
-    vendor_extension: {opaque: [one, {two: three}]}
-    init_params: {unknown: 保留中文}
-    type_snapshot:
-      init_params: {unknown: {type: String}}
-      inputs: {value: {type: Int}}
-      outputs: {value: {type: Int}}
-    inputs:
-      value: {mode: upstream, literal: 9007199254740993, source: {node_seq: 7, port_id: value}}
-)";
+QJsonObject savedInput(const QString &source = "7", QJsonValue literal = qint64{9007199254740993LL})
+{
+    QJsonObject result{
+        {   "mode", source.isEmpty() ? "literal" : "upstream"},
+        {"literal",                                   literal}
+    };
+    if (!source.isEmpty())
+        result.insert("source", QJsonObject{
+                                    {"node_seq",  source},
+                                    { "port_id", "value"}
+        });
+    return result;
+}
+
+QJsonObject savedNode(const QString &id = "7", const QString &source = "7")
+{
+    return {
+        {          "node_seq",                                                                                                      id},
+        {           "tool_id",                                                                                           "unavailable"},
+        {"tool_name_snapshot",                                                                                          "原始名称"},
+        {             "alias",                                                                                                      ""},
+        {               "pos",                                                                                        QJsonArray{0, 0}},
+        {  "vendor_extension",                               QJsonObject{{"opaque", QJsonArray{"one", QJsonObject{{"two", "three"}}}}}},
+        {       "init_params",                                                                QJsonObject{{"unknown", "保留中文"}}},
+        {     "type_snapshot", QJsonObject{{"init_params", QJsonObject{{"unknown", QJsonObject{{"type", "String"}}}}},
+ {"inputs", QJsonObject{{"value", QJsonObject{{"type", "Int"}}}}},
+ {"outputs", QJsonObject{{"value", QJsonObject{{"type", "Int"}}}}}}                                     },
+        {            "inputs",                                                              QJsonObject{{"value", savedInput(source)}}}
+    };
+}
+
+QJsonObject savedProject(const QJsonArray &nodes, const QString &nextNode = "8", const QString &nextFlow = "2")
+{
+    return {
+        {"format_version",                                                                     2                          },
+        {       "project", QJsonObject{{"name", "缺失工具"}, {"next_node_seq", nextNode}, {"next_flow_seq", nextFlow}}},
+        {         "flows",
+         QJsonArray{QJsonObject{{"flow_id", "flow_1"}, {"name", "流程1"}, {"run_selected", true}, {"nodes", nodes}}}    }
+    };
+}
+
+ToolDefinition scalarTool()
+{
+    ToolDefinition tool;
+    tool.id           = "unavailable";
+    tool.displayName  = "原始名称";
+    tool.kind         = ToolKind::CppClass;
+    tool.registryName = tool.id;
+    PortDefinition value;
+    value.id           = "value";
+    value.name         = "值";
+    value.type         = {Type::Int};
+    value.defaultValue = std::int64_t{4};
+    tool.inputs.push_back(value);
+    tool.outputs.push_back(value);
+    PortDefinition restored;
+    restored.id   = "unknown";
+    restored.name = "恢复";
+    restored.type = {Type::String};
+    tool.initParams.push_back(restored);
+    return tool;
+}
 
 void candidateAndRawPreservation(const QString &directory)
 {
     ToolRegistry   registry;
     ProjectStorage storage(registry);
-    const auto     source = directory + "/缺失.vrt";
-    put(source, missingDocument);
+    const auto     source = directory + "/缺失.vrt.json";
+    put(source, QJsonDocument(savedProject({savedNode()})).toJson());
     auto loaded = storage.load(path(source));
-    require(!loaded.project.dirty, "diagnostics alone made a project dirty");
-    require(has(loaded.diagnostics, ProjectStorageCode::DefinitionMissing), "missing definition not diagnosed");
+    require(!loaded.project.dirty && has(loaded.diagnostics, ProjectStorageCode::DefinitionMissing),
+            "missing node was not retained cleanly");
     require(has(loaded.diagnostics, ProjectStorageCode::Cycle), "loaded cycle not diagnosed");
-    require(loaded.project.flows[0].nodes[0].inputs.at("value").source->node == 7, "cycle was silently cut");
     loaded.project.flows[0].nodes[0].alias = "可编辑备注";
-    loaded.project.dirty                   = true;
-    const auto saved                       = directory + "/保留.vrt";
+    const auto saved                       = directory + "/保留.vrt.json";
     storage.save(loaded.project, path(saved));
-    const auto raw = YAML::Load(get(saved))["flows"][0]["nodes"][0];
-    require(raw["vendor_extension"]["opaque"][1]["two"].as<std::string>() == "three",
-            "missing tool extension was discarded");
-    require(raw["inputs"]["value"]["literal"].as<std::int64_t>() == 9007199254740993LL, "int64 literal lost precision");
-    require(raw["alias"].as<std::string>() == "可编辑备注", "missing node alias was not saved");
+    const auto root = QJsonDocument::fromJson(get(saved)).object();
+    const auto raw  = root.value("flows").toArray()[0].toObject().value("nodes").toArray()[0].toObject();
+    require(root.value("format_version").toInteger() == 2 && raw.value("node_seq").isString(),
+            "project version or identity encoding is wrong");
+    require(raw.value("vendor_extension").toObject().value("opaque").toArray()[1].toObject().value("two") == "three",
+            "extension lost");
+    require(raw.value("inputs").toObject().value("value").toObject().value("literal").toInteger() == 9007199254740993LL,
+            "int64 precision lost");
+    require(raw.value("alias") == "可编辑备注", "alias lost");
     const auto before    = get(saved);
     const auto priorPath = loaded.project.path;
     loaded.project.dirty = true;
     bool failed          = false;
     try
     {
-        storage.save(loaded.project, path(directory + "/absent/failed.vrt"));
+        storage.save(loaded.project, path(directory + "/absent/failed.vrt.json"));
     }
     catch (const std::exception &)
     {
         failed = true;
     }
-    require(failed && loaded.project.path == priorPath && loaded.project.dirty,
-            "failed save changed current project path or dirty");
-    require(get(saved) == before, "failed save altered previous file");
-    auto copiedProject                  = loaded.project;
-    auto duplicate                      = copiedProject.flows[0].nodes[0];
+    require(failed && loaded.project.path == priorPath && loaded.project.dirty && get(saved) == before,
+            "failed save installed candidate");
+    auto copied                         = loaded.project;
+    auto duplicate                      = copied.flows[0].nodes[0];
     duplicate.id                        = 9;
     duplicate.position.x                = 1;
     duplicate.inputs.at("value").source = SourcePort{9, "value"};
-    copiedProject.flows[0].nodes.push_back(std::move(duplicate));
-    copiedProject.nextNodeId = 10;
-    const auto copiedFile    = directory + "/copied.vrt";
-    storage.save(copiedProject, path(copiedFile));
-    const auto copied = YAML::Load(get(copiedFile))["flows"][0]["nodes"];
-    require(
-        copied[0]["node_seq"].as<NodeId>() == 7 && copied[1]["node_seq"].as<NodeId>() == 9
-            && copied[1]["inputs"]["value"]["source"]["node_seq"].as<NodeId>() == 9
-            && loaded.project.flows[0].nodes[0].unresolved["inputs"]["value"]["source"]["node_seq"].as<NodeId>() == 7,
-        "copying a missing tool reused its raw ID/source or mutated the original raw subtree");
-
-    for (const auto &text :
-         {std::string("[not, a, project]"), std::string("format_version: 2\nproject: {}\nflows: []"),
-          std::string("format_version: 1\nproject: [broken]\nflows: []"),
-          std::string("format_version: 1\nproject: {name: x, next_node_seq: -1, next_flow_seq: 2}\nflows: []")})
+    copied.flows[0].nodes.push_back(std::move(duplicate));
+    copied.nextNodeId = 10;
+    storage.save(copied, path(directory + "/copied.vrt.json"));
+    const auto reopened = storage.load(copied.path);
+    require(reopened.project.flows[0].nodes[1].id == 9
+                && reopened.project.flows[0].nodes[1].inputs.at("value").source->node == 9
+                && loaded.project.flows[0].nodes[0].unresolved.value("node_seq") == "7",
+            "unknown node copy shared identity");
+    for (const auto &text : {QByteArray("[1,2]"), QByteArray("{\"format_version\":1}"),
+                             QByteArray("{\"format_version\":2,\"project\":[]}"), QByteArray("{\"flows\":[1,]}"),
+                             QByteArray("format_version: 1\nproject: {}\nflows: []")})
     {
         put(source, text);
         failed = false;
@@ -140,79 +179,77 @@ void candidateAndRawPreservation(const QString &directory)
             failed = true;
         }
         require(failed && loaded.project.path == priorPath && loaded.project.dirty,
-                "invalid candidate replaced current project");
+                "invalid candidate replaced project");
     }
-}
-
-ToolDefinition scalarTool(std::string id)
-{
-    ToolDefinition tool;
-    tool.id           = std::move(id);
-    tool.displayName  = "标量";
-    tool.kind         = ToolKind::CppClass;
-    tool.registryName = tool.id;
-    PortDefinition value;
-    value.id           = "value";
-    value.name         = "值";
-    value.type         = {Type::Int};
-    value.defaultValue = std::int64_t{4};
-    tool.inputs.push_back(value);
-    tool.outputs.push_back(value);
-    return tool;
+    try
+    {
+        storage.load(path(source));
+        require(false, "YAML project accepted");
+    }
+    catch (const std::exception &error)
+    {
+        require(std::string(error.what()).find("工程格式不受支持，请使用 JSON 工程") != std::string::npos,
+                "legacy format error is unclear");
+    }
 }
 
 void reconciliationAndIdentities(const QString &directory)
 {
-    ToolRegistry   registry;
-    auto           tool = scalarTool("unavailable");
-    PortDefinition restored;
-    restored.id   = "unknown";
-    restored.name = "恢复";
-    restored.type = {Type::String};
-    tool.initParams.push_back(restored);
+    ToolRegistry registry;
+    const auto   tool = scalarTool();
     registry.addDefinition(tool);
     ProjectStorage storage(registry);
-    auto           document              = YAML::Load(missingDocument);
-    document["project"]["next_node_seq"] = 1;
-    document["project"]["next_flow_seq"] = 1;
-    const auto file                      = directory + "/reconcile.vrt";
-    put(file, YAML::Dump(document));
+    const auto     file     = directory + "/reconcile.vrt.json";
+    const auto     document = savedProject({savedNode()}, "1", "1");
+    put(file, QJsonDocument(document).toJson());
     auto        recovered = storage.load(path(file));
     const auto &node      = recovered.project.flows[0].nodes[0];
-    require(!node.unresolved.IsDefined() || node.unresolved.IsNull(), "restored node stayed unresolved");
-    require(std::get<Utf8>(node.initParams.at("unknown")).str() == "保留中文",
-            "unknown tool parameter did not recover");
-    require(node.id == 7 && recovered.project.nextNodeId == 8 && recovered.project.nextFlowId == 2,
-            "loading did not repair next IDs without renumbering nodes");
-    require(recovered.project.dirty && has(recovered.diagnostics, ProjectStorageCode::CounterRepaired),
-            "counter correction did not mark dirty");
+    require(node.unresolved.isEmpty() && std::get<Utf8>(node.initParams.at("unknown")).str() == "保留中文",
+            "definition did not recover");
+    require(node.id == 7 && recovered.project.nextNodeId == 8 && recovered.project.nextFlowId == 2
+                && recovered.project.dirty && has(recovered.diagnostics, ProjectStorageCode::CounterRepaired),
+            "counter repair changed identity");
     ToolRegistry absentRegistry;
     auto         absent                                = ProjectStorage(absentRegistry).load(path(file));
     absent.project.flows[0].nodes[0].executionRevision = 5;
-    const auto restoredCandidate                       = storage.reconcile(absent.project);
-    require(absent.project.flows[0].nodes[0].unresolved.IsMap()
-                && !restoredCandidate.project.flows[0].nodes[0].unresolved.IsMap()
-                && restoredCandidate.project.flows[0].nodes[0].executionRevision == 6,
-            "reconciliation did not restore a separate candidate and invalidate its execution contract");
-
-    for (int damage = 0; damage != 5; ++damage)
+    const auto restored                                = storage.reconcile(absent.project);
+    require(!absent.project.flows[0].nodes[0].unresolved.isEmpty()
+                && restored.project.flows[0].nodes[0].unresolved.isEmpty()
+                && restored.project.flows[0].nodes[0].executionRevision == 6,
+            "reconciliation did not invalidate separate candidate");
+    for (int damage = 0; damage != 8; ++damage)
     {
-        auto invalid = YAML::Clone(document);
+        auto invalid     = document;
+        auto flow        = invalid.value("flows").toArray()[0].toObject();
+        auto nodes       = flow.value("nodes").toArray();
+        auto damagedNode = nodes[0].toObject();
         if (damage == 0)
-            invalid["flows"].push_back(YAML::Clone(invalid["flows"][0]));
+            invalid.insert("flows", QJsonArray{flow, flow});
         if (damage == 1)
-            invalid["flows"][0]["nodes"].push_back(YAML::Clone(invalid["flows"][0]["nodes"][0]));
+            nodes.append(nodes[0]);
         if (damage == 2)
-            invalid["flows"][0]["flow_id"] = "";
+            flow.insert("flow_id", "");
         if (damage == 3)
-            invalid["flows"][0]["nodes"][0]["node_seq"] = "18446744073709551616";
+            damagedNode.insert("node_seq", "18446744073709551616");
         if (damage == 4)
+            damagedNode.insert("node_seq", qint64{7});
+        if (damage == 5)
+            flow.insert("run_selected", "true");
+        if (damage == 6)
+            damagedNode.insert("pos", QJsonArray{0.5, 0});
+        if (damage == 7)
         {
-            auto duplicate       = YAML::Clone(invalid["flows"][0]);
-            duplicate["flow_id"] = "flow_2";
-            invalid["flows"].push_back(duplicate);
+            auto second = flow;
+            second.insert("flow_id", "flow_2");
+            invalid.insert("flows", QJsonArray{flow, second});
         }
-        put(file, YAML::Dump(invalid));
+        if (damage != 0 && damage != 7)
+        {
+            nodes[0] = damagedNode;
+            flow.insert("nodes", nodes);
+            invalid.insert("flows", QJsonArray{flow});
+        }
+        put(file, QJsonDocument(invalid).toJson());
         bool rejected = false;
         try
         {
@@ -222,112 +259,100 @@ void reconciliationAndIdentities(const QString &directory)
         {
             rejected = true;
         }
-        require(rejected && recovered.project.flows[0].nodes[0].id == 7, "invalid or duplicated identity was accepted");
+        require(rejected && recovered.project.flows[0].nodes[0].id == 7, "invalid or duplicated identity accepted");
     }
-
-    auto source                       = YAML::Clone(document["flows"][0]["nodes"][0]);
-    source["node_seq"]                = 8;
-    source["pos"][0]                  = 1;
-    source["inputs"]["value"]["mode"] = "literal";
-    source["inputs"]["value"].remove("source");
-    document["flows"][0]["nodes"].push_back(source);
-    document["flows"][0]["nodes"][0]["inputs"]["value"]["source"]["node_seq"] = 8;
-    document["project"]["next_node_seq"]                                      = 9;
-    put(file, YAML::Dump(document));
-    auto unchanged = storage.load(path(file));
-    require(unchanged.project.flows[0].nodes[0].inputs.at("value").source->node == 8,
-            "implementation-unavailable definition was treated as missing");
+    auto source = savedNode("8", "");
+    source.insert("pos", QJsonArray{1, 0});
+    const auto target = savedNode("7", "8");
+    put(file, QJsonDocument(savedProject({target, source}, "9")).toJson());
+    require(storage.load(path(file)).project.flows[0].nodes[0].inputs.at("value").source->node == 8,
+            "definition treated as unavailable implementation");
+    auto changedTool           = tool;
+    changedTool.inputs[0].type = changedTool.outputs[0].type = {Type::Float};
+    changedTool.inputs[0].defaultValue = changedTool.outputs[0].defaultValue = 2.5;
     ToolRegistry changedRegistry;
-    auto         changedTool            = scalarTool("unavailable");
-    changedTool.initParams              = tool.initParams;
-    changedTool.inputs[0].type          = {Type::Float};
-    changedTool.inputs[0].defaultValue  = 2.5;
-    changedTool.outputs[0].type         = {Type::Float};
-    changedTool.outputs[0].defaultValue = 2.5;
     changedRegistry.addDefinition(changedTool);
-    auto        changed      = ProjectStorage(changedRegistry).load(path(file));
-    const auto &changedInput = changed.project.flows[0].nodes[0].inputs.at("value");
-    require(!changedInput.source && changedInput.mode == BindingMode::Upstream,
-            "both-end signature change retained a stale edge or activated hidden literal");
-    require(std::get<double>(changedInput.literal) == 2.5 && changed.project.dirty,
-            "incompatible scalar was reinterpreted instead of replaced");
-
-    source["tool_id"] = "still_missing";
-    source["type_snapshot"]["outputs"].remove("value");
-    document["flows"][0]["nodes"][1] = source;
-    put(file, YAML::Dump(document));
-    auto pending = storage.load(path(file));
+    const auto  changed = ProjectStorage(changedRegistry).load(path(file));
+    const auto &binding = changed.project.flows[0].nodes[0].inputs.at("value");
+    require(!binding.source && binding.mode == BindingMode::Upstream && std::get<double>(binding.literal) == 2.5,
+            "schema change retained stale binding");
+    source.insert("tool_id", "still_missing");
+    auto snapshot = source.value("type_snapshot").toObject();
+    snapshot.insert("outputs", QJsonObject{});
+    source.insert("type_snapshot", snapshot);
+    put(file, QJsonDocument(savedProject({target, source}, "9")).toJson());
+    const auto pending = storage.load(path(file));
     require(pending.project.flows[0].nodes[0].inputs.at("value").source.has_value()
                 && has(pending.diagnostics, ProjectStorageCode::PendingReference),
-            "unknown source port was cleared instead of retained pending recovery");
-    const auto retained           = YAML::Clone(document["flows"][0]["nodes"][0]);
-    document["flows"][0]["nodes"] = YAML::Node(YAML::NodeType::Sequence);
-    document["flows"][0]["nodes"].push_back(retained);
-    put(file, YAML::Dump(document));
-    auto invalidSource = storage.load(path(file));
-    require(!invalidSource.project.flows[0].nodes[0].inputs.at("value").source
-                && has(invalidSource.diagnostics, ProjectStorageCode::InvalidReference),
-            "definitely absent source was not cleared");
+            "unknown source cleared");
+    put(file, QJsonDocument(savedProject({target})).toJson());
+    require(!storage.load(path(file)).project.flows[0].nodes[0].inputs.at("value").source, "absent source retained");
 }
 
 void typedArraysAndRanges(const QString &directory)
 {
-    auto document                        = YAML::Load(missingDocument);
-    auto node                            = document["flows"][0]["nodes"][0];
-    node["tool_name_snapshot"]           = "数组";
-    node["init_params"]                  = YAML::Node(YAML::NodeType::Map);
-    node["type_snapshot"]["init_params"] = YAML::Node(YAML::NodeType::Map);
-    node["type_snapshot"]["inputs"]["value"]
-        = YAML::Load("{type: NumericArray, dtype: float32, rank: 2, layout: dense}");
-    node["type_snapshot"]["outputs"] = YAML::Node(YAML::NodeType::Map);
-    node["inputs"]["value"]          = YAML::Load("{mode: literal, literal: {shape: [0, 2], data: []}}");
-    ToolDefinition tool;
-    tool.id           = "unavailable";
-    tool.displayName  = "数组";
-    tool.kind         = ToolKind::CppFunction;
-    tool.registryName = tool.id;
-    PortDefinition input;
-    input.id   = "value";
-    input.name = "数组";
-    input.type = {Type::NumericArray, DType::Int64, 2, Layout::Dense};
-    tool.inputs.push_back(input);
+    auto node = savedNode();
+    node.insert("init_params", QJsonObject{});
+    node.insert("type_snapshot", QJsonObject{
+                                     {"init_params",                                                                                           QJsonObject{}},
+                                     {    "outputs",                                                                                           QJsonObject{}},
+                                     {     "inputs", QJsonObject{{"value", QJsonObject{{"type", "NumericArray"},
+ {"dtype", "float32"},
+ {"rank", 2},
+ {"layout", "dense"}}}}                                                                                 }
+    });
+    node.insert("inputs",
+                QJsonObject{
+                    {"value", savedInput("", QJsonObject{{"shape", QJsonArray{0, 2}}, {"data", QJsonArray{}}})}
+    });
+    auto tool = scalarTool();
+    tool.initParams.clear();
+    tool.outputs.clear();
+    tool.inputs[0].type         = {Type::NumericArray, DType::Int64, 2, Layout::Dense};
+    tool.inputs[0].defaultValue = Missing{};
     ToolRegistry registry;
     registry.addDefinition(tool);
-    const auto file = directory + "/array.vrt";
-    put(file, YAML::Dump(document));
-    auto changed = ProjectStorage(registry).load(path(file));
-    require(isMissing(changed.project.flows[0].nodes[0].inputs.at("value").literal),
-            "empty float32 array silently became an int64 array");
-    require(changed.project.dirty && has(changed.diagnostics, ProjectStorageCode::SchemaChanged),
-            "array signature change not diagnosed");
+    const auto file = directory + "/array.vrt.json";
+    put(file, QJsonDocument(savedProject({node})).toJson());
+    const auto changed = ProjectStorage(registry).load(path(file));
+    require(isMissing(changed.project.flows[0].nodes[0].inputs.at("value").literal) && changed.project.dirty,
+            "float32 empty array reinterpreted as int64");
     tool.inputs[0].type.dtype = DType::Float32;
     ToolRegistry oldRegistry;
     oldRegistry.addDefinition(tool);
-    auto        old   = ProjectStorage(oldRegistry).load(path(file));
+    const auto  old   = ProjectStorage(oldRegistry).load(path(file));
     const auto &array = std::get<NumericArray>(old.project.flows[0].nodes[0].inputs.at("value").literal);
-    require(array.dtype() == DType::Float32 && array.buffers()[0].shape()[0] == 0 && array.buffers()[0].shape()[1] == 2,
-            "typed empty array was not decoded from saved signature");
-
-    auto rangedTool              = scalarTool("unavailable");
+    require(array.buffers()[0].shape()[0] == 0 && array.buffers()[0].shape()[1] == 2, "empty array shape lost");
+    auto rangedTool              = scalarTool();
     rangedTool.inputs[0].maximum = std::int64_t{10};
-    ToolRegistry rangeRegistry;
-    rangeRegistry.addDefinition(rangedTool);
-    document                                                         = YAML::Load(missingDocument);
-    document["flows"][0]["nodes"][0]["init_params"]                  = YAML::Node(YAML::NodeType::Map);
-    document["flows"][0]["nodes"][0]["type_snapshot"]["init_params"] = YAML::Node(YAML::NodeType::Map);
-    put(file, YAML::Dump(document));
-    document["flows"][0]["nodes"][0]["inputs"]["value"]["mode"] = "literal";
-    put(file, YAML::Dump(document));
-    auto ranged = ProjectStorage(rangeRegistry).load(path(file));
+    ToolRegistry rangedRegistry;
+    rangedRegistry.addDefinition(rangedTool);
+    const auto rangedNode = savedNode("7", "");
+    put(file, QJsonDocument(savedProject({rangedNode})).toJson());
+    const auto ranged = ProjectStorage(rangedRegistry).load(path(file));
     require(std::get<std::int64_t>(ranged.project.flows[0].nodes[0].inputs.at("value").literal) == 9007199254740993LL
                 && has(ranged.diagnostics, ProjectStorageCode::RangeWarning),
-            "new UI range clamped saved int64");
+            "saved range violation was clamped");
+    auto overflow = QJsonDocument(savedProject({rangedNode})).toJson();
+    overflow.replace("9007199254740993", "-9223372036854775809");
+    put(file, overflow);
+    bool rejected = false;
+    try
+    {
+        ProjectStorage(rangedRegistry).load(path(file));
+    }
+    catch (const std::exception &)
+    {
+        rejected = true;
+    }
+    require(rejected, "raw int64 overflow accepted from file after Qt rounding");
 }
 
 void saveAsPaths(const QString &directory)
 {
     ToolRegistry registry;
-    auto         tool = scalarTool("path_tool");
+    auto         tool = scalarTool();
+    tool.initParams.clear();
     tool.outputs.clear();
     tool.inputs.clear();
     for (const auto &id : {"path", "text", "empty", "remote", "absolute"})
@@ -360,32 +385,33 @@ void saveAsPaths(const QString &directory)
     ProjectStorage    storage(registry);
     ProjectDefinition project;
     NodeDefinition    node;
-    node.id                       = 0;
-    node.toolId                   = tool.id;
-    node.toolNameSnapshot         = tool.displayName;
-    node.inputs["path"]           = {BindingMode::Upstream, Utf8("图像/不存在.png"), std::nullopt};
-    node.inputs["text"].literal   = Utf8("图像/不存在.png");
-    node.inputs["empty"].literal  = Utf8("");
-    node.inputs["remote"].literal = Utf8("Z:/异盘/资源.png");
+    node.id                         = 0;
+    node.toolId                     = tool.id;
+    node.toolNameSnapshot           = tool.displayName;
+    node.inputs["path"]             = {BindingMode::Upstream, Utf8("图像/不存在.png"), std::nullopt};
+    node.inputs["text"].literal     = Utf8("图像/不存在.png");
+    node.inputs["empty"].literal    = Utf8("");
+    node.inputs["remote"].literal   = Utf8("Z:/异盘/资源.png");
     node.inputs["dynamic"].literal  = Utf8("动态/图像.png");
-    node.initParams["folder"]     = Utf8("目录");
-    const auto oldDirectory = directory + "/旧位置";
-    const auto newDirectory = directory + "/新位置";
-    const auto absolutePath = utf8Path(path(oldDirectory) / std::filesystem::path(u8"绝对.png"));
+    node.initParams["folder"]       = Utf8("目录");
+    const auto oldDirectory         = directory + "/旧位置";
+    const auto newDirectory         = directory + "/新位置";
+    const auto absolutePath         = utf8Path(path(oldDirectory) / std::filesystem::path(u8"绝对.png"));
     node.inputs["absolute"].literal = Utf8(absolutePath);
     for (const auto &port : tool.inputs) node.signatures.inputs.emplace(port.id, port.type);
     node.signatures.initParams.emplace(folder.id, folder.type);
     project.flows[0].nodes.push_back(node);
-    project.nextNodeId      = 1;
+    project.nextNodeId = 1;
     require(QDir().mkpath(oldDirectory) && QDir().mkpath(newDirectory), "cannot create save-as directories");
     storage.save(project, path(oldDirectory + "/首次"));
-    require(project.path.extension() == ".vrt" && !project.dirty, "first save did not append extension or clear dirty");
+    require(project.path.filename() == std::filesystem::path(u8"首次.vrt.json") && !project.dirty,
+            "first save did not append extension or clear dirty");
     require(std::get<Utf8>(project.flows[0].nodes[0].inputs.at("path").literal).str() == "图像/不存在.png",
             "unnamed relative path was resolved using a fabricated old directory");
     require(std::get<Utf8>(project.flows[0].nodes[0].inputs.at("absolute").literal).str() == absolutePath,
             "unnamed project guessed a relative base for an absolute path");
     project.dirty = true;
-    storage.save(project, path(newDirectory + "/另存.vrt"));
+    storage.save(project, path(newDirectory + "/另存.vrt.json"));
     const auto &saved = project.flows[0].nodes[0];
     require(std::get<Utf8>(saved.inputs.at("path").literal).str() == "../旧位置/图像/不存在.png",
             "hidden upstream literal path did not rebase");
@@ -408,7 +434,7 @@ void saveAsPaths(const QString &directory)
     bool failed        = false;
     try
     {
-        storage.save(project, path(directory + "/not-created/failed.vrt"));
+        storage.save(project, path(directory + "/not-created/failed.vrt.json"));
     }
     catch (const std::exception &)
     {
@@ -421,51 +447,36 @@ void saveAsPaths(const QString &directory)
 
 void wideIdsAndCycleMembership(const QString &directory)
 {
-    ToolRegistry     registry;
-    ProjectStorage   storage(registry);
-    auto             document                                                 = YAML::Load(missingDocument);
-    const auto       file                                                     = directory + "/wide.vrt";
-    constexpr NodeId large                                                    = 9007199254740993ULL;
-    document["flows"][0]["nodes"][0]["node_seq"]                              = large;
-    document["flows"][0]["nodes"][0]["inputs"]["value"]["source"]["node_seq"] = large;
-    document["project"]["next_node_seq"]                                      = large + 1;
-    put(file, YAML::Dump(document));
-    auto loaded = storage.load(path(file));
-    storage.save(loaded.project);
-    auto reopened = storage.load(path(file));
-    require(reopened.project.flows[0].nodes[0].id == large && reopened.project.nextNodeId == large + 1,
-            "node identity crossed the JS safe integer boundary imprecisely");
-    constexpr NodeId maximum                                                  = std::numeric_limits<NodeId>::max();
-    document["flows"][0]["nodes"][0]["node_seq"]                              = maximum;
-    document["flows"][0]["nodes"][0]["inputs"]["value"]["source"]["node_seq"] = maximum;
-    document["project"]["next_node_seq"]                                      = maximum;
-    put(file, YAML::Dump(document));
-    const auto exhausted = storage.load(path(file));
-    require(exhausted.project.flows[0].nodes[0].id == maximum && exhausted.project.nextNodeId == maximum
-                && has(exhausted.diagnostics, ProjectStorageCode::SequenceExhausted),
-            "exhausted uint64 identity wrapped instead of retaining a read-only exhausted sequence");
-
-    document                                                                  = YAML::Load(missingDocument);
-    document["project"]["next_node_seq"]                                      = 10;
-    document["flows"][0]["nodes"][0]["inputs"]["value"]["source"]["node_seq"] = 8;
-    auto second                                     = YAML::Clone(document["flows"][0]["nodes"][0]);
-    second["node_seq"]                              = 8;
-    second["pos"][0]                                = 1;
-    second["inputs"]["value"]["source"]["node_seq"] = 7;
-    document["flows"][0]["nodes"].push_back(second);
-    auto downstream        = YAML::Clone(second);
-    downstream["node_seq"] = 9;
-    downstream["pos"][0]   = 2;
-    document["flows"][0]["nodes"].push_back(downstream);
-    put(file, YAML::Dump(document));
+    ToolRegistry   registry;
+    ProjectStorage storage(registry);
+    const auto     file = directory + "/wide.vrt.json";
+    for (const auto &id : {QString("9007199254740993"), QString("18446744073709551615")})
+    {
+        const auto next = id == "9007199254740993" ? QString("9007199254740994") : id;
+        put(file, QJsonDocument(savedProject({savedNode(id, id)}, next)).toJson());
+        auto loaded = storage.load(path(file));
+        storage.save(loaded.project);
+        const auto reopened = storage.load(path(file));
+        require(reopened.project.flows[0].nodes[0].id == id.toULongLong()
+                    && reopened.project.nextNodeId == next.toULongLong(),
+                "uint64 precision lost");
+        if (id == "18446744073709551615")
+            require(has(reopened.diagnostics, ProjectStorageCode::SequenceExhausted), "ID exhaustion not diagnosed");
+    }
+    auto first  = savedNode("7", "8");
+    auto second = savedNode("8", "7");
+    second.insert("pos", QJsonArray{1, 0});
+    auto downstream = savedNode("9", "8");
+    downstream.insert("pos", QJsonArray{2, 0});
+    put(file, QJsonDocument(savedProject({first, second, downstream}, "10")).toJson());
     const auto       cyclic = storage.load(path(file));
     std::set<NodeId> members;
     for (const auto &diagnostic : cyclic.diagnostics)
         if (diagnostic.code == ProjectStorageCode::Cycle)
             members.insert(*diagnostic.node);
-    require(members == std::set<NodeId>{7, 8}, "cycle diagnosis incorrectly included downstream-only nodes");
+    require(members == std::set<NodeId>{7, 8}, "downstream-only nodes included in cycle");
 }
-} // namespace
+}
 
 int main()
 {
@@ -478,7 +489,7 @@ int main()
         typedArraysAndRanges(temporary.path());
         saveAsPaths(temporary.path());
         wideIdsAndCycleMembership(temporary.path());
-        std::cout << "project storage contract passed\n";
+        std::cout << "project storage JSON contract passed\n";
     }
     catch (const std::exception &error)
     {

@@ -1,0 +1,342 @@
+{
+  "format_version": 2,
+  "project": {
+    "name": "CPU与Python全链示例工程",
+    "next_node_seq": "6",
+    "next_flow_seq": "2"
+  },
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "视觉检测与统计流程",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "visionrt.image.read",
+          "tool_name_snapshot": "图像读取",
+          "alias": "读图节点",
+          "pos": [
+            0,
+            0
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "color": {
+                "type": "String"
+              },
+              "limit": {
+                "type": "Int"
+              },
+              "max_batch_bytes": {
+                "type": "Int"
+              },
+              "mode": {
+                "type": "String"
+              },
+              "path": {
+                "type": "String"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "paths": {
+                "type": "StringArray",
+                "rank": 1,
+                "layout": "dense"
+              }
+            }
+          },
+          "inputs": {
+            "color": {
+              "mode": "literal",
+              "literal": "bgr"
+            },
+            "limit": {
+              "mode": "literal",
+              "literal": 0
+            },
+            "max_batch_bytes": {
+              "mode": "literal",
+              "literal": 0
+            },
+            "mode": {
+              "mode": "literal",
+              "literal": "directory"
+            },
+            "path": {
+              "mode": "literal",
+              "literal": "images"
+            }
+          }
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "visionrt.roi.projection",
+          "tool_name_snapshot": "投影ROI",
+          "alias": "投影定位",
+          "pos": [
+            2,
+            0
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "axis": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "merge_gap": {
+                "type": "Int"
+              },
+              "min_extent": {
+                "type": "Int"
+              },
+              "min_pixels": {
+                "type": "Int"
+              },
+              "padding": {
+                "type": "Int"
+              },
+              "polarity": {
+                "type": "String"
+              },
+              "threshold": {
+                "type": "Int"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "rois": {
+                "type": "RoiBatch"
+              }
+            }
+          },
+          "inputs": {
+            "axis": {
+              "mode": "literal",
+              "literal": "x"
+            },
+            "images": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": "images"
+              }
+            },
+            "merge_gap": {
+              "mode": "literal",
+              "literal": 0
+            },
+            "min_extent": {
+              "mode": "literal",
+              "literal": 5
+            },
+            "min_pixels": {
+              "mode": "literal",
+              "literal": 5
+            },
+            "padding": {
+              "mode": "literal",
+              "literal": 0
+            },
+            "polarity": {
+              "mode": "literal",
+              "literal": "bright"
+            },
+            "threshold": {
+              "mode": "literal",
+              "literal": 128
+            }
+          }
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "visionrt.image.crop",
+          "tool_name_snapshot": "图像裁剪",
+          "alias": "区域裁剪",
+          "pos": [
+            0,
+            2
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "images": {
+                "type": "ImageBatch"
+              },
+              "rect": {
+                "type": "Rect"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              },
+              "origins": {
+                "type": "NumericArray",
+                "dtype": "float64",
+                "rank": 2,
+                "layout": "dense"
+              }
+            }
+          },
+          "inputs": {
+            "images": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": "images"
+              }
+            },
+            "rect": {
+              "mode": "literal",
+              "literal": [
+                2,
+                10,
+                10,
+                20,
+                40,
+                0
+              ]
+            }
+          }
+        },
+        {
+          "node_seq": "4",
+          "tool_id": "visionrt.image.preprocess",
+          "tool_name_snapshot": "图像预处理",
+          "alias": "灰度二值化",
+          "pos": [
+            0,
+            4
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "images": {
+                "type": "ImageBatch"
+              },
+              "kernel": {
+                "type": "Int"
+              },
+              "operation": {
+                "type": "String"
+              },
+              "threshold": {
+                "type": "Int"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "images": {
+                "type": "ImageBatch"
+              }
+            }
+          },
+          "inputs": {
+            "images": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "3",
+                "port_id": "images"
+              }
+            },
+            "kernel": {
+              "mode": "literal",
+              "literal": 3
+            },
+            "operation": {
+              "mode": "literal",
+              "literal": "threshold"
+            },
+            "threshold": {
+              "mode": "literal",
+              "literal": 128
+            }
+          }
+        },
+        {
+          "node_seq": "5",
+          "tool_id": "custom.image.mean",
+          "tool_name_snapshot": "计算图像均值",
+          "alias": "Python均值统计",
+          "pos": [
+            2,
+            2
+          ],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {
+              "images": {
+                "type": "ImageBatch"
+              }
+            },
+            "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "means": {
+                "type": "NumericArray",
+                "dtype": "float64",
+                "rank": 1,
+                "layout": "dense"
+              }
+            }
+          },
+          "inputs": {
+            "images": {
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": "images"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

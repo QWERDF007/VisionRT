@@ -41,7 +41,7 @@ void popupSessionsContract()
     };
     visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "popup catalog did not become ready");
-    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt"));
+    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
     app.resolveUnsaved(QStringLiteral("discard"));
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
             "popup contract could not open the real project");
@@ -216,7 +216,7 @@ void popupSessionsContract()
 
     const auto openProject = [&]
     {
-        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt"));
+        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
         app.resolveUnsaved(QStringLiteral("discard"));
         require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
                 "cannot reopen popup project");

@@ -51,7 +51,7 @@ int main(int argc, char **argv)
         QTemporaryDir temporary;
         if (!temporary.isValid())
             throw std::runtime_error("Cannot create the GPU project directory");
-        loaded.project.path = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / "gpu.vrt";
+        loaded.project.path = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / "gpu.vrt.json";
         reader.inputs.at("mode").literal = Utf8("file");
         reader.inputs.at("path").literal = Utf8(image.generic_string());
         detector.initParams.at("model_path") = Utf8(weights.generic_string());

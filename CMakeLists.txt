@@ -37,6 +37,7 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 # 核心业务逻辑库
 add_library(visionrt_core
     src/core/ValueJson.cpp
+    src/core/ValueJsonDocument.cpp
     src/core/NodeContracts.cpp
     src/core/ToolRegistry.cpp
     src/core/ProjectEditor.cpp
