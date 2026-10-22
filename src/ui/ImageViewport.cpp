@@ -259,7 +259,12 @@ ImageViewport::ImageViewport(QQuickItem *parent)
     observeWindow(window());
 }
 
-ImageViewport::~ImageViewport() = default;
+ImageViewport::~ImageViewport()
+{
+    QObject::disconnect(this, &QQuickItem::windowChanged, this, nullptr);
+    QObject::disconnect(this, &QQuickItem::enabledChanged, this, nullptr);
+    QObject::disconnect(windowActiveConnection_);
+}
 
 void ImageViewport::setStatus(QString text)
 {
