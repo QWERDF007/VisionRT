@@ -36,6 +36,7 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 核心业务逻辑库
 add_library(visionrt_core
+    src/core/ValueJson.cpp
     src/core/NodeContracts.cpp
     src/core/ToolRegistry.cpp
     src/core/ProjectEditor.cpp
@@ -140,6 +141,7 @@ if(BUILD_TESTING)
     visionrt_apply_test_environment(path_contract)
 
     visionrt_contract(tool_registry_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    visionrt_contract(value_json_contract visionrt_core)
     visionrt_contract(project_editor_contract visionrt_core)
     visionrt_contract(project_storage_contract visionrt_core)
     visionrt_contract(cpu_tools_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")

@@ -1,6 +1,6 @@
 #include "ui/OutputModel.h"
 
-#include <visionrt/contracts/ValueYaml.h>
+#include "core/ValueJson.h"
 
 #include <algorithm>
 #include <limits>
@@ -70,7 +70,7 @@ void numbers(Preview &out, std::span<const T> values)
     }
 }
 
-QString preview(const PortValue &value, const TypeSpec &type, qsizetype limit)
+QString preview(const PortValue &value, qsizetype limit)
 {
     Preview out{{}, limit};
     std::visit(
@@ -264,7 +264,7 @@ QString typeText(const TypeSpec &type)
 
 QString valueText(const PortValue &value, const TypeSpec &type)
 {
-    return q(YAML::Dump(encodeValue(value, type)));
+    return ValueJson::text(value, type);
 }
 
 OutputModel::OutputModel(QObject *parent)
@@ -307,8 +307,8 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                        count == references.end() ? 0 : count->second,
                        system,
                        std::move(captured)};
-        row.preview = preview(row.captured.value, type, 256);
-        row.tooltip = preview(row.captured.value, type, 4096);
+        row.preview = preview(row.captured.value, 256);
+        row.tooltip = preview(row.captured.value, 4096);
         rows_.push_back(std::move(row));
     };
     add("__status_code", "状态码", {Type::Int}, true);
@@ -360,11 +360,7 @@ std::optional<OutputModel::Captured> OutputModel::capture(const QString &port) c
 
 QString OutputModel::fullText(const Captured &captured)
 {
-    if (std::holds_alternative<ImageBatch>(captured.value))
-        return preview(captured.value, captured.type, std::numeric_limits<qsizetype>::max());
-    if (const auto *string = std::get_if<Utf8>(&captured.value))
-        return q(string->str());
-    return valueText(captured.value, captured.type);
+    return ValueJson::text(captured.value, captured.type, ValueJson::Purpose::Display);
 }
 
 std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
@@ -381,7 +377,7 @@ std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
                 return size;
             }
             else if constexpr (std::is_same_v<T, Utf8>)
-                return value.str().size();
+                return value.str().size() * 6 + 2;
             else if constexpr (std::is_same_v<T, StringArray>)
             {
                 std::size_t size = 128;

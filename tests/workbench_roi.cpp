@@ -4,7 +4,7 @@
 #include "ui/Theme.h"
 #include <quickui/Color.h>
 
-#include <visionrt/contracts/ValueYaml.h>
+#include "core/ValueJson.h"
 
 #include <QDir>
 #include <QFile>
@@ -206,7 +206,7 @@ void roiParameterContract()
     require(literal() != initial && app.dirty() && !changes.isEmpty(),
             "A completed gesture writes directly to the parameter");
     auto committed = literal();
-    const auto rois = std::get<RoiBatch>(decodeValue(YAML::Load(committed.toStdString()), {Type::RoiBatch}));
+    const auto rois = std::get<RoiBatch>(ValueJson::parse(committed, {Type::RoiBatch}));
     require(rois.images().size() == 1 && rois.images()[0].size() == 1
                 && rois.images()[0][0].kind() == RoiKind::Rectangle,
             "ROI parameter lost its typed rectangle representation");
@@ -243,7 +243,7 @@ void roiParameterContract()
             "Deleting a copied ROI detached its upstream binding");
     viewport.setDrawShape(2);
     draw(false);
-    const auto edited = std::get<RoiBatch>(decodeValue(YAML::Load(literal().toStdString()), {Type::RoiBatch}));
+    const auto edited = std::get<RoiBatch>(ValueJson::parse(literal(), {Type::RoiBatch}));
     require(edited.images().size() == 1 && edited.images()[0].size() == 2,
             "copied ROI input could not be edited independently");
     committed = literal();
@@ -411,7 +411,7 @@ void roiParameterContract()
         return nullptr;
     };
     require(QTest::qWaitFor([&] { return findCoordinate(findCoordinate, panel, "roiCoordinate1") != nullptr; }, 1000),
-            "Rect editing must expose the shared numeric fields, not a second YAML editor");
+            "Rect editing must expose the shared numeric fields, not a second text editor");
     auto *vertical = findCoordinate(findCoordinate, panel, "roiCoordinate1");
     auto *height = findCoordinate(findCoordinate, panel, "roiCoordinate3");
     require(vertical && height, "Rect coordinate fields are incomplete");
@@ -486,8 +486,8 @@ void roiParameterContract()
     editCoordinate(verticalInput, "7.75", false);
     changes.clear();
     require(app.applyRoi() && changes.count() == 1, "Apply did not flush the valid focused numeric field exactly once");
-    const auto numericRectangle = std::get<Roi>(decodeValue(YAML::Load(rectLiteral().toStdString()), {Type::Rect}));
-    const auto originalGeometry = std::get<Roi>(decodeValue(YAML::Load(originalRectangle.toStdString()), {Type::Rect}));
+    const auto numericRectangle = std::get<Roi>(ValueJson::parse(rectLiteral(), {Type::Rect}));
+    const auto originalGeometry = std::get<Roi>(ValueJson::parse(originalRectangle, {Type::Rect}));
     require(numericRectangle.encoded()[2] == 7.75f && numericRectangle.encoded()[1] == originalGeometry.encoded()[1]
                 && numericRectangle.encoded()[3] == originalGeometry.encoded()[3]
                 && numericRectangle.encoded()[5] == originalGeometry.encoded()[5],
@@ -563,7 +563,7 @@ void roiParameterContract()
     if (!applied)
         throw std::runtime_error((QStringLiteral("Rect Apply=%1: ").arg(applied)
                                  + app.diagnostic()).toStdString());
-    const auto scalar = decodeValue(YAML::Load(rectLiteral().toStdString()), {Type::Rect});
+    const auto scalar = ValueJson::parse(rectLiteral(), {Type::Rect});
     const auto geometry = std::get<Roi>(scalar).encoded();
     if (!(geometry.size() == 6 && std::abs(geometry[1] - 60) < 1 && std::abs(geometry[2] - 60) < 1
           && std::abs(geometry[3] - 30) < 1 && std::abs(geometry[4] - 20) < 1))
@@ -644,7 +644,7 @@ void roiParameterContract()
     require(rectLiteral() != imageFreeOriginal && app.dirty(), "Image-free fields saved directly");
     changes.clear();
     require(app.applyRoi(), "Image-free numeric Apply succeeded");
-    const auto imageFreeValue = std::get<Roi>(decodeValue(YAML::Load(rectLiteral().toStdString()), {Type::Rect}));
+    const auto imageFreeValue = std::get<Roi>(ValueJson::parse(rectLiteral(), {Type::Rect}));
     require(imageFreeValue.encoded()[2] == 9.25f, "Image-free numeric geometry was lost");
     require(app.save(project) && app.editRoi("rect", false), "Image-free Rect could not reopen");
     const auto previousImageFreeSession = app.roiEditor().value("id").toString();
@@ -681,7 +681,7 @@ void roiParameterContract()
     app.requestOpen(project);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Image-free rectangle reopen did not finish");
     app.selectNode(withoutImage);
-    require(std::holds_alternative<Roi>(decodeValue(YAML::Load(rectLiteral().toStdString()), {Type::Rect})),
+    require(std::holds_alternative<Roi>(ValueJson::parse(rectLiteral(), {Type::Rect})),
             "Saved image-free Rect lost its scalar type");
     const auto beforeBackground = rectLiteral();
     app.selectNode(source);

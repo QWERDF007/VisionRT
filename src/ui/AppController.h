@@ -88,7 +88,7 @@ public:
     Q_INVOKABLE void         deleteFlow(const QString &id);
     Q_INVOKABLE void         copyFlow(const QString &id);
     Q_INVOKABLE void         setFlowSelected(const QString &id, bool selected);
-    Q_INVOKABLE bool         setParameter(const QString &id, bool initialization, const QString &yamlText);
+    Q_INVOKABLE bool         setParameter(const QString &id, bool initialization, const QString &text, bool jsonInput = false);
     Q_INVOKABLE bool         setRectParameter(const QString &id, bool initialization, double x, double y, double width, double height, double angle = 0.0);
     Q_INVOKABLE bool         setParameterPath(const QString &id, bool initialization, const QUrl &url);
     Q_INVOKABLE bool         stepIntegerParameter(const QString &id, bool initialization, int direction,
