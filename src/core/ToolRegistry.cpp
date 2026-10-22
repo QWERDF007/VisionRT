@@ -4,6 +4,7 @@
 #include "plugins/PluginLoader.h"
 
 #include <algorithm>
+#include <set>
 
 namespace visionrt {
 namespace {
@@ -90,6 +91,25 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
     definitions_ = std::move(definitions);
     index_       = std::move(index);
     python_.clear();
+}
+
+void ToolRegistry::loadNativeImplementations() const
+{
+    if (!pluginLoader_)
+        return;
+    std::set<std::filesystem::path> paths;
+    for (const auto &definition : definitions_)
+        if (definition.kind == ToolKind::Cpp && !cpp_.contains(definition.id))
+        {
+            const auto path = pluginLoader_->resolveModulePath(definition.id);
+            if (!path.empty())
+                paths.insert(path);
+        }
+    for (const auto &path : paths)
+    {
+        ToolStatus status;
+        pluginLoader_->loadModule(path, status);
+    }
 }
 
 void ToolRegistry::addDefinition(ToolDefinition definition)
@@ -181,8 +201,8 @@ Availability ToolRegistry::availability(std::string_view id) const
     {
         if (cpp_.contains(definition->id))
             return {ToolAvailability::Available, {}};
-        if (pluginLoader_ && pluginLoader_->hasModule(definition->id))
-            return {ToolAvailability::Available, {}};
+        if (pluginLoader_)
+            return pluginLoader_->availability(definition->id);
         return {ToolAvailability::ImplementationUnavailable, "C++ implementation unavailable: " + definition->id + " ("
                                                                  + pathText(definition->definitionPath) + ")"};
     }
@@ -239,7 +259,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
                                     "Tool factory returned no instance: " + std::string(id));
             return instance;
         }
-        if (pluginLoader_ && pluginLoader_->hasModule(definition.id))
+        if (pluginLoader_)
         {
             auto instance = pluginLoader_->createAdapter(definition.id, services);
             if (!instance)

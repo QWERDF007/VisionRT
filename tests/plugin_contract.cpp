@@ -221,6 +221,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     def.inputs.push_back({"x", "输入", {Type::Int}, std::int64_t{0}});
     def.outputs.push_back({"y", "输出", {Type::Int}});
     registry.addDefinition(def);
+    registry.loadNativeImplementations();
 
     RuntimeEngine     engine(1);
     ProjectDefinition project;
@@ -335,7 +336,9 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(registry.find("test.plugin.counter") != nullptr);
     assert(registry.find("test.plugin.function") != nullptr);
     assert(registry.find("test.plugin.ghost.packaged") == nullptr);
-    assert(loader->hasModule("test.plugin.counter") && loader->hasModule("test.plugin.function"));
+    assert(loader->availability("test.plugin.counter").state == ToolAvailability::ImplementationNotLoaded);
+    assert(loader->availability("test.plugin.function").state == ToolAvailability::ImplementationNotLoaded);
+    registry.loadNativeImplementations();
 
     registry.registerPackage(readToolsPackage(pkgDir));
     assert(registry.find("test.plugin.ghost.packaged") == nullptr);
@@ -436,6 +439,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 })json");
     const auto otherPackage = readToolsPackage(otherDir);
     registry.registerPackage(otherPackage);
+    registry.loadNativeImplementations();
     assert(registry.find("test.plugin.function") != nullptr);
     assert(registry.find("test.plugin.counter") == nullptr);
     assert(registry.find("test.plugin.legacy") == nullptr);
@@ -536,6 +540,11 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         }
         assert(!app.busy());
     };
+
+    assert(app.runState() == "Refreshing");
+    waitForIdle();
+    for (const auto &item : app.toolDefinitions())
+        assert(item.toMap().value("available").toBool());
 
     // 1. Add node for Tool A, runOnce, verify execution
     app.addNode("test.plugin.counter", 100, 100);
@@ -744,6 +753,9 @@ void registryIntegration(const std::filesystem::path &modulePath)
 
     registry.addDefinition(def);
 
+    assert(registry.availability(def.id).state == ToolAvailability::ImplementationNotLoaded);
+    registry.loadNativeImplementations();
+
     auto avail = registry.availability(def.id);
     assert(avail.state == ToolAvailability::Available);
 
@@ -905,6 +917,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
 
+    registry.loadNativeImplementations();
     const auto state = registry.availability("test.plugin.a");
     if (state.state != ToolAvailability::Available)
     {

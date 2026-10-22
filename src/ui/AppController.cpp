@@ -181,7 +181,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     if (!editor.project().flows.empty())
         flow = workbench::q(editor.project().flows.front().id);
     if (std::any_of(registry.definitions().begin(), registry.definitions().end(), [](const auto &tool)
-                    { return tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass; }))
+                    { return tool.kind != ToolKind::Host; }))
         refresh(false);
 }
 
@@ -585,12 +585,14 @@ void AppController::Impl::refresh(bool rescan)
     finishRoi();
     if (rescan)
         loadToolsPackage();
-    auto       result        = std::make_shared<RefreshResult>();
-    auto       definitions   = registry.definitions();
-    auto      *pythonRuntime = python.get();
-    const auto accepted      = runtime->requestRefresh(
-        [result, definitions = std::move(definitions), pythonRuntime]
+    auto        result        = std::make_shared<RefreshResult>();
+    auto        definitions   = registry.definitions();
+    auto       *pythonRuntime = python.get();
+    const auto *catalog       = &registry;
+    const auto  accepted      = runtime->requestRefresh(
+        [result, definitions = std::move(definitions), pythonRuntime, catalog]
         {
+            catalog->loadNativeImplementations();
             if (pythonRuntime)
             {
                 result->implementations = pythonRuntime->refresh(definitions);
@@ -598,7 +600,7 @@ void AppController::Impl::refresh(bool rescan)
                     if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
                     {
                         const auto status = std::find_if(result->implementations.begin(), result->implementations.end(),
-                                                         [&](const auto &item) { return item.toolId == tool.id; });
+                                                               [&](const auto &item) { return item.toolId == tool.id; });
                         if (status != result->implementations.end() && status->status)
                             result->factories.emplace_back(tool.id, pythonRuntime->factory(tool));
                     }
@@ -629,6 +631,14 @@ void AppController::Impl::refresh(bool rescan)
 void AppController::Impl::refreshFinished()
 {
     auto result = std::move(refreshResult);
+    for (const auto &definition : registry.definitions())
+        if (definition.kind == ToolKind::Cpp)
+        {
+            const auto availability = registry.availability(definition.id);
+            if (availability.state != ToolAvailability::Available)
+                report(QStringLiteral("定义已加载，实现不可用：") + workbench::q(availability.message)
+                       + (availability.detail.empty() ? QString() : "\n" + workbench::q(availability.detail)));
+        }
     for (auto &implementation : result->implementations)
     {
         ToolFactory factory;
@@ -830,7 +840,7 @@ QVariantList AppController::nodes() const
             const QString category        = def ? q(def->category) : QString();
             const auto    avail           = impl_->registry.availability(node.toolId);
             const bool    defMissing      = (avail.state == ToolAvailability::DefinitionMissing);
-            const bool    implUnavailable = (avail.state == ToolAvailability::ImplementationUnavailable);
+            const bool    implUnavailable = !defMissing && avail.state != ToolAvailability::Available;
             const bool    missing         = defMissing || implUnavailable;
             result.push_back(QVariantMap{
                 {             "id", QString::number(node.id)},

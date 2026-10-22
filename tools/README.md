@@ -20,6 +20,15 @@ python tools\link_dependencies.py --build-dir build
 python tools\package_app.py --help
 ```
 
+工具包校验入口：
+
+```cmd
+build\bin\visionrt_validate_tool.exe --package <工具包目录>
+build\bin\visionrt_validate_tool.exe --package <工具包目录> --load
+```
+
+阶段和可用状态以 [ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h) 和 [CLI](visionrt_validate_tool.cpp) 为准；真实模块验证见 [注册契约](../tests/module_registration_contract.cpp)。
+
 将工具包部署到既有安装目录：
 
 ```cmd

@@ -156,7 +156,8 @@ if(BUILD_TESTING)
     visionrt_contract(python_rect_contract visionrt_python)
     add_test(NAME validator_cli_contract COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
-        --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}")
+        --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}"
+        --module "$<TARGET_FILE:test_registration_valid>" --bad-module "$<TARGET_FILE:test_plugin_legacy>")
     visionrt_apply_test_environment(validator_cli_contract)
     add_test(NAME package_app_contract COMMAND "${CMAKE_COMMAND}" -E env
         "VISIONTOOLS_VALIDATOR=$<TARGET_FILE:visionrt_validate_tool>"

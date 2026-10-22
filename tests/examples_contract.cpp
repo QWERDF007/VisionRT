@@ -88,10 +88,10 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
-    loader->registerPackage(package);
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
+    registry.loadNativeImplementations();
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
@@ -337,10 +337,10 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
 {
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
-    loader->registerPackage(package);
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
+    registry.loadNativeImplementations();
 
     const auto *def = registry.find("visiontools.preprocess.adaptive_binary");
     assert(def != nullptr);
@@ -378,10 +378,10 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
 {
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
-    loader->registerPackage(package);
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
+    registry.loadNativeImplementations();
 
     const auto *def = registry.find("visionrt.roi.projection");
     assert(def != nullptr);
@@ -498,10 +498,10 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
 {
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
-    loader->registerPackage(package);
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
+    registry.loadNativeImplementations();
     setupPython(registry, python);
 
     QTemporaryDir tmpDir;
@@ -588,10 +588,10 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
-    loader->registerPackage(package);
     ToolRegistry registry;
     registry.setPluginLoader(loader);
     registry.registerPackage(package);
+    registry.loadNativeImplementations();
     setupPython(registry, python);
 
     ProjectStorage storage(registry);
@@ -711,6 +711,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     outY.type = {Type::Int};
     funcDef.outputs.push_back(outY);
     registry.addDefinition(funcDef);
+    registry.loadNativeImplementations();
 
     // Build test pipeline: Node 1 (function, x=25 -> y=50), Node 2 (counter, initial=10 -> count=11)
     ProjectDefinition project;
@@ -902,11 +903,11 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         const auto pkg1    = visionrt::readToolsPackage(toolsPackageDir);
         auto       loader1 = std::make_shared<PluginLoader>();
-        loader1->registerPackage(pkg1);
         ToolRegistry registry1;
         registerReceiveTools(registry1);
         registry1.setPluginLoader(loader1);
         registry1.registerPackage(pkg1);
+        registry1.loadNativeImplementations();
         setupPython(registry1, python);
 
         // Build project:
@@ -1166,11 +1167,11 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     // 6. Simulate restart with Package 2:
     const auto pkg2    = visionrt::readToolsPackage(toolsPackageDir);
     auto       loader2 = std::make_shared<PluginLoader>();
-    loader2->registerPackage(pkg2);
     ToolRegistry registry2;
     registerReceiveTools(registry2);
     registry2.setPluginLoader(loader2);
     registry2.registerPackage(pkg2);
+    registry2.loadNativeImplementations();
     setupPython(registry2, python);
 
     // Verify new tool test.plugin.counter is available

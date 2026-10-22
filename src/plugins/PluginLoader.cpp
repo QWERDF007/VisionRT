@@ -1,5 +1,7 @@
 #include "plugins/PluginLoader.h"
 
+#include "core/JsonFields.h"
+
 #include <algorithm>
 
 #ifndef NOMINMAX
@@ -53,9 +55,28 @@ std::filesystem::path PluginLoader::resolveModulePath(std::string_view toolId) c
     return it == index_.end() ? std::filesystem::path{} : it->second;
 }
 
-bool PluginLoader::hasModule(std::string_view toolId) const
+Availability PluginLoader::availability(std::string_view toolId) const
 {
-    return std::filesystem::is_regular_file(resolveModulePath(toolId));
+    std::unique_lock lock(mutex_);
+    const auto       entry = index_.find(toolId);
+    if (entry == index_.end() || entry->second.empty())
+        return {ToolAvailability::ImplementationUnavailable, "工具未关联模块：" + std::string(toolId)};
+    const auto path = entry->second;
+    if (const auto loaded = loadedModules_.find(path); loaded != loadedModules_.end())
+    {
+        if (loaded->second->registry.nativeFactories().contains(toolId))
+            return {ToolAvailability::Available, {}};
+        return {ToolAvailability::ImplementationUnavailable, "指定模块未注册工具工厂：" + std::string(toolId),
+                json::pathText(path).toStdString()};
+    }
+    if (const auto failure = failures_.find(path); failure != failures_.end())
+        return {ToolAvailability::ImplementationUnavailable, failure->second.message, failure->second.detail};
+    lock.unlock();
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(path, error))
+        return {ToolAvailability::ImplementationUnavailable, "模块库文件不可用：" + std::string(toolId),
+                json::pathText(path).toStdString() + (error ? ": " + error.message() : "")};
+    return {ToolAvailability::ImplementationNotLoaded, "模块尚未加载：" + std::string(toolId)};
 }
 
 std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesystem::path &libraryPath,
