@@ -1,7 +1,5 @@
 #include "ui/AppController_p.h"
 
-#include <algorithm>
-
 namespace visionrt {
 using workbench::nodeId;
 using workbench::q;
@@ -162,19 +160,10 @@ bool AppController::bindOutputTo(const QVariantMap &context, const QString &node
         [&]
         {
             const auto *source = impl_->currentNode();
-            const auto *target = impl_->findNode(nodeId(node));
-            if (!source || !target)
-                throw ContractError("Node not found");
-            const auto candidates
-                = impl_->editor.compatibleInputs(impl_->flow.toStdString(), {source->id, output.toStdString()});
-            if (std::find(candidates.begin(), candidates.end(), InputPort{target->id, input.toStdString()})
-                == candidates.end())
-                throw ContractError("Input is occupied, incompatible or cyclic");
-            auto binding   = target->inputs.at(input.toStdString());
-            binding.mode   = BindingMode::Upstream;
-            binding.source = SourcePort{source->id, output.toStdString()};
-            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input.toStdString(),
-                                            std::move(binding));
+            if (!source)
+                throw ContractError("未选择节点");
+            return impl_->editor.bindFreeInput(impl_->flow.toStdString(), {source->id, output.toStdString()},
+                                               {nodeId(node), input.toStdString()});
         });
 }
 

@@ -466,6 +466,19 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     return id;
 }
 
+bool ProjectEditor::bindFreeInput(std::string_view flowId, const SourcePort &source, const InputPort &target)
+{
+    requireIdle();
+    const auto &currentFlow = flow(flowId);
+    requireEditable(findNode(currentFlow, source.node));
+    auto binding = inputBinding(findNode(currentFlow, target.node), target.port);
+    if (binding.source)
+        throw ContractError("输入端口已关联上游：" + std::to_string(target.node) + "." + target.port);
+    binding.mode   = BindingMode::Upstream;
+    binding.source = source;
+    return setBinding(flowId, target.node, target.port, std::move(binding));
+}
+
 bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_view input, InputBinding binding)
 {
     requireIdle();
@@ -480,7 +493,8 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
     if (binding.source
         && !compatible(signature(findNode(target, binding.source->node).signatures.outputs, binding.source->port),
                        type))
-        throw ContractError("上游输出与输入端口类型不兼容");
+        throw ContractError("上游输出与输入端口类型不兼容：" + std::to_string(binding.source->node) + "."
+                            + binding.source->port + " -> " + std::to_string(id) + "." + std::string(input));
     if (current.mode == binding.mode && current.source == binding.source
         && equalValues(current.literal, binding.literal))
         return false;
