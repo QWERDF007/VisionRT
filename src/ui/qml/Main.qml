@@ -262,7 +262,6 @@ ApplicationWindow {
     QuiMenu {
         id: settingsMenu
         QuiMenuItem { text: "重置界面布局"; onTriggered: window.resetLayout() }
-        QuiMenuItem { text: "浅色工业主题"; enabled: false }
     }
     QuiMenu {
         id: toolsMenu

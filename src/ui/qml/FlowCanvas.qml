@@ -229,6 +229,7 @@ FocusScope {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
+                    objectName: "flowTitle"
                     text: "流程图绘制区"
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
                     color: "#24292f"
@@ -275,6 +276,7 @@ FocusScope {
                 }
                 Rectangle {
                     id: flowDropdown
+                    objectName: "flowDropdown"
                     Layout.preferredWidth: 120; Layout.preferredHeight: 24; radius: 3
                     color: "#ffffff"; border.color: "#c5ccd5"; border.width: 1
                     RowLayout {
@@ -311,6 +313,7 @@ FocusScope {
                     }
                 }
                 QuiTextIconButton {
+                    objectName: "flowFitButton"
                     iconSource: QuiFontIcon.FullScreen
                     implicitWidth: 26; implicitHeight: 24
                     text: "适应全部节点"
