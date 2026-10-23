@@ -1,4 +1,5 @@
 #include "core/ProjectEditor.h"
+#include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
@@ -97,23 +98,31 @@ try
 
     auto project  = editor.project();
     project.path  = std::filesystem::path(temporary.path().toStdWString()) / "author.vrt.json";
+    ProjectStorage storage(registry);
+    assert(storage.save(project).empty());
+    const auto reopened = storage.load(project.path);
+    assert(reopened.diagnostics.empty());
+
     RuntimeEngine engine(2);
-    assert(engine.start(project, registry, RunMode::Once).code == 0);
-    const auto update = finish(engine);
+    for (const auto &candidate : {project, reopened.project})
+    {
+        assert(engine.start(candidate, registry, RunMode::Once).code == 0);
+        const auto update = finish(engine);
 
-    const auto readResult = snapshot(update, reader);
-    const auto roiResult  = snapshot(update, roiNode);
-    const auto addResult  = snapshot(update, addNode);
-    assert(readResult && roiResult && addResult);
-    assert(readResult->status.code == 0 && roiResult->status.code == 0 && addResult->status.code == 0);
+        const auto readResult = snapshot(update, reader);
+        const auto roiResult  = snapshot(update, roiNode);
+        const auto addResult  = snapshot(update, addNode);
+        assert(readResult && roiResult && addResult);
+        assert(readResult->status.code == 0 && roiResult->status.code == 0 && addResult->status.code == 0);
 
-    const auto &rois = std::get<DataRef<ROI>>(roiResult->outputs.at("rois")).get();
-    assert(rois.size() == 1 && rois.front().size() == 1);
-    assert((rois.front().front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
-    const auto &added = std::get<DataRef<Image>>(addResult->outputs.at("images")).get();
-    assert(added.size() == 1 && added.front().at<std::uint8_t>(0, 0) == 11);
-    const auto &readImages = std::get<DataRef<Image>>(readResult->outputs.at("images")).get();
-    assert(readImages.size() == 1 && readImages.front().at<std::uint8_t>(0, 0) == 11);
+        const auto &rois = std::get<DataRef<ROI>>(roiResult->outputs.at("rois")).get();
+        assert(rois.size() == 1 && rois.front().size() == 1);
+        assert((rois.front().front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
+        const auto &added = std::get<DataRef<Image>>(addResult->outputs.at("images")).get();
+        assert(added.size() == 1 && added.front().at<std::uint8_t>(0, 0) == 11);
+        const auto &readImages = std::get<DataRef<Image>>(readResult->outputs.at("images")).get();
+        assert(readImages.size() == 1 && readImages.front().at<std::uint8_t>(0, 0) == 11);
+    }
 
     std::cout << "Installed Python ROI and image-edit author tools executed through RuntimeEngine\n";
     return 0;
