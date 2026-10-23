@@ -289,7 +289,11 @@ if(BUILD_TESTING)
         visionrt_contract(workbench_unavailable_tool_contract visionrt_ui)
         target_link_libraries(workbench_unavailable_tool_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_unavailable_tool_contract PRIVATE
-            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        set_property(TEST workbench_unavailable_tool_contract APPEND PROPERTY
+            ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
         visionrt_contract(workbench_publication_contract visionrt_ui)
         target_link_libraries(workbench_publication_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_publication_contract PRIVATE
