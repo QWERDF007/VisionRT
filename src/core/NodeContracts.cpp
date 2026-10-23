@@ -93,7 +93,9 @@ void resolveOutputTypes(ProjectDefinition &project)
         const auto sourcePort = parameter(reference->second.portParameter);
         std::optional<TypeSpec> type;
         if (flowId.empty() || nodeSeq.empty() || sourcePort.empty())
-            fail("需要选择源流程、源节点和输出端口");
+            fail(node.retiredInitParams.isEmpty()
+                     ? "需要选择源流程、源节点和输出端口"
+                     : "初始化参数定义已变更，原参数已保留；请重新选择源流程、源节点和输出端口");
         else if (!std::all_of(nodeSeq.begin(), nodeSeq.end(), [](char c) { return c >= '0' && c <= '9'; }))
             fail("源节点序号必须是无符号十进制文本：" + nodeSeq);
         else

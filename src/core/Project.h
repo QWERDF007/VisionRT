@@ -63,6 +63,7 @@ struct NodeDefinition
     std::map<std::string, std::string, std::less<>> outputTypeErrors;
     std::uint64_t                                    executionRevision = 0;
     QJsonObject                                      unresolved;
+    QJsonObject                                      retiredInitParams;
     std::string                                      title() const;
 };
 

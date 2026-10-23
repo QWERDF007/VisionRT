@@ -1,4 +1,6 @@
 #include "core/ProjectStorage.h"
+#include "core/DefinitionJson.h"
+#include "core/ProjectEditor.h"
 #include "core/ToolRegistry.h"
 
 #include <QDir>
@@ -494,6 +496,115 @@ void saveAsPaths(const QString &directory)
             "failed save-as installed rebased candidate");
 }
 
+void retiredInitialization(const QString &directory)
+{
+    const auto tool = parseToolDefinitionJson(R"json({
+        "schema_version":2,"tool_id":"unavailable","display_name":"接收器","version":"1.0",
+        "kind":"host","entry":{"binding":"visionrt.receiver"},
+        "init_params":[
+            {"id":"source_flow_id","name":"流程","type":"String","default":""},
+            {"id":"source_node_seq","name":"节点","type":"String","default":""},
+            {"id":"source_port_id","name":"端口","type":"String","default":"value"}],
+        "inputs":[],"outputs":[{"id":"value","name":"值","type_from":{
+            "flow":"source_flow_id","node":"source_node_seq","port":"source_port_id"}}]
+    })json");
+    auto       raw  = savedNode("9007199254740993", "");
+    raw.insert("init_params", QJsonDocument::fromJson(R"json({
+        "source_flow_name":"旧流程","source_node_name":"同名节点","source_port_id":"value",
+        "retired_values":[[9007199254740993],[],[-17]]
+    })json")
+                                  .object());
+    raw.insert("inputs", QJsonObject{});
+    raw.insert("type_snapshot", QJsonDocument::fromJson(R"json({
+        "init_params":{
+            "source_flow_name":{"type":"String"},"source_node_name":{"type":"String"},
+            "source_port_id":{"type":"String"},"retired_values":{"type":"Array","dtype":"int64","rank":2}
+        },"inputs":{},"outputs":{"value":{"type":"Int"}}
+    })json")
+                                    .object());
+    const auto input  = directory + "/retired.vrt.json";
+    const auto output = directory + "/retained.vrt.json";
+    put(input, QJsonDocument(savedProject({raw}, "9007199254740994")).toJson());
+    ToolRegistry registry;
+    registry.addDefinition(tool);
+    ProjectStorage storage(registry);
+    auto           loaded = storage.load(path(input));
+    require(has(loaded.diagnostics, ProjectStorageCode::InvalidReference), "old names were guessed as IDs");
+    require(!loaded.project.flows[0].nodes[0].initParams.contains("source_node_name"),
+            "retired parameters leaked into executable configuration");
+    storage.save(loaded.project, path(output));
+    const auto saved = QJsonDocument::fromJson(get(output))
+                           .object()["flows"]
+                           .toArray()[0]
+                           .toObject()["nodes"]
+                           .toArray()[0]
+                           .toObject();
+    const auto values = saved["init_params"].toObject();
+    require(values["source_flow_name"] == "旧流程" && values["source_node_name"] == "同名节点",
+            "reconciliation discarded unresolved name-based configuration");
+    const auto retainedArray = values["retired_values"].toArray();
+    require(retainedArray.size() == 3 && retainedArray[0].toArray()[0].toInteger() == 9007199254740993LL
+                && retainedArray[1].toArray().isEmpty() && retainedArray[2].toArray()[0].toInteger() == -17,
+            "retired nested values lost integer precision or empty branches");
+    require(
+        saved["type_snapshot"].toObject()["init_params"].toObject()["source_node_name"].toObject()["type"] == "String",
+        "retired parameter type was not preserved");
+    const auto reloaded = storage.load(path(output));
+    require(has(reloaded.diagnostics, ProjectStorageCode::InvalidReference),
+            "retired reference diagnostics disappeared after save/reopen");
+    require(!reloaded.project.dirty, "preserved parameters made an unchanged project perpetually dirty");
+    auto unchanged                                = reloaded.project;
+    unchanged.flows[0].nodes[0].executionRevision = 19;
+    const auto reconciled                         = storage.reconcile(unchanged);
+    require(reconciled.project.flows[0].nodes[0].executionRevision == 19,
+            "retained non-executable parameters invalidated an unchanged tool instance");
+    ProjectEditor editor(reconciled.project);
+    editor.copyFlow("flow_1");
+    auto       copied     = editor.project();
+    const auto copiedPath = directory + "/copied-retained.vrt.json";
+    storage.save(copied, path(copiedPath));
+    const auto copiedProject = storage.load(path(copiedPath)).project;
+    require(
+        copiedProject.flows.size() == 2 && copiedProject.flows[0].nodes[0].id != copiedProject.flows[1].nodes[0].id
+            && copiedProject.flows[0].nodes[0].retiredInitParams == copiedProject.flows[1].nodes[0].retiredInitParams,
+        "copying a flow lost opaque initialization metadata");
+    require(std::any_of(reloaded.diagnostics.begin(), reloaded.diagnostics.end(),
+                        [](const auto &diagnostic)
+                        {
+                            return diagnostic.code == ProjectStorageCode::InvalidReference
+                                && diagnostic.message.find("重新选择") != std::string::npos;
+                        }),
+            "unresolved retained parameters did not explain how to repair the source");
+    auto relocated = reloaded.project;
+    require(QDir().mkpath(directory + "/迁移"), "cannot create retired-parameter relocation directory");
+    require(has(storage.save(relocated, path(directory + "/迁移/retained.vrt.json")), ProjectStorageCode::UnknownPaths),
+            "Save As silently treated undeclared parameter values as known paths");
+    const auto movedNode = QJsonDocument::fromJson(get(directory + "/迁移/retained.vrt.json"))
+                               .object()["flows"]
+                               .toArray()[0]
+                               .toObject()["nodes"]
+                               .toArray()[0]
+                               .toObject();
+    require(movedNode["init_params"] == saved["init_params"] && movedNode["type_snapshot"] == saved["type_snapshot"],
+            "Save As rewrote opaque initialization values or types");
+    auto previous             = tool;
+    previous.initParams[0].id = "source_flow_name";
+    previous.initParams[1].id = "source_node_name";
+    for (auto &port : previous.outputs)
+        if (port.id == "value")
+            port.typeFrom = PortTypeReference{"source_flow_name", "source_node_name", "source_port_id"};
+    ToolRegistry restoredRegistry;
+    restoredRegistry.addDefinition(previous);
+    const auto restored = ProjectStorage(restoredRegistry).load(path(output));
+    require(std::get<std::string>(restored.project.flows[0].nodes[0].initParams.at("source_node_name")) == "同名节点",
+            "restored declaration did not recover its original parameter");
+    const auto  revived     = ProjectStorage(restoredRegistry).reconcile(unchanged);
+    const auto &revivedNode = revived.project.flows[0].nodes[0];
+    require(std::get<std::string>(revivedNode.initParams.at("source_node_name")) == "同名节点"
+                && !revivedNode.retiredInitParams.contains("source_node_name") && revivedNode.executionRevision == 20,
+            "catalog reconciliation did not revive declared parameters and invalidate the instance once");
+}
+
 void wideIdsAndCycleMembership(const QString &directory)
 {
     ToolRegistry   registry;
@@ -538,6 +649,7 @@ int main()
         reconciliationAndIdentities(temporary.path());
         typedArraysAndRanges(temporary.path());
         saveAsPaths(temporary.path());
+        retiredInitialization(temporary.path());
         wideIdsAndCycleMembership(temporary.path());
         std::cout << "project storage JSON contract passed\n";
     }

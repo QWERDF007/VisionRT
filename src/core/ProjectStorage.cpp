@@ -130,6 +130,20 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     for (const auto &[id, current] : outputTypes)
         if (!node.signatures.outputs.contains(id))
             changedOutputs.insert(id);
+    for (const auto &[id, value] : node.initParams)
+    {
+        if (initTypes.contains(id))
+            continue;
+        const auto key = QString::fromStdString(id);
+        node.retiredInitParams.insert(
+            key, QJsonObject{
+                     {"value",                                   raw.value("init_params").toObject().value(key)},
+                     { "type", raw.value("type_snapshot").toObject().value("init_params").toObject().value(key)}
+        });
+        node.signatures.initParams.erase(id);
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + id,
+                 "当前工具声明未定义此初始化参数，已保留原值和类型，不参与执行");
+    }
     if (node.signatures.initParams != initTypes || node.signatures.inputs != inputTypes
         || node.signatures.outputs != outputTypes)
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "type_snapshot",
@@ -148,12 +162,6 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
                      "缺失或类型不兼容的初始化参数已替换为声明默认值", true);
         rangeWarning(result, flow, node, port, value);
         parameters.emplace(port.id, std::move(value));
-    }
-    for (const auto &[id, value] : node.initParams)
-    {
-        if (!initTypes.contains(id))
-            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + id,
-                     "已丢弃声明中不再存在的初始化参数", true);
     }
     std::map<std::string, InputBinding, std::less<>> inputs;
     for (const auto &port : definition.inputs)
@@ -489,6 +497,14 @@ QJsonObject encodeProject(const ProjectDefinition &project)
             if (!unresolved)
             {
                 QJsonObject parameters;
+                auto        parameterTypes = encodeTypes(node.signatures.initParams);
+                for (auto parameter = node.retiredInitParams.begin(); parameter != node.retiredInitParams.end();
+                     ++parameter)
+                {
+                    const auto record = parameter.value().toObject();
+                    parameters.insert(parameter.key(), record.value("value"));
+                    parameterTypes.insert(parameter.key(), record.value("type"));
+                }
                 for (const auto &[id, value] : node.initParams)
                 {
                     const auto signature = node.signatures.initParams.find(id);
@@ -498,9 +514,9 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                 }
                 raw.insert("init_params", parameters);
                 raw.insert("type_snapshot", QJsonObject{
-                                                {"init_params", encodeTypes(node.signatures.initParams)},
-                                                {     "inputs",     encodeTypes(node.signatures.inputs)},
-                                                {    "outputs",    encodeTypes(node.signatures.outputs)}
+                                                {"init_params",                       parameterTypes},
+                                                {     "inputs",  encodeTypes(node.signatures.inputs)},
+                                                {    "outputs", encodeTypes(node.signatures.outputs)}
                 });
             }
             auto inputs = unresolved ? raw.value("inputs").toObject() : QJsonObject{};
@@ -627,7 +643,8 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
             {
                 if (diagnostic.node != updated.id || diagnostic.code != ProjectStorageCode::SchemaChanged)
                     continue;
-                if (diagnostic.field.starts_with("init_params."))
+                if (diagnostic.field.starts_with("init_params.")
+                    && updated.initParams.contains(diagnostic.field.substr(12)))
                     changedExecution = true;
                 if (diagnostic.field.starts_with("inputs."))
                 {
@@ -677,6 +694,9 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
                                            "未知工具字段已保留，另存为后可能需要修复相对路径"});
                     continue;
                 }
+                if (!node.retiredInitParams.isEmpty() && oldDirectory != target.parent_path())
+                    diagnostics.push_back({ProjectStorageCode::UnknownPaths, flow.id, node.id, "init_params",
+                                           "未识别的初始化参数已保留原文，另存后请核对其中的相对路径"});
                 for (const auto &port : definition->initParams)
                 {
                     const auto value = node.initParams.find(port.id);
