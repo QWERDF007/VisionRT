@@ -245,6 +245,7 @@ if(BUILD_TESTING)
         target_compile_definitions(ui_unc_paths_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+        set_tests_properties(ui_unc_paths_contract PROPERTIES SKIP_RETURN_CODE 77)
         visionrt_contract(ui_completion_contract visionrt_ui)
         target_link_libraries(ui_completion_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_completion_contract PRIVATE

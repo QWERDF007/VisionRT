@@ -33,8 +33,15 @@ try
     QImage     image(2, 2, QImage::Format_RGB888);
     image.fill(QColor(70, 70, 70));
     require(image.save(localImage), "cannot write the UNC fixture image");
-    const auto uncImage = QStringLiteral("\\\\localhost\\F$\\Projects\\VisionRT\\build\\unc-fixture\\中文 空格\\图 像.png");
-    require(QFileInfo::exists(uncImage), "UNC fixture path is not reachable");
+    const QString sourceRoot = QStringLiteral(VISIONRT_SOURCE_DIR);
+    const auto    uncRoot = QStringLiteral("\\\\localhost\\") + sourceRoot.left(1) + QStringLiteral("$")
+                       + sourceRoot.mid(2);
+    const auto uncImage = uncRoot + "/build/unc-fixture/中文 空格/图 像.png";
+    if (!QFileInfo::exists(uncImage))
+    {
+        std::cout << "UI_UNC_PATHS_SKIP local-share-unavailable\n";
+        return 77;
+    }
     AppController app(1, root);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC catalog did not become ready");
     app.addNode("visionrt.image.read", 0, 0);
