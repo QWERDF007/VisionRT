@@ -248,6 +248,10 @@ if(BUILD_TESTING)
         target_link_libraries(ui_readback_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_readback_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+        visionrt_contract(runtime_hotpath_contract visionrt_ui)
+        target_link_libraries(runtime_hotpath_contract PRIVATE Qt6::Test)
+        target_compile_definitions(runtime_hotpath_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(ui_result_isolation_contract visionrt_ui)
         target_link_libraries(ui_result_isolation_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_result_isolation_contract PRIVATE
