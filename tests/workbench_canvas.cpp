@@ -352,9 +352,13 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     {
         window->requestActivate();
         require(QTest::qWaitForWindowActive(window), "hover test window did not become active");
-        QTest::mouseMove(window, surface->mapToScene(QPointF(-2, -2)).toPoint());
+        const QPoint targetCenter = nodeCenter(target);
+        const QPoint outsidePoint = targetCenter.x() < surface->width() / 2
+            ? surface->mapToScene(QPointF(surface->width() - 4, surface->height() - 4)).toPoint()
+            : surface->mapToScene(QPointF(4, 4)).toPoint();
+        QTest::mouseMove(window, outsidePoint);
         QTest::qWait(20);
-        QTest::mouseMove(window, nodeCenter(target));
+        QTest::mouseMove(window, targetCenter);
         require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
                 "hover card did not appear after reentering the node");
     };
@@ -463,7 +467,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     {
         window->requestActivate();
         require(QTest::qWaitForWindowActive(window), "corner hover window did not become active");
-        QTest::mouseMove(window, surface->mapToScene(QPointF(-10, -10)).toPoint());
+        QTest::mouseMove(window, surface->mapToScene(QPointF(surface->width() / 2, surface->height() / 2)).toPoint());
         QTest::qWait(30);
         canvas->setProperty("panX", corner.x() - item->x());
         canvas->setProperty("panY", corner.y() - item->y());

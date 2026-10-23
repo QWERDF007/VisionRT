@@ -308,8 +308,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 ScopeTimer initTimer(snapshot->timing.initMs);
                 try
                 {
-                    if (definition->kind != ToolKind::PythonFunction)
-                        status = instance->initialize(parameters);
+                    status = instance->initialize(parameters);
                 }
                 catch (const RegistryError &error)
                 {

@@ -84,7 +84,18 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
             module = importlib.import_module('.'.join([root] + parts))
             return getattr(module, symbol)
         except BaseException:
-            for name in tuple(sys.modules):
-                if name not in modules_before and (name == root or name.startswith(root + '.')):
-                    sys.modules.pop(name, None)
+            new_modules = [
+                name for name in tuple(sys.modules)
+                if name not in modules_before and (name == root or name.startswith(root + '.'))
+            ]
+            for name in new_modules:
+                if '.' in name:
+                    parent_name, attr_name = name.rsplit('.', 1)
+                    parent_mod = sys.modules.get(parent_name)
+                    if parent_mod is not None and hasattr(parent_mod, attr_name):
+                        try:
+                            delattr(parent_mod, attr_name)
+                        except (AttributeError, TypeError):
+                            pass
+                sys.modules.pop(name, None)
             raise

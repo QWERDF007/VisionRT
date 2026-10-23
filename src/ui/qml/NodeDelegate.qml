@@ -158,7 +158,10 @@ Rectangle {
         id: pointer; anchors.fill: parent; hoverEnabled: true; preventStealing: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: function(mouse) { root.pointerPressed(mouse, root) }
-        onPositionChanged: function(mouse) { if (pressed) root.pointerMoved(mouse, root) }
+        onPositionChanged: function(mouse) {
+            if (pressed) root.pointerMoved(mouse, root)
+            else root.hoverEntered()
+        }
         onReleased: function(mouse) { root.pointerReleased(mouse, root) }
         onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !app.busy) root.executeRequested() }
         onEntered: root.hoverEntered()

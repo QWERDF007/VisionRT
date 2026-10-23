@@ -33,7 +33,7 @@ struct RuntimeState
     std::map<std::string, Implementation, std::less<>> implementations;
     PythonStorage                                      storage;
     std::uint64_t                                      generation = 0;
-    std::size_t instances = 0; // Accessed only while holding the interpreter GIL.
+    std::atomic<std::size_t>                           instances{0};
     bool        alive     = true;
 };
 
@@ -113,18 +113,33 @@ public:
         , definition_(*definitionOwner_)
         , services_(std::move(services))
         , sharedStatus_(std::move(sharedStatus))
+        , generation_(state_ ? state_->generation : 0)
     {
+        if (state_)
+            ++state_->instances;
     }
 
     ~PythonTool() override
     {
-        if (state_ && loaded_)
+        if (state_)
         {
-            py::gil_scoped_acquire gil;
-            if (!released_)
-                releaseWithGil();
-            objects_.reset();
             --state_->instances;
+            if (loaded_)
+            {
+                if (state_->alive && Py_IsInitialized())
+                {
+                    py::gil_scoped_acquire gil;
+                    if (!released_)
+                        releaseWithGil();
+                    objects_.reset();
+                }
+                else if (objects_)
+                {
+                    objects_->instance.release();
+                    objects_->execute.release();
+                    objects_.reset();
+                }
+            }
         }
     }
 
@@ -141,6 +156,8 @@ public:
     ToolStatus initialize(const Values &parameters) override
     {
         phase_ = NodePhase::Initialize;
+        if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
+            return {-1, "Python 实例跨代或运行时不可用，不能初始化"};
         py::gil_scoped_acquire gil;
         if (released_)
             return {-1, "Python 实例已释放，不能初始化"};
@@ -172,25 +189,28 @@ public:
     {
         metrics_                       = {};
         phase_                         = NodePhase::Execute;
+        const auto fail = [&](ToolStatus status)
+        {
+            ToolResult res;
+            res.status = std::move(status);
+            for (const auto &output : definition_.outputs)
+                if (isBusinessOutput(output))
+                    res.outputs.emplace(output.id, Missing{});
+            return res;
+        };
+        if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
+            return fail({-1, "Python 实例跨代或运行时不可用，不能执行"});
         const auto             waiting = std::chrono::steady_clock::now();
         py::gil_scoped_acquire gil;
         metrics_.waitGilMs
             = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - waiting).count();
-        ToolResult result;
-        const auto fail = [&](ToolStatus status)
-        {
-            result.status = std::move(status);
-            result.outputs.clear();
-            for (const auto &output : definition_.outputs)
-                if (isBusinessOutput(output))
-                    result.outputs.emplace(output.id, Missing{});
-            return std::move(result);
-        };
         if (released_)
             return fail({-1, "Python 实例已释放，不能执行"});
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
             return fail(loadStatus);
+
+        ToolResult result;
 
         struct ScopeTimer
         {
@@ -296,9 +316,20 @@ public:
 
     ToolStatus release() override
     {
-        py::gil_scoped_acquire gil;
         if (released_)
             return {};
+        if (!state_ || !state_->alive || !Py_IsInitialized())
+        {
+            released_ = true;
+            if (objects_)
+            {
+                objects_->instance.release();
+                objects_->execute.release();
+                objects_.reset();
+            }
+            return {};
+        }
+        py::gil_scoped_acquire gil;
         if (!loaded_)
         {
             released_ = true;
@@ -320,9 +351,9 @@ private:
             return {};
         if (released_)
             return {-1, "Python 实例已释放"};
-        if (!state_ || !state_->alive)
+        if (!state_ || !state_->alive || generation_ != state_->generation)
         {
-            ToolStatus err{-3, "Python 运行时已关闭：" + definition_.id};
+            ToolStatus err{-3, "Python 实例跨代失效或运行时已关闭：" + definition_.id};
             if (sharedStatus_)
                 *sharedStatus_ = err;
             return err;
@@ -397,16 +428,23 @@ private:
         catch (const py::error_already_set &error)
         {
             objects_.reset();
-            return errorStatus(-1, "Python 实例创建异常", error.what());
+            auto err = errorStatus(-1, "Python 实例创建异常", error.what());
+            *impl.status = err;
+            if (sharedStatus_)
+                *sharedStatus_ = err;
+            return err;
         }
         catch (const std::exception &error)
         {
             objects_.reset();
-            return errorStatus(-1, "Python 实例创建异常", error.what());
+            auto err = errorStatus(-1, "Python 实例创建异常", error.what());
+            *impl.status = err;
+            if (sharedStatus_)
+                *sharedStatus_ = err;
+            return err;
         }
 
         loaded_ = true;
-        ++state_->instances;
         return {};
     }
 
@@ -449,6 +487,7 @@ private:
     NodePhase                   phase_    = NodePhase::Execute;
     bool                        loaded_   = false;
     bool                        released_ = false;
+    std::uint64_t               generation_ = 0;
 };
 } // namespace
 
@@ -523,14 +562,15 @@ struct PythonRuntime::Impl
             std::terminate();
         {
             py::gil_scoped_acquire gil;
-            if (state->instances != 0)
-                std::terminate();
             state->alive = false;
             state->implementations.clear();
             try
             {
-                state->loader["finder"].attr("clear")();
-                py::module_::import("sys").attr("meta_path").attr("remove")(state->loader["finder"]);
+                if (state->loader && state->loader.contains("finder"))
+                {
+                    state->loader["finder"].attr("clear")();
+                    py::module_::import("sys").attr("meta_path").attr("remove")(state->loader["finder"]);
+                }
                 state->loader.clear();
                 py::module_::import("gc").attr("collect")();
             }
@@ -538,6 +578,7 @@ struct PythonRuntime::Impl
             {
                 error.discard_as_unraisable("PythonRuntime shutdown");
             }
+            state->loader.release();
         }
         state->storage.waitForRelease();
         releaseMainGil.reset();

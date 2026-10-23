@@ -214,8 +214,7 @@ FocusScope {
         interval: 500
         repeat: false
         onTriggered: {
-            if (root.hoverNodeId !== "" && root.hoverNode !== null && root.gesture === ""
-                    && (!root.Window.window || root.Window.window.active))
+            if (root.hoverNodeId !== "" && root.hoverNode !== null && root.gesture === "")
                 root.hoverCardVisible = true
         }
     }
