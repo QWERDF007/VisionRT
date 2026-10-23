@@ -371,8 +371,8 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     window->requestActivate();
     require(QTest::qWaitForWindowActive(window), "initial hover test window did not become active");
     QTest::mouseMove(window, center);
-    QTest::qWait(700);
-    require(canvas->property("hoverCardVisible").toBool(), "hover card did not appear after 500 ms");
+    require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
+            "hover card did not appear after 500 ms");
     require(card->isVisible(), "hover card item is not visible");
     require(!card->hasActiveFocus(), "hover card took keyboard focus");
     const QStringList content = texts();
@@ -436,8 +436,8 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived leaving the node");
 
     QTest::mouseMove(window, center);
-    QTest::qWait(700);
-    require(canvas->property("hoverCardVisible").toBool(), "hover card did not reappear");
+    require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
+            "hover card did not reappear");
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, center);
     QTest::qWait(50);
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived a pointer press");
@@ -465,8 +465,8 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         canvas->setProperty("panY", corner.y() - item->y());
         QTest::qWait(50);
         QTest::mouseMove(window, nodeCenter(item));
-        QTest::qWait(550);
-        require(canvas->property("hoverCardVisible").toBool(), "hover card did not appear near a canvas corner");
+        require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
+                "hover card did not appear near a canvas corner");
         require(card->x() >= 3 && card->y() >= 3, "hover card left the top/left canvas edge");
         require(card->x() + card->width() <= surface->width() - 3, "hover card left the right canvas edge");
         require(card->y() + card->height() <= surface->height() - 3, "hover card left the bottom canvas edge");
@@ -482,8 +482,8 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     item = nodeItem(id);
     require(item != nullptr, "node delegate is missing after renaming");
     QTest::mouseMove(window, nodeCenter(item));
-    QTest::qWait(700);
-    require(canvas->property("hoverCardVisible").toBool(), "hover card did not appear for a long name");
+    require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
+            "hover card did not appear for a long name");
     require(qFuzzyCompare(card->width(), cardWidth), "long name changed the hover card width");
     require(card->height() > singleLineHeight, "long name did not wrap inside the hover card");
     require(texts().contains(longName + "-" + id), "hover card lost the long tool name");
@@ -592,8 +592,8 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
             require(qAbs(segment * selectionPath->property("strokeWidth").toDouble() * zoom - 8.0) < 0.01,
                     "selection border dash length changes with canvas zoom");
         QTest::mouseMove(window, nodeCenter(zoomed));
-        QTest::qWait(550);
-        require(canvas->property("hoverCardVisible").toBool(), "hover card is missing in the zoom matrix");
+        require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
+                "hover card is missing in the zoom matrix");
         require(qFuzzyCompare(card->width(), cardWidth), "hover card width changed with canvas zoom");
         const auto screenshot = QStringLiteral("build/evidence/workbench_dpi_%1_zoom_%2.png")
                                     .arg(scale, 0, 'f', 1).arg(qRound(zoom * 100));

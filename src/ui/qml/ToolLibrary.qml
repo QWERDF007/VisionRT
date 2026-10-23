@@ -41,6 +41,7 @@ Rectangle {
                         }
                         TextInput {
                             id: filterInput
+                            objectName: "toolFilter"
                             Layout.fillWidth: true
                             font: QuiFont.Body; color: QuiColor.FontPrimary; selectByMouse: true
                             verticalAlignment: Text.AlignVCenter
@@ -76,6 +77,7 @@ Rectangle {
                     enabled: !app.busy; onClicked: app.refreshPython()
                 }
                 QuiTextIconButton {
+                    objectName: "toolLibraryToggle"
                     iconSource: root.expanded ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
                     implicitWidth: 24; implicitHeight: 24
                     text: root.expanded ? "折叠工具库" : "展开工具库"
