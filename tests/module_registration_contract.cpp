@@ -134,5 +134,5 @@ int main(int argc, char **argv)
     assert(std::get<std::int64_t>(retained->execute({}).outputs.at("value")) == 11);
     assert(retained->release());
     assert(ownership.expired());
-    std::cout << "ABI3 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
+    std::cout << "ABI4 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
 }
