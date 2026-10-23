@@ -74,6 +74,7 @@ struct AppController::Impl
     bool                             pendingApproved  = false;
     bool                             awaitingDecision = false;
     bool                             pendingReset     = false;
+    bool                             closing          = false;
     std::optional<ProjectDefinition> replacement;
 
     struct PendingDeletion

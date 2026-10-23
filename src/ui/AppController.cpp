@@ -518,6 +518,8 @@ void AppController::Impl::start(RunMode mode)
 
 void AppController::Impl::request(Pending action, QString path)
 {
+    if (action == Pending::Close && closing)
+        return;
     if (pending != Pending::None)
     {
         report(QStringLiteral("请先完成或取消当前文件操作"));
@@ -616,7 +618,10 @@ void AppController::Impl::advancePending()
         emit q->projectReplaced();
     }
     if (completed == Pending::Close)
+    {
+        closing = true;
         emit q->closeReady();
+    }
     else if (completed == Pending::Reset)
         synchronizeNodes();
 }
