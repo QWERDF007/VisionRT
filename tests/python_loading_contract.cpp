@@ -147,7 +147,7 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
 void nativeHelper(PythonRuntime &runtime, const std::filesystem::path &root)
 {
     auto definition                = definitionFor(root, "python.native", "native.py");
-    definition.source.roots.python = std::filesystem::current_path() / "python-extension-contract";
+    definition.source.roots.python = root / "python-extension-contract";
     const auto package             = definition.pythonPackage();
     std::filesystem::create_directories(package);
     {
