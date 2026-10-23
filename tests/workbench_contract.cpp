@@ -148,6 +148,45 @@ void outputContract()
     const auto releaseJson = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
     require(releaseJson.value("phase") == "release" && releaseJson.value("detail") == "uninitialized release detail",
             "release diagnostics without execution must remain independently exportable");
+
+    ToolDefinition typed;
+    typed.id          = "test.typed";
+    typed.displayName = "类型展示";
+    typed.version     = "1";
+    typed.outputs     = {
+        {  "zero",  "零", {Type::Int}},
+        {  "flag", "标志", {Type::Bool}},
+        {"list", "列表", {Type::Array, DType::Int64, 1}},
+        {  "text", "文本", {Type::String}}
+    };
+    auto typedSnapshot    = std::make_shared<NodeSnapshot>();
+    typedSnapshot->node   = 2;
+    typedSnapshot->toolId = typed.id;
+    typedSnapshot->status = {0, "运行成功"};
+    typedSnapshot->outputs = {
+        {  "zero", std::int64_t{0}},
+        {  "flag",              false},
+        {  "list", Array::empty(DType::Int64, 1)},
+        {  "text",    std::string{}},
+    };
+    OutputModel typedModel;
+    typedModel.setResult(&typed, typedSnapshot, {});
+    require(typedModel.get(2).value("preview").toString() == QStringLiteral("0"), "zero preview became blank");
+    require(typedModel.get(3).value("preview").toString() == QStringLiteral("false"), "false preview became blank");
+    require(typedModel.get(4).value("preview").toString() == QStringLiteral("[]"), "empty array preview became null");
+    require(typedModel.get(5).value("preview").toString().isEmpty(), "empty string preview is not blank");
+    require(std::get<std::int64_t>(typedModel.capture(2)->value) == 0
+                && !std::get<bool>(typedModel.capture(3)->value)
+                && std::holds_alternative<Array>(typedModel.capture(4)->value)
+                && std::get<std::string>(typedModel.capture(5)->value).empty(),
+            "typed outputs lost zero/false/empty values");
+    typedModel.setResult(&typed, {}, {});
+    for (int row = 2; row <= 5; ++row)
+    {
+        require(typedModel.get(row).value("preview").toString().isEmpty(), "unexecuted output fabricated a preview");
+        const auto captured = typedModel.capture(row);
+        require(captured && isMissing(captured->value), "unexecuted output fabricated a typed value");
+    }
 }
 
 void pendingContract()
