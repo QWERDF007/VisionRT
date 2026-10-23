@@ -1,4 +1,5 @@
 #include "common/Version.h"
+#include "core/Sequence.h"
 #include "runtime/Receiver.h"
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
@@ -36,11 +37,7 @@ std::filesystem::path localPath(const QString &text)
 
 NodeId nodeId(const QString &text)
 {
-    bool       okay = false;
-    const auto id   = text.toULongLong(&okay);
-    if (!okay || text.isEmpty() || text.startsWith('-'))
-        throw ContractError("节点标识无效：" + text.toStdString());
-    return id;
+    return parseSequence(text.toUtf8().toStdString(), "节点标识");
 }
 
 const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id)

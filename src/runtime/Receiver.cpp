@@ -1,8 +1,8 @@
 #include "runtime/RuntimeInternal.h"
+#include "core/Sequence.h"
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 
 namespace visionrt {
 namespace {
@@ -93,15 +93,15 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
     const auto context  = context_.lock();
     if (!context)
         return receiveError(1, "没有活动的接收调用");
-    if (request.nodeSequence.empty()
-        || !std::all_of(request.nodeSequence.begin(), request.nodeSequence.end(),
-                        [](char character) { return character >= '0' && character <= '9'; }))
-        return receiveError(1, "source_node_seq 必须是无符号十进制文本");
-    std::uint64_t sourceNode = 0;
-    const auto    parsed     = std::from_chars(request.nodeSequence.data(),
-                                                request.nodeSequence.data() + request.nodeSequence.size(), sourceNode);
-    if (parsed.ec != std::errc{} || parsed.ptr != request.nodeSequence.data() + request.nodeSequence.size())
-        return receiveError(1, "source_node_seq 超出 uint64 范围");
+    NodeId sourceNode = 0;
+    try
+    {
+        sourceNode = parseSequence(request.nodeSequence, "source_node_seq");
+    }
+    catch (const ContractError &error)
+    {
+        return receiveError(1, error.what());
+    }
     const FlowDefinition *sourceFlow = nullptr;
     const FlowDefinition *ownFlow    = nullptr;
     for (const auto &flow : context->frozen->project.flows)

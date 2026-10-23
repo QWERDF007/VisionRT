@@ -1,6 +1,7 @@
 #include "core/ProjectStorage.h"
 
 #include "core/NodeContracts.h"
+#include "core/Sequence.h"
 #include "core/ToolRegistry.h"
 #include "core/ValueJson.h"
 
@@ -59,14 +60,7 @@ std::string text(const QJsonValue &node, std::string_view context, bool nonempty
 
 std::uint64_t sequence(const QJsonValue &node, std::string_view context)
 {
-    const auto value = text(node, context, true);
-    if (!std::all_of(value.begin(), value.end(), [](char c) { return c >= '0' && c <= '9'; }))
-        invalid(std::string(context) + " 必须是无符号十进制 uint64");
-    std::uint64_t result    = 0;
-    const auto    converted = std::from_chars(value.data(), value.data() + value.size(), result);
-    if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size())
-        invalid(std::string(context) + " 超出 uint64 范围");
-    return result;
+    return parseSequence(text(node, context, true), context);
 }
 
 TypeMap decodeTypes(const QJsonValue &node, std::string_view context)

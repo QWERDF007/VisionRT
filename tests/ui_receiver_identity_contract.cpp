@@ -108,6 +108,14 @@ try
     require(app.selectedNode() == targetId && selectedId.metaType() == QMetaType::fromType<QString>()
                 && selectedId.toString() == targetId,
             "workbench rounded the selected node identity");
+    QSignalSpy configurationChanges(&app, &AppController::projectChanged);
+    for (const auto &invalidId : {"0" + targetId, "+" + targetId, " " + targetId, targetId + " "})
+    {
+        app.renameNode(invalidId, "不应修改的名称");
+        idle();
+        require(configurationChanges.isEmpty(), "UI identity coercion modified a node through a textual alias");
+        require(app.diagnostic().contains("节点标识"), "invalid UI identity lost its Chinese field diagnosis");
+    }
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);

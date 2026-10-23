@@ -1,7 +1,7 @@
 #include "core/NodeContracts.h"
+#include "core/Sequence.h"
 
 #include <algorithm>
-#include <charconv>
 #include <functional>
 #include <limits>
 #include <set>
@@ -96,40 +96,42 @@ void resolveOutputTypes(ProjectDefinition &project)
             fail(node.retiredInitParams.isEmpty()
                      ? "需要选择源流程、源节点和输出端口"
                      : "初始化参数定义已变更，原参数已保留；请重新选择源流程、源节点和输出端口");
-        else if (!std::all_of(nodeSeq.begin(), nodeSeq.end(), [](char c) { return c >= '0' && c <= '9'; }))
-            fail("源节点序号必须是无符号十进制文本：" + nodeSeq);
         else
         {
-            std::uint64_t sourceNode = 0;
-            const auto    parsed     = std::from_chars(nodeSeq.data(), nodeSeq.data() + nodeSeq.size(), sourceNode);
-            const FlowDefinition *sourceFlow = nullptr;
-            for (const auto &flow : project.flows)
-                if (flow.id == flowId)
-                {
-                    sourceFlow = &flow;
-                    break;
-                }
-            if (parsed.ec != std::errc{} || parsed.ptr != nodeSeq.data() + nodeSeq.size())
-                fail("源节点序号超出 uint64 范围：" + nodeSeq);
-            else if (!sourceFlow || sourceFlow == resolution.flow)
-                fail("源流程不存在或就是接收流程：" + flowId);
-            else
+            try
             {
-                const NodeDefinition *source = nullptr;
-                for (const auto &candidate : sourceFlow->nodes)
-                    if (candidate.id == sourceNode)
+                const auto            sourceNode = parseSequence(nodeSeq, "源节点序号");
+                const FlowDefinition *sourceFlow = nullptr;
+                for (const auto &flow : project.flows)
+                    if (flow.id == flowId)
                     {
-                        source = &candidate;
+                        sourceFlow = &flow;
                         break;
                     }
-                if (!source)
-                    fail("源节点不存在：" + flowId + "/" + nodeSeq);
+                if (!sourceFlow || sourceFlow == resolution.flow)
+                    fail("源流程不存在或就是接收流程：" + flowId);
                 else
                 {
-                    type = resolve(*source, sourcePort);
-                    if (!type)
-                        fail("源输出端口不存在或类型无法解析：" + nodeSeq + "." + sourcePort);
+                    const NodeDefinition *source = nullptr;
+                    for (const auto &candidate : sourceFlow->nodes)
+                        if (candidate.id == sourceNode)
+                        {
+                            source = &candidate;
+                            break;
+                        }
+                    if (!source)
+                        fail("源节点不存在：" + flowId + "/" + nodeSeq);
+                    else
+                    {
+                        type = resolve(*source, sourcePort);
+                        if (!type)
+                            fail("源输出端口不存在或类型无法解析：" + nodeSeq + "." + sourcePort);
+                    }
                 }
+            }
+            catch (const ContractError &error)
+            {
+                fail(error.what());
             }
         }
         resolving.erase(key);

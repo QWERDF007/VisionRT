@@ -477,6 +477,14 @@ void receiverOutputFollowsItsSource()
     editor.setBinding("flow_1", otherSink, "first",
                       {BindingMode::Upstream, Missing{}, SourcePort{receive, "value"}});
     const auto revision = node(editor, receive).executionRevision;
+    for (const auto &value :
+         {std::string("0") + std::to_string(sender), "+" + std::to_string(sender), " " + std::to_string(sender),
+          std::to_string(sender) + " ", std::string("18446744073709551616")})
+    {
+        editor.setInitParam("flow_1", receive, "source_node_seq", value);
+        assert(!node(editor, receive).signatures.outputs.contains("value"));
+        assert(node(editor, receive).outputTypeErrors.at("value").find("源节点序号") != std::string::npos);
+    }
     editor.setInitParam("flow_1", receive, "source_node_seq", std::string(std::to_string(arraySender)));
     assert(node(editor, receive).signatures.outputs.at("value") == arrays.outputs.front().type);
     assert(node(editor, receive).executionRevision > revision);

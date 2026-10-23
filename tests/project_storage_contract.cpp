@@ -610,9 +610,9 @@ void wideIdsAndCycleMembership(const QString &directory)
     ToolRegistry   registry;
     ProjectStorage storage(registry);
     const auto     file = directory + "/wide.vrt.json";
-    for (const auto &id : {QString("9007199254740993"), QString("18446744073709551615")})
+    for (const auto &id : {QString("0"), QString("1"), QString("9007199254740993"), QString("18446744073709551615")})
     {
-        const auto next = id == "9007199254740993" ? QString("9007199254740994") : id;
+        const auto next = id == "18446744073709551615" ? id : QString::number(id.toULongLong() + 1);
         put(file, QJsonDocument(savedProject({savedNode(id, id)}, next)).toJson());
         auto loaded = storage.load(path(file));
         storage.save(loaded.project);
@@ -636,6 +636,42 @@ void wideIdsAndCycleMembership(const QString &directory)
             members.insert(*diagnostic.node);
     require(members == std::set<NodeId>{7, 8}, "downstream-only nodes included in cycle");
 }
+
+void canonicalSequences(const QString &directory)
+{
+    ToolRegistry   registry;
+    ProjectStorage storage(registry);
+    const auto     file = directory + "/非规范序号.vrt.json";
+    for (const auto &field :
+         {QString("node_seq"), QString("next_node_seq"), QString("next_flow_seq"), QString("source.node_seq")})
+        for (const auto &value :
+             {QString("00"), QString("07"), QString("+7"), QString(" 7"), QString("7 "), QString("-0"), QString("-1"),
+              QString("1e1"), QString("0x7"), QString("７"), QString("18446744073709551616")})
+        {
+            auto document = savedProject(
+                {savedNode(field == "node_seq" ? value : "7", field == "source.node_seq" ? value : "7")});
+            if (field.startsWith("next_"))
+            {
+                auto header = document["project"].toObject();
+                header.insert(field, value);
+                document.insert("project", header);
+            }
+            put(file, QJsonDocument(document).toJson());
+            bool rejected = false;
+            try
+            {
+                storage.load(path(file));
+            }
+            catch (const ContractError &error)
+            {
+                const auto message = QString::fromUtf8(error.what());
+                require(message.contains(field) && message.contains("非规范序号.vrt.json"),
+                        "sequence rejection lost the project file or field context");
+                rejected = true;
+            }
+            require(rejected, "project accepted a noncanonical unsigned sequence");
+        }
+}
 }
 
 int main()
@@ -651,6 +687,7 @@ int main()
         saveAsPaths(temporary.path());
         retiredInitialization(temporary.path());
         wideIdsAndCycleMembership(temporary.path());
+        canonicalSequences(temporary.path());
         std::cout << "project storage JSON contract passed\n";
     }
     catch (const std::exception &error)

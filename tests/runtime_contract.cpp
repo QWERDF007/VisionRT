@@ -877,6 +877,19 @@ void hostBindingReceiverContract()
     assert(std::get<std::int64_t>(recvSnap->outputs.at("value")) == 999);
     assert(std::get<std::int64_t>(recvSnap->outputs.at("source_status_code")) == 0);
 
+    for (const auto &value : {std::string("01"), std::string("+1"), std::string(" 1"), std::string("1 "),
+                              std::string("18446744073709551616")})
+    {
+        auto invalid                                            = project;
+        invalid.flows[1].nodes[0].initParams["source_node_seq"] = value;
+        RuntimeEngine rejected(2);
+        assert(rejected.start(invalid, registry, RunMode::Once));
+        const auto result = snapshot(finish(rejected), receiverNode.id);
+        assert(result->status.code == 1);
+        assert(result->status.message.find("source_node_seq") != std::string::npos);
+        assert(isMissing(result->outputs.at("value")));
+    }
+
     // Dynamic type: string
     ToolDefinition strRecvDef  = recvDef;
     strRecvDef.id              = "test.str.receiver";

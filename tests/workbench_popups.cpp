@@ -132,7 +132,7 @@ void popupSessionsContract()
     require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".rect"),
             "incompatible input rejection lost its precise reason or stable target identity");
     require(!app.bindOutputTo(sourceContext, QStringLiteral("not-a-node"), QStringLiteral("images"))
-                && app.diagnostic() == QStringLiteral("节点标识无效：not-a-node"),
+                && app.diagnostic() == QStringLiteral("节点标识 必须是无前导零的无符号十进制文本：not-a-node"),
             "invalid output target lost its original node identifier or concrete Chinese reason");
     require(app.wires() == beforeRejectedBinding && rejectedProjectChanges.isEmpty()
                 && rejectedParameterChanges.isEmpty() && popup->property("visible").toBool()
