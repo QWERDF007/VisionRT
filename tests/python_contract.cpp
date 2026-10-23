@@ -45,9 +45,9 @@ int main(int argc, char **argv)
                     std::cout << "Pure Python ZIP result: 42\n";
                     return;
                 }
-                assert(registry.definitions().size() == 3);
+                assert(registry.definitions().size() == 4);
                 assert(registry.find("custom.image.mean") && registry.find("custom.call.counter")
-                       && registry.find("visiontools.python.image_sizes"));
+                       && registry.find("custom.python.roi") && registry.find("visiontools.python.image_sizes"));
                 const auto images = DataRef<Image>(Image{cv::Mat(4, 6, CV_16UC1, cv::Scalar(8))(cv::Rect(1, 1, 3, 2)),
                                                          cv::Mat(4, 5, CV_8UC3, cv::Scalar(2, 2, 2))});
                 {
@@ -86,6 +86,23 @@ int main(int argc, char **argv)
                                 {2, 3},
                                 {4, 5}
                     }));
+                }
+                {
+                    auto roi = registry.create("custom.python.roi", {});
+                    assert(roi->initialize({}).code == 0);
+                    const auto result = roi->execute({
+                        {"images", images}
+                    });
+                    assert(result.status.code == 0 && result.outputs.size() == 1);
+                    const auto &groups = std::get<DataRef<ROI>>(result.outputs.at("rois")).get();
+                    assert(groups.size() == 2);
+                    assert((groups[0].front() == std::vector<double>{2, 0, 0, 3, 2, 0}));
+                    assert((groups[1].front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
+                    const auto empty = roi->execute({
+                        {"images", DataRef<Image>(Image{})}
+                    });
+                    assert(empty.status.code == 0 && std::get<DataRef<ROI>>(empty.outputs.at("rois")).get().empty());
+                    assert(roi->release().code == 0);
                 }
                 {
                     auto first  = registry.create("custom.call.counter", {});
