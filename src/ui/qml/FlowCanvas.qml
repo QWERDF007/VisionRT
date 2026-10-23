@@ -692,7 +692,9 @@ FocusScope {
     }
     QuiMenu {
         id: blankMenu
+        objectName: "flowBlankMenu"
         QuiMenuItem {
+            objectName: "flowBlankPaste"
             text: "粘贴"; enabled: app.canPaste && !app.busy
             onTriggered: {
                 let p = root.gridPointAt(root.contextPoint.x, root.contextPoint.y)
