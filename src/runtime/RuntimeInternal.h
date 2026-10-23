@@ -115,6 +115,7 @@ struct NodeRuntime
     std::shared_ptr<NodeReader>                    reader;
     std::unique_ptr<IToolInstance>                 instance;
     std::optional<InstanceConfiguration>           configuration;
+    bool                                           deferredCreate       = false;
     bool                                           initialized          = false;
     std::uint64_t                                  publication          = 0;
     void                                           run(const std::shared_ptr<const RoundContext> &context);

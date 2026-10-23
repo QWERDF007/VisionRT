@@ -475,13 +475,38 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
     state.loader["finder"].attr("clear")();
     ++state.generation;
     std::vector<PythonImplementation> statuses;
+    const auto                        text = [](const std::filesystem::path &path)
+    {
+        const auto utf8 = path.u8string();
+        return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+    };
     for (const auto &definition : definitions)
     {
         if (definition.kind != ToolKind::PythonFunction && definition.kind != ToolKind::PythonClass)
             continue;
-        if (!state.implementations.emplace(definition.id, Implementation{}).second)
+        Implementation implementation;
+        try
+        {
+            const auto script = definition.pythonScript();
+            if (!std::filesystem::is_regular_file(script))
+                implementation.status = {-3, "Python 脚本缺失", text(script)};
+            else if (definition.entry.file.extension() != ".py")
+                implementation.status = {-3, "Python 入口必须是 .py 文件", text(script)};
+            else if (definition.entry.symbol.empty())
+                implementation.status = {-3, "Python 入口缺少 symbol", text(script)};
+        }
+        catch (const ContractError &error)
+        {
+            implementation.status = {-2, error.what()};
+        }
+        catch (const std::exception &error)
+        {
+            implementation.status = {-2, error.what()};
+        }
+        const auto [entry, inserted] = state.implementations.emplace(definition.id, std::move(implementation));
+        if (!inserted)
             throw ContractError("Python 目录有重复工具 ID：" + definition.id);
-        statuses.push_back({definition.id, {}});
+        statuses.push_back({definition.id, entry->second.status});
     }
     return statuses;
 }

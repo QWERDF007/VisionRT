@@ -139,7 +139,8 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
     }
     auto missing = definitionFor(root, "python.missing", "first_only_builtin.py");
     write(root / "python/builtin/math/first_only_builtin.py", fixed);
-    runtime.refresh(std::span(&missing, 1));
+    const auto missingStatus = runtime.refresh(std::span(&missing, 1));
+    assert(missingStatus.size() == 1 && missingStatus.front().status.code == -3);
     unavailable(runtime.factory(missing));
 }
 
@@ -261,7 +262,7 @@ try
                                  packageBoundaries(runtime, root);
                              });
     worker.get();
-    std::cout << "Metadata refresh does not import Python; node construction loads its selected code root\n";
+    std::cout << "Metadata refresh does not import Python; direct adapter construction loads its code root\n";
     return 0;
 }
 catch (const std::exception &error)

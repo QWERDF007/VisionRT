@@ -49,6 +49,37 @@ const char *exceptionSummary(NodePhase phase)
     }
     std::terminate();
 }
+
+std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const ToolRegistry &registry,
+                                              const InstanceConfiguration &configuration,
+                                              const std::shared_ptr<IResultReader> &reader, ToolStatus &status)
+{
+    try
+    {
+        const auto *definition = registry.find(node.toolId);
+        if (!definition)
+            throw RegistryError(ToolAvailability::DefinitionMissing, "工具定义缺失：" + node.toolId);
+        PlatformToolServices services{PathResolver(configuration.directory), reader};
+        return registry.create(nodeContract(node, *definition), services);
+    }
+    catch (const RegistryError &error)
+    {
+        status = error.status;
+    }
+    catch (const ContractError &error)
+    {
+        status = {-2, error.what()};
+    }
+    catch (const std::exception &error)
+    {
+        status = {-1, exceptionSummary(NodePhase::Create), error.what()};
+    }
+    catch (...)
+    {
+        status = {-1, "工具实例创建发生未知异常"};
+    }
+    return {};
+}
 } // namespace
 
 InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry,
@@ -83,33 +114,15 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
     if (configuration && *configuration == next && (instance || !retry))
         return;
     release();
-    configuration = std::move(next);
+    configuration     = std::move(next);
+    // Python declarations import and construct on the first execution; configuring a node must not load code.
+    deferredCreate    = configuration->kind == ToolKind::PythonFunction
+                   || configuration->kind == ToolKind::PythonClass;
     preparation.store({}, std::memory_order_release);
+    if (deferredCreate)
+        return;
     ToolStatus status;
-    try
-    {
-        const auto *definition = registry.find(node.toolId);
-        if (!definition)
-            throw RegistryError(ToolAvailability::DefinitionMissing, "工具定义缺失：" + node.toolId);
-        PlatformToolServices services{PathResolver(configuration->directory), reader};
-        instance = registry.create(nodeContract(node, *definition), services);
-    }
-    catch (const RegistryError &error)
-    {
-        status = error.status;
-    }
-    catch (const ContractError &error)
-    {
-        status = {-2, error.what()};
-    }
-    catch (const std::exception &error)
-    {
-        status = {-1, exceptionSummary(NodePhase::Create), error.what()};
-    }
-    catch (...)
-    {
-        status = {-1, "工具实例创建发生未知异常"};
-    }
+    instance = createInstance(node, registry, *configuration, reader, status);
     if (!status)
     {
         preparation.store(std::make_shared<const NodeDiagnostic>(
@@ -153,6 +166,7 @@ void NodeRuntime::reset() noexcept
     lifecycle.store({}, std::memory_order_release);
     release();
     configuration.reset();
+    deferredCreate = false;
     preparation.store({}, std::memory_order_release);
     slot.publish({});
     active.store(false, std::memory_order_release);
@@ -269,6 +283,20 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             validateToolValues(definition->inputs, inputs);
             prepareTimer.stop();
         }
+        double deferredCreateMs = 0.0;
+        if (!instance && deferredCreate)
+        {
+            const auto createStart = Clock::now();
+            ToolStatus status;
+            instance = createInstance(config, frozen.registry, *configuration, reader, status);
+            deferredCreateMs = milliseconds(Clock::now() - createStart);
+            if (!status)
+                preparation.store(std::make_shared<const NodeDiagnostic>(
+                                      NodeDiagnostic{id, config.toolId, NodePhase::Create, std::move(status)}),
+                                  std::memory_order_release);
+            else
+                preparation.store({}, std::memory_order_release);
+        }
         phase = NodePhase::Initialize;
         reader->bind(context);
         const auto &parameters = configuration->parameters;
@@ -311,6 +339,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             else
                 initialized = true;
         }
+        snapshot->timing.initMs += deferredCreateMs;
         phase = NodePhase::Execute;
         if (instance)
         {
