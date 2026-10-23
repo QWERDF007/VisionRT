@@ -1029,6 +1029,9 @@ void AppController::addNode(const QString &toolId, int x, int y)
     if (impl_->command(
             [&]
             {
+                const auto availability = impl_->registry.availability(toolId.toStdString());
+                if (availability.state != ToolAvailability::Available)
+                    throw RegistryError(availability.state, availability.status);
                 const auto *tool = impl_->registry.find(toolId.toStdString());
                 if (!tool)
                     throw ContractError("工具定义缺失：" + toolId.toStdString());

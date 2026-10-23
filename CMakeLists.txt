@@ -286,6 +286,10 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        visionrt_contract(workbench_unavailable_tool_contract visionrt_ui)
+        target_link_libraries(workbench_unavailable_tool_contract PRIVATE Qt6::Test)
+        target_compile_definitions(workbench_unavailable_tool_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(workbench_publication_contract visionrt_ui)
         target_link_libraries(workbench_publication_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_publication_contract PRIVATE
