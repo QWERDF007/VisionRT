@@ -17,6 +17,7 @@ public:
         LeafRole,
         VersionRole,
         AvailableRole,
+        StatusRole,
         StableKeyRole
     };
 
@@ -34,7 +35,7 @@ public:
 private:
     struct Entry
     {
-        QString                             name, id, version;
+        QString                             name, id, version, status;
         bool                                available = false;
         Entry                              *parent    = nullptr;
         std::vector<std::unique_ptr<Entry>> children;
@@ -42,7 +43,7 @@ private:
 
     struct Definition
     {
-        QString category, group, name, id, version;
+        QString category, group, name, id, version, status;
         bool    available;
     };
 

@@ -141,6 +141,9 @@ try
             "tool tree did not mark the missing-script Python tool unavailable");
     require((controller.toolModel()->flags(index) & Qt::ItemIsDragEnabled) == 0,
             "unavailable tool remained draggable in the tool model");
+    require(controller.toolModel()->data(index, ToolTreeModel::StatusRole).toString().contains(
+                QStringLiteral("Python 脚本缺失")),
+            "tool tree did not retain the unavailable diagnostic");
     const auto diagnostics = controller.diagnostics();
     require(std::any_of(diagnostics.begin(), diagnostics.end(),
                         [](const QString &message) { return message.contains(QStringLiteral("Python 脚本缺失")); }),
@@ -201,6 +204,8 @@ try
             "unavailable tool delegate was not laid out");
     auto *delegate = delegateWithTool(tree, QStringLiteral("custom.python.roi"));
     require(delegate->property("available").toBool() == false, "delegate lost unavailable state");
+    require(delegate->property("status").toString().contains(QStringLiteral("Python 脚本缺失")),
+            "delegate lost the unavailable diagnostic");
     require(library->property("selectedTool").toString().isEmpty(), "unavailable tool was selected before click");
     clickItem(window, delegate);
     QCoreApplication::processEvents();

@@ -19,9 +19,16 @@ Item {
     readonly property string toolId: model.toolId || ""
     readonly property bool leaf: model.leaf === true
     readonly property bool available: model.available !== false
+    readonly property string status: model.status || ""
     readonly property bool isSelected: root.selectedKey.length > 0 && root.selectedKey === root.stableKey
     signal chosen(string toolId)
     signal selected(string key)
+
+    ToolTip {
+        visible: hoverHandler.hovered && root.leaf && !root.available && root.status.length > 0
+        text: root.status
+        delay: 300
+    }
 
     implicitWidth: treeView.width
     implicitHeight: Theme.treeRowHeight
