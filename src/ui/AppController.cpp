@@ -1089,6 +1089,12 @@ void AppController::pasteNodes(int x, int y)
         {
             if (!impl_->clipboard)
                 return false;
+            for (const auto &node : impl_->clipboard->nodes)
+            {
+                const auto availability = impl_->registry.availability(node.toolId);
+                if (availability.state != ToolAvailability::Available)
+                    throw RegistryError(availability.state, availability.status);
+            }
             impl_->editor.pasteSelection(impl_->flow.toStdString(), *impl_->clipboard, {x, y});
             return true;
         },

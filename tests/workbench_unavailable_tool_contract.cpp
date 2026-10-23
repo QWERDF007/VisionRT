@@ -54,14 +54,28 @@ try
     const auto package = std::filesystem::path(installation.directory().toStdWString()) / "tools-package";
     const auto script  = package / "python/custom/examples/roi_geometry/tool.py";
     assert(std::filesystem::is_regular_file(script));
-    assert(std::filesystem::remove(script));
 
     AppController controller(1, installation.directory());
     require(QTest::qWaitFor([&] { return !controller.busy() && !controller.toolDefinitions().isEmpty(); }, 5000),
             "tool catalog did not become ready");
-    const auto definitions = controller.toolDefinitions();
-    const auto roi         = findDefinition(definitions, QStringLiteral("custom.python.roi"));
-    require(!roi.isEmpty(), "missing-script Python declaration was not retained");
+    controller.addNode(QStringLiteral("custom.python.roi"), 0, 0);
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 1; }, 5000),
+            "available Python tool was not added before removal");
+    const auto nodeId = controller.nodes().first().toMap().value("id").toString();
+    controller.copyNodes(QVariantList{nodeId});
+    require(controller.canPaste(), "copied node was not retained");
+
+    assert(std::filesystem::remove(script));
+    controller.refreshPython();
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    const auto current = findDefinition(controller.toolDefinitions(), QStringLiteral("custom.python.roi"));
+                    return !controller.busy() && !current.isEmpty() && current.value("available").toBool() == false;
+                },
+                5000),
+            "missing-script Python declaration was not retained as unavailable");
+    const auto roi = findDefinition(controller.toolDefinitions(), QStringLiteral("custom.python.roi"));
     require(roi.value("available").toBool() == false, "missing-script Python tool was reported available");
     const auto index = findToolIndex(controller.toolModel(), QStringLiteral("custom.python.roi"));
     require(index.isValid(), "missing-script Python declaration disappeared from the tool tree");
@@ -71,14 +85,18 @@ try
     require(std::any_of(diagnostics.begin(), diagnostics.end(),
                         [](const QString &message) { return message.contains(QStringLiteral("Python 脚本缺失")); }),
             "missing-script diagnosis was not retained");
-    require(controller.nodes().isEmpty(), "initial flow unexpectedly contains nodes");
+    require(controller.nodes().size() == 1, "refresh removed the existing node");
+
+    controller.pasteNodes(0, 0);
+    QCoreApplication::processEvents();
+    require(controller.nodes().size() == 1, "unavailable clipboard node was pasted into the flow");
 
     controller.addNode(QStringLiteral("custom.python.roi"), 0, 0);
     QCoreApplication::processEvents();
-    require(controller.nodes().isEmpty(), "unavailable tool was added to the flow");
+    require(controller.nodes().size() == 1, "unavailable tool was added to the flow");
 
     controller.addNode(QStringLiteral("visionrt.image.read"), 0, 0);
-    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 1; }, 5000),
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
             "available tool was not added");
     std::cout << "Unavailable Python declarations stay diagnostic-only; available tools remain addable\n";
     return 0;
