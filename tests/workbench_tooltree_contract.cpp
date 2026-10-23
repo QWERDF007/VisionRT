@@ -13,6 +13,7 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QSignalSpy>
+#include <QStyleHints>
 #include <QTest>
 #include <functional>
 #include <iostream>
@@ -68,7 +69,20 @@ QList<QQuickItem *> categories(QQuickItem *tree)
     for (auto *delegate : delegates)
         if (delegate->property("hasChildren").toBool() && delegate->property("depth").toInt() == 0)
             result.push_back(delegate);
+    std::sort(result.begin(), result.end(), [](QQuickItem *a, QQuickItem *b) {
+        return a->property("row").toInt() < b->property("row").toInt();
+    });
     return result;
+}
+
+QQuickItem *delegateWithKey(QQuickItem *tree, const QString &key)
+{
+    QList<QQuickItem *> delegates;
+    collectDelegates(tree, delegates);
+    for (auto *delegate : delegates)
+        if (delegate->property("stableKey").toString() == key)
+            return delegate;
+    return nullptr;
 }
 
 void clickItem(QQuickWindow &window, QQuickItem *item)
@@ -115,16 +129,27 @@ try
     require(QTest::qWaitFor([&] { return !categories(tree).isEmpty(); }, 3000),
             "tool tree categories did not lay out");
     auto category = categories(tree).front();
+    const auto targetKey = category->property("stableKey").toString();
+    require(!targetKey.isEmpty(), "tool tree category stableKey is empty");
     if (category->property("expanded").toBool())
     {
         clickItem(window, category);
-        require(QTest::qWaitFor([&] { return !category->property("expanded").toBool(); }, 2000),
+        require(QTest::qWaitFor([&] {
+                    auto item = delegateWithKey(tree, targetKey);
+                    return item && !item->property("expanded").toBool();
+                }, 2000),
                 "tool tree category did not collapse");
+        QTest::qWait(QGuiApplication::styleHints()->mouseDoubleClickInterval() + 50);
     }
     QList<QQuickItem *> collapsed;
     collectDelegates(tree, collapsed);
+    category = delegateWithKey(tree, targetKey);
+    require(category != nullptr, "tool tree category delegate was not found");
     clickItem(window, category);
-    require(QTest::qWaitFor([&] { return category->property("expanded").toBool(); }, 2000),
+    require(QTest::qWaitFor([&] {
+                auto item = delegateWithKey(tree, targetKey);
+                return item && item->property("expanded").toBool();
+            }, 2000),
             "tool tree category did not expand");
     require(QTest::qWaitFor(
                 [&]

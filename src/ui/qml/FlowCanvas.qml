@@ -10,6 +10,9 @@ FocusScope {
     property real zoom: 1
     property real panX: 0
     property real panY: 0
+    onZoomChanged: root.hideHover()
+    onPanXChanged: root.hideHover()
+    onPanYChanged: root.hideHover()
     property var flowViews: ({})
     property bool fitRequested: true
     property string viewedFlow: ""
@@ -59,7 +62,8 @@ FocusScope {
         if (ids.length !== nodeIds.length || ids.some(function(v, i) { return v !== nodeIds[i] })) nodeIds = ids
     }
     function enterNode(id) {
-        if (root.gesture !== "" || root.hoverNodeId === id) return
+        if (root.gesture !== "") return
+        if (root.hoverNodeId === id && (root.hoverCardVisible || hoverTimer.running)) return
         root.hoverNodeId = id
         root.hoverCardVisible = false
         hoverTimer.restart()

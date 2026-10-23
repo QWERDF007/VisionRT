@@ -58,7 +58,12 @@ void unavailable(const ToolFactory &factory)
     bool failed = false;
     try
     {
-        factory({});
+        auto instance = factory({});
+        if (instance)
+        {
+            const auto status = instance->initialize({});
+            failed = !status && status.code == -3;
+        }
     }
     catch (const RegistryError &error)
     {
@@ -248,8 +253,9 @@ try
                                  assert(statuses.size() == 1 && statuses[0].status.code == 0);
                                  assert(!std::filesystem::exists(code / "imported.txt"));
                                  auto instance = runtime.factory(definition)({});
-                                 assert(std::filesystem::exists(code / "imported.txt"));
+                                 assert(!std::filesystem::exists(code / "imported.txt"));
                                  assert(instance->initialize({}).code == 0);
+                                 assert(std::filesystem::exists(code / "imported.txt"));
                                  const auto result = instance->execute({});
                                  assert(result.status.code == 0);
                                  assert(std::get<std::int64_t>(result.outputs.at("value")) == 23);

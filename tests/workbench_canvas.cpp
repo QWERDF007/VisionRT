@@ -461,7 +461,9 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     const double bottomEdge = surface->height() - item->height() - 6;
     for (const auto &corner : {QPointF(6, 6), QPointF(rightEdge, 6), QPointF(6, bottomEdge), QPointF(rightEdge, bottomEdge)})
     {
-        QTest::mouseMove(window, surface->mapToScene(QPointF(2, 2)).toPoint());
+        window->requestActivate();
+        require(QTest::qWaitForWindowActive(window), "corner hover window did not become active");
+        QTest::mouseMove(window, surface->mapToScene(QPointF(-10, -10)).toPoint());
         QTest::qWait(30);
         canvas->setProperty("panX", corner.x() - item->x());
         canvas->setProperty("panY", corner.y() - item->y());
@@ -571,7 +573,10 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     QTest::qWait(100);
     for (const double zoom : {1.0, 1.5, 2.0, 3.0})
     {
-        QTest::mouseMove(window, surface->mapToScene(QPointF(2, 2)).toPoint());
+        window->requestActivate();
+        require(QTest::qWaitForWindowActive(window), "zoom matrix window did not become active");
+        QTest::mouseMove(window, surface->mapToScene(QPointF(-10, -10)).toPoint());
+        QTest::qWait(30);
         canvas->setProperty("zoom", zoom);
         QMetaObject::invokeMethod(canvas, "centerNode", Q_ARG(QVariant, remainingId));
         QTest::qWait(100);

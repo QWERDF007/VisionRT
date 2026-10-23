@@ -150,15 +150,12 @@ def absent(inputs):
         assert(result.status.code == 0 && isMissing(result.outputs.at("value")));
         assert(instance->release());
     }
-    try
     {
-        runtime.factory(constructor)(services);
-        assert(false);
-    }
-    catch (const RegistryError &error)
-    {
-        assert(error.status.code == -1);
-        assert(error.status.detail.find("constructor detail") != std::string::npos);
+        auto badInstance = runtime.factory(constructor)(services);
+        assert(badInstance != nullptr);
+        const auto status = badInstance->initialize({});
+        assert(status.code == -1);
+        assert(status.detail.find("constructor detail") != std::string::npos);
     }
     auto first  = runtime.factory(counter)(services);
     auto second = runtime.factory(counter)(services);
@@ -237,14 +234,20 @@ def execute(inputs):
     sources.put("entry.py", "def execute(:\n");
     const auto invalid = runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     assert(invalid[0].status.code == 0);
-    try
     {
-        runtime.factory(function)(services);
-        assert(false);
-    }
-    catch (const RegistryError &error)
-    {
-        assert(error.status.code == -3 && error.status.detail.find("SyntaxError") != std::string::npos);
+        auto inst = runtime.factory(function)(services);
+        assert(inst != nullptr);
+        const auto status = inst->initialize({});
+        assert(status.code == -3 && status.detail.find("SyntaxError") != std::string::npos);
+        try
+        {
+            runtime.factory(function)(services);
+            assert(false);
+        }
+        catch (const RegistryError &error)
+        {
+            assert(error.status.code == -3 && error.status.detail.find("SyntaxError") != std::string::npos);
+        }
     }
     {
         rejects([&] { oldFactory(services); });

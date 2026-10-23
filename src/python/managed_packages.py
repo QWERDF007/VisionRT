@@ -79,5 +79,12 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
             root = f'_visionrt_package_{self.identity}_{self.generation}_{len(self.packages)}'
             self.packages[key] = root
             self.roots[root] = directory
-        module = importlib.import_module('.'.join([root] + parts))
-        return getattr(module, symbol)
+        modules_before = set(sys.modules)
+        try:
+            module = importlib.import_module('.'.join([root] + parts))
+            return getattr(module, symbol)
+        except BaseException:
+            for name in tuple(sys.modules):
+                if name not in modules_before and (name == root or name.startswith(root + '.')):
+                    sys.modules.pop(name, None)
+            raise

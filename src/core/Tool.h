@@ -35,4 +35,15 @@ struct PlatformToolServices : ToolServices
 };
 
 using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)>;
+
+struct PythonFactoryFunctor
+{
+    std::shared_ptr<ToolStatus>                                                 status;
+    std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)> create;
+
+    std::unique_ptr<IToolInstance> operator()(const PlatformToolServices &services) const
+    {
+        return create(services);
+    }
+};
 } // namespace visionrt

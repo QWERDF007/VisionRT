@@ -167,7 +167,12 @@ void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory facto
     const auto *definition = find(toolId);
     if (!definition || (definition->kind != ToolKind::PythonFunction && definition->kind != ToolKind::PythonClass))
         throw ContractError("注册 Python 实现需要已加载的 Python 工具声明：" + toolId);
-    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(status)});
+    std::shared_ptr<ToolStatus> statusPtr;
+    if (const auto *pyFunctor = factory.target<PythonFactoryFunctor>())
+        statusPtr = pyFunctor->status;
+    if (!statusPtr)
+        statusPtr = std::make_shared<ToolStatus>(std::move(status));
+    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(statusPtr)});
 }
 
 void ToolRegistry::registerHostBinding(std::string bindingName, HostBindingFactory factory)
@@ -215,10 +220,13 @@ Availability ToolRegistry::availability(std::string_view id) const
         };
     }
     const auto implementation = python_.find(id);
-    if (implementation != python_.end() && implementation->second.factory && implementation->second.status)
-        return {ToolAvailability::Available, {}};
-    if (implementation != python_.end() && !implementation->second.status)
-        return {ToolAvailability::ImplementationUnavailable, implementation->second.status};
+    if (implementation != python_.end())
+    {
+        if (implementation->second.status && !*implementation->second.status)
+            return {ToolAvailability::ImplementationUnavailable, *implementation->second.status};
+        if (implementation->second.factory && implementation->second.status && *implementation->second.status)
+            return {ToolAvailability::Available, {}};
+    }
     return {
         ToolAvailability::ImplementationUnavailable,
         {-3, "Python 实现尚未加载：" + std::string(id)}
@@ -270,11 +278,22 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
         if (pluginLoader_)
             return pluginLoader_->createAdapter(definition.id, services);
     }
-    const auto &factory  = python_.find(id)->second.factory;
-    auto        instance = factory(services);
-    if (!instance)
-        throw RegistryError(ToolAvailability::ImplementationUnavailable, "工具工厂返回空实例：" + std::string(id));
-    return instance;
+    const auto it = python_.find(id);
+    if (it == python_.end() || !it->second.factory)
+        throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 实现尚未加载：" + std::string(id));
+    try
+    {
+        auto instance = it->second.factory(services);
+        if (!instance)
+            throw RegistryError(ToolAvailability::ImplementationUnavailable, "工具工厂返回空实例：" + std::string(id));
+        return instance;
+    }
+    catch (const RegistryError &error)
+    {
+        if (it->second.status && error.reason == ToolAvailability::ImplementationUnavailable)
+            *it->second.status = error.status;
+        throw;
+    }
 }
 
 } // namespace visionrt

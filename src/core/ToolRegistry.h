@@ -112,8 +112,8 @@ private:
 
     struct PythonImplementation
     {
-        ToolFactory factory;
-        ToolStatus  status;
+        ToolFactory                 factory;
+        std::shared_ptr<ToolStatus> status;
     };
 
     std::shared_ptr<PluginLoader>                            pluginLoader_;
