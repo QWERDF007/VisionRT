@@ -271,9 +271,19 @@ QString ValueJson::text(const PortValue &value, const TypeSpec &type, Purpose pu
 {
     const auto json = encode(value, type, purpose);
     if (json.isArray())
-        return QString::fromUtf8(QJsonDocument(json.toArray()).toJson(QJsonDocument::Indented)).trimmed();
+    {
+        const auto array = json.toArray();
+        if (array.isEmpty())
+            return QStringLiteral("[]");
+        return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Indented)).trimmed();
+    }
     if (json.isObject())
-        return QString::fromUtf8(QJsonDocument(json.toObject()).toJson(QJsonDocument::Indented)).trimmed();
+    {
+        const auto object = json.toObject();
+        if (object.isEmpty())
+            return QStringLiteral("{}");
+        return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Indented)).trimmed();
+    }
     const auto wrapped = QJsonDocument(QJsonArray{json}).toJson(QJsonDocument::Compact);
     return QString::fromUtf8(wrapped.mid(1, wrapped.size() - 2));
 }

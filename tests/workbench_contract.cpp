@@ -180,6 +180,11 @@ void outputContract()
                 && std::holds_alternative<Array>(typedModel.capture(4)->value)
                 && std::get<std::string>(typedModel.capture(5)->value).empty(),
             "typed outputs lost zero/false/empty values");
+    require(OutputModel::fullText(*typedModel.capture(2)) == QStringLiteral("0"), "zero export became null");
+    require(OutputModel::fullText(*typedModel.capture(3)) == QStringLiteral("false"), "false export became null");
+    require(OutputModel::fullText(*typedModel.capture(4)) == QStringLiteral("[]"), "empty array export became null");
+    require(OutputModel::fullText(*typedModel.capture(5)) == QStringLiteral("\"\""),
+            "empty string export became null");
     typedModel.setResult(&typed, {}, {});
     for (int row = 2; row <= 5; ++row)
     {
@@ -369,12 +374,73 @@ void nodeDiagnosticsContract()
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    app.addNode("test.diag.python", 100, 100);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.addNode("test.diag.unfulfilled", 200, 200);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.addNode("test.diag.fail", 300, 200);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
+    QFile projectFile(directory.path() + "/initial.vrt.json");
+    if (projectFile.open(QIODevice::WriteOnly))
+    {
+        projectFile.write(
+            R"json({
+  "format_version": 3,
+  "project": {"name": "诊断工程", "next_node_seq": "4", "next_flow_seq": "2"},
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "流程1",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "test.diag.python",
+          "tool_name_snapshot": "诊断测试",
+          "alias": "",
+          "pos": [100, 100],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {"x": {"type": "Int"}},
+            "outputs": {"value": {"type": "Int"}}
+          },
+          "inputs": {
+            "x": {"mode": "literal", "literal": 1}
+          }
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "test.diag.unfulfilled",
+          "tool_name_snapshot": "未提供实现测试",
+          "alias": "",
+          "pos": [200, 200],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {},
+            "outputs": {}
+          },
+          "inputs": {}
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "test.diag.fail",
+          "tool_name_snapshot": "诊断失败",
+          "alias": "",
+          "pos": [300, 200],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {},
+            "outputs": {"value": {"type": "Int"}}
+          },
+          "inputs": {}
+        }
+      ]
+    }
+  ]
+})json");
+        projectFile.close();
+    }
+    app.requestOpen(directory.path() + "/initial.vrt.json");
+    app.resolveUnsaved("discard");
+    require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 3; }, 5000),
+            "project with unfulfilled tool did not open");
 
     const auto nodes = app.nodes();
     QStringList toolIds;
