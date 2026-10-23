@@ -163,6 +163,7 @@ struct AppController::Impl
     void                                 report(ApplicationDiagnostic diagnostic);
     void                                 report(const std::exception &error, const QString &summary);
     void                                 changed(bool structure = false);
+    void                                 publishNodesChanged();
 
     template<class Function>
     bool command(Function &&operation, bool structure = false)

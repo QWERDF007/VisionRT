@@ -308,6 +308,14 @@ void AppController::Impl::pruneDeletedNodes()
     }
 }
 
+void AppController::Impl::publishNodesChanged()
+{
+    // QML bindings read app.nodes while this signal is delivered; invalidate the
+    // cached rows first so they never observe the previous state.
+    nodeRows.reset();
+    emit q->nodesChanged();
+}
+
 void AppController::Impl::changed(bool structure)
 {
     if (structure)
@@ -318,6 +326,7 @@ void AppController::Impl::changed(bool structure)
         selected.clear();
         emit q->selectionChanged();
     }
+    nodeRows.reset();
     emit q->projectChanged();
     emit q->nodesChanged();
     emit q->parametersChanged();
@@ -357,7 +366,7 @@ void AppController::Impl::clearResults()
     finishRoi();
     converter.invalidate(generation);
     updateResults();
-    emit q->nodesChanged();
+    publishNodesChanged();
     emit q->runtimeChanged();
 }
 
@@ -451,7 +460,7 @@ void AppController::Impl::poll()
         }
         setState(update.state);
         if (nodesChanged)
-            emit q->nodesChanged();
+            publishNodesChanged();
         if (parametersChanged || enteringReadback)
         {
             if (roi)
@@ -945,6 +954,7 @@ void AppController::selectFlow(const QString &id)
             impl_->finishRoi();
             impl_->flow = id;
             impl_->selected.clear();
+            impl_->nodeRows.reset();
             emit selectionChanged();
             emit nodesChanged();
             emit parametersChanged();
