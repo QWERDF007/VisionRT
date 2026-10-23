@@ -746,6 +746,10 @@ AppController::AppController(std::size_t workers, const QString &applicationDire
     : QObject(parent)
     , impl_(std::make_unique<Impl>(this, workers, applicationDirectory))
 {
+    for (const auto signal :
+         {&AppController::nodesChanged, &AppController::projectChanged, &AppController::selectionChanged,
+          &AppController::runtimeChanged, &AppController::diagnosticChanged})
+        connect(this, signal, this, [this] { impl_->nodeRows.reset(); });
 }
 
 AppController::~AppController() = default;
@@ -834,6 +838,8 @@ QVariantList AppController::parameterTabs() const
 
 QVariantList AppController::nodes() const
 {
+    if (impl_->nodeRows)
+        return *impl_->nodeRows;
     QVariantList result;
     if (const auto *flow = impl_->currentFlow())
         for (const auto &node : flow->nodes)
@@ -906,6 +912,7 @@ QVariantList AppController::nodes() const
                 {      "lifecycleDetail",          lifecycleDetail}
             });
         }
+    impl_->nodeRows = result;
     return result;
 }
 

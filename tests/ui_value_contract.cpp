@@ -75,8 +75,52 @@ try
     idle();
     const auto source = app.selectedNode();
     require(!source.isEmpty(), "Python source unavailable through scanned JSON");
+    const auto stableNodes = [&]
+    {
+        const auto rows = app.nodes();
+        for (int iteration = 0; iteration < 100; ++iteration)
+            require(rows.isSharedWith(app.nodes()), "unchanged node readback rebuilt metadata storage");
+        return rows;
+    };
+    const auto originalNodes = stableNodes();
+    require(originalNodes.size() == 1 && originalNodes.front().toMap()["state"] == "idle",
+            "initial node metadata is incorrect");
+    QVariantList observedProjectNodes;
+    const auto   projectObservation
+        = QObject::connect(&app, &AppController::projectChanged, &app, [&] { observedProjectNodes = app.nodes(); });
+    app.renameNode(source, "缓存节点");
+    QObject::disconnect(projectObservation);
+    require(observedProjectNodes.size() == 1 && observedProjectNodes.front().toMap()["alias"] == "缓存节点",
+            "project observers received stale node metadata before nodesChanged");
+    const auto renamedNodes = stableNodes();
+    require(renamedNodes.front().toMap()["alias"] == "缓存节点"
+                && originalNodes.front().toMap()["alias"].toString().isEmpty()
+                && !renamedNodes.isSharedWith(originalNodes),
+            "node rename did not publish independent updated metadata");
+    require(app.moveNodes({source}, 1, 0), "cached node movement failed");
+    const auto movedNodes = stableNodes();
+    require(movedNodes.front().toMap()["x"] == 1 && renamedNodes.front().toMap()["x"] == 0,
+            "node movement retained stale metadata or mutated an earlier readback");
+    idle();
+    require(app.moveNodes({source}, -1, 0), "cached node movement rollback failed");
+    idle();
+    const auto firstFlow = app.currentFlow();
+    app.addFlow("缓存空流程");
+    idle();
+    require(app.currentFlow() != firstFlow && stableNodes().isEmpty(), "empty flow reused previous node metadata");
+    QVariantList observedFlowNodes;
+    const auto   flowObservation
+        = QObject::connect(&app, &AppController::selectionChanged, &app, [&] { observedFlowNodes = app.nodes(); });
+    app.selectFlow(firstFlow);
+    QObject::disconnect(flowObservation);
+    require(observedFlowNodes.size() == 1 && observedFlowNodes.front().toMap()["id"] == source,
+            "flow observers received stale node metadata before nodesChanged");
+    app.selectNode(source);
     app.runNode();
     idle();
+    const auto executedNodes = stableNodes();
+    require(executedNodes.front().toMap()["state"] == "succeeded" && originalNodes.front().toMap()["state"] == "idle",
+            "node execution did not invalidate the metadata readback");
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs != nullptr, "output model unavailable");
     require(OutputModel::fullText(*outputs->capture("__status_code")) == "0", "Python image source failed");

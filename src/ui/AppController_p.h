@@ -39,6 +39,7 @@ struct AppController::Impl
     ToolRegistry                           registry;
     ProjectEditor                          editor;
     WireRouter                             wireRouter;
+    std::optional<QVariantList>            nodeRows;
     std::unique_ptr<PythonRuntime>         python;
     std::unique_ptr<RuntimeEngine>         runtime;
     ToolTreeModel                          tools;

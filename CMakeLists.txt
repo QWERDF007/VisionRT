@@ -174,6 +174,11 @@ if(BUILD_TESTING)
         "CMAKE_COMMAND=${CMAKE_COMMAND}" "${Python3_EXECUTABLE}" -S
         "${CMAKE_SOURCE_DIR}/tests/dependency_manifest_contract.py")
     visionrt_apply_test_environment(dependency_manifest_contract)
+    if(WIN32)
+        add_test(NAME build_incremental_contract COMMAND "${CMAKE_COMMAND}" -E env
+            "CMAKE_COMMAND=${CMAKE_COMMAND}" "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+            "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/build_incremental_contract.py")
+    endif()
     visionrt_contract(value_json_contract visionrt_core)
     visionrt_contract(display_storage_contract visionrt_presentation)
     visionrt_contract(output_value_contract visionrt_presentation)

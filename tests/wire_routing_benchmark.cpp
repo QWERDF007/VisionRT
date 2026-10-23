@@ -75,10 +75,20 @@ try
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addOption({"full", "Run 20/50/100-node sparse/dense graphs with 21 samples each."});
+    parser.addOption({"nodes", "Measure one graph size instead of the default 20 nodes.", "count"});
+    parser.addOption({"samples", "Override the number of drag samples per graph.", "count"});
     parser.addOption(
         {"qml", "Canvas source to measure; imports resolve from the production source directory.", "path"});
     parser.addOption({"output", "Raw CSV output; project fixtures are saved beside it.", "path"});
     parser.process(application);
+    bool      nodeCountValid   = true;
+    bool      sampleCountValid = true;
+    const int nodeCount        = parser.isSet("nodes") ? parser.value("nodes").toInt(&nodeCountValid) : 20;
+    const int samples
+        = parser.isSet("samples") ? parser.value("samples").toInt(&sampleCountValid) : (parser.isSet("full") ? 21 : 3);
+    require(nodeCountValid && nodeCount > 1 && sampleCountValid && samples > 0,
+            "Graph size must exceed one and sample count must be positive");
+    require(!parser.isSet("full") || !parser.isSet("nodes"), "--full and --nodes are mutually exclusive");
     const auto destination = parser.value("output");
     require(!destination.isEmpty(), "--output is required");
     const auto output = std::filesystem::absolute(std::filesystem::path(destination.toStdU16String()));
@@ -128,7 +138,7 @@ try
     auto *surface = findItem(canvas, "flowSurface");
     require(surface != nullptr, "Canvas surface is missing");
     const std::array<const char *, 5> ports{"images", "rois", "scores", "classes", "class_names"};
-    const auto sizes = parser.isSet("full") ? std::vector<int>{20, 50, 100} : std::vector<int>{20};
+    const auto sizes = parser.isSet("full") ? std::vector<int>{20, 50, 100} : std::vector<int>{nodeCount};
     for (const auto count : sizes)
         for (const bool dense : {false, true})
         {
@@ -157,7 +167,6 @@ try
             require(QTest::qWaitFor([&] { return list(canvas->property("routedWires")).size() == app.wires().size(); },
                                     10000),
                     "Initial routing did not finish");
-            const int           samples = parser.isSet("full") ? 21 : 3;
             std::vector<double> timings;
             qsizetype           publications = 0;
             for (int sample = 0; sample < samples; ++sample)
@@ -172,6 +181,8 @@ try
                 require(canvas->property("gesture").toString() == "nodes", "Pointer did not start a node drag");
                 QSignalSpy changes(canvas, SIGNAL(routedWiresChanged()));
                 require(changes.isValid(), "Routing publication signal is missing");
+                std::cout << "ROUTING_BURST_BEGIN nodes=" << count << " density=" << density << " sample=" << sample
+                          << std::endl;
                 const auto begin = Clock::now();
                 for (int offset : {1, 2, 3, 4, 1})
                 {
@@ -182,6 +193,7 @@ try
                 require(QTest::qWaitFor([&] { return !changes.isEmpty(); }, 10000), "Drag routing did not publish");
                 const auto routed       = Clock::now();
                 const auto releasePoint = start + QPoint(qRound(180 * zoom), 0);
+                std::cout << "ROUTING_RELEASE_BEGIN" << std::endl;
                 QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, releasePoint, 0);
                 require(QTest::qWaitFor(
                             [&]
@@ -219,6 +231,7 @@ try
                 const auto burstMs   = std::chrono::duration<double, std::milli>(routed - begin).count();
                 const auto releaseMs = std::chrono::duration<double, std::milli>(released - routed).count();
                 const auto frameMs   = std::chrono::duration<double, std::milli>(finish - released).count();
+                std::cout << "ROUTING_SAMPLE_END" << std::endl;
                 timings.push_back(burstMs + releaseMs + frameMs);
                 publications += changes.size();
                 raw << count << ',' << density << ',' << app.wires().size() << ',' << sample << ',' << changes.size()
