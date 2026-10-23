@@ -194,6 +194,41 @@ int main(int argc, char **argv)
         incompleteRoots = true;
     }
     assert(incompleteRoots);
+    QTemporaryDir resourceExternal;
+    assert(resourceExternal.isValid());
+    const ToolRoots resourceRoots{std::filesystem::path(resourceExternal.filePath("declarations").toStdWString()),
+                                  std::filesystem::path(resourceExternal.filePath("code").toStdWString())};
+    const auto hostResource = QJsonObject{
+        {"schema_version", 2},
+        {"tool_id", "test.host.resource"},
+        {"display_name", "资源宿主"},
+        {"version", "1"},
+        {"kind", "host"},
+        {"entry", QJsonObject{{"binding", "visionrt.receiver"}}},
+        {"init_params", QJsonArray{}},
+        {"inputs", QJsonArray{}},
+        {"outputs", QJsonArray{}},
+        {"resources", QJsonArray{"data.bin"}}
+    };
+    write(resourceExternal.filePath("declarations/host.json"), QJsonDocument(hostResource).toJson());
+    write(resourceExternal.filePath("declarations/data.bin"), "data");
+    const auto withResource = readToolsPackage(root, resourceRoots);
+    assert(withResource.tools.size() == 2);
+    assert(std::any_of(withResource.tools.begin(), withResource.tools.end(), [](const auto &tool)
+                       { return tool.definition.id == "test.host.resource"; }));
+    auto escapedHost       = hostResource;
+    escapedHost["resources"] = QJsonArray{"../outside.bin"};
+    write(resourceExternal.filePath("declarations/host.json"), QJsonDocument(escapedHost).toJson());
+    bool escapedHostResource = false;
+    try
+    {
+        (void)readToolsPackage(root, resourceRoots);
+    }
+    catch (const ContractError &)
+    {
+        escapedHostResource = true;
+    }
+    assert(escapedHostResource);
     QTemporaryDir linked;
     assert(linked.isValid());
     write(linked.filePath("module_index.json"),
