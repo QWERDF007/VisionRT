@@ -45,9 +45,10 @@ int main(int argc, char **argv)
                     std::cout << "Pure Python ZIP result: 42\n";
                     return;
                 }
-                assert(registry.definitions().size() == 4);
+                assert(registry.definitions().size() == 5);
                 assert(registry.find("custom.image.mean") && registry.find("custom.call.counter")
-                       && registry.find("custom.python.roi") && registry.find("visiontools.python.image_sizes"));
+                       && registry.find("custom.python.roi") && registry.find("custom.python.image_add")
+                       && registry.find("visiontools.python.image_sizes"));
                 const auto images = DataRef<Image>(Image{cv::Mat(4, 6, CV_16UC1, cv::Scalar(8))(cv::Rect(1, 1, 3, 2)),
                                                          cv::Mat(4, 5, CV_8UC3, cv::Scalar(2, 2, 2))});
                 {
@@ -103,6 +104,41 @@ int main(int argc, char **argv)
                     });
                     assert(empty.status.code == 0 && std::get<DataRef<ROI>>(empty.outputs.at("rois")).get().empty());
                     assert(roi->release().code == 0);
+                }
+                {
+                    auto add = registry.create("custom.python.image_add", {});
+                    assert(add->initialize({}).code == 0);
+                    auto copyInput = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(10)),
+                                                          cv::Mat(2, 3, CV_8UC3, cv::Scalar(20, 20, 20))});
+                    const auto copied = add->execute({
+                        {"images", copyInput},
+                        {"mode", std::string("copy")}
+                    });
+                    assert(copied.status.code == 0);
+                    assert(copyInput.get()[0].at<std::uint8_t>(0, 0) == 10);
+                    const auto &copiedImages = std::get<DataRef<Image>>(copied.outputs.at("images")).get();
+                    assert(copiedImages.size() == 2);
+                    assert(copiedImages[0].at<std::uint8_t>(0, 0) == 11);
+                    assert(copiedImages[1].at<cv::Vec3b>(0, 0) == cv::Vec3b(21, 21, 21));
+                    assert(copiedImages[0].data != copyInput.get()[0].data);
+
+                    auto inplaceInput = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(30))});
+                    const auto inplace = add->execute({
+                        {"images", inplaceInput},
+                        {"mode", std::string("inplace")}
+                    });
+                    assert(inplace.status.code == 0);
+                    assert(inplaceInput.get()[0].at<std::uint8_t>(0, 0) == 31);
+                    const auto &inplaceImages = std::get<DataRef<Image>>(inplace.outputs.at("images")).get();
+                    assert(inplaceImages[0].data == inplaceInput.get()[0].data);
+                    assert(inplaceImages[0].at<std::uint8_t>(0, 0) == 31);
+
+                    const auto invalid = add->execute({
+                        {"images", copyInput},
+                        {"mode", std::string("other")}
+                    });
+                    assert(invalid.status.code == 1 && isMissing(invalid.outputs.at("images")));
+                    assert(add->release().code == 0);
                 }
                 {
                     auto first  = registry.create("custom.call.counter", {});
