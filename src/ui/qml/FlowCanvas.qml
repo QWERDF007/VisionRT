@@ -327,6 +327,7 @@ FocusScope {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
                 Rectangle {
+                    objectName: "flowAddButton"
                     Layout.preferredWidth: 22; Layout.preferredHeight: 22; radius: 3
                     color: addMouse.containsMouse ? "#f0f2f5" : "#ffffff"
                     border.color: "#d0d7de"; border.width: 1
@@ -350,6 +351,7 @@ FocusScope {
                             model: app.flows
                             Rectangle {
                                 id: flowTabItem
+                                objectName: "flowTab_" + modelData.id
                                 required property var modelData
                                 readonly property bool isActive: app.currentFlow === modelData.id
                                 height: 25; width: tabRow.width + 16
@@ -383,6 +385,7 @@ FocusScope {
                                         border.color: flowTabItem.modelData.selected ? "#2da44e" : "#8c959f"
                                         border.width: 1
                                         MouseArea {
+                                            objectName: "flowTabToggle_" + flowTabItem.modelData.id
                                             anchors.fill: parent; anchors.margins: -4
                                             enabled: !app.busy
                                             onClicked: app.setFlowSelected(flowTabItem.modelData.id, !flowTabItem.modelData.selected)
@@ -399,7 +402,8 @@ FocusScope {
                                         visible: true
                                         opacity: app.flows.length > 1 ? 1.0 : 0.4
                                         MouseArea {
-                                            id: tabCloseMouse; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
+                                            id: tabCloseMouse; objectName: "flowTabClose_" + flowTabItem.modelData.id
+                                            anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
                                             enabled: !app.busy && app.flows.length > 1
                                             onClicked: {
                                                 root.contextFlow = flowTabItem.modelData.id
@@ -698,16 +702,19 @@ FocusScope {
     }
     QuiMenu {
         id: flowMenu
+        objectName: "flowContextMenu"
         QuiMenuItem { text: "重命名流程…"; enabled: !app.busy; onTriggered: { for (let f of app.flows) if (f.id === root.contextFlow) root.openName("flow", f.name) } }
         QuiMenuItem { text: "复制流程"; enabled: !app.busy; onTriggered: app.copyFlow(root.contextFlow) }
         QuiMenuItem { text: "删除流程…"; enabled: !app.busy && app.flows.length > 1; onTriggered: deleteFlowDialog.open() }
     }
     WorkbenchDialog {
-        id: deleteFlowDialog; title: "删除流程"; message: "删除该流程及全部节点？此操作无法撤销。"
+        id: deleteFlowDialog; objectName: "flowDeleteDialog"
+        title: "删除流程"; message: "删除该流程及全部节点？此操作无法撤销。"
         onPositiveClicked: app.deleteFlow(root.contextFlow)
     }
     WorkbenchDialog {
-        id: nameDialog; title: root.nameOperation === "node" ? "节点备注" : "流程名称"
+        id: nameDialog; objectName: "flowNameDialog"
+        title: root.nameOperation === "node" ? "节点备注" : "流程名称"
         positiveButtonEnabled: !app.busy && root.nameDraft.trim().length > 0
         contentDelegate: Component {
             QuiTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }
