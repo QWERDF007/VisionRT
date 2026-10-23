@@ -212,6 +212,15 @@ try
     clickItem(window, delegate);
     QCoreApplication::processEvents();
     require(library->property("selectedTool").toString().isEmpty(), "unavailable tool was chosen by click");
+
+    const auto savedPath = std::filesystem::path(installation.directory().toStdWString()) / "unavailable.vrt.json";
+    require(controller.save(QString::fromStdWString(savedPath.wstring())), "project with unavailable tool was not saved");
+    controller.requestOpen(QString::fromStdWString(savedPath.wstring()));
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
+            "project with unavailable tool was not reopened");
+    const auto reopenedRoi = findDefinition(controller.toolDefinitions(), QStringLiteral("custom.python.roi"));
+    require(!reopenedRoi.isEmpty() && reopenedRoi.value("available").toBool() == false,
+            "reopened unavailable tool lost its diagnostic state");
     std::cout << "Unavailable Python declarations stay diagnostic-only; available tools remain addable\n";
     return 0;
 }
