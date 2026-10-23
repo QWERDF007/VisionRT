@@ -59,6 +59,9 @@ struct RoundContext
     std::shared_ptr<std::stop_source>  stop;
 };
 
+// Rejects receivers whose source cannot produce in the frozen run and closed receiver waits.
+std::optional<ToolStatus> validateReceiverPlan(const FrozenRun &frozen);
+
 class NodeReader final : public IResultReader
 {
 public:

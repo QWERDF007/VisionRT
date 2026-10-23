@@ -619,6 +619,8 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
             return {1, "目标节点不存在：" + (target ? std::to_string(*target) : "未指定")};
         if (frozen->selected.empty() || !nonempty)
             return {1, "请至少选择一个非空流程"};
+        if (auto receiverError = validateReceiverPlan(*frozen))
+            return *receiverError;
         if (mode == RunMode::Node)
         {
             if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))

@@ -347,8 +347,17 @@ try
     lines = calls.readAll().trimmed().split('\n');
     require(lines.size() == 14 && lines.count("17") == 6 && lines.count("29") == 7 && lines.count("41") == 1,
             "source deletion/replacement did not preserve exact execution counts");
+    app.setFlowSelected(QString::fromStdString(sourceFlow), false);
+    idle();
+    app.runOnce();
+    idle();
+    require(app.diagnosticsJson().contains("接收源未在本轮执行") && calls.seek(0)
+                && calls.readAll().trimmed().split('\n').size() == 14,
+            "an unselected source flow did not reject the receiver before waiting");
+    app.setFlowSelected(QString::fromStdString(sourceFlow), true);
+    idle();
     std::cout << "RECEIVER_REFERENCES_PASS renamed=17 deleted_execution=0 lookalike_execution=0 repaired=41"
-              << " source_executions=14 replacement=" << replacement.toStdString() << '\n';
+              << " source_executions=14 replacement=" << replacement.toStdString() << " unselected_rejected=1\n";
 }
 catch (const std::exception &error)
 {

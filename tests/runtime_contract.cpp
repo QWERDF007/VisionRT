@@ -348,57 +348,108 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
     assert(wakeups == 1);
 }
 
-void receiverCapacityAndSessionIsolation(const std::filesystem::path &toolsRoot)
+void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &toolsRoot)
 {
     ToolRegistry registry;
     registry.registerPackage(readToolsPackage(toolsRoot));
     registry.loadNativeImplementations();
     registerReceiveTools(registry);
-    auto source = definition("test.sender");
-    install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{25}}}}; });
+    std::atomic<int> sourceCalls{0};
+    auto             source = definition("test.sender");
+    install(registry, source,
+            [&](const Values &)
+            {
+                ++sourceCalls;
+                return ToolResult{{}, {{"value", std::int64_t{25}}}};
+            });
     auto        sender  = node(1, source);
     const auto *receive = registry.find("visionrt.flow.receive");
     assert(receive);
-    auto receiver       = node(2, *receive);
+    auto typed = *receive;
+    for (auto &port : typed.outputs)
+        if (port.typeFrom)
+        {
+            port.type = {Type::Int};
+            port.typeFrom.reset();
+        }
+    registry.replaceDefinition(typed);
+    auto receiver       = node(2, typed);
     receiver.initParams = {
         { "source_flow_id",                  std::string("sender")},
         {"source_node_seq", std::string(std::to_string(sender.id))},
         { "source_port_id",                   std::string("value")},
-        {     "timeout_ms",                       std::int64_t{50}}
+        {     "timeout_ms",                     std::int64_t{5000}}
     };
     ProjectDefinition project;
     project.flows = {
-        {  "sender",   "sender",  true,   {sender}},
-        {"receiver", "receiver", false, {receiver}}
+        {  "sender",   "sender", false,   {sender}},
+        {"receiver", "receiver",  true, {receiver}}
     };
-    RuntimeEngine single(1);
-    assert(single.start(project, registry, RunMode::Once));
-    finish(single);
-    assert(single.start(project, registry, RunMode::Node, 2));
-    auto capacity = finish(single);
-    assert(snapshot(capacity, 2)->status.code == 5);
-    assert(isMissing(snapshot(capacity, 2)->outputs.at("source_status_code")));
-    project.flows[1].nodes[0].initParams["timeout_ms"] = std::int64_t{0};
-    assert(single.start(project, registry, RunMode::Node, 2));
-    assert(snapshot(finish(single), 2)->status.code == 4);
-    project.flows[0].runSelected                       = false;
-    project.flows[1].runSelected                       = true;
-    project.flows[1].nodes[0].initParams["timeout_ms"] = std::int64_t{100};
-    auto second                                        = project.flows[1].nodes.front();
-    second.id                                          = 3;
+    RuntimeEngine engine(4);
+    const auto    rejectedAt = std::chrono::steady_clock::now();
+    const auto    rejected   = engine.start(project, registry, RunMode::Once);
+    const auto    rejectedIn = std::chrono::steady_clock::now() - rejectedAt;
+    assert(rejected.code == 1);
+    assert(rejected.message.find("sender") != std::string::npos);
+    assert(rejected.message.find(sender.title()) != std::string::npos);
+    assert(rejected.message.find(receiver.title()) != std::string::npos);
+    assert(rejectedIn < 1s);
+    assert(sourceCalls == 0);
+    assert(engine.start(project, registry, RunMode::Node, receiver.id).code == 1);
+    assert(sourceCalls == 0);
+    auto second = receiver;
+    second.id   = 3;
     project.flows.push_back({"receiver2", "receiver2", true, {second}});
-    RuntimeEngine two(2);
-    assert(two.start(project, registry, RunMode::Once));
-    auto       limited = finish(two);
-    const auto codeA = snapshot(limited, 2)->status.code, codeB = snapshot(limited, 3)->status.code;
-    assert((codeA == 4 && codeB == 5) || (codeA == 5 && codeB == 4));
+    assert(engine.start(project, registry, RunMode::Once).code == 1);
+    assert(sourceCalls == 0);
+    project.flows.pop_back();
     project.flows[0].runSelected = true;
-    project.flows[2].runSelected = false;
-    assert(two.start(project, registry, RunMode::Once));
-    auto received = finish(two);
+    assert(engine.start(project, registry, RunMode::Once));
+    auto received = finish(engine);
     assert(snapshot(received, 2)->status.code == 0);
     assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 25);
     assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("source_status_code")) == 0);
+    assert(sourceCalls == 1);
+    auto relay       = node(4, typed);
+    relay.initParams = {
+        { "source_flow_id",                  std::string("receiver")},
+        {"source_node_seq", std::string(std::to_string(receiver.id))},
+        { "source_port_id",                     std::string("value")},
+        {     "timeout_ms",                       std::int64_t{5000}}
+    };
+    project.flows.push_back({"relay", "relay", true, {relay}});
+    assert(engine.start(project, registry, RunMode::Once));
+    const auto chained = finish(engine);
+    assert(snapshot(chained, 4)->status.code == 0);
+    assert(std::get<std::int64_t>(snapshot(chained, 4)->outputs.at("value")) == 25);
+    assert(sourceCalls == 2);
+    auto first       = node(10, typed);
+    first.initParams = {
+        { "source_flow_id",                  std::string("b")},
+        {"source_node_seq",                    std::string("11")},
+        { "source_port_id",                     std::string("value")},
+        {     "timeout_ms",                       std::int64_t{5000}}
+    };
+    auto secondNode       = node(11, typed);
+    secondNode.initParams = {
+        { "source_flow_id",                  std::string("a")},
+        {"source_node_seq",                    std::string("10")},
+        { "source_port_id",                     std::string("value")},
+        {     "timeout_ms",                       std::int64_t{5000}}
+    };
+    ProjectDefinition cyclic;
+    cyclic.flows = {
+        {"a", "a", true, {first}},
+        {"b", "b", true, {secondNode}}
+    };
+    const auto cyclicAt = std::chrono::steady_clock::now();
+    const auto cycle    = engine.start(cyclic, registry, RunMode::Once);
+    assert(cycle.code == 1);
+    assert(cycle.message.find("闭环") != std::string::npos);
+    assert(cycle.message.find(first.title()) != std::string::npos);
+    assert(cycle.message.find(secondNode.title()) != std::string::npos);
+    assert(std::chrono::steady_clock::now() - cyclicAt < 1s);
+    std::cout << "Receiver precheck rejects unscheduled sources and wait cycles\n";
 }
 
 void receiverConsumesFailures()
@@ -1020,7 +1071,16 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
     registry.loadNativeImplementations();
     registerReceiveTools(registry);
     auto source = definition("test.waiting_sender");
-    install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{1}}}}; });
+    std::mutex              gateMutex;
+    std::condition_variable gate;
+    bool                    released = false;
+    install(registry, source,
+            [&](const Values &)
+            {
+                std::unique_lock lock(gateMutex);
+                gate.wait_for(lock, 5s, [&] { return released; });
+                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+            });
     auto sender = node(1, source);
     auto typed = *registry.find("visionrt.flow.receive");
     for (auto &port : typed.outputs)
@@ -1040,12 +1100,16 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
     };
     ProjectDefinition project;
     project.flows = {
-        {  "sender",   "sender", false,   {sender}},
-        {"receiver", "receiver",  true, {receiver}}
+        {  "sender",   "sender", true,   {sender}},
+        {"receiver", "receiver", true, {receiver}}
     };
     enum class Termination { Stop, Reset, Destruction };
     for (const auto termination : {Termination::Stop, Termination::Reset, Termination::Destruction})
     {
+        {
+            std::lock_guard lock(gateMutex);
+            released = false;
+        }
         auto engine = std::make_unique<RuntimeEngine>(2);
         assert(engine->start(project, registry, RunMode::Loop));
         bool waiting = false;
@@ -1059,14 +1123,32 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
         }
         assert(waiting);
         const auto started = std::chrono::steady_clock::now();
+        const auto release = [&]
+        {
+            {
+                std::lock_guard lock(gateMutex);
+                released = true;
+            }
+            gate.notify_all();
+        };
         if (termination == Termination::Destruction)
+        {
+            std::thread opener(
+                [&]
+                {
+                    std::this_thread::sleep_for(50ms);
+                    release();
+                });
             engine.reset();
+            opener.join();
+        }
         else
         {
             if (termination == Termination::Reset)
                 assert(engine->requestReset());
             else
                 engine->requestStop();
+            release();
             const auto result = finish(*engine);
             if (termination == Termination::Reset)
                 assert(result.generation == 2 && !snapshot(result, 2));
@@ -1376,7 +1458,7 @@ int main(int argc, char **argv)
     initializationSuppressionRetryAndReset();
     stopDrainsCommittedFlowsAndFreezesConfiguration();
     assert(argc == 2);
-    receiverCapacityAndSessionIsolation(argv[1]);
+    receiverPrecheckRejectsUnscheduledSources(argv[1]);
     singleReceiverResolvesAllValueTypes(argv[1]);
     receiverConsumesFailures();
     hostBindingReceiverContract();

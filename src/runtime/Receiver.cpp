@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
+#include <map>
 
 namespace visionrt {
 namespace {
@@ -80,6 +82,131 @@ void registerReceiveTools(ToolRegistry &registry)
 }
 
 namespace runtime_detail {
+namespace {
+constexpr std::string_view kReceiverBinding = "visionrt.receiver";
+
+const std::string *stringParameter(const NodeDefinition &node, const char *id)
+{
+    const auto found = node.initParams.find(id);
+    return found == node.initParams.end() ? nullptr : std::get_if<std::string>(&found->second);
+}
+
+std::string receiverLabel(const FlowDefinition &flow, const NodeDefinition &node)
+{
+    return flow.name + "/" + node.title();
+}
+} // namespace
+
+std::optional<ToolStatus> validateReceiverPlan(const FrozenRun &frozen)
+{
+    std::map<NodeId, const FlowDefinition *> owners;
+    for (const auto &flow : frozen.project.flows)
+        for (const auto &node : flow.nodes)
+            owners.emplace(node.id, &flow);
+    struct PlannedReceiver
+    {
+        const FlowDefinition *flow       = nullptr;
+        const NodeDefinition *node       = nullptr;
+        const FlowDefinition *sourceFlow = nullptr;
+        const NodeDefinition *source     = nullptr;
+    };
+    std::map<NodeId, PlannedReceiver> receivers;
+    for (const auto &[id, contract] : frozen.contracts)
+    {
+        if (contract.hostBinding != kReceiverBinding)
+            continue;
+        const auto nodeIt = frozen.nodes.find(id);
+        const auto flowIt = owners.find(id);
+        if (nodeIt == frozen.nodes.end() || flowIt == owners.end())
+            continue;
+        const auto *node   = nodeIt->second;
+        const auto *flow   = flowIt->second;
+        const auto *flowId = stringParameter(*node, "source_flow_id");
+        const auto *nodeId = stringParameter(*node, "source_node_seq");
+        const auto *portId = stringParameter(*node, "source_port_id");
+        if (!flowId || !nodeId || !portId)
+            continue;
+        NodeId sourceId = 0;
+        try
+        {
+            sourceId = parseSequence(*nodeId, "source_node_seq");
+        }
+        catch (const ContractError &)
+        {
+            continue;
+        }
+        const FlowDefinition *sourceFlow = nullptr;
+        for (const auto &candidate : frozen.project.flows)
+            if (candidate.id == *flowId)
+            {
+                sourceFlow = &candidate;
+                break;
+            }
+        if (!sourceFlow || sourceFlow == flow)
+            continue;
+        const NodeDefinition *source = nullptr;
+        for (const auto &candidate : sourceFlow->nodes)
+            if (candidate.id == sourceId)
+            {
+                source = &candidate;
+                break;
+            }
+        if (!source)
+            continue;
+        const auto sourcePort = source->signatures.outputs.find(*portId);
+        const auto valuePort  = node->signatures.outputs.find("value");
+        if (sourcePort == source->signatures.outputs.end() || valuePort == node->signatures.outputs.end()
+            || sourcePort->second != valuePort->second)
+            continue;
+        receivers.emplace(id, PlannedReceiver{flow, node, sourceFlow, source});
+    }
+    for (const auto &[id, plan] : receivers)
+    {
+        const bool selected = std::find(frozen.selected.begin(), frozen.selected.end(), plan.sourceFlow->id)
+                              != frozen.selected.end();
+        const bool executable
+            = selected && (frozen.mode != RunMode::Node || (frozen.target && plan.source->id == *frozen.target));
+        if (!executable)
+            return ToolStatus{1, "接收源未在本轮执行：" + plan.sourceFlow->name + "（" + plan.sourceFlow->id + "）/ "
+                                     + plan.source->title() + "；接收节点 " + plan.node->title()};
+    }
+    std::map<NodeId, NodeId> waits;
+    for (const auto &[id, plan] : receivers)
+        if (receivers.contains(plan.source->id))
+            waits.emplace(id, plan.source->id);
+    std::map<NodeId, int> state;
+    std::vector<NodeId>   stack;
+    std::function<std::optional<ToolStatus>(NodeId)> visit = [&](NodeId id) -> std::optional<ToolStatus>
+    {
+        state[id] = 1;
+        stack.push_back(id);
+        if (const auto found = waits.find(id); found != waits.end())
+        {
+            const auto next = found->second;
+            if (state[next] == 1)
+            {
+                std::string path;
+                const auto  begin = std::find(stack.begin(), stack.end(), next);
+                for (auto item = begin; item != stack.end(); ++item)
+                    path += receiverLabel(*receivers.at(*item).flow, *receivers.at(*item).node) + " → ";
+                path += receiverLabel(*receivers.at(next).flow, *receivers.at(next).node);
+                return ToolStatus{1, "接收等待闭环无法先产出：" + path};
+            }
+            if (state[next] == 0)
+                if (auto error = visit(next))
+                    return error;
+        }
+        stack.pop_back();
+        state[id] = 2;
+        return std::nullopt;
+    };
+    for (const auto &[id, plan] : receivers)
+        if (state[id] == 0)
+            if (auto error = visit(id))
+                return error;
+    return std::nullopt;
+}
+
 ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cursor)
 {
     using Clock        = std::chrono::steady_clock;
