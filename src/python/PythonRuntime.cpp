@@ -14,7 +14,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <thread>
+#include <unordered_set>
 
 namespace visionrt {
 namespace py = pybind11;
@@ -27,6 +29,8 @@ struct Implementation
     py::object                  symbol;
 };
 
+class PythonTool;
+
 struct RuntimeState
 {
     py::dict                                           loader;
@@ -35,6 +39,27 @@ struct RuntimeState
     std::uint64_t                                      generation = 0;
     std::atomic<std::size_t>                           instances{0};
     bool        alive     = true;
+
+    std::mutex                                         toolsMutex;
+    std::unordered_set<PythonTool *>                   tools;
+
+    void registerTool(PythonTool *tool)
+    {
+        std::lock_guard lock(toolsMutex);
+        tools.insert(tool);
+    }
+
+    void unregisterTool(PythonTool *tool)
+    {
+        std::lock_guard lock(toolsMutex);
+        tools.erase(tool);
+    }
+
+    std::vector<PythonTool *> activeTools()
+    {
+        std::lock_guard lock(toolsMutex);
+        return {tools.begin(), tools.end()};
+    }
 };
 
 bool isBusinessOutput(const PortDefinition &output)
@@ -116,14 +141,16 @@ public:
         , generation_(state_ ? state_->generation : 0)
     {
         if (state_)
+        {
+            state_->registerTool(this);
             ++state_->instances;
+        }
     }
 
     ~PythonTool() override
     {
         if (state_)
         {
-            --state_->instances;
             if (loaded_)
             {
                 if (state_->alive && Py_IsInitialized())
@@ -140,6 +167,8 @@ public:
                     objects_.reset();
                 }
             }
+            state_->unregisterTool(this);
+            --state_->instances;
         }
     }
 
@@ -314,6 +343,39 @@ public:
         return result;
     }
 
+    ToolStatus releaseWithGil() noexcept
+    {
+        if (released_)
+            return {};
+        released_ = true;
+        try
+        {
+            if (objects_ && objects_->instance)
+            {
+                auto status = lifecycleStatus(objects_->instance.attr("release")(), state_->storage);
+                objects_.reset();
+                return status;
+            }
+        }
+        catch (const py::error_already_set &error)
+        {
+            objects_.reset();
+            return errorStatus(-4, "Python 释放异常", error.what());
+        }
+        catch (const ContractError &error)
+        {
+            objects_.reset();
+            return {-4, error.what()};
+        }
+        catch (const std::exception &error)
+        {
+            objects_.reset();
+            return errorStatus(-4, "Python 释放异常", error.what());
+        }
+        objects_.reset();
+        return {};
+    }
+
     ToolStatus release() override
     {
         if (released_)
@@ -448,32 +510,7 @@ private:
         return {};
     }
 
-    ToolStatus releaseWithGil() noexcept
-    {
-        if (released_)
-            return {};
-        released_ = true;
-        try
-        {
-            if (objects_ && objects_->instance)
-            {
-                return lifecycleStatus(objects_->instance.attr("release")(), state_->storage);
-            }
-        }
-        catch (const py::error_already_set &error)
-        {
-            return errorStatus(-4, "Python 释放异常", error.what());
-        }
-        catch (const ContractError &error)
-        {
-            return {-4, error.what()};
-        }
-        catch (const std::exception &error)
-        {
-            return errorStatus(-4, "Python 释放异常", error.what());
-        }
-        return {};
-    }
+
 
     std::shared_ptr<RuntimeState>         state_;
     std::shared_ptr<const ToolDefinition> definitionOwner_;
@@ -563,6 +600,10 @@ struct PythonRuntime::Impl
         {
             py::gil_scoped_acquire gil;
             state->alive = false;
+            for (auto *tool : state->activeTools())
+            {
+                tool->releaseWithGil();
+            }
             state->implementations.clear();
             try
             {

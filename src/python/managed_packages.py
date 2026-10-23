@@ -4,6 +4,7 @@ import importlib.machinery
 import importlib.util
 from pathlib import Path
 import sys
+import threading
 
 
 class FreshSourceLoader(importlib.machinery.SourceFileLoader):
@@ -17,12 +18,21 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
         self.generation = 0
         self.roots = {}
         self.packages = {}
+        self._thread_local = threading.local()
+
+    def _record_module(self, fullname):
+        stack = getattr(self._thread_local, 'stack', None)
+        if stack:
+            tx = stack[-1]
+            if fullname not in tx:
+                tx.append(fullname)
 
     def find_spec(self, fullname, path=None, target=None):
         root_name = fullname.partition('.')[0]
         directory = self.roots.get(root_name)
         if directory is None:
             return None
+        self._record_module(fullname)
         if fullname == root_name:
             source = directory / '__init__.py'
             if source.is_file():
@@ -79,16 +89,19 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
             root = f'_visionrt_package_{self.identity}_{self.generation}_{len(self.packages)}'
             self.packages[key] = root
             self.roots[root] = directory
-        modules_before = set(sys.modules)
+
+        if not hasattr(self._thread_local, 'stack'):
+            self._thread_local.stack = []
+        tx = []
+        self._thread_local.stack.append(tx)
         try:
             module = importlib.import_module('.'.join([root] + parts))
-            return getattr(module, symbol)
+            result = getattr(module, symbol)
+            self._thread_local.stack.pop()
+            return result
         except BaseException:
-            new_modules = [
-                name for name in tuple(sys.modules)
-                if name not in modules_before and (name == root or name.startswith(root + '.'))
-            ]
-            for name in new_modules:
+            self._thread_local.stack.pop()
+            for name in reversed(tx):
                 if '.' in name:
                     parent_name, attr_name = name.rsplit('.', 1)
                     parent_mod = sys.modules.get(parent_name)
