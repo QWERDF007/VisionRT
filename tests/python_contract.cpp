@@ -3,8 +3,11 @@
 #include "python/PythonRuntime.h"
 #include "runtime/Snapshot.h"
 
+#include <QTemporaryDir>
+#include <algorithm>
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <iostream>
 
@@ -23,6 +26,23 @@ int main(int argc, char **argv)
             [&]
             {
                 const auto   package = readToolsPackage(root);
+                QTemporaryDir external;
+                assert(external.isValid());
+                const auto externalDeclarations = std::filesystem::path(external.path().toStdWString()) / "declarations";
+                std::filesystem::create_directories(externalDeclarations);
+                {
+                    std::ofstream declaration(externalDeclarations / "external.json");
+                    declaration << R"({
+                        "schema_version":2,"tool_id":"test.external.roots","display_name":"外部根工具","version":"1",
+                        "kind":"python_function","entry":{"package":"external","file":"tool.py","symbol":"execute"},
+                        "init_params":[],"inputs":[],"outputs":[]
+                    })";
+                }
+                const auto overridden = readToolsPackage(
+                    root, ToolRoots{externalDeclarations,
+                                    std::filesystem::path(external.path().toStdWString()) / "code"});
+                assert(std::any_of(overridden.tools.begin(), overridden.tools.end(),
+                                   [](const auto &tool) { return tool.definition.id == "test.external.roots"; }));
                 ToolRegistry registry;
                 for (const auto &tool : package.tools)
                     if (tool.definition.kind == ToolKind::PythonFunction

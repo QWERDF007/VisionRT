@@ -84,10 +84,19 @@ ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::opt
             package.tools.push_back(std::move(tool));
         }
     }
+    const auto defaultCustomRoot = resolveToolPath(package.root, "tools/custom");
+    const bool replacedCustomRoot
+        = customRoots && std::filesystem::weakly_canonical(customRoots->declarations) != defaultCustomRoot;
     for (const auto &[id, entry] : package.index.tools)
     {
         const auto expected = resolveToolPath(package.root, json::relativePath(entry.definition, "tools.definition"));
-        const auto actual   = identities.find(id);
+        if (replacedCustomRoot && entry.module.empty())
+        {
+            const auto relative = expected.lexically_relative(defaultCustomRoot);
+            if (!relative.empty() && *relative.begin() != ".." && !relative.is_absolute())
+                continue;
+        }
+        const auto actual = identities.find(id);
         if (actual == identities.end() || std::filesystem::weakly_canonical(actual->second) != expected)
             throw ContractError("发行索引与扫描声明不一致：" + id + " / " + json::pathText(expected).toStdString());
     }

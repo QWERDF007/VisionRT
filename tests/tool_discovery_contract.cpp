@@ -229,6 +229,20 @@ int main(int argc, char **argv)
         escapedHostResource = true;
     }
     assert(escapedHostResource);
+    QTemporaryDir overridePackage;
+    assert(overridePackage.isValid());
+    write(overridePackage.filePath("module_index.json"),
+          R"({"schema_version":1,"variant":"cpu","modules":[],"tools":[
+              {"tool_id":"custom.indexed","definition":"tools/custom/indexed.json"}],
+              "runtime_files":[]})");
+    QTemporaryDir overrideExternal;
+    assert(overrideExternal.isValid());
+    const ToolRoots overrideRoots{std::filesystem::path(overrideExternal.filePath("declarations").toStdWString()),
+                                  std::filesystem::path(overrideExternal.filePath("code").toStdWString())};
+    write(overrideExternal.filePath("declarations/external.json"), declaration("test.external"));
+    const auto overriddenIndex = readToolsPackage(std::filesystem::path(overridePackage.path().toStdWString()),
+                                                  overrideRoots);
+    assert(overriddenIndex.tools.size() == 1 && overriddenIndex.tools.front().definition.id == "test.external");
     QTemporaryDir linked;
     assert(linked.isValid());
     write(linked.filePath("module_index.json"),
