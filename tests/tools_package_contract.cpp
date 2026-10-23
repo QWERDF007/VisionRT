@@ -176,6 +176,17 @@ try
     };
     write(directory.path() + "/tools/builtin/nested/tool.json", QJsonDocument(tool).toJson());
     assert(readToolsPackage(root).tools.front().definition.hostBinding == "visionrt.receiver");
+    assert(QFile::remove(directory.path() + "/tools/builtin/nested/tool.json"));
+    putIndex(index());
+    auto resourceTool          = QJsonDocument::fromJson(declaration).object();
+    resourceTool["resources"]  = QJsonArray{"../../outside_resource.bin"};
+    write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(resourceTool).toJson());
+    write(directory.path() + "/outside_resource.bin", "outside");
+    rejects([&] { readToolsPackage(root); });
+    resourceTool["resources"] = QJsonArray{"local.dll"};
+    write(directory.path() + "/tools/builtin/local.dll", "local");
+    write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(resourceTool).toJson());
+    assert(readToolsPackage(root).tools.front().definition.resources.size() == 1);
     assert(QFile::remove(indexPath));
     write(directory.path() + "/module_index.yaml", "schema_version: 2");
     rejects([&] { readToolsPackage(root); });

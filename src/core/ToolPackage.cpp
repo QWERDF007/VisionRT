@@ -14,15 +14,11 @@ void requireFile(const std::filesystem::path &path)
         throw ContractError("工具包缺少文件：" + json::pathText(path).toStdString());
 }
 
-std::filesystem::path resourcePath(const ToolsPackage &package, const ToolDefinition &definition,
-                                   const std::filesystem::path &resource)
+std::filesystem::path resourcePath(const ToolDefinition &definition, const std::filesystem::path &resource)
 {
     if (definition.kind == ToolKind::PythonFunction || definition.kind == ToolKind::PythonClass)
         return resolveToolPath(definition.pythonPackage(), resource);
-    const auto  relativeRoot = definition.source.roots.declarations.lexically_relative(package.root);
-    const auto &root         = !relativeRoot.empty() && *relativeRoot.begin() != ".." && !relativeRoot.is_absolute()
-                                 ? package.root
-                                 : definition.source.roots.declarations;
+    const auto &root = definition.source.roots.declarations;
     return resolveToolPath(root, (definition.definitionPath.parent_path() / resource).lexically_relative(root));
 }
 }
@@ -84,7 +80,7 @@ ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::opt
             if (tool.definition.kind == ToolKind::PythonFunction || tool.definition.kind == ToolKind::PythonClass)
                 (void)tool.definition.pythonScript();
             for (const auto &resource : tool.definition.resources)
-                (void)resourcePath(package, tool.definition, resource);
+                (void)resourcePath(tool.definition, resource);
             package.tools.push_back(std::move(tool));
         }
     }
@@ -113,7 +109,7 @@ void validateToolsPackage(const std::filesystem::path &root)
             requireFile(tool.definition.pythonScript());
         for (const auto &resource : tool.definition.resources)
         {
-            const auto path = resourcePath(package, tool.definition, resource);
+            const auto path = resourcePath(tool.definition, resource);
             if (!std::filesystem::exists(path))
                 throw ContractError("工具包缺少资源：" + json::pathText(path).toStdString());
         }
