@@ -94,6 +94,11 @@ try
     {
         require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "identity operation did not finish");
     };
+    const auto pump = []
+    {
+        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();
+    };
     idle();
     QSignalSpy replacements(&app, &AppController::projectReplaced);
     QSignalSpy decisions(&app, &AppController::unsavedDecisionRequired);
@@ -124,7 +129,8 @@ try
     component.setData(
         "import QtQuick\nimport \".\"\n"
         "ParameterEditor { width: 600; height: 36; "
-        "parameter: app.parameters.find(function(row) { return row.id === 'source_node_seq' }) }",
+        "parameter: app.parameters.find(function(row) { return row.id === 'source_node_seq' })"
+        " || { id: '', name: '', type: 'String', literal: '', init: false } }",
         QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/IdentityContract.qml")));
     std::unique_ptr<QObject> owner(component.create());
     if (!owner)
@@ -136,10 +142,14 @@ try
     field->setParentItem(window.contentItem());
     window.show();
     require(QTest::qWaitForWindowExposed(&window), "identity editor window was not exposed");
-    QQuickItem *choice = nullptr;
-    for (auto *item : field->findChildren<QQuickItem *>())
-        if (item->property("textRole") == "label")
-            choice = item;
+    const auto findChoice = [&]() -> QQuickItem *
+    {
+        for (auto *item : field->findChildren<QQuickItem *>())
+            if (item->property("textRole") == "label" && item->parentItem())
+                return item;
+        return nullptr;
+    };
+    auto *choice = findChoice();
     require(choice && choice->property("count").toInt() == 2, "receiver choices did not keep both same-name nodes");
     const auto rawModel = choice->property("model");
     const auto model    = rawModel.metaType() == QMetaType::fromType<QJSValue>()
@@ -192,6 +202,8 @@ try
     idle();
     require(replacements.size() == 2, "saved receiver project was not actually reopened");
     app.selectNode(targetId);
+    choice = findChoice();
+    require(choice, "receiver selector was not recreated for the reopened project");
     require(field->property("valueText").toString() == QString::number(second)
                 && choice->property("currentIndex").toInt() == 1,
             "save/reopen did not restore the selected same-name source");
@@ -271,6 +283,72 @@ try
             "repair/save replaced the original names or changed the selected stable IDs");
     std::cout << "RECEIVER_IDENTITY_PASS first=" << first << " second=" << second << " target=" << target
               << " keyboard=3 source_executions=10 restored=29 repaired=17 rejected_execution=0\n";
+    app.renameFlow(QString::fromStdString(sourceFlow), "已改名的流程");
+    idle();
+    app.selectFlow(QString::fromStdString(sourceFlow));
+    app.renameNode(QString::number(first), "已改名的来源");
+    idle();
+    app.selectFlow("flow_1");
+    app.selectNode(targetId);
+    pump();
+    auto *renamedChoice = findChoice();
+    require(field->property("valueText").toString() == QString::number(first) && renamedChoice
+                && renamedChoice->property("displayText").toString().startsWith("已改名的来源-"),
+            "source rename changed the receiver identity or left its selector label stale");
+    run("17");
+    const auto renamedPath = root + "/改名后的稳定引用.vrt.json";
+    require(app.save(renamedPath), "renamed receiver project save failed");
+    const auto renamed = storage.load(std::filesystem::path(renamedPath.toStdU16String())).project;
+    const auto &renamedReceiver = renamed.flows[0].nodes[0];
+    require(renamed.flows[1].id == sourceFlow && renamed.flows[1].name == "已改名的流程"
+                && renamed.flows[1].nodes[0].alias == "已改名的来源"
+                && std::get<std::string>(renamedReceiver.initParams.at("source_flow_id")) == sourceFlow
+                && std::get<std::string>(renamedReceiver.initParams.at("source_node_seq")) == std::to_string(first)
+                && renamedReceiver.signatures.outputs.at("value").type == Type::Int,
+            "rename/save changed stable receiver references or their resolved type");
+    require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 12,
+            "renamed reference did not execute exactly one graph");
+    app.selectFlow(QString::fromStdString(sourceFlow));
+    app.deleteNodes({QString::number(first)});
+    idle();
+    require(app.diagnosticsJson().contains("源节点不存在") && app.diagnosticsJson().contains(QString::number(first)),
+            "source deletion did not immediately diagnose the dangling stable reference");
+    app.selectFlow("flow_1");
+    app.selectNode(targetId);
+    pump();
+    auto *unavailableChoice = findChoice();
+    require(unavailableChoice && unavailableChoice->property("currentIndex").toInt() == -1
+                && field->property("valueText").toString() == QString::number(first),
+            "deleted reference was silently rebound to a different source");
+    app.runOnce();
+    idle();
+    require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 12,
+            "a dangling receiver reference started source tools");
+    app.selectFlow(QString::fromStdString(sourceFlow));
+    app.addNode("test.identity.source", 3, 0);
+    idle();
+    const auto replacement = app.selectedNode();
+    require(!replacement.isEmpty() && replacement != QString::number(first), "replacement source reused the deleted ID");
+    require(app.setParameter("value", false, "41"), "replacement source value could not be configured");
+    idle();
+    app.renameNode(replacement, "已改名的来源");
+    idle();
+    app.selectFlow("flow_1");
+    app.selectNode(targetId);
+    app.runOnce();
+    idle();
+    require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 12
+                && field->property("valueText").toString() == QString::number(first),
+            "same-name replacement guessed or executed the missing source relationship");
+    require(app.setParameter("source_node_seq", true, replacement), "replacement source identity could not be selected");
+    idle();
+    run("41");
+    require(calls.seek(0), "cannot read repaired reference execution evidence");
+    lines = calls.readAll().trimmed().split('\n');
+    require(lines.size() == 14 && lines.count("17") == 6 && lines.count("29") == 7 && lines.count("41") == 1,
+            "source deletion/replacement did not preserve exact execution counts");
+    std::cout << "RECEIVER_REFERENCES_PASS renamed=17 deleted_execution=0 lookalike_execution=0 repaired=41"
+              << " source_executions=14 replacement=" << replacement.toStdString() << '\n';
 }
 catch (const std::exception &error)
 {
