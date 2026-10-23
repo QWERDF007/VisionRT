@@ -13,6 +13,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <thread>
 
 using namespace visionrt;
 namespace py = pybind11;
@@ -28,7 +29,7 @@ void write(const std::filesystem::path &path, std::string_view content)
 }
 
 ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, std::filesystem::path file,
-                             ToolOrigin origin = ToolOrigin::Custom)
+                             ToolOrigin origin = ToolOrigin::Custom, std::string package = "math")
 {
     const auto folder = origin == ToolOrigin::Builtin ? "builtin" : "custom";
     auto       result = parseToolDefinitionJson(R"({
@@ -41,8 +42,9 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
                                               origin,
                                               {root / "tools" / folder, root / "python" / folder}
     });
-    result.id         = std::move(id);
-    result.entry.file = std::move(file);
+    result.id            = std::move(id);
+    result.entry.package = std::move(package);
+    result.entry.file    = std::move(file);
     return result;
 }
 
@@ -218,6 +220,65 @@ void packageBoundaries(PythonRuntime &runtime, const std::filesystem::path &root
     }
 }
 
+void coldConcurrentRollback(PythonRuntime &runtime, const std::filesystem::path &root)
+{
+    const auto package = root / "python/custom/cold_concurrent";
+    std::filesystem::create_directories(package);
+    write(package / "__init__.py",
+          "import builtins\n"
+          "if not hasattr(builtins, 'visionrt_cold_root_count'):\n"
+          " builtins.visionrt_cold_root_count = 0\n"
+          "builtins.visionrt_cold_root_count += 1\n"
+          "TOKEN = builtins.visionrt_cold_root_count\n");
+    write(package / "good.py",
+          "from . import TOKEN\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':TOKEN}\n");
+    write(package / "sibling.py",
+          "from . import TOKEN\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':TOKEN}\n");
+    write(package / "broken.py",
+          "from pathlib import Path\n"
+          "import time\n"
+          "directory = Path(__file__).parent\n"
+          "(directory / 'broken_entered.flag').write_text('entered')\n"
+          "deadline = time.monotonic() + 5\n"
+          "while not (directory / 'broken_resume.flag').exists():\n"
+          " if time.monotonic() > deadline: raise TimeoutError('resume timeout')\n"
+          " time.sleep(0.005)\n"
+          "raise RuntimeError('controlled first-load failure in worker A')\n");
+
+    const std::array definitions{
+        definitionFor(root, "python.cold_good", "good.py", ToolOrigin::Custom, "cold_concurrent"),
+        definitionFor(root, "python.cold_sibling", "sibling.py", ToolOrigin::Custom, "cold_concurrent"),
+        definitionFor(root, "python.cold_broken", "broken.py", ToolOrigin::Custom, "cold_concurrent")
+    };
+    runtime.refresh(definitions);
+
+    std::promise<void> brokenStarted;
+    auto brokenFuture = brokenStarted.get_future();
+    std::thread workerBroken([&] {
+        brokenStarted.set_value();
+        unavailable(runtime.factory(definitions[2]));
+    });
+    brokenFuture.wait();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!std::filesystem::exists(package / "broken_entered.flag"))
+    {
+        assert(std::chrono::steady_clock::now() < deadline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    auto good = runtime.factory(definitions[0])({});
+    assert(execute(*good) == 1);
+
+    write(package / "broken_resume.flag", "resume");
+    workerBroken.join();
+
+    auto sibling = runtime.factory(definitions[1])({});
+    assert(execute(*sibling) == 1);
+}
+
 }
 
 int main(int argc, char **argv)
@@ -266,6 +327,7 @@ try
                                  freshGenerations(runtime, root);
                                  nativeHelper(runtime, root);
                                  packageBoundaries(runtime, root);
+                                  coldConcurrentRollback(runtime, root);
                              });
     worker.get();
     std::cout << "Metadata refresh does not import Python; direct adapter construction loads its code root\n";

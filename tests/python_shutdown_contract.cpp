@@ -18,7 +18,78 @@ try
 {
     QTemporaryDir temporary;
     assert(temporary.isValid());
-    const auto root    = std::filesystem::path(temporary.path().toStdWString());
+    const auto root = std::filesystem::path(temporary.path().toStdWString());
+
+    // C1: Concurrent destruction of adapters during runtime shutdown executes release for all adapters
+    {
+        const auto package = root / "python/custom/concurrent_shutdown";
+        std::filesystem::create_directories(package);
+        {
+            std::ofstream script(package / "tool.py");
+            script << "from pathlib import Path\n"
+                      "import time\n"
+                      "next_id = 0\n"
+                      "class Tool:\n"
+                      " def __init__(self):\n"
+                      "  global next_id\n"
+                      "  self.identity = next_id\n"
+                      "  next_id += 1\n"
+                      " def initialize(self, params): return {'__status_code':0,'__status_message':''}\n"
+                      " def execute(self, inputs): return {'__status_code':0,'__status_message':'','value':1}\n"
+                      " def release(self):\n"
+                      "  directory = Path(__file__).parent\n"
+                      "  first = directory / 'first.flag'\n"
+                      "  if not first.exists(): first.write_text(str(self.identity))\n"
+                      "  deadline = time.monotonic() + 8\n"
+                      "  while not (directory / 'finished.flag').exists():\n"
+                      "   if time.monotonic() > deadline: raise TimeoutError('worker did not finish')\n"
+                      "   time.sleep(0.005)\n"
+                      "  with (directory / 'released.log').open('a') as stream:\n"
+                      "   stream.write(str(self.identity) + '\\n')\n"
+                      "  return {'__status_code':0,'__status_message':''}\n";
+        }
+        const auto definition = parseToolDefinitionJson(R"({
+            "schema_version":2,"tool_id":"audit.concurrent.shutdown","display_name":"Shutdown","version":"1",
+            "kind":"python_class","entry":{"package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},
+            "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
+        })", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
+                                                            {root / "tools/custom", root / "python/custom"}});
+        auto runtime = std::make_unique<PythonRuntime>();
+        runtime->refresh(std::span(&definition, 1));
+        std::vector<std::unique_ptr<IToolInstance>> instances;
+        for (int index = 0; index < 3; ++index)
+        {
+            auto instance = runtime->factory(definition)({});
+            assert(instance->initialize({}).code == 0);
+            instances.push_back(std::move(instance));
+        }
+        bool workerCompleted = false;
+        std::thread worker([&] {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            int firstIdentity = -1;
+            while (firstIdentity < 0)
+            {
+                if (std::chrono::steady_clock::now() > deadline) return;
+                std::ifstream marker(package / "first.flag");
+                std::string identity;
+                if (marker >> identity) firstIdentity = std::stoi(identity);
+                if (firstIdentity < 0) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            for (int index = 0; index < 3; ++index)
+                if (index != firstIdentity) instances[index].reset();
+            workerCompleted = true;
+            std::ofstream(package / "finished.flag") << "finished";
+        });
+        runtime.reset();
+        worker.join();
+        instances.clear();
+        assert(workerCompleted);
+        int releaseCount = 0;
+        std::string line;
+        std::ifstream released(package / "released.log");
+        while (std::getline(released, line)) ++releaseCount;
+        assert(releaseCount == 3);
+    }
     const auto package = root / "python/custom/memory";
     std::filesystem::create_directories(package);
     {

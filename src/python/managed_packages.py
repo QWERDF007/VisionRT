@@ -102,6 +102,8 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
         except BaseException:
             self._thread_local.stack.pop()
             for name in reversed(tx):
+                if any(m.startswith(name + '.') for m in sys.modules):
+                    continue
                 if '.' in name:
                     parent_name, attr_name = name.rsplit('.', 1)
                     parent_mod = sys.modules.get(parent_name)

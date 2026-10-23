@@ -29,7 +29,7 @@ struct Implementation
     py::object                  symbol;
 };
 
-class PythonTool;
+struct ToolObjects;
 
 struct RuntimeState
 {
@@ -41,24 +41,33 @@ struct RuntimeState
     bool        alive     = true;
 
     std::mutex                                         toolsMutex;
-    std::unordered_set<PythonTool *>                   tools;
+    std::vector<std::weak_ptr<ToolObjects>>            tools;
 
-    void registerTool(PythonTool *tool)
+    void registerTool(const std::shared_ptr<ToolObjects> &tool)
     {
         std::lock_guard lock(toolsMutex);
-        tools.insert(tool);
+        tools.push_back(tool);
     }
 
-    void unregisterTool(PythonTool *tool)
+    std::vector<std::shared_ptr<ToolObjects>> activeTools()
     {
         std::lock_guard lock(toolsMutex);
-        tools.erase(tool);
-    }
-
-    std::vector<PythonTool *> activeTools()
-    {
-        std::lock_guard lock(toolsMutex);
-        return {tools.begin(), tools.end()};
+        std::vector<std::shared_ptr<ToolObjects>> result;
+        result.reserve(tools.size());
+        auto it = tools.begin();
+        while (it != tools.end())
+        {
+            if (auto locked = it->lock())
+            {
+                result.push_back(std::move(locked));
+                ++it;
+            }
+            else
+            {
+                it = tools.erase(it);
+            }
+        }
+        return result;
     }
 };
 
@@ -125,6 +134,51 @@ ToolStatus lifecycleStatus(py::handle returned, const PythonStorage &storage)
     return status;
 }
 
+struct ToolObjects
+{
+    std::atomic<bool> released{false};
+    py::object        instance;
+    py::object        execute;
+
+    ToolStatus releaseWithGil(const PythonStorage &storage) noexcept
+    {
+        bool expected = false;
+        if (!released.compare_exchange_strong(expected, true))
+            return {};
+        try
+        {
+            if (instance)
+            {
+                auto status = lifecycleStatus(instance.attr("release")(), storage);
+                instance = py::none();
+                execute  = py::none();
+                return status;
+            }
+        }
+        catch (const py::error_already_set &error)
+        {
+            instance = py::none();
+            execute  = py::none();
+            return errorStatus(-4, "Python 释放异常", error.what());
+        }
+        catch (const ContractError &error)
+        {
+            instance = py::none();
+            execute  = py::none();
+            return {-4, error.what()};
+        }
+        catch (const std::exception &error)
+        {
+            instance = py::none();
+            execute  = py::none();
+            return errorStatus(-4, "Python 释放异常", error.what());
+        }
+        instance = py::none();
+        execute  = py::none();
+        return {};
+    }
+};
+
 class PythonTool final
     : public IToolInstance
     , public IPythonExecutionMetrics
@@ -139,10 +193,11 @@ public:
         , services_(std::move(services))
         , sharedStatus_(std::move(sharedStatus))
         , generation_(state_ ? state_->generation : 0)
+        , objects_(std::make_shared<ToolObjects>())
     {
         if (state_)
         {
-            state_->registerTool(this);
+            state_->registerTool(objects_);
             ++state_->instances;
         }
     }
@@ -151,23 +206,14 @@ public:
     {
         if (state_)
         {
-            if (loaded_)
+            if (loaded_ && objects_)
             {
                 if (state_->alive && Py_IsInitialized())
                 {
                     py::gil_scoped_acquire gil;
-                    if (!released_)
-                        releaseWithGil();
-                    objects_.reset();
-                }
-                else if (objects_)
-                {
-                    objects_->instance.release();
-                    objects_->execute.release();
-                    objects_.reset();
+                    objects_->releaseWithGil(state_->storage);
                 }
             }
-            state_->unregisterTool(this);
             --state_->instances;
         }
     }
@@ -188,7 +234,7 @@ public:
         if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
             return {-1, "Python 实例跨代或运行时不可用，不能初始化"};
         py::gil_scoped_acquire gil;
-        if (released_)
+        if (!objects_ || objects_->released.load())
             return {-1, "Python 实例已释放，不能初始化"};
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
@@ -233,7 +279,7 @@ public:
         py::gil_scoped_acquire gil;
         metrics_.waitGilMs
             = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - waiting).count();
-        if (released_)
+        if (!objects_ || objects_->released.load())
             return fail({-1, "Python 实例已释放，不能执行"});
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
@@ -345,73 +391,32 @@ public:
 
     ToolStatus releaseWithGil() noexcept
     {
-        if (released_)
+        if (!objects_)
             return {};
-        released_ = true;
-        try
-        {
-            if (objects_ && objects_->instance)
-            {
-                auto status = lifecycleStatus(objects_->instance.attr("release")(), state_->storage);
-                objects_.reset();
-                return status;
-            }
-        }
-        catch (const py::error_already_set &error)
-        {
-            objects_.reset();
-            return errorStatus(-4, "Python 释放异常", error.what());
-        }
-        catch (const ContractError &error)
-        {
-            objects_.reset();
-            return {-4, error.what()};
-        }
-        catch (const std::exception &error)
-        {
-            objects_.reset();
-            return errorStatus(-4, "Python 释放异常", error.what());
-        }
-        objects_.reset();
-        return {};
+        return objects_->releaseWithGil(state_->storage);
     }
 
     ToolStatus release() override
     {
-        if (released_)
+        if (!objects_)
             return {};
-        if (!state_ || !state_->alive || !Py_IsInitialized())
+        if (objects_->released.load())
+            return {};
+        if (!Py_IsInitialized())
         {
-            released_ = true;
-            if (objects_)
-            {
-                objects_->instance.release();
-                objects_->execute.release();
-                objects_.reset();
-            }
+            objects_->released.store(true);
             return {};
         }
         py::gil_scoped_acquire gil;
-        if (!loaded_)
-        {
-            released_ = true;
-            return {};
-        }
-        return releaseWithGil();
+        return objects_->releaseWithGil(state_->storage);
     }
 
 private:
-    struct Objects
-    {
-        py::object instance;
-        py::object execute;
-    };
-
     ToolStatus ensureLoaded()
     {
         if (loaded_)
             return {};
-        if (released_)
+        if (!objects_ || objects_->released.load())
             return {-1, "Python 实例已释放"};
         if (!state_ || !state_->alive || generation_ != state_->generation)
         {
@@ -474,7 +479,6 @@ private:
             }
         }
 
-        objects_ = std::make_unique<Objects>();
         try
         {
             if (definition_.kind == ToolKind::PythonClass)
@@ -489,7 +493,8 @@ private:
         }
         catch (const py::error_already_set &error)
         {
-            objects_.reset();
+            objects_->instance = py::none();
+            objects_->execute  = py::none();
             auto err = errorStatus(-1, "Python 实例创建异常", error.what());
             *impl.status = err;
             if (sharedStatus_)
@@ -498,7 +503,8 @@ private:
         }
         catch (const std::exception &error)
         {
-            objects_.reset();
+            objects_->instance = py::none();
+            objects_->execute  = py::none();
             auto err = errorStatus(-1, "Python 实例创建异常", error.what());
             *impl.status = err;
             if (sharedStatus_)
@@ -517,14 +523,13 @@ private:
     const ToolDefinition                 &definition_;
     const std::size_t                     businessOutputCount_ = static_cast<std::size_t>(
         std::count_if(definition_.outputs.begin(), definition_.outputs.end(), isBusinessOutput));
-    ToolServices                services_;
-    std::shared_ptr<ToolStatus> sharedStatus_;
-    std::unique_ptr<Objects>    objects_;
-    ExecutionMetrics            metrics_;
-    NodePhase                   phase_    = NodePhase::Execute;
-    bool                        loaded_   = false;
-    bool                        released_ = false;
-    std::uint64_t               generation_ = 0;
+    ToolServices                 services_;
+    std::shared_ptr<ToolStatus>  sharedStatus_;
+    std::shared_ptr<ToolObjects> objects_;
+    ExecutionMetrics             metrics_;
+    NodePhase                    phase_      = NodePhase::Execute;
+    bool                         loaded_     = false;
+    std::uint64_t                generation_ = 0;
 };
 } // namespace
 
@@ -600,9 +605,9 @@ struct PythonRuntime::Impl
         {
             py::gil_scoped_acquire gil;
             state->alive = false;
-            for (auto *tool : state->activeTools())
+            for (auto &tool : state->activeTools())
             {
-                tool->releaseWithGil();
+                tool->releaseWithGil(state->storage);
             }
             state->implementations.clear();
             try
