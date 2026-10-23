@@ -57,12 +57,15 @@ try
         script << "from pathlib import Path\n"
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
                   "def execute(inputs):\n"
-                  "    return {'__status_code':0, '__status_message':'运行成功', 'value':7}\n";
+                  "    return {'__status_code':0, '__status_message':'运行成功', 'value':7,\n"
+                  "            'rois':[[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]]}\n";
     }
     const auto definition = parseToolDefinitionJson(R"({
         "schema_version":2,"tool_id":"python.lazy.runtime","display_name":"Lazy runtime","version":"1",
         "kind":"python_function","entry":{"package":"lazy","file":"tool.py","symbol":"execute"},
-        "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
+        "init_params":[],"inputs":[],"outputs":[
+            {"id":"value","name":"Value","type":"Int"},
+            {"id":"rois","name":"ROIs","type":"ROI"}]
     })",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {
@@ -82,6 +85,7 @@ try
     node.toolNameSnapshot = definition.displayName;
     node.signatures.outputs = {
         {"value",            {Type::Int}},
+        {"rois",             {Type::ROI}},
         {"__status_code",    {Type::Int}},
         {"__status_message", {Type::String}}
     };
@@ -98,8 +102,15 @@ try
         assert(engine.start(project, registry, RunMode::Once));
         const auto result = complete(engine);
         const auto value  = snapshot(result, 1);
+        if (!value || value->status.code != 0)
+            std::cerr << "status=" << (value ? value->status.code : -1) << " message="
+                      << (value ? value->status.message : "missing") << " detail="
+                      << (value ? value->status.detail : "") << '\n';
         assert(value && value->status.code == 0);
         assert(std::get<std::int64_t>(value->outputs.at("value")) == 7);
+        const auto &rois = std::get<DataRef<ROI>>(value->outputs.at("rois")).get();
+        assert(rois.size() == 1 && rois.front().size() == 1);
+        assert((rois.front().front() == std::vector<double>{2, 10.5, 20.5, 30.0, 40.0, 15.0}));
         assert(value->timing.initMs > 0.0);
         assert(std::filesystem::exists(marker));
     }
