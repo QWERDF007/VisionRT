@@ -370,6 +370,8 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
 
     window->requestActivate();
     require(QTest::qWaitForWindowActive(window), "initial hover test window did not become active");
+    QTest::mouseMove(window, surface->mapToScene(QPointF(surface->width() - 4, surface->height() - 4)).toPoint());
+    QTest::qWait(20);
     QTest::mouseMove(window, center);
     require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
             "hover card did not appear after 500 ms");
