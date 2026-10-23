@@ -157,6 +157,8 @@ try
     controller.addNode(QStringLiteral("custom.python.roi"), 0, 0);
     QCoreApplication::processEvents();
     require(controller.nodes().size() == 1, "unavailable tool was added to the flow");
+    require(controller.diagnostic().contains(QStringLiteral("Python 脚本缺失")),
+            "unavailable add did not surface its concrete diagnostic");
 
     controller.addNode(QStringLiteral("visionrt.image.read"), 0, 0);
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
