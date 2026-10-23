@@ -18,6 +18,7 @@ Item {
     readonly property string stableKey: model.stableKey || ""
     readonly property string toolId: model.toolId || ""
     readonly property bool leaf: model.leaf === true
+    readonly property bool available: model.available !== false
     readonly property bool isSelected: root.selectedKey.length > 0 && root.selectedKey === root.stableKey
     signal chosen(string toolId)
     signal selected(string key)
@@ -116,7 +117,7 @@ Item {
         z: 1000
         width: 160; height: 32; visible: pointer.drag.active
         property string toolId: root.toolId
-        Drag.active: pointer.drag.active && root.leaf && !app.busy
+        Drag.active: pointer.drag.active && root.leaf && root.available && !app.busy
         Drag.keys: ["visionrt/tool"]
         Drag.source: dragPayload
         Drag.hotSpot.x: 12; Drag.hotSpot.y: 16
@@ -141,7 +142,7 @@ Item {
         hoverEnabled: false
         acceptedButtons: Qt.LeftButton
         preventStealing: root.leaf
-        drag.target: root.leaf && !app.busy ? dragPayload : null
+        drag.target: root.leaf && root.available && !app.busy ? dragPayload : null
         drag.threshold: Qt.styleHints.startDragDistance
         onPressed: function(mouse) {
             let p = root.mapToItem(dragPayload.parent, mouse.x - 12, mouse.y - 16)
@@ -152,7 +153,7 @@ Item {
             root.selected(root.stableKey)
             if (root.hasChildren) {
                 root.treeView.toggleExpanded(root.row)
-            } else {
+            } else if (root.available) {
                 root.chosen(root.toolId)
             }
         }

@@ -138,8 +138,9 @@ Qt::ItemFlags ToolTreeModel::flags(const QModelIndex &index) const
 {
     if (!index.isValid())
         return Qt::NoItemFlags;
-    auto flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
-    if (!static_cast<Entry *>(index.internalPointer())->id.isEmpty())
+    const auto &entry = *static_cast<Entry *>(index.internalPointer());
+    auto        flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    if (!entry.id.isEmpty() && entry.available)
         flags |= Qt::ItemIsDragEnabled;
     return flags;
 }

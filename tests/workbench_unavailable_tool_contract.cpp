@@ -81,6 +81,8 @@ try
     require(index.isValid(), "missing-script Python declaration disappeared from the tool tree");
     require(controller.toolModel()->data(index, ToolTreeModel::AvailableRole).toBool() == false,
             "tool tree did not mark the missing-script Python tool unavailable");
+    require((controller.toolModel()->flags(index) & Qt::ItemIsDragEnabled) == 0,
+            "unavailable tool remained draggable in the tool model");
     const auto diagnostics = controller.diagnostics();
     require(std::any_of(diagnostics.begin(), diagnostics.end(),
                         [](const QString &message) { return message.contains(QStringLiteral("Python 脚本缺失")); }),
