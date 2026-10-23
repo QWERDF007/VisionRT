@@ -1023,15 +1023,20 @@ void AppController::locateNode(const QString &flow, const QString &node)
         emit nodeLocated(node);
 }
 
+void AppController::Impl::requireAvailableTool(std::string_view toolId) const
+{
+    const auto availability = registry.availability(toolId);
+    if (availability.state != ToolAvailability::Available)
+        throw RegistryError(availability.state, availability.status);
+}
+
 void AppController::addNode(const QString &toolId, int x, int y)
 {
     NodeId added = 0;
     if (impl_->command(
             [&]
             {
-                const auto availability = impl_->registry.availability(toolId.toStdString());
-                if (availability.state != ToolAvailability::Available)
-                    throw RegistryError(availability.state, availability.status);
+                impl_->requireAvailableTool(toolId.toStdString());
                 const auto *tool = impl_->registry.find(toolId.toStdString());
                 if (!tool)
                     throw ContractError("工具定义缺失：" + toolId.toStdString());
@@ -1090,11 +1095,7 @@ void AppController::pasteNodes(int x, int y)
             if (!impl_->clipboard)
                 return false;
             for (const auto &node : impl_->clipboard->nodes)
-            {
-                const auto availability = impl_->registry.availability(node.toolId);
-                if (availability.state != ToolAvailability::Available)
-                    throw RegistryError(availability.state, availability.status);
-            }
+                impl_->requireAvailableTool(node.toolId);
             impl_->editor.pasteSelection(impl_->flow.toStdString(), *impl_->clipboard, {x, y});
             return true;
         },

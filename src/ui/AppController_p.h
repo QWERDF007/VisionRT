@@ -16,6 +16,7 @@
 #include <deque>
 #include <future>
 #include <set>
+#include <string_view>
 #include <variant>
 
 namespace visionrt {
@@ -32,6 +33,7 @@ struct AppController::Impl
 {
     explicit Impl(AppController *owner, std::size_t workers, const QString &directory);
     ~Impl();
+    void requireAvailableTool(std::string_view toolId) const;
     AppController                         *q;
     std::filesystem::path                  applicationDirectory;
     std::filesystem::path                  toolsPackageRoot;
