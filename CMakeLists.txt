@@ -240,6 +240,11 @@ if(BUILD_TESTING)
         target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_project_paths_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+        visionrt_contract(ui_unc_paths_contract visionrt_ui)
+        target_link_libraries(ui_unc_paths_contract PRIVATE Qt6::Test)
+        target_compile_definitions(ui_unc_paths_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
         visionrt_contract(ui_completion_contract visionrt_ui)
         target_link_libraries(ui_completion_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_completion_contract PRIVATE
