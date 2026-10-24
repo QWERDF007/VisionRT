@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 #include <unordered_set>
@@ -134,48 +135,94 @@ ToolStatus lifecycleStatus(py::handle returned, const PythonStorage &storage)
     return status;
 }
 
+enum class ReleaseState : int
+{
+    Unreleased = 0,
+    Releasing  = 1,
+    Released   = 2
+};
+
 struct ToolObjects
 {
-    std::atomic<bool> released{false};
-    py::object        instance;
-    py::object        execute;
+    std::atomic<ReleaseState> state{ReleaseState::Unreleased};
+    std::mutex                mutex;
+    std::condition_variable   cv;
+    std::thread::id           releasingThread{};
+    py::object                instance;
+    py::object                execute;
+
+    bool isReleased() const noexcept
+    {
+        return state.load(std::memory_order_acquire) == ReleaseState::Released;
+    }
+
+    bool isReleasingOrReleased() const noexcept
+    {
+        auto s = state.load(std::memory_order_acquire);
+        return s == ReleaseState::Releasing || s == ReleaseState::Released;
+    }
+
+    void markReleased() noexcept
+    {
+        std::lock_guard lock(mutex);
+        state.store(ReleaseState::Released, std::memory_order_release);
+        cv.notify_all();
+    }
 
     ToolStatus releaseWithGil(const PythonStorage &storage) noexcept
     {
-        bool expected = false;
-        if (!released.compare_exchange_strong(expected, true))
+        std::unique_lock lock(mutex);
+        if (state.load(std::memory_order_acquire) == ReleaseState::Released)
             return {};
+
+        if (state.load(std::memory_order_acquire) == ReleaseState::Releasing)
+        {
+            if (releasingThread == std::this_thread::get_id())
+                return {};
+            {
+                py::gil_scoped_release releaseGil;
+                cv.wait(lock, [this] {
+                    return state.load(std::memory_order_acquire) == ReleaseState::Released;
+                });
+                lock.unlock();
+            }
+            return {};
+        }
+
+        state.store(ReleaseState::Releasing, std::memory_order_release);
+        releasingThread = std::this_thread::get_id();
+        lock.unlock();
+
+        ToolStatus status{};
         try
         {
             if (instance)
             {
-                auto status = lifecycleStatus(instance.attr("release")(), storage);
-                instance = py::none();
-                execute  = py::none();
-                return status;
+                status = lifecycleStatus(instance.attr("release")(), storage);
             }
         }
         catch (const py::error_already_set &error)
         {
-            instance = py::none();
-            execute  = py::none();
-            return errorStatus(-4, "Python 释放异常", error.what());
+            status = errorStatus(-4, "Python 释放异常", error.what());
         }
         catch (const ContractError &error)
         {
-            instance = py::none();
-            execute  = py::none();
-            return {-4, error.what()};
+            status = {-4, error.what()};
         }
         catch (const std::exception &error)
         {
-            instance = py::none();
-            execute  = py::none();
-            return errorStatus(-4, "Python 释放异常", error.what());
+            status = errorStatus(-4, "Python 释放异常", error.what());
         }
+
         instance = py::none();
         execute  = py::none();
-        return {};
+
+        {
+            std::lock_guard finishLock(mutex);
+            state.store(ReleaseState::Released, std::memory_order_release);
+        }
+        cv.notify_all();
+        return status;
     }
 };
 
@@ -234,7 +281,7 @@ public:
         if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
             return {-1, "Python 实例跨代或运行时不可用，不能初始化"};
         py::gil_scoped_acquire gil;
-        if (!objects_ || objects_->released.load())
+        if (!objects_ || objects_->isReleasingOrReleased())
             return {-1, "Python 实例已释放，不能初始化"};
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
@@ -279,7 +326,7 @@ public:
         py::gil_scoped_acquire gil;
         metrics_.waitGilMs
             = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - waiting).count();
-        if (!objects_ || objects_->released.load())
+        if (!objects_ || objects_->isReleasingOrReleased())
             return fail({-1, "Python 实例已释放，不能执行"});
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
@@ -400,11 +447,11 @@ public:
     {
         if (!objects_)
             return {};
-        if (objects_->released.load())
+        if (objects_->isReleased())
             return {};
         if (!Py_IsInitialized())
         {
-            objects_->released.store(true);
+            objects_->markReleased();
             return {};
         }
         py::gil_scoped_acquire gil;
@@ -416,7 +463,7 @@ private:
     {
         if (loaded_)
             return {};
-        if (!objects_ || objects_->released.load())
+        if (!objects_ || objects_->isReleasingOrReleased())
             return {-1, "Python 实例已释放"};
         if (!state_ || !state_->alive || generation_ != state_->generation)
         {

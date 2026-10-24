@@ -279,6 +279,67 @@ void coldConcurrentRollback(PythonRuntime &runtime, const std::filesystem::path 
     assert(execute(*sibling) == 1);
 }
 
+void sharedHelperRollback(PythonRuntime &runtime, const std::filesystem::path &root)
+{
+    const auto package = root / "python/custom/shared_helper";
+    std::filesystem::create_directories(package);
+    write(package / "__init__.py", "");
+    write(package / "helper.py",
+          "import builtins\n"
+          "if not hasattr(builtins, 'visionrt_helper_count'):\n"
+          " builtins.visionrt_helper_count = 0\n"
+          "builtins.visionrt_helper_count += 1\n"
+          "VALUE = builtins.visionrt_helper_count\n");
+    write(package / "good.py",
+          "from . import helper\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':helper.VALUE}\n");
+    write(package / "sibling.py",
+          "from . import helper\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':helper.VALUE}\n");
+    write(package / "broken.py",
+          "from . import helper\n"
+          "from pathlib import Path\n"
+          "import time\n"
+          "directory = Path(__file__).parent\n"
+          "(directory / 'broken_entered.flag').write_text('entered')\n"
+          "deadline = time.monotonic() + 5\n"
+          "while not (directory / 'broken_resume.flag').exists():\n"
+          " if time.monotonic() > deadline: raise TimeoutError('resume timeout')\n"
+          " time.sleep(0.005)\n"
+          "raise RuntimeError('controlled failure after shared helper import')\n");
+
+    const std::array definitions{
+        definitionFor(root, "python.shared_good", "good.py", ToolOrigin::Custom, "shared_helper"),
+        definitionFor(root, "python.shared_sibling", "sibling.py", ToolOrigin::Custom, "shared_helper"),
+        definitionFor(root, "python.shared_broken", "broken.py", ToolOrigin::Custom, "shared_helper")
+    };
+    runtime.refresh(definitions);
+
+    std::promise<void> brokenStarted;
+    auto brokenFuture = brokenStarted.get_future();
+    std::thread workerBroken([&] {
+        brokenStarted.set_value();
+        unavailable(runtime.factory(definitions[2]));
+    });
+    brokenFuture.wait();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!std::filesystem::exists(package / "broken_entered.flag"))
+    {
+        assert(std::chrono::steady_clock::now() < deadline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    auto good = runtime.factory(definitions[0])({});
+    assert(execute(*good) == 1);
+
+    write(package / "broken_resume.flag", "resume");
+    workerBroken.join();
+
+    auto sibling = runtime.factory(definitions[1])({});
+    assert(execute(*sibling) == 1);
+}
+
 }
 
 int main(int argc, char **argv)
@@ -328,6 +389,7 @@ try
                                  nativeHelper(runtime, root);
                                  packageBoundaries(runtime, root);
                                   coldConcurrentRollback(runtime, root);
+                                  sharedHelperRollback(runtime, root);
                              });
     worker.get();
     std::cout << "Metadata refresh does not import Python; direct adapter construction loads its code root\n";

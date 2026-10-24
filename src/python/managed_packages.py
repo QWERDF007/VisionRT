@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import threading
+import types
 
 
 class FreshSourceLoader(importlib.machinery.SourceFileLoader):
@@ -72,6 +73,25 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
         self.packages.clear()
         self.generation += 1
 
+    def _is_module_retained(self, name, tx):
+        if any(m.startswith(name + '.') for m in sys.modules if m not in tx):
+            return True
+        mod = sys.modules.get(name)
+        if mod is None:
+            return False
+        for m_name, m in tuple(sys.modules.items()):
+            if m_name in tx or not isinstance(m, types.ModuleType):
+                continue
+            if name.startswith(m_name + '.') or m_name == name:
+                continue
+            if any(m_name == r or m_name.startswith(r + '.') for r in self.roots):
+                if mod in m.__dict__.values():
+                    return True
+                for v in m.__dict__.values():
+                    if getattr(v, '__module__', None) == name:
+                        return True
+        return False
+
     def load(self, origin, directory, script, symbol):
         directory = Path(directory).resolve(strict=True)
         entry = (directory / script).resolve(strict=True)
@@ -102,7 +122,7 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
         except BaseException:
             self._thread_local.stack.pop()
             for name in reversed(tx):
-                if any(m.startswith(name + '.') for m in sys.modules):
+                if self._is_module_retained(name, tx):
                     continue
                 if '.' in name:
                     parent_name, attr_name = name.rsplit('.', 1)

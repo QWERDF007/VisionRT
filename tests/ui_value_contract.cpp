@@ -195,11 +195,15 @@ try
     app.endRoiPreview();
     app.selectNode(source);
     textReady.clear();
+    quint64 lastFrameId = 0;
     const auto frameText = QObject::connect(&viewport, &ImageViewport::imagePresented, &app,
-                                            [&](quint64)
+                                            [&](quint64 frameId)
                                             {
-                                                if (app.busy())
+                                                if (app.busy() && frameId != lastFrameId)
+                                                {
+                                                    lastFrameId = frameId;
                                                     app.requestOutputText(app.portContext("epoch", true), false, false);
+                                                }
                                             });
     app.toggleLoop();
     require(app.busy() && viewport.hasImage(), "loop discarded its previous rendered frame");

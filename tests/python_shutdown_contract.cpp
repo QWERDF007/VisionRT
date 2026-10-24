@@ -90,6 +90,51 @@ try
         while (std::getline(released, line)) ++releaseCount;
         assert(releaseCount == 3);
     }
+
+    // D1: In-flight Python release in worker thread completes before runtime shutdown returns
+    {
+        const auto package = root / "python/custom/inflight_shutdown";
+        std::filesystem::create_directories(package);
+        {
+            std::ofstream script(package / "tool.py");
+            script << "from pathlib import Path\n"
+                      "import time\n"
+                      "class Tool:\n"
+                      " def initialize(self, params): return {'__status_code':0,'__status_message':''}\n"
+                      " def execute(self, inputs): return {'__status_code':0,'__status_message':'','value':1}\n"
+                      " def release(self):\n"
+                      "  directory = Path(__file__).parent\n"
+                      "  (directory / 'entered.flag').write_text('entered')\n"
+                      "  time.sleep(0.3)\n"
+                      "  (directory / 'finished.flag').write_text('finished')\n"
+                      "  return {'__status_code':0,'__status_message':''}\n";
+        }
+        const auto definition = parseToolDefinitionJson(R"({
+            "schema_version":2,"tool_id":"audit.release.inflight","display_name":"Shutdown","version":"1",
+            "kind":"python_class","entry":{"package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},
+            "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
+        })", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
+                                                            {root / "tools/custom", root / "python/custom"}});
+        auto runtime = std::make_unique<PythonRuntime>();
+        runtime->refresh(std::span(&definition, 1));
+        auto instance = runtime->factory(definition)({});
+        assert(instance->initialize({}).code == 0);
+        std::atomic<bool> workerFinished{false};
+        std::thread worker([owned = std::move(instance), &workerFinished]() mutable {
+            owned.reset();
+            workerFinished.store(true);
+        });
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!std::filesystem::exists(package / "entered.flag"))
+        {
+            assert(std::chrono::steady_clock::now() < deadline);
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        runtime.reset();
+        assert(std::filesystem::exists(package / "finished.flag"));
+        worker.join();
+        assert(workerFinished.load());
+    }
     const auto package = root / "python/custom/memory";
     std::filesystem::create_directories(package);
     {
