@@ -86,14 +86,6 @@ Rectangle {
                 color: Theme.nodeStateOrange
                 Layout.alignment: Qt.AlignVCenter
             }
-            QuiText {
-                visible: !root.node.defMissing && !root.node.implUnavailable && root.nodeState === "failed"
-                text: "执行错误"
-                renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: Theme.nodeStateRed
-                Layout.alignment: Qt.AlignVCenter
-            }
             Item { Layout.fillWidth: true }
             QuiText {
                 text: root.node.version ? ("v" + String(root.node.version).replace(/^v/i, "")) : "v1.0"
