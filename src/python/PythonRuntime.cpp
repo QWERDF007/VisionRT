@@ -494,7 +494,8 @@ private:
                     definition_.source.origin == ToolOrigin::Builtin ? "builtin" : "custom",
                     py::str(reinterpret_cast<const char *>(directory.data()), directory.size()),
                     py::str(reinterpret_cast<const char *>(script.data()), script.size()),
-                    definition_.entry.symbol);
+                    definition_.entry.symbol,
+                    generation_);
                 if (!PyCallable_Check(impl.symbol.ptr()))
                     throw ContractError("Python 入口不可调用");
                 if (definition_.kind == ToolKind::PythonClass)

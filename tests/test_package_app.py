@@ -78,16 +78,36 @@ class ToolsDeploymentContract(unittest.TestCase):
             "missing definition": lambda: self.index["tools"][0].update(definition="assets/missing.json"),
             "missing runtime": lambda: self.index.update(runtime_files=["bin/missing.dll"]),
             "identity mismatch": lambda: self.definition.update(tool_id="other.id"),
+            "missing declared resource": lambda: self.definition.update(resources=["models/missing_weights.bin"]),
         }
         for name, invalidate in cases.items():
             with self.subTest(name=name):
                 self.index = copy.deepcopy(valid_index)
                 self.definition["tool_id"] = "test.plugin"
+                self.definition.pop("resources", None)
                 invalidate()
                 self.write_source()
                 with self.assertRaisesRegex(RuntimeError, "Host tools package validation failed"):
                     package_app.deploy_tools_package(self.install, self.archive(), self.validator)
                 self.assertEqual((self.package / "old.txt").read_text(encoding="utf-8"), "old installation")
+
+    def test_missing_declared_resource_keeps_old_package_executable(self) -> None:
+        self.write_source()
+        package_app.deploy_tools_package(self.install, self.archive(), self.validator)
+        self.assertTrue((self.package / "module_index.json").is_file())
+        (self.package / "canary.txt").write_text("prior working package canary", encoding="utf-8")
+
+        self.definition["resources"] = ["models/nonexistent_model.onnx"]
+        self.write_source()
+        with self.assertRaisesRegex(RuntimeError, "Host tools package validation failed"):
+            package_app.deploy_tools_package(self.install, self.archive(), self.validator)
+
+        self.assertTrue((self.package / "canary.txt").is_file())
+        self.assertEqual((self.package / "canary.txt").read_text(encoding="utf-8"), "prior working package canary")
+        self.assertTrue((self.package / "module_index.json").is_file())
+        self.assertEqual((self.package / "bin/plugin.dll").read_bytes(), b"metadata-only module")
+        validation = subprocess.run([str(self.validator), "--package", str(self.package)], capture_output=True, text=True)
+        self.assertEqual(validation.returncode, 0, f"Old package became invalid: {validation.stderr}")
 
     def test_missing_json_and_yaml_only_packages_are_rejected(self) -> None:
         self.write_source()

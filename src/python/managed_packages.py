@@ -14,7 +14,6 @@ class FreshSourceLoader(importlib.machinery.SourceFileLoader):
 class ManagedPackages(importlib.abc.MetaPathFinder):
     def __init__(self, identity):
         self.identity = identity
-        self.generation = 0
         self.roots = {}
         self.packages = {}
 
@@ -49,7 +48,7 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
                 raise ImportError('Managed module requires source or a native extension: ' + fullname)
         return spec
 
-    def clear(self, generation=None):
+    def clear(self):
         namespaces = tuple(self.roots)
         directories = tuple(self.roots.values())
         for name in tuple(sys.modules):
@@ -60,12 +59,8 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
                 del sys.path_importer_cache[search_path]
         self.roots.clear()
         self.packages.clear()
-        if generation is not None:
-            self.generation = generation
-        else:
-            self.generation += 1
 
-    def load(self, origin, directory, script, symbol, generation=None):
+    def load(self, origin, directory, script, symbol, generation):
         directory = Path(directory).resolve(strict=True)
         entry = (directory / script).resolve(strict=True)
         relative = entry.relative_to(directory)
@@ -76,12 +71,10 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
             parts.pop()
         if any(not part.isidentifier() for part in parts):
             raise ImportError('Managed entry path components must be Python identifiers')
-        if generation is not None:
-            self.generation = generation
-        key = (origin, directory, self.generation)
+        key = (origin, directory, generation)
         root = self.packages.get(key)
         if root is None:
-            root = f'_visionrt_package_{self.identity}_{self.generation}_{len(self.packages)}'
+            root = f'_visionrt_package_{self.identity}_{generation}_{len(self.packages)}'
             self.packages[key] = root
             self.roots[root] = directory
 

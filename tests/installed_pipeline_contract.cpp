@@ -1,3 +1,5 @@
+#include <pybind11/embed.h>
+
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
@@ -19,6 +21,7 @@
 
 using namespace visionrt;
 using namespace std::chrono_literals;
+namespace py = pybind11;
 
 namespace {
 void require(bool condition, const char *message)
@@ -161,9 +164,35 @@ def execute(inputs):
 def counter(inputs):
     return {'allocated': allocated, 'released': released, '__status_code': 0, '__status_message': ''}
 )");
+    ToolDefinition h35Combo;
+    h35Combo.id          = "test.installed.h35_combo";
+    h35Combo.displayName = "H35 native helper and declared resource";
+    h35Combo.kind        = ToolKind::PythonFunction;
+    h35Combo.entry       = {"examples/h35_combo", "tool.py", "execute"};
+    h35Combo.resources   = {std::filesystem::path("resources/h35_weights.bin")};
+    h35Combo.outputs     = {
+        {    "val",          "Value", {Type::Int}},
+        {"res_len", "ResourceLength", {Type::Int}}
+    };
+    write(root / "tools/custom/h35_combo.json", emitNormalizedToolJson(h35Combo));
+    const std::string_view h35Payload = "H35_RESOURCE_PAYLOAD_35_BYTES_OK!";
+    const auto             comboDir   = root / "python/custom/examples/h35_combo";
+    std::filesystem::create_directories(comboDir);
+    write(comboDir / "resources/h35_weights.bin", h35Payload);
+    write(comboDir / "tool.py", R"(
+from pathlib import Path
+from . import _queue
+def execute(inputs):
+    q = _queue.SimpleQueue()
+    q.put(42)
+    package_dir = Path(__file__).resolve().parent
+    res_path = package_dir / "resources" / "h35_weights.bin"
+    return {'val': q.get(), 'res_len': len(res_path.read_bytes()), '__status_code': 0, '__status_message': ''}
+)");
     const auto augmented = readToolsPackage(root);
-    require(augmented.tools.size() == published.tools.size() + 3 && !augmented.index.tools.contains(relay.id),
+    require(augmented.tools.size() == published.tools.size() + 4 && !augmented.index.tools.contains(relay.id),
             "Custom discovery required an index rebuild");
+    validateToolsPackage(root);
 
     for (int batch = 0; batch < 2; ++batch)
     {
@@ -175,6 +204,13 @@ def counter(inputs):
     }
 
     PythonRuntime python;
+    {
+        py::gil_scoped_acquire gil;
+        const auto             filename  = py::module_::import("_queue").attr("__file__").cast<std::string>();
+        const auto             extension = std::filesystem::path(std::u8string(filename.begin(), filename.end()));
+        std::filesystem::copy_file(extension, comboDir / extension.filename(),
+                                   std::filesystem::copy_options::overwrite_existing);
+    }
     ToolRegistry  registry;
     registry.setPluginLoader(std::make_shared<PluginLoader>());
     registry.registerPackage(augmented);
@@ -192,6 +228,7 @@ def counter(inputs):
     const auto    after   = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {30, 0});
     const auto    crop    = editor.addNode(flow, *registry.find("visionrt.image.crop"), {40, 0});
     const auto    builtin = editor.addNode(flow, *registry.find("visiontools.python.image_sizes"), {20, 10});
+    const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.id), {50, 0});
     editor.setLiteral(flow, reader, "mode", std::string("directory"));
     editor.setLiteral(flow, reader, "path", std::string("images"));
     editor.setLiteral(flow, reader, "color", std::string("gray"));
@@ -227,6 +264,7 @@ def counter(inputs):
         const auto  filtered      = snapshot(update, after);
         const auto  cropped       = snapshot(update, crop);
         const auto  sizes         = snapshot(update, builtin);
+        const auto  h35Snap       = snapshot(update, h35);
         const auto &sourceImages  = std::get<DataRef<Image>>(original->outputs.at("images")).get();
         const auto &bridgedImages = std::get<DataRef<Image>>(relayed->outputs.at("images")).get();
         const auto &cropImages    = std::get<DataRef<Image>>(cropped->outputs.at("images")).get();
@@ -255,6 +293,10 @@ def counter(inputs):
                 "ROI roundtrip differs");
         require((std::get<Array>(sizes->outputs.at("sizes")).get<NestedVector<std::int64_t, 2>>()
                     == NestedVector<std::int64_t, 2>{{8, 10}, {8, 10}}), "Builtin/custom same-name packages collided");
+        require(std::get<std::int64_t>(h35Snap->outputs.at("val")) == 42,
+                "H35 native helper queue output mismatch");
+        require(std::get<std::int64_t>(h35Snap->outputs.at("res_len")) == static_cast<std::int64_t>(h35Payload.size()),
+                "H35 declared resource size mismatch");
     }
     auto probe = python.factory(*registry.find(counter.id))(PlatformToolServices{});
     require(probe->initialize({}).code == 0, "Ownership probe initialization failed");
