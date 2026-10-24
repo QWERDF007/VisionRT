@@ -26,6 +26,7 @@ public:
     ToolFactory                       factory(const ToolDefinition &definition) const;
 
     bool        isCloseReady() const noexcept;
+    void        prepareShutdown();
     std::size_t activeReferences() const noexcept;
 
 private:

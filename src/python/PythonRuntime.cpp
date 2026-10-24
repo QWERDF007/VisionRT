@@ -647,32 +647,43 @@ struct PythonRuntime::Impl
         }
     }
 
+    bool                                     preparedShutdown = false;
+
+    void prepareShutdown()
+    {
+        if (preparedShutdown)
+            return;
+        preparedShutdown = true;
+        py::gil_scoped_acquire gil;
+        state->alive = false;
+        for (auto &tool : state->activeTools())
+        {
+            tool->releaseWithGil(state->storage);
+        }
+        state->implementations.clear();
+        try
+        {
+            if (state->loader && state->loader.contains("finder"))
+            {
+                state->loader["finder"].attr("clear")();
+                py::module_::import("sys").attr("meta_path").attr("remove")(state->loader["finder"]);
+            }
+            state->loader.clear();
+            py::module_::import("gc").attr("collect")();
+        }
+        catch (py::error_already_set &error)
+        {
+            error.discard_as_unraisable("PythonRuntime prepareShutdown");
+        }
+    }
+
     ~Impl()
     {
         if (std::this_thread::get_id() != ownerThread)
             std::terminate();
+        prepareShutdown();
         {
             py::gil_scoped_acquire gil;
-            state->alive = false;
-            for (auto &tool : state->activeTools())
-            {
-                tool->releaseWithGil(state->storage);
-            }
-            state->implementations.clear();
-            try
-            {
-                if (state->loader && state->loader.contains("finder"))
-                {
-                    state->loader["finder"].attr("clear")();
-                    py::module_::import("sys").attr("meta_path").attr("remove")(state->loader["finder"]);
-                }
-                state->loader.clear();
-                py::module_::import("gc").attr("collect")();
-            }
-            catch (py::error_already_set &error)
-            {
-                error.discard_as_unraisable("PythonRuntime shutdown");
-            }
             state->loader.release();
         }
         state->storage.waitForRelease();
@@ -772,7 +783,15 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
 
 bool PythonRuntime::isCloseReady() const noexcept
 {
-    return impl_ ? impl_->state->storage.isReadyForClose() : true;
+    if (!impl_)
+        return true;
+    return impl_->state->storage.isReadyForClose();
+}
+
+void PythonRuntime::prepareShutdown()
+{
+    if (impl_)
+        impl_->prepareShutdown();
 }
 
 std::size_t PythonRuntime::activeReferences() const noexcept

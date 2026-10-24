@@ -940,7 +940,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
         n2.id               = 2;
         n2.toolId           = "custom.py_math";
         n2.toolNameSnapshot = "Python Calc";
-        n2.position         = {250, 100};
+        n2.position         = {250, 200};
         InputBinding b2;
         b2.mode    = BindingMode::Upstream;
         b2.literal = std::int64_t{0};

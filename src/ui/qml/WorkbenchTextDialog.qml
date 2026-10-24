@@ -14,7 +14,7 @@ WorkbenchDialog {
     positiveText: "关闭"
     contentDelegate: Component {
         ColumnLayout {
-            implicitHeight: Math.min(520, root.Window.window ? root.Window.window.height - 170 : 520)
+            implicitHeight: Math.min(520, Window.window ? Window.window.height - 170 : 520)
             QuiText {
                 visible: root.description.length > 0
                 text: root.description

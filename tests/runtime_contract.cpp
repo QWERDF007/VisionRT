@@ -81,6 +81,7 @@ NodeDefinition node(NodeId id, const ToolDefinition &d)
 {
     NodeDefinition n;
     n.id               = id;
+    n.position         = {0, static_cast<int>(id)};
     n.toolId           = d.id;
     n.toolNameSnapshot = d.displayName;
     for (auto &port : d.inputs)
@@ -1231,7 +1232,7 @@ void singleNodeUpstreamValidity()
     assert(executions[2] == 3);
 
     project.flows.front().nodes[1].alias = "重命名不影响结果";
-    project.flows.front().nodes[1].position = {4, 5};
+    project.flows.front().nodes[1].position = {4, 2};
     assert(engine.start(project, registry, RunMode::Node, 3));
     finish(engine);
     assert(executions[2] == 4);

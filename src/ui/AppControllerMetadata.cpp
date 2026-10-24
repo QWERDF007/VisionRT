@@ -1,4 +1,5 @@
 #include "ui/AppController_p.h"
+#include "ui/DisplayTypes.h"
 
 #include <limits>
 
@@ -263,6 +264,7 @@ QVariantList AppController::parameters() const
             {           "name",                               declaration ? q(declaration->name) : q(id)},
             {           "type",                                 QString::fromLatin1(typeName(type.type))},
             {     "typeDetail",                                                           typeText(type)},
+            {    "typeDisplay",                                                    displayTypeName(type)},
             {           "init",                                                           initialization},
             {           "mode",                                                                     mode},
             {        "literal",                                                                     text},

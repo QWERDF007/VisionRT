@@ -11,10 +11,12 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
         return {QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("—"), QStringLiteral("—")};
     if (!snapshot)
         return {QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("—"), QStringLiteral("—")};
-    return {durationText(snapshot->timing.totalMs),
-            snapshot->timing.toolCallMeasured ? durationText(snapshot->timing.adapterExecuteMs) : QStringLiteral("—"),
-            QStringLiteral("—"),
-            QStringLiteral("—")};
+
+    const auto &t = snapshot->timing;
+    QString totalStr = durationText(t.totalMs);
+    QString toolCallStr = t.toolCallMeasured ? durationText(t.adapterExecuteMs) : QStringLiteral("—");
+
+    return {totalStr, toolCallStr, QStringLiteral("—"), QStringLiteral("—")};
 }
 
 QString durationText(std::optional<double> milliseconds)

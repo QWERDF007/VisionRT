@@ -130,6 +130,18 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     }
     runtime = std::make_unique<RuntimeEngine>(workers);
     runtime->setReadbackEnabled(true);
+    runtime->setReadbackCallback(
+        [owner](RuntimeReadback readback)
+        {
+            QMetaObject::invokeMethod(
+                owner,
+                [owner, readback]
+                {
+                    if (owner->impl_ && readback.generation >= owner->impl_->generation)
+                        owner->impl_->poll();
+                },
+                Qt::QueuedConnection);
+        });
     runtime->setCompletionCallback(
         [owner](RuntimeCompletion completion)
         {
@@ -186,6 +198,7 @@ AppController::Impl::~Impl()
 {
     timer.stop();
     runtime->setCompletionCallback({});
+    runtime->setReadbackCallback({});
     runtime->requestStop();
     drainReaders();
     runtime->setReadbackEnabled(false);
@@ -362,12 +375,16 @@ void AppController::Impl::clearResults()
     active.clear();
     lifecycleErrors.clear();
     instanceErrors.clear();
+    flowLatestMs.clear();
+    latestRoundMs.reset();
+    latestElapsedMs = 0;
     timing.clear();
     finishRoi();
     converter.invalidate(generation);
     updateResults();
     publishNodesChanged();
     emit q->runtimeChanged();
+    emit q->timingChanged();
 }
 
 void AppController::Impl::poll()
@@ -463,22 +480,33 @@ void AppController::Impl::poll()
         bool timingChanged = false;
         for (const auto &item : update.flows)
         {
-            if (flowLatestMs[item.flow] != item.milliseconds)
+            auto it = flowLatestMs.find(item.flow);
+            if (it == flowLatestMs.end() || it->second != item.milliseconds)
             {
                 flowLatestMs[item.flow] = item.milliseconds;
                 timingChanged = true;
             }
         }
-        if (update.roundMilliseconds > 0 && latestRoundMs != update.roundMilliseconds)
+        if (update.session > 0)
         {
-            latestRoundMs = update.roundMilliseconds;
-            timingChanged = true;
-        }
-        if (update.session > 0 && latestElapsedMs != update.sessionElapsedMilliseconds)
-        {
-            latestElapsedMs = update.sessionElapsedMilliseconds;
-            if (update.roundMilliseconds > 0 || update.completion)
+            if (!latestRoundMs || *latestRoundMs != update.roundMilliseconds)
+            {
+                latestRoundMs = update.roundMilliseconds;
                 timingChanged = true;
+            }
+            if (latestElapsedMs != update.sessionElapsedMilliseconds)
+            {
+                latestElapsedMs = update.sessionElapsedMilliseconds;
+                timingChanged = true;
+            }
+        }
+        else
+        {
+            if (latestElapsedMs != 0.0)
+            {
+                latestElapsedMs = 0.0;
+                timingChanged = true;
+            }
         }
         if (timingChanged)
         {
@@ -486,7 +514,7 @@ void AppController::Impl::poll()
             if (timing != updatedTiming)
             {
                 timing = updatedTiming;
-                emit q->runtimeChanged();
+                emit q->timingChanged();
             }
         }
         setState(update.state);
@@ -504,13 +532,16 @@ void AppController::Impl::poll()
             q->parameters();
         if (update.completion && runtime->acknowledgeCompletion(*update.completion))
         {
+            state = runtime->state();
             editor.setBusy(false);
+            if (viewport)
+                viewport->setReadOnly(state != RuntimeState::Idle || !roi);
             updateReadback();
             if (refreshResult)
                 refreshFinished();
             updateResults();
             emit q->parametersChanged();
-            setState(runtime->state());
+            emit q->runtimeChanged();
             advancePending();
         }
     }
@@ -535,6 +566,7 @@ void AppController::Impl::start(RunMode mode)
         }
         target = node->id;
     }
+    runtime->setReadbackEnabled(true);
     const auto result = runtime->start(editor.project(), registry, mode, target);
     if (!result)
     {
@@ -549,7 +581,7 @@ void AppController::Impl::start(RunMode mode)
 
 void AppController::Impl::request(Pending action, QString path)
 {
-    if (action == Pending::Close && closing)
+    if (action == Pending::Close && (closing || pending == Pending::Close))
         return;
     if (pending != Pending::None)
     {
@@ -650,6 +682,16 @@ void AppController::Impl::advancePending()
     }
     if (completed == Pending::Close)
     {
+        if (python)
+        {
+            python->prepareShutdown();
+            if (!python->isCloseReady())
+            {
+                closing = false;
+                pending = Pending::None;
+                return;
+            }
+        }
         closing = true;
         emit q->closeReady();
     }
@@ -1279,6 +1321,11 @@ void AppController::requestOpen(const QString &path)
 void AppController::requestClose()
 {
     impl_->request(Impl::Pending::Close);
+}
+
+bool AppController::isCloseReady() const
+{
+    return impl_->python ? impl_->python->isCloseReady() : true;
 }
 
 void AppController::resolveUnsaved(const QString &decision, const QString &savePath)

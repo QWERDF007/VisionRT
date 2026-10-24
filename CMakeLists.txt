@@ -73,6 +73,7 @@ target_link_libraries(visionrt_runtime PUBLIC visionrt_core visionrt_taskflow)
 # 桌面 Workbench 应用程序与发布配置
 add_library(visionrt_presentation
     src/ui/DisplayConverter.cpp src/ui/DisplayConverter.h
+    src/ui/DisplayTypes.cpp src/ui/DisplayTypes.h
     src/ui/OutputModel.cpp src/ui/OutputModel.h
     src/ui/Diagnostics.cpp src/ui/Diagnostics.h)
 target_link_libraries(visionrt_presentation PUBLIC visionrt_core Qt6::Gui)
@@ -195,6 +196,7 @@ if(BUILD_TESTING)
     add_dependencies(tool_discovery_contract visionrt_validate_tool)
     visionrt_contract(project_editor_contract visionrt_core)
     visionrt_contract(edge_hierarchy_contract visionrt_core)
+    target_link_libraries(edge_hierarchy_contract PRIVATE visionrt_runtime)
     visionrt_contract(project_storage_contract visionrt_core)
     visionrt_contract(project_value_contract visionrt_core)
     visionrt_contract(cpu_tools_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}")

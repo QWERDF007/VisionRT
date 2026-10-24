@@ -114,7 +114,7 @@ void outputContract()
     require(model.get(1).value("portId").toString() == "__status_message", "status message is not second");
     require(model.get(0).value("preview").toString() == "-2", "status not taken from completed snapshot");
     require(model.get(1).value("preview").toString() == "输出合同错误", "status preview must contain only summary");
-    require(model.get(1).value("tooltip").toString().contains("完整详情"), "status tooltip lost technical detail");
+    require(model.get(1).value("tooltip").toString() == "输出合同错误", "status tooltip must contain only raw message");
     const auto diagnostic = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
     require(diagnostic.value("node").toString() == "18446744073709551614", "diagnostic JSON loses node precision");
     require(diagnostic.value("tool_id").toString() == "test.output" && diagnostic.value("phase") == "convert",

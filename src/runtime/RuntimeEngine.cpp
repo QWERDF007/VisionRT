@@ -218,6 +218,7 @@ struct RuntimeEngine::Impl
     std::optional<RuntimeCompletion>                                  completion;
     std::function<void(RuntimeCompletion)>                            callback;
     bool                                                              readbackEnabled = false;
+    std::function<void(RuntimeReadback)>                              readbackCallback;
     std::optional<RuntimeReadback>                                    readback;
     std::vector<FlowTiming>                                           flowTiming;
     double                                                            roundMilliseconds = 0;
@@ -325,6 +326,23 @@ struct RuntimeEngine::Impl
         {
             if (std::find(frozen->selected.begin(), frozen->selected.end(), flow.id) == frozen->selected.end())
                 continue;
+            if (frozen->mode == RunMode::Node && frozen->target)
+            {
+                for (const auto &node : flow.nodes)
+                {
+                    if (node.id != *frozen->target)
+                        continue;
+                    for (const auto &[input, binding] : node.inputs)
+                    {
+                        if (binding.mode == BindingMode::Upstream && binding.source)
+                        {
+                            const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
+                            if (!check)
+                                throw ContractError("单节点执行失败：" + check.message);
+                        }
+                    }
+                }
+            }
             auto edges = frozen->mode == RunMode::Node ? std::vector<DependencyEdge>{} : dependencyEdges(flow);
             std::vector<NodeId>         ids;
             std::vector<ToolDefinition> contracts;
@@ -455,9 +473,20 @@ struct RuntimeEngine::Impl
                 roundMilliseconds = calculatedRoundMs;
                 sessionElapsedMs = milliseconds(roundEnd - sessionStartTime);
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
+                std::function<void(RuntimeReadback)> notifyReadback;
+                std::optional<RuntimeReadback>       currentReadback;
                 if (readbackEnabled && !shutdown)
                 {
                     readback = RuntimeReadback{generation, session, round};
+                    currentReadback = readback;
+                    notifyReadback = readbackCallback;
+                }
+                lock.unlock();
+                if (notifyReadback && currentReadback)
+                    notifyReadback(*currentReadback);
+                if (readbackEnabled && !shutdown)
+                {
+                    lock.lock();
                     commandReady.wait(lock, [&] { return !readback || shutdown; });
                 }
 
@@ -493,6 +522,8 @@ struct RuntimeEngine::Impl
             round   = 0;
             flowTiming.clear();
             roundMilliseconds = 0;
+            sessionElapsedMs  = 0;
+            sessionEndTime.reset();
             diagnostics.clear();
             nextDiagnosticSequence = 1;
             droppedDiagnostics     = 0;
@@ -632,6 +663,23 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
             return *receiverError;
         if (mode == RunMode::Node)
         {
+            for (const auto &flow : frozen->project.flows)
+            {
+                for (const auto &node : flow.nodes)
+                {
+                    if (node.id != *target)
+                        continue;
+                    for (const auto &[input, binding] : node.inputs)
+                    {
+                        if (binding.mode == BindingMode::Upstream && binding.source)
+                        {
+                            const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
+                            if (!check)
+                                return {1, "单节点执行失败：" + check.message};
+                        }
+                    }
+                }
+            }
             if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
                 return {1, *error};
         }
@@ -804,7 +852,10 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.roundMilliseconds = impl_->roundMilliseconds;
     if (impl_->session > 0)
     {
-        update.sessionElapsedMilliseconds = impl_->sessionElapsedMs;
+        if (impl_->sessionEndTime)
+            update.sessionElapsedMilliseconds = impl_->sessionElapsedMs;
+        else
+            update.sessionElapsedMilliseconds = milliseconds(Clock::now() - impl_->sessionStartTime);
     }
     else
     {
@@ -839,6 +890,12 @@ bool RuntimeEngine::acknowledgeCompletion(RuntimeCompletion completion)
     impl_->completion.reset();
     impl_->state = RuntimeState::Idle;
     return true;
+}
+
+void RuntimeEngine::setReadbackCallback(std::function<void(RuntimeReadback)> callback)
+{
+    std::lock_guard lock(impl_->control);
+    impl_->readbackCallback = std::move(callback);
 }
 
 void RuntimeEngine::setCompletionCallback(std::function<void(RuntimeCompletion)> callback)

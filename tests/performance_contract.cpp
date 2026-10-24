@@ -252,6 +252,7 @@ void test200NodesExecution()
     {
         NodeDefinition n;
         n.id               = i;
+        n.position         = {0, i};
         n.toolId           = addDef.id;
         n.toolNameSnapshot = addDef.displayName;
         n.signatures.inputs.emplace("in", TypeSpec{Type::Int});
@@ -461,6 +462,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
 
     NodeDefinition srcNode;
     srcNode.id               = 1;
+    srcNode.position         = {0, 0};
     srcNode.toolId           = srcDef.id;
     srcNode.toolNameSnapshot = srcDef.displayName;
     srcNode.signatures.outputs.emplace("batch", TypeSpec{Type::Image});
@@ -472,6 +474,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     {
         NodeDefinition cNode;
         cNode.id               = i;
+        cNode.position         = {i, 1};
         cNode.toolId           = consDef.id;
         cNode.toolNameSnapshot = consDef.displayName;
         cNode.signatures.inputs.emplace("batch", TypeSpec{Type::Image});
@@ -736,6 +739,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
 
     NodeDefinition n1;
     n1.id     = 1;
+    n1.position = {0, 0};
     n1.toolId = genDef.id;
     n1.signatures.outputs.emplace("val", TypeSpec{Type::Int});
     n1.signatures.outputs.emplace("image", TypeSpec{Type::Image});
@@ -745,6 +749,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
 
     NodeDefinition n2;
     n2.id     = 2;
+    n2.position = {0, 1};
     n2.toolId = procDef.id;
     n2.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
     n2.signatures.inputs.emplace("in_image", TypeSpec{Type::Image});
@@ -795,6 +800,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
 
             NodeDefinition n3;
             n3.id               = 3;
+            n3.position         = {0, 2};
             n3.toolId           = pyToolDef.id;
             n3.toolNameSnapshot = pyToolDef.displayName;
             n3.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});

@@ -1,7 +1,14 @@
 #include "core/ProjectEditor.h"
+#include "core/ProjectStorage.h"
+#include "runtime/RuntimeEngine.h"
+#include <QTemporaryDir>
 #include <cassert>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string_view>
+#include <thread>
 
 using namespace visionrt;
 
@@ -18,6 +25,10 @@ void rejects(F &&operation, std::string_view reason = {})
     {
         if (!reason.empty())
         {
+            if (std::string_view(error.what()).find(reason) == std::string_view::npos)
+            {
+                std::cerr << "Expected reason: " << reason << ", got: " << error.what() << std::endl;
+            }
             assert(std::string_view(error.what()).find(reason) != std::string_view::npos);
         }
         rejected = true;
@@ -39,6 +50,14 @@ ToolDefinition makeTool(std::string id)
     };
     return tool;
 }
+
+class PassTool final : public IToolInstance
+{
+public:
+    ToolStatus initialize(const Values &) override { return {}; }
+    ToolResult execute(const Values &inputs) override { return {{}, inputs}; }
+    ToolStatus release() override { return {}; }
+};
 } // namespace
 
 int main()
@@ -126,6 +145,120 @@ int main()
         const auto &afterC = *std::find_if(afterFlow.nodes.begin(), afterFlow.nodes.end(), [&](const auto &n) { return n.id == nodeC; });
         assert(afterA.position.x == 1 && afterA.position.y == 2);
         assert(afterC.position.x == 1 && afterC.position.y == 5);
+    }
+
+    // E11: Hand-crafted JSON with same-row or reverse-row binding:
+    // - Loads successfully without throw
+    // - Binding is preserved for repair (not discarded)
+    // - Diagnostics report the hierarchy violation
+    // - Flow and single-node execution are strictly rejected
+    // - Repairing via node move restores execution ability
+    {
+        ToolRegistry registry;
+        registry.addDefinition(toolA);
+        registry.addDefinition(toolB);
+        registry.registerCpp(toolA, [](const auto &) { return std::make_unique<PassTool>(); });
+        registry.registerCpp(toolB, [](const auto &) { return std::make_unique<PassTool>(); });
+
+        QTemporaryDir tmpDir;
+        assert(tmpDir.isValid());
+        const auto jsonPath = std::filesystem::path(tmpDir.path().toStdWString()) / "peer_test.vrt.json";
+
+        // Create a valid project with node 1 at (0, 0) and node 2 at (5, 2), bound 1 -> 2
+        ProjectEditor validEditor;
+        const auto n1 = validEditor.addNode("flow_1", toolA, {0, 0});
+        const auto n2 = validEditor.addNode("flow_1", toolB, {5, 2});
+        validEditor.setBinding("flow_1", n2, "in_val", {BindingMode::Upstream, Missing{}, SourcePort{n1, "out_val"}});
+
+        auto projectToSave = validEditor.project();
+        ProjectStorage storage(registry);
+        storage.save(projectToSave, jsonPath);
+
+        // Modify node 2 position in the saved file to (5, 0), making it on the SAME row as node 1
+        std::ifstream in(jsonPath);
+        std::string jsonContent((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        // Replace node 2's position Y=2 with Y=0
+        auto posIdx = jsonContent.find("2\r\n                    ]");
+        if (posIdx != std::string::npos)
+        {
+            jsonContent.replace(posIdx, 1, "0");
+        }
+        else
+        {
+            posIdx = jsonContent.find("2\n                    ]");
+            assert(posIdx != std::string::npos);
+            jsonContent.replace(posIdx, 1, "0");
+        }
+        std::ofstream out(jsonPath);
+        out << jsonContent;
+        out.close();
+
+        const auto loadResult = storage.load(jsonPath);
+
+        // 1. Diagnostics should report the hierarchy violation
+        bool foundDiagnostic = false;
+        for (const auto &diag : loadResult.diagnostics)
+        {
+            if (diag.message.find("层级约束") != std::string::npos || diag.message.find("上下层") != std::string::npos)
+                foundDiagnostic = true;
+        }
+        assert(foundDiagnostic);
+
+        // 2. Binding must be PRESERVED for repair (not quietly removed)
+        const auto &loadedFlow = loadResult.project.flows.front();
+        const auto &loadedNode2 = *std::find_if(loadedFlow.nodes.begin(), loadedFlow.nodes.end(), [&](const auto &n) { return n.id == n2; });
+        assert(loadedNode2.inputs.at("in_val").source.has_value());
+        assert(loadedNode2.inputs.at("in_val").source->node == n1);
+
+        // 3. portRelations has error, dependencyEdges throws
+        const auto relations = portRelations(loadedFlow);
+        assert(!relations.errors.empty());
+        rejects([&] {
+            dependencyEdges(loadedFlow);
+        }, "层级约束");
+
+        // 4. RuntimeEngine execution rejected for flow and single node
+        RuntimeEngine engine(2);
+
+        // Flow run rejected
+        const auto flowStatus = engine.start(loadResult.project, registry, RunMode::Once);
+        assert(!flowStatus);
+        assert(std::string_view(flowStatus.message).find("层级约束") != std::string_view::npos);
+
+        // Single node run for node 2 rejected
+        const auto nodeStatus = engine.start(loadResult.project, registry, RunMode::Node, n2);
+        assert(!nodeStatus);
+        assert(std::string_view(nodeStatus.message).find("层级约束") != std::string_view::npos);
+
+        // 5. Repair: Move node 2 to (5, 4) so that source.y(0) < target.y(4)
+        ProjectEditor repairEditor(loadResult.project);
+        bool moved = repairEditor.moveNodes("flow_1", std::array{n2}, {0, 4});
+        assert(moved);
+
+        const auto &repairedFlow = repairEditor.project().flows.front();
+        const auto repairedRelations = portRelations(repairedFlow);
+        assert(repairedRelations.errors.empty());
+        assert(repairedRelations.active.size() == 1);
+
+        const auto edges = dependencyEdges(repairedFlow);
+        assert(edges.size() == 1);
+        assert(edges.front() == std::make_pair(n1, n2));
+
+        // Now single node run for node 1 starts without hierarchy rejection
+        const auto started = engine.start(repairEditor.project(), registry, RunMode::Node, n1);
+        assert(started);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            auto u = engine.pollLatest();
+            if (u.completion)
+            {
+                engine.acknowledgeCompletion(*u.completion);
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
     }
 
     std::cout << "[PASS] All edge hierarchy contract tests passed successfully!" << std::endl;

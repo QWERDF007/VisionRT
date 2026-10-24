@@ -36,7 +36,7 @@ class AppController : public QObject
     Q_PROPERTY(QAbstractItemModel *toolModel READ toolModel CONSTANT)
     Q_PROPERTY(QAbstractItemModel *outputModel READ outputModel CONSTANT)
     Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
-    Q_PROPERTY(QString timingText READ timingText NOTIFY runtimeChanged)
+    Q_PROPERTY(QString timingText READ timingText NOTIFY timingChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY projectChanged)
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
     Q_PROPERTY(QString aboutText READ aboutText CONSTANT)
@@ -115,6 +115,7 @@ public:
     Q_INVOKABLE void         requestNew();
     Q_INVOKABLE void         requestOpen(const QString &path);
     Q_INVOKABLE void         requestClose();
+    Q_INVOKABLE bool         isCloseReady() const;
     Q_INVOKABLE void         resolveUnsaved(const QString &decision, const QString &savePath = {});
     Q_INVOKABLE bool         save(const QString &path = {});
     Q_INVOKABLE void         setImageIndex(int index);
@@ -137,6 +138,7 @@ signals:
     void resultsChanged();
     void roiApplyRequested();
     void runtimeChanged();
+    void timingChanged();
     void diagnosticChanged();
     void searchChanged();
     void unsavedDecisionRequired();

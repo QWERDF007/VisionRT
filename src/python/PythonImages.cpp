@@ -12,12 +12,52 @@ namespace {
 
 constexpr const char *capsuleName = "visionrt.image.storage";
 
+struct BufferLease
+{
+    Py_buffer view{};
+    bool      active = false;
+
+    BufferLease() = default;
+    explicit BufferLease(Py_buffer b) : view(b), active(true) {}
+    ~BufferLease()
+    {
+        if (active)
+        {
+            py::gil_scoped_acquire gil;
+            PyBuffer_Release(&view);
+            active = false;
+        }
+    }
+    BufferLease(const BufferLease &) = delete;
+    BufferLease &operator=(const BufferLease &) = delete;
+    BufferLease(BufferLease &&other) noexcept : view(other.view), active(other.active)
+    {
+        other.active = false;
+    }
+    BufferLease &operator=(BufferLease &&other) noexcept
+    {
+        if (this != &other)
+        {
+            if (active)
+            {
+                py::gil_scoped_acquire gil;
+                PyBuffer_Release(&view);
+            }
+            view = other.view;
+            active = other.active;
+            other.active = false;
+        }
+        return *this;
+    }
+};
+
 struct ImageStorage
 {
-    Owner       owner;
-    cv::Mat     matrix;
-    const void *begin = nullptr;
-    std::size_t bytes = 0;
+    Owner                       owner;
+    cv::Mat                     matrix;
+    const void                 *begin = nullptr;
+    std::size_t                 bytes = 0;
+    std::shared_ptr<BufferLease> lease;
 };
 
 using Storage = std::shared_ptr<ImageStorage>;
@@ -129,12 +169,16 @@ Storage backingStorage(const py::array &array, std::size_t bytes, const PythonSt
                 throw py::error_already_set();
             const auto begin  = buffer.buf;
             const auto length = buffer.len;
-            PyBuffer_Release(&buffer);
             if (length <= 0)
+            {
+                PyBuffer_Release(&buffer);
                 throw ContractError("NumPy 底层存储必须非空");
+            }
+            auto lease     = std::make_shared<BufferLease>(buffer);
             storage        = std::make_shared<ImageStorage>();
             storage->begin = begin;
             storage->bytes = static_cast<std::size_t>(length);
+            storage->lease = std::move(lease);
             break;
         }
         throw ContractError("NumPy 输出没有可验证的底层存储所有者");

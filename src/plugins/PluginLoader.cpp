@@ -208,8 +208,11 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
                           + std::to_string(error) + "）"};
         return nullptr;
     }
+    DWORD oldErrorMode = 0;
+    SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldErrorMode);
     HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr,
                                     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    SetThreadErrorMode(oldErrorMode, nullptr);
     if (!handle)
     {
         const DWORD err = GetLastError();

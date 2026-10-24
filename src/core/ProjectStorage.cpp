@@ -446,14 +446,25 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                     continue;
                 }
                 bool valid = false;
+                bool hierarchyViolation = false;
                 if (source != nodes.end())
                 {
                     const auto output = source->second->signatures.outputs.find(binding.source->port);
-                    valid             = output != source->second->signatures.outputs.end()
+                    const bool typeCompatible = output != source->second->signatures.outputs.end()
                          && compatible(output->second, node.signatures.inputs.at(id))
                          && !changedOutputs[source->second->id].contains(binding.source->port);
+                    if (source->second->position.y >= node.position.y)
+                    {
+                        hierarchyViolation = true;
+                    }
+                    valid = typeCompatible && !hierarchyViolation;
                 }
-                if (!valid)
+                if (hierarchyViolation)
+                {
+                    diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
+                             "上游节点未在当前节点上方（违反上游 Y < 下游 Y 层级约束），绑定已保留供修复，不可执行");
+                }
+                else if (!valid)
                 {
                     binding.source.reset();
                     diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,

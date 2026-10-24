@@ -203,22 +203,28 @@ Rectangle {
         Instantiator {
             model: root.cascadeTools
             delegate: QuiMenu {
+                id: toolSubMenu
                 required property var modelData
+                property string targetNode: modelData.node
                 title: modelData.title
                 Instantiator {
-                    model: modelData.inputs
+                    model: toolSubMenu.modelData.inputs
                     delegate: QuiMenuItem {
                         required property var modelData
-                        text: modelData.connected ? ("✓ " + modelData.name + " (" + modelData.type + ")")
-                            : modelData.occupied ? (modelData.name + " (" + modelData.type + " · 已被占用)")
-                            : (modelData.name + " (" + modelData.type + ")")
-                        enabled: !app.busy && !modelData.connected && !modelData.occupied
+                        text: modelData.connected ? ("✓ " + (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
+                            : modelData.occupied ? ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + " · 已被占用)")
+                            : ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
+                        enabled: !app.busy && !modelData.occupied
                         onTriggered: {
-                            app.bindOutputTo(root.selectedContext, parent.parent.modelData.node, modelData.port)
+                            if (modelData.connected) {
+                                app.unbindOutputFrom(root.selectedContext, toolSubMenu.targetNode, modelData.port)
+                            } else {
+                                app.bindOutputTo(root.selectedContext, toolSubMenu.targetNode, modelData.port)
+                            }
                         }
                     }
-                    onObjectAdded: function(index, object) { insertItem(index, object) }
-                    onObjectRemoved: function(index, object) { removeItem(object) }
+                    onObjectAdded: function(index, object) { toolSubMenu.insertItem(index, object) }
+                    onObjectRemoved: function(index, object) { toolSubMenu.removeItem(object) }
                 }
             }
             onObjectAdded: function(index, object) { nameMenu.insertMenu(index, object) }

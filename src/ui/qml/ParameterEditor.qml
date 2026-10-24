@@ -48,13 +48,9 @@ ColumnLayout {
             QuiToolTip {
                 visible: nameHover.containsMouse && text.length > 0
                 text: {
-                    let t = root.parameter.name || ""
-                    if (root.parameter.id && root.parameter.id !== root.parameter.name)
-                        t += "(" + root.parameter.id + ")"
-                    let typeText = root.parameter.typeDetail || root.parameter.type || ""
-                    if (typeText.length > 0)
-                        t += "(" + typeText + ")"
-                    return t
+                    let name = root.parameter.name || ""
+                    let typeText = root.parameter.typeDisplay || root.parameter.typeDetail || root.parameter.type || ""
+                    return typeText.length > 0 ? (name + "（" + typeText + "）") : name
                 }
                 delay: 500
             }

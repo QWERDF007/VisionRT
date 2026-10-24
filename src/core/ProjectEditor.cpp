@@ -96,20 +96,15 @@ PortRelations deriveRelations(const FlowDefinition &flow, NodeId replacedNode = 
             if (!effectiveSource(binding))
                 continue;
             const auto &source = *binding.source;
-            try
+            const auto check = visionrt::validateBinding(flow, source.node, source.port, target.id, input);
+            if (!check)
             {
-                const auto found = nodes.find(source.node);
-                if (found == nodes.end())
-                    throw ContractError("上游节点不属于当前流程");
-                if (!compatible(signature(found->second->signatures.outputs, source.port),
-                                signature(target.signatures.inputs, input)))
-                    throw ContractError("上游输出与输入端口类型不兼容");
-                result.active.push_back({source, {target.id, input}});
-            }
-            catch (const ContractError &error)
-            {
-                result.errors.push_back(std::string(error.what()) + "：节点 " + std::to_string(source.node) + "."
+                result.errors.push_back(check.message + "：节点 " + std::to_string(source.node) + "."
                                         + source.port + " -> 节点 " + std::to_string(target.id) + "." + input);
+            }
+            else
+            {
+                result.active.push_back({source, {target.id, input}});
             }
         }
     }
@@ -353,6 +348,81 @@ ReferencesToClear referencesTo(ProjectDefinition &project, const std::set<NodeId
 }
 } // namespace
 
+BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, const std::string &sourcePort,
+                            NodeId targetNodeId, const std::string &targetInputPort)
+{
+    if (sourceNodeId == targetNodeId)
+        return {BindingError::Self, "不能连接自身节点"};
+
+    const NodeDefinition *sourceNode = nullptr;
+    const NodeDefinition *targetNode = nullptr;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == sourceNodeId)
+            sourceNode = &node;
+        if (node.id == targetNodeId)
+            targetNode = &node;
+    }
+    if (!sourceNode || !targetNode)
+        return {BindingError::OtherFlow, "上游节点或目标节点不属于当前流程"};
+
+    if (sourceNode->position.y >= targetNode->position.y)
+        return {BindingError::SameOrUpperRow, "只能连接上级节点的输出（违反上下层层级约束：上游 Y 必须严格小于下游 Y）"};
+
+    const auto sourceOut = sourceNode->signatures.outputs.find(sourcePort);
+    if (sourceOut == sourceNode->signatures.outputs.end())
+        return {BindingError::MissingPort, "上游输出端口不存在：" + sourcePort};
+
+    const auto targetIn = targetNode->signatures.inputs.find(targetInputPort);
+    if (targetIn == targetNode->signatures.inputs.end())
+        return {BindingError::MissingPort, "目标输入端口不存在：" + targetInputPort};
+
+    if (!compatible(sourceOut->second, targetIn->second))
+        return {BindingError::TypeMismatch, "上游输出与输入端口类型不兼容：" + std::to_string(sourceNodeId) + "."
+                                                + sourcePort + " -> " + std::to_string(targetNodeId) + "." + targetInputPort};
+
+    return {BindingError::None, {}};
+}
+
+std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow, const SourcePort &source)
+{
+    const NodeDefinition *sourceNode = nullptr;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == source.node)
+        {
+            sourceNode = &node;
+            break;
+        }
+    }
+    if (!sourceNode)
+        return {};
+    const auto outputIt = sourceNode->signatures.outputs.find(source.port);
+    if (outputIt == sourceNode->signatures.outputs.end())
+        return {};
+    const auto &outputType = outputIt->second;
+
+    std::vector<CandidateInput> result;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == source.node || !node.unresolved.isEmpty() || sourceNode->position.y >= node.position.y)
+            continue;
+        for (const auto &[input, binding] : node.inputs)
+        {
+            const auto inputSig = node.signatures.inputs.find(input);
+            if (inputSig == node.signatures.inputs.end() || !compatible(outputType, inputSig->second))
+                continue;
+
+            const bool connected = (binding.mode == BindingMode::Upstream && binding.source && *binding.source == source);
+            const bool occupied = (binding.mode == BindingMode::Upstream && binding.source && *binding.source != source);
+
+            result.push_back(CandidateInput{node.id, input, connected, occupied});
+        }
+    }
+    return result;
+}
+
+
 std::vector<DependencyEdge> dependencyEdges(const FlowDefinition &flow)
 {
     const auto relations = portRelations(flow);
@@ -494,12 +564,12 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
     validateLiteral(type, binding.literal);
     if (binding.source)
     {
-        const auto &sourceNode = findNode(target, binding.source->node);
-        if (binding.mode == BindingMode::Upstream && sourceNode.position.y >= node.position.y)
-            throw ContractError("只能连接上级节点的输出");
-        if (!compatible(signature(sourceNode.signatures.outputs, binding.source->port), type))
-            throw ContractError("上游输出与输入端口类型不兼容：" + std::to_string(binding.source->node) + "."
-                                + binding.source->port + " -> " + std::to_string(id) + "." + std::string(input));
+        const auto check = visionrt::validateBinding(target, binding.source->node, binding.source->port, id, std::string(input));
+        if (!check)
+        {
+            if (binding.mode == BindingMode::Upstream || check.reason != BindingError::SameOrUpperRow)
+                throw ContractError(check.message);
+        }
     }
     if (current.mode == binding.mode && current.source == binding.source
         && equalValues(current.literal, binding.literal))

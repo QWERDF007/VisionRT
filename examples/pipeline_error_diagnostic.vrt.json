@@ -87,7 +87,7 @@
           "alias": "裁剪(缺矩形输入负例)",
           "pos": [
             2,
-            0
+            1
           ],
           "init_params": {},
           "type_snapshot": {

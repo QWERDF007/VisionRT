@@ -141,27 +141,26 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
         return {};
     const SourcePort source{sourceNode->id, outputPortId};
 
-    auto compatible = impl_->editor.compatibleInputs(impl_->flow.toStdString(), source);
+    auto candidates = candidateInputsWithState(*flow, source);
 
     std::map<NodeId, QVariantList> nodeInputsMap;
-    for (const auto &input : compatible)
+    for (const auto &candidate : candidates)
     {
-        const auto *target = impl_->findNode(input.node);
+        const auto *target = impl_->findNode(candidate.node);
         if (!target)
             continue;
         const auto *definition = impl_->registry.find(target->toolId);
-        const auto *portDef = definition ? workbench::port(definition->inputs, input.port) : nullptr;
-        const auto &inputType = target->signatures.inputs.at(input.port);
-        const auto it = target->inputs.find(input.port);
-        const bool connected = (it != target->inputs.end() && it->second.mode == BindingMode::Upstream && it->second.source == source);
-        const bool occupied = (it != target->inputs.end() && it->second.mode == BindingMode::Upstream && it->second.source.has_value() && !connected);
+        const auto *portDef = definition ? workbench::port(definition->inputs, candidate.port) : nullptr;
+        const auto &inputType = target->signatures.inputs.at(candidate.port);
 
-        nodeInputsMap[input.node].push_back(QVariantMap{
-            {"port", q(input.port)},
-            {"name", portDef ? q(portDef->name) : q(input.port)},
+        nodeInputsMap[candidate.node].push_back(QVariantMap{
+            {"port", q(candidate.port)},
+            {"name", portDef ? q(portDef->name) : q(candidate.port)},
+            {"title", portDef ? q(portDef->name) : q(candidate.port)},
             {"type", displayTypeName(inputType)},
-            {"connected", connected},
-            {"occupied", occupied}
+            {"typeText", displayTypeName(inputType)},
+            {"connected", candidate.connected},
+            {"occupied", candidate.occupied}
         });
     }
 

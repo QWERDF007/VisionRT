@@ -86,7 +86,7 @@ void flowCanvasContract()
     QVariantList ids;
     for (const auto &value : app.nodes())
         ids.push_back(value.toMap().value("id"));
-    require(app.moveNodes({QStringLiteral("2")}, -2, 1), "cannot place routing obstacle between bound nodes");
+    require(app.moveNodes({QStringLiteral("2")}, -2, 0), "cannot place routing obstacle between bound nodes");
     QTest::qWait(50);
     QQuickItem *bypass = nullptr;
     QList<QQuickItem *> pending{surface};

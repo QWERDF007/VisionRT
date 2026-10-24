@@ -15,7 +15,7 @@ QVariantMap textTarget(QVariantMap context)
 
 bool AppController::Impl::readsAllowed() const noexcept
 {
-    return runtime->state() == RuntimeState::Idle || readback.has_value();
+    return state == RuntimeState::Idle || readback.has_value();
 }
 
 void AppController::Impl::drainReaders()
@@ -122,11 +122,12 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy, boo
     impl_->approvedTextContext.clear();
     const auto generation = impl_->generation;
     impl_->textTask       = std::async(std::launch::async,
-                                       [captured = std::move(*captured), copy, generation, context, diagnostic]
+                                       [captured = std::move(*captured), copy, generation, context, diagnostic, this]
                                        {
-                                     auto text = diagnostic ? OutputModel::diagnosticText(captured)
-                                                                  : OutputModel::fullText(captured);
-                                     return Impl::TextResult{std::move(text), copy, generation, context};
-                                 });
+                                           auto text = diagnostic ? OutputModel::diagnosticText(captured)
+                                                                        : OutputModel::fullText(captured);
+                                           QMetaObject::invokeMethod(this, [this] { impl_->updateReadback(); }, Qt::QueuedConnection);
+                                           return Impl::TextResult{std::move(text), copy, generation, context};
+                                       });
 }
 } // namespace visionrt

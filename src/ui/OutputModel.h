@@ -1,5 +1,6 @@
 #pragma once
 #include "runtime/Snapshot.h"
+#include "ui/DisplayTypes.h"
 
 #include <QAbstractTableModel>
 #include <QVariantMap>
@@ -64,7 +65,6 @@ private:
     std::vector<Row> rows_;
 };
 
-QString displayTypeName(const TypeSpec &type);
 QString typeText(const TypeSpec &type);
 QString valueText(const PortValue &value, const TypeSpec &type);
 } // namespace visionrt

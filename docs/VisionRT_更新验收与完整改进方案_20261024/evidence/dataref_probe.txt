@@ -1,0 +1,3 @@
+PASS: shared writable payload; retained dependency lifetime; last-owner release once
+
+exit_code=0

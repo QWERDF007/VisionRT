@@ -27,6 +27,37 @@ struct PortRelation
     bool operator==(const PortRelation &) const = default;
 };
 
+enum class BindingError
+{
+    None = 0,
+    Self,
+    OtherFlow,
+    SameOrUpperRow,
+    MissingPort,
+    TypeMismatch,
+    Cycle,
+};
+
+struct BindingCheck
+{
+    BindingError reason = BindingError::None;
+    std::string  message;
+    explicit operator bool() const noexcept { return reason == BindingError::None; }
+};
+
+BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, const std::string &sourcePort,
+                            NodeId targetNodeId, const std::string &targetInputPort);
+
+struct CandidateInput
+{
+    NodeId      node{};
+    std::string port;
+    bool        connected = false;
+    bool        occupied  = false;
+};
+
+std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow, const SourcePort &source);
+
 struct PortRelations
 {
     std::vector<PortRelation> active;

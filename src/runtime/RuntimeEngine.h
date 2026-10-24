@@ -116,6 +116,7 @@ public:
     void           requestStop();
     void           setReadbackEnabled(bool enabled);
     bool           acknowledgeReadback(RuntimeReadback readback);
+    void           setReadbackCallback(std::function<void(RuntimeReadback)> callback);
     ToolStatus     requestReset();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);
