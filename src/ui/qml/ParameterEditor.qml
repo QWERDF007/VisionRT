@@ -341,8 +341,8 @@ ColumnLayout {
             onActivated: function(index) { root.commit(model[index].value) }
             HoverHandler { id: choiceHover }
             QuiToolTip {
-                visible: choiceHover.hovered && text.length > 0 && choice.contentItem && choice.contentItem.truncated
-                text: choice.currentText || ""
+                visible: choiceHover.hovered && text.length > 0 && Boolean(choice.contentItem && (choice.contentItem.truncated || choice.contentItem.contentWidth > choice.contentItem.width))
+                text: choice.displayText || choice.currentText || ""
                 delay: 500
             }
         }
