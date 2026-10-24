@@ -223,12 +223,12 @@ def execute(inputs):
     ProjectEditor editor;
     const auto    flow    = editor.project().flows.front().id;
     const auto    reader  = editor.addNode(flow, *registry.find("visionrt.image.read"), {0, 0});
-    const auto    before  = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {10, 0});
-    const auto    bridge  = editor.addNode(flow, *registry.find(relay.id), {20, 0});
-    const auto    after   = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {30, 0});
-    const auto    crop    = editor.addNode(flow, *registry.find("visionrt.image.crop"), {40, 0});
-    const auto    builtin = editor.addNode(flow, *registry.find("visiontools.python.image_sizes"), {20, 10});
-    const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.id), {50, 0});
+    const auto    before  = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 10});
+    const auto    bridge  = editor.addNode(flow, *registry.find(relay.id), {0, 20});
+    const auto    after   = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 30});
+    const auto    crop    = editor.addNode(flow, *registry.find("visionrt.image.crop"), {0, 40});
+    const auto    builtin = editor.addNode(flow, *registry.find("visiontools.python.image_sizes"), {10, 15});
+    const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.id), {0, 50});
     editor.setLiteral(flow, reader, "mode", std::string("directory"));
     editor.setLiteral(flow, reader, "path", std::string("images"));
     editor.setLiteral(flow, reader, "color", std::string("gray"));
@@ -312,7 +312,7 @@ def execute(inputs):
         ProjectEditor ownership;
         const auto    ownershipFlow = ownership.project().flows.front().id;
         const auto    parent        = ownership.addNode(ownershipFlow, *registry.find(generated.id), {0, 0});
-        const auto    child         = ownership.addNode(ownershipFlow, *registry.find("visionrt.image.crop"), {2, 0});
+        const auto    child         = ownership.addNode(ownershipFlow, *registry.find("visionrt.image.crop"), {0, 2});
         ownership.bindFreeInput(ownershipFlow, {parent, "images"}, {child, "images"});
         ownership.setLiteral(ownershipFlow, child, "rect", DataRef<ROI>(ROI{{{2., 1., 2., 4., 3., 0.}}}));
         ownership.setMode(ownershipFlow, child, "rect", BindingMode::Literal);

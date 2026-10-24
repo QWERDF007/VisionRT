@@ -25,6 +25,9 @@ public:
     std::vector<PythonImplementation> refresh(std::span<const ToolDefinition> definitions);
     ToolFactory                       factory(const ToolDefinition &definition) const;
 
+    bool        isCloseReady() const noexcept;
+    std::size_t activeReferences() const noexcept;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

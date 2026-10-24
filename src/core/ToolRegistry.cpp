@@ -167,12 +167,18 @@ void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory facto
     const auto *definition = find(toolId);
     if (!definition || (definition->kind != ToolKind::PythonFunction && definition->kind != ToolKind::PythonClass))
         throw ContractError("注册 Python 实现需要已加载的 Python 工具声明：" + toolId);
-    std::shared_ptr<ToolStatus> statusPtr;
+    std::shared_ptr<PythonLoadState> loadState;
     if (const auto *pyFunctor = factory.target<PythonFactoryFunctor>())
-        statusPtr = pyFunctor->status;
-    if (!statusPtr)
-        statusPtr = std::make_shared<ToolStatus>(std::move(status));
-    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(statusPtr)});
+        loadState = pyFunctor->loadState;
+    if (!loadState)
+        loadState = std::make_shared<PythonLoadState>(std::move(status));
+    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(loadState)});
+}
+
+std::shared_ptr<PythonLoadState> ToolRegistry::pythonLoadState(std::string_view id) const
+{
+    const auto it = python_.find(id);
+    return it != python_.end() ? it->second.loadState : nullptr;
 }
 
 void ToolRegistry::registerHostBinding(std::string bindingName, HostBindingFactory factory)
@@ -222,10 +228,14 @@ Availability ToolRegistry::availability(std::string_view id) const
     const auto implementation = python_.find(id);
     if (implementation != python_.end())
     {
-        if (implementation->second.status && !*implementation->second.status)
-            return {ToolAvailability::ImplementationUnavailable, *implementation->second.status};
-        if (implementation->second.factory && implementation->second.status && *implementation->second.status)
-            return {ToolAvailability::Available, {}};
+        if (implementation->second.loadState)
+        {
+            const auto snap = implementation->second.loadState->snapshot();
+            if (!snap.status)
+                return {ToolAvailability::ImplementationUnavailable, snap.status};
+            if (implementation->second.factory && snap.status)
+                return {ToolAvailability::Available, {}};
+        }
     }
     return {
         ToolAvailability::ImplementationUnavailable,
@@ -290,8 +300,8 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     }
     catch (const RegistryError &error)
     {
-        if (it->second.status && error.reason == ToolAvailability::ImplementationUnavailable)
-            *it->second.status = error.status;
+        if (it->second.loadState && error.reason == ToolAvailability::ImplementationUnavailable)
+            it->second.loadState->update(error.status);
         throw;
     }
 }

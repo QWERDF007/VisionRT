@@ -61,9 +61,9 @@ void portProjectionRetainsIdentityAndRejectsInvalidReferences()
     auto tool = integerTool();
     tool.outputs.push_back({"other", "另一输出", {Type::Int}});
     ProjectEditor editor;
-    const auto source = editor.addNode("flow_1", tool, {});
-    const auto target = editor.addNode("flow_1", tool, {1, 0});
-    const auto branch = editor.addNode("flow_1", tool, {2, 0});
+    const auto source = editor.addNode("flow_1", tool, {0, 0});
+    const auto target = editor.addNode("flow_1", tool, {0, 1});
+    const auto branch = editor.addNode("flow_1", tool, {0, 2});
     editor.setBinding("flow_1", target, "first", {BindingMode::Upstream, Missing{}, SourcePort{source, "value"}});
     editor.setBinding("flow_1", target, "second", {BindingMode::Upstream, Missing{}, SourcePort{source, "other"}});
     editor.setBinding("flow_1", branch, "first", {BindingMode::Upstream, Missing{}, SourcePort{source, "value"}});
@@ -106,10 +106,10 @@ void cycleRejectionIsAtomic()
 {
     ProjectEditor editor;
     const auto    tool  = integerTool();
-    const auto    a     = editor.addNode("flow_1", tool, {0, 0});
-    const auto    b     = editor.addNode("flow_1", tool, {0, 1});
-    const auto    c     = editor.addNode("flow_1", tool, {0, 2});
-    const auto    spare = editor.addNode("flow_1", tool, {1, 0});
+    const auto    a     = editor.addNode("flow_1", tool, {0, 1});
+    const auto    b     = editor.addNode("flow_1", tool, {0, 2});
+    const auto    c     = editor.addNode("flow_1", tool, {0, 3});
+    const auto    spare = editor.addNode("flow_1", tool, {0, 0});
     editor.setBinding("flow_1", b, "first",
                       {
                           BindingMode::Upstream, std::int64_t{10},
@@ -150,7 +150,7 @@ void inactiveDraftsOnlyDirty()
     ProjectEditor editor;
     const auto    tool      = integerTool();
     const auto    a         = editor.addNode("flow_1", tool, {0, 0});
-    const auto    b         = editor.addNode("flow_1", tool, {1, 0});
+    const auto    b         = editor.addNode("flow_1", tool, {0, 1});
     const auto    structure = editor.project().flows.front().structureRevision;
     editor.markSaved();
     assert(editor.setSource("flow_1", b, "first", SourcePort{a, "value"}));
@@ -209,10 +209,10 @@ void copiesRemapInternalSourcesAndPreserveOriginals()
     auto          tool = integerTool();
     tool.initParams.push_back({"source_flow_id", "来源流程", {Type::String}, std::string("flow_1")});
     tool.initParams.push_back({"source_node_seq", "来源节点", {Type::String}, std::string("0")});
-    const auto external   = editor.addNode("flow_1", tool, {-1, 0});
-    const auto a          = editor.addNode("flow_1", tool, {0, 0});
-    const auto b          = editor.addNode("flow_1", tool, {0, 1});
-    const auto downstream = editor.addNode("flow_1", tool, {0, 2});
+    const auto external   = editor.addNode("flow_1", tool, {0, 0});
+    const auto a          = editor.addNode("flow_1", tool, {0, 1});
+    const auto b          = editor.addNode("flow_1", tool, {0, 2});
+    const auto downstream = editor.addNode("flow_1", tool, {0, 3});
     editor.setBinding("flow_1", a, "first",
                       {
                           BindingMode::Upstream, std::int64_t{71},
@@ -268,9 +268,11 @@ void movementAndDeletionAreAtomic()
     const auto    tool = integerTool();
     const auto    a    = editor.addNode("flow_1", tool, {0, 0});
     const auto    b    = editor.addNode("flow_1", tool, {1, 0});
-    const auto    c    = editor.addNode("flow_1", tool, {2, 0});
+    const auto    blocker = editor.addNode("flow_1", tool, {2, 0});
+    (void)blocker;
     const auto    near = editor.addNode("flow_1", tool, {2, 0});
     assert((node(editor, near).position == GridPoint{2, -1}));
+    const auto    c    = editor.addNode("flow_1", tool, {2, 2});
     editor.setBinding("flow_1", c, "first",
                       {
                           BindingMode::Upstream, std::int64_t{10},
@@ -346,7 +348,7 @@ void exhaustedCountersAndCoordinateOverflowRejectWithoutChanges()
 {
     ProjectEditor editor;
     const auto    tool = integerTool();
-    const auto    a    = editor.addNode("flow_1", tool, {std::numeric_limits<int>::max(), 0});
+    const auto    a    = editor.addNode("flow_1", tool, {std::numeric_limits<int>::max(), 2});
     const auto    b    = editor.addNode("flow_1", tool, {0, 1});
     editor.markSaved();
     rejects([&] { editor.moveNodes("flow_1", std::array{a, b}, {1, 0}); });
@@ -400,10 +402,10 @@ void compatibilityAndRelationshipMenusUseEffectiveInputs()
     ProjectEditor editor;
     const auto    tool           = integerTool();
     const auto    a              = editor.addNode("flow_1", tool, {0, 0});
-    const auto    b              = editor.addNode("flow_1", tool, {1, 0});
+    const auto    b              = editor.addNode("flow_1", tool, {0, 2});
     auto          boolean        = integerTool();
     boolean.outputs.front().type = {Type::Bool};
-    const auto incompatible      = editor.addNode("flow_1", boolean, {2, 0});
+    const auto incompatible      = editor.addNode("flow_1", boolean, {0, 1});
     const auto otherFlow         = editor.addFlow();
     const auto otherNode         = editor.addNode(otherFlow, tool, {0, 0});
     editor.markSaved();
@@ -468,12 +470,12 @@ void receiverOutputFollowsItsSource()
     editor.setInitParam("flow_1", receive, "source_node_seq", std::string(std::to_string(sender)));
     editor.setInitParam("flow_1", receive, "source_port_id", std::string("value"));
     assert(node(editor, receive).signatures.outputs.at("value") == TypeSpec{Type::Int});
-    const auto sink = editor.addNode("flow_1", integerTool(), {1, 0});
+    const auto sink = editor.addNode("flow_1", integerTool(), {0, 10});
     editor.setSource("flow_1", sink, "first", SourcePort{receive, "value"});
     editor.setMode("flow_1", sink, "first", BindingMode::Upstream);
     assert(dependencyEdges(editor.project().flows.front()).size() == 1);
-    const auto otherSink = editor.addNode("flow_1", integerTool(), {2, 0});
-    const auto replacement = editor.addNode("flow_1", integerTool(), {3, 0});
+    const auto otherSink = editor.addNode("flow_1", integerTool(), {10, 10});
+    const auto replacement = editor.addNode("flow_1", integerTool(), {10, 0});
     editor.setBinding("flow_1", otherSink, "first",
                       {BindingMode::Upstream, Missing{}, SourcePort{receive, "value"}});
     const auto revision = node(editor, receive).executionRevision;
@@ -550,6 +552,14 @@ int main()
         return 1;
     }
     portProjectionRetainsIdentityAndRejectsInvalidReferences();
+
+
+
+
+
+
+
+
     cycleRejectionIsAtomic();
     inactiveDraftsOnlyDirty();
     copiesRemapInternalSourcesAndPreserveOriginals();

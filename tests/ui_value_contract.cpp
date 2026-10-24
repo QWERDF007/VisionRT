@@ -155,7 +155,7 @@ try
         require(saved.isObject() && saved.object()["format_version"].toInt() == 3,
                 "queued save was not committed at the read-safe stage");
     }
-    app.addNode("test.ui.editor", 100, 0);
+    app.addNode("test.ui.editor", 100, 100);
     idle();
     ImageViewport viewport;
     viewport.setSize({480, 320});

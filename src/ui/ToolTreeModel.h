@@ -24,6 +24,7 @@ public:
     explicit ToolTreeModel(QObject *parent = nullptr);
     void                   setRegistry(const ToolRegistry &registry);
     void                   setFilter(const QString &text);
+    bool                   updateToolStatus(const QString &toolId, bool available, const QString &status);
     QModelIndex            index(int row, int column, const QModelIndex &parent = {}) const override;
     QModelIndex            parent(const QModelIndex &index) const override;
     int                    rowCount(const QModelIndex &parent = {}) const override;

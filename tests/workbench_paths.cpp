@@ -79,7 +79,7 @@ void pathEditorsContract()
 
     visionrt::AppController app(1, directory.path());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "path tool initialization did not finish");
-    app.addNode("test.paths", 0, 0);
+    app.addNode("test.paths", 0, 10);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.nodes().size() == 1, "path fixture tool was not discovered");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
@@ -108,7 +108,15 @@ void pathEditorsContract()
     require(QTest::qWaitForWindowActive(&window), "path window did not become active");
     const auto findVisible = [&](const auto &matches) -> QQuickItem *
     {
-        QList<QQuickItem *> pending{window.contentItem()};
+        QList<QQuickItem *> pending;
+        for (auto *w : QGuiApplication::topLevelWindows())
+        {
+            if (auto *qw = qobject_cast<QQuickWindow *>(w))
+            {
+                if (qw->isVisible() && qw->contentItem())
+                    pending.append(qw->contentItem());
+            }
+        }
         while (!pending.isEmpty())
         {
             auto *item = pending.takeLast();
@@ -125,7 +133,8 @@ void pathEditorsContract()
                 ? QString("%1 text=%2 enabled=%3").arg(item->metaObject()->className(), item->property("text").toString())
                     .arg(item->isEnabled()).toStdString()
                 : std::string("missing item")));
-        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+        auto *win = item->window() ? item->window() : &window;
+        QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier,
                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
         QTest::qWait(50);
     };
@@ -152,6 +161,7 @@ void pathEditorsContract()
                 "path chooser did not accept its initial folder");
         const auto openPicker = [&]
         {
+            picker->setProperty("currentFolder", QUrl::fromLocalFile(root.filePath(nested)));
             click(findVisible([&](QQuickItem *item)
             {
                 return item->property("text").toString() == (id == "file" ? QStringLiteral("选择文件") : QStringLiteral("选择文件夹"))
@@ -166,7 +176,16 @@ void pathEditorsContract()
         const auto original = value(id);
         QSignalSpy changes(&app, &visionrt::AppController::parametersChanged);
         openPicker();
-        QTest::keyClick(&window, Qt::Key_Escape);
+        std::cerr << "AFTER OPEN PICKER: visible=" << picker->property("visible").toBool() << std::endl;
+        for (auto *w : QGuiApplication::topLevelWindows()) {
+            std::cerr << "  WIN: " << w->metaObject()->className() << " active=" << w->isActive() << " visible=" << w->isVisible() << std::endl;
+        }
+        // Try keyClick on all windows
+        for (auto *w : QGuiApplication::topLevelWindows()) {
+            if (w->isVisible()) {
+                QTest::keyClick(w, Qt::Key_Escape);
+            }
+        }
         require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500), "Escape did not cancel the chooser");
         require(value(id) == original && !app.dirty() && changes.isEmpty(), "cancelled path selection changed the project");
         openPicker();
@@ -221,7 +240,7 @@ void pathEditorsContract()
     require(!app.setParameterPath("path", false, QUrl("https://example.invalid/image.png")) && value("path") == localPath,
             "a remote URL was submitted as a local path");
     const auto targetNode = app.selectedNode();
-    app.addNode("test.paths", 1, 0);
+    app.addNode("test.paths", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto modeSource = app.selectedNode();
     app.selectNode(targetNode);

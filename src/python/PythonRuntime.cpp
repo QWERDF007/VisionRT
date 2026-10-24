@@ -26,8 +26,8 @@ namespace {
 
 struct Implementation
 {
-    std::shared_ptr<ToolStatus> status = std::make_shared<ToolStatus>();
-    py::object                  symbol;
+    std::shared_ptr<PythonLoadState> loadState = std::make_shared<PythonLoadState>();
+    py::object                       symbol;
 };
 
 struct ToolObjects;
@@ -233,12 +233,12 @@ class PythonTool final
 {
 public:
     PythonTool(std::shared_ptr<RuntimeState> state, std::shared_ptr<const ToolDefinition> definition,
-               ToolServices services, std::shared_ptr<ToolStatus> sharedStatus)
+               ToolServices services, std::shared_ptr<PythonLoadState> sharedLoadState)
         : state_(std::move(state))
         , definitionOwner_(std::move(definition))
         , definition_(*definitionOwner_)
         , services_(std::move(services))
-        , sharedStatus_(std::move(sharedStatus))
+        , sharedLoadState_(std::move(sharedLoadState))
         , generation_(state_ ? state_->generation : 0)
         , objects_(std::make_shared<ToolObjects>())
     {
@@ -468,21 +468,20 @@ private:
         if (!state_ || !state_->alive || generation_ != state_->generation)
         {
             ToolStatus err{-3, "Python 实例跨代失效或运行时已关闭：" + definition_.id};
-            if (sharedStatus_)
-                *sharedStatus_ = err;
             return err;
         }
         const auto it = state_->implementations.find(definition_.id);
         if (it == state_->implementations.end())
         {
             ToolStatus err{-3, "Python 实现未注册：" + definition_.id};
-            if (sharedStatus_)
-                *sharedStatus_ = err;
+            if (sharedLoadState_)
+                sharedLoadState_->update(err);
             return err;
         }
         auto &impl = it->second;
-        if (!*impl.status)
-            return *impl.status;
+        auto snap = impl.loadState->snapshot();
+        if (!snap.status)
+            return snap.status;
 
         if (!impl.symbol)
         {
@@ -511,19 +510,21 @@ private:
             }
             catch (const py::error_already_set &error)
             {
-                *impl.status = errorStatus(-3, "Python 加载异常", error.what());
-                impl.symbol  = py::object{};
-                if (sharedStatus_)
-                    *sharedStatus_ = *impl.status;
-                return *impl.status;
+                auto err = errorStatus(-3, "Python 加载异常", error.what());
+                impl.loadState->update(err);
+                impl.symbol = py::object{};
+                if (sharedLoadState_)
+                    sharedLoadState_->update(err);
+                return err;
             }
             catch (const std::exception &error)
             {
-                *impl.status = errorStatus(-3, "Python 加载异常", error.what());
-                impl.symbol  = py::object{};
-                if (sharedStatus_)
-                    *sharedStatus_ = *impl.status;
-                return *impl.status;
+                auto err = errorStatus(-3, "Python 加载异常", error.what());
+                impl.loadState->update(err);
+                impl.symbol = py::object{};
+                if (sharedLoadState_)
+                    sharedLoadState_->update(err);
+                return err;
             }
         }
 
@@ -544,9 +545,9 @@ private:
             objects_->instance = py::none();
             objects_->execute  = py::none();
             auto err = errorStatus(-1, "Python 实例创建异常", error.what());
-            *impl.status = err;
-            if (sharedStatus_)
-                *sharedStatus_ = err;
+            impl.loadState->update(err);
+            if (sharedLoadState_)
+                sharedLoadState_->update(err);
             return err;
         }
         catch (const std::exception &error)
@@ -554,9 +555,9 @@ private:
             objects_->instance = py::none();
             objects_->execute  = py::none();
             auto err = errorStatus(-1, "Python 实例创建异常", error.what());
-            *impl.status = err;
-            if (sharedStatus_)
-                *sharedStatus_ = err;
+            impl.loadState->update(err);
+            if (sharedLoadState_)
+                sharedLoadState_->update(err);
             return err;
         }
 
@@ -572,7 +573,7 @@ private:
     const std::size_t                     businessOutputCount_ = static_cast<std::size_t>(
         std::count_if(definition_.outputs.begin(), definition_.outputs.end(), isBusinessOutput));
     ToolServices                 services_;
-    std::shared_ptr<ToolStatus>  sharedStatus_;
+    std::shared_ptr<PythonLoadState> sharedLoadState_;
     std::shared_ptr<ToolObjects> objects_;
     ExecutionMetrics             metrics_;
     NodePhase                    phase_      = NodePhase::Execute;
@@ -708,28 +709,30 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
         if (definition.kind != ToolKind::PythonFunction && definition.kind != ToolKind::PythonClass)
             continue;
         Implementation implementation;
+        ToolStatus initStatus{};
         try
         {
             const auto script = definition.pythonScript();
             if (!std::filesystem::is_regular_file(script))
-                *implementation.status = {-3, "Python 脚本缺失", text(script)};
+                initStatus = {-3, "Python 脚本缺失", text(script)};
             else if (definition.entry.file.extension() != ".py")
-                *implementation.status = {-3, "Python 入口必须是 .py 文件", text(script)};
+                initStatus = {-3, "Python 入口必须是 .py 文件", text(script)};
             else if (definition.entry.symbol.empty())
-                *implementation.status = {-3, "Python 入口缺少 symbol", text(script)};
+                initStatus = {-3, "Python 入口缺少 symbol", text(script)};
         }
         catch (const ContractError &error)
         {
-            *implementation.status = {-2, error.what()};
+            initStatus = {-2, error.what()};
         }
         catch (const std::exception &error)
         {
-            *implementation.status = {-2, error.what()};
+            initStatus = {-2, error.what()};
         }
+        implementation.loadState->set(std::move(initStatus), state.generation);
         const auto [entry, inserted] = state.implementations.emplace(definition.id, std::move(implementation));
         if (!inserted)
             throw ContractError("Python 目录有重复工具 ID：" + definition.id);
-        statuses.push_back({definition.id, *entry->second.status});
+        statuses.push_back({definition.id, entry->second.loadState->status()});
     }
     return statuses;
 }
@@ -738,15 +741,15 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
 {
     py::gil_scoped_acquire gil;
     auto state = impl_->state;
-    std::shared_ptr<ToolStatus> status;
+    std::shared_ptr<PythonLoadState> loadState;
     const auto it = state->implementations.find(definition.id);
     if (it != state->implementations.end())
-        status = it->second.status;
+        loadState = it->second.loadState;
     else
-        status = std::make_shared<ToolStatus>(-3, "Python 实现未注册：" + definition.id);
+        loadState = std::make_shared<PythonLoadState>(ToolStatus{-3, "Python 实现未注册：" + definition.id});
 
     auto defPtr = std::make_shared<const ToolDefinition>(definition);
-    auto createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, status,
+    auto createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState,
                        generation = state->generation](
                           const PlatformToolServices &services) -> std::unique_ptr<IToolInstance>
     {
@@ -755,12 +758,26 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
             throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 运行时已关闭：" + defPtr->id);
         if (lockedState->generation != generation)
             throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 运行时已刷新：" + defPtr->id);
-        if (status && !*status)
-            throw RegistryError(ToolAvailability::ImplementationUnavailable, *status);
-        return std::make_unique<PythonTool>(std::move(lockedState), defPtr, services, status);
+        if (loadState)
+        {
+            auto status = loadState->status();
+            if (!status)
+                throw RegistryError(ToolAvailability::ImplementationUnavailable, status);
+        }
+        return std::make_unique<PythonTool>(std::move(lockedState), defPtr, services, loadState);
     };
 
-    return ToolFactory(PythonFactoryFunctor{std::move(status), std::move(createFunc)});
+    return ToolFactory(PythonFactoryFunctor{std::move(loadState), std::move(createFunc)});
+}
+
+bool PythonRuntime::isCloseReady() const noexcept
+{
+    return impl_ ? impl_->state->storage.isReadyForClose() : true;
+}
+
+std::size_t PythonRuntime::activeReferences() const noexcept
+{
+    return impl_ ? impl_->state->storage.activeCount() : 0;
 }
 
 } // namespace visionrt

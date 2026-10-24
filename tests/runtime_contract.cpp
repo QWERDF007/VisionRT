@@ -1042,7 +1042,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         {
             auto sinkDefinition = definition("test.integer.sink", {"input"});
             install(registry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
-            const auto sink = editor.addNode("flow_1", sinkDefinition, {1, 0});
+            const auto sink = editor.addNode("flow_1", sinkDefinition, {0, 1});
             editor.setSource("flow_1", sink, "input", SourcePort{receiver, "value"});
             editor.setMode("flow_1", sink, "input", BindingMode::Upstream);
             source.outputs.front().type = {Type::String};
@@ -1445,27 +1445,33 @@ void failedBusinessOutputsAreNotInputs()
 }
 
 int main(int argc, char **argv)
+try
 {
     assert(argc == 2);
-    optionalOutputsAndCachedMissing();
-    failedBusinessOutputsAreNotInputs();
-    explicitRequirednessAtExecution();
-    managementDiagnosticsPreserveStatus();
-    singleNodeUpstreamValidity();
-    stopWakesReceiverWait(argv[1]);
-    branchesOverlapAndJoin();
-    failureReplacesOldValueAndManualUsesCache();
-    initializationSuppressionRetryAndReset();
-    stopDrainsCommittedFlowsAndFreezesConfiguration();
-    assert(argc == 2);
-    receiverPrecheckRejectsUnscheduledSources(argv[1]);
-    singleReceiverResolvesAllValueTypes(argv[1]);
-    receiverConsumesFailures();
-    hostBindingReceiverContract();
-    executionDiagnostics();
-    managementWaitsForActiveInvocation();
-    executionMetricsAndTimingSeparation();
-    timingRecordedOnFailure();
-    crossRoundPythonMetricIsolation();
+    std::cout << "1\n"; optionalOutputsAndCachedMissing();
+    std::cout << "2\n"; failedBusinessOutputsAreNotInputs();
+    std::cout << "3\n"; explicitRequirednessAtExecution();
+    std::cout << "4\n"; managementDiagnosticsPreserveStatus();
+    std::cout << "5\n"; singleNodeUpstreamValidity();
+    std::cout << "6\n"; stopWakesReceiverWait(argv[1]);
+    std::cout << "7\n"; branchesOverlapAndJoin();
+    std::cout << "8\n"; failureReplacesOldValueAndManualUsesCache();
+    std::cout << "9\n"; initializationSuppressionRetryAndReset();
+    std::cout << "10\n"; stopDrainsCommittedFlowsAndFreezesConfiguration();
+    std::cout << "11\n"; receiverPrecheckRejectsUnscheduledSources(argv[1]);
+    std::cout << "12\n"; singleReceiverResolvesAllValueTypes(argv[1]);
+    std::cout << "13\n"; receiverConsumesFailures();
+    std::cout << "14\n"; hostBindingReceiverContract();
+    std::cout << "15\n"; executionDiagnostics();
+    std::cout << "16\n"; managementWaitsForActiveInvocation();
+    std::cout << "17\n"; executionMetricsAndTimingSeparation();
+    std::cout << "18\n"; timingRecordedOnFailure();
+    std::cout << "19\n"; crossRoundPythonMetricIsolation();
     std::cout << "runtime contracts passed\n";
+    return 0;
+}
+catch (const std::exception &e)
+{
+    std::cerr << "CAUGHT EXCEPTION: " << e.what() << std::endl;
+    return 1;
 }

@@ -10,6 +10,7 @@ void AppController::Impl::finishRoi()
 {
     if (!roi)
         return;
+    ++roiSerial;
     const auto view = roi->view;
     index           = roi->resultIndex;
     roi.reset();

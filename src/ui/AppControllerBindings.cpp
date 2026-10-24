@@ -1,3 +1,4 @@
+#include "ui/OutputModel.h"
 #include "ui/AppController_p.h"
 
 namespace visionrt {
@@ -20,10 +21,11 @@ QVariantMap AppController::portContext(const QString &port, bool output) const
                         {"revision", QString::number(node->executionRevision)}};
     if (output)
     {
-        const auto captured = impl_->outputs.capture(port);
-        if (!captured)
+        if (!node->signatures.outputs.contains(port.toStdString()))
             return {};
-        context.insert("publication", QString::number(captured->publication));
+        const auto captured = impl_->outputs.capture(port);
+        if (captured)
+            context.insert("publication", QString::number(captured->publication));
     }
     else if (!node->inputs.contains(port.toStdString()))
         return {};
@@ -32,8 +34,25 @@ QVariantMap AppController::portContext(const QString &port, bool output) const
 
 bool AppController::portContextCurrent(const QVariantMap &context) const
 {
-    return !context.isEmpty()
-           && context == portContext(context.value("port").toString(), context.value("output").toBool());
+    if (context.isEmpty())
+        return false;
+    const auto current = portContext(context.value("port").toString(), context.value("output").toBool());
+    if (current.isEmpty())
+        return false;
+    if (context.value("project") != current.value("project")
+        || context.value("flow") != current.value("flow")
+        || context.value("node") != current.value("node")
+        || context.value("port") != current.value("port")
+        || context.value("output") != current.value("output")
+        || context.value("structure") != current.value("structure"))
+    {
+        return false;
+    }
+    if (context.contains("publication") && context.value("publication") != current.value("publication"))
+        return false;
+    if (context.contains("interaction") && context.value("interaction") != current.value("interaction"))
+        return false;
+    return true;
 }
 
 QVariantList AppController::bindingCandidates(const QVariantMap &context) const
@@ -106,6 +125,79 @@ bool AppController::unbindInput(const QVariantMap &context)
             impl_->finishRoi();
             return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input.toStdString());
         });
+}
+
+QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) const
+{
+    if (!context.value("output").toBool() || !portContextCurrent(context))
+        return {};
+    const auto *sourceNode = impl_->currentNode();
+    const auto *flow = impl_->currentFlow();
+    if (!sourceNode || !flow)
+        return {};
+
+    const auto outputPortId = context.value("port").toString().toStdString();
+    if (!sourceNode->signatures.outputs.contains(outputPortId))
+        return {};
+    const SourcePort source{sourceNode->id, outputPortId};
+
+    auto compatible = impl_->editor.compatibleInputs(impl_->flow.toStdString(), source);
+
+    std::map<NodeId, QVariantList> nodeInputsMap;
+    for (const auto &input : compatible)
+    {
+        const auto *target = impl_->findNode(input.node);
+        if (!target)
+            continue;
+        const auto *definition = impl_->registry.find(target->toolId);
+        const auto *portDef = definition ? workbench::port(definition->inputs, input.port) : nullptr;
+        const auto &inputType = target->signatures.inputs.at(input.port);
+        const auto it = target->inputs.find(input.port);
+        const bool connected = (it != target->inputs.end() && it->second.mode == BindingMode::Upstream && it->second.source == source);
+        const bool occupied = (it != target->inputs.end() && it->second.mode == BindingMode::Upstream && it->second.source.has_value() && !connected);
+
+        nodeInputsMap[input.node].push_back(QVariantMap{
+            {"port", q(input.port)},
+            {"name", portDef ? q(portDef->name) : q(input.port)},
+            {"type", displayTypeName(inputType)},
+            {"connected", connected},
+            {"occupied", occupied}
+        });
+    }
+
+    struct TargetGroup
+    {
+        const NodeDefinition *node = nullptr;
+        QVariantList inputs;
+    };
+    std::vector<TargetGroup> groups;
+    for (auto &[nodeId, inputs] : nodeInputsMap)
+    {
+        const auto *targetNode = impl_->findNode(nodeId);
+        if (targetNode)
+            groups.push_back({targetNode, std::move(inputs)});
+    }
+
+    std::sort(groups.begin(), groups.end(), [](const auto &a, const auto &b) {
+        if (a.node->position.y != b.node->position.y)
+            return a.node->position.y < b.node->position.y;
+        if (a.node->position.x != b.node->position.x)
+            return a.node->position.x < b.node->position.x;
+        return a.node->id < b.node->id;
+    });
+
+    QVariantList result;
+    for (const auto &g : groups)
+    {
+        result.push_back(QVariantMap{
+            {"node", QString::number(g.node->id)},
+            {"title", q(g.node->title())},
+            {"gridY", g.node->position.y},
+            {"gridX", g.node->position.x},
+            {"inputs", g.inputs}
+        });
+    }
+    return result;
 }
 
 QVariantList AppController::relationTargets(const QVariantMap &context) const

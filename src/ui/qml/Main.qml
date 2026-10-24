@@ -481,11 +481,7 @@ ApplicationWindow {
                     iconColor: "#57606a"
                 }
                 QuiText {
-                    text: {
-                        let name = "流程1"
-                        for (let f of app.flows) if (f.id === app.currentFlow) { name = f.name; break }
-                        return name + "运行时间: " + (app.timingText || "0ms")
-                    }
+                    text: app.timingText
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
                     color: "#57606a"
                 }

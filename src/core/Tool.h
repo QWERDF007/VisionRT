@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/PythonLoadState.h"
 #include "core/ToolDefinition.h"
 #include "visionrt/contracts/Tool.h"
 
@@ -38,7 +39,7 @@ using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformT
 
 struct PythonFactoryFunctor
 {
-    std::shared_ptr<ToolStatus>                                                 status;
+    std::shared_ptr<PythonLoadState>                                            loadState;
     std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)> create;
 
     std::unique_ptr<IToolInstance> operator()(const PlatformToolServices &services) const

@@ -91,6 +91,7 @@ struct RuntimeUpdate
     std::vector<NodeUpdate>          nodes;
     std::vector<FlowTiming>          flows;
     double                           roundMilliseconds = 0;
+    double                           sessionElapsedMilliseconds = 0;
     // Only events produced since the previous poll, ordered by sequence.
     std::vector<RuntimeDiagnostic>   diagnostics;
     // Events evicted before this poll; reported once by the consumer.

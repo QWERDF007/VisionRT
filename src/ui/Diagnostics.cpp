@@ -7,6 +7,14 @@
 #include <utility>
 
 namespace visionrt {
+QString statusSummary(const ToolStatus &status)
+{
+    auto message = QString::fromStdString(status.message);
+    if (message.trimmed().isEmpty() && status.code != 0)
+        message = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
+    return message;
+}
+
 namespace {
 std::pair<const char *, const char *> phaseNames(NodePhase phase)
 {
@@ -96,10 +104,7 @@ QString summary(const QString &message)
 
 QString summary(const ToolStatus &status)
 {
-    auto message = QString::fromStdString(status.message);
-    if (message.trimmed().isEmpty() && status.code != 0)
-        message = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
-    return message;
+    return statusSummary(status);
 }
 
 QString summary(const NodeDiagnostic &diagnostic)

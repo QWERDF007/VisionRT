@@ -492,11 +492,15 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
     if (binding.mode != BindingMode::Literal && binding.mode != BindingMode::Upstream)
         throw ContractError("输入绑定模式无效");
     validateLiteral(type, binding.literal);
-    if (binding.source
-        && !compatible(signature(findNode(target, binding.source->node).signatures.outputs, binding.source->port),
-                       type))
-        throw ContractError("上游输出与输入端口类型不兼容：" + std::to_string(binding.source->node) + "."
-                            + binding.source->port + " -> " + std::to_string(id) + "." + std::string(input));
+    if (binding.source)
+    {
+        const auto &sourceNode = findNode(target, binding.source->node);
+        if (binding.mode == BindingMode::Upstream && sourceNode.position.y >= node.position.y)
+            throw ContractError("只能连接上级节点的输出");
+        if (!compatible(signature(sourceNode.signatures.outputs, binding.source->port), type))
+            throw ContractError("上游输出与输入端口类型不兼容：" + std::to_string(binding.source->node) + "."
+                                + binding.source->port + " -> " + std::to_string(id) + "." + std::string(input));
+    }
     if (current.mode == binding.mode && current.source == binding.source
         && equalValues(current.literal, binding.literal))
         return false;
@@ -593,7 +597,7 @@ std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId
     std::vector<SourcePort> result;
     for (const auto &source : target.nodes)
     {
-        if (source.id == id || !source.unresolved.isEmpty())
+        if (source.id == id || !source.unresolved.isEmpty() || source.position.y >= node.position.y)
             continue;
         for (const auto &[port, output] : source.signatures.outputs)
         {
@@ -616,7 +620,7 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
     std::vector<InputPort> result;
     for (const auto &node : target.nodes)
     {
-        if (node.id == source.node || !node.unresolved.isEmpty())
+        if (node.id == source.node || !node.unresolved.isEmpty() || sourceNode.position.y >= node.position.y)
             continue;
         for (const auto &[input, binding] : node.inputs)
         {
@@ -773,6 +777,24 @@ bool ProjectEditor::moveNodes(std::string_view flowId, std::span<const NodeId> n
     for (const auto &node : target.nodes)
         if (!moving.contains(node.id) && destinations.contains({node.position.x, node.position.y}))
             throw ContractError("移动位置与已有节点重叠");
+    for (const auto &node : target.nodes)
+    {
+        const int targetY = moving.contains(node.id) ? node.position.y + delta.y : node.position.y;
+        for (const auto &[input, binding] : node.inputs)
+        {
+            if (binding.mode == BindingMode::Upstream && binding.source)
+            {
+                const auto sourceIt = std::find_if(target.nodes.begin(), target.nodes.end(),
+                    [&](const auto &n) { return n.id == binding.source->node; });
+                if (sourceIt != target.nodes.end())
+                {
+                    const int sourceY = moving.contains(sourceIt->id) ? sourceIt->position.y + delta.y : sourceIt->position.y;
+                    if (sourceY >= targetY)
+                        throw ContractError("移动后连接不再满足上下层关系");
+                }
+            }
+        }
+    }
     for (auto &node : target.nodes)
         if (moving.contains(node.id))
             node.position = translated(node.position, delta.x, delta.y);

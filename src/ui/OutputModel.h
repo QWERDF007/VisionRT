@@ -15,6 +15,7 @@ public:
         PortIdRole = Qt::UserRole + 1,
         NameRole,
         TypeRole,
+        TypeDisplayRole,
         PreviewRole,
         TooltipRole,
         CountRole,
@@ -25,10 +26,10 @@ public:
 
     struct Captured
     {
-        PortValue     value;
-        TypeSpec      type;
-        std::uint64_t publication = 0;
-        QString       port;
+        PortValue                             value;
+        TypeSpec                              type;
+        std::uint64_t                         publication = 0;
+        QString                               port;
         std::optional<NodeDiagnostic>         diagnostic;
         std::shared_ptr<const NodeDiagnostic> lifecycle;
     };
@@ -63,6 +64,7 @@ private:
     std::vector<Row> rows_;
 };
 
+QString displayTypeName(const TypeSpec &type);
 QString typeText(const TypeSpec &type);
 QString valueText(const PortValue &value, const TypeSpec &type);
 } // namespace visionrt

@@ -106,7 +106,7 @@ def tail(inputs):
     ProjectEditor editor;
     const auto    flow   = editor.project().flows.front().id;
     const auto    parent = editor.addNode(flow, *definitions.find(gate.id), {0, 0});
-    const auto    child  = editor.addNode(flow, *definitions.find(tail.id), {2, 0});
+    const auto    child  = editor.addNode(flow, *definitions.find(tail.id), {2, 2});
     editor.bindFreeInput(flow, {parent, "value"}, {child, "value"});
     auto project = editor.project();
     project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.vrt.json";

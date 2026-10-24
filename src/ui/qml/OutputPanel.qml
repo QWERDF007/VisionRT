@@ -15,7 +15,16 @@ Rectangle {
     property bool selectedSystem: true
     property bool selectedDiagnostic: false
     property string fullText: ""
-    function showMenu(options, item, point) {
+    property var cascadeTools: []
+    function showNameMenu(options, item, point) {
+        selectedContext = app.portContext(options.portId, true)
+        if (!app.portContextCurrent(selectedContext)) return
+        selectedName = options.name; selectedSystem = options.system
+        cascadeTools = app.cascadeOutputCandidates(selectedContext)
+        let position = item.mapToItem(root, point.x, point.y)
+        nameMenu.popup(root, position.x, position.y)
+    }
+    function showDataMenu(options, item, point) {
         selectedContext = app.portContext(options.portId, true)
         if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
@@ -31,7 +40,7 @@ Rectangle {
     }
     function invalidateMenu() {
         pendingAction = null; selectedContext = ({})
-        outputMenu.close(); binding.close()
+        outputMenu.close(); nameMenu.close(); binding.close()
     }
     function validateMenu() {
         if (app.busy || !app.portContextCurrent(selectedContext)) invalidateMenu()
@@ -100,7 +109,8 @@ Rectangle {
                     display: data.display === undefined ? "" : String(data.display),
                     portId: data.portId || "",
                     name: data.name || "",
-                    type: data.type || "",
+                    type: data.typeDisplay || data.type || "",
+                    typeMachine: data.type || "",
                     tooltip: data.tooltip || "",
                     diagnostic: data.diagnostic || false,
                     count: data.count || 0,
@@ -140,18 +150,21 @@ Rectangle {
             MouseArea {
                 id: cellPointer; anchors.fill: parent; hoverEnabled: true
                 acceptedButtons: Qt.RightButton
-                onClicked: function(mouse) { root.showMenu(cell.options, cell, Qt.point(mouse.x, mouse.y)) }
+                onClicked: function(mouse) {
+                    if (cell.options.column === 0 && !cell.options.system) {
+                        root.showNameMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
+                    } else {
+                        root.showDataMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
+                    }
+                }
             }
             QuiToolTip {
                 visible: cellPointer.containsMouse && text.length > 0
                 text: {
                     if (cell.options.column === 0) {
-                        let t = cell.options.name || ""
-                        if (cell.options.portId && cell.options.portId !== cell.options.name)
-                            t += "(" + cell.options.portId + ")"
-                        if (cell.options.type)
-                            t += "(" + cell.options.type + ")"
-                        return t
+                        let n = cell.options.name || cell.options.portId || ""
+                        let t = cell.options.type || ""
+                        return t.length > 0 ? (n + "（" + t + "）") : n
                     }
                     if (cell.options.column === 2)
                         return cell.options.tooltip || cell.options.display || ""
@@ -182,7 +195,41 @@ Rectangle {
         QuiMenuItem { text: "复制诊断 JSON"; visible: root.selectedSystem; enabled: app.portContextCurrent(root.selectedContext) && root.selectedDiagnostic; onTriggered: root.queueAction("diagnostic-copy") }
         QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: root.queueAction("bind") }
     }
-    BindingPopup { id: binding }
+    BindingPopup { id: binding; objectName: "bindingPopup" }
+    QuiMenu {
+        id: nameMenu
+        objectName: "outputNameMenu"
+        parent: root
+        Instantiator {
+            model: root.cascadeTools
+            delegate: QuiMenu {
+                required property var modelData
+                title: modelData.title
+                Instantiator {
+                    model: modelData.inputs
+                    delegate: QuiMenuItem {
+                        required property var modelData
+                        text: modelData.connected ? ("✓ " + modelData.name + " (" + modelData.type + ")")
+                            : modelData.occupied ? (modelData.name + " (" + modelData.type + " · 已被占用)")
+                            : (modelData.name + " (" + modelData.type + ")")
+                        enabled: !app.busy && !modelData.connected && !modelData.occupied
+                        onTriggered: {
+                            app.bindOutputTo(root.selectedContext, parent.parent.modelData.node, modelData.port)
+                        }
+                    }
+                    onObjectAdded: function(index, object) { insertItem(index, object) }
+                    onObjectRemoved: function(index, object) { removeItem(object) }
+                }
+            }
+            onObjectAdded: function(index, object) { nameMenu.insertMenu(index, object) }
+            onObjectRemoved: function(index, object) { nameMenu.removeMenu(object) }
+        }
+        QuiMenuItem {
+            visible: root.cascadeTools.length === 0
+            text: "无可连接的下层输入"
+            enabled: false
+        }
+    }
     WorkbenchTextDialog {
         id: dataDialog; objectName: "outputDataDialog"; title: "输出数据 · 点击时的快照"
         text: root.fullText

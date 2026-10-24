@@ -23,4 +23,10 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running);
 // fabricated zero.
 QString durationText(std::optional<double> milliseconds);
 
+// Format session duration as HH:MM:SS:mmm
+QString formatElapsed(double milliseconds);
+
+// Format milliseconds as "xxx ms" or "— ms"
+QString formatMs(std::optional<double> milliseconds);
+
 } // namespace visionrt

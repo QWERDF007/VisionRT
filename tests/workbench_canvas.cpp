@@ -218,12 +218,12 @@ void flowCanvasContract()
             "canvas zoom changes the world-coordinate wire path");
     canvas->setProperty("zoom", originalZoom);
     require(app.moveNodes({QStringLiteral("2")}, -1, 0), "cannot undo routing obstacle drag");
-    require(app.moveNodes({QStringLiteral("2")}, 2, -1), "cannot restore routing obstacle");
+    require(app.moveNodes({QStringLiteral("2")}, 2, 0), "cannot restore routing obstacle");
     readable = false;
-    require(app.moveNodes({ids.front()}, 1000, 1000), "cannot spread canvas fixture");
+    require(app.moveNodes({ids.front()}, -1000, -1000), "cannot spread canvas fixture");
     require(QMetaObject::invokeMethod(canvas, "fit"), "canvas fit action is missing");
     require(QTest::qWaitFor(allVisible, 1000), "fit clips nodes in a widely spaced flow");
-    require(app.moveNodes({ids.front()}, -1000, -1000), "cannot restore canvas fixture spacing");
+    require(app.moveNodes({ids.front()}, 1000, 1000), "cannot restore canvas fixture spacing");
     for (const auto offset : {QPoint(1000, 1000), QPoint(-2000, -2000)})
     {
         require(app.moveNodes(ids, offset.x(), offset.y()), "cannot translate canvas fixture");

@@ -136,7 +136,7 @@ void nativeGraphSharing(std::size_t batchSize)
         });
     ProjectEditor editor;
     const auto    producer = editor.addNode("flow_1", *registry.find(source.id), {});
-    const auto    consumer = editor.addNode("flow_1", *registry.find(mutator.id), {1, 0});
+    const auto    consumer = editor.addNode("flow_1", *registry.find(mutator.id), {0, 1});
     for (const auto &port : mutator.inputs)
         editor.setBinding("flow_1", consumer, port.id,
                           {
@@ -221,7 +221,7 @@ void explicitToolStoragePolicies()
                         return ToolResult{{}, {{"images", DataRef<Image>(Image{std::move(output)})}}};
                     });
             });
-        const auto node = editor.addNode("flow_1", *registry.find(definition.id), {});
+        const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
         editor.setBinding("flow_1", node, "images",
                           {
                               BindingMode::Upstream, Missing{},
@@ -328,7 +328,7 @@ void toolCoordinatedBranches()
                         return ToolResult{{}, inputs};
                     });
             });
-        const auto node = editor.addNode("flow_1", *registry.find(definition.id), {});
+        const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
         editor.setBinding("flow_1", node, "images",
                           {
                               BindingMode::Upstream, Missing{},

@@ -10,6 +10,7 @@ namespace visionrt {
 using ApplicationDiagnostic
     = std::variant<QString, ToolStatus, NodeDiagnostic, RuntimeDiagnostic, ProjectStorageDiagnostic>;
 
+QString     statusSummary(const ToolStatus &status);
 QString     diagnosticMessage(const NodeDiagnostic &diagnostic);
 QString     diagnosticMessage(const ApplicationDiagnostic &diagnostic);
 QJsonObject diagnosticObject(const ApplicationDiagnostic &diagnostic);

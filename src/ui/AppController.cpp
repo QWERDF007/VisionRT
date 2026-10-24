@@ -410,6 +410,13 @@ void AppController::Impl::poll()
                     nodesChanged                = true;
                     selectedChanged |= selected == QString::number(item.node);
                     report(*item.lifecycleDiagnostic);
+                    if (const auto *node = findNode(item.node))
+                    {
+                        const auto avail = registry.availability(node->toolId);
+                        tools.updateToolStatus(QString::fromStdString(node->toolId),
+                                               avail.state == ToolAvailability::Available,
+                                               QString::fromStdString(avail.status.message));
+                    }
                 }
             }
             else if (lifecycleErrors.erase(item.node))
@@ -422,6 +429,13 @@ void AppController::Impl::poll()
                     instanceErrors[item.node] = item.instanceDiagnostic;
                     nodesChanged              = true;
                     report(*item.instanceDiagnostic);
+                    if (const auto *node = findNode(item.node))
+                    {
+                        const auto avail = registry.availability(node->toolId);
+                        tools.updateToolStatus(QString::fromStdString(node->toolId),
+                                               avail.state == ToolAvailability::Available,
+                                               QString::fromStdString(avail.status.message));
+                    }
                 }
             }
             else if (instanceErrors.erase(item.node))
@@ -446,17 +460,34 @@ void AppController::Impl::poll()
         for (const auto &event : update.diagnostics) report(event);
         if (update.droppedDiagnostics > 0)
             report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
-        QString updatedTiming;
-        if (update.roundMilliseconds > 0)
+        bool timingChanged = false;
+        for (const auto &item : update.flows)
         {
-            updatedTiming = QStringLiteral("本轮 %1 ms").arg(update.roundMilliseconds, 0, 'f', 2);
-            for (const auto &item : update.flows)
-                updatedTiming += QStringLiteral(" · %1 %2 ms").arg(workbench::q(item.flow)).arg(item.milliseconds, 0, 'f', 2);
+            if (flowLatestMs[item.flow] != item.milliseconds)
+            {
+                flowLatestMs[item.flow] = item.milliseconds;
+                timingChanged = true;
+            }
         }
-        if (timing != updatedTiming)
+        if (update.roundMilliseconds > 0 && latestRoundMs != update.roundMilliseconds)
         {
-            timing = updatedTiming;
-            emit q->runtimeChanged();
+            latestRoundMs = update.roundMilliseconds;
+            timingChanged = true;
+        }
+        if (update.session > 0 && latestElapsedMs != update.sessionElapsedMilliseconds)
+        {
+            latestElapsedMs = update.sessionElapsedMilliseconds;
+            if (update.roundMilliseconds > 0 || update.completion)
+                timingChanged = true;
+        }
+        if (timingChanged)
+        {
+            QString updatedTiming = q->timingText();
+            if (timing != updatedTiming)
+            {
+                timing = updatedTiming;
+                emit q->runtimeChanged();
+            }
         }
         setState(update.state);
         if (nodesChanged)
@@ -793,7 +824,20 @@ QString AppController::selectedNode() const
 
 QString AppController::timingText() const
 {
-    return impl_->timing;
+    const auto *currentFlowDef = impl_->currentFlow();
+    QString flowName = currentFlowDef ? workbench::q(currentFlowDef->name) : QStringLiteral("流程1");
+    std::optional<double> currentFlowMs;
+    if (currentFlowDef)
+    {
+        auto it = impl_->flowLatestMs.find(currentFlowDef->id);
+        if (it != impl_->flowLatestMs.end())
+            currentFlowMs = it->second;
+    }
+    return QStringLiteral("%1：%2 | 全流程：%3 | 已运行：%4")
+        .arg(flowName)
+        .arg(formatMs(currentFlowMs))
+        .arg(formatMs(impl_->latestRoundMs))
+        .arg(formatElapsed(impl_->latestElapsedMs));
 }
 
 bool AppController::dirty() const

@@ -61,4 +61,16 @@ void PythonStorage::waitForRelease() const
     state_->released.wait(lock, [&] { return state_->active == 0; });
 }
 
+std::size_t PythonStorage::activeCount() const noexcept
+{
+    std::lock_guard lock(state_->mutex);
+    return state_->active;
 }
+
+bool PythonStorage::isReadyForClose() const noexcept
+{
+    std::lock_guard lock(state_->mutex);
+    return state_->active == 0;
+}
+
+} // namespace visionrt

@@ -164,6 +164,11 @@ cv::Mat imageHeader(py::handle value, const PythonStorage &objects)
             depth = candidate;
     if (depth < 0)
         throw ContractError("Image 像素 dtype 不受支持，不执行隐式 astype");
+    const auto S = static_cast<std::size_t>(array.itemsize());
+    const auto addr = reinterpret_cast<std::uintptr_t>(array.data());
+    if (addr % S != 0)
+        throw ContractError("Image 像素地址未按标量大小对齐");
+
     const auto rows     = array.shape(0);
     const auto columns  = array.shape(1);
     const auto channels = array.ndim() == 3 ? array.shape(2) : 1;
@@ -172,15 +177,50 @@ cv::Mat imageHeader(py::handle value, const PythonStorage &objects)
         throw ContractError("Image 尺寸必须在 OpenCV 有效范围内");
     if (!array.writeable())
         throw ContractError("Image 的实际 NumPy 存储不可写；请由工具显式构造可写数组");
-    const auto pixelBytes = channels * array.itemsize();
-    if (array.strides(0) <= 0 || array.strides(1) != pixelBytes
-        || (array.ndim() == 3 && array.strides(2) != array.itemsize()))
-        throw ContractError("Image 布局无法表示为 cv::Mat；请由工具显式使用 np.ascontiguousarray/np.array(copy=True)");
-    const auto rowBytes = static_cast<std::size_t>(columns) * static_cast<std::size_t>(pixelBytes);
-    const auto bytes    = extent(static_cast<std::size_t>(rows), static_cast<std::size_t>(array.strides(0)), rowBytes);
-    auto       storage  = backingStorage(array, bytes, objects);
+
+    const auto C = static_cast<std::size_t>(channels);
+    const auto P = C * S;
+    const auto W = static_cast<std::size_t>(columns);
+    const auto R = W * P;
+    const auto H = static_cast<std::size_t>(rows);
+
+    if (array.ndim() == 3 && C > 1)
+    {
+        if (array.strides(2) != static_cast<py::ssize_t>(S))
+            throw ContractError("Image 通道必须连续");
+    }
+
+    if (W > 1)
+    {
+        if (array.strides(1) != static_cast<py::ssize_t>(P))
+            throw ContractError("Image 列必须按像素大小连续");
+    }
+
+    std::size_t effectiveRowStep = R;
+    if (H > 1)
+    {
+        const auto s0 = array.strides(0);
+        if (s0 <= 0 || static_cast<std::size_t>(s0) < R || (static_cast<std::size_t>(s0) % S != 0))
+            throw ContractError("Image 布局无法表示为 cv::Mat；请由工具显式使用 np.ascontiguousarray/np.array(copy=True)");
+        effectiveRowStep = static_cast<std::size_t>(s0);
+    }
+    else
+    {
+        if (array.strides(0) > 0 && static_cast<std::size_t>(array.strides(0)) >= R
+            && (static_cast<std::size_t>(array.strides(0)) % S == 0))
+        {
+            effectiveRowStep = static_cast<std::size_t>(array.strides(0));
+        }
+        else
+        {
+            effectiveRowStep = R;
+        }
+    }
+
+    const auto bytes   = extent(H, effectiveRowStep, R);
+    auto       storage = backingStorage(array, bytes, objects);
     cv::Mat    result(static_cast<int>(rows), static_cast<int>(columns), CV_MAKETYPE(depth, static_cast<int>(channels)),
-                      const_cast<void *>(array.data()), static_cast<std::size_t>(array.strides(0)));
+                      const_cast<void *>(array.data()), effectiveRowStep);
     auto       retained = std::make_unique<Storage>(std::move(storage));
     auto       data     = std::make_unique<cv::UMatData>(&allocator);
     data->data = data->origdata = result.data;

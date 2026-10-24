@@ -31,6 +31,49 @@ void ToolTreeModel::setFilter(const QString &text)
     rebuild();
 }
 
+bool ToolTreeModel::updateToolStatus(const QString &toolId, bool available, const QString &status)
+{
+    bool changed = false;
+    for (auto &def : definitions_)
+    {
+        if (def.id == toolId)
+        {
+            if (def.available != available || def.status != status)
+            {
+                def.available = available;
+                def.status    = status;
+                changed       = true;
+            }
+            break;
+        }
+    }
+
+    for (int catRow = 0; catRow < static_cast<int>(root_.children.size()); ++catRow)
+    {
+        auto &cat = *root_.children[catRow];
+        for (int subRow = 0; subRow < static_cast<int>(cat.children.size()); ++subRow)
+        {
+            auto &sub = *cat.children[subRow];
+            for (int toolRow = 0; toolRow < static_cast<int>(sub.children.size()); ++toolRow)
+            {
+                auto &tool = *sub.children[toolRow];
+                if (tool.id == toolId)
+                {
+                    if (tool.available == available && tool.status == status)
+                        return changed;
+                    tool.available = available;
+                    tool.status    = status;
+                    const auto parentIdx = index(subRow, 0, index(catRow, 0, {}));
+                    const auto toolIdx   = index(toolRow, 0, parentIdx);
+                    emit dataChanged(toolIdx, toolIdx, {AvailableRole, StatusRole});
+                    return true;
+                }
+            }
+        }
+    }
+    return changed;
+}
+
 void ToolTreeModel::rebuild()
 {
     beginResetModel();

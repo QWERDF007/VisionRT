@@ -1287,7 +1287,7 @@ void packageDrivenCatalogAndRefreshContract()
         std::cout << "[Evidence T-05] Cross-flow receive of dynamic host_binding node verified, value="
                   << recvPreview.toStdString() << "\n";
 
-        app.addNode("test.plugin.function", 200, 100);
+        app.addNode("test.plugin.function", 200, 200);
 
 
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");

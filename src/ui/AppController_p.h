@@ -59,6 +59,9 @@ struct AppController::Impl
     QString                                selected;
     QString                                search;
     QString                                timing;
+    std::map<std::string, double>          flowLatestMs;
+    std::optional<double>                  latestRoundMs;
+    double                                 latestElapsedMs = 0;
     std::deque<ApplicationDiagnostic>                       diagnostics;
     std::optional<CopiedSelection>         clipboard;
     std::set<std::string>                  routingErrors;
@@ -104,6 +107,7 @@ struct AppController::Impl
     QString                              imageOutput;
     int                                  index = 0;
     int                                  count = 0;
+    NodeId                               displayedNode = 0;
 
     struct RoiPreview
     {

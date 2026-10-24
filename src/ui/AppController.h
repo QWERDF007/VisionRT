@@ -102,6 +102,7 @@ public:
     Q_INVOKABLE QVariantList bindingCandidates(const QVariantMap &context) const;
     Q_INVOKABLE bool         bindInput(const QVariantMap &context, const QString &node, const QString &output);
     Q_INVOKABLE bool         unbindInput(const QVariantMap &context);
+    Q_INVOKABLE QVariantList cascadeOutputCandidates(const QVariantMap &context) const;
     Q_INVOKABLE QVariantList relationTargets(const QVariantMap &context) const;
     Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, const QString &input);
     Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, const QString &input);

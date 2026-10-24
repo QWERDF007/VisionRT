@@ -221,6 +221,9 @@ struct RuntimeEngine::Impl
     std::optional<RuntimeReadback>                                    readback;
     std::vector<FlowTiming>                                           flowTiming;
     double                                                            roundMilliseconds = 0;
+    Clock::time_point                                                 sessionStartTime;
+    std::optional<Clock::time_point>                                  sessionEndTime;
+    double                                                            sessionElapsedMs = 0;
     std::deque<RuntimeDiagnostic>                                     diagnostics;
     std::uint64_t                                                     nextDiagnosticSequence = 1;
     std::size_t                                                       droppedDiagnostics = 0;
@@ -444,16 +447,20 @@ struct RuntimeEngine::Impl
                 }
             }
             for (const auto &plan : selected) plan->activeRound.reset();
+            const auto roundEnd = Clock::now();
+            const double calculatedRoundMs = milliseconds(roundEnd - roundStart);
             {
                 std::unique_lock lock(control);
                 flowTiming = std::move(timings);
+                roundMilliseconds = calculatedRoundMs;
+                sessionElapsedMs = milliseconds(roundEnd - sessionStartTime);
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
                 if (readbackEnabled && !shutdown)
                 {
                     readback = RuntimeReadback{generation, session, round};
                     commandReady.wait(lock, [&] { return !readback || shutdown; });
                 }
-                roundMilliseconds = milliseconds(Clock::now() - roundStart);
+
             }
             if (infrastructureError || frozen->mode != RunMode::Loop)
                 break;
@@ -526,6 +533,8 @@ struct RuntimeEngine::Impl
             RuntimeCompletion                      finished;
             {
                 std::lock_guard lock(control);
+                sessionEndTime = Clock::now();
+                sessionElapsedMs = milliseconds(*sessionEndTime - sessionStartTime);
                 management = Management::None;
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
                 finished   = {generation, ++completionToken};
@@ -634,6 +643,9 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
         impl_->completion.reset();
         impl_->flowTiming.clear();
         impl_->roundMilliseconds = 0;
+        impl_->sessionStartTime = Clock::now();
+        impl_->sessionEndTime.reset();
+        impl_->sessionElapsedMs = 0;
         ++impl_->session;
         impl_->round          = 0;
         impl_->command        = std::move(frozen);
@@ -790,6 +802,14 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.round             = impl_->round;
     update.flows             = impl_->flowTiming;
     update.roundMilliseconds = impl_->roundMilliseconds;
+    if (impl_->session > 0)
+    {
+        update.sessionElapsedMilliseconds = impl_->sessionElapsedMs;
+    }
+    else
+    {
+        update.sessionElapsedMilliseconds = 0;
+    }
     update.diagnostics.reserve(impl_->diagnostics.size());
     for (auto &diagnostic : impl_->diagnostics) update.diagnostics.push_back(std::move(diagnostic));
     impl_->diagnostics.clear();

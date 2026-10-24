@@ -1,3 +1,4 @@
+#include <iostream>
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
@@ -85,7 +86,7 @@ void parameterEditorsContract()
     for (int attempt = 0; app.busy() && attempt < 100; ++attempt)
         QTest::qWait(10);
     require(!app.busy(), "parameter tool initialization did not finish");
-    app.addNode("test.parameters", 0, 0);
+    app.addNode("test.parameters", 0, 100);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     if (app.nodes().size() != 1)
         throw std::runtime_error("parameter fixture tool was not discovered: " + app.diagnostic().toStdString());
@@ -489,6 +490,7 @@ void parameterEditorsContract()
             "invalid structure did not keep the draft and report its validation error");
     structureInput->setProperty("text", "[\"中文\", \"with spaces\"]");
     click(confirm);
+    if (dialog->property("visible").toBool()) { std::cerr << "VALID STRUCTURE DIALOG ERROR: err=" << labelsRow->property("structureError").toString().toStdString() << " diag=" << app.diagnostic().toStdString() << " draft=" << labelsRow->property("structureDraft").toString().toStdString() << " txt=" << structureInput->property("text").toString().toStdString() << std::endl; }
     require(!dialog->property("visible").toBool(), "valid structure did not close its dialog");
     const auto committedLabels = value("labels");
     require(committedLabels.contains(QStringLiteral("中文")) && committedLabels.contains("with spaces"),

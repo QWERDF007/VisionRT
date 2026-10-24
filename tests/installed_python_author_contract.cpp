@@ -90,9 +90,9 @@ try
     editor.setLiteral(flow, reader, "color", std::string("gray"));
     editor.setLiteral(flow, reader, "limit", std::int64_t{0});
     editor.setLiteral(flow, reader, "max_batch_bytes", std::int64_t{0});
-    const auto roiNode = editor.addNode(flow, *roi, {10, 0});
+    const auto roiNode = editor.addNode(flow, *roi, {0, 10});
     editor.bindFreeInput(flow, {reader, "images"}, {roiNode, "images"});
-    const auto addNode = editor.addNode(flow, *add, {20, 0});
+    const auto addNode = editor.addNode(flow, *add, {0, 20});
     editor.bindFreeInput(flow, {reader, "images"}, {addNode, "images"});
     editor.setLiteral(flow, addNode, "mode", std::string("inplace"));
 

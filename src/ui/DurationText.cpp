@@ -8,11 +8,13 @@ namespace visionrt {
 NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 {
     if (running)
-        return {QStringLiteral("运行中"), QStringLiteral("运行中")};
+        return {QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("—"), QStringLiteral("—")};
     if (!snapshot)
-        return {QStringLiteral("未运行"), QStringLiteral("未运行")};
-    return {durationText(snapshot->timing.totalMs), snapshot->timing.toolCallMeasured
-                ? durationText(snapshot->timing.adapterExecuteMs) : QStringLiteral("—")};
+        return {QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("—"), QStringLiteral("—")};
+    return {durationText(snapshot->timing.totalMs),
+            snapshot->timing.toolCallMeasured ? durationText(snapshot->timing.adapterExecuteMs) : QStringLiteral("—"),
+            QStringLiteral("—"),
+            QStringLiteral("—")};
 }
 
 QString durationText(std::optional<double> milliseconds)
@@ -32,4 +34,28 @@ QString durationText(std::optional<double> milliseconds)
     return text + QStringLiteral(" ms");
 }
 
+QString formatElapsed(double milliseconds)
+{
+    if (milliseconds <= 0.0 || !std::isfinite(milliseconds))
+        return QStringLiteral("00:00:00:000");
+    auto totalMs = static_cast<std::uint64_t>(milliseconds);
+    auto millis = totalMs % 1000;
+    auto totalSec = totalMs / 1000;
+    auto seconds = totalSec % 60;
+    auto totalMin = totalSec / 60;
+    auto minutes = totalMin % 60;
+    auto hours = totalMin / 60;
+    return QStringLiteral("%1:%2:%3:%4")
+        .arg(hours, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(seconds, 2, 10, QLatin1Char('0'))
+        .arg(millis, 3, 10, QLatin1Char('0'));
+}
+
+QString formatMs(std::optional<double> milliseconds)
+{
+    if (!milliseconds || !std::isfinite(*milliseconds) || *milliseconds < 0.0)
+        return QStringLiteral("— ms");
+    return QStringLiteral("%1 ms").arg(*milliseconds, 0, 'f', 2);
+}
 } // namespace visionrt

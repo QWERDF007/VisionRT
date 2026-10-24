@@ -48,8 +48,27 @@ ResultSlot::Snapshot AppController::Impl::displaySnapshot(const NodeDefinition &
 void AppController::Impl::updateResults()
 {
     if (!readsAllowed())
+    {
+        const auto *node   = currentNode();
+        const auto  nodeId = node ? node->id : 0;
+        if (nodeId != displayedNode)
+        {
+            displayedNode = nodeId;
+            outputs.clear();
+            imageOutput.clear();
+            index = 0;
+            if (viewport)
+            {
+                viewport->clearImage(displayRequest);
+                viewport->setOverlays({}, {});
+                viewport->endRoiEdit();
+            }
+            emit q->resultsChanged();
+        }
         return;
+    }
     const auto *node = currentNode();
+    displayedNode    = node ? node->id : 0;
     const auto *tool = currentTool();
     if (!node)
     {

@@ -778,7 +778,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(foundB);
 
     // Add node for Tool B, bind x to node A's count, runOnce
-    app.addNode("test.plugin.function", 300, 100);
+    app.addNode("test.plugin.function", 100, 200);
     waitForIdle();
     assert(app.nodes().size() == 2);
     const auto nodeBId = app.nodes().last().toMap().value("id").toString();

@@ -277,10 +277,13 @@ void popupSessionsContract()
     const auto openMenu = [&]
     {
         QQuickItem *label = nullptr;
-        require(QTest::qWaitFor([&] { label = visibleText(panel, QStringLiteral("图像批次")); return label != nullptr; }, 1000),
-                "real output table has no image output cell");
+        require(QTest::qWaitFor([&] {
+            label = visibleText(panel, QStringLiteral("图像"));
+            if (!label) label = visibleText(panel, QStringLiteral("图像批次"));
+            return label != nullptr;
+        }, 1000), "real output table has no image output cell");
         QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
-                          label->mapToScene(QPointF(label->width() / 2, label->height() / 2)).toPoint());
+                          label->mapToScene(QPointF(label->width() + 150, label->height() / 2)).toPoint());
         require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "output context menu did not open");
         require(menu->property("parent").value<QQuickItem *>() == panel,
                 "output menu is parented to an ephemeral table cell");
@@ -534,7 +537,7 @@ void outputCellReuseContract()
     auto *manyTable = manyPanel->findChild<QObject *>("outputTable");
     require(manyMenu && manyTable, "many-output menu or table is unavailable");
     QTest::mouseClick(&manyWindow, Qt::RightButton, Qt::NoModifier,
-                      firstLabel->mapToScene(QPointF(firstLabel->width() / 2, firstLabel->height() / 2)).toPoint());
+                      firstLabel->mapToScene(QPointF(firstLabel->width() + 150, firstLabel->height() / 2)).toPoint());
     require(QTest::qWaitFor([&] { return manyMenu->property("opened").toBool(); }, 1000),
             "many-output source menu did not open");
     const auto sourceContext = manyPanel->property("selectedContext").toMap();

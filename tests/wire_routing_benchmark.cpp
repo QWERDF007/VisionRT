@@ -147,7 +147,7 @@ try
             std::vector<NodeId> ids;
             for (int index = 0; index < count; ++index)
             {
-                const auto id = editor.addNode(flow, *definition, {2 * (index % 10), 2 * (index / 10)});
+                const auto id = editor.addNode(flow, *definition, {2 * (index % 10), 2 * index});
                 ids.push_back(id);
                 for (int port = 0; port < (dense ? 5 : 1) && port < index; ++port)
                     require(editor.bindFreeInput(flow, {ids[index - port - 1], ports[port]}, {id, ports[port]}),
