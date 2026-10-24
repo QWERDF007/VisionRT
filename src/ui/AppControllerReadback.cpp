@@ -79,7 +79,16 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy, boo
         return;
     if (!impl_->readsAllowed())
     {
-        impl_->readRequests.push_back(Impl::TextRequest{textTarget(context), copy, diagnostic});
+        const auto target = textTarget(context);
+        const bool alreadyQueued = std::any_of(impl_->readRequests.begin(), impl_->readRequests.end(),
+            [&](const auto &item) {
+                if (const auto *textReq = std::get_if<Impl::TextRequest>(&item)) {
+                    return textReq->context == target && textReq->copy == copy && textReq->diagnostic == diagnostic;
+                }
+                return false;
+            });
+        if (!alreadyQueued)
+            impl_->readRequests.push_back(Impl::TextRequest{target, copy, diagnostic});
         return;
     }
     if (impl_->textTask.valid())

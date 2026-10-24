@@ -340,6 +340,109 @@ void sharedHelperRollback(PythonRuntime &runtime, const std::filesystem::path &r
     assert(execute(*sibling) == 1);
 }
 
+void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::path &root)
+{
+    const auto package = root / "python/custom/constant_numpy";
+    std::filesystem::create_directories(package);
+    write(package / "__init__.py", "");
+    write(package / "helper.py",
+          "import builtins\n"
+          "if not hasattr(builtins, 'visionrt_cn_helper_count'):\n"
+          " builtins.visionrt_cn_helper_count = 0\n"
+          "builtins.visionrt_cn_helper_count += 1\n"
+          "VALUE = builtins.visionrt_cn_helper_count\n");
+    write(package / "good.py",
+          "from .helper import VALUE\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':VALUE}\n");
+    write(package / "sibling.py",
+          "from .helper import VALUE\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':VALUE}\n");
+    write(package / "broken.py",
+          "from . import helper\n"
+          "from pathlib import Path\n"
+          "import time\n"
+          "directory = Path(__file__).parent\n"
+          "(directory / 'cn_broken_entered.flag').write_text('entered')\n"
+          "deadline = time.monotonic() + 5\n"
+          "while not (directory / 'cn_broken_resume.flag').exists():\n"
+          " if time.monotonic() > deadline: raise TimeoutError('resume timeout')\n"
+          " time.sleep(0.005)\n"
+          "raise RuntimeError('controlled failure after helper import')\n");
+
+    write(package / "numpy_warm.py",
+          "import numpy as np\n"
+          "FRAME = np.arange(4).reshape(2, 2)\n"
+          "def execute(inputs): return {'__status_code':0, '__status_message':'', 'value':int(FRAME.sum())}\n");
+    write(package / "numpy_broken.py",
+          "from . import helper\n"
+          "raise RuntimeError('controlled original failure')\n");
+
+    const std::array definitions{
+        definitionFor(root, "python.cn_good", "good.py", ToolOrigin::Custom, "constant_numpy"),
+        definitionFor(root, "python.cn_sibling", "sibling.py", ToolOrigin::Custom, "constant_numpy"),
+        definitionFor(root, "python.cn_broken", "broken.py", ToolOrigin::Custom, "constant_numpy"),
+        definitionFor(root, "python.cn_np_warm", "numpy_warm.py", ToolOrigin::Custom, "constant_numpy"),
+        definitionFor(root, "python.cn_np_broken", "numpy_broken.py", ToolOrigin::Custom, "constant_numpy")
+    };
+    runtime.refresh(definitions);
+
+    auto npWarm = runtime.factory(definitions[3])({});
+    assert(execute(*npWarm) == 6);
+
+    bool brokenFailed = false;
+    try
+    {
+        auto inst = runtime.factory(definitions[4])({});
+        if (inst)
+        {
+            auto status = inst->initialize({});
+            brokenFailed = !status && status.detail.find("controlled original failure") != std::string::npos;
+        }
+    }
+    catch (const RegistryError &error)
+    {
+        brokenFailed = error.status.detail.find("controlled original failure") != std::string::npos;
+    }
+    assert(brokenFailed);
+
+    std::promise<void> brokenStarted;
+    auto brokenFuture = brokenStarted.get_future();
+    std::thread workerBroken([&] {
+        brokenStarted.set_value();
+        unavailable(runtime.factory(definitions[2]));
+    });
+    brokenFuture.wait();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!std::filesystem::exists(package / "cn_broken_entered.flag"))
+    {
+        assert(std::chrono::steady_clock::now() < deadline);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    auto good = runtime.factory(definitions[0])({});
+    assert(execute(*good) == 1);
+
+    write(package / "cn_broken_resume.flag", "resume");
+    workerBroken.join();
+
+    auto sibling = runtime.factory(definitions[1])({});
+    assert(execute(*sibling) == 1);
+
+    write(package / "helper.py", "VALUE = 99\n");
+    auto sibling2 = runtime.factory(definitions[1])({});
+    assert(execute(*sibling2) == 1);
+
+    good.reset();
+    sibling.reset();
+    sibling2.reset();
+    npWarm.reset();
+
+    runtime.refresh(definitions);
+    auto siblingFresh = runtime.factory(definitions[1])({});
+    assert(execute(*siblingFresh) == 99);
+}
+
 }
 
 int main(int argc, char **argv)
@@ -390,6 +493,7 @@ try
                                  packageBoundaries(runtime, root);
                                   coldConcurrentRollback(runtime, root);
                                   sharedHelperRollback(runtime, root);
+                                  constantAndNumpyRollback(runtime, root);
                              });
     worker.get();
     std::cout << "Metadata refresh does not import Python; direct adapter construction loads its code root\n";

@@ -195,14 +195,19 @@ try
     app.endRoiPreview();
     app.selectNode(source);
     textReady.clear();
-    quint64 lastFrameId = 0;
+    QString lastPublication;
     const auto frameText = QObject::connect(&viewport, &ImageViewport::imagePresented, &app,
-                                            [&](quint64 frameId)
+                                            [&](quint64)
                                             {
-                                                if (app.busy() && frameId != lastFrameId)
+                                                if (app.busy())
                                                 {
-                                                    lastFrameId = frameId;
-                                                    app.requestOutputText(app.portContext("epoch", true), false, false);
+                                                    const auto context = app.portContext("epoch", true);
+                                                    const auto pub     = context.value("publication").toString();
+                                                    if (!pub.isEmpty() && pub != lastPublication)
+                                                    {
+                                                        lastPublication = pub;
+                                                        app.requestOutputText(context, false, false);
+                                                    }
                                                 }
                                             });
     app.toggleLoop();

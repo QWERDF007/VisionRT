@@ -4,8 +4,6 @@ import importlib.machinery
 import importlib.util
 from pathlib import Path
 import sys
-import threading
-import types
 
 
 class FreshSourceLoader(importlib.machinery.SourceFileLoader):
@@ -19,21 +17,12 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
         self.generation = 0
         self.roots = {}
         self.packages = {}
-        self._thread_local = threading.local()
-
-    def _record_module(self, fullname):
-        stack = getattr(self._thread_local, 'stack', None)
-        if stack:
-            tx = stack[-1]
-            if fullname not in tx:
-                tx.append(fullname)
 
     def find_spec(self, fullname, path=None, target=None):
         root_name = fullname.partition('.')[0]
         directory = self.roots.get(root_name)
         if directory is None:
             return None
-        self._record_module(fullname)
         if fullname == root_name:
             source = directory / '__init__.py'
             if source.is_file():
@@ -60,7 +49,7 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
                 raise ImportError('Managed module requires source or a native extension: ' + fullname)
         return spec
 
-    def clear(self):
+    def clear(self, generation=None):
         namespaces = tuple(self.roots)
         directories = tuple(self.roots.values())
         for name in tuple(sys.modules):
@@ -71,28 +60,12 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
                 del sys.path_importer_cache[search_path]
         self.roots.clear()
         self.packages.clear()
-        self.generation += 1
+        if generation is not None:
+            self.generation = generation
+        else:
+            self.generation += 1
 
-    def _is_module_retained(self, name, tx):
-        if any(m.startswith(name + '.') for m in sys.modules if m not in tx):
-            return True
-        mod = sys.modules.get(name)
-        if mod is None:
-            return False
-        for m_name, m in tuple(sys.modules.items()):
-            if m_name in tx or not isinstance(m, types.ModuleType):
-                continue
-            if name.startswith(m_name + '.') or m_name == name:
-                continue
-            if any(m_name == r or m_name.startswith(r + '.') for r in self.roots):
-                if mod in m.__dict__.values():
-                    return True
-                for v in m.__dict__.values():
-                    if getattr(v, '__module__', None) == name:
-                        return True
-        return False
-
-    def load(self, origin, directory, script, symbol):
+    def load(self, origin, directory, script, symbol, generation=None):
         directory = Path(directory).resolve(strict=True)
         entry = (directory / script).resolve(strict=True)
         relative = entry.relative_to(directory)
@@ -103,6 +76,8 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
             parts.pop()
         if any(not part.isidentifier() for part in parts):
             raise ImportError('Managed entry path components must be Python identifiers')
+        if generation is not None:
+            self.generation = generation
         key = (origin, directory, self.generation)
         root = self.packages.get(key)
         if root is None:
@@ -110,27 +85,5 @@ class ManagedPackages(importlib.abc.MetaPathFinder):
             self.packages[key] = root
             self.roots[root] = directory
 
-        if not hasattr(self._thread_local, 'stack'):
-            self._thread_local.stack = []
-        tx = []
-        self._thread_local.stack.append(tx)
-        try:
-            module = importlib.import_module('.'.join([root] + parts))
-            result = getattr(module, symbol)
-            self._thread_local.stack.pop()
-            return result
-        except BaseException:
-            self._thread_local.stack.pop()
-            for name in reversed(tx):
-                if self._is_module_retained(name, tx):
-                    continue
-                if '.' in name:
-                    parent_name, attr_name = name.rsplit('.', 1)
-                    parent_mod = sys.modules.get(parent_name)
-                    if parent_mod is not None and hasattr(parent_mod, attr_name):
-                        try:
-                            delattr(parent_mod, attr_name)
-                        except (AttributeError, TypeError):
-                            pass
-                sys.modules.pop(name, None)
-            raise
+        module = importlib.import_module('.'.join([root] + parts))
+        return getattr(module, symbol)
