@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-25",
+  "branch": "refactor/abi4-writable-data",
+  "VisionRT": "6df386eeafe208a5ade6fa382a253611482717ab",
+  "VisionTools": "aa92f9e578b7780b85fde71d4aee25cf88182f2d",
+  "previous_VisionRT": "f3fc08270a932331fd2a826312daee0740e97258",
+  "product_sources_modified": false,
+  "independent_checks": [
+    "VisionTools Python tests:12 passed",
+    "DataRef header probe:passed",
+    "Actual YoloPostprocess.cpp padding edge cases:two reproduced"
+  ],
+  "not_executed": [
+    "Windows Qt/OpenCV whole CTest",
+    "installed E drive binaries",
+    "CUDA real model benchmark"
+  ],
+  "contracts_snapshot": "Reviewed dependency snapshot inherited from preceding review; no claim of standalone Contracts branch-head acceptance"
+}

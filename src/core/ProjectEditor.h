@@ -59,6 +59,7 @@ struct CandidateInput
     bool        occupied  = false;
 };
 
+const std::optional<SourcePort> &effectiveSource(const InputBinding &binding);
 std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow, const SourcePort &source);
 
 struct PortRelations

@@ -126,7 +126,6 @@ class Gate:
         if (item->isVisible() && item->isEnabled() && item->property("text").toString() == "循环")
             loop = item;
     require(loop != nullptr, "lifecycle loop button was not found");
-    QSignalSpy closes(&app, &AppController::closeReady);
     const auto hasPrefix = [&](const QByteArray &prefix)
     {
         for (const auto &event : events())
@@ -142,6 +141,22 @@ class Gate:
                 ++count;
         return count;
     };
+    QSignalSpy closes(&app, &AppController::closeReady);
+    int closeReadySyncInvocations = 0;
+    int constructsAtCloseReady = 0;
+    int initsAtCloseReady = 0;
+    QObject::connect(&app, &AppController::closeReady, [&] {
+        ++closeReadySyncInvocations;
+        constructsAtCloseReady = countPrefix("construct:");
+        initsAtCloseReady = countPrefix("initialize:");
+        require(app.isClosing(), "app must report isClosing() in closeReady synchronous slot");
+        app.runOnce();
+        app.refreshPython();
+        const int flowCount = app.flows().size();
+        app.addFlow("rejected_flow");
+        require(app.flows().size() == flowCount, "editing must be rejected during ClosePhase::Ready");
+        require(app.runState() == "Idle", "runState must remain Idle and not Running");
+    });
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                       loop->mapToScene(QPointF(loop->width() / 2, loop->height() / 2)).toPoint(), 0);
     require(QTest::qWaitFor([&] { return hasPrefix("execute:"); }, 5000),
@@ -200,6 +215,16 @@ class Gate:
             "lifecycle window did not hide after close");
     QTest::qWait(200);
     require(closes.size() == 1, "repeated stop/reset/close produced duplicate completion");
+    require(closeReadySyncInvocations == 1, "closeReady slot must be called exactly once");
+    require(countPrefix("construct:") == constructsAtCloseReady, "instances must not be constructed during Ready");
+    require(countPrefix("initialize:") == initsAtCloseReady, "instances must not be initialized during Ready");
+    app.runOnce();
+    app.refreshPython();
+    const int postFlowCount = app.flows().size();
+    app.addFlow("rejected_flow_post");
+    require(app.flows().size() == postFlowCount, "editing must be rejected after closeReady");
+    require(countPrefix("construct:") == constructsAtCloseReady, "instances must not be constructed after Ready");
+    require(countPrefix("initialize:") == initsAtCloseReady, "instances must not be initialized after Ready");
     QTest::qWait(500);
     require(countPrefix("execute:") == 1 && countPrefix("return:") == 1,
             "lifecycle stop started another round: " + events().join(',').toStdString());

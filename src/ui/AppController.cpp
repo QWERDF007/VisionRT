@@ -265,7 +265,7 @@ const PortDefinition *AppController::Impl::parameter(const std::string &id, bool
 
 bool AppController::Impl::idle()
 {
-    if (closing)
+    if (isClosing())
         return false;
     if (state == RuntimeState::Idle && pending == Pending::None)
         return true;
@@ -354,7 +354,7 @@ void AppController::Impl::changed(bool structure)
 
 void AppController::Impl::synchronizeNodes()
 {
-    if (closing || closePhase != ClosePhase::None)
+    if (isClosing())
         return;
     if (runtime->state() != RuntimeState::Idle)
         return;
@@ -581,7 +581,7 @@ void AppController::Impl::poll()
 
 void AppController::Impl::start(RunMode mode)
 {
-    if (closing || !idle())
+    if (isClosing() || !idle())
         return;
     finishRoi();
     q->parameters();
@@ -641,7 +641,7 @@ void AppController::Impl::request(Pending action, QString path)
         if (closePhase == ClosePhase::Resetting || pending == Pending::Close)
             return;
     }
-    if (closing || closePhase != ClosePhase::None)
+    if (isClosing())
     {
         report(QStringLiteral("正在关闭中，不能执行新操作"));
         return;
@@ -816,7 +816,7 @@ void AppController::Impl::advancePending()
 
 void AppController::Impl::refresh(bool rescan)
 {
-    if (state != RuntimeState::Idle || closing || pending == Pending::Close)
+    if (state != RuntimeState::Idle || isClosing() || pending == Pending::Close)
         return;
     finishRoi();
     if (rescan)
@@ -932,7 +932,7 @@ void AppController::Impl::loadToolsPackage()
 
 void AppController::Impl::rescanTools()
 {
-    if (state != RuntimeState::Idle)
+    if (state != RuntimeState::Idle || isClosing())
         return;
     finishRoi();
 
@@ -1259,7 +1259,7 @@ bool AppController::moveNodes(const QVariantList &values, int dx, int dy)
 
 void AppController::deleteNodes(const QVariantList &values)
 {
-    if (impl_->pending != Impl::Pending::None)
+    if (impl_->isClosing() || impl_->pending != Impl::Pending::None)
     {
         impl_->report(QStringLiteral("请先完成或取消当前操作"));
         return;
@@ -1277,6 +1277,8 @@ void AppController::deleteNodes(const QVariantList &values)
 
 void AppController::copyNodes(const QVariantList &values)
 {
+    if (impl_->isClosing())
+        return;
     try
     {
         const auto nodes = ids(values);
@@ -1449,7 +1451,7 @@ bool AppController::isCloseReady() const
 
 bool AppController::isClosing() const
 {
-    return impl_->closing || impl_->closePhase != Impl::ClosePhase::None;
+    return impl_->isClosing();
 }
 
 void AppController::resolveUnsaved(const QString &decision, const QString &savePath)
@@ -1484,7 +1486,7 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
 
 bool AppController::save(const QString &path)
 {
-    if (impl_->closing || impl_->closePhase != Impl::ClosePhase::None)
+    if (impl_->isClosing())
         return false;
     auto destination = path.isEmpty() ? impl_->editor.project().path : workbench::localPath(path);
     if (destination.empty())

@@ -89,6 +89,10 @@ struct AppController::Impl
     bool                             pendingReset     = false;
     bool                             closing          = false;
     bool                             closeReadyEmitted = false;
+    bool isClosing() const noexcept
+    {
+        return closing || closePhase != ClosePhase::None;
+    }
     std::optional<ProjectDefinition> replacement;
 
     struct PendingDeletion

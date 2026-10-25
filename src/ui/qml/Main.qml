@@ -108,12 +108,12 @@ ApplicationWindow {
     Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; enabled: !app.closing; onTriggered: openFile.open() }
     Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(false) }
     Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(true) }
-    Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: !app.busy; onTriggered: app.runOnce() }
+    Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: !app.busy && !app.closing; onTriggered: app.runOnce() }
     Action {
         id: loopAction
         text: app.runState === "Stopping" ? "等待本轮结束" : app.runState === "RunningLoop" ? "停止循环" : "循环"
         shortcut: "F6"
-        enabled: !app.busy || app.runState === "RunningLoop"
+        enabled: (!app.busy || app.runState === "RunningLoop") && !app.closing
         onTriggered: app.toggleLoop()
     }
     Shortcut { sequence: "Ctrl+F"; onActivated: window.focusSearch() }
@@ -245,7 +245,7 @@ ApplicationWindow {
                 display: AbstractButton.TextBesideIcon
                 normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
                 textColor: Theme.menuButtonText; iconColor: Theme.menuButtonIcon
-                implicitHeight: Theme.menuButtonHeight; enabled: !app.busy
+                implicitHeight: Theme.menuButtonHeight; enabled: !app.busy && !app.closing
                 focusPolicy: Qt.TabFocus
                 onClicked: resetDialog.open()
             }
@@ -266,7 +266,7 @@ ApplicationWindow {
     }
     QuiMenu {
         id: toolsMenu
-        QuiMenuItem { text: "刷新 Python 工具"; enabled: !app.busy; onTriggered: app.refreshPython() }
+        QuiMenuItem { text: "刷新 Python 工具"; enabled: !app.busy && !app.closing; onTriggered: app.refreshPython() }
     }
     QuiMenu {
         id: helpMenu
@@ -278,7 +278,7 @@ ApplicationWindow {
         QuiMenuItem { action: runAction }
         QuiMenuItem { action: loopAction }
         MenuSeparator {}
-        QuiMenuItem { text: "运行时复位"; enabled: !app.busy; onTriggered: resetDialog.open() }
+        QuiMenuItem { text: "运行时复位"; enabled: !app.busy && !app.closing; onTriggered: resetDialog.open() }
     }
 
     QuiSplitView {

@@ -8,6 +8,13 @@
 #include <utility>
 
 namespace visionrt {
+
+const std::optional<SourcePort> &effectiveSource(const InputBinding &binding)
+{
+    static const std::optional<SourcePort> none;
+    return binding.mode == BindingMode::Upstream ? binding.source : none;
+}
+
 namespace {
 constexpr auto maximumCounter = std::numeric_limits<std::uint64_t>::max();
 
@@ -60,11 +67,6 @@ void validateLiteral(const TypeSpec &type, const PortValue &value)
         throw ContractError("图像字面量只能是 Missing 或空批次");
 }
 
-const std::optional<SourcePort> &effectiveSource(const InputBinding &binding)
-{
-    static const std::optional<SourcePort> none;
-    return binding.mode == BindingMode::Upstream ? binding.source : none;
-}
 
 bool sameEffectiveValue(const InputBinding &left, const InputBinding &right)
 {
@@ -420,8 +422,9 @@ std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow,
             if (!check)
                 continue;
 
-            const bool connected = (binding.mode == BindingMode::Upstream && binding.source && *binding.source == source);
-            const bool occupied = (binding.mode == BindingMode::Upstream && binding.source && *binding.source != source);
+            const auto &eff = effectiveSource(binding);
+            const bool connected = (eff && *eff == source);
+            const bool occupied = (eff && *eff != source);
 
             result.push_back(CandidateInput{node.id, input, connected, occupied});
         }
@@ -551,7 +554,7 @@ bool ProjectEditor::bindFreeInput(std::string_view flowId, const SourcePort &sou
     const auto &currentFlow = flow(flowId);
     requireEditable(findNode(currentFlow, source.node));
     auto binding = inputBinding(findNode(currentFlow, target.node), target.port);
-    if (binding.source)
+    if (effectiveSource(binding))
         throw ContractError("输入端口已关联上游：" + std::to_string(target.node) + "." + target.port);
     binding.mode   = BindingMode::Upstream;
     binding.source = source;
@@ -702,7 +705,7 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
             continue;
         for (const auto &[input, binding] : node.inputs)
         {
-            if (binding.source)
+            if (effectiveSource(binding))
                 continue;
             const auto check = validateBinding(target, source.node, source.port, node.id, input);
             if (!check)

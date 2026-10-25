@@ -15,6 +15,8 @@ QVariantMap textTarget(QVariantMap context)
 
 bool AppController::Impl::readsAllowed() const noexcept
 {
+    if (isClosing())
+        return false;
     return state == RuntimeState::Idle || readback.has_value();
 }
 
@@ -147,7 +149,7 @@ void AppController::Impl::updateReadback()
 
 void AppController::requestOutputText(const QVariantMap &context, bool copy, bool diagnostic)
 {
-    if (impl_->closing || impl_->draining)
+    if (impl_->isClosing() || impl_->draining)
         return;
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return;

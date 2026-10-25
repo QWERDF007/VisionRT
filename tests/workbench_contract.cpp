@@ -210,6 +210,10 @@ void pendingContract()
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved("discard");
     require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
+    require(app.isClosing(), "app must report isClosing() after discard close");
+    app.runOnce();
+    app.refreshPython();
+    require(app.runState() == "Idle", "runOnce in Ready must not change runState");
 
     // S-D03: Resolving unsaved decision with valid "save" writes to disk and completes close
     {
@@ -224,6 +228,10 @@ void pendingContract()
         require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
         require(QFile::exists(validSavePath), "resolveUnsaved save did not write file");
         require(!saveApp.dirty(), "project should be clean after save on close");
+        require(saveApp.isClosing(), "saveApp must report isClosing() after save on close");
+        saveApp.runOnce();
+        saveApp.refreshPython();
+        require(saveApp.runState() == "Idle", "runOnce in Ready must not change runState");
     }
 }
 

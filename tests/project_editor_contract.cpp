@@ -435,6 +435,58 @@ void compatibilityAndRelationshipMenusUseEffectiveInputs()
                 {a, b}
     }));
 }
+void bindingEffectiveSourceDraftsAndOccupiedContract()
+{
+    ProjectEditor editor;
+    const auto tool = integerTool();
+    const auto a = editor.addNode("flow_1", tool, {0, 0});
+    const auto c = editor.addNode("flow_1", tool, {1, 0});
+    const auto b = editor.addNode("flow_1", tool, {0, 2});
+
+    // 1. Literal with old draft source
+    editor.setBinding("flow_1", b, "first",
+                      {BindingMode::Literal, std::int64_t{42}, SourcePort{a, "value"}});
+    assert(node(editor, b).inputs.at("first").mode == BindingMode::Literal);
+    assert(node(editor, b).inputs.at("first").source == SourcePort(a, "value"));
+    assert(!effectiveSource(node(editor, b).inputs.at("first")).has_value());
+
+    // candidateInputsWithState must treat Literal with draft as Free (connected=false, occupied=false)
+    const auto candsA = candidateInputsWithState(editor.project().flows.front(), {a, "value"});
+    const auto itBFirstA = std::find_if(candsA.begin(), candsA.end(), [&](const auto &item) {
+        return item.node == b && item.port == "first";
+    });
+    assert(itBFirstA != candsA.end());
+    assert(!itBFirstA->connected && !itBFirstA->occupied);
+
+    // compatibleInputs must include b.first
+    const auto inputsC = editor.compatibleInputs("flow_1", {c, "value"});
+    assert(std::find(inputsC.begin(), inputsC.end(), InputPort{b, "first"}) != inputsC.end());
+
+    // bindFreeInput from c must succeed, overwriting old draft source and switching to Upstream
+    assert(editor.bindFreeInput("flow_1", {c, "value"}, {b, "first"}));
+    assert(node(editor, b).inputs.at("first").mode == BindingMode::Upstream);
+    assert(node(editor, b).inputs.at("first").source == SourcePort(c, "value"));
+    assert(effectiveSource(node(editor, b).inputs.at("first")).value() == SourcePort(c, "value"));
+
+    // 2. Upstream occupied: candidateInputsWithState for a must report occupied=true
+    const auto candsA_after = candidateInputsWithState(editor.project().flows.front(), {a, "value"});
+    const auto itBFirstA_after = std::find_if(candsA_after.begin(), candsA_after.end(), [&](const auto &item) {
+        return item.node == b && item.port == "first";
+    });
+    assert(itBFirstA_after != candsA_after.end());
+    assert(!itBFirstA_after->connected && itBFirstA_after->occupied);
+
+    // bindFreeInput from a while occupied must throw
+    rejects([&] { editor.bindFreeInput("flow_1", {a, "value"}, {b, "first"}); }, "输入端口已关联上游");
+
+    // Connected candidate: for c, it must be connected=true, occupied=false
+    const auto candsC = candidateInputsWithState(editor.project().flows.front(), {c, "value"});
+    const auto itBFirstC = std::find_if(candsC.begin(), candsC.end(), [&](const auto &item) {
+        return item.node == b && item.port == "first";
+    });
+    assert(itBFirstC != candsC.end());
+    assert(itBFirstC->connected && !itBFirstC->occupied);
+}
 } // namespace
 
 void receiverOutputFollowsItsSource()
@@ -567,4 +619,5 @@ int main()
     flowsAndBusyGuard();
     exhaustedCountersAndCoordinateOverflowRejectWithoutChanges();
     compatibilityAndRelationshipMenusUseEffectiveInputs();
+    bindingEffectiveSourceDraftsAndOccupiedContract();
 }
