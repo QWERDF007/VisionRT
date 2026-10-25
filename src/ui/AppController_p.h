@@ -80,6 +80,7 @@ struct AppController::Impl
     bool                             awaitingDecision = false;
     bool                             pendingReset     = false;
     bool                             closing          = false;
+    bool                             closeReadyEmitted = false;
     std::optional<ProjectDefinition> replacement;
 
     struct PendingDeletion
@@ -155,7 +156,18 @@ struct AppController::Impl
         QVariantMap   context;
     };
 
-    std::future<TextResult>              textTask;
+    struct TextMailbox
+    {
+        std::mutex                mutex;
+        std::uint64_t             generation = 0;
+        bool                      done       = false;
+        std::optional<TextResult> value;
+        std::exception_ptr        error;
+    };
+
+    std::future<void>                    textTask;
+    std::shared_ptr<TextMailbox>         textMailbox;
+    void                                 consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
     QVariantMap                         approvedTextContext;
     bool                                 approvedCopy = false;
     bool                                 approvedDiagnostic = false;

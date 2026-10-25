@@ -23,27 +23,77 @@ void AppController::Impl::drainReaders()
     converter.waitForReads();
     if (textTask.valid())
         textTask.wait();
+    if (textMailbox)
+    {
+        bool done = false;
+        {
+            std::lock_guard lock(textMailbox->mutex);
+            done = textMailbox->done;
+        }
+        if (done)
+            consumeTextMailbox(textMailbox);
+        else
+            textMailbox.reset();
+    }
+}
+
+void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox)
+{
+    if (!mailbox || mailbox != textMailbox)
+        return;
+    textMailbox.reset();
+    if (textTask.valid())
+    {
+        textTask.wait();
+        textTask = {};
+    }
+    if (mailbox->generation != generation)
+        return;
+
+    std::exception_ptr        error;
+    std::optional<TextResult> result;
+    {
+        std::lock_guard lock(mailbox->mutex);
+        if (!mailbox->done)
+            return;
+        error  = mailbox->error;
+        result = std::move(mailbox->value);
+    }
+
+    if (error)
+    {
+        try
+        {
+            std::rethrow_exception(error);
+        }
+        catch (const std::exception &e)
+        {
+            report(e, QStringLiteral("输出文本格式化失败"));
+        }
+        updateReadback();
+        return;
+    }
+
+    if (result && q->portContextCurrent(result->context))
+    {
+        if (result->copy)
+            QGuiApplication::clipboard()->setText(result->text);
+        emit q->outputTextReady(result->text);
+    }
+    updateReadback();
 }
 
 void AppController::Impl::updateReadback()
 {
-    using namespace std::chrono_literals;
-    if (textTask.valid() && textTask.wait_for(0ms) == std::future_status::ready)
+    if (textMailbox)
     {
-        try
+        bool done = false;
         {
-            auto result = textTask.get();
-            if (result.generation == generation && q->portContextCurrent(result.context))
-            {
-                if (result.copy)
-                    QGuiApplication::clipboard()->setText(result.text);
-                emit q->outputTextReady(result.text);
-            }
+            std::lock_guard lock(textMailbox->mutex);
+            done = textMailbox->done;
         }
-        catch (const std::exception &error)
-        {
-            report(error, QStringLiteral("完整输出生成失败"));
-        }
+        if (done)
+            consumeTextMailbox(textMailbox);
     }
     if (!readsAllowed())
         return;
@@ -121,13 +171,30 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy, boo
     }
     impl_->approvedTextContext.clear();
     const auto generation = impl_->generation;
-    impl_->textTask       = std::async(std::launch::async,
-                                       [captured = std::move(*captured), copy, generation, context, diagnostic, this]
-                                       {
-                                           auto text = diagnostic ? OutputModel::diagnosticText(captured)
-                                                                        : OutputModel::fullText(captured);
-                                           QMetaObject::invokeMethod(this, [this] { impl_->updateReadback(); }, Qt::QueuedConnection);
-                                           return Impl::TextResult{std::move(text), copy, generation, context};
-                                       });
+    auto       mailbox    = std::make_shared<Impl::TextMailbox>();
+    mailbox->generation   = generation;
+    impl_->textMailbox    = mailbox;
+    impl_->textTask       = std::async(
+        std::launch::async,
+        [captured = std::move(*captured), copy, generation, context, diagnostic, mailbox, this]
+        {
+            try
+            {
+                auto text = diagnostic ? OutputModel::diagnosticText(captured) : OutputModel::fullText(captured);
+                {
+                    std::lock_guard lock(mailbox->mutex);
+                    mailbox->value = Impl::TextResult{std::move(text), copy, generation, context};
+                    mailbox->done  = true;
+                }
+            }
+            catch (...)
+            {
+                std::lock_guard lock(mailbox->mutex);
+                mailbox->error = std::current_exception();
+                mailbox->done  = true;
+            }
+            QMetaObject::invokeMethod(this, [this, mailbox] { impl_->consumeTextMailbox(mailbox); },
+                                      Qt::QueuedConnection);
+        });
 }
 } // namespace visionrt

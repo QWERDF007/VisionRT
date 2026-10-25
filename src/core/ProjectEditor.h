@@ -45,8 +45,11 @@ struct BindingCheck
     explicit operator bool() const noexcept { return reason == BindingError::None; }
 };
 
+using PositionLookup = std::function<std::optional<GridPoint>(NodeId)>;
+
 BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, const std::string &sourcePort,
-                            NodeId targetNodeId, const std::string &targetInputPort);
+                            NodeId targetNodeId, const std::string &targetInputPort,
+                            const PositionLookup &positions = {});
 
 struct CandidateInput
 {

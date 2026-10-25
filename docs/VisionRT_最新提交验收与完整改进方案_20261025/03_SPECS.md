@@ -46,3 +46,37 @@ flowchart TD
 保留unique_ptr单一所有权、shared_ptr用于真正共享payload/module/Python锚点。锁内只变更元数据，不执行Python/DECREF/用户回调。引用释放不抛异常；关闭就绪必须在冻结新调用之后判定，避免check-then-finalize竞争。
 
 DataRef仍返回可写T&，不添加访问属性。模板用requires约束真实合法类型；公共动态插件接口使用虚函数与create/destroy边界，不用模板取代运行时多态。RT与Tools使用匹配工具链/STL/OpenCV二进制依赖，不能把现有C++ ABI宣称为任意编译器通用ABI。
+
+## 补充可执行约束
+
+| ID | 必须满足 |
+|---|---|
+| S14 | readbackEnabled、shutdown、token的所有访问遵循同一同步协议；回调后必须重新获得锁才读取共享状态 |
+| S15 | 文本结果或异常先发布后通知；禁用周期轮询仍能完成 |
+| S16 | Closing单向收尾，不能先销毁Python可运行状态再恢复Idle；剩余外部引用可诊断、可重试 |
+| S17 | 成功获取Py_buffer后立即由栈上RAII拥有；任何分配失败恰好释放一次 |
+| S18 | Win32失败码立即捕获；模式恢复不能覆盖原错误 |
+
+### 工具与框架错误
+
+工具有有效message时普通界面完全保留；框架自身启动/绑定错误由框架给出简短说明。节点、端口、堆栈和detail放结构化诊断，不拼到工具原始message。零长度/未测/不存在分别有明确语义，不能用0兜底。
+
+### 最终关闭时序
+
+```mermaid
+sequenceDiagram
+ participant UI as 控制器
+ participant RT as 运行时
+ participant PY as Python运行时
+ participant OWN as 外部持有人
+ UI->>UI: 进入Closing，禁止新工作
+ UI->>RT: 停止并收尾调用
+ RT-->>UI: 写任务已结束
+ UI->>UI: 排空读者并清内部结果引用
+ UI->>PY: 准备关闭并检查剩余owner
+ PY-->>UI: 未就绪，保持事件循环
+ OWN->>PY: 最后引用归还
+ PY-->>UI: 可重新检查就绪
+ UI->>PY: 所属线程finalize
+ UI->>UI: closeReady
+```

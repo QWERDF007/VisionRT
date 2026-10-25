@@ -349,7 +349,8 @@ ReferencesToClear referencesTo(ProjectDefinition &project, const std::set<NodeId
 } // namespace
 
 BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, const std::string &sourcePort,
-                            NodeId targetNodeId, const std::string &targetInputPort)
+                            NodeId targetNodeId, const std::string &targetInputPort,
+                            const PositionLookup &positions)
 {
     if (sourceNodeId == targetNodeId)
         return {BindingError::Self, "不能连接自身节点"};
@@ -366,7 +367,17 @@ BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, co
     if (!sourceNode || !targetNode)
         return {BindingError::OtherFlow, "上游节点或目标节点不属于当前流程"};
 
-    if (sourceNode->position.y >= targetNode->position.y)
+    GridPoint sourcePos = sourceNode->position;
+    GridPoint targetPos = targetNode->position;
+    if (positions)
+    {
+        if (auto p = positions(sourceNodeId))
+            sourcePos = *p;
+        if (auto p = positions(targetNodeId))
+            targetPos = *p;
+    }
+
+    if (sourcePos.y >= targetPos.y)
         return {BindingError::SameOrUpperRow, "只能连接上级节点的输出（违反上下层层级约束：上游 Y 必须严格小于下游 Y）"};
 
     const auto sourceOut = sourceNode->signatures.outputs.find(sourcePort);
@@ -397,20 +408,16 @@ std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow,
     }
     if (!sourceNode)
         return {};
-    const auto outputIt = sourceNode->signatures.outputs.find(source.port);
-    if (outputIt == sourceNode->signatures.outputs.end())
-        return {};
-    const auto &outputType = outputIt->second;
 
     std::vector<CandidateInput> result;
     for (const auto &node : flow.nodes)
     {
-        if (node.id == source.node || !node.unresolved.isEmpty() || sourceNode->position.y >= node.position.y)
+        if (node.id == source.node || !node.unresolved.isEmpty())
             continue;
         for (const auto &[input, binding] : node.inputs)
         {
-            const auto inputSig = node.signatures.inputs.find(input);
-            if (inputSig == node.signatures.inputs.end() || !compatible(outputType, inputSig->second))
+            const auto check = validateBinding(flow, source.node, source.port, node.id, input);
+            if (!check)
                 continue;
 
             const bool connected = (binding.mode == BindingMode::Upstream && binding.source && *binding.source == source);
@@ -667,11 +674,12 @@ std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId
     std::vector<SourcePort> result;
     for (const auto &source : target.nodes)
     {
-        if (source.id == id || !source.unresolved.isEmpty() || source.position.y >= node.position.y)
+        if (source.id == id || !source.unresolved.isEmpty())
             continue;
         for (const auto &[port, output] : source.signatures.outputs)
         {
-            if (!compatible(output, type))
+            const auto check = validateBinding(target, source.id, port, id, std::string(input));
+            if (!check)
                 continue;
             candidate.source = SourcePort{source.id, port};
             if (!containsCycle(deriveEdges(deriveRelations(target, id, input, &candidate))))
@@ -690,11 +698,14 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
     std::vector<InputPort> result;
     for (const auto &node : target.nodes)
     {
-        if (node.id == source.node || !node.unresolved.isEmpty() || sourceNode.position.y >= node.position.y)
+        if (node.id == source.node || !node.unresolved.isEmpty())
             continue;
         for (const auto &[input, binding] : node.inputs)
         {
-            if (binding.source || !compatible(type, signature(node.signatures.inputs, input)))
+            if (binding.source)
+                continue;
+            const auto check = validateBinding(target, source.node, source.port, node.id, input);
+            if (!check)
                 continue;
             auto candidate   = binding;
             candidate.mode   = BindingMode::Upstream;
@@ -847,21 +858,26 @@ bool ProjectEditor::moveNodes(std::string_view flowId, std::span<const NodeId> n
     for (const auto &node : target.nodes)
         if (!moving.contains(node.id) && destinations.contains({node.position.x, node.position.y}))
             throw ContractError("移动位置与已有节点重叠");
+
+    auto candidatePos = [&](NodeId id) -> std::optional<GridPoint> {
+        if (moving.contains(id))
+        {
+            const auto it = std::find_if(target.nodes.begin(), target.nodes.end(), [id](const auto &n) { return n.id == id; });
+            if (it != target.nodes.end())
+                return translated(it->position, delta.x, delta.y);
+        }
+        return std::nullopt;
+    };
+
     for (const auto &node : target.nodes)
     {
-        const int targetY = moving.contains(node.id) ? node.position.y + delta.y : node.position.y;
         for (const auto &[input, binding] : node.inputs)
         {
             if (binding.mode == BindingMode::Upstream && binding.source)
             {
-                const auto sourceIt = std::find_if(target.nodes.begin(), target.nodes.end(),
-                    [&](const auto &n) { return n.id == binding.source->node; });
-                if (sourceIt != target.nodes.end())
-                {
-                    const int sourceY = moving.contains(sourceIt->id) ? sourceIt->position.y + delta.y : sourceIt->position.y;
-                    if (sourceY >= targetY)
-                        throw ContractError("移动后连接不再满足上下层关系");
-                }
+                const auto check = validateBinding(target, binding.source->node, binding.source->port, node.id, input, candidatePos);
+                if (!check)
+                    throw ContractError("移动后连接不再满足上下层关系");
             }
         }
     }

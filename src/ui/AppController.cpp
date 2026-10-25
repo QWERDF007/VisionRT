@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <iostream>
 
 namespace visionrt {
 namespace workbench {
@@ -264,6 +265,8 @@ const PortDefinition *AppController::Impl::parameter(const std::string &id, bool
 
 bool AppController::Impl::idle()
 {
+    if (closing)
+        return false;
     if (state == RuntimeState::Idle && pending == Pending::None)
         return true;
     report(QStringLiteral("当前任务尚未结束，配置编辑不可用"));
@@ -389,6 +392,19 @@ void AppController::Impl::clearResults()
 
 void AppController::Impl::poll()
 {
+    if (closing && pending == Pending::Close)
+    {
+        if (!python || python->isCloseReady())
+        {
+            pending = Pending::None;
+            if (!closeReadyEmitted)
+            {
+                closeReadyEmitted = true;
+                emit q->closeReady();
+            }
+        }
+        return;
+    }
     auto update = runtime->pollLatest();
     if (update.generation >= generation)
     {
@@ -489,10 +505,13 @@ void AppController::Impl::poll()
         }
         if (update.session > 0)
         {
-            if (!latestRoundMs || *latestRoundMs != update.roundMilliseconds)
+            if (update.roundMilliseconds.has_value())
             {
-                latestRoundMs = update.roundMilliseconds;
-                timingChanged = true;
+                if (!latestRoundMs || *latestRoundMs != *update.roundMilliseconds)
+                {
+                    latestRoundMs = update.roundMilliseconds;
+                    timingChanged = true;
+                }
             }
             if (latestElapsedMs != update.sessionElapsedMilliseconds)
             {
@@ -502,6 +521,11 @@ void AppController::Impl::poll()
         }
         else
         {
+            if (latestRoundMs.has_value())
+            {
+                latestRoundMs.reset();
+                timingChanged = true;
+            }
             if (latestElapsedMs != 0.0)
             {
                 latestElapsedMs = 0.0;
@@ -550,11 +574,12 @@ void AppController::Impl::poll()
 
 void AppController::Impl::start(RunMode mode)
 {
-    if (!idle())
+    if (closing || !idle())
         return;
     finishRoi();
     q->parameters();
     drainReaders();
+    latestRoundMs.reset();
     std::optional<NodeId> target;
     if (mode == RunMode::Node)
     {
@@ -582,7 +607,23 @@ void AppController::Impl::start(RunMode mode)
 void AppController::Impl::request(Pending action, QString path)
 {
     if (action == Pending::Close && (closing || pending == Pending::Close))
+    {
+        if (closing && (!python || python->isCloseReady()))
+        {
+            pending = Pending::None;
+            if (!closeReadyEmitted)
+            {
+                closeReadyEmitted = true;
+                emit q->closeReady();
+            }
+        }
+        else if (closing && python)
+        {
+            const auto remaining = python->activeReferences();
+            report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
+        }
         return;
+    }
     if (pending != Pending::None)
     {
         report(QStringLiteral("请先完成或取消当前文件操作"));
@@ -682,18 +723,48 @@ void AppController::Impl::advancePending()
     }
     if (completed == Pending::Close)
     {
+        drainReaders();
+        converter.waitForReads();
+        converter.invalidate(generation);
+        if (viewport)
+        {
+            viewport->clearImage(displayRequest);
+            viewport->setOverlays({}, {});
+            viewport->endRoiEdit();
+        }
+        roi.reset();
+        outputs.clear();
+        snapshots.clear();
+        displayInputs.clear();
+        displayOutputs.clear();
+        parameterRows.clear();
+        parameterRowsNode = 0;
+        clipboard.reset();
+        replacement.reset();
+        refreshResult.reset();
+        runtime->clearResults();
+        clearResults();
+
         if (python)
         {
             python->prepareShutdown();
             if (!python->isCloseReady())
             {
-                closing = false;
-                pending = Pending::None;
+                const auto remaining = python->activeReferences();
+                report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
+                closing         = true;
+                pending         = Pending::Close;
+                pendingApproved = true;
+                pendingReset    = true;
                 return;
             }
         }
         closing = true;
-        emit q->closeReady();
+        if (!closeReadyEmitted)
+        {
+            closeReadyEmitted = true;
+            emit q->closeReady();
+        }
     }
     else if (completed == Pending::Reset)
         synchronizeNodes();
@@ -701,7 +772,7 @@ void AppController::Impl::advancePending()
 
 void AppController::Impl::refresh(bool rescan)
 {
-    if (state != RuntimeState::Idle)
+    if (state != RuntimeState::Idle || closing || pending == Pending::Close)
         return;
     finishRoi();
     if (rescan)
@@ -1334,6 +1405,11 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
         return;
     if (decision == "cancel")
     {
+        if (impl_->pending == Impl::Pending::Close)
+        {
+            impl_->closing = false;
+            impl_->closeReadyEmitted = false;
+        }
         impl_->pending          = Impl::Pending::None;
         impl_->awaitingDecision = false;
         impl_->replacement.reset();

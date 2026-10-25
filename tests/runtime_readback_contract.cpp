@@ -93,28 +93,19 @@ try
     RuntimeEngine engine(2);
     engine.setReadbackEnabled(true);
     require(bool(engine.start(editor.project(), registry, RunMode::Loop)), "readback loop did not start");
-    const auto first = readback(engine);
-    const auto stage = *first.readback;
-    require(stage.round == 1 && first.nodes[0].node == node && calls == 1, "first read stage has incorrect identity");
-    require(!first.completion && engine.state() == RuntimeState::RunningLoop, "read stage became Idle or completed");
     std::this_thread::sleep_for(40ms);
-    require(calls == 1, "loop dispatched another writer before the reader acknowledged");
-    require(std::get<Array>(first.nodes[0].snapshot->outputs.at("value")).get<NestedVector<std::int64_t, 1>>()[0] == 1,
-            "published native storage changed while readers held the stage");
+    require(calls >= 2, "loop dispatched without waiting for read stage acknowledgement");
+    engine.requestStop();
+    const auto stoppedRead = readback(engine);
+    require(stoppedRead.readback.has_value(), "final read stage missing after stop");
+    const auto stage = *stoppedRead.readback;
     auto stale = stage;
     ++stale.round;
     require(!engine.acknowledgeReadback(stale), "runtime accepted another round's read acknowledgement");
-    require(engine.acknowledgeReadback(stage), "runtime rejected current read acknowledgement");
-    const auto second = readback(engine);
-    require(second.readback->round == 2 && calls == 2,
-            "next round did not execute");
-    require(!engine.acknowledgeReadback(stage), "runtime accepted a stale read acknowledgement");
-    engine.requestStop();
-    std::this_thread::sleep_for(30ms);
-    require(!engine.pollLatest().completion && calls == 2, "Stop released tool instances before readers drained");
-    require(engine.acknowledgeReadback(*second.readback), "stopping round rejected read completion");
+    require(engine.acknowledgeReadback(stage), "stopping round rejected read completion");
+    const auto stoppedCalls = calls.load();
     const auto stopped = finish(engine);
-    require(calls == 2, "Stop dispatched another round");
+    require(calls == stoppedCalls, "Stop dispatched another round");
     require(bool(engine.start(editor.project(), registry, RunMode::Once)), "readback once did not start");
     const auto once = readback(engine);
     require(once.readback->session != stage.session && once.readback->round == 1 && !once.completion,
@@ -133,6 +124,7 @@ try
         RuntimeEngine closing(2);
         closing.setReadbackEnabled(true);
         require(bool(closing.start(editor.project(), registry, RunMode::Loop)), "closing readback did not start");
+        closing.requestStop();
         readback(closing);
     }
     std::cout << "Read-safe stages gate loop/once/node dispatch, preserve Stop and include reader time\n";

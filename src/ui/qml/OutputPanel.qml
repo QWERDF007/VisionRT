@@ -200,8 +200,47 @@ Rectangle {
         id: nameMenu
         objectName: "outputNameMenu"
         parent: root
+        property string search: ""
+        property var filteredTools: {
+            if (!search || search.trim() === "") return root.cascadeTools
+            let q = search.trim().toLowerCase()
+            let res = []
+            for (let tool of root.cascadeTools) {
+                let toolMatch = (tool.title || "").toLowerCase().indexOf(q) >= 0
+                let matchedInputs = []
+                for (let input of tool.inputs) {
+                    let inputName = (input.title || input.name || "").toLowerCase()
+                    let portName = (input.port || "").toLowerCase()
+                    if (toolMatch || inputName.indexOf(q) >= 0 || portName.indexOf(q) >= 0) {
+                        matchedInputs.push(input)
+                    }
+                }
+                if (matchedInputs.length > 0) {
+                    res.push({
+                        node: tool.node,
+                        title: tool.title,
+                        inputs: matchedInputs
+                    })
+                }
+            }
+            return res
+        }
+        onAboutToShow: search = ""
+        onClosed: search = ""
+        Item {
+            implicitWidth: 180
+            implicitHeight: 32
+            QuiTextField {
+                id: nameSearchField
+                anchors.fill: parent
+                anchors.margins: 4
+                placeholderText: "搜索工具或输入..."
+                text: nameMenu.search
+                onTextChanged: nameMenu.search = text
+            }
+        }
         Instantiator {
-            model: root.cascadeTools
+            model: nameMenu.filteredTools
             delegate: QuiMenu {
                 id: toolSubMenu
                 required property var modelData
@@ -227,12 +266,12 @@ Rectangle {
                     onObjectRemoved: function(index, object) { toolSubMenu.removeItem(object) }
                 }
             }
-            onObjectAdded: function(index, object) { nameMenu.insertMenu(index, object) }
+            onObjectAdded: function(index, object) { nameMenu.insertMenu(index + 1, object) }
             onObjectRemoved: function(index, object) { nameMenu.removeMenu(object) }
         }
         QuiMenuItem {
-            visible: root.cascadeTools.length === 0
-            text: "无可连接的下层输入"
+            visible: nameMenu.filteredTools.length === 0
+            text: root.cascadeTools.length === 0 ? "无可连接的下层输入" : "未找到匹配项"
             enabled: false
         }
     }

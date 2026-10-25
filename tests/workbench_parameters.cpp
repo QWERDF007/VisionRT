@@ -530,7 +530,7 @@ void parameterEditorsContract()
     auto *group = visibleText(candidate.value("title").toString());
     require(group != nullptr, "upstream dropdown did not expose its source node group");
     click(group);
-    auto *output = visibleText(QStringLiteral("比例 (Float)"));
+    auto *output = visibleText(QStringLiteral("比例 (浮点数)"));
     require(output != nullptr, "upstream dropdown did not expose its typed source output");
     click(output);
     const auto wires = app.wires();

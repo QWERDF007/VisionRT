@@ -164,17 +164,15 @@ Storage backingStorage(const py::array &array, std::size_t bytes, const PythonSt
         }
         if (PyObject_CheckBuffer(base.ptr()))
         {
-            Py_buffer buffer{};
-            if (PyObject_GetBuffer(base.ptr(), &buffer, PyBUF_SIMPLE) != 0)
+            Py_buffer rawBuffer{};
+            if (PyObject_GetBuffer(base.ptr(), &rawBuffer, PyBUF_SIMPLE) != 0)
                 throw py::error_already_set();
-            const auto begin  = buffer.buf;
-            const auto length = buffer.len;
+            BufferLease guard(rawBuffer);
+            const auto begin  = guard.view.buf;
+            const auto length = guard.view.len;
             if (length <= 0)
-            {
-                PyBuffer_Release(&buffer);
                 throw ContractError("NumPy 底层存储必须非空");
-            }
-            auto lease     = std::make_shared<BufferLease>(buffer);
+            auto lease     = std::make_shared<BufferLease>(std::move(guard));
             storage        = std::make_shared<ImageStorage>();
             storage->begin = begin;
             storage->bytes = static_cast<std::size_t>(length);

@@ -209,14 +209,15 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
         return nullptr;
     }
     DWORD oldErrorMode = 0;
-    SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldErrorMode);
+    const BOOL modeSet = SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldErrorMode);
     HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr,
                                     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-    SetThreadErrorMode(oldErrorMode, nullptr);
+    const DWORD loadError = handle ? 0 : GetLastError();
+    if (modeSet)
+        SetThreadErrorMode(oldErrorMode, nullptr);
     if (!handle)
     {
-        const DWORD err = GetLastError();
-        status = {-3, "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(err) + "）"};
+        status = {-3, "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(loadError) + "）"};
         return nullptr;
     }
     loaded->handle = handle;

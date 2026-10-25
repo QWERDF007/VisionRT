@@ -189,12 +189,14 @@ struct RuntimeEngine::Impl
             std::lock_guard lock(control);
             shutdown      = true;
             stopRequested = true;
+            readback.reset();
             stop          = activeStop;
         }
         if (stop)
             stop->request_stop();
-        commandReady.notify_one();
-        coordinator.join();
+        commandReady.notify_all();
+        if (coordinator.joinable())
+            coordinator.join();
     }
 
     tf::Executor                                                      executor;
@@ -221,7 +223,7 @@ struct RuntimeEngine::Impl
     std::function<void(RuntimeReadback)>                              readbackCallback;
     std::optional<RuntimeReadback>                                    readback;
     std::vector<FlowTiming>                                           flowTiming;
-    double                                                            roundMilliseconds = 0;
+    std::optional<double>                                             roundMilliseconds;
     Clock::time_point                                                 sessionStartTime;
     std::optional<Clock::time_point>                                  sessionEndTime;
     double                                                            sessionElapsedMs = 0;
@@ -475,7 +477,8 @@ struct RuntimeEngine::Impl
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
                 std::function<void(RuntimeReadback)> notifyReadback;
                 std::optional<RuntimeReadback>       currentReadback;
-                if (readbackEnabled && !shutdown)
+                const bool requiresReadback = readbackEnabled && !shutdown && frozen->mode != RunMode::Loop;
+                if (requiresReadback)
                 {
                     readback = RuntimeReadback{generation, session, round};
                     currentReadback = readback;
@@ -484,15 +487,35 @@ struct RuntimeEngine::Impl
                 lock.unlock();
                 if (notifyReadback && currentReadback)
                     notifyReadback(*currentReadback);
-                if (readbackEnabled && !shutdown)
+                lock.lock();
+                if (requiresReadback && !shutdown && !stopRequested && readback.has_value())
                 {
-                    lock.lock();
-                    commandReady.wait(lock, [&] { return !readback || shutdown; });
+                    commandReady.wait(lock, [&] { return !readback || shutdown || stopRequested; });
                 }
-
             }
             if (infrastructureError || frozen->mode != RunMode::Loop)
                 break;
+        }
+
+        if (frozen->mode == RunMode::Loop)
+        {
+            std::function<void(RuntimeReadback)> notifyFinal;
+            std::optional<RuntimeReadback>       finalReadback;
+            std::unique_lock lock(control);
+            if (readbackEnabled && !shutdown)
+            {
+                readback = RuntimeReadback{generation, session, round};
+                finalReadback = readback;
+                notifyFinal = readbackCallback;
+            }
+            lock.unlock();
+            if (notifyFinal && finalReadback)
+                notifyFinal(*finalReadback);
+            lock.lock();
+            if (readbackEnabled && !shutdown && readback.has_value())
+            {
+                commandReady.wait(lock, [&] { return !readback || shutdown; });
+            }
         }
     }
 
@@ -521,7 +544,7 @@ struct RuntimeEngine::Impl
             session = 0;
             round   = 0;
             flowTiming.clear();
-            roundMilliseconds = 0;
+            roundMilliseconds.reset();
             sessionElapsedMs  = 0;
             sessionEndTime.reset();
             diagnostics.clear();
@@ -690,7 +713,7 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
         impl_->activeStop    = std::make_shared<std::stop_source>();
         impl_->completion.reset();
         impl_->flowTiming.clear();
-        impl_->roundMilliseconds = 0;
+        impl_->roundMilliseconds.reset();
         impl_->sessionStartTime = Clock::now();
         impl_->sessionEndTime.reset();
         impl_->sessionElapsedMs = 0;
@@ -723,7 +746,7 @@ void RuntimeEngine::setReadbackEnabled(bool enabled)
         if (!enabled)
             impl_->readback.reset();
     }
-    impl_->commandReady.notify_one();
+    impl_->commandReady.notify_all();
 }
 
 bool RuntimeEngine::acknowledgeReadback(RuntimeReadback readback)
@@ -734,7 +757,7 @@ bool RuntimeEngine::acknowledgeReadback(RuntimeReadback readback)
             return false;
         impl_->readback.reset();
     }
-    impl_->commandReady.notify_one();
+    impl_->commandReady.notify_all();
     return true;
 }
 
@@ -753,6 +776,7 @@ void RuntimeEngine::requestStop()
     }
     if (stop)
         stop->request_stop();
+    impl_->commandReady.notify_all();
 }
 
 ToolStatus RuntimeEngine::requestReset()
@@ -777,6 +801,15 @@ ToolStatus RuntimeEngine::requestReset()
     if (stop)
         stop->request_stop();
     return {};
+}
+
+void RuntimeEngine::clearResults()
+{
+    std::lock_guard lock(impl_->control);
+    for (auto &[id, runtime] : impl_->nodes)
+    {
+        runtime->reset();
+    }
 }
 
 ToolStatus RuntimeEngine::requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry)

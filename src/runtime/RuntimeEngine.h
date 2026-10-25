@@ -90,7 +90,7 @@ struct RuntimeUpdate
     std::uint64_t                    round      = 0;
     std::vector<NodeUpdate>          nodes;
     std::vector<FlowTiming>          flows;
-    double                           roundMilliseconds = 0;
+    std::optional<double>            roundMilliseconds;
     double                           sessionElapsedMilliseconds = 0;
     // Only events produced since the previous poll, ordered by sequence.
     std::vector<RuntimeDiagnostic>   diagnostics;
@@ -118,6 +118,7 @@ public:
     bool           acknowledgeReadback(RuntimeReadback readback);
     void           setReadbackCallback(std::function<void(RuntimeReadback)> callback);
     ToolStatus     requestReset();
+    void           clearResults();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);
     ToolStatus     requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry);

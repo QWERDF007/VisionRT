@@ -32,7 +32,14 @@ try
     QGuiApplication                application(argc, argv);
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();
-    QTemporaryDir                  destination(QCoreApplication::applicationDirPath() + "/路径 另存-XXXXXX");
+    const auto destinationBase = [&]() -> QString
+    {
+        const auto rootDrive = std::filesystem::path(root.toStdU16String()).root_name().string();
+        if (QDir("E:/tmp").exists() && rootDrive != "E:")
+            return QStringLiteral("E:/tmp/路径 另存-XXXXXX");
+        return QCoreApplication::applicationDirPath() + "/路径 另存-XXXXXX";
+    }();
+    QTemporaryDir destination(destinationBase);
     require(destination.isValid(), "cannot create project destination beside the test executable");
     const auto write = [&](const QString &path, const QByteArray &bytes)
     {

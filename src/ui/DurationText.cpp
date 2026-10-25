@@ -15,8 +15,10 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
     const auto &t = snapshot->timing;
     QString totalStr = durationText(t.totalMs);
     QString toolCallStr = t.toolCallMeasured ? durationText(t.adapterExecuteMs) : QStringLiteral("—");
+    QString preprocessStr = QStringLiteral("—");
+    QString postprocessStr = QStringLiteral("—");
 
-    return {totalStr, toolCallStr, QStringLiteral("—"), QStringLiteral("—")};
+    return {totalStr, toolCallStr, preprocessStr, postprocessStr};
 }
 
 QString durationText(std::optional<double> milliseconds)

@@ -80,7 +80,7 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
                 {"title",                      q(parent->title())},
                 { "port",                          q(source.port)},
                 { "name",   port ? q(port->name) : q(source.port)},
-                { "type", typeText(parent->signatures.outputs.at(source.port))}
+                { "type", displayTypeName(parent->signatures.outputs.at(source.port))}
             });
         }
     }
@@ -229,7 +229,7 @@ QVariantList AppController::relationTargets(const QVariantMap &context) const
                 {"title",                      q(target->title())},
                 { "port",                           q(input.port)},
                 { "name",    port ? q(port->name) : q(input.port)},
-                { "type", port ? typeText(port->type) : QString{}},
+                { "type", port ? displayTypeName(port->type) : QString{}},
                 {"connected", target->inputs.at(input.port).mode == BindingMode::Upstream
                                   && target->inputs.at(input.port).source == source}
             });

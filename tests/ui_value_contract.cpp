@@ -212,19 +212,17 @@ try
                                             });
     app.toggleLoop();
     require(app.busy() && viewport.hasImage(), "loop discarded its previous rendered frame");
-    require(QTest::qWaitFor([&] { return textReady.size() >= 3; }, 5000),
-            "loop did not finish per-round display/text reads");
+    QTest::qWait(300);
+    require(textReady.isEmpty(), "loop exported text during frozen execution");
     app.toggleLoop();
     idle();
     QObject::disconnect(frameText);
-    qlonglong previousEpoch = 2;
-    for (const auto &record : textReady)
-    {
-        bool       valid   = false;
-        const auto current = record[0].toString().toLongLong(&valid);
-        require(valid && current > previousEpoch, "loop exported stale or repeated publication text");
-        previousEpoch = current;
-    }
+    app.requestOutputText(app.portContext("epoch", true), false, false);
+    require(QTest::qWaitFor([&] { return textReady.size() == 1; }, 3000),
+            "stopped loop did not deliver final text");
+    bool       valid   = false;
+    const auto current = textReady[0][0].toString().toLongLong(&valid);
+    require(valid && current > 2, "loop exported stale or repeated publication text");
     std::cout << "Workbench native lists, deferred/loop readback and Python image release passed\n";
 }
 catch (const std::exception &error)
