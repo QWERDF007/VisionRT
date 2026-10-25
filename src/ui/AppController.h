@@ -97,6 +97,8 @@ public:
     Q_INVOKABLE bool         stepIntegerParameter(const QString &id, bool initialization, int direction,
                                                   const QString &literal);
     Q_INVOKABLE bool         setParameterMode(const QString &id, bool upstream);
+    Q_INVOKABLE QVariantMap  portDeclarationContext(const QString &port, bool output = false) const;
+    Q_INVOKABLE QVariantMap  portResultContext(const QString &port) const;
     Q_INVOKABLE QVariantMap  portContext(const QString &port, bool output = false) const;
     Q_INVOKABLE bool         portContextCurrent(const QVariantMap &context) const;
     Q_INVOKABLE QVariantList bindingCandidates(const QVariantMap &context) const;

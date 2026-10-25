@@ -282,6 +282,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             }
             validateToolValues(definition->inputs, inputs);
             prepareTimer.stop();
+            snapshot->timing.prepareMeasured = true;
         }
         double deferredCreateMs = 0.0;
         if (!instance && deferredCreate)
@@ -327,6 +328,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     status = {-1, "未知的初始化异常"};
                 }
                 initTimer.stop();
+                snapshot->timing.initMeasured = true;
             }
             if (!status)
             {
@@ -338,6 +340,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             else
                 initialized = true;
         }
+        if (deferredCreateMs > 0.0)
+            snapshot->timing.initMeasured = true;
         snapshot->timing.initMs += deferredCreateMs;
         phase = NodePhase::Execute;
         if (instance)
@@ -405,6 +409,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
             }
             convertTimer.stop();
+            snapshot->timing.validateMeasured = true;
             phase = invocationPhase;
         }
         snapshot->timing.validateMs = snapshot->timing.convertMs;

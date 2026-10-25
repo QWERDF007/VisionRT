@@ -8,17 +8,22 @@ namespace visionrt {
 NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 {
     if (running)
-        return {QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("—"), QStringLiteral("—")};
+        return {QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("—"), QStringLiteral("—"),
+                QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("运行中")};
     if (!snapshot)
-        return {QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("—"), QStringLiteral("—")};
+        return {QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("—"), QStringLiteral("—"),
+                QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("未运行")};
 
     const auto &t = snapshot->timing;
     QString totalStr = durationText(t.totalMs);
     QString toolCallStr = t.toolCallMeasured ? durationText(t.adapterExecuteMs) : QStringLiteral("—");
+    QString prepareStr = t.prepareMeasured ? durationText(t.prepareMs) : QStringLiteral("—");
+    QString initStr = t.initMeasured ? durationText(t.initMs) : QStringLiteral("—");
+    QString validateStr = t.validateMeasured ? durationText(t.validateMs) : QStringLiteral("—");
     QString preprocessStr = QStringLiteral("—");
     QString postprocessStr = QStringLiteral("—");
 
-    return {totalStr, toolCallStr, preprocessStr, postprocessStr};
+    return {totalStr, toolCallStr, preprocessStr, postprocessStr, prepareStr, initStr, validateStr};
 }
 
 QString durationText(std::optional<double> milliseconds)

@@ -5,52 +5,97 @@ namespace visionrt {
 using workbench::nodeId;
 using workbench::q;
 
-QVariantMap AppController::portContext(const QString &port, bool output) const
+QVariantMap AppController::portDeclarationContext(const QString &port, bool output) const
 {
     const auto *flow = impl_->currentFlow();
     const auto *node = impl_->currentNode();
     if (!flow || !node)
         return {};
-    QVariantMap context{{"project", QString::number(impl_->projectEpoch)},
-                        {"flow", impl_->flow},
-                        {"node", QString::number(node->id)},
-                        {"port", port},
-                        {"output", output},
-                        {"interaction", QString::number(impl_->roiSerial)},
-                        {"structure", QString::number(flow->structureRevision)},
-                        {"revision", QString::number(node->executionRevision)}};
     if (output)
     {
         if (!node->signatures.outputs.contains(port.toStdString()))
             return {};
-        const auto captured = impl_->outputs.capture(port);
-        if (captured)
-            context.insert("publication", QString::number(captured->publication));
     }
     else if (!node->inputs.contains(port.toStdString()))
         return {};
-    return context;
+    return QVariantMap{{"project", QString::number(impl_->projectEpoch)},
+                       {"flow", impl_->flow},
+                       {"node", QString::number(node->id)},
+                       {"port", port},
+                       {"output", output},
+                       {"kind", QStringLiteral("declaration")},
+                       {"interaction", QString::number(impl_->roiSerial)},
+                       {"structure", QString::number(flow->structureRevision)}};
+}
+
+QVariantMap AppController::portResultContext(const QString &port) const
+{
+    const auto *flow = impl_->currentFlow();
+    const auto *node = impl_->currentNode();
+    if (!flow || !node)
+        return {};
+    if (!node->signatures.outputs.contains(port.toStdString()))
+        return {};
+    const auto captured = impl_->outputs.capture(port);
+    if (!captured)
+        return {};
+    return QVariantMap{{"project", QString::number(impl_->projectEpoch)},
+                       {"flow", impl_->flow},
+                       {"node", QString::number(node->id)},
+                       {"port", port},
+                       {"output", true},
+                       {"kind", QStringLiteral("result")},
+                       {"interaction", QString::number(impl_->roiSerial)},
+                       {"structure", QString::number(flow->structureRevision)},
+                       {"revision", QString::number(node->executionRevision)},
+                       {"publication", QString::number(captured->publication)}};
+}
+
+QVariantMap AppController::portContext(const QString &port, bool output) const
+{
+    if (output)
+    {
+        auto result = portResultContext(port);
+        if (!result.isEmpty())
+            return result;
+    }
+    return portDeclarationContext(port, output);
 }
 
 bool AppController::portContextCurrent(const QVariantMap &context) const
 {
     if (context.isEmpty())
         return false;
-    const auto current = portContext(context.value("port").toString(), context.value("output").toBool());
-    if (current.isEmpty())
+    const auto *flow = impl_->currentFlow();
+    const auto *node = impl_->currentNode();
+    if (!flow || !node)
         return false;
-    if (context.value("project") != current.value("project")
-        || context.value("flow") != current.value("flow")
-        || context.value("node") != current.value("node")
-        || context.value("port") != current.value("port")
-        || context.value("output") != current.value("output")
-        || context.value("structure") != current.value("structure"))
+    if (context.value("project").toString() != QString::number(impl_->projectEpoch)
+        || context.value("flow").toString() != impl_->flow
+        || context.value("node").toString() != QString::number(node->id)
+        || context.value("structure").toString() != QString::number(flow->structureRevision))
     {
         return false;
     }
-    if (context.contains("publication") && context.value("publication") != current.value("publication"))
-        return false;
-    if (context.contains("interaction") && context.value("interaction") != current.value("interaction"))
+    const auto port = context.value("port").toString().toStdString();
+    const bool output = context.value("output").toBool();
+    if (output)
+    {
+        if (!node->signatures.outputs.contains(port))
+            return false;
+    }
+    else
+    {
+        if (!node->inputs.contains(port))
+            return false;
+    }
+    if (context.value("kind").toString() == QStringLiteral("result") || context.contains("publication"))
+    {
+        const auto captured = impl_->outputs.capture(QString::fromStdString(port));
+        if (!captured || QString::number(captured->publication) != context.value("publication").toString())
+            return false;
+    }
+    if (context.contains("interaction") && context.value("interaction").toString() != QString::number(impl_->roiSerial))
         return false;
     return true;
 }

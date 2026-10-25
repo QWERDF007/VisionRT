@@ -39,10 +39,13 @@ struct ExecutionMetrics
 {
     double totalMs          = 0; // 总墙钟
     double prepareMs        = 0; // 参数准备墙钟
+    bool   prepareMeasured  = false;
     double initMs           = 0; // 初始化墙钟
+    bool   initMeasured     = false;
     double adapterExecuteMs = 0; // 工具Adapter整次execute墙钟（含Python桥接）
     bool   toolCallMeasured = false; // 本次执行是否真正进入工具调用边界
     double validateMs       = 0; // 结果统一检查与格式验证墙钟
+    bool   validateMeasured = false;
     // Python 包含项（已包含在 adapterExecuteMs 中，不能再累加到 totalMs）
     double waitGilMs      = 0; // Python 获取 GIL 等待时间
     double pythonInputMs  = 0; // Python 输入映射耗时

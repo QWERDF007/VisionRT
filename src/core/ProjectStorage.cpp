@@ -1,4 +1,5 @@
 #include "core/ProjectStorage.h"
+#include "core/ProjectEditor.h"
 
 #include "core/NodeContracts.h"
 #include "core/Sequence.h"
@@ -436,7 +437,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 continue;
             for (auto &[id, binding] : node.inputs)
             {
-                if (!binding.source)
+                if (binding.mode != BindingMode::Upstream || !binding.source)
                     continue;
                 const auto source = nodes.find(binding.source->node);
                 if (source != nodes.end() && !source->second->unresolved.isEmpty())
@@ -445,26 +446,22 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                              "上游工具定义缺失，引用已保留以便恢复");
                     continue;
                 }
-                bool valid = false;
-                bool hierarchyViolation = false;
-                if (source != nodes.end())
+                const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, id);
+                if (!check)
                 {
-                    const auto output = source->second->signatures.outputs.find(binding.source->port);
-                    const bool typeCompatible = output != source->second->signatures.outputs.end()
-                         && compatible(output->second, node.signatures.inputs.at(id))
-                         && !changedOutputs[source->second->id].contains(binding.source->port);
-                    if (source->second->position.y >= node.position.y)
+                    if (check.reason == BindingError::SameOrUpperRow)
                     {
-                        hierarchyViolation = true;
+                        diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
+                                 "上游节点未在当前节点上方（违反上游 Y < 下游 Y 层级约束），绑定已保留供修复，不可执行");
                     }
-                    valid = typeCompatible && !hierarchyViolation;
+                    else
+                    {
+                        binding.source.reset();
+                        diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
+                                 "上游不存在、输出已变更、跨流程或类型不兼容，引用已清除", true);
+                    }
                 }
-                if (hierarchyViolation)
-                {
-                    diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
-                             "上游节点未在当前节点上方（违反上游 Y < 下游 Y 层级约束），绑定已保留供修复，不可执行");
-                }
-                else if (!valid)
+                else if (source != nodes.end() && changedOutputs[source->second->id].contains(binding.source->port))
                 {
                     binding.source.reset();
                     diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,

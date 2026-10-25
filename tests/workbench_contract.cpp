@@ -243,10 +243,19 @@ void durationTextContract()
             "uncalled tool used an unmeasured adapter duration");
     require(uncalled.preprocess == QStringLiteral("—") && uncalled.postprocess == QStringLiteral("—"),
             "framework stages were relabeled as algorithm stages");
+    require(uncalled.prepare == QStringLiteral("—") && uncalled.init == QStringLiteral("—")
+                && uncalled.validate == QStringLiteral("—"),
+            "unmeasured stages must display —");
     snapshot.timing.toolCallMeasured = true;
+    snapshot.timing.prepareMeasured = true;
+    snapshot.timing.initMeasured = true;
+    snapshot.timing.validateMeasured = true;
     const auto called = nodeTimingText(&snapshot, false);
     require(called.total == QStringLiteral("1234.57 ms") && called.toolCall == QStringLiteral("1.1 ms"),
             "node total and adapter call measurements were conflated");
+    require(called.prepare == QStringLiteral("27 ms") && called.init == QStringLiteral("31 ms")
+                && called.validate == QStringLiteral("43 ms"),
+            "measured framework stages did not display real values");
     const std::pair<double, QString> measurements[] = {
         {0.0, QStringLiteral("0 ms")}, {0.005, QStringLiteral("<0.01 ms")}, {1.1, QStringLiteral("1.1 ms")},
         {-1.0, QStringLiteral("—")},

@@ -637,6 +637,54 @@ void wideIdsAndCycleMembership(const QString &directory)
     require(members == std::set<NodeId>{7, 8}, "downstream-only nodes included in cycle");
 }
 
+void dormantLiteralSources(const QString &directory)
+{
+    // T-B04: Dormant source on Literal binding mode must not block execution or produce false diagnostics
+    ToolRegistry registry;
+    ToolDefinition defA;
+    defA.id = "test.producer";
+    defA.displayName = "生产者";
+    defA.outputs = {{"out", "输出", {Type::Int}}};
+    registry.addDefinition(defA);
+
+    ToolDefinition defB;
+    defB.id = "test.consumer";
+    defB.displayName = "消费者";
+    defB.inputs = {{"in", "输入", {Type::Int}}};
+    registry.addDefinition(defB);
+
+    ProjectEditor editor;
+    const auto pA = editor.addNode("flow_1", defA, {0, 100}); // Y = 100
+    const auto pB = editor.addNode("flow_1", defB, {0, 50});  // Y = 50 (above pA)
+
+    // Consumer (pB) has an input with Literal mode, but has a stale/dormant source pointing to pA (below pB)
+    auto project = editor.project();
+    auto &nodeB = project.flows[0].nodes[1];
+    auto &binding = nodeB.inputs["in"];
+    binding.mode = BindingMode::Literal;
+    binding.literal = std::int64_t{42};
+    binding.source = SourcePort{pA, "out"}; // If upstream, this would violate Y < Y
+
+    const auto filePath = std::filesystem::path((directory + "/dormant_literal.vrt.json").toStdString());
+    ProjectStorage(registry).save(project, filePath);
+
+    const auto loaded = ProjectStorage(registry).load(filePath);
+    bool hasHierarchyDiagnostic = false;
+    for (const auto &diag : loaded.diagnostics)
+    {
+        if (diag.field == "inputs.in")
+            hasHierarchyDiagnostic = true;
+    }
+    require(!hasHierarchyDiagnostic, "T-B04: Literal mode with dormant source produced false diagnostic");
+    const auto &loadedBinding = loaded.project.flows[0].nodes[1].inputs.at("in");
+    require(loadedBinding.mode == BindingMode::Literal, "T-B04: Binding mode changed from Literal");
+    require(std::get<std::int64_t>(loadedBinding.literal) == 42, "T-B04: Literal value corrupted");
+
+    // Switching back to Upstream mode must be rejected
+    const auto check = validateBinding(loaded.project.flows[0], pA, "out", pB, "in");
+    require(!check && check.reason == BindingError::SameOrUpperRow, "T-B04: Upstream mode did not reject illegal edge");
+}
+
 void canonicalSequences(const QString &directory)
 {
     ToolRegistry   registry;
@@ -688,6 +736,7 @@ int main()
         retiredInitialization(temporary.path());
         wideIdsAndCycleMembership(temporary.path());
         canonicalSequences(temporary.path());
+        dormantLiteralSources(temporary.path());
         std::cout << "project storage JSON contract passed\n";
     }
     catch (const std::exception &error)

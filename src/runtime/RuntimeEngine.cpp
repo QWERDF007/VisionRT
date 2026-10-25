@@ -488,9 +488,9 @@ struct RuntimeEngine::Impl
                 if (notifyReadback && currentReadback)
                     notifyReadback(*currentReadback);
                 lock.lock();
-                if (requiresReadback && !shutdown && !stopRequested && readback.has_value())
+                if (requiresReadback && !shutdown && readback.has_value())
                 {
-                    commandReady.wait(lock, [&] { return !readback || shutdown || stopRequested; });
+                    commandReady.wait(lock, [&] { return !readback || shutdown; });
                 }
             }
             if (infrastructureError || frozen->mode != RunMode::Loop)
@@ -627,8 +627,8 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                                 std::optional<NodeId> target)
 {
     std::lock_guard lock(impl_->control);
-    if (impl_->state != RuntimeState::Idle || impl_->shutdown)
-        return {1, "运行时忙，不能开始执行"};
+    if (impl_->state != RuntimeState::Idle || impl_->shutdown || impl_->readback.has_value())
+        return {1, "运行时忙或读回尚未完成，不能开始执行"};
     try
     {
         auto frozen      = std::make_shared<FrozenRun>();
@@ -803,15 +803,6 @@ ToolStatus RuntimeEngine::requestReset()
     return {};
 }
 
-void RuntimeEngine::clearResults()
-{
-    std::lock_guard lock(impl_->control);
-    for (auto &[id, runtime] : impl_->nodes)
-    {
-        runtime->reset();
-    }
-}
-
 ToolStatus RuntimeEngine::requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry)
 {
     std::unique_lock lock(impl_->control);
@@ -918,7 +909,7 @@ bool RuntimeEngine::acknowledgeCompletion(RuntimeCompletion completion)
 {
     std::lock_guard lock(impl_->control);
     if (!impl_->completion || completion.generation != impl_->generation
-        || completion.token != impl_->completion->token)
+        || completion.token != impl_->completion->token || impl_->readback.has_value())
         return false;
     impl_->completion.reset();
     impl_->state = RuntimeState::Idle;

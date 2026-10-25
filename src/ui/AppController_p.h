@@ -167,6 +167,7 @@ struct AppController::Impl
 
     std::future<void>                    textTask;
     std::shared_ptr<TextMailbox>         textMailbox;
+    bool                                 draining = false;
     void                                 consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
     QVariantMap                         approvedTextContext;
     bool                                 approvedCopy = false;

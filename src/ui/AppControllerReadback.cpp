@@ -20,6 +20,13 @@ bool AppController::Impl::readsAllowed() const noexcept
 
 void AppController::Impl::drainReaders()
 {
+    struct DrainGuard
+    {
+        bool &flag;
+        DrainGuard(bool &f) : flag(f) { flag = true; }
+        ~DrainGuard() { flag = false; }
+    } guard(draining);
+
     converter.waitForReads();
     if (textTask.valid())
         textTask.wait();
@@ -35,6 +42,7 @@ void AppController::Impl::drainReaders()
         else
             textMailbox.reset();
     }
+    readRequests.clear();
 }
 
 void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox)
@@ -80,7 +88,8 @@ void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbo
             QGuiApplication::clipboard()->setText(result->text);
         emit q->outputTextReady(result->text);
     }
-    updateReadback();
+    if (!draining)
+        updateReadback();
 }
 
 void AppController::Impl::updateReadback()
@@ -125,6 +134,8 @@ void AppController::Impl::updateReadback()
 
 void AppController::requestOutputText(const QVariantMap &context, bool copy, bool diagnostic)
 {
+    if (impl_->closing || impl_->draining)
+        return;
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return;
     if (!impl_->readsAllowed())

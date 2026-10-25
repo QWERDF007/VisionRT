@@ -118,7 +118,6 @@ public:
     bool           acknowledgeReadback(RuntimeReadback readback);
     void           setReadbackCallback(std::function<void(RuntimeReadback)> callback);
     ToolStatus     requestReset();
-    void           clearResults();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);
     ToolStatus     requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry);

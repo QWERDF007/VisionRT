@@ -742,7 +742,6 @@ void AppController::Impl::advancePending()
         clipboard.reset();
         replacement.reset();
         refreshResult.reset();
-        runtime->clearResults();
         clearResults();
 
         if (python)
@@ -1068,6 +1067,9 @@ QVariantList AppController::nodes() const
                 {                "state",                    state},
                 {           "timingText",             timing.total},
                 {   "timingOperatorText",          timing.toolCall},
+                {    "timingPrepareText",          timing.prepare},
+                {       "timingInitText",             timing.init},
+                {   "timingValidateText",         timing.validate},
                 { "timingPreprocessText",        timing.preprocess},
                 {"timingPostprocessText",       timing.postprocess},
                 {              "missing",                  missing},

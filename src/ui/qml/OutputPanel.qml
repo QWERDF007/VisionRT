@@ -17,7 +17,7 @@ Rectangle {
     property string fullText: ""
     property var cascadeTools: []
     function showNameMenu(options, item, point) {
-        selectedContext = app.portContext(options.portId, true)
+        selectedContext = app.portDeclarationContext(options.portId, true)
         if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
         cascadeTools = app.cascadeOutputCandidates(selectedContext)
@@ -25,7 +25,7 @@ Rectangle {
         nameMenu.popup(root, position.x, position.y)
     }
     function showDataMenu(options, item, point) {
-        selectedContext = app.portContext(options.portId, true)
+        selectedContext = app.portResultContext(options.portId)
         if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
         selectedDiagnostic = options.diagnostic || false
@@ -39,7 +39,7 @@ Rectangle {
         outputMenu.close()
     }
     function invalidateMenu() {
-        pendingAction = null; selectedContext = ({})
+        if (!pendingAction) selectedContext = ({})
         outputMenu.close(); nameMenu.close(); binding.close()
     }
     function validateMenu() {

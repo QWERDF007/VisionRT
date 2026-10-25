@@ -127,6 +127,32 @@ try
         closing.requestStop();
         readback(closing);
     }
+    // T-B01: Barrier stops Once/Node completion until ACK even when stopRequested
+    {
+        engine.setReadbackEnabled(true);
+        // 1. Once with Stop while reader holds barrier
+        require(bool(engine.start(editor.project(), registry, RunMode::Once)), "Once barrier test failed to start");
+        const auto onceBarrier = readback(engine);
+        require(onceBarrier.readback.has_value(), "Once reader barrier missing readback");
+        engine.requestStop();
+        // Before ACK: start must be rejected, and completion must not be published
+        require(!engine.start(editor.project(), registry, RunMode::Once), "Start accepted before readback ACK");
+        auto pollBeforeAck = engine.pollLatest();
+        require(!pollBeforeAck.completion.has_value(), "Completion published before reader ACKed Once readback");
+        require(engine.acknowledgeReadback(*onceBarrier.readback), "Failed to ACK Once readback");
+        finish(engine);
+
+        // 2. Node with Stop while reader holds barrier
+        require(bool(engine.start(editor.project(), registry, RunMode::Node, node)), "Node barrier test failed to start");
+        const auto nodeBarrier = readback(engine);
+        require(nodeBarrier.readback.has_value(), "Node reader barrier missing readback");
+        engine.requestStop();
+        require(!engine.start(editor.project(), registry, RunMode::Node, node), "Start accepted before node readback ACK");
+        auto pollNodeBeforeAck = engine.pollLatest();
+        require(!pollNodeBeforeAck.completion.has_value(), "Completion published before reader ACKed Node readback");
+        require(engine.acknowledgeReadback(*nodeBarrier.readback), "Failed to ACK Node readback");
+        finish(engine);
+    }
     std::cout << "Read-safe stages gate loop/once/node dispatch, preserve Stop and include reader time\n";
 }
 catch (const std::exception &error)

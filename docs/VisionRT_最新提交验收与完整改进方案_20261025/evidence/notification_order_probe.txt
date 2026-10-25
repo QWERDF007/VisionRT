@@ -1,1 +1,0 @@
-PASS: notification can be consumed before async future is ready; interleaving model only, not Qt integration test

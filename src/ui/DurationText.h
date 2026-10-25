@@ -14,6 +14,9 @@ struct NodeTimingText
     QString toolCall;
     QString preprocess = QStringLiteral("—");
     QString postprocess = QStringLiteral("—");
+    QString prepare = QStringLiteral("—");
+    QString init = QStringLiteral("—");
+    QString validate = QStringLiteral("—");
 };
 
 NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running);
