@@ -48,7 +48,7 @@ void AppController::Impl::drainReaders()
     }
     for (auto it = readRequests.begin(); it != readRequests.end();)
     {
-        if (std::holds_alternative<TextRequest>(*it))
+        if (std::holds_alternative<TextRequest>(*it) || closing || closePhase != ClosePhase::None)
             it = readRequests.erase(it);
         else
             ++it;
@@ -105,7 +105,7 @@ void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbo
 
 void AppController::Impl::updateReadback()
 {
-    if (draining)
+    if (draining || closing || closePhase != ClosePhase::None)
         return;
     if (textMailbox)
     {

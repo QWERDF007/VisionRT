@@ -74,6 +74,7 @@ ApplicationWindow {
         flowCanvas.focusSearch()
     }
     function saveProject(asNew) {
+        if (app.closing) return
         unsavedSaving = false
         if (asNew) saveFile.open()
         else app.save()
@@ -103,10 +104,10 @@ ApplicationWindow {
     onClosing: function(event) {
         if (!closingApproved) { event.accepted = false; app.requestClose() }
     }
-    Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; onTriggered: app.requestNew() }
-    Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; onTriggered: openFile.open() }
-    Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; onTriggered: window.saveProject(false) }
-    Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; onTriggered: window.saveProject(true) }
+    Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; enabled: !app.closing; onTriggered: app.requestNew() }
+    Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; enabled: !app.closing; onTriggered: openFile.open() }
+    Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(false) }
+    Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(true) }
     Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: !app.busy; onTriggered: app.runOnce() }
     Action {
         id: loopAction

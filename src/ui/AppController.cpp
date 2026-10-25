@@ -354,6 +354,8 @@ void AppController::Impl::changed(bool structure)
 
 void AppController::Impl::synchronizeNodes()
 {
+    if (closing || closePhase != ClosePhase::None)
+        return;
     if (runtime->state() != RuntimeState::Idle)
         return;
     drainReaders();
@@ -397,7 +399,9 @@ void AppController::Impl::poll()
         if (!python || python->isCloseReady())
         {
             closePhase = ClosePhase::Ready;
+            closing    = false;
             pending    = Pending::None;
+            emit q->closingChanged();
             if (!closeReadyEmitted)
             {
                 closeReadyEmitted = true;
@@ -618,7 +622,9 @@ void AppController::Impl::request(Pending action, QString path)
             if (!python || python->isCloseReady())
             {
                 closePhase = ClosePhase::Ready;
+                closing    = false;
                 pending    = Pending::None;
+                emit q->closingChanged();
                 if (!closeReadyEmitted)
                 {
                     closeReadyEmitted = true;
@@ -691,6 +697,7 @@ void AppController::Impl::advancePending()
         {
             closing    = true;
             closePhase = ClosePhase::Resetting;
+            emit q->closingChanged();
             drainReaders();
             const auto result = runtime->requestReset();
             if (!result)
@@ -699,6 +706,7 @@ void AppController::Impl::advancePending()
                 pending    = Pending::None;
                 closing    = false;
                 closePhase = ClosePhase::None;
+                emit q->closingChanged();
                 return;
             }
             pendingReset = true;
@@ -794,6 +802,8 @@ void AppController::Impl::advancePending()
             }
         }
         closePhase = ClosePhase::Ready;
+        closing = false;
+        emit q->closingChanged();
         if (!closeReadyEmitted)
         {
             closeReadyEmitted = true;
@@ -1437,6 +1447,11 @@ bool AppController::isCloseReady() const
         || (impl_->closePhase == Impl::ClosePhase::None && (!impl_->python || impl_->python->isCloseReady()));
 }
 
+bool AppController::isClosing() const
+{
+    return impl_->closing || impl_->closePhase != Impl::ClosePhase::None;
+}
+
 void AppController::resolveUnsaved(const QString &decision, const QString &savePath)
 {
     if (impl_->pending == Impl::Pending::None || !impl_->awaitingDecision)
@@ -1448,6 +1463,7 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
             impl_->closing = false;
             impl_->closePhase = Impl::ClosePhase::None;
             impl_->closeReadyEmitted = false;
+            emit closingChanged();
         }
         impl_->pending          = Impl::Pending::None;
         impl_->awaitingDecision = false;
@@ -1468,6 +1484,8 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
 
 bool AppController::save(const QString &path)
 {
+    if (impl_->closing || impl_->closePhase != Impl::ClosePhase::None)
+        return false;
     auto destination = path.isEmpty() ? impl_->editor.project().path : workbench::localPath(path);
     if (destination.empty())
     {

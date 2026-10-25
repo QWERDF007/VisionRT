@@ -39,6 +39,7 @@ class AppController : public QObject
     Q_PROPERTY(QString timingText READ timingText NOTIFY timingChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY projectChanged)
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
+    Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
     Q_PROPERTY(QString aboutText READ aboutText CONSTANT)
 public:
     AppController(std::size_t workers, const QString &applicationDirectory, QObject *parent = nullptr);
@@ -118,6 +119,7 @@ public:
     Q_INVOKABLE void         requestOpen(const QString &path);
     Q_INVOKABLE void         requestClose();
     Q_INVOKABLE bool         isCloseReady() const;
+    Q_INVOKABLE bool         isClosing() const;
     Q_INVOKABLE void         resolveUnsaved(const QString &decision, const QString &savePath = {});
     Q_INVOKABLE bool         save(const QString &path = {});
     Q_INVOKABLE void         setImageIndex(int index);
@@ -146,6 +148,7 @@ signals:
     void unsavedDecisionRequired();
     void savePathRequired();
     void closeReady();
+    void closingChanged();
     void projectReplaced();
     void nodeLocated(const QString &node);
     void outputTextReady(const QString &text);

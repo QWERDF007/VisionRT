@@ -149,20 +149,23 @@ def run(inputs):
     require(values.size() == 100000 && values.first().toInt() == 2 && values.last().toInt() == 2,
             "queued full text read the wrong publication");
     frame(38);
-    // T-C03 / S-C04: Nested management inside outputTextReady preserves draining guard, delivers exactly once, no premature ACK
+    // T-D02 / S-D04: Outer drain in progress when consumeTextMailbox delivers; nested management call preserves draining guard
     {
         int nestedCount = 0;
         const auto conn = QObject::connect(&app, &AppController::outputTextReady, &app,
             [&](const QString &)
             {
                 ++nestedCount;
+                // At this moment, consumeTextMailbox was called from within drainReaders()!
                 app.resetRuntime();
             });
         text.clear();
         const auto currentContext = app.portContext("values", true);
         app.requestOutputText(currentContext, false, false);
+        // Immediately invoke management to initiate an outer drainReaders while textTask is active
+        app.resetRuntime();
         require(QTest::qWaitFor([&] { return nestedCount == 1; }, 5000),
-                "nested management operation not triggered via outputTextReady");
+                "nested management operation not triggered via outputTextReady during outer drain");
         idle();
         require(text.size() == 1, "outputTextReady delivered wrong number of times");
         QObject::disconnect(conn);

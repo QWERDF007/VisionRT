@@ -174,6 +174,23 @@ class Gate:
     require(closes.size() == 0, "closeReady must not be emitted while external owner is held");
     require(window->isVisible(), "window must remain visible while awaiting owners");
 
+    // T-D01: While in AwaitOwners, save attempts and Ctrl+S must be rejected without disk writes or re-synchronization
+    require(app.isClosing(), "app must report isClosing() while in AwaitOwners");
+    const int constructsBeforeSave = countPrefix("construct:");
+    const int initsBeforeSave = countPrefix("initialize:");
+    const bool directSaveResult = app.save(root + "/illegal_save.vrt.json");
+    require(!directSaveResult, "app.save() with path must be rejected during AwaitOwners");
+    require(!QFile::exists(root + "/illegal_save.vrt.json"), "save during AwaitOwners must not create file");
+
+    const bool emptySaveResult = app.save();
+    require(!emptySaveResult, "app.save() without path must be rejected during AwaitOwners");
+
+    QTest::keyClick(window, Qt::Key_S, Qt::ControlModifier);
+    QTest::qWait(100);
+    require(countPrefix("construct:") == constructsBeforeSave, "instance was constructed during AwaitOwners");
+    require(countPrefix("initialize:") == initsBeforeSave, "instance was initialized during AwaitOwners");
+    require(closes.size() == 0, "closeReady must not be emitted during save attempts");
+
     // Release external owner - close should now proceed automatically
     captured.reset();
     require(QTest::qWaitFor([&] { return closes.size() == 1; }, 5000),

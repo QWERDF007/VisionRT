@@ -210,6 +210,21 @@ void pendingContract()
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved("discard");
     require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
+
+    // S-D03: Resolving unsaved decision with valid "save" writes to disk and completes close
+    {
+        QTemporaryDir saveDir;
+        AppController saveApp(1, saveDir.path());
+        int saveCloses = 0;
+        QObject::connect(&saveApp, &AppController::closeReady, [&] { ++saveCloses; });
+        saveApp.requestClose();
+        require(saveApp.dirty(), "new project without file should be dirty");
+        const QString validSavePath = saveDir.path() + "/saved_on_close.vrt.json";
+        saveApp.resolveUnsaved("save", validSavePath);
+        require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
+        require(QFile::exists(validSavePath), "resolveUnsaved save did not write file");
+        require(!saveApp.dirty(), "project should be clean after save on close");
+    }
 }
 
 #include <chrono>

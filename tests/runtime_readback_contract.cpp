@@ -135,12 +135,16 @@ try
         const auto onceBarrier = readback(engine);
         require(onceBarrier.readback.has_value(), "Once reader barrier missing readback");
         engine.requestStop();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        require(engine.state() == RuntimeState::Stopping, "Engine should be in Stopping state");
-        // Before ACK: start must be rejected, and completion must not be published
-        require(!engine.start(editor.project(), registry, RunMode::Once), "Start accepted before readback ACK");
-        auto pollBeforeAck = engine.pollLatest();
-        require(!pollBeforeAck.completion.has_value(), "Completion published before reader ACKed Once readback");
+        // Bounded polling window: verify completion is never prematurely published before ACK
+        const auto onceDeadline = std::chrono::steady_clock::now() + 50ms;
+        while (std::chrono::steady_clock::now() < onceDeadline)
+        {
+            require(engine.state() == RuntimeState::Stopping, "Engine should be in Stopping state");
+            require(!engine.start(editor.project(), registry, RunMode::Once), "Start accepted before readback ACK");
+            auto poll = engine.pollLatest();
+            require(!poll.completion.has_value(), "Completion published prematurely before reader ACKed Once readback");
+            std::this_thread::sleep_for(2ms);
+        }
         require(engine.acknowledgeReadback(*onceBarrier.readback), "Failed to ACK Once readback");
         finish(engine);
 
@@ -149,11 +153,15 @@ try
         const auto nodeBarrier = readback(engine);
         require(nodeBarrier.readback.has_value(), "Node reader barrier missing readback");
         engine.requestStop();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        require(engine.state() == RuntimeState::Stopping, "Engine should be in Stopping state");
-        require(!engine.start(editor.project(), registry, RunMode::Node, node), "Start accepted before node readback ACK");
-        auto pollNodeBeforeAck = engine.pollLatest();
-        require(!pollNodeBeforeAck.completion.has_value(), "Completion published before reader ACKed Node readback");
+        const auto nodeDeadline = std::chrono::steady_clock::now() + 50ms;
+        while (std::chrono::steady_clock::now() < nodeDeadline)
+        {
+            require(engine.state() == RuntimeState::Stopping, "Engine should be in Stopping state");
+            require(!engine.start(editor.project(), registry, RunMode::Node, node), "Start accepted before node readback ACK");
+            auto poll = engine.pollLatest();
+            require(!poll.completion.has_value(), "Completion published prematurely before reader ACKed Node readback");
+            std::this_thread::sleep_for(2ms);
+        }
         require(engine.acknowledgeReadback(*nodeBarrier.readback), "Failed to ACK Node readback");
         finish(engine);
 
@@ -163,12 +171,16 @@ try
         require(resetBarrier.readback.has_value(), "Once reader barrier missing readback for reset");
         const auto callsBeforeReset = calls.load();
         require(bool(engine.requestReset()), "Reset request should be accepted");
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        require(engine.state() == RuntimeState::Stopping, "Engine should be in Stopping state after requestReset");
-        require(!engine.start(editor.project(), registry, RunMode::Once), "Start accepted during barrier before reset ACK");
-        require(calls.load() == callsBeforeReset, "In-place tool executed while reader still holds readback barrier");
-        auto pollResetBeforeAck = engine.pollLatest();
-        require(!pollResetBeforeAck.completion.has_value(), "Completion published before reader ACKed readback during Reset");
+        const auto resetDeadline = std::chrono::steady_clock::now() + 50ms;
+        while (std::chrono::steady_clock::now() < resetDeadline)
+        {
+            require(engine.state() == RuntimeState::Stopping, "Engine should be in Stopping state after requestReset");
+            require(!engine.start(editor.project(), registry, RunMode::Once), "Start accepted during barrier before reset ACK");
+            require(calls.load() == callsBeforeReset, "In-place tool executed while reader still holds readback barrier");
+            auto poll = engine.pollLatest();
+            require(!poll.completion.has_value(), "Completion published prematurely before reader ACKed readback during Reset");
+            std::this_thread::sleep_for(2ms);
+        }
         require(engine.acknowledgeReadback(*resetBarrier.readback), "Failed to ACK readback for Reset");
         finish(engine);
     }
