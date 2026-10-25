@@ -34,6 +34,7 @@ class ImageViewport : public QQuickItem
     Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged)
     Q_PROPERTY(int drawShape READ drawShape WRITE setDrawShape NOTIFY drawShapeChanged)
     Q_PROPERTY(int selectedRoi READ selectedRoi NOTIFY selectedRoiChanged)
+    Q_PROPERTY(bool assistActive READ assistActive WRITE setAssistActive NOTIFY assistActiveChanged)
 public:
     enum ViewMode
     {
@@ -56,6 +57,10 @@ public:
     void beginRoiEdit(RoiEditTarget target, ROI::value_type targetRois, bool readOnly = false,
                       bool singleRectangle = false);
     void endRoiEdit();
+    // Transient assist candidate in current image coordinates. It never reaches the project and
+    // never claims to be a formal result.
+    void setAssistPreview(ROI preview);
+    void setAssistActive(bool value);
 
     bool hasImage() const noexcept
     {
@@ -106,6 +111,11 @@ public:
         return selected_;
     }
 
+    bool assistActive() const noexcept
+    {
+        return assistActive_;
+    }
+
     QPointF    imageToItem(QPointF point) const;
     QPointF    itemToImage(QPointF point) const;
     QTransform imageTransform() const;
@@ -140,7 +150,13 @@ signals:
     void readOnlyChanged();
     void drawShapeChanged();
     void selectedRoiChanged();
+    void assistActiveChanged();
     void imagePresented(quint64 requestId);
+    // Cursor in image coordinates. The host debounces and converts these into bounded requests.
+    void assistHover(const QPointF &imagePoint);
+    void assistLeave();
+    void assistClicked(const QPointF &imagePoint, bool append);
+    void assistCanceled();
     void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::ROI::value_type::value_type &roi);
     void roiDeleted(const visionrt::RoiEditTarget &target);
     void roiEditCanceled();
@@ -168,7 +184,8 @@ private:
         Create,
         Move,
         Handle,
-        Vertices
+        Vertices,
+        Assist
     };
     void                 applyFrame(const DisplayFrame &frame);
     void                 recalculateFit();
@@ -202,6 +219,8 @@ private:
     ROI::value_type                            inputs_;
     ROI::value_type                            outputs_;
     ROI::value_type                            editable_;
+    ROI                                        assistPreview_;
+    bool                                       assistActive_    = false;
     std::optional<RoiEditTarget>      target_;
     bool                                       singleRectangle_ = false;
     bool                              readOnly_  = true;

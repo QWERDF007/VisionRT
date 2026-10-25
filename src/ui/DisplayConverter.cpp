@@ -284,7 +284,10 @@ void DisplayConverter::complete(std::vector<DisplayFrame> frames, quint64 serial
         auto next = std::move(*pending_);
         pending_.reset();
         dispatch(std::move(next));
+        return;
     }
+    if (!busy_)
+        emit readersIdle();
 }
 
 void DisplayConverter::waitForReads()

@@ -65,7 +65,7 @@ QuiSplitView {
             parameterGroups = result
     }
     function focusRoi() {
-        if (!root.enabled || app.busy) return
+        if (!root.enabled || app.runtimeBusy) return
         roiNodeId = app.selectedNode
         for (let p of app.parameters) {
             if (p.type === "ROI" && !p.init) {
@@ -141,7 +141,7 @@ QuiSplitView {
                         Layout.margins: 4; Layout.rightMargin: 8
                         radius: Theme.radiusBase
                         color: runMouse.pressed ? Theme.executeButtonPressedBg : (runMouse.containsMouse ? Theme.executeButtonHoverBg : Theme.executeButtonNormalBg)
-                        enabled: !app.busy && app.selectedNode.length > 0
+                        enabled: !app.runtimeBusy && app.selectedNode.length > 0
                         opacity: enabled ? 1.0 : 0.4
                         RowLayout {
                             anchors.centerIn: parent; spacing: 5

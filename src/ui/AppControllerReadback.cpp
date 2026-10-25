@@ -57,18 +57,77 @@ void AppController::Impl::drainReaders()
     }
 }
 
+bool AppController::Impl::drainReady() const
+{
+    return !converter.isBusy() && textPending.load() == 0 && (!assist || !assist->busy());
+}
+
+void AppController::Impl::beginDrain(std::function<void()> continuation)
+{
+    if (draining)
+    {
+        // Coalesce: the newest continuation wins, exactly one body runs after the drain.
+        drainContinuation = std::move(continuation);
+        return;
+    }
+    // A preview must release its image owner before the runtime mutates anything.
+    if (assist)
+        assist->invalidate();
+    // Invalidate before waiting so a completed-but-not-yet-delivered conversion can not touch the
+    // data the caller is about to mutate.
+    converter.invalidate(generation);
+    for (auto it = readRequests.begin(); it != readRequests.end();)
+    {
+        if (std::holds_alternative<TextRequest>(*it) || closing || closePhase != ClosePhase::None)
+            it = readRequests.erase(it);
+        else
+            ++it;
+    }
+    if (drainReady())
+    {
+        if (continuation)
+            continuation();
+        return;
+    }
+    draining          = true;
+    drainContinuation = std::move(continuation);
+}
+
+void AppController::Impl::finishDrain()
+{
+    if (!draining || !drainReady())
+        return;
+    draining = false;
+    auto continuation = std::move(drainContinuation);
+    drainContinuation = {};
+    if (continuation)
+        continuation();
+}
+
 void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox)
 {
-    if (!mailbox || mailbox != textMailbox)
+    if (!mailbox)
         return;
-    textMailbox.reset();
-    if (textTask.valid())
-    {
-        textTask.wait();
+    const bool current = mailbox == textMailbox;
+    if (current)
+        textMailbox.reset();
+    // Never block the GUI thread. The async body has already decremented the pending counter before
+    // it queues this call, so releasing the future here cannot wait on formatting work. Releasing it
+    // for a discarded mailbox is what keeps a later request from being rejected as still running.
+    if (textTask.valid() && textPending.load() == 0)
         textTask = {};
+    if (!current)
+    {
+        if (draining)
+            finishDrain();
+        return;
     }
     if (mailbox->generation != generation)
+    {
+        if (draining)
+            finishDrain();
         return;
+    }
 
     std::exception_ptr        error;
     std::optional<TextResult> result;
@@ -92,6 +151,8 @@ void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbo
         }
         if (!draining)
             updateReadback();
+        else
+            finishDrain();
         return;
     }
 
@@ -103,6 +164,8 @@ void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbo
     }
     if (!draining)
         updateReadback();
+    else
+        finishDrain();
 }
 
 void AppController::Impl::updateReadback()
@@ -200,6 +263,7 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy, boo
     auto       mailbox    = std::make_shared<Impl::TextMailbox>();
     mailbox->generation   = generation;
     impl_->textMailbox    = mailbox;
+    ++impl_->textPending;
     impl_->textTask       = std::async(
         std::launch::async,
         [captured = std::move(*captured), copy, generation, context, diagnostic, mailbox, this]
@@ -219,6 +283,7 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy, boo
                 mailbox->error = std::current_exception();
                 mailbox->done  = true;
             }
+            --impl_->textPending;
             QMetaObject::invokeMethod(this, [this, mailbox] { impl_->consumeTextMailbox(mailbox); },
                                       Qt::QueuedConnection);
         });

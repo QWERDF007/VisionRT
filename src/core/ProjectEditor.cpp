@@ -848,6 +848,39 @@ bool ProjectEditor::setLiteral(std::string_view flowId, NodeId id, std::string_v
     return setBinding(flowId, id, input, std::move(binding));
 }
 
+bool ProjectEditor::setLiteralBindings(std::string_view flowId, NodeId id,
+                                       std::span<const std::pair<std::string, PortValue>> values)
+{
+    requireIdle();
+    if (values.empty())
+        return false;
+    ProjectEditor edit(project_);
+    auto         &node = findNode(edit.flow(flowId), id);
+    requireEditable(node);
+    bool changed = false;
+    for (const auto &[input, value] : values)
+    {
+        const auto &binding = inputBinding(node, input);
+        if (binding.mode == BindingMode::Upstream || effectiveSource(binding))
+            throw ContractError("该参数由上游提供：" + input);
+        const auto &type = signature(node.signatures.inputs, input);
+        if (type.type == Type::Image)
+            throw ContractError("图像输入不能写入字面量：" + input);
+        validateLiteral(type, value);
+        if (equalValues(binding.literal, value))
+            continue;
+        auto &mutableBinding  = node.inputs.find(input)->second;
+        mutableBinding.literal = copyProjectLiteral(value);
+        changed                = true;
+    }
+    if (!changed)
+        return false;
+    requireIncrement(node.executionRevision);
+    ++node.executionRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
 bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string_view parameter, PortValue value)
 {
     requireIdle();
@@ -880,6 +913,11 @@ bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, Expr
     if (tool.nodeModel != NodeModel::Expression && tool.nodeModel != NodeModel::Condition)
         throw ContractError("该节点不使用表达式配置");
     validateExpressionConfig(config);
+    // Identifiers already handed out stay retired: a later transaction may raise the sequence but
+    // never lower it, so stale contexts can not be pointed at a freshly allocated port.
+    if (node.expression && config.nextPortSeq < node.expression->nextPortSeq)
+        throw ContractError("表达式端口序号不得回退：当前 " + std::to_string(node.expression->nextPortSeq)
+                            + "，提交 " + std::to_string(config.nextPortSeq));
     if (tool.nodeModel == NodeModel::Condition)
     {
         if (config.program.size() != 1)

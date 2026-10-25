@@ -5,6 +5,7 @@
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
 #include "ui/AppController.h"
+#include "ui/AssistPreview.h"
 #include "ui/Diagnostics.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
@@ -12,8 +13,11 @@
 #include "ui/WireRouter.h"
 
 #include <QPointer>
+#include <QPointF>
 #include <QTimer>
+#include <atomic>
 #include <deque>
+#include <functional>
 #include <future>
 #include <set>
 #include <string_view>
@@ -142,6 +146,15 @@ struct AppController::Impl
     std::optional<RoiPreview> roi;
     std::uint64_t            roiSerial = 0;
 
+    // Smart point selection runs on its own bounded channel; the controller only forwards the
+    // cursor and owns the proposal transaction.
+    std::unique_ptr<AssistPreview>        assist;
+    std::string                           assistToolId;
+    bool                                  assistEnabled = false;
+    QString                               assistHint;
+    ROI                                   assistPreviewRois;
+    std::optional<AssistContext>          assistPreviewContext;
+
     struct TextRequest
     {
         QVariantMap context;
@@ -179,7 +192,10 @@ struct AppController::Impl
 
     std::future<void>                    textTask;
     std::shared_ptr<TextMailbox>         textMailbox;
+    std::atomic<int>                     textPending{0};
     bool                                 draining = false;
+    std::function<void()>                drainContinuation;
+    bool                                 pendingDrained = false;
     void                                 consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
     QVariantMap                         approvedTextContext;
     bool                                 approvedCopy = false;
@@ -217,17 +233,27 @@ struct AppController::Impl
 
     void      setState(RuntimeState value);
     bool                 readsAllowed() const noexcept;
+    // Blocking drain, reserved for the destructor (last line of defence).
     void                 drainReaders();
+    // Asynchronous drain used by every management flow: continues on the GUI thread once the
+    // display worker and the text task released their references.
+    void                 beginDrain(std::function<void()> continuation);
+    void                 finishDrain();
+    bool                 drainReady() const;
     void                 updateReadback();
     void      poll();
     void      start(RunMode mode);
+    void      beginRun(RunMode mode);
     void      request(Pending action, QString path = {});
     void      advancePending();
+    void      finishClose();
     void      clearResults();
     bool      nodeExists(NodeId id) const;
     void      pruneDeletedNodes();
     void      synchronizeNodes();
+    void      requestSynchronize();
     void      refresh(bool rescan);
+    void      requestRefresh(bool rescan);
     void      loadToolsPackage();
     void      rescanTools();
     void      refreshFinished();
@@ -240,5 +266,15 @@ struct AppController::Impl
     ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
     void      finishRoi();
     void      storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
+
+    // Smart point selection.
+    void                          refreshAssist();
+    void                          setAssistHint(const QString &text);
+    void                          clearAssistPreview();
+    std::optional<AssistContext>  assistContext(QString *reason) const;
+    bool                          assistContextCurrent(const AssistContext &context) const;
+    std::optional<AssistRequest>  assistRequest(bool learn, bool append, const QPointF &cursor,
+                                                QString *reason) const;
+    void                          applyAssistOutcome(const AssistOutcome &outcome);
 };
 } // namespace visionrt

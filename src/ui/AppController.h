@@ -16,6 +16,7 @@ class AppController : public QObject
     Q_OBJECT
     Q_PROPERTY(QString title READ title NOTIFY projectChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY runtimeChanged)
+    Q_PROPERTY(bool runtimeBusy READ runtimeBusy NOTIFY runtimeChanged)
     Q_PROPERTY(QString runState READ runState NOTIFY runtimeChanged)
     Q_PROPERTY(QString diagnostic READ diagnostic NOTIFY diagnosticChanged)
     Q_PROPERTY(QStringList diagnostics READ diagnostics NOTIFY diagnosticChanged)
@@ -44,11 +45,16 @@ class AppController : public QObject
     Q_PROPERTY(QString nodeModel READ nodeModel NOTIFY parametersChanged)
     Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
     Q_PROPERTY(QString selectTypeText READ selectTypeText NOTIFY parametersChanged)
+    Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
+    Q_PROPERTY(QString assistHint READ assistHint NOTIFY assistChanged)
+    Q_PROPERTY(QVariantList assistPreview READ assistPreview NOTIFY assistChanged)
 public:
     AppController(std::size_t workers, const QString &applicationDirectory, QObject *parent = nullptr);
     ~AppController() override;
     QString             title() const;
     bool                busy() const;
+    // State-only view used by editors: drains caused by display conversion must not disable drawing.
+    bool                runtimeBusy() const;
     QString             runState() const;
     QString             diagnostic() const;
     QStringList         diagnostics() const;
@@ -144,11 +150,21 @@ public:
     Q_INVOKABLE QVariantMap  selectType(const QString &node) const;
     Q_INVOKABLE bool         applySelectType(const QString &node, const QString &type, const QString &dtype,
                                              int rank);
+    // Chinese description of a type row, reusing the parameter panel's display mapping.
+    Q_INVOKABLE QString      typeDescription(const QString &type, const QString &dtype, int rank) const;
     QString                  nodeModel() const;
     QString                  executionGuardText() const;
     QString                  selectTypeText() const;
+    bool                     assistActive() const;
+    QString                  assistHint() const;
+    QVariantList             assistPreview() const;
     Q_INVOKABLE QVariantList toolDefinitions() const;
     Q_INVOKABLE QVariantMap  toolMetadata(const QString &toolId) const;
+    // Smart point-selection. Hover previews a candidate, click learns and commits a proposal,
+    // Ctrl+click appends it to the current group. Esc cancels through assistCancel().
+    Q_INVOKABLE bool         assistHover(double x, double y);
+    Q_INVOKABLE bool         assistClick(double x, double y, bool append);
+    Q_INVOKABLE void         assistCancel();
 signals:
     void projectChanged();
     void nodesChanged();
@@ -169,6 +185,7 @@ signals:
     void outputTextReady(const QString &text);
     void catalogChanged();
     void pasteChanged();
+    void assistChanged();
 
 private:
     struct Impl;

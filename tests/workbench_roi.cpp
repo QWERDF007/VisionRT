@@ -265,6 +265,7 @@ void roiParameterContract()
     viewport.setReadOnly(false);
     app.endRoiPreview();
     require(app.bindInput(app.portContext("rois"), source, "rois"), "ROI input could not bind to the upstream ROI output");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "upstream ROI binding did not settle");
     require(app.editRoi("rois", true), "Copied upstream session could reopen");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Copied ROI background was presented");
@@ -440,6 +441,7 @@ void roiParameterContract()
         return QString{};
     };
     require(app.save(project) && !app.dirty(), "Rect baseline could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "post-save synchronization did not finish");
     const auto originalRectangle = rectLiteral();
     require(app.editRoi("rect", false), "Scalar Rect could not open the image editor");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
@@ -536,6 +538,7 @@ void roiParameterContract()
                 && numericRectangle[3] == originalGeometry[3] && numericRectangle[5] == originalGeometry[5],
             "Numeric Apply lost an unedited component or committed stale text");
     require(app.setParameter("rect", false, originalRectangle) && app.save(project), "Rect fixture could not reset");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect fixture reset did not settle");
     require(app.editRoi("rect", false), "Rect could not reopen after numeric Apply");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Rect background was not presented after numeric editing");
@@ -615,6 +618,7 @@ void roiParameterContract()
                                      .arg(rectLiteral()).arg(rectangleGestures.count())).toStdString());
     require(app.bindInput(app.portContext("rect"), source, "rect"), "Scalar Rect could not bind to its upstream output");
     require(app.save(project) && !app.dirty(), "Bound Rect baseline could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Bound Rect baseline did not settle");
     const auto boundRectangle = rectLiteral();
     require(app.editRoi("rect", true), "Scalar Rect upstream copy could not begin");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
@@ -692,7 +696,9 @@ void roiParameterContract()
     require(app.applyRoi(), "Image-free numeric Apply succeeded");
     const auto imageFreeValue = std::get<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI})).get()[0][0];
     require(imageFreeValue[2] == 9.25f, "Image-free numeric geometry was lost");
-    require(app.save(project) && app.editRoi("rect", false), "Image-free Rect could not reopen");
+    require(app.save(project), "Image-free Rect could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Image-free Rect save did not settle");
+    require(app.editRoi("rect", false), "Image-free Rect could not reopen");
     const auto previousImageFreeSession = app.roiEditor().value("id").toString();
     app.endRoiPreview();
     require(app.editRoi("rect", false), "Image-free Rect could not start a new session for the same parameter");
@@ -707,8 +713,10 @@ void roiParameterContract()
             "Image-free draft could change");
     require(app.dirty(), "Image-free numeric edit directly updated project");
     app.endRoiPreview();
-    require(app.setParameter("rect", false, "[]") && app.save(project) && app.editRoi("rect", false),
-            "Empty ROI rectangle could not enter image-free numeric editing");
+    require(app.setParameter("rect", false, "[]") && app.save(project),
+            "Empty ROI rectangle baseline could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty ROI rectangle save did not settle");
+    require(app.editRoi("rect", false), "Empty ROI rectangle could not enter image-free numeric editing");
     QQuickItem *createRectangle = nullptr;
     pending = {panel};
     while (!pending.isEmpty())
@@ -723,7 +731,9 @@ void roiParameterContract()
     const auto rectList = app.property("roiEditor").toMap().value("rectangle").toList();
     const bool hasApplied = app.applyRoi();
     require(rectList.size() == 5 && app.dirty() && hasApplied, "Image-free Rect creation did not produce a valid draft");
-    require(app.save(project), "Image-free rectangle could not save");
+    if (!app.save(project))
+        throw std::runtime_error("Image-free rectangle could not save: " + app.diagnostic().toStdString());
+
     app.requestOpen(project);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Image-free rectangle reopen did not finish");
     app.selectNode(withoutImage);
@@ -769,8 +779,9 @@ void roiParameterContract()
     const auto currentRect = rectLiteral();
     require(app.roiEditor().isEmpty() && !viewport.editing() && !app.applyRoi() && rectLiteral() == currentRect,
             "Acquiring a background preserved or committed the image-free ROI session");
-    require(app.save(project) && !app.dirty() && app.editRoi("rect", false),
-            "Rectangle editor could not reopen against the newly bound image");
+    require(app.save(project) && !app.dirty(), "Newly bound rectangle baseline could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Newly bound rectangle save did not settle");
+    require(app.editRoi("rect", false), "Rectangle editor could not reopen against the newly bound image");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
                 && app.imageCount() == 2 && app.roiEditor().value("imageWidth").toInt() == 128
                 && app.roiEditor().value("imageHeight").toInt() == 96,
@@ -817,6 +828,7 @@ void roiParameterContract()
             "A pre-execution gesture or numeric callback changed the saved rectangle after new results");
     require(app.setParameter("rect", false, "[]") && app.save(project) && !app.dirty(),
             "Empty rectangle mode baseline could not be saved");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty rectangle baseline did not settle");
     const auto missingRectangle = rectLiteral();
     require(app.editRoi("rect", false), "Empty rectangle could not enter image drawing mode");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
@@ -902,6 +914,7 @@ void roiParameterContract()
                 && app.roiEditor().value("rectangle").toList().size() == 5,
             "A canceled window session's numeric callback modified the reopened rectangle");
     require(app.save(project) && !app.dirty(), "Save window session state");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Window session save did not settle");
     require(app.setRoiRectangle(reopenedWindowSession, {12.0, 14.0, 30.0, 20.0, 0.0}),
             "Transient window test could not stage rectangle geometry");
     const auto transientRectangle = app.roiEditor().value("rectangle").toList();
@@ -931,6 +944,7 @@ void roiParameterContract()
         {
             require(app.save(project) && !app.dirty(), "Save literal binding baseline");
         }
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Window gesture baseline did not settle");
         const auto windowLiteral = rectLiteral();
         const auto windowWires = app.wires();
         require(app.editRoi("rect", copyUpstream), "Window gesture rectangle could not open");

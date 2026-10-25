@@ -92,14 +92,17 @@ if(VISIONRT_BUILD_APP)
         src/ui/WireRouter.cpp
         src/ui/WireRouter.h
         src/ui/AppController.cpp
+        src/ui/AppControllerAssist.cpp
         src/ui/AppControllerBindings.cpp
         src/ui/AppControllerDisplay.cpp
         src/ui/AppControllerReadback.cpp
         src/ui/AppControllerRoi.cpp
         src/ui/AppControllerMetadata.cpp
-    src/ui/AppControllerExpression.cpp
+        src/ui/AppControllerExpression.cpp
         src/ui/AppControllerParameters.cpp
         src/ui/AppControllerRouting.cpp
+        src/ui/AssistPreview.cpp
+        src/ui/AssistPreview.h
         src/ui/AppController.h
         src/ui/AppControllerDiagnostics.cpp
         src/ui/ToolTreeModel.cpp
@@ -264,6 +267,16 @@ if(BUILD_TESTING)
         target_link_libraries(ui_readback_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_readback_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+        visionrt_contract(ui_drain_contract visionrt_ui)
+        target_link_libraries(ui_drain_contract PRIVATE Qt6::Test)
+        visionrt_contract(assist_viewport_contract visionrt_ui)
+        target_link_libraries(assist_viewport_contract PRIVATE Qt6::Test)
+        visionrt_contract(workbench_expression_contract visionrt_ui)
+        target_link_libraries(workbench_expression_contract PRIVATE Qt6::Test)
+        target_compile_definitions(workbench_expression_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(runtime_hotpath_contract visionrt_ui)
         target_link_libraries(runtime_hotpath_contract PRIVATE Qt6::Test)
         target_compile_definitions(runtime_hotpath_contract PRIVATE
@@ -286,6 +299,10 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        visionrt_contract(workbench_assist_contract visionrt_ui)
+        target_link_libraries(workbench_assist_contract PRIVATE Qt6::Test)
+        target_compile_definitions(workbench_assist_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(workbench_tooltree_contract visionrt_ui)
         target_link_libraries(workbench_tooltree_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_tooltree_contract PRIVATE

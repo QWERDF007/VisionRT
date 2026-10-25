@@ -189,6 +189,48 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                          }
                          updateReadback();
                      });
+    // The display worker released its batch: management continuations waiting on the drain may
+    // advance without ever blocking the GUI thread.
+    QObject::connect(&converter, &DisplayConverter::readersIdle, owner,
+                     [this]
+                     {
+                         if (draining)
+                             finishDrain();
+                     });
+    assist = std::make_unique<AssistPreview>();
+    QObject::connect(assist.get(), &AssistPreview::outcomeReady, owner,
+                     [this](const AssistOutcome &outcome)
+                     {
+                         if (outcome.learn)
+                         {
+                             applyAssistOutcome(outcome);
+                             return;
+                         }
+                         if (!assistContextCurrent(outcome.context))
+                         {
+                             clearAssistPreview();
+                             return;
+                         }
+                         if (!outcome.valid)
+                         {
+                             clearAssistPreview();
+                             setAssistHint(outcome.quality.isEmpty()
+                                               ? QStringLiteral("未找到有效目标")
+                                               : QStringLiteral("未找到有效目标：") + outcome.quality);
+                             return;
+                         }
+                         assistPreviewRois    = outcome.preview;
+                         assistPreviewContext = outcome.context;
+                         if (viewport)
+                             viewport->setAssistPreview(assistPreviewRois);
+                         emit q->assistChanged();
+                     });
+    QObject::connect(assist.get(), &AssistPreview::busyChanged, owner,
+                     [this]
+                     {
+                         if (draining)
+                             finishDrain();
+                     });
     tools.setRegistry(registry);
     if (!editor.project().flows.empty())
         flow = workbench::q(editor.project().flows.front().id);
@@ -200,6 +242,9 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
 AppController::Impl::~Impl()
 {
     timer.stop();
+    // The helper owns images and may still be executing; release it before any runtime state goes.
+    if (assist)
+        assist->shutdown();
     runtime->setCompletionCallback({});
     runtime->setReadbackCallback({});
     runtime->requestStop();
@@ -283,6 +328,7 @@ void AppController::Impl::setState(RuntimeState value)
     state = value;
     if (viewport)
         viewport->setReadOnly(state != RuntimeState::Idle || !roi);
+    refreshAssist();
     emit q->runtimeChanged();
 }
 
@@ -360,7 +406,13 @@ void AppController::Impl::synchronizeNodes()
         return;
     if (runtime->state() != RuntimeState::Idle)
         return;
-    drainReaders();
+    beginDrain([this] { requestSynchronize(); });
+}
+
+void AppController::Impl::requestSynchronize()
+{
+    if (isClosing())
+        return;
     const auto status = runtime->requestSynchronize(editor.project(), registry);
     if (!status)
         report(status);
@@ -583,11 +635,19 @@ void AppController::Impl::poll()
 
 void AppController::Impl::start(RunMode mode)
 {
-    if (isClosing() || !idle())
+    // A run may supersede a pending synchronize: it waits for the same drain and becomes the
+    // continuation, so the newest management intent is the one that executes.
+    if (isClosing() || state != RuntimeState::Idle || pending != Pending::None)
         return;
     finishRoi();
     q->parameters();
-    drainReaders();
+    beginDrain([this, mode] { beginRun(mode); });
+}
+
+void AppController::Impl::beginRun(RunMode mode)
+{
+    if (isClosing())
+        return;
     latestRoundMs.reset();
     std::optional<NodeId> target;
     if (mode == RunMode::Node)
@@ -659,6 +719,7 @@ void AppController::Impl::request(Pending action, QString path)
     pendingApproved  = action == Pending::Reset;
     awaitingDecision = false;
     pendingReset     = false;
+    pendingDrained   = false;
     replacement.reset();
     if (state != RuntimeState::Idle)
     {
@@ -700,7 +761,12 @@ void AppController::Impl::advancePending()
             closing    = true;
             closePhase = ClosePhase::Resetting;
             emit q->closingChanged();
-            drainReaders();
+            if (!pendingDrained)
+            {
+                pendingDrained = true;
+                beginDrain([this] { advancePending(); });
+                return;
+            }
             const auto result = runtime->requestReset();
             if (!result)
             {
@@ -717,13 +783,13 @@ void AppController::Impl::advancePending()
         }
         try
         {
-            if (pending == Pending::Open)
+            if (!replacement && pending == Pending::Open)
             {
                 auto loaded = ProjectStorage(registry).load(workbench::localPath(pendingPath));
                 storageDiagnostics(loaded.diagnostics);
                 replacement = std::move(loaded.project);
             }
-            else if (pending == Pending::New)
+            else if (!replacement && pending == Pending::New)
                 replacement = ProjectDefinition{};
         }
         catch (const std::exception &error)
@@ -732,7 +798,12 @@ void AppController::Impl::advancePending()
             pending = Pending::None;
             return;
         }
-        drainReaders();
+        if (!pendingDrained)
+        {
+            pendingDrained = true;
+            beginDrain([this] { advancePending(); });
+            return;
+        }
         const auto result = runtime->requestReset();
         if (!result)
         {
@@ -768,52 +839,64 @@ void AppController::Impl::advancePending()
     if (completed == Pending::Close)
     {
         closing = true;
-        drainReaders();
-        converter.waitForReads();
-        converter.invalidate(generation);
-        if (viewport)
-        {
-            viewport->clearImage(displayRequest);
-            viewport->setOverlays({}, {});
-            viewport->endRoiEdit();
-        }
-        roi.reset();
-        outputs.clear();
-        snapshots.clear();
-        displayInputs.clear();
-        displayOutputs.clear();
-        parameterRows.clear();
-        parameterRowsNode = 0;
-        clipboard.reset();
-        replacement.reset();
-        refreshResult.reset();
-        clearResults();
-
-        if (python)
-        {
-            python->prepareShutdown();
-            if (!python->isCloseReady())
-            {
-                closePhase      = ClosePhase::AwaitOwners;
-                const auto remaining = python->activeReferences();
-                report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
-                pending         = Pending::Close;
-                pendingApproved = true;
-                pendingReset    = true;
-                return;
-            }
-        }
-        closePhase = ClosePhase::Ready;
-        closing = false;
-        emit q->closingChanged();
-        if (!closeReadyEmitted)
-        {
-            closeReadyEmitted = true;
-            emit q->closeReady();
-        }
+        beginDrain([this] { finishClose(); });
+        return;
     }
     else if (completed == Pending::Reset)
         synchronizeNodes();
+}
+
+void AppController::Impl::finishClose()
+{
+    if (assist)
+    {
+        assist->shutdown();
+        assistToolId.clear();
+    }
+    clearAssistPreview();
+    assistEnabled = false;
+    converter.invalidate(generation);
+    if (viewport)
+    {
+        viewport->clearImage(displayRequest);
+        viewport->setOverlays({}, {});
+        viewport->setAssistActive(false);
+        viewport->endRoiEdit();
+    }
+    roi.reset();
+    outputs.clear();
+    snapshots.clear();
+    displayInputs.clear();
+    displayOutputs.clear();
+    parameterRows.clear();
+    parameterRowsNode = 0;
+    clipboard.reset();
+    replacement.reset();
+    refreshResult.reset();
+    clearResults();
+
+    if (python)
+    {
+        python->prepareShutdown();
+        if (!python->isCloseReady())
+        {
+            closePhase      = ClosePhase::AwaitOwners;
+            const auto remaining = python->activeReferences();
+            report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
+            pending         = Pending::Close;
+            pendingApproved = true;
+            pendingReset    = true;
+            return;
+        }
+    }
+    closePhase = ClosePhase::Ready;
+    closing = false;
+    emit q->closingChanged();
+    if (!closeReadyEmitted)
+    {
+        closeReadyEmitted = true;
+        emit q->closeReady();
+    }
 }
 
 void AppController::Impl::refresh(bool rescan)
@@ -823,11 +906,22 @@ void AppController::Impl::refresh(bool rescan)
     finishRoi();
     if (rescan)
         loadToolsPackage();
+    // The catalog may now expose different modules: drop the assist session so it is rebuilt from
+    // the refreshed registry instead of serving from an outdated module.
+    assistToolId.clear();
+    if (assist)
+        assist->invalidate();
+    beginDrain([this, rescan] { requestRefresh(rescan); });
+}
+
+void AppController::Impl::requestRefresh(bool rescan)
+{
+    if (isClosing())
+        return;
     auto        result        = std::make_shared<RefreshResult>();
     auto        definitions   = registry.definitions();
     auto       *pythonRuntime = python.get();
     const auto *catalog       = &registry;
-    drainReaders();
     const auto  accepted      = runtime->requestRefresh(
         [result, definitions = std::move(definitions), pythonRuntime, catalog]
         {
@@ -963,6 +1057,11 @@ QString AppController::title() const
 
 bool AppController::busy() const
 {
+    return impl_->state != RuntimeState::Idle || impl_->draining;
+}
+
+bool AppController::runtimeBusy() const
+{
     return impl_->state != RuntimeState::Idle;
 }
 
@@ -1060,20 +1159,44 @@ QVariantList AppController::nodes() const
         {
             const bool running = impl_->active.contains(node.id);
             const auto snapshot = impl_->displaySnapshot(node);
+            const auto disposition = snapshot ? snapshot->disposition : NodeDisposition::Pending;
             QString state = "idle";
             if (running)
                 state = "running";
             else if (snapshot)
-                state = snapshot->status.code == 0 ? "succeeded"
-                      : snapshot->status.code == kCancelledStatus ? "cancelled" : "failed";
+                switch (disposition)
+                {
+                case NodeDisposition::Skipped:
+                    state = "skipped";
+                    break;
+                case NodeDisposition::Blocked:
+                    state = "blocked";
+                    break;
+                case NodeDisposition::Canceled:
+                    state = "cancelled";
+                    break;
+                case NodeDisposition::Failed:
+                    state = "failed";
+                    break;
+                default:
+                    state = snapshot->status.code == 0 ? "succeeded"
+                          : snapshot->status.code == kCancelledStatus ? "cancelled" : "failed";
+                    break;
+                }
             std::int64_t statusCode = 0;
             QString      statusMessage;
             QString      statusDetail;
-            if (snapshot && snapshot->status.code != 0)
+            if (snapshot && (snapshot->status.code != 0 || disposition == NodeDisposition::Skipped
+                             || disposition == NodeDisposition::Blocked))
             {
-                statusCode    = snapshot->status.code;
-                statusMessage
-                    = diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status});
+                statusCode = snapshot->status.code;
+                // The gate reason stays separate from tool errors: no error code is invented.
+                statusMessage = disposition == NodeDisposition::Skipped || disposition == NodeDisposition::Blocked
+                                  ? (q(snapshot->status.message).isEmpty()
+                                         ? QStringLiteral("节点未执行")
+                                         : QStringLiteral("节点未执行：") + q(snapshot->status.message))
+                                  : diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase,
+                                                       snapshot->status});
                 statusDetail = q(snapshot->status.detail);
             }
             const auto timing = nodeTimingText(snapshot.get(), running);
@@ -1095,6 +1218,9 @@ QVariantList AppController::nodes() const
             }
             const auto   *def             = impl_->registry.find(node.toolId);
             const QString version         = def ? q(def->version) : QStringLiteral("1.0");
+            // A snapshot produced by an older configuration is still shown, but it must not claim
+            // to describe the current parameters.
+            const bool    stale           = snapshot && snapshot->executionRevision != node.executionRevision;
             const QString category        = def ? q(def->category) : QString();
             const auto    avail           = impl_->registry.availability(node.toolId);
             const bool    defMissing      = (avail.state == ToolAvailability::DefinitionMissing);
@@ -1112,6 +1238,11 @@ QVariantList AppController::nodes() const
                 {                    "x",          node.position.x},
                 {                    "y",          node.position.y},
                 {                "state",                    state},
+                {          "disposition",          dispositionName(disposition)},
+                {             "executed", disposition == NodeDisposition::Succeeded
+                                              || disposition == NodeDisposition::Failed
+                                              || disposition == NodeDisposition::Canceled},
+                {                "stale",                   stale},
                 {           "timingText",             timing.total},
                 {   "timingOperatorText",          timing.toolCall},
                 {    "timingPrepareText",          timing.prepare},

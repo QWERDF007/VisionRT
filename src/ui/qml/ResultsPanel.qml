@@ -114,7 +114,7 @@ Rectangle {
                     Layout.preferredWidth: 26; Layout.preferredHeight: 22; radius: Theme.radiusSmall
                     color: roiMouse.containsMouse ? Theme.menuButtonHoverBg : Theme.surfaceBg
                     border.color: Theme.border; border.width: 1
-                    enabled: !app.busy && app.selectedNode.length > 0
+                    enabled: !app.runtimeBusy && app.selectedNode.length > 0
                     opacity: enabled ? 1.0 : 0.5
                     QuiText {
                         anchors.centerIn: parent
@@ -148,8 +148,19 @@ Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; color: "#eaebef"
                 ImageViewport {
                     id: viewport; objectName: "imageViewport"
-                    anchors.fill: parent; readOnly: app.busy
+                    anchors.fill: parent; readOnly: app.runtimeBusy
                     Component.onCompleted: app.attachViewport(viewport)
+                    onAssistHover: function(point) { app.assistHover(point.x, point.y) }
+                    onAssistLeave: app.assistCancel()
+                    onAssistClicked: function(point, append) { app.assistClick(point.x, point.y, append) }
+                    onAssistCanceled: app.assistCancel()
+                }
+                QuiText {
+                    anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 8
+                    text: app.assistHint
+                    visible: app.assistActive && text.length > 0
+                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                    color: "#0f6f6f"
                 }
                 QuiText {
                     anchors.bottom: parent.bottom; anchors.right: parent.right; anchors.margins: 8

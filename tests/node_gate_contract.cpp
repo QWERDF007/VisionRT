@@ -247,6 +247,23 @@ void materialisationAndTransactions()
     }
     require(rejected == false, "an unconnected variable may change type");
 
+    // Port identifiers are retired once issued: a later transaction can raise the sequence but a
+    // lower value must be rejected so stale contexts can not point at a recycled port.
+    auto narrowedSequence     = retyped;
+    narrowedSequence.nextPortSeq = retyped.nextPortSeq - 1;
+    bool sequenceRejected     = false;
+    try
+    {
+        editor.setExpressionConfig("flow_1", id, narrowedSequence, expression);
+    }
+    catch (const ContractError &)
+    {
+        sequenceRejected = true;
+    }
+    require(sequenceRejected, "a decreasing port sequence must be rejected");
+    require(editor.project().flows.front().nodes.front().expression->nextPortSeq == retyped.nextPortSeq,
+            "a rejected sequence must not change the stored allocator");
+
     // Forward references and duplicate symbols are rejected before commit.
     auto forward                     = sampleExpression();
     forward.program.back().symbol    = "later";

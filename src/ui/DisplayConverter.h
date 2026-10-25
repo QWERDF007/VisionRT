@@ -46,6 +46,9 @@ public:
 
 signals:
     void batchConverted(const std::vector<visionrt::DisplayFrame> &frames);
+    // Emitted after the worker dropped every reference to the submitted batch. Management flows use
+    // it to continue asynchronously instead of blocking the GUI thread.
+    void readersIdle();
 
 private:
     struct Request

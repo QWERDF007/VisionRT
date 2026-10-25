@@ -67,7 +67,8 @@ try
         { "mode", "模式", {Type::String}, std::string("success")}
     };
     definition.outputs = {
-        { "value", "值", {Type::Int}}
+        {  "value",  "值", {Type::Int}},
+        { "flag", "标志", {Type::Bool}}
     };
     write(package + "tools/custom/status/source.json", QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(script, R"py(import time
@@ -82,8 +83,8 @@ def run(inputs):
         while not (root / 'allow').exists():
             time.sleep(0.002)
     if mode == 'fail':
-        return {'__status_code': 1, '__status_message': '受控失败', 'value': None}
-    return {'__status_code': 0, '__status_message': '', 'value': 7}
+        return {'__status_code': 1, '__status_message': '受控失败', 'value': None, 'flag': None}
+    return {'__status_code': 0, '__status_message': '', 'value': 7, 'flag': mode != 'gate_false'}
 )py");
     AppController app(2, root);
     const auto    releaseOnExit = qScopeGuard([&] { write(permission, "allow"); });
@@ -211,7 +212,60 @@ def run(inputs):
             "cancelled receiver lost its message");
     requireColor(receiverItem, "statusDotColor", theme->nodeStateGray(), "cancelled status dot is not neutral");
     requireColor(receiverItem, "headerBg", theme->nodeHeaderGray(), "cancelled header is not neutral");
-    std::cout << "WORKBENCH_STATUS_PASS running=green succeeded=neutral failed=red cancelled=neutral timing=1\n";
+
+    // Gated nodes never ran the algorithm: they must show 跳过/阻塞, never a green success and
+    // never a fabricated zero-millisecond algorithm time.
+    app.addFlow("门控流程");
+    idle();
+    app.addNode("test.status", 0, 0);
+    idle();
+    const auto gate = app.selectedNode();
+    require(!gate.isEmpty(), "gate node is missing");
+    require(app.setParameter("mode", false, "gate_false"), "gate node could not produce a false flag");
+    idle();
+    app.addNode("test.status", 4, 8);
+    idle();
+    const auto gated = app.selectedNode();
+    require(!gated.isEmpty() && app.applyExecutionGuard(gated, gate, "flag"), "gate guard could not be applied");
+    idle();
+    app.runOnce();
+    idle();
+    auto gatedRow = stateOf(gated);
+    require(gatedRow.value("state").toString() == "skipped", "false branch must be reported as skipped");
+    require(gatedRow.value("disposition").toString() == "skipped", "skipped disposition is missing");
+    require(gatedRow.value("timingText").toString() == QStringLiteral("未执行"),
+            "a skipped node must not report algorithm time");
+    require(!gatedRow.value("executed").toBool(), "a skipped node must not be marked as executed");
+    auto *gatedItem = findItem(canvas, "flowNode_" + gated);
+    require(gatedItem, "gated delegate is missing");
+    require(gatedItem->property("nodeState").toString() == "skipped", "gated delegate did not reach skipped state");
+    requireColor(gatedItem, "statusDotColor", theme->nodeStateGray(), "skipped status dot is not neutral");
+    auto *skipBadge = findItem(gatedItem, "nodeBadgeSkip_" + gated);
+    auto *blockBadge = findItem(gatedItem, "nodeBadgeBlock_" + gated);
+    require(skipBadge && skipBadge->isVisible(), "skipped badge is missing");
+    require(blockBadge && !blockBadge->isVisible(), "skipped node must not show a blocked badge");
+    require(gatedItem->property("statusDotColor").value<QColor>() != theme->nodeStateGreen(),
+            "skipped node must not borrow the running green");
+
+    // A failing upstream blocks the guarded node instead of running it.
+    app.selectNode(gate);
+    require(app.setParameter("mode", false, "fail"), "gate node could not enter failure mode");
+    idle();
+    app.runOnce();
+    idle();
+    gatedRow = stateOf(gated);
+    require(gatedRow.value("state").toString() == "blocked", "failed upstream must block the guarded node");
+    require(gatedRow.value("disposition").toString() == "blocked", "blocked disposition is missing");
+    require(gatedRow.value("timingText").toString() == QStringLiteral("未执行"),
+            "a blocked node must not report algorithm time");
+    require(gatedRow.value("statusMessage").toString().contains(QStringLiteral("未执行")),
+            "blocked reason must stay separate from tool errors");
+    requireColor(gatedItem, "statusDotColor", theme->nodeStateOrange(), "blocked status dot is not orange");
+    require(blockBadge && blockBadge->isVisible(), "blocked badge is missing");
+    require(skipBadge && !skipBadge->isVisible(), "blocked node must not show a skipped badge");
+
+    std::cout << "WORKBENCH_STATUS_PASS running=green succeeded=neutral failed=red cancelled=neutral "
+                 "skipped=neutral blocked=orange timing=1\n";
     window.hide();
     return 0;
 }

@@ -134,6 +134,12 @@ public:
     bool setSource(std::string_view flowId, NodeId node, std::string_view input, std::optional<SourcePort> source);
     bool unbind(std::string_view flowId, NodeId node, std::string_view input);
     bool setLiteral(std::string_view flowId, NodeId node, std::string_view input, PortValue value);
+    // One transaction for a proposal that touches several literal inputs (ROI plus recommended
+    // parameters). Every port is validated before anything is written, inputs currently fed from
+    // upstream are refused instead of being silently disconnected, and the whole proposal raises
+    // exactly one node execution revision.
+    bool setLiteralBindings(std::string_view flowId, NodeId node,
+                            std::span<const std::pair<std::string, PortValue>> values);
     bool setInitParam(std::string_view flowId, NodeId node, std::string_view parameter, PortValue value);
     // One transaction: validate the candidate configuration, materialise its
     // contract, verify bindings, then commit exactly one revision.

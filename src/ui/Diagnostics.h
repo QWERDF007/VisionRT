@@ -11,6 +11,7 @@ using ApplicationDiagnostic
     = std::variant<QString, ToolStatus, NodeDiagnostic, RuntimeDiagnostic, ProjectStorageDiagnostic>;
 
 QString     statusSummary(const ToolStatus &status);
+QString     dispositionName(NodeDisposition disposition);
 QString     diagnosticMessage(const NodeDiagnostic &diagnostic);
 QString     diagnosticMessage(const ApplicationDiagnostic &diagnostic);
 QJsonObject diagnosticObject(const ApplicationDiagnostic &diagnostic);

@@ -65,6 +65,7 @@ void AppController::Impl::updateResults()
             }
             emit q->resultsChanged();
         }
+        refreshAssist();
         return;
     }
     const auto *node = currentNode();
@@ -96,6 +97,7 @@ void AppController::Impl::updateResults()
     }
     updateDisplay();
     emit q->resultsChanged();
+    refreshAssist();
 }
 
 void AppController::Impl::applyOverlays()

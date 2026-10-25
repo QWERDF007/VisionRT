@@ -14,6 +14,12 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
         return {QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("—"), QStringLiteral("—"),
                 QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("未运行")};
 
+    // A gated node never entered the algorithm, so it must not look like a zero-millisecond
+    // success. The gate decision itself is reported through the disposition badge instead.
+    if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
+        return {QStringLiteral("未执行"), QStringLiteral("未执行"), QStringLiteral("—"), QStringLiteral("—"),
+                QStringLiteral("未执行"), QStringLiteral("未执行"), QStringLiteral("未执行")};
+
     const auto &t = snapshot->timing;
     QString totalStr = durationText(t.totalMs);
     QString toolCallStr = t.toolCallMeasured ? durationText(t.adapterExecuteMs) : QStringLiteral("—");

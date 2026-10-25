@@ -1,8 +1,10 @@
 #include "core/NodeContracts.h"
+#include "ui/DisplayTypes.h"
 #include "ui/OutputModel.h"
 #include "ui/AppController_p.h"
 
 #include <algorithm>
+#include <optional>
 
 namespace visionrt {
 namespace {
@@ -79,10 +81,13 @@ QString AppController::executionGuardText() const
     if (source && tool)
     {
         const PortDefinition *port = workbench::port(tool->outputs, node->executionGuard->port);
+        // The materialized contract owns the port storage, so it must outlive every read of `port`.
+        std::optional<ToolDefinition> contract;
         if (!port)
             try
             {
-                port = workbench::port(nodeContract(*source, *tool).outputs, node->executionGuard->port);
+                contract = nodeContract(*source, *tool);
+                port     = workbench::port(contract->outputs, node->executionGuard->port);
             }
             catch (const ContractError &)
             {
@@ -148,11 +153,16 @@ bool AppController::applyExpressionConfig(const QString &nodeId, const QVariantL
         return false;
     if (!impl_->idle())
         return false;
+    // The allocator only moves forward: committed identifiers are never recycled, even when the
+    // highest one was deleted in this very transaction.
+    std::uint64_t sequenceFloor = 1;
+    if (const auto *existing = impl_->findNode(id); existing && existing->expression)
+        sequenceFloor = existing->expression->nextPortSeq;
     bool ok = impl_->command(
         [&]
         {
             ExpressionConfig config;
-            std::uint64_t    next = 1;
+            std::uint64_t    next = sequenceFloor;
             for (const auto &item : variables)
             {
                 const auto row = item.toMap();
@@ -271,5 +281,19 @@ bool AppController::applySelectType(const QString &nodeId, const QString &type, 
         emit parametersChanged();
     }
     return ok;
+}
+
+QString AppController::typeDescription(const QString &type, const QString &dtype, int rank) const
+{
+    TypeSpec spec;
+    try
+    {
+        spec = typeFromMap(QVariantMap{{"type", type}, {"dtype", dtype}, {"rank", rank}});
+    }
+    catch (const ContractError &)
+    {
+        return {};
+    }
+    return displayTypeName(spec);
 }
 } // namespace visionrt

@@ -1,6 +1,7 @@
 #include "ui/ImageViewport.h"
 
 #include <QCursor>
+#include <QGuiApplication>
 #include <QHoverEvent>
 #include <QKeyEvent>
 #include <QMatrix4x4>
@@ -15,6 +16,7 @@
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
 #include <QSGTransformNode>
+#include <QStyleHints>
 #include <QThread>
 #include <QWheelEvent>
 #include <algorithm>
@@ -284,6 +286,7 @@ void ImageViewport::setGeneration(quint64 generation)
     endRoiEdit();
     inputs_.clear();
     outputs_.clear();
+    assistPreview_.clear();
     display_    = {};
     imageSize_  = {};
     firstImage_ = true;
@@ -348,6 +351,27 @@ void ImageViewport::setOverlays(ROI::value_type inputs, ROI::value_type outputs)
     inputs_  = std::move(inputs);
     outputs_ = std::move(outputs);
     overlaysUpdated();
+}
+
+void ImageViewport::setAssistPreview(ROI preview)
+{
+    if (assistPreview_ == preview)
+        return;
+    assistPreview_ = std::move(preview);
+    overlaysUpdated();
+}
+
+void ImageViewport::setAssistActive(bool value)
+{
+    if (assistActive_ == value)
+        return;
+    assistActive_ = value;
+    if (!assistActive_)
+        setAssistPreview({});
+    if (gesture_ == Gesture::Assist)
+        clearGesture();
+    updateCursor();
+    emit assistActiveChanged();
 }
 
 QTransform ImageViewport::imageTransform() const
@@ -632,6 +656,18 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
         event->accept();
         return;
     }
+    if (event->button() == Qt::LeftButton && assistActive_ && !canEdit() && hasImage()
+        && gesture_ == Gesture::None)
+    {
+        // A click is only a selection if the pointer does not travel; beyond the drag threshold the
+        // same press turns into a pan, so inspecting the image never commits a candidate.
+        forceActiveFocus(Qt::MouseFocusReason);
+        gesture_     = Gesture::Assist;
+        anchor_      = itemToImage(event->position());
+        lastPointer_ = event->position();
+        event->accept();
+        return;
+    }
     if (event->button() != Qt::LeftButton || !canEdit()
         || (gesture_ != Gesture::None && gesture_ != Gesture::Vertices))
     {
@@ -781,6 +817,18 @@ void ImageViewport::changeDraft(QPointF point)
 
 void ImageViewport::mouseMoveEvent(QMouseEvent *event)
 {
+    if (gesture_ == Gesture::Assist)
+    {
+        const auto delta = event->position() - lastPointer_;
+        if (delta.manhattanLength() > QGuiApplication::styleHints()->startDragDistance())
+        {
+            gesture_     = Gesture::Pan;
+            panButton_   = Qt::LeftButton;
+            lastPointer_ = event->position();
+        }
+        event->accept();
+        return;
+    }
     if (gesture_ == Gesture::Pan)
     {
         const auto delta = event->position() - lastPointer_;
@@ -805,6 +853,15 @@ void ImageViewport::mouseMoveEvent(QMouseEvent *event)
 
 void ImageViewport::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (gesture_ == Gesture::Assist && event->button() == Qt::LeftButton)
+    {
+        const auto point = itemToImage(event->position());
+        const bool append = event->modifiers().testFlag(Qt::ControlModifier);
+        clearGesture();
+        event->accept();
+        emit assistClicked(point, append);
+        return;
+    }
     if (gesture_ == Gesture::Pan && event->button() == panButton_)
     {
         gesture_   = Gesture::None;
@@ -840,7 +897,9 @@ void ImageViewport::mouseDoubleClickEvent(QMouseEvent *event)
 void ImageViewport::mouseUngrabEvent()
 {
     // Multi-click polygon/point-set drafts intentionally survive each click's ungrab.
-    if (gesture_ != Gesture::Vertices)
+    if (gesture_ == Gesture::Assist)
+        clearGesture();
+    else if (gesture_ != Gesture::Vertices)
         cancelDraft();
 }
 
@@ -932,7 +991,12 @@ void ImageViewport::wheelEvent(QWheelEvent *event)
 
 void ImageViewport::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_Escape && editing())
+    if (event->key() == Qt::Key_Escape && assistActive_ && !editing())
+    {
+        emit assistCanceled();
+        event->accept();
+    }
+    else if (event->key() == Qt::Key_Escape && editing())
     {
         if (gesture_ == Gesture::None)
             emit roiEditCanceled();
@@ -956,7 +1020,7 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
 
 void ImageViewport::updateCursor()
 {
-    if (drawShape_ > 0 && canEdit())
+    if ((drawShape_ > 0 && canEdit()) || (assistActive_ && hasImage() && !editing()))
         setCursor(QCursor(Qt::CrossCursor));
     else
         unsetCursor();
@@ -965,18 +1029,24 @@ void ImageViewport::updateCursor()
 void ImageViewport::hoverEnterEvent(QHoverEvent *event)
 {
     updateCursor();
+    if (assistActive_ && hasImage() && !editing())
+        emit assistHover(itemToImage(event->position()));
     QQuickItem::hoverEnterEvent(event);
 }
 
 void ImageViewport::hoverMoveEvent(QHoverEvent *event)
 {
     updateCursor();
+    if (assistActive_ && hasImage() && !editing())
+        emit assistHover(itemToImage(event->position()));
     QQuickItem::hoverMoveEvent(event);
 }
 
 void ImageViewport::hoverLeaveEvent(QHoverEvent *event)
 {
     unsetCursor();
+    if (assistActive_)
+        emit assistLeave();
     QQuickItem::hoverLeaveEvent(event);
 }
 
@@ -1013,9 +1083,12 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->overlays->removeChildNode(child);
             delete child;
         }
-        Lines input(scale_), output(scale_), edit(scale_);
+        Lines input(scale_), output(scale_), edit(scale_), assist(scale_);
         for (const auto &roi : inputs_) input.roi(roi);
         for (const auto &roi : outputs_) output.roi(roi);
+        for (const auto &group : assistPreview_)
+            for (const auto &roi : group)
+                assist.roi(roi);
         for (std::size_t i = 0; editing() && i < editable_.size(); ++i)
         {
             if (static_cast<int>(i) == selected_ && draft_)
@@ -1042,6 +1115,8 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         if (auto *geometry = input.node(window(), QColor(255, 220, 0)))
             node->overlays->appendChildNode(geometry);
         if (auto *geometry = output.node(window(), QColor(0, 120, 255)))
+            node->overlays->appendChildNode(geometry);
+        if (auto *geometry = assist.node(window(), QColor(0, 190, 190)))
             node->overlays->appendChildNode(geometry);
         if (auto *geometry = edit.node(window(), QColor(255, 220, 0)))
             node->overlays->appendChildNode(geometry);

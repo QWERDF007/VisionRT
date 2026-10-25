@@ -165,6 +165,28 @@ QJsonObject encode(const RuntimeDiagnostic &diagnostic)
 }
 }
 
+QString dispositionName(NodeDisposition disposition)
+{
+    switch (disposition)
+    {
+    case NodeDisposition::Pending:
+        return QStringLiteral("pending");
+    case NodeDisposition::Running:
+        return QStringLiteral("running");
+    case NodeDisposition::Succeeded:
+        return QStringLiteral("succeeded");
+    case NodeDisposition::Failed:
+        return QStringLiteral("failed");
+    case NodeDisposition::Skipped:
+        return QStringLiteral("skipped");
+    case NodeDisposition::Blocked:
+        return QStringLiteral("blocked");
+    case NodeDisposition::Canceled:
+        return QStringLiteral("canceled");
+    }
+    return QStringLiteral("pending");
+}
+
 QString diagnosticMessage(const NodeDiagnostic &diagnostic)
 {
     return QStringLiteral("节点 %1（%2）%3：%4")

@@ -46,6 +46,7 @@ Dialog {
     }
     function addProgram() {
         let rows = program.slice()
+        // Conditions always produce a boolean decision, so their single formula starts as Bool.
         rows.push({ portId: allocatePort(), name: "结果" + (rows.length + 1), symbol: "r" + (rows.length + 1),
                     expression: "", type: conditionMode ? "Bool" : "Float", dtype: "", rank: -1,
                     exposed: !conditionMode })
@@ -57,19 +58,51 @@ Dialog {
     function removeProgram(index) {
         let rows = program.slice(); rows.splice(index, 1); program = rows
     }
+    function replaceRow(programRow, index, row) {
+        let rows = (programRow ? program : variables).slice()
+        rows[index] = row
+        if (programRow) program = rows
+        else variables = rows
+    }
+    function rowAt(programRow, index) {
+        return (programRow ? program : variables)[index]
+    }
     function updateVariable(index, key, value) {
-        let rows = variables.slice(); rows[index][key] = value; variables = rows
+        let row = Object.assign({}, variables[index]); row[key] = value; replaceRow(false, index, row)
     }
     function updateProgram(index, key, value) {
-        let rows = program.slice(); rows[index][key] = value; program = rows
+        let row = Object.assign({}, program[index]); row[key] = value; replaceRow(true, index, row)
+    }
+    // Switching the kind of a row must also settle the array shape, otherwise the row would render
+    // a fallback dtype/rank while the committed draft stays unrepresentable and gets rejected.
+    function changeType(index, programRow, type) {
+        let row = Object.assign({}, rowAt(programRow, index))
+        row.type = type
+        if (type === "Array") {
+            if (root.dtypeValues.indexOf(row.dtype) < 0) row.dtype = "float64"
+            if (!(row.rank >= 1 && row.rank <= 4)) row.rank = 1
+        } else {
+            row.dtype = ""
+            row.rank = -1
+        }
+        replaceRow(programRow, index, row)
     }
     function commit() {
-        if (app.applyExpressionConfig(nodeId, variables, program))
-            close()
+        if (!app.applyExpressionConfig(nodeId, variables, program))
+            return false
+        close()
+        return true
     }
 
-    readonly property var typeNames: ["Int", "Float", "Bool", "String", "Array"]
-    readonly property var dtypeNames: ["int32", "int64", "float32", "float64", "bool", "string"]
+    readonly property var typeValues: ["Int", "Float", "Bool", "String", "Array"]
+    readonly property var dtypeValues: ["uint8", "int32", "int64", "float32", "float64", "bool", "string"]
+    function typeLabel(value) {
+        let text = app.typeDescription(value, "", -1)
+        return text.length > 0 ? text : value
+    }
+    function rowDescription(row) {
+        return row.type === "Array" ? app.typeDescription("Array", row.dtype, row.rank) : typeLabel(row.type)
+    }
 
     component Field: TextField {
         Layout.fillWidth: true
@@ -83,21 +116,21 @@ Dialog {
         required property bool programRow
         spacing: 4
         ComboBox {
-            Layout.preferredWidth: 96
-            model: root.typeNames
-            currentIndex: Math.max(0, root.typeNames.indexOf(typeRow.rowData.type))
-            onActivated: typeRow.programRow
-                ? root.updateProgram(typeRow.rowIndex, "type", currentText)
-                : root.updateVariable(typeRow.rowIndex, "type", currentText)
+            id: typeCombo
+            Layout.preferredWidth: 110
+            model: root.typeValues.map(function(value) { return root.typeLabel(value) })
+            currentIndex: Math.max(0, root.typeValues.indexOf(typeRow.rowData.type || "Int"))
+            onActivated: root.changeType(typeRow.rowIndex, typeRow.programRow, root.typeValues[typeCombo.currentIndex])
         }
         ComboBox {
-            Layout.preferredWidth: 96
+            id: dtypeCombo
+            Layout.preferredWidth: 110
             visible: typeRow.rowData.type === "Array"
-            model: root.dtypeNames
-            currentIndex: Math.max(0, root.dtypeNames.indexOf(typeRow.rowData.dtype || "float64"))
+            model: root.dtypeValues
+            currentIndex: Math.max(0, root.dtypeValues.indexOf(typeRow.rowData.dtype || "float64"))
             onActivated: typeRow.programRow
-                ? root.updateProgram(typeRow.rowIndex, "dtype", currentText)
-                : root.updateVariable(typeRow.rowIndex, "dtype", currentText)
+                ? root.updateProgram(typeRow.rowIndex, "dtype", root.dtypeValues[dtypeCombo.currentIndex])
+                : root.updateVariable(typeRow.rowIndex, "dtype", root.dtypeValues[dtypeCombo.currentIndex])
         }
         SpinBox {
             Layout.preferredWidth: 84
@@ -107,6 +140,13 @@ Dialog {
             onValueModified: typeRow.programRow
                 ? root.updateProgram(typeRow.rowIndex, "rank", value)
                 : root.updateVariable(typeRow.rowIndex, "rank", value)
+        }
+        QuiText {
+            Layout.preferredWidth: 150
+            color: Theme.paramRowText
+            font: Qt.font({ pixelSize: 11 })
+            elide: Text.ElideRight
+            text: root.rowDescription(typeRow.rowData)
         }
     }
 
@@ -124,78 +164,93 @@ Dialog {
                 : "变量端口由稳定标识区分；结果公式按顺序求值，隐藏结果只供后续公式使用，不输出端口。"
         }
 
-        QuiText { text: "输入变量"; font: Qt.font({ pixelSize: 13, bold: true }); color: Theme.paramRowText }
-        Repeater {
-            model: root.variables
-            RowLayout {
-                required property var modelData
-                required property int index
-                Layout.fillWidth: true
-                Field {
-                    Layout.preferredWidth: 120
-                    text: modelData.name
-                    placeholderText: "名称"
-                    onTextEdited: root.updateVariable(index, "name", text)
+        ScrollView {
+            id: scroller
+            objectName: "expressionScroller"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentWidth: availableWidth
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+            ColumnLayout {
+                width: scroller.availableWidth
+                spacing: 8
+
+                QuiText { text: "输入变量"; font: Qt.font({ pixelSize: 13, bold: true }); color: Theme.paramRowText }
+                Repeater {
+                    model: root.variables
+                    RowLayout {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Field {
+                            Layout.preferredWidth: 120
+                            text: modelData.name
+                            placeholderText: "名称"
+                            onTextEdited: root.updateVariable(index, "name", text)
+                        }
+                        Field {
+                            Layout.preferredWidth: 110
+                            text: modelData.symbol
+                            placeholderText: "公式符号"
+                            onTextEdited: root.updateVariable(index, "symbol", text)
+                        }
+                        RowTypeEditor { rowData: modelData; rowIndex: index; programRow: false; Layout.fillWidth: true }
+                        CheckBox {
+                            text: "可有缺失"
+                            checked: modelData.allowMissing
+                            onToggled: root.updateVariable(index, "allowMissing", checked)
+                        }
+                        Button {
+                            text: "删除"
+                            onClicked: root.removeVariable(index)
+                        }
+                    }
                 }
-                Field {
-                    Layout.preferredWidth: 110
-                    text: modelData.symbol
-                    placeholderText: "公式符号"
-                    onTextEdited: root.updateVariable(index, "symbol", text)
-                }
-                RowTypeEditor { rowData: modelData; rowIndex: index; programRow: false; Layout.fillWidth: true }
-                CheckBox {
-                    text: "可有缺失"
-                    checked: modelData.allowMissing
-                    onToggled: root.updateVariable(index, "allowMissing", checked)
+                Button { text: "添加变量"; onClicked: root.addVariable(); enabled: !root.conditionMode || root.variables.length < 64 }
+
+                QuiText { text: "公式列表"; font: Qt.font({ pixelSize: 13, bold: true }); color: Theme.paramRowText }
+                Repeater {
+                    model: root.program
+                    RowLayout {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Field {
+                            Layout.preferredWidth: 110
+                            text: modelData.name
+                            placeholderText: "名称"
+                            onTextEdited: root.updateProgram(index, "name", text)
+                        }
+                        Field {
+                            Layout.preferredWidth: 90
+                            text: modelData.symbol
+                            placeholderText: "结果符号"
+                            onTextEdited: root.updateProgram(index, "symbol", text)
+                        }
+                        Field {
+                            Layout.fillWidth: true
+                            text: modelData.expression
+                            placeholderText: "例如 all_nonempty(v_gt(radii, 5.0))"
+                            onTextEdited: root.updateProgram(index, "expression", text)
+                        }
+                        RowTypeEditor { rowData: modelData; rowIndex: index; programRow: true }
+                        CheckBox {
+                            text: "输出端口"
+                            visible: !root.conditionMode
+                            checked: modelData.exposed
+                            onToggled: root.updateProgram(index, "exposed", checked)
+                        }
+                        Button { text: "删除"; onClicked: root.removeProgram(index) }
+                    }
                 }
                 Button {
-                    text: "删除"
-                    onClicked: root.removeVariable(index)
+                    text: "添加公式"
+                    enabled: root.conditionMode ? root.program.length === 0 : true
+                    onClicked: root.addProgram()
                 }
             }
-        }
-        Button { text: "添加变量"; onClicked: root.addVariable(); enabled: !root.conditionMode || root.variables.length < 64 }
-
-        QuiText { text: "公式列表"; font: Qt.font({ pixelSize: 13, bold: true }); color: Theme.paramRowText }
-        Repeater {
-            model: root.program
-            RowLayout {
-                required property var modelData
-                required property int index
-                Layout.fillWidth: true
-                Field {
-                    Layout.preferredWidth: 110
-                    text: modelData.name
-                    placeholderText: "名称"
-                    onTextEdited: root.updateProgram(index, "name", text)
-                }
-                Field {
-                    Layout.preferredWidth: 90
-                    text: modelData.symbol
-                    placeholderText: "结果符号"
-                    onTextEdited: root.updateProgram(index, "symbol", text)
-                }
-                Field {
-                    Layout.fillWidth: true
-                    text: modelData.expression
-                    placeholderText: "例如 all_nonempty(v_gt(radii, 5.0))"
-                    onTextEdited: root.updateProgram(index, "expression", text)
-                }
-                RowTypeEditor { rowData: modelData; rowIndex: index; programRow: true }
-                CheckBox {
-                    text: "输出端口"
-                    visible: !root.conditionMode
-                    checked: modelData.exposed
-                    onToggled: root.updateProgram(index, "exposed", checked)
-                }
-                Button { text: "删除"; onClicked: root.removeProgram(index) }
-            }
-        }
-        Button {
-            text: "添加公式"
-            enabled: root.conditionMode ? root.program.length === 0 : true
-            onClicked: root.addProgram()
         }
 
         QuiText {
