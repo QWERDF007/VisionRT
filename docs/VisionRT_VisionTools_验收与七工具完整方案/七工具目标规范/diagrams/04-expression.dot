@@ -1,0 +1,21 @@
+digraph G {
+graph [rankdir=TB, bgcolor="white", pad="0.3", nodesep="0.36", ranksep="0.44", splines=polyline, fontname="sans-serif", label="评估表达式", labelloc=t, fontsize=21];
+node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=14, margin="0.18,0.13", color="#c5ccd4", fontcolor="#243447", penwidth=1];
+edge [fontname="sans-serif", fontsize=12, color="#7e8c9c", fontcolor="#526171", arrowsize=0.7];
+"edit" [label="RT · 变量与公式编辑\n稳定ID / symbol / 显式类型", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"contract" [label="RT · 节点契约物化\n派生variables与program初始化表", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"compile" [label="Tools Python · initialize\n受限AST校验并缓存", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"run" [label="execute更新变量\n按顺序计算并复用中间结果", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"valid" [label="全部结果符合声明？", shape=diamond, fillcolor="#fff6e2", color="#9c7c36"];
+"out" [label="按port_id组装可见输出\n隐藏结果仅供内部引用", shape=box, fillcolor="#eaf5ef", color="#42755a"];
+"err" [label="简短错误与位置\n整组业务输出Missing", shape=box, fillcolor="#fff0ed", color="#ac5c4e"];
+"ui" [label="RT · 校验 / 连线 / JSON保存\n动态端口不修改全局声明", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"edit" -> "contract" [label=""];
+"contract" -> "compile" [label=""];
+"compile" -> "run" [label="合法"];
+"compile" -> "err" [label="语法或类型非法"];
+"run" -> "valid" [label=""];
+"valid" -> "out" [label="是"];
+"valid" -> "err" [label="否"];
+"out" -> "ui" [label=""];
+}

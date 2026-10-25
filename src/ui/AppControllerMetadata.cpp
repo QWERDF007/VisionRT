@@ -1,4 +1,5 @@
 #include "ui/AppController_p.h"
+#include "core/NodeContracts.h"
 #include "ui/DisplayTypes.h"
 
 #include <limits>
@@ -82,6 +83,11 @@ QVariantMap metadata(const ToolDefinition &definition)
         {       "builtin",                      definition.source.origin == ToolOrigin::Builtin},
         {"definitionPath",                                  pathText(definition.definitionPath)},
         {   "hostBinding",                                            q(definition.hostBinding)},
+        {     "nodeModel", QString::fromLatin1(definition.nodeModel == NodeModel::Expression ? "expression"
+                                              : definition.nodeModel == NodeModel::Condition ? "condition"
+                                              : definition.nodeModel == NodeModel::Select    ? "select"
+                                                                                             : "fixed")},
+        {    "visibility",                                        definition.visibility == ToolVisibility::Assist},
         {         "entry", QVariantMap{{"package", pathText(definition.entry.package)},
  {"file", pathText(definition.entry.file)},
  {"symbol", q(definition.entry.symbol)}}                             }
@@ -92,6 +98,14 @@ QVariantMap metadata(const ToolDefinition &definition)
         for (const auto &port : values) rows.push_back(portMetadata(port));
         return rows;
     };
+    if (definition.interaction)
+    {
+        QVariantList kinds;
+        for (const auto kind : definition.interaction->roiKinds)
+            kinds.push_back(static_cast<int>(kind));
+        result["interaction"] = QVariantMap{{"helper", q(definition.interaction->helperToolId)},
+                                            {"roiKinds", kinds}};
+    }
     result["inputs"]     = ports(definition.inputs);
     result["initParams"] = ports(definition.initParams);
     result["outputs"]    = ports(definition.outputs);
@@ -128,7 +142,12 @@ QVariantList AppController::parameters() const
         return result;
     if (!impl_->readsAllowed())
         return impl_->parameterRowsNode == node->id ? impl_->parameterRows : QVariantList{};
-    const auto *tool = impl_->currentTool();
+    const auto                    *tool = impl_->currentTool();
+    // Only derived node models need materialisation for row generation; fixed
+    // declarations keep unresolved type_from entries that resolve at run time.
+    std::optional<ToolDefinition> contract;
+    if (tool)
+        contract = tool->derivesPorts() ? nodeContract(*node, *tool) : *tool;
     auto add = [&](const std::string &id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
     {
         PortValue literal = Missing{};
@@ -147,8 +166,21 @@ QVariantList AppController::parameters() const
             {
                 const auto *parent    = impl_->findNode(found->second.source->node);
                 const auto *parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
-                const auto *portDef
-                    = parentDef ? workbench::port(parentDef->outputs, found->second.source->port) : nullptr;
+                const PortDefinition *portDef = nullptr;
+                if (parent && parentDef)
+                {
+                    portDef = workbench::port(parentDef->outputs, found->second.source->port);
+                    if (!portDef)
+                        try
+                        {
+                            const auto parentContract = nodeContract(*parent, *parentDef);
+                            portDef = workbench::port(parentContract.outputs, found->second.source->port);
+                        }
+                        catch (const ContractError &)
+                        {
+                            portDef = nullptr;
+                        }
+                }
                 const QString portName = portDef ? q(portDef->name) : q(found->second.source->port);
                 source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
             }
@@ -176,6 +208,8 @@ QVariantList AppController::parameters() const
                 const auto  optionText  = stringValue ? q(*stringValue) : valueText(value, type);
                 addOption(optionText, optionText);
             }
+        // type_from parameters drive both the source selection and the resolved
+        // contract, so their option lists still come from the raw declaration.
         if (initialization && tool)
             for (const auto &output : tool->outputs)
                 if (output.typeFrom)
@@ -337,10 +371,17 @@ QVariantList AppController::parameters() const
         }
         result.push_back(row);
     };
-    if (tool)
+    if (contract)
     {
-        for (const auto &port : tool->initParams) add(port.id, port.type, true, &port);
-        for (const auto &port : tool->inputs) add(port.id, port.type, false, &port);
+        for (const auto &port : contract->initParams)
+        {
+            // Derived variable/program tables are managed by the expression
+            // editor, not by ordinary parameter rows.
+            if (tool->derivesPorts() && (port.id == "variables" || port.id == "program"))
+                continue;
+            add(port.id, port.type, true, &port);
+        }
+        for (const auto &port : contract->inputs) add(port.id, port.type, false, &port);
     }
     else
     {

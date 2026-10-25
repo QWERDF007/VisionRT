@@ -464,7 +464,7 @@ void outputCellReuseContract()
           "    values.update(__status_code=0, __status_message='')\n"
           "    return values\n");
     QJsonObject definition{
-        {"schema_version",                                                                              2},
+        {"schema_version",                                                                              3},
         {       "tool_id",                                                                 "test.outputs"},
         {  "display_name",                                                                 "Many outputs"},
         {       "version",                                                                        "1.0.0"},

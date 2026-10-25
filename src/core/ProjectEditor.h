@@ -51,6 +51,11 @@ BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, co
                             NodeId targetNodeId, const std::string &targetInputPort,
                             const PositionLookup &positions = {});
 
+// A guard is a Bool control dependency with the same row/ownership rules as data
+// edges. It never carries images, arrays or ROI values.
+BindingCheck validateGuard(const FlowDefinition &flow, const SourcePort &source, NodeId targetNodeId,
+                           const PositionLookup &positions = {});
+
 struct CandidateInput
 {
     NodeId      node{};
@@ -130,6 +135,12 @@ public:
     bool unbind(std::string_view flowId, NodeId node, std::string_view input);
     bool setLiteral(std::string_view flowId, NodeId node, std::string_view input, PortValue value);
     bool setInitParam(std::string_view flowId, NodeId node, std::string_view parameter, PortValue value);
+    // One transaction: validate the candidate configuration, materialise its
+    // contract, verify bindings, then commit exactly one revision.
+    bool setExpressionConfig(std::string_view flowId, NodeId node, ExpressionConfig config,
+                             const ToolDefinition &tool);
+    bool setExecutionGuard(std::string_view flowId, NodeId node, std::optional<SourcePort> source);
+    bool setSelectType(std::string_view flowId, NodeId node, TypeSpec type, const ToolDefinition &tool);
 
     std::size_t             referenceCount(std::string_view flowId, const SourcePort &source) const;
     std::vector<SourcePort> compatibleSources(std::string_view flowId, NodeId node, std::string_view input) const;

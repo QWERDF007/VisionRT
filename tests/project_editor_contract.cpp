@@ -492,7 +492,7 @@ void bindingEffectiveSourceDraftsAndOccupiedContract()
 void receiverOutputFollowsItsSource()
 {
     const auto    receiver = parseToolDefinitionJson(R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "visionrt.flow.receive",
   "display_name": "跨流程接收",
   "version": "1.0.0",

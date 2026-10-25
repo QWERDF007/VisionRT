@@ -265,8 +265,14 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
     auto      &slot = context->frozen->runtimes.at(source->id)->slot;
     const auto take = [&](const ResultSlot::Snapshot &snapshot)
     {
-        cursor.publication                   = snapshot->publication;
-        auto result                          = receiveError(3, "源节点执行失败：" + snapshot->status.message);
+        cursor.publication = snapshot->publication;
+        // Terminal states published by the host end the wait immediately. A
+        // skipped or blocked source never falls back to a previous round value.
+        if (snapshot->disposition == NodeDisposition::Skipped)
+            return receiveError(6, "源节点本轮已跳过：" + snapshot->status.message);
+        if (snapshot->disposition == NodeDisposition::Blocked)
+            return receiveError(7, "源节点本轮被阻塞：" + snapshot->status.message);
+        auto result = receiveError(3, "源节点执行失败：" + snapshot->status.message);
         result.status.detail                    = snapshot->status.detail;
         result.outputs["source_status_code"] = snapshot->status.code;
         result.outputs["source_status_message"] = std::string(snapshot->status.message);

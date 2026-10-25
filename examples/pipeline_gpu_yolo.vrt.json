@@ -1,5 +1,5 @@
 {
-  "format_version": 3,
+  "format_version": 4,
   "project": {
     "name": "GPU-YOLO与缺陷过滤全链工程",
     "next_node_seq": "4",
@@ -38,6 +38,25 @@
               },
               "max_batch_bytes": {
                 "type": "Int"
+              },
+              "paths_in": {
+                "type": "Array",
+                "dtype": "string",
+                "rank": 1
+              },
+              "read_mode": {
+                "type": "String"
+              },
+              "recursive": {
+                "type": "Bool"
+              },
+              "extensions": {
+                "type": "Array",
+                "dtype": "string",
+                "rank": 1
+              },
+              "end_policy": {
+                "type": "String"
               }
             },
             "outputs": {
@@ -54,6 +73,15 @@
                 "type": "Array",
                 "rank": 1,
                 "dtype": "string"
+              },
+              "current_index": {
+                "type": "Int"
+              },
+              "total_count": {
+                "type": "Int"
+              },
+              "end_reached": {
+                "type": "Bool"
               }
             }
           },
@@ -77,6 +105,33 @@
             "max_batch_bytes": {
               "mode": "literal",
               "literal": 0
+            },
+            "paths_in": {
+              "mode": "literal",
+              "literal": []
+            },
+            "read_mode": {
+              "mode": "literal",
+              "literal": "all"
+            },
+            "recursive": {
+              "mode": "literal",
+              "literal": false
+            },
+            "extensions": {
+              "mode": "literal",
+              "literal": [
+                "png",
+                "jpg",
+                "jpeg",
+                "bmp",
+                "tif",
+                "tiff"
+              ]
+            },
+            "end_policy": {
+              "mode": "literal",
+              "literal": "wrap"
             }
           }
         },

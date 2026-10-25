@@ -1,0 +1,149 @@
+{
+  "schema_version": 3,
+  "tool_id": "visionrt.image.read",
+  "display_name": "从文件获取图像",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "category": "采集",
+  "init_params": [],
+  "inputs": [
+    {
+      "id": "mode",
+      "name": "来源模式",
+      "type": "String",
+      "required": true,
+      "default": "file",
+      "options": [
+        "file",
+        "directory",
+        "list"
+      ]
+    },
+    {
+      "id": "path",
+      "name": "文件或目录路径",
+      "type": "String",
+      "required": true,
+      "default": "",
+      "editor": "path",
+      "path_mode_from": "mode"
+    },
+    {
+      "id": "paths_in",
+      "name": "文件列表",
+      "type": "Array",
+      "required": true,
+      "default": [],
+      "dtype": "string",
+      "rank": 1
+    },
+    {
+      "id": "read_mode",
+      "name": "读取方式",
+      "type": "String",
+      "required": true,
+      "default": "all",
+      "options": [
+        "all",
+        "sequence"
+      ]
+    },
+    {
+      "id": "color",
+      "name": "色彩模式",
+      "type": "String",
+      "required": true,
+      "default": "bgr",
+      "options": [
+        "bgr",
+        "gray",
+        "unchanged"
+      ]
+    },
+    {
+      "id": "recursive",
+      "name": "包含子目录",
+      "type": "Bool",
+      "required": true,
+      "default": false
+    },
+    {
+      "id": "extensions",
+      "name": "后缀筛选",
+      "type": "Array",
+      "required": true,
+      "default": [
+        "png",
+        "jpg",
+        "jpeg",
+        "bmp",
+        "tif",
+        "tiff"
+      ],
+      "dtype": "string",
+      "rank": 1
+    },
+    {
+      "id": "end_policy",
+      "name": "序列末尾行为",
+      "type": "String",
+      "required": true,
+      "default": "wrap",
+      "options": [
+        "wrap",
+        "hold",
+        "error"
+      ]
+    },
+    {
+      "id": "limit",
+      "name": "最大图像数量",
+      "type": "Int",
+      "required": true,
+      "default": 0,
+      "min": 0
+    },
+    {
+      "id": "max_batch_bytes",
+      "name": "本次图像字节上限",
+      "type": "Int",
+      "required": true,
+      "default": 0,
+      "min": 0
+    }
+  ],
+  "outputs": [
+    {
+      "id": "images",
+      "name": "图像",
+      "type": "Image",
+      "required": true
+    },
+    {
+      "id": "paths",
+      "name": "文件路径",
+      "type": "Array",
+      "required": true,
+      "dtype": "string",
+      "rank": 1
+    },
+    {
+      "id": "current_index",
+      "name": "当前索引",
+      "type": "Int",
+      "required": true
+    },
+    {
+      "id": "total_count",
+      "name": "目录总数量",
+      "type": "Int",
+      "required": true
+    },
+    {
+      "id": "end_reached",
+      "name": "已到末项",
+      "type": "Bool",
+      "required": true
+    }
+  ]
+}

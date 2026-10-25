@@ -1,0 +1,26 @@
+digraph G {
+graph [rankdir=TB, bgcolor="white", pad="0.3", nodesep="0.36", ranksep="0.44", splines=polyline, fontname="sans-serif", label="智能点选：预览与提交", labelloc=t, fontsize=21];
+node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=14, margin="0.18,0.13", color="#c5ccd4", fontcolor="#243447", penwidth=1];
+edge [fontname="sans-serif", fontsize=12, color="#7e8c9c", fontcolor="#526171", arrowsize=0.7];
+"mouse" [label="RT · 悬停或点击\n复用图像坐标转换", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"idle" [label="Idle且输入稳定？", shape=diamond, fillcolor="#fff6e2", color="#9c7c36"];
+"lease" [label="RT · 上下文与读者租约\n一在途 + 一最新待处理", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"helper" [label="Tools · 独立辅助实例\n候选搜索 → 共享测量内核", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"current" [label="结果上下文仍有效？", shape=diamond, fillcolor="#fff6e2", color="#9c7c36"];
+"overlay" [label="RT · 临时候选overlay\n不dirty，不推进取图", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"learn" [label="点击learn精测\nproposal回参考坐标", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"commit" [label="RT · 一次事务提交\nROI + 参数 + 一次revision", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"final" [label="正式结果标记过期\n用户单次运行确认", shape=box, fillcolor="#eaf5ef", color="#42755a"];
+"drop" [label="丢弃候选并归还Owner\nLoop不派发预览", shape=box, fillcolor="#fff0ed", color="#ac5c4e"];
+"mouse" -> "idle" [label=""];
+"idle" -> "lease" [label="是"];
+"idle" -> "drop" [label="否"];
+"lease" -> "helper" [label=""];
+"helper" -> "current" [label=""];
+"current" -> "overlay" [label="是"];
+"current" -> "drop" [label="否"];
+"overlay" -> "learn" [label="点击"];
+"learn" -> "commit" [label="有效且上下文相同"];
+"learn" -> "drop" [label="过期或无效"];
+"commit" -> "final" [label=""];
+}

@@ -41,6 +41,9 @@ class AppController : public QObject
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
     Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
     Q_PROPERTY(QString aboutText READ aboutText CONSTANT)
+    Q_PROPERTY(QString nodeModel READ nodeModel NOTIFY parametersChanged)
+    Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
+    Q_PROPERTY(QString selectTypeText READ selectTypeText NOTIFY parametersChanged)
 public:
     AppController(std::size_t workers, const QString &applicationDirectory, QObject *parent = nullptr);
     ~AppController() override;
@@ -132,6 +135,18 @@ public:
     Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
     Q_INVOKABLE void         endRoiPreview();
     Q_INVOKABLE void         requestOutputText(const QVariantMap &context, bool copy, bool diagnostic = false);
+    Q_INVOKABLE QVariantMap  expressionConfig(const QString &node) const;
+    Q_INVOKABLE bool         applyExpressionConfig(const QString &node, const QVariantList &variables,
+                                                   const QVariantList &program);
+    Q_INVOKABLE QVariantList guardCandidates(const QString &node) const;
+    Q_INVOKABLE bool         applyExecutionGuard(const QString &node, const QString &sourceNode,
+                                                 const QString &port);
+    Q_INVOKABLE QVariantMap  selectType(const QString &node) const;
+    Q_INVOKABLE bool         applySelectType(const QString &node, const QString &type, const QString &dtype,
+                                             int rank);
+    QString                  nodeModel() const;
+    QString                  executionGuardText() const;
+    QString                  selectTypeText() const;
     Q_INVOKABLE QVariantList toolDefinitions() const;
     Q_INVOKABLE QVariantMap  toolMetadata(const QString &toolId) const;
 signals:

@@ -1,0 +1,25 @@
+digraph G {
+graph [rankdir=TB, bgcolor="white", pad="0.3", nodesep="0.36", ranksep="0.44", splines=polyline, fontname="sans-serif", label="旋转图像", labelloc=t, fontsize=21];
+node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=14, margin="0.18,0.13", color="#c5ccd4", fontcolor="#243447", penwidth=1];
+edge [fontname="sans-serif", fontsize=12, color="#7e8c9c", fontcolor="#526171", arrowsize=0.7];
+"input" [label="图像 · 角度 · 中心\n画布 · 插值 · alignment", shape=box, fillcolor="#eaf5ef", color="#42755a"];
+"check" [label="Tools · 检查类型与矩阵\n正角度顺时针", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"rotate" [label="OpenCV旋转矩阵\ngetRotationMatrix2D(center, -angle)", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"canvas" [label="画布模式？", shape=diamond, fillcolor="#fff6e2", color="#9c7c36"];
+"keep" [label="keep\n保持输入尺寸", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"expand" [label="expand\n变换像素外边界并追加平移", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"warp" [label="warpAffine\n按最终矩阵采样并填边界", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"out" [label="新图像与最终alignment\nH_out = A × H_in", shape=box, fillcolor="#eaf5ef", color="#42755a"];
+"ui" [label="RT · 显示图像与几何\n不替工具复制输入", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"err" [label="类型或参数错误\n无隐式像素转换", shape=box, fillcolor="#fff0ed", color="#ac5c4e"];
+"input" -> "check" [label=""];
+"check" -> "rotate" [label="合法"];
+"check" -> "err" [label="非法"];
+"rotate" -> "canvas" [label=""];
+"canvas" -> "keep" [label="keep"];
+"canvas" -> "expand" [label="expand"];
+"keep" -> "warp" [label=""];
+"expand" -> "warp" [label=""];
+"warp" -> "out" [label=""];
+"out" -> "ui" [label=""];
+}

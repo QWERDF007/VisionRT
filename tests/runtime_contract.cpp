@@ -214,9 +214,12 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(snapshot(failed, 1)->status.code == -2);
     assert(std::get<std::int64_t>(snapshot(failed, 1)->outputs.at("__status_code")) == -2);
     assert(isMissing(snapshot(failed, 1)->outputs.at("value")));
-    assert(snapshot(failed, 2)->status.code == -2);
+    // A failed required data source blocks the consumer; the host publishes a
+    // terminal state without borrowing a tool error code.
+    assert(snapshot(failed, 2)->disposition == NodeDisposition::Blocked);
+    assert(snapshot(failed, 2)->status.code == 0);
     assert(isMissing(snapshot(failed, 2)->outputs.at("value")));
-    assert(snapshot(failed, 2)->status.message.find("端口值缺失") != std::string::npos);
+    assert(snapshot(failed, 2)->status.message.find("阻塞") != std::string::npos);
     assert(snapshot(failed, 1)->round == snapshot(failed, 2)->round);
     assert(snapshot(failed, 1)->session == snapshot(failed, 2)->session);
 }
@@ -1440,7 +1443,9 @@ void failedBusinessOutputsAreNotInputs()
     assert(snapshot(result, 1)->status.code == 7);
     assert(snapshot(result, 1)->status.detail == "original failure detail");
     assert(std::get<std::int64_t>(snapshot(result, 1)->outputs.at("value")) == 99);
-    assert(requiredCalls == 0 && snapshot(result, 2)->status.code == -2);
+    assert(requiredCalls == 0);
+    assert(snapshot(result, 2)->disposition == NodeDisposition::Blocked);
+    assert(snapshot(result, 2)->status.code == 0);
     assert(isMissing(snapshot(result, 2)->outputs.at("value")));
     assert(snapshot(result, 3)->status.code == 0 && snapshot(result, 4)->status.code == 0);
 }

@@ -54,7 +54,7 @@ void pathEditorsContract()
           "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.paths",
   "display_name": "路径测试",
   "version": "1.0.0",

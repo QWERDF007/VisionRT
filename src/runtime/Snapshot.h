@@ -10,6 +10,19 @@
 #include <stop_token>
 
 namespace visionrt {
+// Host-owned terminal state for one round. Skipped and Blocked never consume a
+// tool error code; they publish Missing outputs plus this disposition.
+enum class NodeDisposition
+{
+    Pending,
+    Running,
+    Succeeded,
+    Failed,
+    Skipped,
+    Blocked,
+    Canceled
+};
+
 enum class NodePhase
 {
     Create,
@@ -83,6 +96,7 @@ struct NodeSnapshot
     std::uint64_t publication       = 0;
     std::uint64_t executionRevision = 0;
     ToolStatus    status;
+    NodeDisposition       disposition = NodeDisposition::Succeeded;
     NodePhase             phase = NodePhase::Execute;
     TypeMap               outputTypes;
     Values        outputs;

@@ -2,7 +2,8 @@
 
 ## 规格入口
 
-- [最新提交验收与完整改进方案](VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/README.md)：包含验收报告、完整改进方案、Specs、Tickets 与验收矩阵。
+- [最新交付：验收报告与七工具完整改进方案](VisionRT_VisionTools_验收与七工具完整方案/README.md)：包含验收报告、完整改进方案、VisionRT/VisionTools Specs、Tickets、验证证据与验收门槛、CPP 设计与整体优化。原始打包件见 `docs/VisionRT_VisionTools_f6f57b03_验收报告与七工具完整改进方案_Specs_Tickets_20261025.zip`。
+- [上一轮验收与完整改进方案](VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/README.md)：包含验收报告、完整改进方案、Specs、Tickets 与验收矩阵。
 - [任务账本](../WORKLOG.md)：本地工作恢复与验证证据入口，不随代码提交。
 
 ## 界面约束

@@ -140,9 +140,9 @@ void readImages(ToolRegistry &registry)
                          {"path",     std::string("empty")}
     },
                      services);
-    success(result);
-    assert((std::get<DataRef<Image>>(result.outputs.at("images")).get().empty()));
-    assert((std::get<Array>(result.outputs.at("paths")).get<NestedVector<std::string, 1>>().size() == 0));
+    // 空目录没有任何可用文件，按规范明确失败而不是发布空批次。
+    failure(result);
+    assert((result.status.message.find("没有可用图像文件") != std::string::npos));
     const auto unicodeFolder = directory.path() + "/unicode_sort";
     assert((QDir().mkpath(unicodeFolder)));
     const auto supplementaryName = QString::fromUtf8("\xF0\x90\x80\x80.png"); // U+10000

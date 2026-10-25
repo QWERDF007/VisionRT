@@ -270,7 +270,7 @@ class PathProbe:
         return {'__status_code': 0, '__status_message': 'ok'}
 )");
     Sources::write(sources.declarations / "paths.json", R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "python.paths",
   "display_name": "Path probe",
   "version": "1.0.0",

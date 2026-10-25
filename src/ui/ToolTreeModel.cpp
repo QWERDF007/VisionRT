@@ -13,6 +13,10 @@ void ToolTreeModel::setRegistry(const ToolRegistry &registry)
     definitions_.clear();
     for (const auto &tool : registry.definitions())
     {
+        // Assist helpers are driven by the interaction mapping and never appear
+        // in the ordinary tool menu.
+        if (tool.visibility == ToolVisibility::Assist)
+            continue;
         const auto availability = registry.availability(tool.id);
         definitions_.push_back({QString::fromStdString(tool.category), QString::fromStdString(tool.subcategory),
                                 QString::fromStdString(tool.displayName), QString::fromStdString(tool.id),

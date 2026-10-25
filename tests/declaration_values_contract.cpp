@@ -57,7 +57,7 @@ int main()
     // CT-01: a single classification for every resource-path editor.
     {
         const auto definition = parseToolDefinitionJson(R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "runtime.paths",
   "display_name": "路径分类",
   "version": "1.0.0",
@@ -86,7 +86,7 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "runtime.paths.bad.file",
   "display_name": "错误文件端口",
   "version": "1.0.0",
@@ -103,7 +103,7 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "runtime.paths.bad.directory",
   "display_name": "错误目录端口",
   "version": "1.0.0",
@@ -296,7 +296,7 @@ int main()
 
     {
         const auto declared = parseToolDefinitionJson(R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "runtime.required",
   "display_name": "必填声明",
   "version": "1.0.0",

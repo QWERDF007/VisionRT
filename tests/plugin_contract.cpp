@@ -225,7 +225,7 @@ void nativeOutputRequiredness(const std::filesystem::path &modulePath)
             const auto declaration
                 = QJsonDocument(
                       QJsonObject{
-                          {"schema_version",                                   2                                            },
+                          {"schema_version",                                   3                                            },
                           {       "tool_id",                                                       "test.plugin.publication"},
                           {  "display_name",                                                                  "输出发布"},
                           {       "version",                                                                         "1.0.0"},
@@ -401,7 +401,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
                                std::filesystem::copy_options::overwrite_existing);
 
     writeText(declarationDir / "counter.json", R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.counter",
   "display_name": "打包计数器",
   "version": "1.0.0",
@@ -415,7 +415,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
   ]
 })json");
     writeText(declarationDir / "function.json", R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.function",
   "display_name": "打包函数",
   "version": "1.0.0",
@@ -430,7 +430,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 })json");
     // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.ghost.packaged",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -488,7 +488,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
     writeText(legacyDir / "legacy.json", R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.legacy",
   "display_name": "旧目录工具",
   "version": "1.0.0",
@@ -507,7 +507,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
     writeText(duplicateDir / "counter.json", R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.counter",
   "display_name": "重复计数器",
   "version": "2.0.0",
@@ -554,7 +554,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     std::filesystem::copy_file(modulePath, otherDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
     writeText(otherDir / std::filesystem::path(u8"tools/custom/Python/示例/function.json"), R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.function",
   "display_name": "另一包函数",
   "version": "1.0.0",
@@ -645,7 +645,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
         const char *jsonContent = R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.counter",
   "display_name": "实际打包插件",
   "version": "1.0.0",
@@ -728,7 +728,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(funcJsonFile));
         assert(f.open(QIODevice::WriteOnly));
         const char *funcJsonContent = R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -932,7 +932,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
         QFile definition(toQString(jsonDir / "release.json"));
         assert(definition.open(QIODevice::WriteOnly));
-        definition.write(R"({"schema_version":2,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
+        definition.write(R"({"schema_version":3,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
                             "version":"1.0.0","kind":"cpp","init_params":[],"inputs":[],"outputs":[]})");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -1166,7 +1166,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
 
     writeText(unicodeDir / std::filesystem::path(u8"tools/builtin/测试/示例") / "plugin_a.json",
               R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.a",
   "display_name": "插件甲",
   "version": "1.0.0",

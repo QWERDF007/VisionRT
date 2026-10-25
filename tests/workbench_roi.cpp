@@ -63,7 +63,7 @@ void roiParameterContract()
           "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float64).tolist()]]}\n");
     write("tools/custom/roi/source.json",
           R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.roi.source",
   "display_name": "ROI图像源",
   "version": "1.0.0",
@@ -88,7 +88,7 @@ void roiParameterContract()
           "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float64).tolist()]]}\n");
     write("tools/custom/roi/editor.json",
           R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.roi.editor",
   "display_name": "ROI编辑",
   "version": "1.0.0",

@@ -1,6 +1,7 @@
 #include "common/Version.h"
 #include "core/Sequence.h"
 #include "runtime/Receiver.h"
+#include "runtime/SelectTool.h"
 #include "ui/AppController_p.h"
 #include "ui/DurationText.h"
 #include "ui/Diagnostics.h"
@@ -119,6 +120,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     pluginLoader = std::make_shared<PluginLoader>();
     registry.setPluginLoader(pluginLoader);
     registerReceiveTools(registry);
+    registerSelectTools(registry);
     loadToolsPackage();
     // Interpreter lifetime encloses the worker pool and all Python instances.
     try

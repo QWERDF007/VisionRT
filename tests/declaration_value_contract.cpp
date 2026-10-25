@@ -50,7 +50,7 @@ try
 
     // Schema validation tests
     ToolDefinition valid;
-    valid.schemaVersion = 2;
+    valid.schemaVersion = 3;
     valid.id            = "valid.tool";
     valid.displayName   = "Valid Tool";
     valid.version       = "1.0.0";
@@ -203,7 +203,7 @@ try
 
     const auto pathEditor = parseToolDefinitionJson(
         R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.path",
   "display_name": "Path",
   "version": "1.0.0",

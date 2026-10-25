@@ -67,6 +67,7 @@ target_compile_definitions(visionrt_python PUBLIC
 add_library(visionrt_runtime
     src/runtime/RuntimeEngine.cpp
     src/runtime/NodeRuntime.cpp
+    src/runtime/SelectTool.cpp
     src/runtime/Receiver.cpp)
 target_link_libraries(visionrt_runtime PUBLIC visionrt_core visionrt_taskflow)
 
@@ -96,6 +97,7 @@ if(VISIONRT_BUILD_APP)
         src/ui/AppControllerReadback.cpp
         src/ui/AppControllerRoi.cpp
         src/ui/AppControllerMetadata.cpp
+    src/ui/AppControllerExpression.cpp
         src/ui/AppControllerParameters.cpp
         src/ui/AppControllerRouting.cpp
         src/ui/AppController.h
@@ -195,6 +197,7 @@ if(BUILD_TESTING)
     visionrt_contract(tool_discovery_contract visionrt_core "$<TARGET_FILE:visionrt_validate_tool>")
     add_dependencies(tool_discovery_contract visionrt_validate_tool)
     visionrt_contract(project_editor_contract visionrt_core)
+    visionrt_contract(node_gate_contract visionrt_runtime)
     visionrt_contract(edge_hierarchy_contract visionrt_core)
     target_link_libraries(edge_hierarchy_contract PRIVATE visionrt_runtime)
     visionrt_contract(project_storage_contract visionrt_core)

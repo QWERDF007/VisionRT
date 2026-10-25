@@ -24,12 +24,15 @@ TypeMap resolvedOutputTypes(const ToolDefinition &contract)
 
 void setOutputDeclarations(NodeDefinition &node, const ToolDefinition &definition)
 {
-    TypeMap outputs;
+    // Fixed declarations keep their unresolved type_from entries here; resolution
+    // happens once in resolveOutputTypes after every node is known.
+    const auto &contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
+    TypeMap     outputs;
     for (const auto *id : {"__status_code", "__status_message"})
         if (const auto previous = node.signatures.outputs.find(id); previous != node.signatures.outputs.end())
             outputs.emplace(id, previous->second);
     node.outputTypeSources.clear();
-    for (const auto &port : definition.outputs)
+    for (const auto &port : contract.outputs)
     {
         if (port.typeFrom)
         {
@@ -174,9 +177,81 @@ void resolveOutputTypes(ProjectDefinition &project)
     }
 }
 
+namespace {
+PortDefinition materializedPort(std::string id, std::string name, TypeSpec type, bool required)
+{
+    PortDefinition port;
+    port.id         = std::move(id);
+    port.name       = std::move(name);
+    port.type       = std::move(type);
+    port.required   = required;
+    port.defaultValue = Missing{};
+    return port;
+}
+
+std::string typeCell(const TypeSpec &type)
+{
+    return typeName(type.type);
+}
+
+std::string dtypeCell(const TypeSpec &type)
+{
+    return type.dtype ? std::string(dtypeName(*type.dtype)) : std::string{};
+}
+
+std::string rankCell(const TypeSpec &type)
+{
+    return type.rank >= 0 ? std::to_string(type.rank) : std::string{};
+}
+} // namespace
+
 ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &definition)
 {
     auto contract = definition;
+    if (definition.derivesPorts())
+    {
+        std::vector<PortDefinition> system;
+        for (const auto &port : definition.outputs)
+            if (port.id == "__status_code" || port.id == "__status_message")
+                system.push_back(port);
+        switch (definition.nodeModel)
+        {
+        case NodeModel::Fixed:
+            break;
+        case NodeModel::Expression:
+        case NodeModel::Condition:
+        {
+            if (!node.expression)
+                throw ContractError("节点缺少表达式配置：" + node.title());
+            contract.inputs.clear();
+            contract.inputs.reserve(node.expression->variables.size());
+            for (const auto &variable : node.expression->variables)
+                contract.inputs.push_back(
+                    materializedPort(variable.portId, variable.name, variable.type, !variable.allowMissing));
+            if (definition.nodeModel == NodeModel::Expression)
+            {
+                contract.outputs = std::move(system);
+                for (const auto &result : node.expression->program)
+                    if (result.exposed)
+                        contract.outputs.push_back(
+                            materializedPort(result.portId, result.name, result.type, true));
+            }
+            break;
+        }
+        case NodeModel::Select:
+        {
+            if (!node.selectType)
+                throw ContractError("合流节点尚未选择类型：" + node.title());
+            contract.inputs = {materializedPort("selector", "选择条件", {Type::Bool}, true),
+                               materializedPort("if_true", "成立值", *node.selectType, false),
+                               materializedPort("if_false", "否则值", *node.selectType, false)};
+            contract.outputs = std::move(system);
+            contract.outputs.push_back(materializedPort("value", "所选值", *node.selectType, true));
+            break;
+        }
+        }
+        return contract;
+    }
     for (auto &port : contract.outputs)
         if (port.typeFrom)
         {
@@ -191,5 +266,34 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
             port.typeFrom.reset();
         }
     return contract;
+}
+
+Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definition)
+{
+    Values parameters;
+    if (definition.nodeModel == NodeModel::Expression || definition.nodeModel == NodeModel::Condition)
+    {
+        if (!node.expression)
+            throw ContractError("节点缺少表达式配置：" + node.title());
+        NestedVector<std::string, 2> variables;
+        NestedVector<std::string, 2> program;
+        for (const auto &variable : node.expression->variables)
+            variables.push_back({variable.portId, variable.symbol, typeCell(variable.type), dtypeCell(variable.type),
+                                 rankCell(variable.type), variable.allowMissing ? "true" : "false"});
+        for (const auto &result : node.expression->program)
+            program.push_back({result.portId, result.symbol, result.expression, typeCell(result.type),
+                               dtypeCell(result.type), rankCell(result.type), result.exposed ? "true" : "false"});
+        parameters.emplace("variables",
+                           Array(DataRef<NestedVector<std::string, 2>>(std::move(variables))));
+        parameters.emplace("program", Array(DataRef<NestedVector<std::string, 2>>(std::move(program))));
+        return parameters;
+    }
+    for (const auto &port : definition.initParams)
+    {
+        const auto found = node.initParams.find(port.id);
+        parameters.emplace(port.id,
+                           copyProjectLiteral(found == node.initParams.end() ? port.defaultValue : found->second));
+    }
+    return parameters;
 }
 }

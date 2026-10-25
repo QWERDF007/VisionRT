@@ -2,6 +2,7 @@
 
 #include "visionrt/contracts/Tool.h"
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -11,6 +12,31 @@
 namespace visionrt {
 
 enum class ToolKind { Cpp, PythonFunction, PythonClass, Host };
+
+// How the host edits and materialises a node contract. Only fixed nodes use the
+// declaration ports directly; the other models derive ports from node config.
+enum class NodeModel
+{
+    Fixed,
+    Expression,
+    Condition,
+    Select
+};
+
+enum class ToolVisibility
+{
+    Normal,
+    Assist
+};
+
+struct InteractionMapping
+{
+    std::string                        helperToolId;
+    std::map<std::string, std::string, std::less<>> inputMap;
+    std::map<std::string, std::string, std::less<>> proposalMap;
+    std::vector<RoiKind>               roiKinds;
+    bool                               operator==(const InteractionMapping &) const = default;
+};
 
 enum class ToolOrigin
 {
@@ -65,17 +91,21 @@ struct PortDefinition {
     std::string imagePort;
     std::string colorOrder;
     std::string sameGeometryAsInput;
+    std::string alignmentInput;
     std::optional<PortTypeReference> typeFrom;
     std::string pathModeFrom;
     bool required = true;
 };
 
 struct ToolDefinition {
-    int                                schemaVersion = 2;
+    int                                schemaVersion = 3;
     std::string id;
     std::string displayName;
     std::string version = "1.0.0";
     ToolKind kind = ToolKind::Cpp;
+    NodeModel        nodeModel  = NodeModel::Fixed;
+    ToolVisibility   visibility = ToolVisibility::Normal;
+    std::optional<InteractionMapping> interaction;
     std::filesystem::path definitionPath;
     std::string category;
     std::string subcategory;
@@ -86,6 +116,11 @@ struct ToolDefinition {
     std::vector<PortDefinition> initParams;
     std::vector<PortDefinition> inputs;
     std::vector<PortDefinition> outputs;
+
+    bool derivesPorts() const noexcept
+    {
+        return nodeModel != NodeModel::Fixed;
+    }
 
     std::filesystem::path pythonPackage() const;
     std::filesystem::path pythonScript() const;

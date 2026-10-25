@@ -61,7 +61,7 @@ try
                   "            'rois':[[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]]}\n";
     }
     const auto definition = parseToolDefinitionJson(R"({
-        "schema_version":2,"tool_id":"python.lazy.runtime","display_name":"Lazy runtime","version":"1",
+        "schema_version":3,"tool_id":"python.lazy.runtime","display_name":"Lazy runtime","version":"1",
         "kind":"python_function","entry":{"package":"lazy","file":"tool.py","symbol":"execute"},
         "init_params":[],"inputs":[],"outputs":[
             {"id":"value","name":"Value","type":"Int"},

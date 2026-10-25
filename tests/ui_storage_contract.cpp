@@ -40,12 +40,12 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.storage.source","definition":"tools/custom/storage/source.json"},
         {"tool_id":"test.storage.probe","definition":"tools/custom/storage/probe.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/storage/source.json", R"({"schema_version":2,"tool_id":"test.storage.source",
+    write("tools/custom/storage/source.json", R"({"schema_version":3,"tool_id":"test.storage.source",
         "display_name":"大图存储","version":"1","kind":"python_function",
         "entry":{"package":"storage","file":"tool.py","symbol":"source"},"init_params":[],"inputs":[{"id":"gate","name":"执行闸门","type":"String","default":""}],"outputs":[
         {"id":"images","name":"图像","type":"Image","display":{"color_order":"BGR"}},
         {"id":"token","name":"对象编号","type":"Int"}]})");
-    write("tools/custom/storage/probe.json", R"({"schema_version":2,"tool_id":"test.storage.probe",
+    write("tools/custom/storage/probe.json", R"({"schema_version":3,"tool_id":"test.storage.probe",
         "display_name":"存储计数","version":"1","kind":"python_function",
         "entry":{"package":"storage","file":"tool.py","symbol":"probe"},"init_params":[],"inputs":[],"outputs":[
         {"id":"allocated","name":"分配","type":"Int"},{"id":"released","name":"释放","type":"Int"},

@@ -1,0 +1,24 @@
+digraph G {
+graph [rankdir=TB, bgcolor="white", pad="0.3", nodesep="0.36", ranksep="0.44", splines=polyline, fontname="sans-serif", label="测量行间距", labelloc=t, fontsize=21];
+node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=14, margin="0.18,0.13", color="#c5ccd4", fontcolor="#243447", penwidth=1];
+edge [fontname="sans-serif", fontsize=12, color="#7e8c9c", fontcolor="#526171", arrowsize=0.7];
+"in" [label="图像 · 旋转矩形ROI\n方向 / 极性 / 阈值 / 单位比例", shape=box, fillcolor="#eaf5ef", color="#42755a"];
+"profile" [label="Tools · 沿宽度扫描\n沿高度平均形成一维投影", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"edge" [label="Gaussian导数\n正负极值与亚像素位置", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"pair" [label="按扫描方向配对\nbright：正→负 / dark：负→正", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"raw" [label="保留所有完整边缘对\n不先删除宽度异常物体", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"metric" [label="计算width / gap / pitch\n相邻原始配对参与计算", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"check" [label="独立标记accepted\n统计合格与未配对数量", shape=box, fillcolor="#f1ecfb", color="#725495"];
+"out" [label="分组数值数组与显示线段\n零对为空，一对无gap/pitch", shape=box, fillcolor="#eaf5ef", color="#42755a"];
+"ui" [label="RT · 叠加边缘与结果\n异常位置仍然可诊断", shape=box, fillcolor="#eaf3fc", color="#37698d"];
+"err" [label="非法ROI或不支持图像\n明确失败", shape=box, fillcolor="#fff0ed", color="#ac5c4e"];
+"in" -> "profile" [label="合法"];
+"in" -> "err" [label="非法"];
+"profile" -> "edge" [label=""];
+"edge" -> "pair" [label=""];
+"pair" -> "raw" [label=""];
+"raw" -> "metric" [label=""];
+"metric" -> "check" [label=""];
+"check" -> "out" [label=""];
+"out" -> "ui" [label=""];
+}

@@ -104,7 +104,7 @@ void startupProjectContract()
             const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
             QFile      badProject(badPath);
             require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
-            require(badProject.write(R"json({"format_version":3,"project":{},"flows":{}})json") > 0,
+            require(badProject.write(R"json({"format_version":4,"project":{},"flows":{}})json") > 0,
                     "cannot populate malformed project fixture");
             badProject.close();
             const auto oldNodes   = app.nodes();

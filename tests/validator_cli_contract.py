@@ -37,7 +37,7 @@ def main():
             return result
 
         tool = {
-            "schema_version": 2, "tool_id": "test.cli", "display_name": "校验工具",
+            "schema_version": 3, "tool_id": "test.cli", "display_name": "校验工具",
             "version": "1", "kind": "cpp", "init_params": [],
             "inputs": [{"id": "count", "name": "数量", "type": "Int", "default": 9007199254740993}],
             "outputs": [{"id": "value", "name": "值", "type": "Int"}]

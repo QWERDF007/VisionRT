@@ -1,0 +1,92 @@
+{
+  "schema_version": 3,
+  "tool_id": "visiontools.image.rotate",
+  "display_name": "旋转图像",
+  "version": "1.0.0",
+  "kind": "cpp",
+  "category": "预处理",
+  "init_params": [],
+  "inputs": [
+    {
+      "id": "images",
+      "name": "图像",
+      "type": "Image",
+      "required": true
+    },
+    {
+      "id": "angle_deg",
+      "name": "顺时针角度",
+      "type": "Float",
+      "required": true,
+      "default": 0.0
+    },
+    {
+      "id": "center",
+      "name": "旋转中心",
+      "type": "Array",
+      "required": true,
+      "default": [],
+      "dtype": "float64",
+      "rank": 1
+    },
+    {
+      "id": "canvas",
+      "name": "画布模式",
+      "type": "String",
+      "required": true,
+      "default": "keep",
+      "options": [
+        "keep",
+        "expand"
+      ]
+    },
+    {
+      "id": "interpolation",
+      "name": "插值",
+      "type": "String",
+      "required": true,
+      "default": "linear",
+      "options": [
+        "nearest",
+        "linear",
+        "cubic"
+      ]
+    },
+    {
+      "id": "border_value",
+      "name": "边界填充值",
+      "type": "Array",
+      "required": true,
+      "default": [
+        0.0
+      ],
+      "dtype": "float64",
+      "rank": 1
+    },
+    {
+      "id": "alignment",
+      "name": "参考到当前变换",
+      "type": "Array",
+      "required": true,
+      "default": [],
+      "dtype": "float64",
+      "rank": 3
+    }
+  ],
+  "outputs": [
+    {
+      "id": "images",
+      "name": "旋转图像",
+      "type": "Image",
+      "required": true
+    },
+    {
+      "id": "alignment",
+      "name": "参考到输出变换",
+      "type": "Array",
+      "required": true,
+      "dtype": "float64",
+      "rank": 3
+    }
+  ]
+}

@@ -171,6 +171,7 @@ QuiSplitView {
                     }
                 }
             }
+            NodeModelBar { Layout.fillWidth: true }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Flickable {

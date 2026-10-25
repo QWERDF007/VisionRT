@@ -330,7 +330,7 @@ void nodeDiagnosticsContract()
     {
         jsonFile.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.diag.python",
   "display_name": "诊断测试",
   "version": "1.0.0",
@@ -351,7 +351,7 @@ void nodeDiagnosticsContract()
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.diag.fail",
   "display_name": "诊断失败",
   "version": "1.0.0",
@@ -370,7 +370,7 @@ void nodeDiagnosticsContract()
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.diag.unfulfilled",
   "display_name": "未提供实现测试",
   "version": "1.0.0",
@@ -411,7 +411,7 @@ void nodeDiagnosticsContract()
     {
         projectFile.write(
             R"json({
-  "format_version": 3,
+  "format_version": 4,
   "project": {"name": "诊断工程", "next_node_seq": "4", "next_flow_seq": "2"},
   "flows": [
     {
@@ -596,7 +596,7 @@ void mainQmlContract(double scale)
     {
         sleepJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.sleep",
   "display_name": "Plugin Sleep",
   "version": "1.0.0",
@@ -615,7 +615,7 @@ void mainQmlContract(double scale)
     {
         counterJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.counter",
   "display_name": "Plugin Counter",
   "version": "1.0.0",
@@ -636,7 +636,7 @@ void mainQmlContract(double scale)
     {
         failJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.fail_init",
   "display_name": "Fail Init Tool",
   "version": "1.0.0",
@@ -957,7 +957,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.legacy.func",
   "display_name": "遗留函数",
   "version": "1.0.0",
@@ -980,7 +980,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.legacy.python",
   "display_name": "遗留脚本",
   "version": "1.0.0",
@@ -1020,7 +1020,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.counter",
   "display_name": "计数器插件",
   "version": "1.0.0",
@@ -1043,7 +1043,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -1075,7 +1075,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.user.pythonA",
   "display_name": "用户脚本A",
   "version": "1.0.0",
@@ -1098,7 +1098,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         recvJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.custom.receiver",
   "display_name": "动态接收器",
   "version": "1.0.0",
@@ -1127,7 +1127,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.unindexed.tool",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -1400,7 +1400,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.custom.renamed_recv",
   "display_name": "改名接收器",
   "version": "1.0.0",

@@ -49,7 +49,7 @@ try
                       "  return {'__status_code':0,'__status_message':''}\n";
         }
         const auto definition = parseToolDefinitionJson(R"({
-            "schema_version":2,"tool_id":"audit.concurrent.shutdown","display_name":"Shutdown","version":"1",
+            "schema_version":3,"tool_id":"audit.concurrent.shutdown","display_name":"Shutdown","version":"1",
             "kind":"python_class","entry":{"package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},
             "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
         })", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
@@ -110,7 +110,7 @@ try
                       "  return {'__status_code':0,'__status_message':''}\n";
         }
         const auto definition = parseToolDefinitionJson(R"({
-            "schema_version":2,"tool_id":"audit.release.inflight","display_name":"Shutdown","version":"1",
+            "schema_version":3,"tool_id":"audit.release.inflight","display_name":"Shutdown","version":"1",
             "kind":"python_class","entry":{"package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},
             "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
         })", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
@@ -151,7 +151,7 @@ def execute(inputs):
 )";
     }
     const auto definition = parseToolDefinitionJson(R"({
-        "schema_version":2,"tool_id":"python.memory","display_name":"Memory","version":"1",
+        "schema_version":3,"tool_id":"python.memory","display_name":"Memory","version":"1",
         "kind":"python_function","entry":{"package":"memory","file":"tool.py","symbol":"execute"},
         "init_params":[],"inputs":[],"outputs":[
             {"id":"images","name":"Images","type":"Image"},

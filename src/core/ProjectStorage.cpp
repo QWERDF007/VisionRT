@@ -20,7 +20,7 @@
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 3;
+constexpr int projectFormatVersion = 4;
 
 QString qtPath(const std::filesystem::path &path)
 {
@@ -110,8 +110,9 @@ PortValue defaultValue(const PortDefinition &port)
 void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node, const QJsonObject &raw,
                    const ToolDefinition &definition, std::set<std::string, std::less<>> &changedOutputs)
 {
-    auto       initTypes    = types(definition.initParams);
-    auto       inputTypes   = types(definition.inputs);
+    const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
+    auto       initTypes    = types(contract.initParams);
+    auto       inputTypes   = types(contract.inputs);
     const auto savedOutputs = node.signatures.outputs;
     setOutputDeclarations(node, definition);
     auto outputTypes        = std::move(node.signatures.outputs);
@@ -145,7 +146,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
                  "保存的端口类型已与当前工具定义同步", true);
 
     Values parameters;
-    for (const auto &port : definition.initParams)
+    for (const auto &port : definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams)
     {
         const auto old       = node.initParams.find(port.id);
         const auto signature = node.signatures.initParams.find(port.id);
@@ -159,7 +160,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         parameters.emplace(port.id, std::move(value));
     }
     std::map<std::string, InputBinding, std::less<>> inputs;
-    for (const auto &port : definition.inputs)
+    for (const auto &port : contract.inputs)
     {
         const auto old       = node.inputs.find(port.id);
         const auto signature = node.signatures.inputs.find(port.id);
@@ -262,6 +263,13 @@ void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
     for (std::size_t i = 0; i < flow.nodes.size(); ++i)
         if (discovery[i] == unseen)
             visit(visit, i);
+}
+
+QJsonObject object(const QJsonValue &value, const char *context)
+{
+    if (!value.isObject())
+        invalid(std::string(context) + " 必须是 JSON 对象");
+    return value.toObject();
 }
 
 ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolRegistry &registry)
@@ -396,6 +404,52 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 }
                 node.inputs.emplace(id, std::move(binding));
             }
+            if (raw.contains("expression_config"))
+            {
+                const auto config = map(raw.value("expression_config"), "expression_config");
+                ExpressionConfig expression;
+                expression.nextPortSeq = sequence(config.value("next_port_seq"), "next_port_seq");
+                if (!config.value("variables").isArray() || !config.value("program").isArray())
+                    invalid("expression_config.variables 与 program 必须是数组");
+                const auto variables = config.value("variables").toArray();
+                for (qsizetype index = 0; index < variables.size(); ++index)
+                {
+                    const auto item = map(variables[index], "expression variable");
+                    ExpressionVariable variable;
+                    variable.portId     = text(item.value("port_id"), "variable.port_id", true);
+                    variable.name       = text(item.value("name"), "variable.name", true);
+                    variable.symbol     = text(item.value("symbol"), "variable.symbol", true);
+                    if (!item.value("allow_missing").isBool())
+                        invalid("variable.allow_missing 必须是布尔值");
+                    variable.allowMissing = item.value("allow_missing").toBool();
+                    variable.type = ValueJson::decodeType(object(item.value("type"), "variable.type"));
+                    expression.variables.push_back(std::move(variable));
+                }
+                const auto program = config.value("program").toArray();
+                for (qsizetype index = 0; index < program.size(); ++index)
+                {
+                    const auto item = map(program[index], "expression result");
+                    ExpressionResult result;
+                    result.portId     = text(item.value("port_id"), "result.port_id", true);
+                    result.name       = text(item.value("name"), "result.name", true);
+                    result.symbol     = text(item.value("symbol"), "result.symbol", true);
+                    result.expression = text(item.value("expression"), "result.expression", true);
+                    if (!item.value("exposed").isBool())
+                        invalid("result.exposed 必须是布尔值");
+                    result.exposed = item.value("exposed").toBool();
+                    result.type    = ValueJson::decodeType(object(item.value("type"), "result.type"));
+                    expression.program.push_back(std::move(result));
+                }
+                node.expression = std::move(expression);
+            }
+            if (raw.contains("execution_guard"))
+            {
+                const auto guard = map(raw.value("execution_guard"), "execution_guard");
+                node.executionGuard = SourcePort{sequence(guard.value("node_seq"), "guard.node_seq"),
+                                                 text(guard.value("port_id"), "guard.port_id", true)};
+            }
+            if (raw.contains("select_type"))
+                node.selectType = ValueJson::decodeType(map(raw.value("select_type"), "select_type"));
             if (!definition)
             {
                 node.unresolved = raw;
@@ -514,6 +568,37 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                         invalid("无法保存缺少 type_snapshot 的初始化参数：" + id);
                     parameters.insert(QString::fromStdString(id), ValueJson::encode(value, signature->second));
                 }
+                raw.remove("expression_config");
+                raw.remove("execution_guard");
+                raw.remove("select_type");
+                if (node.expression)
+                {
+                    QJsonArray variables;
+                    for (const auto &variable : node.expression->variables)
+                        variables.append(QJsonObject{{"port_id", QString::fromStdString(variable.portId)},
+                                                     {"name", QString::fromStdString(variable.name)},
+                                                     {"symbol", QString::fromStdString(variable.symbol)},
+                                                     {"type", ValueJson::encodeType(variable.type)},
+                                                     {"allow_missing", variable.allowMissing}});
+                    QJsonArray program;
+                    for (const auto &result : node.expression->program)
+                        program.append(QJsonObject{{"port_id", QString::fromStdString(result.portId)},
+                                                   {"name", QString::fromStdString(result.name)},
+                                                   {"symbol", QString::fromStdString(result.symbol)},
+                                                   {"expression", QString::fromStdString(result.expression)},
+                                                   {"type", ValueJson::encodeType(result.type)},
+                                                   {"exposed", result.exposed}});
+                    raw.insert("expression_config",
+                               QJsonObject{{"next_port_seq", QString::number(node.expression->nextPortSeq)},
+                                           {"variables", variables},
+                                           {"program", program}});
+                }
+                if (node.executionGuard)
+                    raw.insert("execution_guard",
+                               QJsonObject{{"node_seq", QString::number(node.executionGuard->node)},
+                                           {"port_id", QString::fromStdString(node.executionGuard->port)}});
+                if (node.selectType)
+                    raw.insert("select_type", ValueJson::encodeType(*node.selectType));
                 raw.insert("init_params", parameters);
                 raw.insert("type_snapshot", QJsonObject{
                                                 {"init_params",                       parameterTypes},

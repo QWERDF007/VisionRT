@@ -51,7 +51,7 @@ try
                 "cannot write identity fixture");
     };
     write("tools/custom/identity/source.json", R"json({
-        "schema_version":2,"tool_id":"test.identity.source","display_name":"来源","version":"1.0",
+        "schema_version":3,"tool_id":"test.identity.source","display_name":"来源","version":"1.0",
         "kind":"python_function","entry":{"package":"identity","file":"source.py","symbol":"run"},
         "init_params":[],"inputs":[{"id":"value","name":"值","type":"Int","default":0}],
         "outputs":[{"id":"value","name":"值","type":"Int"}]

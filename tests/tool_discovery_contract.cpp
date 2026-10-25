@@ -45,7 +45,7 @@ void write(const QString &path, const QByteArray &bytes)
 QByteArray declaration(const QString &id)
 {
     return QJsonDocument(QJsonObject{
-                             {"schema_version",                                                                                  2},
+                             {"schema_version",                                                                                  3},
                              {       "tool_id",                                                                                 id},
                              {  "display_name",                                                                     "同名工具"},
                              {       "version",                                                                                "1"},
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
     const ToolRoots resourceRoots{std::filesystem::path(resourceExternal.filePath("declarations").toStdWString()),
                                   std::filesystem::path(resourceExternal.filePath("code").toStdWString())};
     const auto hostResource = QJsonObject{
-        {"schema_version", 2},
+        {"schema_version", 3},
         {"tool_id", "test.host.resource"},
         {"display_name", "资源宿主"},
         {"version", "1"},

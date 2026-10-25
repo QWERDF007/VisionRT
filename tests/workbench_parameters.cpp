@@ -56,7 +56,7 @@ void parameterEditorsContract()
           "'ratio': inputs['ratio'], 'count': inputs['count']}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.parameters",
   "display_name": "参数测试",
   "version": "1.0.0",

@@ -93,11 +93,7 @@ InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const T
     {
         version = definition->version;
         kind    = definition->kind;
-        for (const auto &port : definition->initParams)
-        {
-            const auto value = node.initParams.find(port.id);
-            parameters.emplace(port.id, value == node.initParams.end() ? port.defaultValue : value->second);
-        }
+        parameters = nodeParameters(node, *definition);
     }
 }
 
@@ -238,10 +234,101 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->toolId            = definition->id;
     snapshot->outputTypes       = resolvedOutputTypes(*definition);
     snapshot->executionRevision = config.executionRevision;
-    ToolResult  result;
-    auto        phase            = NodePhase::Prepare;
+    ToolResult      result;
+    NodeDisposition disposition  = NodeDisposition::Running;
+    std::string     gateMessage;
+    auto            phase            = NodePhase::Prepare;
     bool        frameworkFailure = false;
     bool        enteredExecute   = false;
+
+    // Host gate: a false guard or a skipped control source never instantiates or
+    // executes the formal tool, and never reports fabricated business zeros.
+    if (config.executionGuard)
+    {
+        const auto &guard    = *config.executionGuard;
+        const auto  upstream = frozen.runtimes.at(guard.node)->slot.latest();
+        const bool  current  = upstream && upstream->generation == context->generation
+                           && upstream->session == context->session && upstream->round == context->round;
+        if (!current)
+        {
+            disposition = NodeDisposition::Blocked;
+            gateMessage = "执行条件在本轮不可用，节点已阻塞";
+        }
+        else if (upstream->disposition == NodeDisposition::Skipped)
+        {
+            disposition = NodeDisposition::Skipped;
+            gateMessage = "执行条件来源已跳过";
+        }
+        else if (upstream->disposition != NodeDisposition::Succeeded || upstream->status.code != 0)
+        {
+            disposition = NodeDisposition::Blocked;
+            gateMessage = "执行条件失败，节点已阻塞";
+        }
+        else
+        {
+            const auto  value = upstream->outputs.find(guard.port);
+            const auto *flag  = value == upstream->outputs.end() ? nullptr : std::get_if<bool>(&value->second);
+            if (!flag)
+            {
+                disposition = NodeDisposition::Blocked;
+                gateMessage = "执行条件必须是布尔值，节点已阻塞";
+            }
+            else if (!*flag)
+            {
+                disposition = NodeDisposition::Skipped;
+                gateMessage = "执行条件为假";
+            }
+        }
+    }
+    if (disposition == NodeDisposition::Running)
+    {
+        for (const auto &port : definition->inputs)
+        {
+            if (!port.required || port.id.starts_with("__"))
+                continue;
+            const auto binding = config.inputs.find(port.id);
+            if (binding == config.inputs.end() || binding->second.mode != BindingMode::Upstream
+                || !binding->second.source)
+                continue;
+            const auto upstream = frozen.runtimes.at(binding->second.source->node)->slot.latest();
+            const bool current  = upstream && upstream->generation == context->generation
+                              && upstream->session == context->session && upstream->round == context->round;
+            if (!current)
+                continue; // The frozen-run check reports stale publications later.
+            if (upstream->disposition == NodeDisposition::Skipped)
+            {
+                disposition = NodeDisposition::Skipped;
+                gateMessage = "上游节点本轮跳过";
+                break;
+            }
+            if (upstream->disposition != NodeDisposition::Succeeded)
+            {
+                disposition = NodeDisposition::Blocked;
+                gateMessage = "上游节点失败，节点已阻塞";
+                break;
+            }
+        }
+    }
+
+    const auto publishTerminal = [&](std::string message)
+    {
+        snapshot->disposition = disposition;
+        snapshot->status      = {0, std::move(message)};
+        snapshot->phase       = NodePhase::Prepare;
+        for (const auto &port : definition->outputs)
+            if (port.id != "__status_code" && port.id != "__status_message")
+                snapshot->outputs.emplace(port.id, Missing{});
+        snapshot->outputs.emplace("__status_code", std::int64_t{0});
+        snapshot->outputs.emplace("__status_message", snapshot->status.message);
+        snapshot->timing.totalMs = milliseconds(Clock::now() - started);
+        slot.publish(std::move(snapshot));
+    };
+
+    if (disposition != NodeDisposition::Running)
+    {
+        publishTerminal(gateMessage);
+        return;
+    }
     try
     {
         Values inputs;
@@ -284,8 +371,26 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 inputs.emplace(port.id, std::move(value));
             }
+            if (definition->nodeModel == NodeModel::Select)
+            {
+                const auto selector = inputs.find("selector");
+                const auto *flag    = selector == inputs.end() ? nullptr : std::get_if<bool>(&selector->second);
+                if (!flag)
+                    throw ContractError("合流节点缺少选择条件");
+                const auto chosen = inputs.find(*flag ? "if_true" : "if_false");
+                if (chosen == inputs.end() || isMissing(chosen->second))
+                {
+                    disposition = NodeDisposition::Blocked;
+                    gateMessage = "所选分支没有可用值，节点已阻塞";
+                }
+            }
             validateToolValues(definition->inputs, inputs);
             prepareTimer.stop();
+        }
+        if (disposition != NodeDisposition::Running)
+        {
+            publishTerminal(gateMessage);
+            return;
         }
         double deferredCreateMs = 0.0;
         if (!instance && deferredCreate)
@@ -457,6 +562,16 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     result.outputs.emplace(port.id, Missing{});
     }
     snapshot->status  = normalizeExecutionStatus(std::move(result.status));
+    if (disposition == NodeDisposition::Running)
+    {
+        if (result.status.code == kCancelledStatus)
+            disposition = NodeDisposition::Canceled;
+        else if (result.status.code == 0)
+            disposition = NodeDisposition::Succeeded;
+        else
+            disposition = NodeDisposition::Failed;
+    }
+    snapshot->disposition = disposition;
     snapshot->phase   = phase;
     snapshot->outputs = std::move(result.outputs);
     snapshot->outputs.emplace("__status_code", snapshot->status.code);

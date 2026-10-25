@@ -804,7 +804,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "func.json");
         ofs << R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.function",
   "display_name": "Plugin Function",
   "version": "1.0.0",
@@ -828,7 +828,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "calc.json");
         ofs << R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "custom.py_math",
   "display_name": "Python Calc",
   "version": "1.0.0",
@@ -848,7 +848,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "platform.test_recv",
   "display_name": "Test Receiver",
   "version": "1.0.0",
@@ -1096,7 +1096,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "counter.json");
         ofs << R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.plugin.counter",
   "display_name": "Plugin Counter",
   "version": "1.0.0",
@@ -1114,7 +1114,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "platform.test_recv",
   "display_name": "Test Receiver",
   "version": "1.0.0",

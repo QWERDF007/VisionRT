@@ -18,7 +18,7 @@ int main()
     QFile      file(name);
     assert(file.open(QIODevice::WriteOnly));
     file.write(R"json({
-  "schema_version": 2,
+  "schema_version": 3,
   "tool_id": "test.json",
   "display_name": "JSON 声明",
   "version": "1.0.0",

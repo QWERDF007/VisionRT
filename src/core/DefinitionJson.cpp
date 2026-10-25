@@ -4,6 +4,7 @@
 #include "core/ValueJson.h"
 
 #include <limits>
+#include <string_view>
 
 namespace visionrt {
 namespace {
@@ -25,7 +26,8 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
         else
             json::fields(item,
                          {"id", "name", "type", "dtype", "rank", "required", "default", "editor", "tab", "group", "min",
-                          "max", "step", "decimals", "options", "options_provider", "image_input", "path_mode_from"},
+                          "max", "step", "decimals", "options", "options_provider", "image_input", "path_mode_from",
+                          "alignment_input"},
                          context);
         PortDefinition port;
         port.id = json::text(item.value("id"), context + ".id");
@@ -100,6 +102,7 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
                      {           "group",           &port.group},
                      {"options_provider", &port.optionsProvider},
                      {     "image_input",      &port.imageInput},
+                     { "alignment_input",  &port.alignmentInput},
                      {      "image_port",       &port.imagePort},
                      {  "path_mode_from",    &port.pathModeFrom}
             })
@@ -166,7 +169,8 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, bool output)
                      {           "group",           port.group},
                      {"options_provider", port.optionsProvider},
                      {     "image_input",      port.imageInput},
-                     {  "path_mode_from",    port.pathModeFrom}
+                     {  "path_mode_from",    port.pathModeFrom},
+                     { "alignment_input",  port.alignmentInput}
             })
                 if (!value.empty())
                     item.insert(key, QString::fromStdString(value));
@@ -205,10 +209,11 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
         const auto root = document.json().object();
         json::fields(root,
                      {"schema_version", "tool_id", "display_name", "version", "kind", "entry", "category",
-                      "subcategory", "resources", "init_params", "inputs", "outputs"},
+                      "subcategory", "resources", "init_params", "inputs", "outputs", "node_model", "visibility",
+                      "interaction"},
                      "工具声明");
-        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{2}}))
-            throw ContractError("schema_version 必须是整数 2");
+        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{3}}))
+            throw ContractError("schema_version 必须是整数 3");
         ToolDefinition definition;
         definition.id          = json::text(root.value("tool_id"), "tool_id");
         definition.displayName = json::text(root.value("display_name"), "display_name");
@@ -251,6 +256,69 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
         if (root.contains("resources"))
             for (const auto &value : json::array(root.value("resources"), "resources"))
                 definition.resources.push_back(json::relativePath(json::text(value, "resources"), "resources"));
+        if (root.contains("node_model"))
+        {
+            const auto model = json::text(root.value("node_model"), "node_model");
+            if (model == "fixed")
+                definition.nodeModel = NodeModel::Fixed;
+            else if (model == "expression")
+                definition.nodeModel = NodeModel::Expression;
+            else if (model == "condition")
+                definition.nodeModel = NodeModel::Condition;
+            else if (model == "select")
+                definition.nodeModel = NodeModel::Select;
+            else
+                throw ContractError("未知 node_model：" + model);
+        }
+        if (root.contains("visibility"))
+        {
+            const auto visibility = json::text(root.value("visibility"), "visibility");
+            if (visibility == "normal")
+                definition.visibility = ToolVisibility::Normal;
+            else if (visibility == "assist")
+                definition.visibility = ToolVisibility::Assist;
+            else
+                throw ContractError("未知 visibility：" + visibility);
+        }
+        if (root.contains("interaction"))
+        {
+            const auto item = json::object(root.value("interaction"), "interaction");
+            json::fields(item, {"helper_tool_id", "input_map", "proposal_map", "roi_kinds"}, "interaction");
+            InteractionMapping mapping;
+            mapping.helperToolId = json::text(item.value("helper_tool_id"), "interaction.helper_tool_id");
+            for (const auto *field : {"input_map", "proposal_map"})
+            {
+                if (!item.contains(field))
+                    continue;
+                const auto values = json::object(item.value(field), QString{"interaction."} + field);
+                auto      &target = std::string_view(field) == "input_map" ? mapping.inputMap : mapping.proposalMap;
+                for (auto entry = values.begin(); entry != values.end(); ++entry)
+                    target.emplace(entry.key().toUtf8().toStdString(),
+                                   json::text(entry.value(), QString{"interaction."} + field + "." + entry.key()));
+            }
+            if (item.contains("roi_kinds"))
+            {
+                for (const auto &value : json::array(item.value("roi_kinds"), "interaction.roi_kinds"))
+                {
+                    const auto kind = json::text(value, "interaction.roi_kinds");
+                    if (kind == "point")
+                        mapping.roiKinds.push_back(RoiKind::Point);
+                    else if (kind == "segment")
+                        mapping.roiKinds.push_back(RoiKind::Segment);
+                    else if (kind == "rectangle")
+                        mapping.roiKinds.push_back(RoiKind::Rectangle);
+                    else if (kind == "circle")
+                        mapping.roiKinds.push_back(RoiKind::Circle);
+                    else if (kind == "polygon")
+                        mapping.roiKinds.push_back(RoiKind::Polygon);
+                    else if (kind == "point_set")
+                        mapping.roiKinds.push_back(RoiKind::PointSet);
+                    else
+                        throw ContractError("未知 ROI kind：" + kind);
+                }
+            }
+            definition.interaction = std::move(mapping);
+        }
         definition.initParams = ports(document, root, "init_params");
         definition.inputs     = ports(document, root, "inputs");
         definition.outputs    = ports(document, root, "outputs");
@@ -313,6 +381,72 @@ std::string emitNormalizedToolJson(const ToolDefinition &definition)
         QJsonArray resources;
         for (const auto &path : definition.resources) resources.append(json::pathText(path));
         root.insert("resources", resources);
+    }
+    if (definition.nodeModel != NodeModel::Fixed)
+    {
+        const char *model = "fixed";
+        switch (definition.nodeModel)
+        {
+        case NodeModel::Fixed:
+            break;
+        case NodeModel::Expression:
+            model = "expression";
+            break;
+        case NodeModel::Condition:
+            model = "condition";
+            break;
+        case NodeModel::Select:
+            model = "select";
+            break;
+        }
+        root.insert("node_model", model);
+    }
+    if (definition.visibility != ToolVisibility::Normal)
+        root.insert("visibility", "assist");
+    if (definition.interaction)
+    {
+        QJsonObject interaction;
+        interaction.insert("helper_tool_id", QString::fromStdString(definition.interaction->helperToolId));
+        QJsonObject inputMap;
+        for (const auto &[helper, port] : definition.interaction->inputMap)
+            inputMap.insert(QString::fromStdString(helper), QString::fromStdString(port));
+        if (!inputMap.isEmpty())
+            interaction.insert("input_map", inputMap);
+        QJsonObject proposalMap;
+        for (const auto &[helper, port] : definition.interaction->proposalMap)
+            proposalMap.insert(QString::fromStdString(helper), QString::fromStdString(port));
+        if (!proposalMap.isEmpty())
+            interaction.insert("proposal_map", proposalMap);
+        if (!definition.interaction->roiKinds.empty())
+        {
+            QJsonArray kinds;
+            for (const auto kind : definition.interaction->roiKinds)
+            {
+                switch (kind)
+                {
+                case RoiKind::Point:
+                    kinds.append("point");
+                    break;
+                case RoiKind::Segment:
+                    kinds.append("segment");
+                    break;
+                case RoiKind::Rectangle:
+                    kinds.append("rectangle");
+                    break;
+                case RoiKind::Circle:
+                    kinds.append("circle");
+                    break;
+                case RoiKind::Polygon:
+                    kinds.append("polygon");
+                    break;
+                case RoiKind::PointSet:
+                    kinds.append("point_set");
+                    break;
+                }
+            }
+            interaction.insert("roi_kinds", kinds);
+        }
+        root.insert("interaction", interaction);
     }
     return QJsonDocument(root).toJson(QJsonDocument::Indented).toStdString();
 }

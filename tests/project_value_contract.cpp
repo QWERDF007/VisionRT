@@ -211,7 +211,7 @@ void allValuesSurviveRealProjectFiles()
     QFile file(filename);
     require(file.open(QIODevice::ReadOnly), "saved project unavailable");
     const auto root = QJsonDocument::fromJson(file.readAll()).object();
-    require(root["format_version"].toInt() == 3, "saved project does not use format3");
+    require(root["format_version"].toInt() == 4, "saved project does not use format4");
     const auto saved    = root["flows"].toArray()[0].toObject()["nodes"].toArray()[0].toObject();
     const auto literals = saved["inputs"].toObject();
     require(literals["array_0"].toObject()["literal"].isArray(), "saved Array used a DTO instead of nested lists");

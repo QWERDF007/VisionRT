@@ -33,7 +33,7 @@ int main(int argc, char **argv)
                 {
                     std::ofstream declaration(externalDeclarations / "external.json");
                     declaration << R"({
-                        "schema_version":2,"tool_id":"test.external.roots","display_name":"外部根工具","version":"1",
+                        "schema_version":3,"tool_id":"test.external.roots","display_name":"外部根工具","version":"1",
                         "kind":"python_function","entry":{"package":"external","file":"tool.py","symbol":"execute"},
                         "init_params":[],"inputs":[],"outputs":[]
                     })";
@@ -65,10 +65,11 @@ int main(int argc, char **argv)
                     std::cout << "Pure Python ZIP result: 42\n";
                     return;
                 }
-                assert(registry.definitions().size() == 5);
+                assert(registry.definitions().size() == 7);
                 assert(registry.find("custom.image.mean") && registry.find("custom.call.counter")
                        && registry.find("custom.python.roi") && registry.find("custom.python.image_add")
-                       && registry.find("visiontools.python.image_sizes"));
+                       && registry.find("visiontools.python.image_sizes")
+                       && registry.find("visiontools.logic.expression") && registry.find("visiontools.logic.branch"));
                 const auto images = DataRef<Image>(Image{cv::Mat(4, 6, CV_16UC1, cv::Scalar(8))(cv::Rect(1, 1, 3, 2)),
                                                          cv::Mat(4, 5, CV_8UC3, cv::Scalar(2, 2, 2))});
                 {

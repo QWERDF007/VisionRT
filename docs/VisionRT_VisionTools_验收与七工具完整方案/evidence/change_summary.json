@@ -1,0 +1,174 @@
+{
+  "VisionRT": {
+    "base": "6df386eeafe208a5ade6fa382a253611482717ab",
+    "head": "f6f57b03adea1c732492e635a7c09bdc19cbe26c",
+    "commits": [
+      {
+        "sha": "f6f57b03adea1c732492e635a7c09bdc19cbe26c",
+        "message": "feat：统一关闭终态入口与有效绑定状态，修复YOLO填充框抑制缺陷"
+      }
+    ],
+    "files": [
+      {
+        "path": "docs/README.md",
+        "status": "modified"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/01_验收报告.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/02_完整目标方案.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/03_VisionRT优化方案.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/04_VisionTools优化方案.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/05_SPECS.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/06_TICKETS.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/07_验收与性能矩阵.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/08_CPP设计评审.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/09_证据与来源.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/README.md",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/evidence/baseline.json",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/evidence/dataref_probe.cpp",
+        "status": "renamed"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/evidence/dataref_probe.txt",
+        "status": "renamed"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/evidence/python_tools_test.txt",
+        "status": "renamed"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/evidence/yolo_padding_probe.cpp",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025/evidence/yolo_padding_probe.txt",
+        "status": "added"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/01_验收报告.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/02_完整改进方案.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/03_SPECS.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/04_TICKETS.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/05_验收矩阵.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/06_CPP设计评审.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/07_证据与限制.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/README.md",
+        "status": "removed"
+      },
+      {
+        "path": "docs/VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025/evidence/baseline.json",
+        "status": "removed"
+      },
+      {
+        "path": "src/core/ProjectEditor.cpp",
+        "status": "modified"
+      },
+      {
+        "path": "src/core/ProjectEditor.h",
+        "status": "modified"
+      },
+      {
+        "path": "src/ui/AppController.cpp",
+        "status": "modified"
+      },
+      {
+        "path": "src/ui/AppControllerReadback.cpp",
+        "status": "modified"
+      },
+      {
+        "path": "src/ui/AppController_p.h",
+        "status": "modified"
+      },
+      {
+        "path": "src/ui/qml/Main.qml",
+        "status": "modified"
+      },
+      {
+        "path": "tests/project_editor_contract.cpp",
+        "status": "modified"
+      },
+      {
+        "path": "tests/workbench_contract.cpp",
+        "status": "modified"
+      },
+      {
+        "path": "tests/workbench_lifecycle_contract.cpp",
+        "status": "modified"
+      }
+    ]
+  },
+  "VisionTools": {
+    "base": "aa92f9e578b7780b85fde71d4aee25cf88182f2d",
+    "head": "b24307b7bcb687a3b8f9fe2269aff528b054de6f",
+    "commits": [
+      {
+        "sha": "b24307b7bcb687a3b8f9fe2269aff528b054de6f",
+        "message": "fix：YOLO填充无效候选框预过滤避免占用上限与抑制有效框"
+      }
+    ],
+    "files": [
+      {
+        "path": "src/infer/YoloPostprocess.cpp",
+        "status": "modified"
+      },
+      {
+        "path": "tests/test_infer_contract.cpp",
+        "status": "modified"
+      }
+    ]
+  }
+}
