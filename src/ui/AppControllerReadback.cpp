@@ -23,13 +23,17 @@ void AppController::Impl::drainReaders()
     struct DrainGuard
     {
         bool &flag;
-        DrainGuard(bool &f) : flag(f) { flag = true; }
-        ~DrainGuard() { flag = false; }
+        bool  previous;
+        DrainGuard(bool &f) : flag(f), previous(f) { flag = true; }
+        ~DrainGuard() { flag = previous; }
     } guard(draining);
 
     converter.waitForReads();
     if (textTask.valid())
+    {
         textTask.wait();
+        textTask = {};
+    }
     if (textMailbox)
     {
         bool done = false;
@@ -42,7 +46,13 @@ void AppController::Impl::drainReaders()
         else
             textMailbox.reset();
     }
-    readRequests.clear();
+    for (auto it = readRequests.begin(); it != readRequests.end();)
+    {
+        if (std::holds_alternative<TextRequest>(*it))
+            it = readRequests.erase(it);
+        else
+            ++it;
+    }
 }
 
 void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox)
@@ -78,7 +88,8 @@ void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbo
         {
             report(e, QStringLiteral("输出文本格式化失败"));
         }
-        updateReadback();
+        if (!draining)
+            updateReadback();
         return;
     }
 
@@ -94,6 +105,8 @@ void AppController::Impl::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbo
 
 void AppController::Impl::updateReadback()
 {
+    if (draining)
+        return;
     if (textMailbox)
     {
         bool done = false;

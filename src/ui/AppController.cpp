@@ -392,11 +392,12 @@ void AppController::Impl::clearResults()
 
 void AppController::Impl::poll()
 {
-    if (closing && pending == Pending::Close)
+    if (closePhase == ClosePhase::AwaitOwners)
     {
         if (!python || python->isCloseReady())
         {
-            pending = Pending::None;
+            closePhase = ClosePhase::Ready;
+            pending    = Pending::None;
             if (!closeReadyEmitted)
             {
                 closeReadyEmitted = true;
@@ -405,6 +406,8 @@ void AppController::Impl::poll()
         }
         return;
     }
+    if (closePhase == ClosePhase::Ready)
+        return;
     auto update = runtime->pollLatest();
     if (update.generation >= generation)
     {
@@ -606,22 +609,35 @@ void AppController::Impl::start(RunMode mode)
 
 void AppController::Impl::request(Pending action, QString path)
 {
-    if (action == Pending::Close && (closing || pending == Pending::Close))
+    if (action == Pending::Close)
     {
-        if (closing && (!python || python->isCloseReady()))
+        if (closePhase == ClosePhase::Ready || closeReadyEmitted)
+            return;
+        if (closePhase == ClosePhase::AwaitOwners)
         {
-            pending = Pending::None;
-            if (!closeReadyEmitted)
+            if (!python || python->isCloseReady())
             {
-                closeReadyEmitted = true;
-                emit q->closeReady();
+                closePhase = ClosePhase::Ready;
+                pending    = Pending::None;
+                if (!closeReadyEmitted)
+                {
+                    closeReadyEmitted = true;
+                    emit q->closeReady();
+                }
             }
+            else if (python)
+            {
+                const auto remaining = python->activeReferences();
+                report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
+            }
+            return;
         }
-        else if (closing && python)
-        {
-            const auto remaining = python->activeReferences();
-            report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
-        }
+        if (closePhase == ClosePhase::Resetting || pending == Pending::Close)
+            return;
+    }
+    if (closing || closePhase != ClosePhase::None)
+    {
+        report(QStringLiteral("正在关闭中，不能执行新操作"));
         return;
     }
     if (pending != Pending::None)
@@ -669,8 +685,26 @@ void AppController::Impl::advancePending()
         return;
     }
     pendingApproved = true;
-    if (pending != Pending::Close && !pendingReset)
+    if (!pendingReset)
     {
+        if (pending == Pending::Close)
+        {
+            closing    = true;
+            closePhase = ClosePhase::Resetting;
+            drainReaders();
+            const auto result = runtime->requestReset();
+            if (!result)
+            {
+                report(result);
+                pending    = Pending::None;
+                closing    = false;
+                closePhase = ClosePhase::None;
+                return;
+            }
+            pendingReset = true;
+            setState(RuntimeState::Resetting);
+            return;
+        }
         try
         {
             if (pending == Pending::Open)
@@ -723,6 +757,7 @@ void AppController::Impl::advancePending()
     }
     if (completed == Pending::Close)
     {
+        closing = true;
         drainReaders();
         converter.waitForReads();
         converter.invalidate(generation);
@@ -749,16 +784,16 @@ void AppController::Impl::advancePending()
             python->prepareShutdown();
             if (!python->isCloseReady())
             {
+                closePhase      = ClosePhase::AwaitOwners;
                 const auto remaining = python->activeReferences();
                 report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
-                closing         = true;
                 pending         = Pending::Close;
                 pendingApproved = true;
                 pendingReset    = true;
                 return;
             }
         }
-        closing = true;
+        closePhase = ClosePhase::Ready;
         if (!closeReadyEmitted)
         {
             closeReadyEmitted = true;
@@ -1398,7 +1433,8 @@ void AppController::requestClose()
 
 bool AppController::isCloseReady() const
 {
-    return impl_->python ? impl_->python->isCloseReady() : true;
+    return impl_->closePhase == Impl::ClosePhase::Ready
+        || (impl_->closePhase == Impl::ClosePhase::None && (!impl_->python || impl_->python->isCloseReady()));
 }
 
 void AppController::resolveUnsaved(const QString &decision, const QString &savePath)
@@ -1410,6 +1446,7 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
         if (impl_->pending == Impl::Pending::Close)
         {
             impl_->closing = false;
+            impl_->closePhase = Impl::ClosePhase::None;
             impl_->closeReadyEmitted = false;
         }
         impl_->pending          = Impl::Pending::None;

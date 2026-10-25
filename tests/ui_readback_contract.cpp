@@ -149,6 +149,24 @@ def run(inputs):
     require(values.size() == 100000 && values.first().toInt() == 2 && values.last().toInt() == 2,
             "queued full text read the wrong publication");
     frame(38);
+    // T-C03 / S-C04: Nested management inside outputTextReady preserves draining guard, delivers exactly once, no premature ACK
+    {
+        int nestedCount = 0;
+        const auto conn = QObject::connect(&app, &AppController::outputTextReady, &app,
+            [&](const QString &)
+            {
+                ++nestedCount;
+                app.resetRuntime();
+            });
+        text.clear();
+        const auto currentContext = app.portContext("values", true);
+        app.requestOutputText(currentContext, false, false);
+        require(QTest::qWaitFor([&] { return nestedCount == 1; }, 5000),
+                "nested management operation not triggered via outputTextReady");
+        idle();
+        require(text.size() == 1, "outputTextReady delivered wrong number of times");
+        QObject::disconnect(conn);
+    }
     std::cout << "READBACK_CONTRACT_PASS queued_ms=" << queuedMs << " values=100000 frame=38 index=1\n";
     window.hide();
     return 0;

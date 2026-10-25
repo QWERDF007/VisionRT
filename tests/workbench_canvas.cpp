@@ -382,13 +382,20 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(card->isVisible(), "hover card item is not visible");
     require(!card->hasActiveFocus(), "hover card took keyboard focus");
     const QStringList content = texts();
-    require(content.size() == 7, "hover card contains more than the tool name and three timing rows");
+    require(content.size() == 13, "hover card does not contain the tool name and six timing rows");
     require(content.contains(first.value("title").toString()), "hover card lost the tool name");
-    require(content.contains(QStringLiteral("算子")) && content.contains(QStringLiteral("预处理"))
-                && content.contains(QStringLiteral("后处理")),
+    require(content.contains(QStringLiteral("算子")) && content.contains(QStringLiteral("宿主准备"))
+                && content.contains(QStringLiteral("初始化")) && content.contains(QStringLiteral("结果校验"))
+                && content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("后处理")),
             "hover card lost a timing row");
     require(content.contains(first.value("timingOperatorText").toString()),
             "hover card operator time does not match the structured node data");
+    require(content.contains(first.value("timingPrepareText").toString()),
+            "hover card prepare time does not match the structured node data");
+    require(content.contains(first.value("timingInitText").toString()),
+            "hover card init time does not match the structured node data");
+    require(content.contains(first.value("timingValidateText").toString()),
+            "hover card validate time does not match the structured node data");
     require(content.contains(first.value("timingPreprocessText").toString()),
             "hover card preprocess time does not match the structured node data");
     require(content.contains(first.value("timingPostprocessText").toString()),

@@ -209,7 +209,7 @@ void pendingContract()
     app.resolveUnsaved("save", directory.path() + "/absent/project.vrt.json");
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved("discard");
-    require(closes == 1, "discard does not finish pending close exactly once");
+    require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
 }
 
 #include <chrono>

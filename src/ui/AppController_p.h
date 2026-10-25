@@ -74,7 +74,15 @@ struct AppController::Impl
         Reset,
         DeleteNodes
     };
-    Pending                          pending = Pending::None;
+    enum class ClosePhase
+    {
+        None,
+        Resetting,
+        AwaitOwners,
+        Ready
+    };
+    ClosePhase                       closePhase       = ClosePhase::None;
+    Pending                          pending          = Pending::None;
     QString                          pendingPath;
     bool                             pendingApproved  = false;
     bool                             awaitingDecision = false;

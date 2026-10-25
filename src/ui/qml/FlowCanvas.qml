@@ -612,6 +612,9 @@ FocusScope {
                     Repeater {
                         model: [
                             { label: "算子", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
+                            { label: "宿主准备", value: root.hoverNode ? root.hoverNode.timingPrepareText : "" },
+                            { label: "初始化", value: root.hoverNode ? root.hoverNode.timingInitText : "" },
+                            { label: "结果校验", value: root.hoverNode ? root.hoverNode.timingValidateText : "" },
                             { label: "预处理", value: root.hoverNode ? root.hoverNode.timingPreprocessText : "" },
                             { label: "后处理", value: root.hoverNode ? root.hoverNode.timingPostprocessText : "" }
                         ]

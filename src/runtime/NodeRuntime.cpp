@@ -197,12 +197,16 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     {
         Clock::time_point start = Clock::now();
         double           &target;
-        bool              active = true;
+        bool             *measured = nullptr;
+        bool              active   = true;
 
-        explicit ScopeTimer(double &destination)
+        explicit ScopeTimer(double &destination, bool *measuredFlag = nullptr)
             : target(destination)
+            , measured(measuredFlag)
         {
             target = 0.0;
+            if (measured)
+                *measured = true;
         }
 
         ~ScopeTimer()
@@ -242,7 +246,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     {
         Values inputs;
         {
-            ScopeTimer prepareTimer(snapshot->timing.prepareMs);
+            ScopeTimer prepareTimer(snapshot->timing.prepareMs, &snapshot->timing.prepareMeasured);
             for (const auto &port : definition->inputs)
             {
                 PortValue  value   = port.defaultValue;
@@ -282,11 +286,11 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             }
             validateToolValues(definition->inputs, inputs);
             prepareTimer.stop();
-            snapshot->timing.prepareMeasured = true;
         }
         double deferredCreateMs = 0.0;
         if (!instance && deferredCreate)
         {
+            snapshot->timing.initMeasured = true;
             const auto createStart = Clock::now();
             ToolStatus status;
             instance = createInstance(config, frozen.registry, *configuration, reader, status);
@@ -306,7 +310,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             validateToolValues(definition->initParams, parameters);
             ToolStatus status;
             {
-                ScopeTimer initTimer(snapshot->timing.initMs);
+                ScopeTimer initTimer(snapshot->timing.initMs, &snapshot->timing.initMeasured);
                 try
                 {
                     status = instance->initialize(parameters);
@@ -328,7 +332,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     status = {-1, "未知的初始化异常"};
                 }
                 initTimer.stop();
-                snapshot->timing.initMeasured = true;
             }
             if (!status)
             {
@@ -340,8 +343,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             else
                 initialized = true;
         }
-        if (deferredCreateMs > 0.0)
-            snapshot->timing.initMeasured = true;
         snapshot->timing.initMs += deferredCreateMs;
         phase = NodePhase::Execute;
         if (instance)
@@ -381,7 +382,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         {
             const auto invocationPhase = phase;
             phase                      = NodePhase::Convert;
-            ScopeTimer convertTimer(snapshot->timing.convertMs);
+            ScopeTimer convertTimer(snapshot->timing.convertMs, &snapshot->timing.validateMeasured);
             validateUtf8(result.status.message);
             validateUtf8(result.status.detail);
             const auto businessCount
@@ -409,7 +410,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
             }
             convertTimer.stop();
-            snapshot->timing.validateMeasured = true;
             phase = invocationPhase;
         }
         snapshot->timing.validateMs = snapshot->timing.convertMs;

@@ -2,6 +2,7 @@
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
+#include "ui/OutputModel.h"
 #include "ui/Theme.h"
 
 #include <QDir>
@@ -58,7 +59,8 @@ try
     gate.kind        = ToolKind::PythonClass;
     gate.entry       = {"lifecycle", "tool.py", "Gate"};
     gate.outputs     = {
-        {"value", "Value", {Type::Int}}
+        {"value", "Value", {Type::Int}},
+        {"image", "Image", {Type::Image}}
     };
     write(root + "/tools-package/tools/custom/lifecycle.json",
           QByteArray::fromStdString(emitNormalizedToolJson(gate)));
@@ -72,6 +74,8 @@ serial = itertools.count(1)
 def record(event):
     with (root / 'events').open('a', encoding='utf-8') as stream:
         stream.write(event + '\n')
+
+import numpy as np
 
 class Gate:
     def __init__(self):
@@ -90,7 +94,8 @@ class Gate:
                 raise RuntimeError('Lifecycle gate deadline exceeded')
             time.sleep(0.001)
         record(f'return:{self.serial}')
-        return {'value': 1, '__status_code': 0, '__status_message': ''}
+        img = np.zeros((10, 10), dtype=np.uint8)
+        return {'value': 1, 'image': [img], '__status_code': 0, '__status_message': ''}
 
     def release(self):
         record(f'release:{self.serial}')
@@ -145,23 +150,37 @@ class Gate:
                       loop->mapToScene(QPointF(loop->width() / 2, loop->height() / 2)).toPoint(), 0);
     require(QTest::qWaitFor([&] { return app.runState() == "Stopping"; }, 2000),
             "lifecycle stop did not reach Stopping");
-    app.resetRuntime();
-    app.resetRuntime();
-    app.requestClose();
-    QTest::keyClick(window, Qt::Key_F6);
     write(permission, "allow");
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000),
-            "lifecycle reset did not finish; state=" + app.runState().toStdString() + "; events="
+    require(QTest::qWaitFor([&] { return !app.busy() && app.runState() == "Idle"; }, 5000),
+            "lifecycle loop stop did not return to Idle; state=" + app.runState().toStdString() + "; events="
                 + events().join(',').toStdString());
-    require(app.runState() == "Idle", "lifecycle reset did not return to Idle");
+
+    const auto nodeId = app.nodes().first().toMap().value("id").toString();
+    app.selectNode(nodeId);
+    auto *outputModel = qobject_cast<OutputModel *>(app.outputModel());
+    require(outputModel != nullptr, "lifecycle outputModel is null");
+    auto captured = outputModel->capture(QStringLiteral("image"));
+    require(captured.has_value(), "lifecycle image output was not captured");
+    require(std::holds_alternative<DataRef<Image>>(captured->value), "captured value is not DataRef<Image>");
+
     require(app.save(root + "/lifecycle.vrt.json"), "lifecycle project could not be saved");
     require(QTest::qWaitFor([&] { return !app.busy() && !app.dirty(); }, 5000),
             "lifecycle project did not become clean");
+
+    // Close directly with active Python output and external owner held (no prior resetRuntime)
     app.requestClose();
     app.requestClose();
-    require(QTest::qWaitFor([&] { return !window->isVisible() && !app.busy(); }, 5000),
-            "lifecycle close did not finish; state=" + app.runState().toStdString() + "; events="
-                + events().join(',').toStdString());
+    QTest::qWait(100);
+    require(closes.size() == 0, "closeReady must not be emitted while external owner is held");
+    require(window->isVisible(), "window must remain visible while awaiting owners");
+
+    // Release external owner - close should now proceed automatically
+    captured.reset();
+    require(QTest::qWaitFor([&] { return closes.size() == 1; }, 5000),
+            "lifecycle close did not finish after owner was released; state=" + app.runState().toStdString()
+                + "; events=" + events().join(',').toStdString());
+    require(QTest::qWaitFor([&] { return !window->isVisible(); }, 5000),
+            "lifecycle window did not hide after close");
     QTest::qWait(200);
     require(closes.size() == 1, "repeated stop/reset/close produced duplicate completion");
     QTest::qWait(500);
