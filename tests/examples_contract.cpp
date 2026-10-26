@@ -1008,13 +1008,8 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
         // Save project
         ProjectStorage storage1(registry1);
-        auto           reconciled = storage1.reconcile(project);
-        for (const auto &d : reconciled.diagnostics)
-        {
-            std::cerr << "RECONCILE DIAGNOSTIC: node=" << (d.node ? *d.node : 0) << " code=" << static_cast<int>(d.code)
-                      << " field=" << d.field << " msg=" << d.message << std::endl;
-        }
-        project = std::move(reconciled.project);
+        auto reconciled = storage1.reconcile(project);
+        project          = std::move(reconciled.project);
         storage1.save(project, savedProjectFile);
 
         // Reopen and re-execute to verify numerical equality on reload
@@ -1209,6 +1204,24 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
 } // namespace
 
+namespace {
+
+void copyWithoutGpuRuntime(const std::filesystem::path &source, const std::filesystem::path &target)
+{
+    std::filesystem::create_directories(target);
+    for (const auto &entry : std::filesystem::directory_iterator(source))
+    {
+        const auto name = entry.path().filename().string();
+        const auto dest = target / entry.path().filename();
+        if (entry.is_directory())
+            copyWithoutGpuRuntime(entry.path(), dest);
+        else if (name.rfind("nvinfer", 0) != 0)
+            std::filesystem::copy_file(entry.path(), dest, std::filesystem::copy_options::overwrite_existing);
+    }
+}
+
+} // namespace
+
 int main(int argc, char **argv)
 {
     QCoreApplication      app(argc, argv);
@@ -1254,7 +1267,9 @@ int main(int argc, char **argv)
     assert((unicodeTemp.isValid()));
     const auto unicodePkg
         = std::filesystem::u8path(unicodeTemp.path().toUtf8().toStdString()) / "测试 工具 目录 with space";
-    std::filesystem::copy(toolsPkg, unicodePkg, std::filesystem::copy_options::recursive);
+    // Only the unicode-path contract is under test, so the heavyweight GPU inference runtime is
+    // skipped: it is never loaded by these CPU/Python examples and would cost gigabytes per run.
+    copyWithoutGpuRuntime(toolsPkg, unicodePkg);
 
     std::cout << "[TEST] Running real Tools package CPU + Python pipeline in unicode path (RT-S03)..." << std::endl;
     testRealToolsCpuPythonPipeline(unicodePkg, repoRoot, python);
