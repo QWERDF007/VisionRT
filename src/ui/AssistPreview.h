@@ -82,8 +82,15 @@ public:
     // Queues an asynchronous release of the persistent helper instance. The GUI keeps its event
     // loop; busy() stays true until the worker acknowledges with sessionReleased().
     void releaseSession();
-    bool busy() const;
+    // Starts the asynchronous close: no further work is accepted, the worker performs the final
+    // release and then exits. The GUI never waits for it.
+    void beginShutdown();
+    bool finished() const;
+    // Reclaims an already finished worker (the join is immediate) and drops the session.
+    void finalizeShutdown();
+    // Blocking close for process teardown only.
     void shutdown();
+    bool busy() const;
 
 signals:
     void outcomeReady(const visionrt::AssistOutcome &outcome);
@@ -114,6 +121,7 @@ private:
     void          notifyBusy();
     void          workerLoop(std::stop_token stop);
     void          releaseInstance();
+    void          acknowledgeRelease(std::uint64_t id);
 
     mutable std::mutex            mutex_;
     std::condition_variable_any   changed_;
@@ -131,7 +139,12 @@ private:
     bool                           inFlight_       = false;
     bool                           inFlightLearn_  = false;
     bool                           shuttingDown_   = false;
-    std::atomic<bool>              releaseRequested_{false};
+    // GUI-owned release barrier: the request id is only cleared when the worker acknowledges the
+    // matching id, so busy() stays true for the whole release instead of flickering before it runs.
+    std::optional<std::uint64_t>   releasePending_;
+    std::uint64_t                  releaseSerial_ = 0;
+    std::atomic<std::uint64_t>     releaseRequest_{0};
+    std::atomic<bool>              workerFinished_{false};
     std::jthread                   worker_;
 };
 } // namespace visionrt

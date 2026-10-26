@@ -2,6 +2,10 @@
 #include "core/NodeContracts.h"
 #include "ui/DisplayTypes.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 #include <limits>
 
 namespace visionrt {
@@ -166,22 +170,25 @@ QVariantList AppController::parameters() const
             {
                 const auto *parent    = impl_->findNode(found->second.source->node);
                 const auto *parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
-                const PortDefinition *portDef = nullptr;
+                // The display name is copied while its contract is alive: a derived contract is a
+                // temporary, so a bare PortDefinition pointer would dangle past this scope.
+                QString portName = q(found->second.source->port);
                 if (parent && parentDef)
                 {
-                    portDef = workbench::port(parentDef->outputs, found->second.source->port);
-                    if (!portDef)
+                    if (const auto *declared = workbench::port(parentDef->outputs, found->second.source->port))
+                        portName = q(declared->name);
+                    else
                         try
                         {
                             const auto parentContract = nodeContract(*parent, *parentDef);
-                            portDef = workbench::port(parentContract.outputs, found->second.source->port);
+                            if (const auto *derived
+                                = workbench::port(parentContract.outputs, found->second.source->port))
+                                portName = q(derived->name);
                         }
                         catch (const ContractError &)
                         {
-                            portDef = nullptr;
                         }
                 }
-                const QString portName = portDef ? q(portDef->name) : q(found->second.source->port);
                 source = (parent ? q(parent->title()) : QString::number(found->second.source->node)) + "-" + portName;
             }
         }
@@ -422,9 +429,10 @@ QVariantList AppController::parameters() const
     {
         for (const auto &port : contract->initParams)
         {
-            // Derived variable/program tables are managed by the expression
-            // editor, not by ordinary parameter rows.
-            if (tool->derivesPorts() && (port.id == "variables" || port.id == "program"))
+            // Derived initialisation entries are internal presentation sources: the parameter
+            // editors own them, so they never appear as editable rows while still being handed to
+            // the tool through nodeParameters().
+            if (tool->derivesPorts() && isDerivedInitParam(port.id))
                 continue;
             add(port.id, port.type, true, &port);
         }
@@ -453,7 +461,12 @@ QVariantList AppController::parameters() const
                 }
                 else if (node->expression->program.size() > 1)
                 {
-                    exprText = QStringLiteral("%1条公式").arg(node->expression->program.size());
+                    // The row shows the configured value itself, never a summary of it.
+                    QJsonArray program;
+                    for (const auto &entry : node->expression->program)
+                        program.append(QJsonObject{{"name", workbench::q(entry.name)},
+                                                   {"expression", workbench::q(entry.expression)}});
+                    exprText = QString::fromUtf8(QJsonDocument(program).toJson(QJsonDocument::Compact));
                     isSingle = false;
                 }
                 else
@@ -509,16 +522,28 @@ QVariantList AppController::parameters() const
         }
         else if (tool->nodeModel == NodeModel::Select)
         {
-            QString selectText = node->selectType ? displayTypeName(*node->selectType) : QStringLiteral("请选择类型");
+            QString selectText = node->selectType ? displayTypeName(*node->selectType) : QString{};
             addMeta(QStringLiteral("__select_type"), QStringLiteral("合流类型"), QStringLiteral("select_type"),
                     selectText, false);
         }
 
-        for (const auto &port : contract->inputs) add(port.id, port.type, false, &port);
+        for (const auto &port : contract->inputs)
+        {
+            // A condition node maps its single condition input onto the dedicated condition row;
+            // enumerating the raw port again would show the same value twice.
+            if (tool->nodeModel == NodeModel::Condition && port.id == "condition")
+                continue;
+            add(port.id, port.type, false, &port);
+        }
     }
     else
     {
-        for (const auto &[id, type] : node->signatures.initParams) add(id, type, true, nullptr);
+        for (const auto &[id, type] : node->signatures.initParams)
+        {
+            if (tool && tool->derivesPorts() && isDerivedInitParam(id))
+                continue;
+            add(id, type, true, nullptr);
+        }
         if (tool && supportsExecutionGuard(tool->nodeModel))
             addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
                     executionGuardText(), false);

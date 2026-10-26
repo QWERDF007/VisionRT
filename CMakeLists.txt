@@ -301,6 +301,8 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        visionrt_contract(workbench_assist_release_contract visionrt_ui)
+        target_link_libraries(workbench_assist_release_contract PRIVATE Qt6::Test)
         visionrt_contract(workbench_assist_contract visionrt_ui)
         target_link_libraries(workbench_assist_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_assist_contract PRIVATE

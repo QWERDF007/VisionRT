@@ -234,6 +234,11 @@ bool isPathPort(const PortDefinition& port) {
         (port.editor == "file" || port.editor == "directory" || port.editor == "path");
 }
 
+bool isDerivedInitParam(std::string_view id) noexcept
+{
+    return id == "variables" || id == "program" || id == "condition_mode";
+}
+
 bool isHostOwnedPort(std::string_view id) noexcept
 {
     return id == kUpstreamStatusPort || id == kStatusCodePort || id == kStatusMessagePort;

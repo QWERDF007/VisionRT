@@ -457,8 +457,10 @@ void AppController::Impl::poll()
 {
     if (closePhase == ClosePhase::AwaitOwners)
     {
-        if (!python || python->isCloseReady())
+        if ((!python || python->isCloseReady()) && (!assist || assist->finished()))
         {
+            if (assist)
+                assist->finalizeShutdown();
             closePhase = ClosePhase::Ready;
             closing    = false;
             pending    = Pending::None;
@@ -696,8 +698,10 @@ void AppController::Impl::request(Pending action, QString path)
             return;
         if (closePhase == ClosePhase::AwaitOwners)
         {
-            if (!python || python->isCloseReady())
+            if ((!python || python->isCloseReady()) && (!assist || assist->finished()))
             {
+                if (assist)
+                    assist->finalizeShutdown();
                 closePhase = ClosePhase::Ready;
                 closing    = false;
                 pending    = Pending::None;
@@ -708,11 +712,13 @@ void AppController::Impl::request(Pending action, QString path)
                     emit q->closeReady();
                 }
             }
-            else if (python)
+            else if (python && !python->isCloseReady())
             {
                 const auto remaining = python->activeReferences();
                 report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
             }
+            else
+                report(QStringLiteral("等待智能点选释放后关闭"));
             return;
         }
         if (closePhase == ClosePhase::Resetting || pending == Pending::Close)
@@ -857,6 +863,10 @@ void AppController::Impl::advancePending()
     if (completed == Pending::Close)
     {
         closing = true;
+        // Release the helper before the drain: the barrier stays closed until the worker
+        // acknowledges, so the close never races a release that is still destroying the instance.
+        if (assist)
+            assist->releaseSession();
         beginDrain([this] { finishClose(); });
         return;
     }
@@ -868,7 +878,8 @@ void AppController::Impl::finishClose()
 {
     if (assist)
     {
-        assist->shutdown();
+        // Only the worker performs the release; the GUI waits for its exit through poll().
+        assist->beginShutdown();
         assistToolId.clear();
     }
     clearAssistPreview();
@@ -894,19 +905,22 @@ void AppController::Impl::finishClose()
     clearResults();
 
     if (python)
-    {
         python->prepareShutdown();
-        if (!python->isCloseReady())
-        {
-            closePhase      = ClosePhase::AwaitOwners;
-            const auto remaining = python->activeReferences();
-            report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(remaining));
-            pending         = Pending::Close;
-            pendingApproved = true;
-            pendingReset    = true;
-            return;
-        }
+    const bool assistReady = !assist || assist->finished();
+    if (!assistReady || (python && !python->isCloseReady()))
+    {
+        closePhase      = ClosePhase::AwaitOwners;
+        if (python && !python->isCloseReady())
+            report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(python->activeReferences()));
+        else
+            report(QStringLiteral("等待智能点选释放后关闭"));
+        pending         = Pending::Close;
+        pendingApproved = true;
+        pendingReset    = true;
+        return;
     }
+    if (assist)
+        assist->finalizeShutdown();
     closePhase = ClosePhase::Ready;
     closing = false;
     emit q->closingChanged();

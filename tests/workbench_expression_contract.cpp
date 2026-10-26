@@ -192,6 +192,51 @@ try
     require(app.executionGuardText().contains(QStringLiteral("门控源")),
             "guard text kept the old source title");
 
+    // A dynamic output connected to an ordinary downstream input must resolve its label from the
+    // materialised contract on every refresh; the row may never keep a pointer into a temporary.
+    app.addNode("visiontools.logic.expression", 9, 0);
+    settle();
+    const auto intSource = app.selectedNode();
+    const auto intProgram = [](const QString &name)
+    {
+        return QVariantList{QVariantMap{{"portId", "p1"}, {"name", name}, {"symbol", "n"},
+                                        {"expression", "1"}, {"type", "Int"}, {"dtype", ""},
+                                        {"rank", -1}, {"exposed", true}}};
+    };
+    require(app.applyExpressionConfig(intSource, {}, intProgram(QStringLiteral("计数结果"))),
+            "dynamic Int program could not be applied");
+    settle();
+    app.addNode("visionrt.image.read", 9, 6);
+    settle();
+    const auto consumer = app.selectedNode();
+    require(!consumer.isEmpty(), "downstream reader node is missing");
+    require(app.bindInput(app.portContext("count"), intSource, "p1"),
+            "dynamic Int output could not be bound to an ordinary input");
+    settle();
+
+    const auto sourceRow = [&]()
+    {
+        for (const auto &value : app.parameters())
+            if (value.toMap().value("id").toString() == QStringLiteral("count"))
+                return value.toMap();
+        return QVariantMap{};
+    };
+    for (int refresh = 0; refresh < 100; ++refresh)
+    {
+        const auto row = sourceRow();
+        require(row.value("inputMode").toString() == QStringLiteral("upstream"),
+                "bound ordinary input lost its upstream mode");
+        require(row.value("source").toString().contains(QStringLiteral("计数结果")),
+                "ordinary binding lost the dynamic port name");
+    }
+    app.selectNode(intSource);
+    require(app.applyExpressionConfig(intSource, {}, intProgram(QStringLiteral("计数结果改"))),
+            "dynamic Int port rename failed");
+    settle();
+    app.selectNode(consumer);
+    require(sourceRow().value("source").toString().contains(QStringLiteral("计数结果改")),
+            "ordinary binding kept the old dynamic port name");
+
     std::cout << "WORKBENCH_EXPRESSION_PASS array=atomic uint8=1 chinese=1 nextPortSeq=monotonic rows=20 scroll=1 guard=dynamic\n";
     return 0;
 }

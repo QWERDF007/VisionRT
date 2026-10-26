@@ -141,6 +141,10 @@ inline constexpr std::string_view kStatusMessagePort   = "__status_message";
 
 bool isHostOwnedPort(std::string_view id) noexcept;
 
+// Initialisation entries derived from the node model rather than edited directly. They are still
+// handed to the tool through nodeParameters(), but never become parameter rows.
+bool isDerivedInitParam(std::string_view id) noexcept;
+
 // Fixed parameter pages shared by the validator and the workbench.
 std::span<const std::string_view> toolTabs() noexcept;
 

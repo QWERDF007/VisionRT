@@ -122,21 +122,22 @@ void AssistPreview::releaseSession()
     hoverRequest_.reset();
     pending_.reset();
     ++epoch_;
+    if (!shuttingDown_ && !releasePending_)
     {
-        std::lock_guard lock(mutex_);
-        releaseRequested_.store(true, std::memory_order_release);
+        // One outstanding release per barrier: a repeated request while the worker is still
+        // destroying the instance must not queue a second release behind the first.
+        const auto id = ++releaseSerial_;
+        releasePending_ = id;
+        {
+            std::lock_guard lock(mutex_);
+            releaseRequest_.store(id, std::memory_order_release);
+        }
+        changed_.notify_all();
     }
-    changed_.notify_all();
     notifyBusy();
 }
 
-bool AssistPreview::busy() const
-{
-    return inFlight_ || pending_.has_value() || hover_.isActive()
-        || releaseRequested_.load(std::memory_order_acquire);
-}
-
-void AssistPreview::shutdown()
+void AssistPreview::beginShutdown()
 {
     if (shuttingDown_)
         return;
@@ -148,14 +149,56 @@ void AssistPreview::shutdown()
     {
         std::lock_guard lock(mutex_);
         work_.reset();
+        if (!releasePending_)
+        {
+            const auto id = ++releaseSerial_;
+            releasePending_ = id;
+            releaseRequest_.store(id, std::memory_order_release);
+        }
     }
-    releaseRequested_.store(false, std::memory_order_release);
     worker_.request_stop();
     changed_.notify_all();
+    notifyBusy();
+}
+
+bool AssistPreview::finished() const
+{
+    return workerFinished_.load(std::memory_order_acquire) || !worker_.joinable();
+}
+
+void AssistPreview::finalizeShutdown()
+{
+    if (!shuttingDown_ || !finished())
+        return;
     if (worker_.joinable())
         worker_.join();
     session_.reset();
     notifyBusy();
+}
+
+void AssistPreview::shutdown()
+{
+    beginShutdown();
+    if (worker_.joinable())
+        worker_.join();
+    workerFinished_.store(true, std::memory_order_release);
+    session_.reset();
+    notifyBusy();
+}
+
+void AssistPreview::acknowledgeRelease(std::uint64_t id)
+{
+    // Only the acknowledgement for the request the GUI is waiting on clears the barrier; a stale
+    // acknowledgement from an earlier session leaves a newer pending release intact.
+    if (!releasePending_ || *releasePending_ != id)
+        return;
+    releasePending_.reset();
+    notifyBusy();
+}
+
+bool AssistPreview::busy() const
+{
+    return inFlight_ || pending_.has_value() || hover_.isActive() || releasePending_.has_value();
 }
 
 void AssistPreview::startNext()
@@ -308,31 +351,38 @@ void AssistPreview::workerLoop(std::stop_token stop)
     while (!stop.stop_requested())
     {
         std::optional<Job> job;
-        bool               release = false;
+        std::uint64_t      releaseId = 0;
         {
             std::unique_lock lock(mutex_);
             if (!changed_.wait(lock, stop,
                                [this]
                                {
                                    return work_.has_value()
-                                       || releaseRequested_.load(std::memory_order_acquire);
+                                       || releaseRequest_.load(std::memory_order_acquire) != 0;
                                }))
                 break;
-            if (releaseRequested_.exchange(false, std::memory_order_acq_rel))
-                release = true;
-            else
+            releaseId = releaseRequest_.exchange(0, std::memory_order_acq_rel);
+            if (releaseId == 0)
             {
                 job = std::move(work_);
                 work_.reset();
             }
         }
-        if (release)
+        if (releaseId != 0)
         {
             releaseInstance();
+            // The release is only complete once the GUI consumes this exact id; until then busy()
+            // keeps any drain or close waiting instead of racing the worker.
+            QMetaObject::invokeMethod(
+                this, [this, id = releaseId] { acknowledgeRelease(id); }, Qt::QueuedConnection);
             QMetaObject::invokeMethod(this, [this] { Q_EMIT sessionReleased(); }, Qt::QueuedConnection);
             QMetaObject::invokeMethod(this, [this] { notifyBusy(); }, Qt::QueuedConnection);
+            if (stop.stop_requested())
+                break;
             continue;
         }
+        if (!job)
+            continue;
         auto outcome = execute(job->session, job->request);
         QMetaObject::invokeMethod(
             this,
@@ -341,5 +391,11 @@ void AssistPreview::workerLoop(std::stop_token stop)
             Qt::QueuedConnection);
     }
     releaseInstance();
+    const auto outstanding = releaseRequest_.exchange(0, std::memory_order_acq_rel);
+    workerFinished_.store(true, std::memory_order_release);
+    if (outstanding != 0)
+        QMetaObject::invokeMethod(
+            this, [this, id = outstanding] { acknowledgeRelease(id); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, [this] { notifyBusy(); }, Qt::QueuedConnection);
 }
 } // namespace visionrt
