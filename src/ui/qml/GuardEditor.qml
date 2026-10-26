@@ -13,10 +13,20 @@ Dialog {
     property string selectedPort: ""
     modal: true
     title: "执行条件"
+    parent: Overlay.overlay ? Overlay.overlay : undefined
+    x: Math.round(((parent ? parent.width : 0) - width) / 2)
+    y: Math.round(((parent ? parent.height : 0) - height) / 2)
     width: 520
     height: 420
     standardButtons: Dialog.NoButton
     padding: 12
+
+    background: Rectangle {
+        color: QuiColor.CardBackground
+        border.color: QuiColor.CardBorder
+        border.width: 1
+        radius: 6
+    }
 
     function openFor(id) {
         nodeId = id
@@ -50,7 +60,7 @@ Dialog {
         QuiText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: Theme.paramRowText
+            color: Theme.textSecondary
             text: "条件为假时本节点本轮不执行；条件来源跳过时本节点同样跳过；条件来源失败或缺失时本节点被阻塞，不会被当成假分支。"
         }
         ListView {
@@ -78,7 +88,7 @@ Dialog {
             QuiText {
                 anchors.centerIn: parent
                 visible: root.candidates.length === 0
-                color: Theme.paramRowText
+                color: Theme.textSecondary
                 text: "没有可选的上游布尔输出"
             }
         }

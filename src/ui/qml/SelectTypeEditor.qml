@@ -11,10 +11,20 @@ Dialog {
     property var current: ({})
     modal: true
     title: "合流类型"
+    parent: Overlay.overlay ? Overlay.overlay : undefined
+    x: Math.round(((parent ? parent.width : 0) - width) / 2)
+    y: Math.round(((parent ? parent.height : 0) - height) / 2)
     width: 440
     height: 320
     standardButtons: Dialog.NoButton
     padding: 12
+
+    background: Rectangle {
+        color: QuiColor.CardBackground
+        border.color: QuiColor.CardBorder
+        border.width: 1
+        radius: 6
+    }
 
     readonly property var typeList: [
         { name: "Int", label: "整数" },
@@ -79,7 +89,7 @@ Dialog {
         spacing: 10
         RowLayout {
             spacing: 8
-            QuiText { text: "数据类型"; color: Theme.paramRowText }
+            QuiText { text: "数据类型"; color: Theme.textSecondary }
             ComboBox {
                 id: typeBox
                 Layout.preferredWidth: 180
@@ -90,19 +100,19 @@ Dialog {
         RowLayout {
             spacing: 8
             visible: root.selectedTypeName === "Array"
-            QuiText { text: "元素类型"; color: Theme.paramRowText }
+            QuiText { text: "元素类型"; color: Theme.textSecondary }
             ComboBox {
                 id: dtypeBox
                 Layout.preferredWidth: 140
                 model: root.dtypeList
                 textRole: "label"
             }
-            QuiText { text: "数组维度"; color: Theme.paramRowText }
+            QuiText { text: "数组维度"; color: Theme.textSecondary }
             SpinBox { id: rankBox; from: 1; to: 4 }
         }
         RowLayout {
             spacing: 8
-            QuiText { text: "类型预览："; font: Qt.font({ bold: true }); color: Theme.paramRowText }
+            QuiText { text: "类型预览："; font: Qt.font({ bold: true }); color: Theme.textPrimary }
             QuiText { text: root.previewDescription; color: Theme.highlight; font: Qt.font({ bold: true }) }
         }
         QuiText {

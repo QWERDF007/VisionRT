@@ -10,8 +10,11 @@ ColumnLayout {
     property string nodeId: app.selectedNode
     property var panel: null
     objectName: "parameter_" + parameter.id
+    readonly property bool isMeta: !!parameter.isMeta
     readonly property bool alwaysUpstream: parameter.type === "Image"
-    readonly property bool upstream: (alwaysUpstream || parameter.mode === "upstream") && !parameter.init
+    readonly property bool upstream: (parameter.editor === "guard")
+        ? (app.executionGuardText.length > 0)
+        : ((alwaysUpstream || parameter.mode === "upstream") && !parameter.init && !isMeta)
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && !app.busy
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
@@ -109,6 +112,7 @@ ColumnLayout {
                         sourceComponent: root.parameter.isMeta ? metaEditor
                                        : root.upstream ? upstreamEditor
                                        : (root.parameter.options || []).length > 0 ? choiceEditor
+                                       : (root.parameter.type === "Bool" && (root.parameter.editor === "switch" || root.parameter.id === "reload")) ? toggleSwitchComponent
                                        : root.parameter.type === "Bool" ? boolEditor
                                        : root.parameter.type === "Int" ? integerEditor
                                        : root.parameter.type === "Float" ? floatEditor
@@ -130,7 +134,7 @@ ColumnLayout {
                 Rectangle {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: !root.parameter.init && !root.alwaysUpstream && !root.parameter.isMeta
+                    visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.parameter.editor === "guard")
                     Layout.preferredWidth: Theme.paramActionBtnWidth
                     Layout.fillHeight: true
                     color: toggleMouse.containsMouse ? Theme.paramRowHoverBg : "transparent"
@@ -147,12 +151,28 @@ ColumnLayout {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         enabled: root.editable
-                        onClicked: app.setParameterMode(root.parameter.id, !root.upstream)
+                        onClicked: {
+                            if (root.parameter.editor === "guard") {
+                                if (root.upstream) {
+                                    app.applyExecutionGuard(root.nodeId, "", "")
+                                } else {
+                                    let p = root.getPanel()
+                                    if (p) p.openGuardEditor(root.nodeId)
+                                }
+                            } else {
+                                app.setParameterMode(root.parameter.id, !root.upstream)
+                            }
+                        }
                     }
 
                     QuiToolTip {
                         visible: toggleMouse.containsMouse
-                        text: root.upstream ? "切换为直接输入" : "绑定上层输入"
+                        text: {
+                            if (root.parameter.editor === "guard") {
+                                return root.upstream ? "切换为直接输入（始终执行）" : "绑定上层输入（执行条件）"
+                            }
+                            return root.upstream ? "切换为直接输入" : "绑定上层输入"
+                        }
                         delay: 300
                     }
                 }
@@ -310,20 +330,35 @@ ColumnLayout {
             font: root.editorFont
             implicitHeight: Theme.paramEditorHeight
             readonly property bool isRecursive: root.parameter.id === "recursive"
-            readonly property bool isReload: root.parameter.id === "reload"
-            model: isRecursive ? ["不递归", "递归"]
-                 : isReload ? ["关闭", "开启"]
-                 : ["是", "否"]
+            model: isRecursive ? ["不递归", "递归"] : ["是", "否"]
             currentIndex: {
-                let val = root.parameter.literal === "true"
-                if (isRecursive || isReload) return val ? 1 : 0
+                let val = (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")
+                if (isRecursive) return val ? 1 : 0
                 return val ? 0 : 1
             }
             onActivated: function(index) {
-                let isTrue = false
-                if (isRecursive || isReload) isTrue = (index === 1)
-                else isTrue = (index === 0)
+                let isTrue = isRecursive ? (index === 1) : (index === 0)
                 root.commit(isTrue ? "true" : "false")
+            }
+        }
+    }
+
+    Component {
+        id: toggleSwitchComponent
+        Item {
+            anchors.fill: parent
+            QuiToggleSwitch {
+                id: sw
+                anchors.left: parent.left
+                anchors.leftMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                checked: (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")
+                enabled: root.editable
+                clickListener: function() {
+                    let nextVal = !sw.checked
+                    sw.checked = nextVal
+                    root.commit(nextVal ? "true" : "false")
+                }
             }
         }
     }

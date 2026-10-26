@@ -17,11 +17,21 @@ Dialog {
 
     modal: true
     closePolicy: Popup.CloseOnEscape
+    parent: Overlay.overlay ? Overlay.overlay : undefined
+    x: Math.round(((parent ? parent.width : 0) - width) / 2)
+    y: Math.round(((parent ? parent.height : 0) - height) / 2)
     width: Math.min(1080, Overlay.overlay ? Overlay.overlay.width - 80 : 1080)
     height: Math.min(720, Overlay.overlay ? Overlay.overlay.height - 80 : 720)
     title: conditionMode ? "条件公式" : "变量与公式"
     standardButtons: Dialog.NoButton
     padding: 12
+
+    background: Rectangle {
+        color: QuiColor.CardBackground
+        border.color: QuiColor.CardBorder
+        border.width: 1
+        radius: 6
+    }
 
     function openNode(id) {
         openNodeWithDraft(id, "")
