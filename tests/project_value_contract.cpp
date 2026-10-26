@@ -141,7 +141,10 @@ void reconciledDefaultsAreIndependent()
     const auto  restored                                 = ProjectStorage(registry).reconcile(missing);
     const auto &nodes                                    = restored.project.flows.front().nodes;
     numbers(nodes[0].inputs.at("numbers").literal)[0][0] = 94;
-    require(numbers(registry.find(tool.id)->inputs.front().defaultValue)[0][0] == 2,
+    const auto *registered = registry.find(tool.id);
+    const auto  declared   = std::find_if(registered->inputs.begin(), registered->inputs.end(),
+                                          [](const auto &port) { return port.id == "numbers"; });
+    require(declared != registered->inputs.end() && numbers(declared->defaultValue)[0][0] == 2,
             "reconciliation changed registry defaults");
     require(numbers(nodes[1].inputs.at("numbers").literal)[0][0] == 2, "reconciled nodes share Array defaults");
     std::get<DataRef<ROI>>(nodes[0].initParams.at("regions")).get()[0][0][1] = 79.;
@@ -211,7 +214,7 @@ void allValuesSurviveRealProjectFiles()
     QFile file(filename);
     require(file.open(QIODevice::ReadOnly), "saved project unavailable");
     const auto root = QJsonDocument::fromJson(file.readAll()).object();
-    require(root["format_version"].toInt() == 4, "saved project does not use format4");
+    require(root["format_version"].toInt() == 5, "saved project does not use format5");
     const auto saved    = root["flows"].toArray()[0].toObject()["nodes"].toArray()[0].toObject();
     const auto literals = saved["inputs"].toObject();
     require(literals["array_0"].toObject()["literal"].isArray(), "saved Array used a DTO instead of nested lists");

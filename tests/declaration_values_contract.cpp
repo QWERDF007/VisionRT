@@ -57,7 +57,7 @@ int main()
     // CT-01: a single classification for every resource-path editor.
     {
         const auto definition = parseToolDefinitionJson(R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "runtime.paths",
   "display_name": "路径分类",
   "version": "1.0.0",
@@ -71,10 +71,10 @@ int main()
   ],
   "outputs": []
 })json");
-        assert(isPathPort(definition.inputs[1]));
         assert(isPathPort(definition.inputs[2]));
         assert(isPathPort(definition.inputs[3]));
-        assert(!isPathPort(definition.inputs[0]));
+        assert(isPathPort(definition.inputs[4]));
+        assert(!isPathPort(definition.inputs[1]));
         auto plain   = port("plain", {Type::String});
         plain.editor = "text";
         assert(!isPathPort(plain));
@@ -86,7 +86,7 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "runtime.paths.bad.file",
   "display_name": "错误文件端口",
   "version": "1.0.0",
@@ -103,7 +103,7 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "runtime.paths.bad.directory",
   "display_name": "错误目录端口",
   "version": "1.0.0",
@@ -296,7 +296,7 @@ int main()
 
     {
         const auto declared = parseToolDefinitionJson(R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "runtime.required",
   "display_name": "必填声明",
   "version": "1.0.0",
@@ -311,17 +311,17 @@ int main()
   "outputs": []
 })json");
         assert(!declared.initParams[0].required);
-        assert(declared.inputs[0].required);
-        assert(!declared.inputs[1].required);
+        assert(declared.inputs[1].required);
+        assert(!declared.inputs[2].required);
         validateToolValues(declared.initParams, {
                                                     {"seed", Missing{}}
         });
-        validateToolValue(declared.inputs[1], Missing{});
-        rejects([&] { validateToolValue(declared.inputs[0], Missing{}); }, "input");
+        validateToolValue(declared.inputs[2], Missing{});
+        rejects([&] { validateToolValue(declared.inputs[1], Missing{}); }, "input");
         const auto roundTrip = parseToolDefinitionJson(emitNormalizedToolJson(declared));
         assert(!roundTrip.initParams[0].required);
-        assert(roundTrip.inputs[0].required);
-        assert(!roundTrip.inputs[1].required);
+        assert(roundTrip.inputs[1].required);
+        assert(!roundTrip.inputs[2].required);
     }
     std::cout << "[Runtime Contract] Path classification, status normalization and value constraints verified.\n";
     return 0;

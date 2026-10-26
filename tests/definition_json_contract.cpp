@@ -18,7 +18,7 @@ int main()
     QFile      file(name);
     assert(file.open(QIODevice::WriteOnly));
     file.write(R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.json",
   "display_name": "JSON 声明",
   "version": "1.0.0",
@@ -39,16 +39,20 @@ int main()
     const auto definition = parseToolDefinitionFile(std::filesystem::path(name.toStdWString()));
     assert(definition.id == "test.json");
     assert(std::get<std::int64_t>(definition.initParams[0].defaultValue) == 9007199254740993LL);
-    assert(!definition.inputs[0].required);
+    assert(definition.inputs.size() == 2 && definition.inputs[0].id == "upstream_status");
+    assert(!definition.inputs[1].required);
     assert(definition.outputs.size() == 3);
     assert(definition.outputs[0].id == "__status_code");
     const auto normalized = emitNormalizedToolJson(definition);
     const auto emitted    = QJsonDocument::fromJson(QByteArray::fromStdString(normalized)).object();
     assert(emitted["outputs"].toArray().size() == 1);
+    // Host-owned common ports are materialised in the effective contract but never written back
+    // into the author declaration.
+    assert(emitted["inputs"].toArray().size() == 1 && emitted["inputs"].toArray()[0].toObject()["id"] == "optional");
     assert(!emitted.contains("entry"));
     const auto roundTrip = parseToolDefinitionJson(normalized);
     assert(equalValues(roundTrip.initParams[0].defaultValue, definition.initParams[0].defaultValue));
-    assert(!roundTrip.inputs[0].required);
+    assert(!roundTrip.inputs[1].required);
 
     const auto rejects = [](const std::string &text)
     {
@@ -72,8 +76,8 @@ int main()
         QJsonObject{{"id", "rect"}, {"name", "矩形"}, {"type", "ROI"}, {"editor", "rect"}, {"image_input", "images"}}
     };
     const auto cropDefinition = parseToolDefinitionJson(QJsonDocument(crop).toJson().toStdString());
-    assert(cropDefinition.inputs[1].type.type == Type::ROI && cropDefinition.inputs[1].editor == "rect");
-    assert(parseToolDefinitionJson(emitNormalizedToolJson(cropDefinition)).inputs[1].editor == "rect");
+    assert(cropDefinition.inputs[2].type.type == Type::ROI && cropDefinition.inputs[2].editor == "rect");
+    assert(parseToolDefinitionJson(emitNormalizedToolJson(cropDefinition)).inputs[2].editor == "rect");
     crop["inputs"] = QJsonArray{
         QJsonObject{{"id", "text"}, {"name", "文本"}, {"type", "String"}, {"editor", "rect"}}
     };

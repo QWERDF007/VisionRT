@@ -20,7 +20,10 @@
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 4;
+constexpr int projectFormatVersion = 5;
+// Format 4 projects are migrated in memory: execution conditions move to the
+// explicit mode object and fixed-tool guards are reported instead of executed.
+constexpr int minimumProjectFormatVersion = 4;
 
 QString qtPath(const std::filesystem::path &path)
 {
@@ -113,6 +116,13 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
     auto       initTypes    = types(contract.initParams);
     auto       inputTypes   = types(contract.inputs);
+    // Host-owned ports are materialised by the current contract. A project saved before they
+    // existed is migrated in memory: the binding gets its declared default and the signature is
+    // completed without turning a version upgrade into a user-visible schema warning.
+    auto       savedInputs  = node.signatures.inputs;
+    for (const auto &[id, type] : inputTypes)
+        if (isHostOwnedPort(id))
+            savedInputs.emplace(id, type);
     const auto savedOutputs = node.signatures.outputs;
     setOutputDeclarations(node, definition);
     auto outputTypes        = std::move(node.signatures.outputs);
@@ -140,7 +150,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + id,
                  "当前工具声明未定义此初始化参数，已保留原值和类型，不参与执行");
     }
-    if (node.signatures.initParams != initTypes || node.signatures.inputs != inputTypes
+    if (node.signatures.initParams != initTypes || savedInputs != inputTypes
         || node.signatures.outputs != outputTypes)
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "type_snapshot",
                  "保存的端口类型已与当前工具定义同步", true);
@@ -182,8 +192,9 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             binding.literal = defaultValue(port);
             if (old != node.inputs.end())
                 binding.mode = old->second.mode;
-            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
-                     "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
+            if (!isHostOwnedPort(port.id))
+                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
+                         "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
         }
         if (binding.mode == BindingMode::Literal || !binding.source)
             rangeWarning(result, flow, node, port, binding.literal);
@@ -280,9 +291,10 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
     if (!root.value("format_version").isDouble())
         invalid("format_version 必须是整数");
     const auto version = std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int}));
-    if (version != projectFormatVersion)
-        invalid("format_version 不受支持，要求 " + std::to_string(projectFormatVersion) + "，实际 "
-                + std::to_string(version));
+    if (version < minimumProjectFormatVersion || version > projectFormatVersion)
+        invalid("format_version 不受支持，要求 " + std::to_string(minimumProjectFormatVersion) + "–"
+                + std::to_string(projectFormatVersion) + "，实际 " + std::to_string(version));
+    const bool legacyFormat = version < projectFormatVersion;
     const auto metadata = map(root.value("project"), "project");
     if (!root.value("flows").isArray())
         invalid("flows 必须是数组");
@@ -445,8 +457,23 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             if (raw.contains("execution_guard"))
             {
                 const auto guard = map(raw.value("execution_guard"), "execution_guard");
-                node.executionGuard = SourcePort{sequence(guard.value("node_seq"), "guard.node_seq"),
-                                                 text(guard.value("port_id"), "guard.port_id", true)};
+                ExecutionGuard parsed;
+                if (guard.contains("mode"))
+                {
+                    const auto mode = text(guard.value("mode"), "guard.mode");
+                    if (mode == "literal")
+                        parsed.mode = BindingMode::Literal;
+                    else if (mode != "upstream")
+                        invalid("执行条件模式无效：" + mode);
+                }
+                const auto source = guard.value("source");
+                if (source.isObject())
+                    parsed.source = SourcePort{sequence(source.toObject().value("node_seq"), "guard.source.node_seq"),
+                                               text(source.toObject().value("port_id"), "guard.source.port_id", true)};
+                else if (legacyFormat && guard.contains("node_seq"))
+                    parsed.source = SourcePort{sequence(guard.value("node_seq"), "guard.node_seq"),
+                                               text(guard.value("port_id"), "guard.port_id", true)};
+                node.executionGuard = std::move(parsed);
             }
             if (raw.contains("select_type"))
                 node.selectType = ValueJson::decodeType(map(raw.value("select_type"), "select_type"));
@@ -457,7 +484,12 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                          "工具定义缺失，原始配置已保留：" + node.toolId);
             }
             else
+            {
                 reconcileNode(result, flow, node, raw, *definition, changedOutputs[node.id]);
+                if (node.executionGuard && !supportsExecutionGuard(definition->nodeModel))
+                    diagnose(result, ProjectStorageCode::LegacyExecutionGuard, flow, node, "execution_guard",
+                             "普通工具不再支持执行条件，原配置已保留但不再执行；请改用上层工具状态输入重新配置");
+            }
             flow.nodes.push_back(std::move(node));
         }
         project.flows.push_back(std::move(flow));
@@ -594,9 +626,16 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                                            {"program", program}});
                 }
                 if (node.executionGuard)
-                    raw.insert("execution_guard",
-                               QJsonObject{{"node_seq", QString::number(node.executionGuard->node)},
-                                           {"port_id", QString::fromStdString(node.executionGuard->port)}});
+                {
+                    QJsonObject guard{{"mode", node.executionGuard->mode == BindingMode::Upstream ? "upstream"
+                                                                                                  : "literal"}};
+                    if (node.executionGuard->source)
+                        guard.insert("source", QJsonObject{
+                                                   {"node_seq", QString::number(node.executionGuard->source->node)},
+                                                   { "port_id", QString::fromStdString(node.executionGuard->source->port)}
+                    });
+                    raw.insert("execution_guard", guard);
+                }
                 if (node.selectType)
                     raw.insert("select_type", ValueJson::encodeType(*node.selectType));
                 raw.insert("init_params", parameters);

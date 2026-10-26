@@ -145,7 +145,12 @@ public:
     // contract, verify bindings, then commit exactly one revision.
     bool setExpressionConfig(std::string_view flowId, NodeId node, ExpressionConfig config,
                              const ToolDefinition &tool);
-    bool setExecutionGuard(std::string_view flowId, NodeId node, std::optional<SourcePort> source);
+    // One transaction for switching a condition node between its formula and
+    // upstream-Bool source. Inactive bindings stay stored for switching back.
+    bool setConditionMode(std::string_view flowId, NodeId node, BindingMode mode, const ToolDefinition &tool);
+    // The object is the input mode: absent means user input (always execute).
+    bool setExecutionGuard(std::string_view flowId, NodeId node, std::optional<ExecutionGuard> guard,
+                           const ToolDefinition &tool);
     bool setSelectType(std::string_view flowId, NodeId node, TypeSpec type, const ToolDefinition &tool);
 
     std::size_t             referenceCount(std::string_view flowId, const SourcePort &source) const;

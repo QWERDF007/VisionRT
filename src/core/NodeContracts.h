@@ -11,6 +11,11 @@ namespace visionrt {
 // validation, the frozen run graph and UI type display.
 ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &definition);
 
+// Condition nodes choose their active input set from the binding mode of the
+// single `condition` input: formula variables or one upstream Bool.
+bool        conditionUsesUpstream(const NodeDefinition &node);
+std::string conditionModeText(const NodeDefinition &node);
+
 // Derived init parameters for the instanced tool. Expression and condition nodes
 // derive variables/program from their node configuration instead of persisting
 // another copy in the project.

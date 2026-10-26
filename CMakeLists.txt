@@ -33,6 +33,7 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 add_library(visionrt_core
     src/core/ToolDefinition.cpp
     src/core/ToolValueValidation.cpp
+    src/core/InputNormalizer.cpp
     src/core/DefinitionJson.cpp
     src/core/ModuleIndex.cpp
     src/core/ToolPackage.cpp
@@ -93,6 +94,7 @@ if(VISIONRT_BUILD_APP)
         src/ui/WireRouter.h
         src/ui/AppController.cpp
         src/ui/AppControllerAssist.cpp
+        src/ui/UiPreferences.cpp
         src/ui/AppControllerBindings.cpp
         src/ui/AppControllerDisplay.cpp
         src/ui/AppControllerReadback.cpp

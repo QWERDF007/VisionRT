@@ -80,11 +80,13 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
     std::map<std::string, std::size_t, std::less<>> index;
     for (const auto &tool : package.tools)
     {
-        validateToolDefinition(tool.definition);
-        validateContract(tool.definition);
-        if (!index.emplace(tool.definition.id, definitions.size()).second)
-            throw ContractError("工具包内 tool_id 重复：" + tool.definition.id);
-        definitions.push_back(tool.definition);
+        auto definition = tool.definition;
+        normalizeToolDefinition(definition);
+        validateToolDefinition(definition);
+        validateContract(definition);
+        if (!index.emplace(definition.id, definitions.size()).second)
+            throw ContractError("工具包内 tool_id 重复：" + definition.id);
+        definitions.push_back(std::move(definition));
     }
     if (pluginLoader_)
         pluginLoader_->registerPackage(package);
@@ -114,6 +116,7 @@ void ToolRegistry::loadNativeImplementations() const
 
 void ToolRegistry::addDefinition(ToolDefinition definition)
 {
+    normalizeToolDefinition(definition);
     validateToolDefinition(definition);
     if (const auto *previous = find(definition.id))
         throw ContractError("tool_id 重复：" + definition.id + "，声明位于 " + pathText(previous->definitionPath)
@@ -133,6 +136,7 @@ void ToolRegistry::replaceDefinition(ToolDefinition definition)
         addDefinition(std::move(definition));
         return;
     }
+    normalizeToolDefinition(definition);
     validateToolDefinition(definition);
     validateContract(definition);
     definitions_[existing->second] = std::move(definition);
@@ -143,6 +147,7 @@ void ToolRegistry::registerCpp(ToolDefinition contract, ToolFactory factory)
 {
     if (!factory || contract.kind != ToolKind::Cpp)
         throw ContractError("C++ 工厂注册无效：需要 cpp 工具种类和非空工厂");
+    normalizeToolDefinition(contract);
     validateToolDefinition(contract);
     const auto id = contract.id;
     if (cpp_.contains(id))

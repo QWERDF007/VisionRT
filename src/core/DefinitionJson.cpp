@@ -133,7 +133,7 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, bool output)
     QJsonArray result;
     for (const auto &port : ports)
     {
-        if (port.id.starts_with("__"))
+        if (isHostOwnedPort(port.id))
             continue;
         QJsonObject item{
             {      "id",   QString::fromStdString(port.id)},
@@ -212,8 +212,8 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
                       "subcategory", "resources", "init_params", "inputs", "outputs", "node_model", "visibility",
                       "interaction"},
                      "工具声明");
-        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{3}}))
-            throw ContractError("schema_version 必须是整数 3");
+        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{4}}))
+            throw ContractError("schema_version 必须是整数 4");
         ToolDefinition definition;
         definition.id          = json::text(root.value("tool_id"), "tool_id");
         definition.displayName = json::text(root.value("display_name"), "display_name");
@@ -322,9 +322,14 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
         definition.initParams = ports(document, root, "init_params");
         definition.inputs     = ports(document, root, "inputs");
         definition.outputs    = ports(document, root, "outputs");
+        for (const auto *list : {&definition.initParams, &definition.inputs, &definition.outputs})
+            for (const auto &port : *list)
+                if (isHostOwnedPort(port.id))
+                    throw ContractError("工具声明不得定义宿主公共端口：" + port.id);
         PortDefinition code{"__status_code", "状态码", {Type::Int}};
         PortDefinition message{"__status_message", "状态消息", {Type::String}};
         definition.outputs.insert(definition.outputs.begin(), {std::move(code), std::move(message)});
+        normalizeToolDefinition(definition);
         validateToolDefinition(definition);
         return definition;
     }
@@ -341,8 +346,10 @@ ToolDefinition parseToolDefinitionFile(const std::filesystem::path &path, ToolSo
     return parseToolDefinitionJson(json::read(path).toStdString(), path, std::move(source));
 }
 
-std::string emitNormalizedToolJson(const ToolDefinition &definition)
+std::string emitNormalizedToolJson(const ToolDefinition &source)
 {
+    auto definition = source;
+    normalizeToolDefinition(definition);
     validateToolDefinition(definition);
     QJsonObject root{
         {"schema_version", definition.schemaVersion},

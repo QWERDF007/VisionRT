@@ -7,6 +7,17 @@
 #include <set>
 
 namespace visionrt {
+bool conditionUsesUpstream(const NodeDefinition &node)
+{
+    const auto binding = node.inputs.find("condition");
+    return binding != node.inputs.end() && binding->second.mode == BindingMode::Upstream;
+}
+
+std::string conditionModeText(const NodeDefinition &node)
+{
+    return conditionUsesUpstream(node) ? "upstream" : "formula";
+}
+
 TypeMap resolvedOutputTypes(const ToolDefinition &contract)
 {
     TypeMap result{
@@ -224,10 +235,15 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
             if (!node.expression)
                 throw ContractError("节点缺少表达式配置：" + node.title());
             contract.inputs.clear();
-            contract.inputs.reserve(node.expression->variables.size());
-            for (const auto &variable : node.expression->variables)
-                contract.inputs.push_back(
-                    materializedPort(variable.portId, variable.name, variable.type, !variable.allowMissing));
+            if (definition.nodeModel == NodeModel::Condition && conditionUsesUpstream(node))
+                contract.inputs.push_back(materializedPort("condition", "条件", {Type::Bool}, true));
+            else
+            {
+                contract.inputs.reserve(node.expression->variables.size());
+                for (const auto &variable : node.expression->variables)
+                    contract.inputs.push_back(
+                        materializedPort(variable.portId, variable.name, variable.type, !variable.allowMissing));
+            }
             if (definition.nodeModel == NodeModel::Expression)
             {
                 contract.outputs = std::move(system);
@@ -286,6 +302,8 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
         parameters.emplace("variables",
                            Array(DataRef<NestedVector<std::string, 2>>(std::move(variables))));
         parameters.emplace("program", Array(DataRef<NestedVector<std::string, 2>>(std::move(program))));
+        if (definition.nodeModel == NodeModel::Condition)
+            parameters.emplace("condition_mode", conditionModeText(node));
         return parameters;
     }
     for (const auto &port : definition.initParams)

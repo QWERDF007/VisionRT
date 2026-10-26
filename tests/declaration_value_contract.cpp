@@ -50,7 +50,7 @@ try
 
     // Schema validation tests
     ToolDefinition valid;
-    valid.schemaVersion = 3;
+    valid.schemaVersion = 4;
     valid.id            = "valid.tool";
     valid.displayName   = "Valid Tool";
     valid.version       = "1.0.0";
@@ -203,7 +203,7 @@ try
 
     const auto pathEditor = parseToolDefinitionJson(
         R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.path",
   "display_name": "Path",
   "version": "1.0.0",
@@ -215,24 +215,25 @@ try
   ],
   "outputs": []
 })json");
-    assert(pathEditor.inputs[1].editor == "path");
-    assert(pathEditor.inputs[1].pathModeFrom == "mode");
+    // The effective contract prepends the host-owned upstream_status input.
+    assert(pathEditor.inputs[2].editor == "path");
+    assert(pathEditor.inputs[2].pathModeFrom == "mode");
     {
         auto invalid                   = pathEditor;
-        invalid.inputs[1].pathModeFrom = "missing";
+        invalid.inputs[2].pathModeFrom = "missing";
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[1].pathModeFrom = "path";
+        invalid.inputs[2].pathModeFrom = "path";
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[1].pathModeFrom = "mode";
-        invalid.inputs[1].editor       = "file";
+        invalid.inputs[2].pathModeFrom = "mode";
+        invalid.inputs[2].editor       = "file";
         rejects([&] { validateToolDefinition(invalid); });
         invalid                        = pathEditor;
-        invalid.inputs[0].type         = {Type::Int};
-        invalid.inputs[0].defaultValue = std::int64_t{0};
-        invalid.inputs[0].options.clear();
+        invalid.inputs[1].type         = {Type::Int};
+        invalid.inputs[1].defaultValue = std::int64_t{0};
+        invalid.inputs[1].options.clear();
         rejects([&] { validateToolDefinition(invalid); });
         invalid = pathEditor;
-        invalid.inputs[1].pathModeFrom.clear();
+        invalid.inputs[2].pathModeFrom.clear();
         validateToolDefinition(invalid);
     }
     {

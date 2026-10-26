@@ -98,7 +98,7 @@ struct PortDefinition {
 };
 
 struct ToolDefinition {
-    int                                schemaVersion = 3;
+    int                                schemaVersion = 4;
     std::string id;
     std::string displayName;
     std::string version = "1.0.0";
@@ -129,9 +129,26 @@ struct ToolDefinition {
 // True only for String ports whose editor selects a resource path (file, directory, path).
 bool isPathPort(const PortDefinition& port);
 
+// Execution conditions belong to the logical node models only. A future model
+// never inherits the privilege by accident.
+bool supportsExecutionGuard(NodeModel model) noexcept;
+
+// Canonical host-provided ports: materialised into every effective contract and
+// never written by tool declaration files.
+inline constexpr std::string_view kUpstreamStatusPort  = "upstream_status";
+inline constexpr std::string_view kStatusCodePort      = "__status_code";
+inline constexpr std::string_view kStatusMessagePort   = "__status_message";
+
+bool isHostOwnedPort(std::string_view id) noexcept;
+
 // Fixed parameter pages shared by the validator and the workbench.
 std::span<const std::string_view> toolTabs() noexcept;
 
+// Materialises host-owned contract requirements (currently upstream_status) and
+// then validates. Idempotent; conflicting author declarations fail loudly.
+void normalizeToolDefinition(ToolDefinition &def);
+
+// Validating entry used after normalisation; kept separate for read-only checks.
 void validateToolDefinition(const ToolDefinition& def);
 
 } // namespace visionrt

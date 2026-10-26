@@ -234,13 +234,95 @@ bool isPathPort(const PortDefinition& port) {
         (port.editor == "file" || port.editor == "directory" || port.editor == "path");
 }
 
+bool isHostOwnedPort(std::string_view id) noexcept
+{
+    return id == kUpstreamStatusPort || id == kStatusCodePort || id == kStatusMessagePort;
+}
+
+bool supportsExecutionGuard(NodeModel model) noexcept
+{
+    switch (model)
+    {
+    case NodeModel::Expression:
+    case NodeModel::Condition:
+    case NodeModel::Select:
+        return true;
+    case NodeModel::Fixed:
+        return false;
+    }
+    return false;
+}
+
 std::span<const std::string_view> toolTabs() noexcept {
     static constexpr std::array<std::string_view, 4> tabs{"基本输入", "预处理", "检测", "结果处理"};
     return tabs;
 }
 
+void normalizeToolDefinition(ToolDefinition &def)
+{
+    if (def.nodeModel != NodeModel::Fixed)
+        return;
+
+    const auto canonical = [](PortDefinition port)
+    {
+        port.name         = port.name.empty() ? std::string("上层工具状态") : port.name;
+        port.type         = TypeSpec{Type::Int};
+        port.defaultValue = PortValue{std::int64_t{0}};
+        port.required     = true;
+        port.editor.clear();
+        port.tab          = "基本输入";
+        port.group.clear();
+        port.minimum.reset();
+        port.maximum.reset();
+        port.step.reset();
+        port.decimals.reset();
+        port.options.clear();
+        port.optionsProvider.clear();
+        port.imageInput.clear();
+        port.imagePort.clear();
+        port.colorOrder.clear();
+        port.sameGeometryAsInput.clear();
+        port.alignmentInput.clear();
+        port.pathModeFrom.clear();
+        port.typeFrom.reset();
+        return port;
+    };
+
+    const auto existing = std::find_if(def.inputs.begin(), def.inputs.end(),
+                                       [](const auto &port) { return port.id == kUpstreamStatusPort; });
+    if (existing == def.inputs.end())
+    {
+        PortDefinition status;
+        status.id = std::string(kUpstreamStatusPort);
+        def.inputs.insert(def.inputs.begin(), canonical(std::move(status)));
+        return;
+    }
+
+    if (existing->type != TypeSpec{Type::Int})
+        throw ContractError("upstream_status 必须是 Int 输入：" + def.id);
+    if (existing->typeFrom)
+        throw ContractError("upstream_status 不能由 type_from 派生：" + def.id);
+    if (!existing->options.empty() || !existing->optionsProvider.empty())
+        throw ContractError("upstream_status 不接受 options 约束：" + def.id);
+    if (existing->minimum || existing->maximum || existing->step || existing->decimals)
+        throw ContractError("upstream_status 不接受数值范围约束：" + def.id);
+    if (!isMissing(existing->defaultValue) && !equalValues(existing->defaultValue, PortValue{std::int64_t{0}}))
+        throw ContractError("upstream_status 的默认值必须为 0：" + def.id);
+    if (!existing->required)
+        throw ContractError("upstream_status 必须是必填输入：" + def.id);
+
+    auto replacement = canonical(*existing);
+    if (existing != def.inputs.begin())
+    {
+        def.inputs.erase(existing);
+        def.inputs.insert(def.inputs.begin(), std::move(replacement));
+    }
+    else
+        *existing = std::move(replacement);
+}
+
 void validateToolDefinition(const ToolDefinition& def) {
-    if (def.schemaVersion != 3)
+    if (def.schemaVersion != 4)
     {
         throw ContractError("Unsupported schema_version: " + std::to_string(def.schemaVersion));
     }
@@ -365,9 +447,22 @@ void validateToolDefinition(const ToolDefinition& def) {
             throw ContractError("表达式与条件节点必须是 python_class 工具：" + def.id);
         requireParameter("variables");
         requireParameter("program");
-        if (def.nodeModel == NodeModel::Condition
-            && (def.outputs.size() != 4 || !findPort(def.outputs, "on_true") || !findPort(def.outputs, "on_false")))
-            throw ContractError("条件节点必须声明 on_true 与 on_false 两个布尔输出：" + def.id);
+        if (def.nodeModel == NodeModel::Condition)
+        {
+            const auto *mode = findPort(def.initParams, "condition_mode");
+            const bool  validMode
+                = mode && mode->type == TypeSpec{Type::String} && mode->options.size() == 2
+               && std::any_of(mode->options.begin(), mode->options.end(),
+                              [](const auto &value) { return equalValues(value, PortValue{std::string{"formula"}}); })
+               && std::any_of(mode->options.begin(), mode->options.end(),
+                              [](const auto &value) { return equalValues(value, PortValue{std::string{"upstream"}}); })
+               && equalValues(mode->defaultValue, PortValue{std::string{"formula"}});
+            if (!validMode)
+                throw ContractError("条件节点必须声明 condition_mode:String，选项 formula/upstream，默认 formula：" + def.id);
+            if (def.outputs.size() != 6 || !findPort(def.outputs, "on_true") || !findPort(def.outputs, "on_false")
+                || !findPort(def.outputs, "on_true_status") || !findPort(def.outputs, "on_false_status"))
+                throw ContractError("条件节点必须声明两个布尔输出与两路状态输出：" + def.id);
+        }
         break;
     case NodeModel::Select:
         if (def.kind != ToolKind::Host)

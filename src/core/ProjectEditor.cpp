@@ -239,6 +239,18 @@ void applyContract(NodeDefinition &node, const ToolDefinition &tool)
 {
     const auto contract = nodeContract(node, tool);
     auto       inputs   = portTypes(contract.inputs);
+    // Formula variables are inactive while a condition node reads an upstream Bool, but their
+    // bindings stay stored so switching back does not lose the user's configuration. Only a
+    // variable the user actually deleted leaves this set.
+    std::set<std::string, std::less<>> retained;
+    if (tool.nodeModel == NodeModel::Condition && conditionUsesUpstream(node) && node.expression)
+        for (const auto &variable : node.expression->variables)
+        {
+            retained.insert(variable.portId);
+            if (const auto previous = node.signatures.inputs.find(variable.portId);
+                previous != node.signatures.inputs.end())
+                inputs.insert_or_assign(variable.portId, previous->second);
+        }
     for (auto it = node.inputs.begin(); it != node.inputs.end();)
     {
         if (!inputs.contains(it->first))
@@ -404,13 +416,13 @@ CopiedNodes duplicateNodes(std::span<const NodeDefinition *const> selected, Node
             else
                 binding.source->node = mapped->second;
         }
-        if (node.executionGuard)
+        if (node.executionGuard && node.executionGuard->source)
         {
-            const auto mapped = result.mapping.find(node.executionGuard->node);
+            const auto mapped = result.mapping.find(node.executionGuard->source->node);
             if (mapped == result.mapping.end())
                 node.executionGuard.reset();
             else
-                node.executionGuard->node = mapped->second;
+                node.executionGuard->source->node = mapped->second;
         }
         result.nodes.push_back(std::move(node));
     }
@@ -631,12 +643,12 @@ std::vector<DependencyEdge> dependencyEdges(const FlowDefinition &flow)
     auto edges = deriveEdges(relations);
     for (const auto &node : flow.nodes)
     {
-        if (!node.executionGuard)
+        if (!node.executionGuard || !node.executionGuard->source)
             continue;
-        const auto check = validateGuard(flow, *node.executionGuard, node.id);
+        const auto check = validateGuard(flow, *node.executionGuard->source, node.id);
         if (!check)
             throw ContractError("执行条件无效：" + check.message);
-        edges.emplace_back(node.executionGuard->node, node.id);
+        edges.emplace_back(node.executionGuard->source->node, node.id);
     }
     std::sort(edges.begin(), edges.end());
     edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
@@ -974,24 +986,105 @@ bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, Expr
     return true;
 }
 
-bool ProjectEditor::setExecutionGuard(std::string_view flowId, NodeId id, std::optional<SourcePort> source)
+bool ProjectEditor::setExecutionGuard(std::string_view flowId, NodeId id, std::optional<ExecutionGuard> guard,
+                                     const ToolDefinition &tool)
 {
     requireIdle();
     ProjectEditor edit(project_);
     auto         &target = edit.flow(flowId);
     auto         &node   = findNode(target, id);
     requireEditable(node);
-    if (node.executionGuard == source)
+    if (node.executionGuard == guard)
         return false;
-    if (source)
+    if (guard && !supportsExecutionGuard(tool.nodeModel))
+        throw ContractError("该工具不支持执行条件：" + node.toolId);
+    if (guard && guard->mode == BindingMode::Upstream && guard->source)
     {
-        const auto check = validateGuard(target, *source, id);
+        const auto check = validateGuard(target, *guard->source, id);
         if (!check)
             throw ContractError(check.message);
     }
-    node.executionGuard = std::move(source);
+    node.executionGuard = std::move(guard);
     if (hasDependencyCycle(target))
         throw ContractError("执行条件形成依赖循环");
+    requireIncrement(node.executionRevision);
+    requireIncrement(target.structureRevision);
+    ++node.executionRevision;
+    ++target.structureRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
+bool ProjectEditor::setConditionMode(std::string_view flowId, NodeId id, BindingMode mode,
+                                    const ToolDefinition &tool)
+{
+    requireIdle();
+    ProjectEditor edit(project_);
+    auto         &target = edit.flow(flowId);
+    auto         &node   = findNode(target, id);
+    requireEditable(node);
+    if (tool.nodeModel != NodeModel::Condition)
+        throw ContractError("只有条件节点支持来源模式切换：" + node.toolId);
+    if (conditionUsesUpstream(node) == (mode == BindingMode::Upstream))
+        return false;
+
+    std::set<std::string, std::less<>> nextOutputs;
+    for (const auto &port : tool.outputs)
+        if (!port.id.starts_with("__"))
+            nextOutputs.insert(port.id);
+    for (const auto &[portId, type] : node.signatures.outputs)
+    {
+        if (portId.starts_with("__"))
+            continue;
+        const auto next = std::find_if(tool.outputs.begin(), tool.outputs.end(),
+                                       [&](const auto &port) { return port.id == portId; });
+        const bool kept = next != tool.outputs.end() && next->type == type;
+        if (kept)
+            continue;
+        const auto used = std::count_if(target.nodes.begin(), target.nodes.end(), [&](const auto &consumer)
+        {
+            return std::any_of(consumer.inputs.begin(), consumer.inputs.end(), [&](const auto &entry)
+            { return entry.second.mode == BindingMode::Upstream && entry.second.source
+                  && entry.second.source->node == id && entry.second.source->port == portId; });
+        });
+        if (used != 0)
+            throw ContractError("输出端口仍被连接，不能切换来源模式：" + portId);
+    }
+
+    if (!node.inputs.contains("condition"))
+        node.inputs.emplace("condition", InputBinding{});
+    auto &binding = node.inputs.at("condition");
+    binding.mode  = mode;
+    if (mode == BindingMode::Literal)
+        binding.literal = Missing{};
+    else if (!isMissing(binding.literal))
+        throw ContractError("上层模式下条件输入不能保存字面量");
+
+    applyContract(node, tool);
+    const auto contract = nodeContract(node, tool);
+    for (const auto &port : contract.inputs)
+    {
+        const auto found = node.inputs.find(port.id);
+        if (found == node.inputs.end())
+            throw ContractError("条件节点缺少输入绑定：" + port.id);
+        try
+        {
+            validateLiteral(port.type, found->second.literal);
+        }
+        catch (const ContractError &error)
+        {
+            throw ContractError("输入 " + port.id + " 的已存值在新模式下无效：" + error.what());
+        }
+        if (found->second.mode == BindingMode::Upstream && found->second.source)
+        {
+            const auto check
+                = validateBinding(target, found->second.source->node, found->second.source->port, id, port.id);
+            if (!check)
+                throw ContractError("输入 " + port.id + " 的已存来源在新模式下无效：" + check.message);
+        }
+    }
+    if (hasDependencyCycle(target))
+        throw ContractError("来源模式切换形成依赖循环");
     requireIncrement(node.executionRevision);
     requireIncrement(target.structureRevision);
     ++node.executionRevision;

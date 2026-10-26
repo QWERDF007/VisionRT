@@ -33,7 +33,7 @@ int main(int argc, char **argv)
                 {
                     std::ofstream declaration(externalDeclarations / "external.json");
                     declaration << R"({
-                        "schema_version":3,"tool_id":"test.external.roots","display_name":"外部根工具","version":"1",
+                        "schema_version":4,"tool_id":"test.external.roots","display_name":"外部根工具","version":"1",
                         "kind":"python_function","entry":{"package":"external","file":"tool.py","symbol":"execute"},
                         "init_params":[],"inputs":[],"outputs":[]
                     })";

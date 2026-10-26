@@ -124,8 +124,8 @@ void knownFailureDiagnostics(const QString &directory)
     const auto   filename = directory + "/错误 工程.vrt.json";
     for (const auto &[document, reason] : {
              std::pair{R"json({"format_version":4,"project":{},"flows":{}})json",                             "flows 必须是数组"},
-             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 4，实际 1"},
-             std::pair{                        R"json({"format_version":2})json", "format_version 不受支持，要求 4，实际 2"},
+             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 4–5，实际 1"},
+             std::pair{                        R"json({"format_version":2})json", "format_version 不受支持，要求 4–5，实际 2"},
              std::pair{                      R"json({"format_version":"4"})json",                    "format_version 必须是整数"},
              std::pair{                                                  "[1,2]",              "工程 JSON 根节点必须是对象"}
     })
@@ -180,7 +180,7 @@ void candidateAndRawPreservation(const QString &directory)
     storage.save(loaded.project, path(saved));
     const auto root = QJsonDocument::fromJson(get(saved)).object();
     const auto raw  = root.value("flows").toArray()[0].toObject().value("nodes").toArray()[0].toObject();
-    require(root.value("format_version").toInteger() == 4 && raw.value("node_seq").isString(),
+    require(root.value("format_version").toInteger() == 5 && raw.value("node_seq").isString(),
             "project version or identity encoding is wrong");
     require(raw.value("vendor_extension").toObject().value("opaque").toArray()[1].toObject().value("two") == "three",
             "extension lost");
@@ -499,7 +499,7 @@ void saveAsPaths(const QString &directory)
 void retiredInitialization(const QString &directory)
 {
     const auto tool = parseToolDefinitionJson(R"json({
-        "schema_version":3,"tool_id":"unavailable","display_name":"接收器","version":"1.0",
+        "schema_version":4,"tool_id":"unavailable","display_name":"接收器","version":"1.0",
         "kind":"host","entry":{"binding":"visionrt.receiver"},
         "init_params":[
             {"id":"source_flow_id","name":"流程","type":"String","default":""},

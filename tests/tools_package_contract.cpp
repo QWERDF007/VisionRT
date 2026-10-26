@@ -37,7 +37,7 @@ void write(const QString &path, const QByteArray &bytes)
 }
 
 const QByteArray declaration = R"json({
-    "schema_version":3,"tool_id":"test.package","display_name":"包工具","version":"1",
+    "schema_version":4,"tool_id":"test.package","display_name":"包工具","version":"1",
     "kind":"cpp","init_params":[],"inputs":[],"outputs":[]
 })json";
 

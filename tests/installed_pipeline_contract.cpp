@@ -125,7 +125,11 @@ def execute(inputs):
         classes[0] += 1
     for names in inputs['class_names']:
         names[0] += '中文'
-    return dict(inputs, rect=[inputs['rois'][0]], __status_code=0, __status_message='')
+    out = {key: inputs[key] for key in ('images', 'rois', 'scores', 'classes', 'class_names')}
+    out['rect'] = [inputs['rois'][0]]
+    out['__status_code'] = 0
+    out['__status_message'] = ''
+    return out
 )");
     ToolDefinition generated;
     generated.id          = "test.installed.generated";
