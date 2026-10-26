@@ -8,6 +8,7 @@ ColumnLayout {
     id: root
     required property var parameter
     property string nodeId: app.selectedNode
+    property var panel: null
     objectName: "parameter_" + parameter.id
     readonly property bool alwaysUpstream: parameter.type === "Image"
     readonly property bool upstream: (alwaysUpstream || parameter.mode === "upstream") && !parameter.init
@@ -24,6 +25,16 @@ ColumnLayout {
     readonly property int actionWidth: Theme.paramActionBtnWidth
     readonly property font editorFont: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.paramEditorFontSize })
     spacing: 6
+
+    function getPanel() {
+        if (root.panel) return root.panel
+        let item = root.parent
+        while (item) {
+            if (typeof item.openExpressionEditor === "function") return item
+            item = item.parent
+        }
+        return null
+    }
 
     function commit(text) { return root.editable && app.setParameter(parameter.id, parameter.init, text) }
     onPathKindChanged: { filePicker.close(); directoryPicker.close() }
@@ -95,7 +106,8 @@ ColumnLayout {
                         id: editorLoader
                         anchors.fill: parent
                         enabled: root.editable
-                        sourceComponent: root.upstream ? upstreamEditor
+                        sourceComponent: root.parameter.isMeta ? metaEditor
+                                       : root.upstream ? upstreamEditor
                                        : (root.parameter.options || []).length > 0 ? choiceEditor
                                        : root.parameter.type === "Bool" ? boolEditor
                                        : root.parameter.type === "Int" ? integerEditor
@@ -118,7 +130,7 @@ ColumnLayout {
                 Rectangle {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: !root.parameter.init && !root.alwaysUpstream
+                    visible: !root.parameter.init && !root.alwaysUpstream && !root.parameter.isMeta
                     Layout.preferredWidth: Theme.paramActionBtnWidth
                     Layout.fillHeight: true
                     color: toggleMouse.containsMouse ? Theme.paramRowHoverBg : "transparent"
@@ -297,9 +309,22 @@ ColumnLayout {
             flat: true
             font: root.editorFont
             implicitHeight: Theme.paramEditorHeight
-            model: ["是", "否"]
-            currentIndex: root.parameter.literal === "true" ? 0 : 1
-            onActivated: root.commit(currentIndex === 0 ? "true" : "false")
+            readonly property bool isRecursive: root.parameter.id === "recursive"
+            readonly property bool isReload: root.parameter.id === "reload"
+            model: isRecursive ? ["不递归", "递归"]
+                 : isReload ? ["关闭", "开启"]
+                 : ["是", "否"]
+            currentIndex: {
+                let val = root.parameter.literal === "true"
+                if (isRecursive || isReload) return val ? 1 : 0
+                return val ? 0 : 1
+            }
+            onActivated: function(index) {
+                let isTrue = false
+                if (isRecursive || isReload) isTrue = (index === 1)
+                else isTrue = (index === 0)
+                root.commit(isTrue ? "true" : "false")
+            }
         }
     }
     Component {
@@ -327,6 +352,65 @@ ColumnLayout {
         }
     }
     Component {
+        id: metaEditor
+        ParameterDialogField {
+            id: field
+            flat: true
+            readOnly: !root.parameter.isSingleFormula
+            placeholderText: {
+                if (root.parameter.editor === "guard") return "无（始终执行）"
+                if (root.parameter.editor === "select_type") return "请选择合流类型"
+                if (root.parameter.editor === "condition") return "请输入条件公式"
+                return "请输入公式"
+            }
+            actionText: {
+                if (root.parameter.editor === "guard") return "设置执行条件"
+                if (root.parameter.editor === "select_type") return "选择合流类型"
+                if (root.parameter.editor === "condition") return "编辑条件公式"
+                return "编辑公式"
+            }
+            property string committedText: ""
+            function sync(force) {
+                const currentText = root.parameter.displayText || ""
+                committedText = currentText
+                if (force || !inputItem.activeFocus) {
+                    text = committedText
+                    invalid = false
+                }
+            }
+            Component.onCompleted: sync(true)
+            onCommitRequested: function(commitText) {
+                if (root.parameter.isSingleFormula) {
+                    let ok = app.applySingleExpression(root.nodeId, commitText)
+                    invalid = !ok
+                    if (ok) committedText = commitText
+                }
+            }
+            onCancelRequested: {
+                text = committedText
+                invalid = false
+            }
+            onActionRequested: {
+                let p = root.getPanel()
+                if (!p) return
+                if (root.parameter.editor === "guard") {
+                    p.openGuardEditor(root.nodeId)
+                } else if (root.parameter.editor === "select_type") {
+                    p.openSelectTypeEditor(root.nodeId)
+                } else {
+                    p.openExpressionEditor(root.nodeId, field.text)
+                }
+            }
+            Connections {
+                target: root
+                function onParameterChanged() { field.sync(false) }
+                function onValueTextChanged() { field.sync(false) }
+                function onParameterKeyChanged() { field.sync(true) }
+            }
+        }
+    }
+
+    Component {
         id: textEditor
         ParameterTextField {
             id: field
@@ -342,8 +426,8 @@ ColumnLayout {
                 }
             }
             Component.onCompleted: sync(true)
-            actionIcon: root.parameter.editor === "file" || root.parameter.editor === "directory" ? QuiFontIcon.FolderOpen : 0
-            actionText: root.parameter.editor === "directory" ? "选择文件夹" : "选择文件"
+            actionIcon: (root.parameter.editor === "file" || root.parameter.editor === "directory" || root.parameter.editor === "path") ? QuiFontIcon.FolderOpen : 0
+            actionText: root.parameter.editor === "directory" ? "选择文件夹" : (root.parameter.editor === "path" ? "选择路径" : "选择文件")
             onCommitRequested: {
                 if (text === root.valueText) {
                     invalid = false
@@ -355,7 +439,15 @@ ColumnLayout {
                 text = root.valueText
                 invalid = false
             }
-            onActionRequested: root.parameter.editor === "directory" ? directoryPicker.open() : filePicker.open()
+            onActionRequested: {
+                if (root.parameter.editor === "path") {
+                    pathMenu.open()
+                } else if (root.parameter.editor === "directory") {
+                    directoryPicker.open()
+                } else {
+                    filePicker.open()
+                }
+            }
             Connections {
                 target: root
                 function onValueTextChanged() { field.sync(false) }
@@ -566,4 +658,15 @@ ColumnLayout {
     }
     FileDialog { id: filePicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFile) }
     FolderDialog { id: directoryPicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFolder) }
+    Menu {
+        id: pathMenu
+        MenuItem {
+            text: "选择文件…"
+            onTriggered: filePicker.open()
+        }
+        MenuItem {
+            text: "选择文件夹…"
+            onTriggered: directoryPicker.open()
+        }
+    }
 }

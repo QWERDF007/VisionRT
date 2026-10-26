@@ -510,10 +510,10 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     auto           loaded = storage.load(projectFile);
     assert((loaded.diagnostics.empty()));
 
-    // Prepare 2 projects with different inputs (Engine 1: 2 images; Engine 2: 1 image via limit=1)
+    // Prepare 2 projects with different inputs (Engine 1: 2 images; Engine 2: 1 image via count=1)
     ProjectDefinition project1                 = loaded.project;
     ProjectDefinition project2                 = loaded.project;
-    project2.flows[0].nodes[0].inputs["limit"] = {BindingMode::Literal, std::int64_t{1}, {}};
+    project2.flows[0].nodes[0].inputs["count"] = {BindingMode::Literal, std::int64_t{1}, {}};
 
     // Concurrent execution of 2 independent engines sharing registry & plugin loader
     RuntimeEngine engine1(2);

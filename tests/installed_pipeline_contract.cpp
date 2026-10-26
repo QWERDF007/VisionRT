@@ -229,9 +229,9 @@ def execute(inputs):
     const auto    crop    = editor.addNode(flow, *registry.find("visionrt.image.crop"), {0, 40});
     const auto    builtin = editor.addNode(flow, *registry.find("visiontools.python.image_sizes"), {10, 15});
     const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.id), {0, 50});
-    editor.setLiteral(flow, reader, "mode", std::string("directory"));
     editor.setLiteral(flow, reader, "path", std::string("images"));
-    editor.setLiteral(flow, reader, "color", std::string("gray"));
+    editor.setLiteral(flow, reader, "count", std::int64_t(2));
+    editor.setLiteral(flow, reader, "reload", true);
     editor.bindFreeInput(flow, {reader, "images"}, {before, "images"});
     editor.setLiteral(flow, before, "rois", DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}, {{2., 1., 2., 3., 4., 0.}}}));
     editor.setLiteral(flow, before, "scores", Array(NestedVector<float, 2>{{0.75F}, {0.5F}}));

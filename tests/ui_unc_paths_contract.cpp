@@ -47,8 +47,6 @@ try
     app.addNode("visionrt.image.read", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 1; }, 5000),
             "UNC reader node was not created");
-    require(app.setParameter("mode", false, "file"), "UNC reader mode was rejected");
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC reader mode did not settle");
     require(app.setParameter("path", false, uncImage), "UNC path was rejected");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC path did not settle");
     const auto projectDirectory = QStringLiteral(VISIONRT_SOURCE_DIR "/build/unc-project");

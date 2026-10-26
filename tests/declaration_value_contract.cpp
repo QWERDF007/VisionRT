@@ -233,7 +233,7 @@ try
         rejects([&] { validateToolDefinition(invalid); });
         invalid = pathEditor;
         invalid.inputs[1].pathModeFrom.clear();
-        rejects([&] { validateToolDefinition(invalid); });
+        validateToolDefinition(invalid);
     }
     {
         auto initialization       = pathEditor;

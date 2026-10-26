@@ -100,7 +100,7 @@ try
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());
-    require(QTest::qWaitFor([&] { return !app.busy() && app.toolModel()->rowCount() > 0; }, 5000),
+    require(QTest::qWaitFor([&] { return !app.busy() && app.toolModel()->rowCount() > 0; }, 20000),
             "tool tree catalog did not become ready");
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);

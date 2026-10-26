@@ -116,8 +116,6 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
 
         if (!port.pathModeFrom.empty() && (output || port.editor != "path"))
             throw ContractError("path_mode_from requires a path editor: " + port.id);
-        if (port.editor == "path" && port.pathModeFrom.empty())
-            throw ContractError("path editor requires path_mode_from: " + port.id);
 
         if (!port.tab.empty()) {
             const auto tabs = toolTabs();

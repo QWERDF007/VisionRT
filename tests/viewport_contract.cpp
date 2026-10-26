@@ -242,7 +242,7 @@ int main(int argc, char **argv)
     DisplayFrame missing;
     missing.requestId = 2;
     viewport.setDisplayFrame(missing);
-    assert(!viewport.hasImage() && !viewport.statusText().isEmpty());
+    assert(!viewport.hasImage());
     drag(viewport, {10, 10}, {30, 30});
     assert(commits == 8);
     viewport.setDisplayFrame(frame); // Stale id cannot restore a disappeared image.

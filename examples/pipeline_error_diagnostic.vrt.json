@@ -24,50 +24,26 @@
           "type_snapshot": {
             "init_params": {},
             "inputs": {
-              "mode": {
+              "count": {
+                "type": "Int"
+              },
+              "order": {
                 "type": "String"
               },
               "path": {
                 "type": "String"
               },
-              "color": {
-                "type": "String"
-              },
-              "limit": {
-                "type": "Int"
-              },
-              "max_batch_bytes": {
-                "type": "Int"
-              },
-              "paths_in": {
-                "type": "Array",
-                "dtype": "string",
-                "rank": 1
-              },
-              "read_mode": {
-                "type": "String"
-              },
               "recursive": {
                 "type": "Bool"
               },
-              "extensions": {
-                "type": "Array",
-                "dtype": "string",
-                "rank": 1
+              "reload": {
+                "type": "Bool"
               },
-              "end_policy": {
+              "traversal": {
                 "type": "String"
               }
             },
             "outputs": {
-              "images": {
-                "type": "Image"
-              },
-              "paths": {
-                "type": "Array",
-                "rank": 1,
-                "dtype": "string"
-              },
               "__status_code": {
                 "type": "Int"
               },
@@ -77,61 +53,46 @@
               "current_index": {
                 "type": "Int"
               },
-              "total_count": {
-                "type": "Int"
-              },
               "end_reached": {
                 "type": "Bool"
+              },
+              "images": {
+                "type": "Image"
+              },
+              "paths": {
+                "dtype": "string",
+                "rank": 1,
+                "type": "Array"
+              },
+              "total_count": {
+                "type": "Int"
               }
             }
           },
           "inputs": {
-            "mode": {
+            "count": {
               "mode": "literal",
-              "literal": "directory"
+              "literal": 2
+            },
+            "order": {
+              "mode": "literal",
+              "literal": "顺序（下一张）"
             },
             "path": {
               "mode": "literal",
               "literal": "images"
             },
-            "color": {
-              "mode": "literal",
-              "literal": "bgr"
-            },
-            "limit": {
-              "mode": "literal",
-              "literal": 0
-            },
-            "max_batch_bytes": {
-              "mode": "literal",
-              "literal": 0
-            },
-            "paths_in": {
-              "mode": "literal",
-              "literal": []
-            },
-            "read_mode": {
-              "mode": "literal",
-              "literal": "all"
-            },
             "recursive": {
               "mode": "literal",
               "literal": false
             },
-            "extensions": {
+            "reload": {
               "mode": "literal",
-              "literal": [
-                "png",
-                "jpg",
-                "jpeg",
-                "bmp",
-                "tif",
-                "tiff"
-              ]
+              "literal": false
             },
-            "end_policy": {
+            "traversal": {
               "mode": "literal",
-              "literal": "wrap"
+              "literal": "循环"
             }
           }
         },

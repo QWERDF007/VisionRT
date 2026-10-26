@@ -144,6 +144,7 @@ public:
     Q_INVOKABLE QVariantMap  expressionConfig(const QString &node) const;
     Q_INVOKABLE bool         applyExpressionConfig(const QString &node, const QVariantList &variables,
                                                    const QVariantList &program);
+    Q_INVOKABLE bool         applySingleExpression(const QString &node, const QString &text);
     Q_INVOKABLE QVariantList guardCandidates(const QString &node) const;
     Q_INVOKABLE bool         applyExecutionGuard(const QString &node, const QString &sourceNode,
                                                  const QString &port);

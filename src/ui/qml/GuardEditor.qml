@@ -9,6 +9,8 @@ Dialog {
     id: root
     property string nodeId: ""
     property var candidates: []
+    property string selectedNode: ""
+    property string selectedPort: ""
     modal: true
     title: "执行条件"
     width: 520
@@ -19,7 +21,28 @@ Dialog {
     function openFor(id) {
         nodeId = id
         candidates = app.guardCandidates(id)
+        selectedNode = ""
+        selectedPort = ""
+        for (let i = 0; i < candidates.length; ++i) {
+            if (candidates[i].selected) {
+                selectedNode = candidates[i].node
+                selectedPort = candidates[i].port
+                break
+            }
+        }
         open()
+    }
+
+    Connections {
+        target: app
+        function onSelectedNodeChanged() {
+            if (root.visible && app.selectedNode !== root.nodeId)
+                root.close()
+        }
+        function onRuntimeBusyChanged() {
+            if (root.visible && app.runtimeBusy)
+                root.close()
+        }
     }
 
     contentItem: ColumnLayout {
@@ -36,11 +59,19 @@ Dialog {
             clip: true
             model: root.candidates
             delegate: ItemDelegate {
+                id: itemDelegate
                 required property var modelData
                 width: ListView.view.width
-                text: modelData.title + " · " + modelData.portName + (modelData.selected ? "（当前）" : "")
+                highlighted: root.selectedNode === modelData.node && root.selectedPort === modelData.port
+                text: modelData.title + " · " + modelData.portName + (modelData.selected ? "（已应用）" : "")
                 onClicked: {
-                    if (app.applyExecutionGuard(root.nodeId, modelData.node, modelData.port))
+                    root.selectedNode = modelData.node
+                    root.selectedPort = modelData.port
+                }
+                onDoubleClicked: {
+                    root.selectedNode = modelData.node
+                    root.selectedPort = modelData.port
+                    if (app.applyExecutionGuard(root.nodeId, root.selectedNode, root.selectedPort))
                         root.close()
                 }
             }
@@ -55,11 +86,26 @@ Dialog {
             Layout.fillWidth: true
             Button {
                 text: "清除条件"
-                enabled: app.executionGuardText.length > 0
-                onClicked: { if (app.applyExecutionGuard(root.nodeId, "", "")) root.close() }
+                enabled: !app.runtimeBusy && (app.executionGuardText.length > 0 || root.selectedNode.length > 0)
+                onClicked: {
+                    if (app.applyExecutionGuard(root.nodeId, "", ""))
+                        root.close()
+                }
             }
             Item { Layout.fillWidth: true }
-            Button { text: "关闭"; onClicked: root.close() }
+            Button {
+                text: "取消"
+                onClicked: root.close()
+            }
+            Button {
+                text: "确定"
+                highlighted: true
+                enabled: !app.runtimeBusy && (root.selectedNode.length > 0 || app.executionGuardText.length > 0)
+                onClicked: {
+                    if (app.applyExecutionGuard(root.nodeId, root.selectedNode, root.selectedPort))
+                        root.close()
+                }
+            }
         }
     }
 }

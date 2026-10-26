@@ -200,6 +200,51 @@ bool AppController::applyExpressionConfig(const QString &nodeId, const QVariantL
     return ok;
 }
 
+bool AppController::applySingleExpression(const QString &nodeId, const QString &text)
+{
+    const auto  id   = workbench::nodeId(nodeId);
+    const auto *node = impl_->findNode(id);
+    const auto *tool = impl_->currentTool();
+    if (!node || !tool || !tool->derivesPorts())
+        return false;
+    if (!impl_->idle())
+        return false;
+
+    std::uint64_t sequenceFloor = 1;
+    if (node->expression)
+        sequenceFloor = node->expression->nextPortSeq;
+
+    bool ok = impl_->command(
+        [&]
+        {
+            ExpressionConfig config = node->expression.value_or(ExpressionConfig{});
+            config.nextPortSeq      = sequenceFloor;
+            if (config.program.empty())
+            {
+                ExpressionResult result;
+                result.portId     = "p" + std::to_string(config.nextPortSeq++);
+                result.name       = tool->nodeModel == NodeModel::Condition ? "条件" : "结果1";
+                result.symbol     = tool->nodeModel == NodeModel::Condition ? "c" : "r1";
+                result.type       = tool->nodeModel == NodeModel::Condition ? TypeSpec{Type::Bool} : TypeSpec{Type::Float};
+                result.exposed    = tool->nodeModel != NodeModel::Condition;
+                result.expression = text.toUtf8().toStdString();
+                config.program.push_back(std::move(result));
+            }
+            else
+            {
+                config.program[0].expression = text.toUtf8().toStdString();
+            }
+            return impl_->editor.setExpressionConfig(impl_->flow.toStdString(), id, std::move(config), *tool);
+        },
+        true);
+    if (ok)
+    {
+        impl_->publishNodesChanged();
+        emit parametersChanged();
+    }
+    return ok;
+}
+
 QVariantList AppController::guardCandidates(const QString &nodeId) const
 {
     QVariantList result;

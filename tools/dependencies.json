@@ -4,7 +4,7 @@
       "name": "qt",
       "cmake": "cmake/ConfigQT.cmake",
       "root": "Qt6_ROOT",
-      "windows_default": "E:/Softwares/Qt/6.11.0/msvc2022_64",
+      "windows_default": "D:/Software/Qt6/6.6.2/msvc2019_64",
       "default": "D:/Software/Qt6/6.6.2/msvc2019_64"
     },
     {
@@ -12,7 +12,7 @@
       "cmake": "cmake/ConfigOpenCV.cmake",
       "root": "OpenCV_HOME",
       "windows_root": "OpenCV_BIN_DIR",
-      "windows_default": "D:/Software/opencv/build/x64/vc16",
+      "windows_default": "D:/Software/dev/opencv-4.8.0/build/x64/vc16",
       "default": "D:/Software/dev/opencv-4.8.0/build/x64/vc16",
       "destinations": ["build/bin"],
       "windows": ["*.dll", "bin/*.dll"]
@@ -21,7 +21,7 @@
       "name": "python",
       "cmake": "cmake/ConfigPython.cmake",
       "root": "Python3_ROOT_DIR",
-      "windows_default": "E:/Softwares/Anaconda3/envs/py312",
+      "windows_default": "D:/Software/anaconda3/envs/py312",
       "default": "D:/Software/anaconda3/envs/py312",
       "destinations": ["build/bin"],
       "windows": ["python3*.dll", "zlib*.dll"]

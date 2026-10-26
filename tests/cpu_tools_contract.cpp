@@ -68,8 +68,12 @@ void readImages(ToolRegistry &registry)
     const auto         root = std::filesystem::u8path(directory.path().toUtf8().toStdString());
     const ToolServices services{PathResolver(root)};
     Values             inputs{
-                    {"mode",    std::string("directory")},
-                    {"path", std::string("中文目录")}
+                    {"path", std::string("中文目录")},
+                    {"recursive", false},
+                    {"traversal", std::string("循环")},
+                    {"order", std::string("顺序（下一张）")},
+                    {"count", std::int64_t(2)},
+                    {"reload", false}
     };
     auto result = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
@@ -79,23 +83,25 @@ void readImages(ToolRegistry &registry)
     assert((images.get()[1].at<unsigned char>(0, 0) == 22));
     const auto paths = std::get<Array>(result.outputs.at("paths")).get<NestedVector<std::string, 1>>();
     assert((paths[0].ends_with("/a.png") && paths[1].ends_with("/b.png")));
-    inputs["limit"] = std::int64_t{-1};
+    inputs["count"] = std::int64_t{-1};
     result = execute(registry, "visionrt.image.read", inputs, services);
     failure(result);
-    assert((result.status.message.find("limit") != std::string::npos));
-    inputs["limit"] = std::int64_t{1};
+    assert((result.status.message.find("count") != std::string::npos));
+    inputs["count"] = std::int64_t{1};
     result          = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
     assert((std::get<DataRef<Image>>(result.outputs.at("images")).get().size() == 1));
     saveImage(folder + "/a.png", 99);
+    inputs["reload"] = true;
     result = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
     assert((std::get<DataRef<Image>>(result.outputs.at("images")).get()[0].at<unsigned char>(0, 0) == 99));
+    inputs["reload"] = false;
     QFile corrupt(folder + "/c.png");
     assert((corrupt.open(QIODevice::WriteOnly)));
     assert((corrupt.write("corrupt") == 7));
     corrupt.close();
-    inputs["limit"] = std::int64_t{0};
+    inputs["path"] = std::string("中文目录/c.png");
     result          = execute(registry, "visionrt.image.read", inputs, services);
     failure(result);
     assert((result.status.message.find("c.png") != std::string::npos));
@@ -117,9 +123,13 @@ void readImages(ToolRegistry &registry)
     oversizedFile.close();
     result = execute(registry, "visionrt.image.read",
                      {
-                         {"mode",                       std::string("file")},
-                         {"path", std::string("中文目录/oversized.bmp")}
-    },
+                         {"path", std::string("中文目录/oversized.bmp")},
+                         {"recursive", false},
+                         {"traversal", std::string("循环")},
+                         {"order", std::string("顺序（下一张）")},
+                         {"count", std::int64_t(1)},
+                         {"reload", false}
+                     },
                      services);
     failure(result);
     assert((result.status.code == 1));
@@ -128,7 +138,6 @@ void readImages(ToolRegistry &registry)
     assert((result.status.message.find("批次索引 0") != std::string::npos));
     assert((result.status.message.find("OpenCV") == std::string::npos));
     assert((result.status.detail == decoderDetail));
-    inputs["mode"] = std::string("file");
     inputs["path"] = std::string("中文目录/a.png");
     success(execute(registry, "visionrt.image.read", inputs, services));
     inputs["path"] = std::string("absent.png");
@@ -136,9 +145,13 @@ void readImages(ToolRegistry &registry)
     assert((QDir().mkpath(directory.path() + "/empty")));
     result = execute(registry, "visionrt.image.read",
                      {
-                         {"mode", std::string("directory")},
-                         {"path",     std::string("empty")}
-    },
+                         {"path",     std::string("empty")},
+                         {"recursive", false},
+                         {"traversal", std::string("循环")},
+                         {"order", std::string("顺序（下一张）")},
+                         {"count", std::int64_t(1)},
+                         {"reload", false}
+                     },
                      services);
     // 空目录没有任何可用文件，按规范明确失败而不是发布空批次。
     failure(result);
@@ -150,8 +163,12 @@ void readImages(ToolRegistry &registry)
     saveImage(unicodeFolder + "/" + supplementaryName, 100);
     saveImage(unicodeFolder + "/" + bmpName, 14);
     const Values unicodeInputs{
-        {"mode",    std::string("directory")},
-        {"path", std::string("unicode_sort")}
+        {"path", std::string("unicode_sort")},
+        {"recursive", false},
+        {"traversal", std::string("循环")},
+        {"order", std::string("顺序（下一张）")},
+        {"count", std::int64_t(2)},
+        {"reload", false}
     };
     result = execute(registry, "visionrt.image.read", unicodeInputs, services);
     success(result);

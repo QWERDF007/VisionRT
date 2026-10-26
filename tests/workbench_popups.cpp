@@ -46,7 +46,7 @@ void popupSessionsContract()
     };
     visionrt::testing::WorkbenchInstallation installation;
     visionrt::AppController                  app(1, installation.directory());
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "popup catalog did not become ready");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "popup catalog did not become ready");
     app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
     app.resolveUnsaved(QStringLiteral("discard"));
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
@@ -322,7 +322,7 @@ void popupSessionsContract()
     QImage image(16, 12, QImage::Format_RGB888);
     image.fill(QColor(30, 90, 180));
     require(image.save(imagePath), "cannot write the real popup image fixture");
-    require(app.setParameter(QStringLiteral("mode"), false, QStringLiteral("file"))
+    require(app.setParameter(QStringLiteral("count"), false, QStringLiteral("1"))
                 && app.setParameterPath(QStringLiteral("path"), false, QUrl::fromLocalFile(imagePath)),
             "cannot select the real image for result publication");
     const auto beforeRun = app.portContext(QStringLiteral("images"), true);

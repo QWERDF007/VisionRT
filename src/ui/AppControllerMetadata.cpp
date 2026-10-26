@@ -244,16 +244,19 @@ QVariantList AppController::parameters() const
         QString editorKind = declaration ? q(declaration->editor) : QString{};
         if (declaration && declaration->editor == "path")
         {
-            PortValue modeValue = Missing{};
-            if (initialization)
+            if (!declaration->pathModeFrom.empty())
             {
-                const auto found = node->initParams.find(declaration->pathModeFrom);
-                if (found != node->initParams.end()) modeValue = found->second;
+                PortValue modeValue = Missing{};
+                if (initialization)
+                {
+                    const auto found = node->initParams.find(declaration->pathModeFrom);
+                    if (found != node->initParams.end()) modeValue = found->second;
+                }
+                else
+                    modeValue = impl_->resolvedInput(*node, declaration->pathModeFrom);
+                const auto *pathMode = std::get_if<std::string>(&modeValue);
+                editorKind = pathMode && (*pathMode == "file" || *pathMode == "directory") ? q(*pathMode) : QString{};
             }
-            else
-                modeValue = impl_->resolvedInput(*node, declaration->pathModeFrom);
-            const auto *pathMode = std::get_if<std::string>(&modeValue);
-            editorKind = pathMode && (*pathMode == "file" || *pathMode == "directory") ? q(*pathMode) : QString{};
         }
 
         QVariant rectMap;
@@ -377,6 +380,40 @@ QVariantList AppController::parameters() const
         }
         result.push_back(row);
     };
+
+    auto addMeta = [&](const QString &id, const QString &name, const QString &editorKind,
+                       const QString &displayText, bool isSingle = false)
+    {
+        QVariantMap row{
+            {             "id",                                                                    id},
+            {           "name",                                                                  name},
+            {           "type",                                                  QStringLiteral("String")},
+            {     "typeDetail",                                                  QStringLiteral("String")},
+            {    "typeDisplay",                                                  QStringLiteral("宿主配置")},
+            {           "init",                                                                 false},
+            {           "mode",                                               QStringLiteral("literal")},
+            {        "literal",                                                           displayText},
+            {      "valueText",                                                           displayText},
+            {    "displayText",                                                           displayText},
+            {          "title",                                                      workbench::q(node->title())},
+            {         "editor",                                                            editorKind},
+            {            "tab",                                                  QStringLiteral("基本输入")},
+            {          "group",                                                             QString{}},
+            {         "isMeta",                                                                  true},
+            {"isSingleFormula",                                                              isSingle},
+            {        "options",                                                         QVariantList{}},
+            {"optionsProvider",                                                             QString{}},
+            {     "imageInput",                                                             QString{}},
+            {        "minimum",                                                             QString{}},
+            {        "maximum",                                                             QString{}},
+            {           "step",                                                             QString{}},
+            {       "decimals",                                                                    -1},
+            {   "canIncrement",                                                                 false},
+            {   "canDecrement",                                                                 false}
+        };
+        result.push_back(row);
+    };
+
     if (contract)
     {
         for (const auto &port : contract->initParams)
@@ -387,11 +424,63 @@ QVariantList AppController::parameters() const
                 continue;
             add(port.id, port.type, true, &port);
         }
+
+        // Host metadata rows at top of basic inputs
+        addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
+                executionGuardText(), false);
+
+        if (tool->nodeModel == NodeModel::Expression)
+        {
+            QString exprText;
+            bool isSingle = false;
+            if (node->expression)
+            {
+                if (node->expression->program.size() == 1)
+                {
+                    exprText = workbench::q(node->expression->program[0].expression);
+                    isSingle = true;
+                }
+                else if (node->expression->program.size() > 1)
+                {
+                    exprText = QStringLiteral("%1条公式").arg(node->expression->program.size());
+                    isSingle = false;
+                }
+                else
+                {
+                    exprText = QString{};
+                    isSingle = true;
+                }
+            }
+            else
+            {
+                exprText = QString{};
+                isSingle = true;
+            }
+            addMeta(QStringLiteral("__expression"), QStringLiteral("表达式"), QStringLiteral("expression"),
+                    exprText, isSingle);
+        }
+        else if (tool->nodeModel == NodeModel::Condition)
+        {
+            QString condText;
+            if (node->expression && !node->expression->program.empty())
+                condText = workbench::q(node->expression->program[0].expression);
+            addMeta(QStringLiteral("__condition"), QStringLiteral("条件公式"), QStringLiteral("condition"),
+                    condText, true);
+        }
+        else if (tool->nodeModel == NodeModel::Select)
+        {
+            QString selectText = node->selectType ? displayTypeName(*node->selectType) : QStringLiteral("请选择类型");
+            addMeta(QStringLiteral("__select_type"), QStringLiteral("合流类型"), QStringLiteral("select_type"),
+                    selectText, false);
+        }
+
         for (const auto &port : contract->inputs) add(port.id, port.type, false, &port);
     }
     else
     {
         for (const auto &[id, type] : node->signatures.initParams) add(id, type, true, nullptr);
+        addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
+                executionGuardText(), false);
         for (const auto &[id, type] : node->signatures.inputs) add(id, type, false, nullptr);
     }
     impl_->parameterRows     = result;

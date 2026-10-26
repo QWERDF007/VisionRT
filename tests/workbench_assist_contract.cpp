@@ -127,8 +127,7 @@ try
     const auto reader = app.selectedNode();
     if (reader.isEmpty())
         throw std::runtime_error("assist reader node is missing: " + app.diagnostic().toStdString());
-    require(app.setParameter("mode", false, "directory"), "assist reader mode was rejected");
-    require(app.setParameter("read_mode", false, "all"), "assist batch mode was rejected");
+    require(app.setParameter("count", false, "3"), "assist count was rejected");
     require(app.setParameterPath("path", false, QUrl::fromLocalFile(images)), "assist image path was rejected");
     settle();
 

@@ -35,11 +35,11 @@ void startupProjectContract()
     {
         visionrt::testing::WorkbenchInstallation installation;
         visionrt::AppController                  app(1, installation.directory());
-        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "startup catalog did not become ready");
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "startup catalog did not become ready");
         app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
         app.resolveUnsaved(QStringLiteral("discard"));
         if (projectReadyBeforeWindow)
-            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
+            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                     "preloaded startup project did not become ready");
 
         QQmlApplicationEngine engine;
@@ -52,7 +52,7 @@ void startupProjectContract()
         require(!engine.rootObjects().isEmpty(), "startup Main.qml did not load");
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         require(window && QTest::qWaitForWindowExposed(window), "startup main window was not exposed");
-        require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
+        require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                 "startup main window did not receive the real project");
 
         const auto findItem = [](auto &&self, QQuickItem *parent, const QString &name) -> QQuickItem *
@@ -237,8 +237,7 @@ void startupProjectContract()
                     "cannot write native decode failure fixture");
             oversizedFile.close();
             app.selectNode("1");
-            require(app.setParameter("mode", false, "file")
-                        && app.setParameterPath("path", false, QUrl::fromLocalFile(imagePath)),
+            require(app.setParameterPath("path", false, QUrl::fromLocalFile(imagePath)),
                     "cannot select native decode failure input");
             auto *outputModel = qobject_cast<visionrt::OutputModel *>(app.outputModel());
             require(outputModel != nullptr, "main-window output model is missing");

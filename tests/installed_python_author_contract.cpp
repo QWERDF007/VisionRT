@@ -85,11 +85,8 @@ try
     ProjectEditor editor;
     const auto    flow = editor.project().flows.front().id;
     const auto    reader = editor.addNode(flow, *read, {0, 0});
-    editor.setLiteral(flow, reader, "mode", std::string("file"));
     editor.setLiteral(flow, reader, "path", std::string(imagePath.string()));
-    editor.setLiteral(flow, reader, "color", std::string("gray"));
-    editor.setLiteral(flow, reader, "limit", std::int64_t{0});
-    editor.setLiteral(flow, reader, "max_batch_bytes", std::int64_t{0});
+    editor.setLiteral(flow, reader, "reload", true);
     const auto roiNode = editor.addNode(flow, *roi, {0, 10});
     editor.bindFreeInput(flow, {reader, "images"}, {roiNode, "images"});
     const auto addNode = editor.addNode(flow, *add, {0, 20});
