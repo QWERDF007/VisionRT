@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import VisionRT.Style 1.0
 
 Item {
     id: root

@@ -27,6 +27,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void roiParameterContract()
 {
     using namespace visionrt;
@@ -63,7 +64,7 @@ void roiParameterContract()
           "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float64).tolist()]]}\n");
     write("tools/custom/roi/source.json",
           R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.roi.source",
   "display_name": "ROI图像源",
   "version": "1.0.0",
@@ -88,7 +89,7 @@ void roiParameterContract()
           "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float64).tolist()]]}\n");
     write("tools/custom/roi/editor.json",
           R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.roi.editor",
   "display_name": "ROI编辑",
   "version": "1.0.0",
@@ -149,7 +150,6 @@ void roiParameterContract()
     quickui::QuiColor::getInstance()->setPrimary(Theme::instance()->surfaceBg());
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\nItem { id: root; width: 480; height: 36; "
@@ -185,17 +185,24 @@ void roiParameterContract()
         return image.pixelColor(qFloor(point.x()), qFloor(point.y()));
     };
     require(QTest::qWaitFor([&] { return editor->height() > 0; }, 1000), "ROI row has no layout");
-    QQuickItem *action = nullptr;
-    QList<QQuickItem *> pending{editor};
-    while (!pending.isEmpty())
+    const auto findAction = [&]
     {
-        auto *item = pending.takeLast();
-        if ((item->property("text").toString() == QStringLiteral("编辑输入 ROI")
-             || item->property("text").toString() == QStringLiteral("画矩形"))
-            && item->metaObject()->indexOfSignal("clicked()") >= 0) action = item;
-        pending.append(item->childItems());
-    }
-    require(action && action->isEnabled(), "ROI action is missing from the parameter row");
+        QQuickItem *found   = nullptr;
+        QList<QQuickItem *> pending{editor};
+        while (!pending.isEmpty())
+        {
+            auto *item = pending.takeLast();
+            if ((item->property("text").toString() == QStringLiteral("编辑输入 ROI")
+                 || item->property("text").toString() == QStringLiteral("画矩形"))
+                && item->metaObject()->indexOfSignal("clicked()") >= 0)
+                found = item;
+            pending.append(item->childItems());
+        }
+        return found;
+    };
+    QQuickItem *action = nullptr;
+    require(QTest::qWaitFor([&] { return (action = findAction()) != nullptr && action->isEnabled(); }, 2000),
+            "ROI action is missing from the parameter row");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                       action->mapToScene(QPointF(action->width() / 2, action->height() / 2)).toPoint());
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
@@ -462,7 +469,9 @@ void roiParameterContract()
             "Numeric commit did not update the same ROI session as the image editor");
     require(rectLiteral() != originalRectangle && app.dirty(), "Numeric ROI edit wrote the project directly");
     require(app.applyRoi(), "Numeric Apply succeeded");
-    require(app.setParameter("rect", false, originalRectangle) && app.save(project), "Rect fixture could not reset");
+    require(app.setParameter("rect", false, originalRectangle), "Rect fixture reset was rejected");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect fixture reset did not settle");
+    require(app.save(project), "Rect fixture could not reset");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect fixture reset did not settle");
     require(app.editRoi("rect", false), "Rect could not reopen after numeric Apply");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
@@ -539,6 +548,7 @@ void roiParameterContract()
         throw std::runtime_error((QStringLiteral("Rect redraw/batch switch geometry=%1, gestures=%2")
                                      .arg(rectLiteral()).arg(rectangleGestures.count())).toStdString());
     require(app.bindInput(app.portContext("rect"), source, "rect"), "Scalar Rect could not bind to its upstream output");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Bound Rect baseline did not settle");
     require(app.save(project) && !app.dirty(), "Bound Rect baseline could not be saved");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Bound Rect baseline did not settle");
     const auto boundRectangle = rectLiteral();
@@ -620,18 +630,19 @@ void roiParameterContract()
             "Image-free draft could change");
     require(app.dirty(), "Image-free numeric edit directly updated project");
     app.endRoiPreview();
-    require(app.setParameter("rect", false, "[]") && app.save(project),
-            "Empty ROI rectangle baseline could not be saved");
+    require(app.setParameter("rect", false, "[]"), "Empty ROI rectangle baseline was rejected");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty ROI rectangle baseline did not settle");
+    require(app.save(project), "Empty ROI rectangle baseline could not be saved");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty ROI rectangle save did not settle");
     require(app.editRoi("rect", false), "Empty ROI rectangle could not enter image-free numeric editing");
-    QQuickItem *createRectangle = nullptr;
-    pending = {panel};
-    while (!pending.isEmpty())
+    QQuickItem *createRectangle  = nullptr;
+    QList<QQuickItem *> pendingItems{panel};
+    while (!pendingItems.isEmpty())
     {
-        auto *item = pending.takeLast();
+        auto *item = pendingItems.takeLast();
         if (item->isVisible() && item->property("text").toString() == QStringLiteral("新建矩形"))
             createRectangle = item;
-        pending.append(item->childItems());
+        pendingItems.append(item->childItems());
     }
     require(createRectangle == nullptr, "Empty ROI rectangle must not offer 新建矩形 button");
     require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {0, 0, 8, 6, 30}), "Set ROI rectangle");
@@ -733,9 +744,10 @@ void roiParameterContract()
     require(!app.setRoiRectangle(beforeExecutionSession, {99, 99, 1, 1, 0})
                 && app.dirty() && rectLiteral() != currentRect,
             "A pre-execution gesture or numeric callback changed the saved rectangle after new results");
-    require(app.setParameter("rect", false, "[]") && app.save(project) && !app.dirty(),
+    require(app.setParameter("rect", false, "[]"), "Rect clear was rejected");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect clear did not settle");
+    require(app.save(project) && !app.dirty(),
             "Empty rectangle mode baseline could not be saved");
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty rectangle baseline did not settle");
     const auto missingRectangle = rectLiteral();
     require(app.editRoi("rect", false), "Empty rectangle could not enter image drawing mode");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
@@ -843,7 +855,11 @@ void roiParameterContract()
     {
         if (copyUpstream)
         {
-            require(app.bindInput(app.portContext("rect"), source, "rect") && app.save(project) && !app.dirty(),
+            require(app.bindInput(app.portContext("rect"), source, "rect"),
+                    "Window gesture test could not bind an upstream rectangle");
+            require(QTest::qWaitFor([&] { return !app.busy(); }, 5000),
+                    "Window gesture upstream binding did not settle");
+            require(app.save(project) && !app.dirty(),
                     "Window gesture test could not save an upstream rectangle binding");
         }
         else

@@ -141,8 +141,8 @@ struct Lines
     std::vector<QPointF> triangles;
     double               halfWidth;
 
-    explicit Lines(double scale)
-        : halfWidth(0.9 / scale)
+    Lines(double scale, double strokeWidth)
+        : halfWidth(strokeWidth * 0.5 / scale)
     {
     }
 
@@ -551,6 +551,51 @@ void ImageViewport::selectRoi(int index)
 bool ImageViewport::canEdit() const
 {
     return editing() && !readOnly_ && hasImage() && isEnabled();
+}
+
+void ImageViewport::setInputRoiColor(const QColor &color)
+{
+    if (inputRoiColor_ == color)
+        return;
+    inputRoiColor_ = color;
+    emit styleChanged();
+    overlaysUpdated();
+}
+
+void ImageViewport::setOutputRoiColor(const QColor &color)
+{
+    if (outputRoiColor_ == color)
+        return;
+    outputRoiColor_ = color;
+    emit styleChanged();
+    overlaysUpdated();
+}
+
+void ImageViewport::setAssistRoiColor(const QColor &color)
+{
+    if (assistRoiColor_ == color)
+        return;
+    assistRoiColor_ = color;
+    emit styleChanged();
+    overlaysUpdated();
+}
+
+void ImageViewport::setRoiStrokeWidth(qreal width)
+{
+    if (width <= 0.0 || qFuzzyCompare(roiStrokeWidth_, width))
+        return;
+    roiStrokeWidth_ = width;
+    emit styleChanged();
+    overlaysUpdated();
+}
+
+void ImageViewport::setRoiHandleSize(qreal size)
+{
+    if (size <= 0.0 || qFuzzyCompare(roiHandleSize_, size))
+        return;
+    roiHandleSize_ = size;
+    emit styleChanged();
+    overlaysUpdated();
 }
 
 void ImageViewport::overlaysUpdated()
@@ -1097,7 +1142,8 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->overlays->removeChildNode(child);
             delete child;
         }
-        Lines input(scale_), output(scale_), edit(scale_), assist(scale_);
+        Lines input(scale_, roiStrokeWidth_), output(scale_, roiStrokeWidth_), edit(scale_, roiStrokeWidth_),
+            assist(scale_, roiStrokeWidth_);
         for (const auto &roi : inputs_) input.roi(roi);
         for (const auto &roi : outputs_) output.roi(roi);
         for (const auto &group : assistPreview_)
@@ -1116,23 +1162,23 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         {
             if (drawShape_ == 4)
                 edit.path(vertices_, false);
-            for (const auto &point : vertices_) edit.square(point, 2.5 / scale_);
+            for (const auto &point : vertices_) edit.square(point, roiHandleSize_ * 0.7 / scale_);
         }
         if (editing() && !readOnly_ && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
         {
             const auto &roi      = draft_ ? *draft_ : editable_[selected_];
             const auto  controls = handles(roi);
-            for (const auto &point : controls) edit.square(point, 3.5 / scale_);
+            for (const auto &point : controls) edit.square(point, roiHandleSize_ / scale_);
             if (roiKind(roi) == RoiKind::Rectangle)
                 edit.segment((controls[0] + controls[1]) / 2, controls[4]);
         }
-        if (auto *geometry = input.node(window(), QColor(255, 220, 0)))
+        if (auto *geometry = input.node(window(), inputRoiColor_))
             node->overlays->appendChildNode(geometry);
-        if (auto *geometry = output.node(window(), QColor(0, 120, 255)))
+        if (auto *geometry = output.node(window(), outputRoiColor_))
             node->overlays->appendChildNode(geometry);
-        if (auto *geometry = assist.node(window(), QColor(0, 190, 190)))
+        if (auto *geometry = assist.node(window(), assistRoiColor_))
             node->overlays->appendChildNode(geometry);
-        if (auto *geometry = edit.node(window(), QColor(255, 220, 0)))
+        if (auto *geometry = edit.node(window(), inputRoiColor_))
             node->overlays->appendChildNode(geometry);
         node->overlayRevision = overlayRevision_;
         node->markDirty(QSGNode::DirtyMatrix);

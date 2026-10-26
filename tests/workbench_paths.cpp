@@ -19,6 +19,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void pathEditorsContract()
 {
     const auto require = [](bool condition, const char *message)
@@ -54,7 +55,7 @@ void pathEditorsContract()
           "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.paths",
   "display_name": "路径测试",
   "version": "1.0.0",
@@ -86,7 +87,6 @@ void pathEditorsContract()
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"

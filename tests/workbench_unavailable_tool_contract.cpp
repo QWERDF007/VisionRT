@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <quickui/Color.h>
 
+
 using namespace visionrt;
 
 namespace {
@@ -108,6 +109,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    registerStyleModule();
     testing::WorkbenchInstallation installation;
     const auto package = std::filesystem::path(installation.directory().toStdWString()) / "tools-package";
     const auto script  = package / "python/custom/examples/roi_geometry/tool.py";
@@ -170,7 +172,6 @@ try
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &controller);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine,
                             QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ToolLibrary.qml")));
     std::unique_ptr<QObject> owner(component.create());

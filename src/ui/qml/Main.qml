@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Window
 import quickui
+import VisionRT.Style 1.0
 
 ApplicationWindow {
     id: window

@@ -70,7 +70,9 @@ void AppController::Impl::beginDrain(std::function<void()> continuation)
         drainContinuation = std::move(continuation);
         return;
     }
-    // A preview must release its image owner before the runtime mutates anything.
+    // A preview must stop touching the data the caller is about to mutate. Only an invalidation
+    // belongs here: the persistent helper is released by the management operations that really end
+    // its session (reset, catalog reload, close), otherwise every drain would tear it down again.
     if (assist)
         assist->invalidate();
     // Invalidate before waiting so a completed-but-not-yet-delivered conversion can not touch the
@@ -184,29 +186,47 @@ void AppController::Impl::updateReadback()
     }
     if (!readsAllowed())
         return;
-    while (!textTask.valid() && !readRequests.empty())
+    // Text reads need the publication to stay valid, so they are served first; deferred project
+    // saves belong to the end of the run and are flushed there.
+    while (!textTask.valid())
     {
-        auto request = std::move(readRequests.front());
-        readRequests.pop_front();
-        std::visit(
-            [&](const auto &intent)
-            {
-                using Request = std::decay_t<decltype(intent)>;
-                if constexpr (std::is_same_v<Request, TextRequest>)
-                {
-                    const auto current = q->portContext(intent.context.value("port").toString(), true);
-                    if (intent.context == textTarget(current))
-                        q->requestOutputText(current, intent.copy, intent.diagnostic);
-                }
-                else if (intent.project == projectEpoch)
-                    q->save(intent.path);
-            },
-            request);
+        const auto textRequest
+            = std::find_if(readRequests.begin(), readRequests.end(),
+                           [](const auto &request) { return std::holds_alternative<TextRequest>(request); });
+        if (textRequest == readRequests.end())
+            break;
+        auto request = std::move(*textRequest);
+        readRequests.erase(textRequest);
+        const auto &intent  = std::get<TextRequest>(request);
+        const auto  current = q->portContext(intent.context.value("port").toString(), true);
+        if (intent.context == textTarget(current))
+            q->requestOutputText(current, intent.copy, intent.diagnostic);
     }
-    if (readback && !textTask.valid() && readRequests.empty() && !converter.isBusy() && !converter.hasPending())
+    const bool textQueued
+        = std::any_of(readRequests.begin(), readRequests.end(),
+                      [](const auto &request) { return std::holds_alternative<TextRequest>(request); });
+    if (readback && !textTask.valid() && !textQueued && !converter.isBusy() && !converter.hasPending())
     {
         if (runtime->acknowledgeReadback(*readback))
             readback.reset();
+    }
+}
+
+void AppController::Impl::flushDeferredSaves()
+{
+    for (auto it = readRequests.begin(); it != readRequests.end();)
+    {
+        const auto *save = std::get_if<SaveRequest>(&*it);
+        if (!save)
+        {
+            ++it;
+            continue;
+        }
+        const auto path = save->path;
+        const bool current = save->project == projectEpoch;
+        it = readRequests.erase(it);
+        if (current)
+            q->save(path);
     }
 }
 

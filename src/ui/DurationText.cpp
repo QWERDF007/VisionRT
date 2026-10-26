@@ -26,8 +26,16 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
     QString prepareStr = t.prepareMeasured ? durationText(t.prepareMs) : QStringLiteral("—");
     QString initStr = t.initMeasured ? durationText(t.initMs) : QStringLiteral("—");
     QString validateStr = t.validateMeasured ? durationText(t.validateMs) : QStringLiteral("—");
-    QString preprocessStr = QStringLiteral("—");
-    QString postprocessStr = QStringLiteral("—");
+
+    // Tooltip phases. Python bridging is counted once: the GIL wait and input mapping are input
+    // preparation, the output copy belongs to post-processing, and the call itself is the operator
+    // time. No phase is guessed from a total minus the operator time.
+    const bool preprocessMeasured = t.prepareMeasured || t.initMeasured || t.pythonInputMs > 0.0;
+    const bool postprocessMeasured = t.validateMeasured || t.pythonOutputMs > 0.0;
+    const auto preprocessMs        = t.prepareMs + t.initMs + t.waitGilMs + t.pythonInputMs;
+    const auto postprocessMs       = t.validateMs + t.pythonOutputMs;
+    QString    preprocessStr  = preprocessMeasured ? durationText(preprocessMs) : QStringLiteral("—");
+    QString    postprocessStr = postprocessMeasured ? durationText(postprocessMs) : QStringLiteral("—");
 
     return {totalStr, toolCallStr, preprocessStr, postprocessStr, prepareStr, initStr, validateStr};
 }

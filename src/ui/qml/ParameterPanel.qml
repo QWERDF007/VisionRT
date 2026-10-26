@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 QuiSplitView {
     id: root

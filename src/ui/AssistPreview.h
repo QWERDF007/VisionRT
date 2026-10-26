@@ -7,6 +7,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <atomic>
 #include <condition_variable>
 #include <filesystem>
 #include <memory>
@@ -78,12 +79,17 @@ public:
     // its result is discarded.
     void cancel();
     void invalidate();
+    // Queues an asynchronous release of the persistent helper instance. The GUI keeps its event
+    // loop; busy() stays true until the worker acknowledges with sessionReleased().
+    void releaseSession();
     bool busy() const;
     void shutdown();
 
 signals:
     void outcomeReady(const visionrt::AssistOutcome &outcome);
     void busyChanged();
+    // Emitted on the GUI thread after the worker actually destroyed the instance.
+    void sessionReleased();
 
 private:
     struct Session
@@ -125,6 +131,7 @@ private:
     bool                           inFlight_       = false;
     bool                           inFlightLearn_  = false;
     bool                           shuttingDown_   = false;
+    std::atomic<bool>              releaseRequested_{false};
     std::jthread                   worker_;
 };
 } // namespace visionrt

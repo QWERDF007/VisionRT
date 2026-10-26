@@ -336,7 +336,8 @@ QVariantList AppController::parameters() const
             {           "step",                                                                QString{}},
             {       "decimals",                                                                       -1},
             {   "canIncrement",                                                                    false},
-            {   "canDecrement",                                                                    false}
+            {   "canDecrement",                                                                    false},
+            {      "inputMode",                                                                    mode}
         };
         if (type.type == Type::Int && (initialization || mode == "literal"))
         {
@@ -382,7 +383,7 @@ QVariantList AppController::parameters() const
     };
 
     auto addMeta = [&](const QString &id, const QString &name, const QString &editorKind,
-                       const QString &displayText, bool isSingle = false)
+                       const QString &displayText, bool isSingle = false, const QVariantMap &extras = {})
     {
         QVariantMap row{
             {             "id",                                                                    id},
@@ -409,8 +410,11 @@ QVariantList AppController::parameters() const
             {           "step",                                                             QString{}},
             {       "decimals",                                                                    -1},
             {   "canIncrement",                                                                 false},
-            {   "canDecrement",                                                                 false}
+            {   "canDecrement",                                                                 false},
+            {      "inputMode",                                                     QStringLiteral("literal")}
         };
+        for (auto entry = extras.begin(); entry != extras.end(); ++entry)
+            row.insert(entry.key(), entry.value());
         result.push_back(row);
     };
 
@@ -425,9 +429,16 @@ QVariantList AppController::parameters() const
             add(port.id, port.type, true, &port);
         }
 
-        // Host metadata rows at top of basic inputs
-        addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
-                executionGuardText(), false);
+        // Explicit execution conditions exist on the logical models only; a fixed
+        // tool exposes its real upstream_status input instead.
+        if (supportsExecutionGuard(tool->nodeModel))
+            addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
+                    executionGuardText(), false,
+                    QVariantMap{{"inputMode", node->executionGuard
+                                                  && node->executionGuard->mode == BindingMode::Upstream
+                                              ? "upstream"
+                                              : "literal"},
+                                {"source", executionGuardText()}});
 
         if (tool->nodeModel == NodeModel::Expression)
         {
@@ -464,8 +475,37 @@ QVariantList AppController::parameters() const
             QString condText;
             if (node->expression && !node->expression->program.empty())
                 condText = workbench::q(node->expression->program[0].expression);
-            addMeta(QStringLiteral("__condition"), QStringLiteral("条件公式"), QStringLiteral("condition"),
-                    condText, true);
+            const bool       upstream = conditionUsesUpstream(*node);
+            const auto       found    = node->inputs.find("condition");
+            const bool       bound    = found != node->inputs.end() && found->second.source.has_value();
+            QVariantMap      extras{{"inputMode", upstream ? "upstream" : "literal"}};
+            if (bound)
+            {
+                const auto &source = *found->second.source;
+                const auto *parent = impl_->findNode(source.node);
+                QString     name   = QString::fromStdString(source.port);
+                if (parent)
+                {
+                    const auto *parentTool = impl_->registry.find(parent->toolId);
+                    if (parentTool)
+                        try
+                        {
+                            const auto contract = nodeContract(*parent, *parentTool);
+                            if (const auto *port = workbench::port(contract.outputs, source.port))
+                                name = workbench::q(port->name);
+                        }
+                        catch (const ContractError &)
+                        {
+                            name = QString::fromStdString(source.port);
+                        }
+                    extras.insert("source", workbench::q(parent->title()) + "-" + name);
+                }
+                extras.insert("sourceNode", QString::number(source.node));
+                extras.insert("sourcePort", workbench::q(source.port));
+            }
+            addMeta(QStringLiteral("__condition"), QStringLiteral("条件公式"),
+                    upstream ? QStringLiteral("condition_upstream") : QStringLiteral("condition"), condText, true,
+                    extras);
         }
         else if (tool->nodeModel == NodeModel::Select)
         {
@@ -479,8 +519,9 @@ QVariantList AppController::parameters() const
     else
     {
         for (const auto &[id, type] : node->signatures.initParams) add(id, type, true, nullptr);
-        addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
-                executionGuardText(), false);
+        if (tool && supportsExecutionGuard(tool->nodeModel))
+            addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
+                    executionGuardText(), false);
         for (const auto &[id, type] : node->signatures.inputs) add(id, type, false, nullptr);
     }
     impl_->parameterRows     = result;

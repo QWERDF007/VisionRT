@@ -35,6 +35,13 @@ class ImageViewport : public QQuickItem
     Q_PROPERTY(int drawShape READ drawShape WRITE setDrawShape NOTIFY drawShapeChanged)
     Q_PROPERTY(int selectedRoi READ selectedRoi NOTIFY selectedRoiChanged)
     Q_PROPERTY(bool assistActive READ assistActive WRITE setAssistActive NOTIFY assistActiveChanged)
+    // Display-only style snapshot pushed from the theme. It never changes ROI geometry, business
+    // coordinates or the rendered image data.
+    Q_PROPERTY(QColor inputRoiColor READ inputRoiColor WRITE setInputRoiColor NOTIFY styleChanged)
+    Q_PROPERTY(QColor outputRoiColor READ outputRoiColor WRITE setOutputRoiColor NOTIFY styleChanged)
+    Q_PROPERTY(QColor assistRoiColor READ assistRoiColor WRITE setAssistRoiColor NOTIFY styleChanged)
+    Q_PROPERTY(qreal roiStrokeWidth READ roiStrokeWidth WRITE setRoiStrokeWidth NOTIFY styleChanged)
+    Q_PROPERTY(qreal roiHandleSize READ roiHandleSize WRITE setRoiHandleSize NOTIFY styleChanged)
 public:
     enum ViewMode
     {
@@ -99,6 +106,17 @@ public:
 
     void setReadOnly(bool value);
 
+    QColor inputRoiColor() const { return inputRoiColor_; }
+    QColor outputRoiColor() const { return outputRoiColor_; }
+    QColor assistRoiColor() const { return assistRoiColor_; }
+    qreal  roiStrokeWidth() const { return roiStrokeWidth_; }
+    qreal  roiHandleSize() const { return roiHandleSize_; }
+    void   setInputRoiColor(const QColor &color);
+    void   setOutputRoiColor(const QColor &color);
+    void   setAssistRoiColor(const QColor &color);
+    void   setRoiStrokeWidth(qreal width);
+    void   setRoiHandleSize(qreal size);
+
     int drawShape() const noexcept
     {
         return drawShape_;
@@ -143,6 +161,7 @@ public:
     Q_INVOKABLE void deleteSelectedRoi();
 
 signals:
+    void styleChanged();
     void imageChanged();
     void statusTextChanged();
     void transformChanged();
@@ -225,6 +244,11 @@ private:
     std::optional<RoiEditTarget>      target_;
     bool                                       singleRectangle_ = false;
     bool                              readOnly_  = true;
+    QColor                            inputRoiColor_{255, 220, 0};
+    QColor                            outputRoiColor_{0, 120, 255};
+    QColor                            assistRoiColor_{0, 190, 190};
+    qreal                             roiStrokeWidth_ = 1.8;
+    qreal                             roiHandleSize_  = 3.5;
     int                               drawShape_ = 0;
     int                               selected_  = -1;
     Gesture                           gesture_   = Gesture::None;

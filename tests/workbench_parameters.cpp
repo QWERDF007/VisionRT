@@ -21,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void parameterStatesContract(visionrt::AppController &app);
 
 void parameterEditorsContract()
@@ -56,7 +57,7 @@ void parameterEditorsContract()
           "'ratio': inputs['ratio'], 'count': inputs['count']}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.parameters",
   "display_name": "参数测试",
   "version": "1.0.0",
@@ -97,7 +98,6 @@ void parameterEditorsContract()
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"

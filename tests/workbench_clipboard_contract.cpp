@@ -17,6 +17,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 using namespace visionrt;
 
 namespace {
@@ -80,6 +81,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    registerStyleModule();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());
@@ -88,7 +90,6 @@ try
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine,
                             QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/FlowCanvas.qml")));
     std::unique_ptr<QObject> owner(component.create());

@@ -22,6 +22,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 void startupProjectContract()
 {
     const auto require = [](bool condition, const std::string &message)
@@ -30,7 +31,7 @@ void startupProjectContract()
             throw std::runtime_error(message);
     };
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", visionrt::Theme::instance());
+    visionrt::registerStyleModule();
     for (const bool projectReadyBeforeWindow : {false, true})
     {
         visionrt::testing::WorkbenchInstallation installation;
@@ -45,7 +46,6 @@ void startupProjectContract()
         QQmlApplicationEngine engine;
         engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
         engine.rootContext()->setContextProperty("app", &app);
-        engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
         engine.rootContext()->setContextProperty("demoMenu", false);
         engine.rootContext()->setContextProperty("demoSelect", false);
         engine.load(QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/Main.qml")));
@@ -159,12 +159,17 @@ void startupProjectContract()
             warningProject.close();
             app.requestOpen(warningPath);
             app.resolveUnsaved(QStringLiteral("discard"));
-            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 3000),
+            const auto warningDiagnostic = [&]
+            {
+                for (const auto &entry : QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array())
+                    if (entry.toObject().value("storage_code") == "range_warning")
+                        return entry.toObject();
+                return QJsonObject{};
+            };
+            require(QTest::qWaitFor(
+                        [&] { return !app.busy() && app.nodes().size() == 5 && !warningDiagnostic().isEmpty(); }, 5000),
                     "project warning load did not complete");
-            QJsonObject rangeWarning;
-            for (const auto &entry : QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array())
-                if (entry.toObject().value("storage_code") == "range_warning")
-                    rangeWarning = entry.toObject();
+            const auto rangeWarning = warningDiagnostic();
             require(rangeWarning.value("flow_id") == "flow_1" && rangeWarning.value("node") == "4"
                         && rangeWarning.value("field") == "kernel"
                         && rangeWarning.value("message").toString().contains(QStringLiteral("已保留原值"))

@@ -22,6 +22,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 void cancellationWindowContract()
 {
     using namespace visionrt;
@@ -112,7 +113,6 @@ def tail(inputs):
     project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.vrt.json";
     require(ProjectStorage(definitions).save(project).empty(), "Cannot save cancellation project");
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    qmlRegisterSingletonInstance<Theme>("VisionRT", 1, 0, "Theme", Theme::instance());
     {
         AppController app(2, root);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Cancellation catalog did not become ready");
@@ -124,7 +124,6 @@ def tail(inputs):
         QQmlApplicationEngine engine;
         engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
         engine.rootContext()->setContextProperty("app", &app);
-        engine.rootContext()->setContextProperty("Theme", Theme::instance());
         engine.rootContext()->setContextProperty("demoMenu", false);
         engine.rootContext()->setContextProperty("demoSelect", false);
         engine.load(QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/Main.qml")));

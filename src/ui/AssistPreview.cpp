@@ -115,9 +115,25 @@ void AssistPreview::invalidate()
     cancel();
 }
 
+void AssistPreview::releaseSession()
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    hover_.stop();
+    hoverRequest_.reset();
+    pending_.reset();
+    ++epoch_;
+    {
+        std::lock_guard lock(mutex_);
+        releaseRequested_.store(true, std::memory_order_release);
+    }
+    changed_.notify_all();
+    notifyBusy();
+}
+
 bool AssistPreview::busy() const
 {
-    return inFlight_ || pending_.has_value() || hover_.isActive();
+    return inFlight_ || pending_.has_value() || hover_.isActive()
+        || releaseRequested_.load(std::memory_order_acquire);
 }
 
 void AssistPreview::shutdown()
@@ -133,6 +149,7 @@ void AssistPreview::shutdown()
         std::lock_guard lock(mutex_);
         work_.reset();
     }
+    releaseRequested_.store(false, std::memory_order_release);
     worker_.request_stop();
     changed_.notify_all();
     if (worker_.joinable())
@@ -291,12 +308,30 @@ void AssistPreview::workerLoop(std::stop_token stop)
     while (!stop.stop_requested())
     {
         std::optional<Job> job;
+        bool               release = false;
         {
             std::unique_lock lock(mutex_);
-            if (!changed_.wait(lock, stop, [this] { return work_.has_value(); }))
+            if (!changed_.wait(lock, stop,
+                               [this]
+                               {
+                                   return work_.has_value()
+                                       || releaseRequested_.load(std::memory_order_acquire);
+                               }))
                 break;
-            job = std::move(work_);
-            work_.reset();
+            if (releaseRequested_.exchange(false, std::memory_order_acq_rel))
+                release = true;
+            else
+            {
+                job = std::move(work_);
+                work_.reset();
+            }
+        }
+        if (release)
+        {
+            releaseInstance();
+            QMetaObject::invokeMethod(this, [this] { Q_EMIT sessionReleased(); }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(this, [this] { notifyBusy(); }, Qt::QueuedConnection);
+            continue;
         }
         auto outcome = execute(job->session, job->request);
         QMetaObject::invokeMethod(

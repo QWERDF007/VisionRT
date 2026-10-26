@@ -2,12 +2,14 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 Item {
     id: root
 
     property alias text: input.text
     property alias inputItem: input
+    property alias font: input.font
     property string placeholderText: ""
     property bool readOnly: false
     property bool invalid: false
@@ -53,10 +55,10 @@ Item {
                     leftPadding: 8
                     rightPadding: root.actionIcon > 0 ? 6 : 4
                     verticalAlignment: Text.AlignVCenter
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.paramEditorFontSize })
-                    color: !root.enabled ? QuiColor.FontCaption : root.invalid ? QuiColor.Error : QuiColor.FontPrimary
+                    font: Theme.bodyFont
+                    color: !root.enabled ? Theme.disabledText : root.invalid ? Theme.error : Theme.textPrimary
                     selectionColor: Theme.highlight
-                    selectedTextColor: "#ffffff"
+                    selectedTextColor: Theme.surfaceBg
                     selectByMouse: true
                     readOnly: root.readOnly
                     enabled: root.enabled

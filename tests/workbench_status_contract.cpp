@@ -20,6 +20,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 using namespace visionrt;
 
 namespace {
@@ -46,6 +47,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    registerStyleModule();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     const auto                     root  = installation.directory();
@@ -93,7 +95,6 @@ def run(inputs):
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine,
                             QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/FlowCanvas.qml")));
     std::unique_ptr<QObject> owner(component.create());
@@ -223,7 +224,8 @@ def run(inputs):
     require(!gate.isEmpty(), "gate node is missing");
     require(app.setParameter("mode", false, "gate_false"), "gate node could not produce a false flag");
     idle();
-    app.addNode("test.status", 4, 8);
+    // Execution conditions belong to the logical node models only.
+    app.addNode("visiontools.logic.expression", 4, 8);
     idle();
     const auto gated = app.selectedNode();
     require(!gated.isEmpty() && app.applyExecutionGuard(gated, gate, "flag"), "gate guard could not be applied");

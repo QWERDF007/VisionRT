@@ -245,6 +245,7 @@ try
     require(QTest::qWaitFor([&] { return app.dirty(); }, 10000), "the aligned click was not committed");
     stable();
     require(app.save(root + "/assist.json"), "aligned assist project could not be saved");
+    stable();
     const auto alignedGroups = roiGroups(root + "/assist.json", circle);
     require(alignedGroups.at(0).toArray().size() == 1, "the aligned proposal replaced the wrong group");
     const auto aligned = recordCenter(alignedGroups.at(0).toArray().at(0).toArray());
@@ -252,7 +253,8 @@ try
             "the proposal was not inverse-transformed into reference coordinates");
 
     // Editing a parameter invalidates the preview that was learned from the old configuration.
-    require(app.assistHover(160.0, 120.0), "hover for the staleness check was rejected");
+    require(app.assistHover(160.0, 120.0),
+            ("hover for the staleness check was rejected: " + app.assistHint()).toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate for the staleness check");
     require(app.setParameter("search_half_width", false, "6"), "parameter edit was rejected");

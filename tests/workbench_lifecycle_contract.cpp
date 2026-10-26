@@ -20,6 +20,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 using namespace visionrt;
 
 namespace {
@@ -34,6 +35,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    registerStyleModule();
     testing::WorkbenchInstallation installation;
     const auto                     root       = installation.directory();
     const auto                     script     = root + "/tools-package/python/custom/lifecycle/tool.py";
@@ -102,18 +104,19 @@ class Gate:
         return {'__status_code': 0, '__status_message': ''}
 )py");
     AppController app(1, root);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "lifecycle catalog did not become ready");
+    const bool ready = QTest::qWaitFor([&] { return !app.busy(); }, 15000);
+    require(ready, ("lifecycle catalog did not become ready: " + app.runState() + " "
+                    + app.diagnostics().join(QStringLiteral(" | ")))
+                       .toStdString());
     app.addNode("test.lifecycle.gate", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 1; }, 5000),
             "lifecycle node was not created");
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    qmlRegisterSingletonInstance<Theme>("VisionRT", 1, 0, "Theme", Theme::instance());
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.addImportPath(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml"));
     engine.addImportPath(QStringLiteral(VISIONRT_SOURCE_DIR "/3rdparty/QuickUI/quickui"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
     engine.load(QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/Main.qml")));

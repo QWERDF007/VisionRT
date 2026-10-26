@@ -238,6 +238,7 @@ void pendingContract()
 #include <chrono>
 #include <thread>
 
+
 void durationTextContract()
 {
     require(durationText(std::nullopt) == QStringLiteral("—"), "missing measurement must be unavailable");
@@ -279,12 +280,19 @@ void durationTextContract()
     require(called.prepare == QStringLiteral("27 ms") && called.init == QStringLiteral("31 ms")
                 && called.validate == QStringLiteral("43 ms"),
             "measured framework stages did not display real values");
+    // The tooltip has exactly three rows: preparation and post-processing aggregate the measured
+    // phases; the operator row is the tool call itself.
+    require(called.preprocess == QStringLiteral("58 ms") && called.postprocess == QStringLiteral("43 ms"),
+            "tooltip phases did not aggregate the measured preparation/post-processing");
     const std::pair<double, QString> measurements[] = {
         {0.0, QStringLiteral("0 ms")}, {0.005, QStringLiteral("<0.01 ms")}, {1.1, QStringLiteral("1.1 ms")},
         {-1.0, QStringLiteral("—")},
         {std::numeric_limits<double>::quiet_NaN(), QStringLiteral("—")},
         {std::numeric_limits<double>::infinity(), QStringLiteral("—")}
     };
+    snapshot.timing.prepareMeasured = false;
+    snapshot.timing.initMeasured    = false;
+    snapshot.timing.validateMeasured = false;
     for (const auto &[value, expected] : measurements)
     {
         snapshot.timing.totalMs = value;
@@ -293,7 +301,7 @@ void durationTextContract()
         require(measured.total == expected && measured.toolCall == expected,
                 "controlled snapshot lost its measured zero, small value or invalid metric semantics");
         require(measured.preprocess == QStringLiteral("—") && measured.postprocess == QStringLiteral("—"),
-                "controlled snapshot fabricated independent algorithm measurements");
+                "unmeasured phases must stay unavailable instead of fabricating a zero");
     }
     const NodeSnapshot *previousSnapshots[] = {nullptr, &snapshot};
     for (const auto *previous : previousSnapshots)
@@ -330,7 +338,7 @@ void nodeDiagnosticsContract()
     {
         jsonFile.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.diag.python",
   "display_name": "诊断测试",
   "version": "1.0.0",
@@ -351,7 +359,7 @@ void nodeDiagnosticsContract()
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.diag.fail",
   "display_name": "诊断失败",
   "version": "1.0.0",
@@ -370,7 +378,7 @@ void nodeDiagnosticsContract()
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.diag.unfulfilled",
   "display_name": "未提供实现测试",
   "version": "1.0.0",
@@ -514,10 +522,12 @@ void nodeDiagnosticsContract()
             "executed node total timing is not measured");
     require(executedMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
             "executed node operator timing is not measured");
-    require(executedMap.value("timingPreprocessText").toString() == QStringLiteral("—"),
-            "executed node fabricates preprocess timing");
-    require(executedMap.value("timingPostprocessText").toString() == QStringLiteral("—"),
-            "executed node fabricates postprocess timing");
+    // The executed node measured its preparation and result validation, so the two aggregate
+    // rows must show real values instead of the unavailable placeholder.
+    require(executedMap.value("timingPreprocessText").toString().endsWith(QStringLiteral(" ms")),
+            "executed node lost its measured preprocess timing");
+    require(executedMap.value("timingPostprocessText").toString().endsWith(QStringLiteral(" ms")),
+            "executed node lost its measured postprocess timing");
 
     const auto unavailableMap = executedNodes.at(1).toMap();
     require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
@@ -596,7 +606,7 @@ void mainQmlContract(double scale)
     {
         sleepJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.plugin.sleep",
   "display_name": "Plugin Sleep",
   "version": "1.0.0",
@@ -615,7 +625,7 @@ void mainQmlContract(double scale)
     {
         counterJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "Plugin Counter",
   "version": "1.0.0",
@@ -636,7 +646,7 @@ void mainQmlContract(double scale)
     {
         failJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.plugin.fail_init",
   "display_name": "Fail Init Tool",
   "version": "1.0.0",
@@ -656,8 +666,7 @@ void mainQmlContract(double scale)
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto *theme = visionrt::Theme::instance();
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+    visionrt::registerStyleModule();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -673,7 +682,6 @@ void mainQmlContract(double scale)
 #endif
 
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", theme);
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
@@ -957,7 +965,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.legacy.func",
   "display_name": "遗留函数",
   "version": "1.0.0",
@@ -980,7 +988,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.legacy.python",
   "display_name": "遗留脚本",
   "version": "1.0.0",
@@ -1020,7 +1028,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "计数器插件",
   "version": "1.0.0",
@@ -1043,7 +1051,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -1075,7 +1083,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.user.pythonA",
   "display_name": "用户脚本A",
   "version": "1.0.0",
@@ -1098,7 +1106,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         recvJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.custom.receiver",
   "display_name": "动态接收器",
   "version": "1.0.0",
@@ -1127,7 +1135,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.unindexed.tool",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -1400,7 +1408,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 3,
+  "schema_version": 4,
   "tool_id": "test.custom.renamed_recv",
   "display_name": "改名接收器",
   "version": "1.0.0",
@@ -1545,8 +1553,7 @@ void shortWindowContract()
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto *theme = visionrt::Theme::instance();
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+    visionrt::registerStyleModule();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1562,7 +1569,6 @@ void shortWindowContract()
 #endif
 
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", theme);
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
@@ -1617,6 +1623,7 @@ void shortWindowContract()
 
 int main(int argc, char **argv)
 {
+    visionrt::registerStyleModule();
     if (argc >= 2
         && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
             || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"

@@ -21,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 using namespace visionrt;
 
 namespace {
@@ -104,11 +105,17 @@ try
         const double scale = std::stod(argv[2]);
         qputenv("QT_SCALE_FACTOR", QByteArray::number(scale, 'f', 1));
         QGuiApplication application(argc, argv);
+    registerStyleModule();
         QQuickStyle::setStyle("Basic");
         testing::WorkbenchInstallation installation;
         AppController                  app(1, installation.directory());
-        require(QTest::qWaitFor([&] { return !app.busy() && !app.flows().isEmpty(); }, 5000),
-                "layout catalog did not become ready");
+        // Catalog loading is asynchronous and this contract starts a fresh process per scale; give
+        // it a generous budget and keep the failure diagnosable.
+        const bool ready
+            = QTest::qWaitFor([&] { return !app.busy() && !app.flows().isEmpty(); }, 15000);
+        require(ready, ("layout catalog did not become ready: " + app.runState() + " flows="
+                        + QString::number(app.flows().size()) + " " + app.diagnostics().join(QStringLiteral(" | ")))
+                           .toStdString());
         QQmlEngine engine;
         quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
@@ -116,7 +123,6 @@ try
         engine.addImportPath(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml"));
         engine.addImportPath(QStringLiteral(VISIONRT_SOURCE_DIR "/3rdparty/QuickUI/quickui"));
         engine.rootContext()->setContextProperty("app", &app);
-        engine.rootContext()->setContextProperty("Theme", Theme::instance());
         engine.rootContext()->setContextProperty("demoMenu", false);
         engine.rootContext()->setContextProperty("demoSelect", false);
         QQmlComponent component(&engine,

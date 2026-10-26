@@ -1,5 +1,7 @@
 #include "ui/AppController_p.h"
+#include "ui/UiPreferences.h"
 
+#include "core/InputNormalizer.h"
 #include "core/ToolValueValidation.h"
 
 #include <algorithm>
@@ -134,11 +136,12 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     if (!node || !tool)
         return reject(QStringLiteral("请先选择工具节点"));
     if (!tool->interaction)
-        return reject({});
-    if (state != RuntimeState::Idle || !readsAllowed())
-        return reject(QStringLiteral("运行或排空期间不可用智能点选"));
-    if (roi)
-        return reject(QStringLiteral("ROI 编辑期间不可用智能点选"));
+        return reject(QStringLiteral("该工具不支持智能点选"));
+    if (!easyTouchEnabled)
+        return reject(QStringLiteral("智能点选已关闭"));
+    if (!assistRequestsAllowed())
+        return reject(state != RuntimeState::Idle || draining ? QStringLiteral("运行或排空期间不可用智能点选")
+                                                              : QStringLiteral("当前管理操作尚未完成，暂不可用智能点选"));
     const auto *roiPort = firstRoiInput(*tool);
     if (!roiPort)
         return reject(QStringLiteral("该工具没有可点选的 ROI 输入"));
@@ -255,6 +258,9 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         if (const auto *declared = std::get_if<std::int64_t>(&port->defaultValue))
             extent = *declared;
     inputs.emplace("search_extent", extent);
+    // System inputs with a legal default (currently upstream_status=0) are never required in
+    // each tool's interaction map, but the helper must still receive a legal value.
+    inputs = normalizeInputs(helper->inputs, std::move(inputs));
 
     AssistRequest request;
     request.context = *context;
@@ -372,16 +378,24 @@ void AppController::Impl::clearAssistPreview()
     emit q->assistChanged();
 }
 
+bool AppController::Impl::assistRequestsAllowed() const
+{
+    return easyTouchEnabled && !isClosing() && state == RuntimeState::Idle && !draining
+        && pending == Pending::None && !roi && readsAllowed();
+}
+
 void AppController::Impl::refreshAssist()
 {
-    QString    hint;
-    bool       enabled  = false;
+    QString     hint;
+    bool        enabled  = false;
     const auto *node    = currentNode();
     const auto *tool    = currentTool();
     const auto *roiPort = tool ? firstRoiInput(*tool) : nullptr;
     const bool  candidate = node && tool && tool->interaction && roiPort && state == RuntimeState::Idle
                          && !isClosing() && !roi && readsAllowed();
-    if (candidate)
+    if (!easyTouchEnabled)
+        hint = QStringLiteral("智能点选已关闭");
+    else if (candidate)
     {
         const auto &mapping = *tool->interaction;
         const auto *helper  = registry.find(mapping.helperToolId);
@@ -395,7 +409,7 @@ void AppController::Impl::refreshAssist()
                 missing = QStringLiteral("协议端口 cursor/phase/search_extent");
             for (const auto &port : helper->inputs)
                 if (port.id != "cursor" && port.id != "phase" && port.id != "search_extent"
-                    && !mapping.inputMap.contains(port.id))
+                    && !mapping.inputMap.contains(port.id) && isMissing(port.defaultValue))
                     missing = workbench::q(port.id);
             for (const auto &[helperOutput, target] : mapping.proposalMap)
                 if (!workbench::port(helper->outputs, helperOutput))
@@ -417,8 +431,11 @@ void AppController::Impl::refreshAssist()
     }
     else if (node && tool && tool->interaction && roiPort && state == RuntimeState::Idle && !isClosing())
         hint = QStringLiteral("智能点选需要已运行的图像输入");
+    else if (node && tool && tool->interaction && (draining || pending != Pending::None || isClosing()))
+        hint = QStringLiteral("运行或排空期间不可用智能点选");
     if (!enabled && assist)
         assist->invalidate();
+    assistDisabledReason = hint;
     if (assistPreviewContext && !assistContextCurrent(*assistPreviewContext))
         clearAssistPreview();
     assistEnabled = enabled;
@@ -429,7 +446,44 @@ void AppController::Impl::refreshAssist()
 
 bool AppController::assistActive() const
 {
-    return impl_->assistEnabled;
+    return impl_->assistEnabled && impl_->assistRequestsAllowed();
+}
+
+bool AppController::easyTouchEnabled() const
+{
+    return impl_->easyTouchEnabled;
+}
+
+void AppController::setEasyTouchEnabled(bool enabled)
+{
+    if (impl_->easyTouchEnabled == enabled || impl_->isClosing())
+        return;
+    impl_->easyTouchEnabled = enabled;
+    UiPreferences::setEasyTouchEnabled(enabled);
+    if (!enabled)
+    {
+        // Drop the preview and every queued/in-flight request, then release the persistent
+        // helper off the GUI thread. Committed ROI and recommended parameters stay untouched.
+        impl_->clearAssistPreview();
+        impl_->setAssistHint(QStringLiteral("智能点选已关闭"));
+        if (impl_->assist)
+        {
+            impl_->assist->cancel();
+            impl_->assist->releaseSession();
+        }
+    }
+    impl_->refreshAssist();
+    emit assistChanged();
+}
+
+bool AppController::assistAvailable() const
+{
+    return impl_->assistEnabled && impl_->easyTouchEnabled;
+}
+
+QString AppController::assistDisabledReason() const
+{
+    return impl_->assistDisabledReason;
 }
 
 QString AppController::assistHint() const
@@ -453,7 +507,7 @@ QVariantList AppController::assistPreview() const
 
 bool AppController::assistHover(double x, double y)
 {
-    if (!impl_->assistEnabled || impl_->isClosing())
+    if (!impl_->assistRequestsAllowed() || !impl_->assistEnabled)
         return false;
     QString reason;
     auto    request = impl_->assistRequest(false, false, QPointF(x, y), &reason);
@@ -469,7 +523,7 @@ bool AppController::assistHover(double x, double y)
 
 bool AppController::assistClick(double x, double y, bool append)
 {
-    if (!impl_->assistEnabled || impl_->isClosing())
+    if (!impl_->assistRequestsAllowed() || !impl_->assistEnabled)
     {
         impl_->setAssistHint(QStringLiteral("当前状态不可用智能点选"));
         return false;

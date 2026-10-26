@@ -231,6 +231,13 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                          if (draining)
                              finishDrain();
                      });
+    // Release completion is part of the drain condition: management never joins the worker.
+    QObject::connect(assist.get(), &AssistPreview::sessionReleased, owner,
+                     [this]
+                     {
+                         if (draining)
+                             finishDrain();
+                     });
     tools.setRegistry(registry);
     if (!editor.project().flows.empty())
         flow = workbench::q(editor.project().flows.front().id);
@@ -554,42 +561,33 @@ void AppController::Impl::poll()
         for (const auto &event : update.diagnostics) report(event);
         if (update.droppedDiagnostics > 0)
             report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
+        // Bottom statistics belong to complete runs only. A single-node session updates its own
+        // node timing and outputs but never resets, clears or accumulates these three values.
         bool timingChanged = false;
-        for (const auto &item : update.flows)
+        const bool completeRunTiming
+            = update.mode != RunMode::Node
+           && (fullRunSession == 0 || update.session == 0 || update.session == fullRunSession);
+        if (completeRunTiming && update.session != 0)
+            fullRunSession = update.session;
+        if (completeRunTiming)
         {
-            auto it = flowLatestMs.find(item.flow);
-            if (it == flowLatestMs.end() || it->second != item.milliseconds)
+            for (const auto &item : update.flows)
             {
-                flowLatestMs[item.flow] = item.milliseconds;
-                timingChanged = true;
-            }
-        }
-        if (update.session > 0)
-        {
-            if (update.roundMilliseconds.has_value())
-            {
-                if (!latestRoundMs || *latestRoundMs != *update.roundMilliseconds)
+                auto it = flowLatestMs.find(item.flow);
+                if (it == flowLatestMs.end() || it->second != item.milliseconds)
                 {
-                    latestRoundMs = update.roundMilliseconds;
+                    flowLatestMs[item.flow] = item.milliseconds;
                     timingChanged = true;
                 }
             }
-            if (latestElapsedMs != update.sessionElapsedMilliseconds)
+            if (update.roundMilliseconds.has_value() && latestRoundMs != update.roundMilliseconds)
+            {
+                latestRoundMs = update.roundMilliseconds;
+                timingChanged = true;
+            }
+            if (update.session > 0 && latestElapsedMs != update.sessionElapsedMilliseconds)
             {
                 latestElapsedMs = update.sessionElapsedMilliseconds;
-                timingChanged = true;
-            }
-        }
-        else
-        {
-            if (latestRoundMs.has_value())
-            {
-                latestRoundMs.reset();
-                timingChanged = true;
-            }
-            if (latestElapsedMs != 0.0)
-            {
-                latestElapsedMs = 0.0;
                 timingChanged = true;
             }
         }
@@ -627,6 +625,7 @@ void AppController::Impl::poll()
             updateResults();
             emit q->parametersChanged();
             emit q->runtimeChanged();
+            flushDeferredSaves();
             advancePending();
         }
     }
@@ -648,7 +647,6 @@ void AppController::Impl::beginRun(RunMode mode)
 {
     if (isClosing())
         return;
-    latestRoundMs.reset();
     std::optional<NodeId> target;
     if (mode == RunMode::Node)
     {
@@ -661,11 +659,28 @@ void AppController::Impl::beginRun(RunMode mode)
         target = node->id;
     }
     runtime->setReadbackEnabled(true);
+    // A read-safe window belongs to the session that requested it; drop the previous one before
+    // the new session can publish its own.
+    readback.reset();
     const auto result = runtime->start(editor.project(), registry, mode, target);
     if (!result)
     {
         report(result);
         return;
+    }
+    if (mode != RunMode::Node)
+    {
+        // A successfully accepted complete run starts a new statistics session immediately.
+        fullRunSession = 0;
+        flowLatestMs.clear();
+        latestRoundMs.reset();
+        latestElapsedMs = 0.0;
+        const QString cleared = q->timingText();
+        if (timing != cleared)
+        {
+            timing = cleared;
+            emit q->timingChanged();
+        }
     }
     active.clear();
     setState(mode == RunMode::Once   ? RuntimeState::RunningOnce
@@ -714,6 +729,9 @@ void AppController::Impl::request(Pending action, QString path)
         return;
     }
     finishRoi();
+    if (action == Pending::Reset && assist)
+        // Resetting tears the assist session down; the drain below waits for the async release.
+        assist->releaseSession();
     pending          = action;
     pendingPath      = std::move(path);
     pendingApproved  = action == Pending::Reset;
@@ -1031,6 +1049,9 @@ void AppController::Impl::rescanTools()
     if (state != RuntimeState::Idle || isClosing())
         return;
     finishRoi();
+    // A catalog reload changes the active tool set, so the persistent helper session must go too.
+    if (assist)
+        assist->releaseSession();
 
     loadToolsPackage();
     refreshReconcile = true;
@@ -1634,10 +1655,12 @@ bool AppController::save(const QString &path)
     }
     try
     {
-        if (!impl_->readsAllowed())
+        // The editor project is frozen while a run owns the runtime, so a mid-run save is queued
+        // and written once the run finished instead of serialising a moving project.
+        if (busy() || !impl_->readsAllowed())
         {
             impl_->readRequests.push_back(Impl::SaveRequest{workbench::pathText(destination), impl_->projectEpoch});
-            impl_->report(QStringLiteral("工程保存已排队，等待本轮读取阶段"));
+            impl_->report(QStringLiteral("工程保存已排队，等待运行结束后写入"));
             return false;
         }
         auto candidate   = impl_->editor.project();

@@ -14,6 +14,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void parameterStatesContract(visionrt::AppController &app)
 {
     using namespace visionrt;
@@ -31,7 +32,6 @@ void parameterStatesContract(visionrt::AppController &app)
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/Main.qml")));

@@ -25,6 +25,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 namespace {
 QQuickItem *visibleText(QQuickItem *item, const QString &text)
 {
@@ -56,7 +57,6 @@ void popupSessionsContract()
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
     QQuickWindow window;
     window.resize(760, 560);
     window.show();
@@ -464,7 +464,7 @@ void outputCellReuseContract()
           "    values.update(__status_code=0, __status_message='')\n"
           "    return values\n");
     QJsonObject definition{
-        {"schema_version",                                                                              3},
+        {"schema_version",                                                                              4},
         {       "tool_id",                                                                 "test.outputs"},
         {  "display_name",                                                                 "Many outputs"},
         {       "version",                                                                        "1.0.0"},
@@ -499,7 +499,7 @@ void outputCellReuseContract()
     QQmlEngine manyEngine;
     manyEngine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     manyEngine.rootContext()->setContextProperty("app", &manyApp);
-    manyEngine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
+    visionrt::registerStyleModule();
     QQmlComponent manyComponent(&manyEngine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/OutputPanel.qml")));
     std::unique_ptr<QObject> manyOwner(manyComponent.create());
     if (!manyOwner) throw std::runtime_error(manyComponent.errorString().toStdString());

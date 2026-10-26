@@ -44,8 +44,13 @@ class AppController : public QObject
     Q_PROPERTY(QString aboutText READ aboutText CONSTANT)
     Q_PROPERTY(QString nodeModel READ nodeModel NOTIFY parametersChanged)
     Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
+    Q_PROPERTY(bool executionGuardActive READ executionGuardActive NOTIFY parametersChanged)
+    Q_PROPERTY(QString conditionMode READ conditionMode NOTIFY parametersChanged)
     Q_PROPERTY(QString selectTypeText READ selectTypeText NOTIFY parametersChanged)
+    Q_PROPERTY(bool easyTouchEnabled READ easyTouchEnabled WRITE setEasyTouchEnabled NOTIFY assistChanged)
+    Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
+    Q_PROPERTY(QString assistDisabledReason READ assistDisabledReason NOTIFY assistChanged)
     Q_PROPERTY(QString assistHint READ assistHint NOTIFY assistChanged)
     Q_PROPERTY(QVariantList assistPreview READ assistPreview NOTIFY assistChanged)
 public:
@@ -148,6 +153,9 @@ public:
     Q_INVOKABLE QVariantList guardCandidates(const QString &node) const;
     Q_INVOKABLE bool         applyExecutionGuard(const QString &node, const QString &sourceNode,
                                                  const QString &port);
+    // Mode switch is one transaction; binding a source is a separate one.
+    Q_INVOKABLE bool         setExecutionGuardMode(const QString &node, bool upstream);
+    Q_INVOKABLE bool         setConditionMode(const QString &node, bool upstream);
     Q_INVOKABLE QVariantMap  selectType(const QString &node) const;
     Q_INVOKABLE bool         applySelectType(const QString &node, const QString &type, const QString &dtype,
                                              int rank);
@@ -155,8 +163,14 @@ public:
     Q_INVOKABLE QString      typeDescription(const QString &type, const QString &dtype, int rank) const;
     QString                  nodeModel() const;
     QString                  executionGuardText() const;
+    bool                     executionGuardActive() const;
+    QString                  conditionMode() const;
     QString                  selectTypeText() const;
+    bool                     easyTouchEnabled() const;
+    void                     setEasyTouchEnabled(bool enabled);
+    bool                     assistAvailable() const;
     bool                     assistActive() const;
+    QString                  assistDisabledReason() const;
     QString                  assistHint() const;
     QVariantList             assistPreview() const;
     Q_INVOKABLE QVariantList toolDefinitions() const;

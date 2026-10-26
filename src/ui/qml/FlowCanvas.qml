@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 FocusScope {
     id: root
@@ -590,12 +591,12 @@ FocusScope {
                 objectName: "nodeHoverCard"
                 visible: root.hoverCardVisible && root.hoverNode !== null
                 z: 30
-                width: 232
+                width: Theme.tooltipWidth
                 height: hoverColumn.implicitHeight + 16
                 x: root.hoverCardX()
                 y: root.hoverCardY()
                 radius: Theme.radiusBase
-                color: "#ffffff"
+                color: Theme.tooltipBg
                 border.color: Theme.border
                 border.width: 1
                 enabled: false
@@ -606,16 +607,13 @@ FocusScope {
                         Layout.fillWidth: true
                         text: root.hoverNode ? root.hoverNode.title : ""
                         wrapMode: Text.Wrap
-                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                        font: Theme.titleFont
                         color: Theme.textPrimary
                     }
                     Repeater {
                         model: [
-                            { label: "算子", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
-                            { label: "宿主准备", value: root.hoverNode ? root.hoverNode.timingPrepareText : "" },
-                            { label: "初始化", value: root.hoverNode ? root.hoverNode.timingInitText : "" },
-                            { label: "结果校验", value: root.hoverNode ? root.hoverNode.timingValidateText : "" },
                             { label: "预处理", value: root.hoverNode ? root.hoverNode.timingPreprocessText : "" },
+                            { label: "算子时间", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
                             { label: "后处理", value: root.hoverNode ? root.hoverNode.timingPostprocessText : "" }
                         ]
                         RowLayout {
@@ -623,13 +621,13 @@ FocusScope {
                             Layout.fillWidth: true
                             QuiText {
                                 text: modelData.label
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                                font: Theme.captionFont
                                 color: Theme.textSecondary
                             }
                             Item { Layout.fillWidth: true }
                             QuiText {
                                 text: modelData.value
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                                font: Theme.captionFont
                                 color: Theme.textPrimary
                             }
                         }

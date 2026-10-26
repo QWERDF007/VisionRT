@@ -26,6 +26,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 using namespace visionrt;
 
 namespace {
@@ -39,6 +40,7 @@ void require(bool condition, const char *message)
 int main(int argc, char **argv)
 try
 {
+    visionrt::registerStyleModule();
     QGuiApplication                application(argc, argv);
     testing::WorkbenchInstallation installation;
     const auto                     root  = installation.directory();
@@ -51,7 +53,7 @@ try
                 "cannot write identity fixture");
     };
     write("tools/custom/identity/source.json", R"json({
-        "schema_version":3,"tool_id":"test.identity.source","display_name":"来源","version":"1.0",
+        "schema_version":4,"tool_id":"test.identity.source","display_name":"来源","version":"1.0",
         "kind":"python_function","entry":{"package":"identity","file":"source.py","symbol":"run"},
         "init_params":[],"inputs":[{"id":"value","name":"值","type":"Int","default":0}],
         "outputs":[{"id":"value","name":"值","type":"Int"}]
@@ -124,7 +126,6 @@ try
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"

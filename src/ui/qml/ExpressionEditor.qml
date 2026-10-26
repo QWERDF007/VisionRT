@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 // Node-model editor for the expression and condition tools. Port identifiers are
 // allocated by the controller; names, symbols, types and formulas are owned here

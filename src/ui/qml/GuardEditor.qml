@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 // Selects one Bool control dependency for the current node. Only nodes strictly
 // above the target (smaller row) are offered, matching data-binding rules.

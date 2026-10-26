@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 // Node-model entry points above the ordinary parameter groups. The editors are
 // created on demand so that an idle workbench opens no extra popup windows.

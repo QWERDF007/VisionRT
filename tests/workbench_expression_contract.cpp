@@ -18,6 +18,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 using namespace visionrt;
 
 namespace {
@@ -32,6 +33,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    registerStyleModule();
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();
 
@@ -47,7 +49,6 @@ try
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine,
                             QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ExpressionEditor.qml")));
     std::unique_ptr<QObject> editor(component.create());
@@ -164,7 +165,9 @@ try
     require(app.applyExpressionConfig(guardSource, {}, guardProgram(QStringLiteral("布尔结果"))),
             "guard source program could not be applied");
     settle();
-    app.addNode("visiontools.measure.circle", 8, 6);
+    // Execution conditions belong to the logical node models; a fixed measuring tool
+    // exposes its own upstream_status input instead.
+    app.addNode("visiontools.logic.expression", 8, 6);
     settle();
     const auto guarded = app.selectedNode();
     require(!guarded.isEmpty(), "guarded node is missing");

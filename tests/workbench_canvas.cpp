@@ -21,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void flowCanvasContract()
 {
     const auto require = [](bool condition, const char *message)
@@ -35,7 +36,6 @@ void flowCanvasContract()
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/FlowCanvas.qml")));
     std::unique_ptr<QObject> owner(component.create());
     if (!owner)
@@ -382,22 +382,19 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(card->isVisible(), "hover card item is not visible");
     require(!card->hasActiveFocus(), "hover card took keyboard focus");
     const QStringList content = texts();
-    require(content.size() == 13, "hover card does not contain the tool name and six timing rows");
+    // Title plus exactly three timing rows: preprocessing, operator and post-processing.
+    require(content.size() == 7, "hover card does not contain the tool name and three timing rows");
     require(content.contains(first.value("title").toString()), "hover card lost the tool name");
-    require(content.contains(QStringLiteral("算子")) && content.contains(QStringLiteral("宿主准备"))
-                && content.contains(QStringLiteral("初始化")) && content.contains(QStringLiteral("结果校验"))
-                && content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("后处理")),
+    require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("算子时间"))
+                && content.contains(QStringLiteral("后处理")),
             "hover card lost a timing row");
-    require(content.contains(first.value("timingOperatorText").toString()),
-            "hover card operator time does not match the structured node data");
-    require(content.contains(first.value("timingPrepareText").toString()),
-            "hover card prepare time does not match the structured node data");
-    require(content.contains(first.value("timingInitText").toString()),
-            "hover card init time does not match the structured node data");
-    require(content.contains(first.value("timingValidateText").toString()),
-            "hover card validate time does not match the structured node data");
+    require(!content.contains(QStringLiteral("宿主准备")) && !content.contains(QStringLiteral("初始化"))
+                && !content.contains(QStringLiteral("结果校验")),
+            "hover card still shows host framework stages");
     require(content.contains(first.value("timingPreprocessText").toString()),
             "hover card preprocess time does not match the structured node data");
+    require(content.contains(first.value("timingOperatorText").toString()),
+            "hover card operator time does not match the structured node data");
     require(content.contains(first.value("timingPostprocessText").toString()),
             "hover card postprocess time does not match the structured node data");
 

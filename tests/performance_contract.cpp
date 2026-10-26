@@ -47,6 +47,7 @@
 #include <thread>
 #include <vector>
 
+
 #ifdef _WIN32
 // clang-format off
 #    include <windows.h>
@@ -1089,8 +1090,7 @@ void testGuiEventToPresentationLatency(AppController &app, const std::filesystem
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto *theme = visionrt::Theme::instance();
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+    visionrt::registerStyleModule();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1106,7 +1106,6 @@ void testGuiEventToPresentationLatency(AppController &app, const std::filesystem
 #endif
 
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", theme);
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
@@ -1267,6 +1266,7 @@ void testWorkbenchBrowsingLatency()
 
 int main(int argc, char **argv)
 {
+    visionrt::registerStyleModule();
     QGuiApplication qt(argc, argv);
 
     QTemporaryDir directory;

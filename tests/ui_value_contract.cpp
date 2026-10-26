@@ -39,14 +39,14 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.ui.source","definition":"tools/custom/fixture/source.json"},
         {"tool_id":"test.ui.editor","definition":"tools/custom/fixture/editor.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/fixture/source.json", R"({"schema_version":3,"tool_id":"test.ui.source",
+    write("tools/custom/fixture/source.json", R"({"schema_version":4,"tool_id":"test.ui.source",
         "display_name":"图像源","version":"1","kind":"python_function",
         "entry":{"package":"fixture","file":"tool.py","symbol":"source"},"init_params":[],"inputs":[],"outputs":[
         {"id":"images","name":"图像","type":"Image","display":{"color_order":"BGR"}},
         {"id":"values","name":"列表","type":"Array","dtype":"int64","rank":2},
         {"id":"epoch","name":"轮次","type":"Int"},
         {"id":"regions","name":"区域","type":"ROI","image_port":"images"}]})");
-    write("tools/custom/fixture/editor.json", R"({"schema_version":3,"tool_id":"test.ui.editor",
+    write("tools/custom/fixture/editor.json", R"({"schema_version":4,"tool_id":"test.ui.editor",
         "display_name":"图像编辑","version":"1","kind":"python_function",
         "entry":{"package":"fixture","file":"tool.py","symbol":"edit"},"init_params":[],"inputs":[
         {"id":"images","name":"图像","type":"Image"},
@@ -137,7 +137,7 @@ try
     QSignalSpy textReady(&app, &AppController::outputTextReady);
     app.runNode();
     require(app.busy(), "second execution was not submitted");
-    require(!app.save(), "busy project serialization was performed before a read-safe stage");
+    require(!app.save(), "busy project serialization was performed before the run finished");
     {
         QFile file(projectPath);
         require(file.open(QIODevice::ReadOnly) && file.readAll() == "sentinel", "deferred save wrote during execution");
@@ -152,8 +152,8 @@ try
         QFile file(projectPath);
         require(file.open(QIODevice::ReadOnly), "deferred project file unavailable");
         const auto saved = QJsonDocument::fromJson(file.readAll());
-        require(saved.isObject() && saved.object()["format_version"].toInt() == 4,
-                "queued save was not committed at the read-safe stage");
+        require(saved.isObject() && saved.object()["format_version"].toInt() == 5,
+                "queued save was not committed after the run finished");
     }
     app.addNode("test.ui.editor", 100, 100);
     idle();

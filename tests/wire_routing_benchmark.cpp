@@ -30,6 +30,7 @@
 #include <stdexcept>
 #include <vector>
 
+
 using namespace visionrt;
 using Clock = std::chrono::steady_clock;
 
@@ -71,6 +72,7 @@ double percentile(std::vector<double> samples, double fraction)
 int main(int argc, char **argv)
 try
 {
+    visionrt::registerStyleModule();
     QGuiApplication    application(argc, argv);
     QCommandLineParser parser;
     parser.addHelpOption();
@@ -113,7 +115,6 @@ try
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine);
     const auto    sourceUrl = QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/FlowCanvas.qml"));
     if (parser.isSet("qml"))

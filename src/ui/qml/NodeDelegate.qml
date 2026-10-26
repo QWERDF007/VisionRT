@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
 import quickui
+import VisionRT.Style 1.0
 
 Rectangle {
     id: root

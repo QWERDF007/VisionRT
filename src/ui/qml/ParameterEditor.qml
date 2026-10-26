@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import quickui
+import VisionRT.Style 1.0
 
 ColumnLayout {
     id: root
@@ -12,9 +13,14 @@ ColumnLayout {
     objectName: "parameter_" + parameter.id
     readonly property bool isMeta: !!parameter.isMeta
     readonly property bool alwaysUpstream: parameter.type === "Image"
-    readonly property bool upstream: (parameter.editor === "guard")
-        ? (app.executionGuardText.length > 0)
-        : ((alwaysUpstream || parameter.mode === "upstream") && !parameter.init && !isMeta)
+    readonly property bool guardRow: parameter.editor === "guard"
+    readonly property bool conditionRow: parameter.editor === "condition" || parameter.editor === "condition_upstream"
+    // The source button only reports the input mode. It never infers the mode from a
+    // source, from the guard text or from this round's success.
+    readonly property bool upstream: parameter.inputMode === "upstream"
+    readonly property bool sourceMissing: upstream && !root.parameter.source && !root.parameter.init
+    // Condition rows edit the single `condition` port, ordinary rows their own port.
+    readonly property string bindingPort: root.conditionRow ? "condition" : root.parameter.id
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && !app.busy
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
@@ -26,7 +32,7 @@ ColumnLayout {
     readonly property int decimalPlaces: parameter.decimals === undefined || parameter.decimals < 0 ? 6 : parameter.decimals
     readonly property int labelWidth: 96
     readonly property int actionWidth: Theme.paramActionBtnWidth
-    readonly property font editorFont: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.paramEditorFontSize })
+    readonly property font editorFont: Theme.bodyFont
     spacing: 6
 
     function getPanel() {
@@ -52,7 +58,7 @@ ColumnLayout {
             objectName: "parameterLabel"
             text: root.parameter.name; Layout.preferredWidth: root.labelWidth
             Layout.alignment: Qt.AlignVCenter
-            font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.paramLabelFontSize })
+            font: Theme.bodyFont
             color: Theme.paramLabelText
             elide: Text.ElideRight
             MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
@@ -74,15 +80,17 @@ ColumnLayout {
             Layout.preferredHeight: Theme.paramEditorHeight
             Layout.alignment: Qt.AlignVCenter
             radius: 4
-            color: frameHover.hovered ? QuiColor.ItemHover : QuiColor.CardBackground
+            color: frameHover.hovered ? Theme.paramRowHoverBg : Theme.paramEditorBg
             clip: true
 
             readonly property color frameBorderColor: {
+                if (root.sourceMissing)
+                    return Theme.sourceFieldErrorColor
                 if (editorLoader.item && editorLoader.item.invalid)
-                    return QuiColor.Error
+                    return Theme.error
                 if (frameHover.hovered || isEditorFocused)
-                    return QuiColor.Highlight
-                return QuiColor.CardBorder
+                    return Theme.paramEditorFocusBorder
+                return Theme.paramEditorBorder
             }
 
             readonly property bool isEditorFocused: {
@@ -109,7 +117,8 @@ ColumnLayout {
                         id: editorLoader
                         anchors.fill: parent
                         enabled: root.editable
-                        sourceComponent: root.parameter.isMeta ? metaEditor
+                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor
+                                       : root.isMeta ? metaEditor
                                        : root.upstream ? upstreamEditor
                                        : (root.parameter.options || []).length > 0 ? choiceEditor
                                        : (root.parameter.type === "Bool" && (root.parameter.editor === "switch" || root.parameter.id === "reload")) ? toggleSwitchComponent
@@ -134,15 +143,20 @@ ColumnLayout {
                 Rectangle {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.parameter.editor === "guard")
+                    visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.guardRow || root.conditionRow)
                     Layout.preferredWidth: Theme.paramActionBtnWidth
                     Layout.fillHeight: true
-                    color: toggleMouse.containsMouse ? Theme.paramRowHoverBg : "transparent"
+                    radius: Theme.radiusSmall
+                    color: root.upstream ? Theme.sourceButtonActiveBackground
+                                        : (toggleMouse.containsMouse ? Theme.paramRowHoverBg : "transparent")
+                    border.width: root.upstream ? 1 : 0
+                    border.color: Theme.sourceButtonActiveBorder
+                    opacity: root.editable ? 1.0 : Theme.sourceButtonDisabledOpacity
 
                     UpstreamToggleIcon {
                         anchors.centerIn: parent
                         iconSize: Theme.paramToggleIconSize
-                        iconColor: root.upstream ? Theme.bindingActiveColor : Theme.bindingInactiveColor
+                        iconColor: root.upstream ? Theme.sourceButtonActiveIcon : Theme.sourceButtonIdleIcon
                     }
 
                     MouseArea {
@@ -152,24 +166,29 @@ ColumnLayout {
                         cursorShape: Qt.PointingHandCursor
                         enabled: root.editable
                         onClicked: {
-                            if (root.parameter.editor === "guard") {
-                                if (root.upstream) {
-                                    app.applyExecutionGuard(root.nodeId, "", "")
-                                } else {
-                                    let p = root.getPanel()
-                                    if (p) p.openGuardEditor(root.nodeId)
-                                }
+                            if (root.guardRow) {
+                                app.setExecutionGuardMode(root.nodeId, !root.upstream)
+                            } else if (root.conditionRow) {
+                                app.setConditionMode(root.nodeId, !root.upstream)
                             } else {
                                 app.setParameterMode(root.parameter.id, !root.upstream)
                             }
                         }
                     }
 
+                    Accessible.name: root.guardRow ? "执行条件输入来源"
+                                   : root.conditionRow ? "条件公式输入来源" : "参数输入来源"
+                    Accessible.checkable: true
+                    Accessible.checked: root.upstream
+
                     QuiToolTip {
                         visible: toggleMouse.containsMouse
                         text: {
-                            if (root.parameter.editor === "guard") {
-                                return root.upstream ? "切换为直接输入（始终执行）" : "绑定上层输入（执行条件）"
+                            if (root.guardRow) {
+                                return root.upstream ? "切换为始终执行（用户输入）" : "绑定上层输入（执行条件）"
+                            }
+                            if (root.conditionRow) {
+                                return root.upstream ? "切换为条件公式" : "使用上层布尔值"
                             }
                             return root.upstream ? "切换为直接输入" : "绑定上层输入"
                         }
@@ -199,7 +218,7 @@ ColumnLayout {
     }
 
     function buildBindingGroups() {
-        let candidates = app.bindingCandidates(app.portContext(root.parameter.id))
+        let candidates = app.bindingCandidates(app.portContext(root.bindingPort))
         let groups = []
         if (root.parameter.source) {
             groups.push({
@@ -249,10 +268,11 @@ ColumnLayout {
             objectName: "parameterUpstream"
             implicitHeight: Theme.paramEditorHeight
             savedValue: root.currentUpstreamValue()
+            Accessible.name: root.parameter.name
             displayText: root.parameter.source ? root.parameter.source : "请选择"
             optionGroups: root.buildBindingGroups()
             onAboutToOpen: {
-                bindingContext = app.portContext(root.parameter.id)
+                bindingContext = app.portContext(root.bindingPort)
                 optionGroups = root.buildBindingGroups()
             }
             commitValue: function(val) {
@@ -392,10 +412,11 @@ ColumnLayout {
             id: field
             flat: true
             readOnly: !root.parameter.isSingleFormula
+            font: Theme.monoFont
             placeholderText: {
-                if (root.parameter.editor === "guard") return "无（始终执行）"
+                if (root.guardRow) return root.upstream ? "请选择上层布尔输出" : "无（始终执行）"
                 if (root.parameter.editor === "select_type") return "请选择合流类型"
-                if (root.parameter.editor === "condition") return "请输入条件公式"
+                if (root.conditionRow) return "请输入条件公式"
                 return "请输入公式"
             }
             actionText: {

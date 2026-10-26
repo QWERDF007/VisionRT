@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import quickui
+import VisionRT.Style 1.0
 
 Item {
     id: root

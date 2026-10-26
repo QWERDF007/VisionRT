@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 // Merge type for the host select node. The chosen TypeSpec replaces both branch
 // inputs and the output; changing it requires the ports to be unbound first.

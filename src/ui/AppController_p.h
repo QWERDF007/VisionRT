@@ -6,6 +6,7 @@
 #include "runtime/RuntimeEngine.h"
 #include "ui/AppController.h"
 #include "ui/AssistPreview.h"
+#include "ui/UiPreferences.h"
 #include "ui/Diagnostics.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
@@ -66,6 +67,8 @@ struct AppController::Impl
     std::map<std::string, double>          flowLatestMs;
     std::optional<double>                  latestRoundMs;
     double                                 latestElapsedMs = 0;
+    // Session that owns the bottom complete-run statistics; single-node sessions never adopt it.
+    std::uint64_t                          fullRunSession = 0;
     std::deque<ApplicationDiagnostic>                       diagnostics;
     std::optional<CopiedSelection>         clipboard;
     std::set<std::string>                  routingErrors;
@@ -151,7 +154,9 @@ struct AppController::Impl
     std::unique_ptr<AssistPreview>        assist;
     std::string                           assistToolId;
     bool                                  assistEnabled = false;
+    bool                                  easyTouchEnabled = UiPreferences::easyTouchEnabled();
     QString                               assistHint;
+    QString                               assistDisabledReason;
     ROI                                   assistPreviewRois;
     std::optional<AssistContext>          assistPreviewContext;
 
@@ -232,6 +237,10 @@ struct AppController::Impl
     }
 
     void      setState(RuntimeState value);
+    // Writes project saves queued during a run, now that the editor is no longer frozen.
+    void      flushDeferredSaves();
+    // Single acceptance predicate for hover, click, pending dispatch and result delivery.
+    bool                 assistRequestsAllowed() const;
     bool                 readsAllowed() const noexcept;
     // Blocking drain, reserved for the destructor (last line of defence).
     void                 drainReaders();

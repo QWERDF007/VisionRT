@@ -84,14 +84,12 @@ int main(int argc, char *argv[])
             openProject();
         }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-        auto *theme = visionrt::Theme::instance();
-        qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+        visionrt::registerStyleModule();
         (void)quickui::QuiColor::getInstance();
         QQmlApplicationEngine engine;
         engine.addImportPath(QCoreApplication::applicationDirPath());
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);
-        engine.rootContext()->setContextProperty("Theme", theme);
         engine.rootContext()->setContextProperty("demoMenu", parser.isSet("demo-menu"));
         engine.rootContext()->setContextProperty("demoSelect", parser.isSet("demo-select"));
         QObject::connect(
