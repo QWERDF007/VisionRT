@@ -340,8 +340,6 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
         updateCursor();
     }
     setStatus(!frame.error.isEmpty() ? frame.error : frame.warning);
-    if (!hasImage() && editing() && statusText_.isEmpty())
-        setStatus(QStringLiteral("没有输入图像缓存，请先运行读图或上游；仍可在参数区进行数值编辑。"));
     update();
     emit imagePresented(frame.requestId);
 }
@@ -495,14 +493,14 @@ void ImageViewport::beginRoiEdit(RoiEditTarget target, ROI::value_type targetRoi
     singleRectangle_ = singleRectangle;
     target_   = std::move(target);
     editable_ = std::move(targetRois);
-    selectRoi(target_->roiIndex >= 0 && target_->roiIndex < static_cast<int>(editable_.size()) ? target_->roiIndex
-                                                                                               : -1);
+    int initialSelection = target_->roiIndex >= 0 && target_->roiIndex < static_cast<int>(editable_.size())
+        ? target_->roiIndex
+        : (singleRectangle_ && !editable_.empty() ? 0 : -1);
+    selectRoi(initialSelection);
     setReadOnly(readOnly);
     overlaysUpdated();
     emit editingChanged();
     updateCursor();
-    if (!hasImage())
-        setStatus(QStringLiteral("没有输入图像缓存，请先运行读图或上游；仍可在参数区进行数值编辑。"));
 }
 
 void ImageViewport::endRoiEdit()
@@ -602,12 +600,13 @@ std::vector<QPointF> ImageViewport::handles(const ROI::value_type::value_type &r
     return points;
 }
 
-int ImageViewport::hitRoi(QPointF point) const
+namespace {
+int hitRoiInList(const ROI::value_type &rois, QPointF point, double scale)
 {
-    const double tolerance = 7 / scale_;
-    for (int i = static_cast<int>(editable_.size()) - 1; i >= 0; --i)
+    const double tolerance = 8 / scale;
+    for (int i = static_cast<int>(rois.size()) - 1; i >= 0; --i)
     {
-        const auto &roi = editable_[i];
+        const auto &roi = rois[i];
         if (roiKind(roi) == RoiKind::Circle)
         {
             const auto &data = roi;
@@ -640,9 +639,16 @@ int ImageViewport::hitRoi(QPointF point) const
     }
     return -1;
 }
+} // namespace
+
+int ImageViewport::hitRoi(QPointF point) const
+{
+    return hitRoiInList(editable_, point, scale_);
+}
 
 void ImageViewport::mousePressEvent(QMouseEvent *event)
 {
+    forceActiveFocus(Qt::MouseFocusReason);
     if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton)
     {
         if (gesture_ != Gesture::None)
@@ -661,12 +667,22 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
     {
         // A click is only a selection if the pointer does not travel; beyond the drag threshold the
         // same press turns into a pan, so inspecting the image never commits a candidate.
-        forceActiveFocus(Qt::MouseFocusReason);
         gesture_     = Gesture::Assist;
         anchor_      = itemToImage(event->position());
         lastPointer_ = event->position();
         event->accept();
         return;
+    }
+    if (!canEdit() && event->button() == Qt::LeftButton && hasImage() && gesture_ == Gesture::None)
+    {
+        const auto point = itemToImage(event->position());
+        const int hit = hitRoiInList(inputs_, point, scale_);
+        if (hit >= 0)
+        {
+            emit roiSelected(hit, point);
+            event->accept();
+            return;
+        }
     }
     if (event->button() != Qt::LeftButton || !canEdit()
         || (gesture_ != Gesture::None && gesture_ != Gesture::Vertices))
@@ -674,7 +690,6 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
         event->ignore();
         return;
     }
-    forceActiveFocus(Qt::MouseFocusReason);
     const auto point = itemToImage(event->position());
     if (gesture_ == Gesture::Vertices)
     {
@@ -956,8 +971,7 @@ void ImageViewport::commitDraft()
     else
         editable_[key.roiIndex] = *value;
     clearGesture();
-    if (singleRectangle())
-        setDrawShape(0);
+    setDrawShape(0);
     updateCursor();
     emit roiCommitted(key, *value);
 }

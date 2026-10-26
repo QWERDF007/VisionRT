@@ -357,6 +357,28 @@ void AppController::attachViewport(QObject *object)
                          { impl_->commitRoi(key, &roi); });
         QObject::connect(target, &ImageViewport::roiDeleted, this,
                          [this](const RoiEditTarget &key) { impl_->commitRoi(key, nullptr); });
+        QObject::connect(target, &ImageViewport::roiSelected, this,
+                         [this](int /*index*/, QPointF /*point*/)
+                         {
+                             if (!impl_->idle())
+                                 return;
+                             const auto *node = impl_->currentNode();
+                             const auto *tool = impl_->currentTool();
+                             if (!node || !tool)
+                                 return;
+                             for (const auto &port : tool->inputs)
+                             {
+                                 if (port.type.type == Type::ROI)
+                                 {
+                                     const auto found = node->inputs.find(port.id);
+                                     if (found != node->inputs.end() && found->second.mode == BindingMode::Literal)
+                                     {
+                                         editRoi(workbench::q(port.id), true);
+                                         break;
+                                     }
+                                 }
+                             }
+                         });
         QObject::connect(target, &ImageViewport::roiEditCanceled, this, &AppController::endRoiPreview);
         QObject::connect(target, &ImageViewport::drawShapeChanged, this, [this] { emit resultsChanged(); });
     }
@@ -425,6 +447,8 @@ void AppController::setImageIndex(int index)
     else
         impl_->index = clamped;
     impl_->updateDisplay();
+    if (impl_->viewport)
+        impl_->viewport->forceActiveFocus();
     emit resultsChanged();
 }
 
@@ -438,6 +462,8 @@ void AppController::setImageOutput(const QString &output)
         return;
     impl_->imageOutput = output;
     impl_->updateDisplay();
+    if (impl_->viewport)
+        impl_->viewport->forceActiveFocus();
     emit resultsChanged();
 }
 

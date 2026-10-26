@@ -283,11 +283,16 @@ QVariantList AppController::parameters() const
         if (regions)
             for (const auto &group : regions->get()) roiCount += group.size();
         const bool hasRois = roiCount > 0;
+        QString arrayText = text;
+        if (type.type == Type::Array && (text.isEmpty() || text == QStringLiteral("null")))
+            arrayText = QStringLiteral("[]");
         QString displayText;
         if (rectangleEditor)
             displayText = hasRect ? rectDisplayText : QStringLiteral("[]");
         else if (type.type == Type::ROI)
             displayText = hasRois ? QStringLiteral("[%1 个区域]").arg(roiCount) : QStringLiteral("[]");
+        else if (type.type == Type::Array)
+            displayText = arrayText;
         else if (string)
             displayText = q(*string);
         else
@@ -301,8 +306,9 @@ QVariantList AppController::parameters() const
             {    "typeDisplay",                                                    displayTypeName(type)},
             {           "init",                                                           initialization},
             {           "mode",                                                                     mode},
-            {        "literal",                                                                     text},
+            {        "literal",                         type.type == Type::Array ? arrayText : text},
             {      "valueText",               rectangleEditor && hasRect ? rectDisplayText
+               : type.type == Type::Array ? arrayText
                : string                   ? q(*string)
                : text                                                    },
             {    "displayText",                                                              displayText},

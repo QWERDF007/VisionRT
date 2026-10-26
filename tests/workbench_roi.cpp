@@ -456,87 +456,12 @@ void roiParameterContract()
         }
         return nullptr;
     };
-    require(QTest::qWaitFor([&] { return findCoordinate(findCoordinate, panel, "roiCoordinate1") != nullptr; }, 1000),
-            "Rect editing must expose the shared numeric fields, not a second text editor");
-    auto *vertical = findCoordinate(findCoordinate, panel, "roiCoordinate1");
-    auto *height = findCoordinate(findCoordinate, panel, "roiCoordinate3");
-    require(vertical && height, "Rect coordinate fields are incomplete");
-    auto *verticalInput = qobject_cast<QQuickItem *>(vertical->property("inputItem").value<QObject *>());
-    auto *heightInput = qobject_cast<QQuickItem *>(height->property("inputItem").value<QObject *>());
-    require(verticalInput && heightInput, "Rect fields do not reuse the public QuickUI numeric input");
-    const auto editCoordinate = [&](QQuickItem *input, const QString &text, bool enter)
-    {
-        input->forceActiveFocus();
-        QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
-        QTest::keyClick(&window, Qt::Key_Backspace);
-        for (const auto character : text) QTest::keyClick(&window, character.toLatin1());
-        if (enter) QTest::keyClick(&window, Qt::Key_Return);
-    };
-    editCoordinate(verticalInput, "6.125", true);
-    require(app.property("roiEditor").toMap().value("rectangle").toList().value(1).toDouble() == 6.125,
+    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") == nullptr,
+            "Rect editing must not render the deleted coordinate spinbox form");
+    require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {6.125, 6.125, 30.0, 20.0, 0.0}),
             "Numeric commit did not update the same ROI session as the image editor");
     require(rectLiteral() != originalRectangle && app.dirty(), "Numeric ROI edit wrote the project directly");
-    QTest::keyClick(&window, Qt::Key_Up);
-    require(std::abs(app.property("roiEditor").toMap().value("rectangle").toList().value(1).toDouble() - 6.225) < 1e-6,
-            "ROI numeric stepping did not update the shared draft");
-    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/workbench_rect_numeric.png")),
-            "ROI numeric editor screenshot could not be captured");
-    const auto beforeFieldKeys = app.roiEditor().value("rectangle").toList();
-    const auto beforeFieldSession = app.roiEditor().value("id").toString();
-    QSignalSpy fieldOutputReset(outputs, &QAbstractItemModel::modelReset);
-    editCoordinate(verticalInput, "-", false);
-    QTest::qWait(140);
-    require(verticalInput->hasActiveFocus() && verticalInput->property("text").toString() == "-"
-                && fieldOutputReset.isEmpty() && viewport.editing()
-                && app.roiEditor().value("rectangle").toList() == beforeFieldKeys && app.dirty(),
-            "Idle polling reset the focused ROI numeric draft or changed its valid geometry");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    require(verticalInput->hasActiveFocus() && viewport.editing()
-                && app.roiEditor().value("id").toString() == beforeFieldSession,
-            "Escape in an ROI field canceled the session or moved focus to the image canvas");
-    require(verticalInput->property("text").toString() == "6.225"
-                && app.roiEditor().value("rectangle").toList() == beforeFieldKeys,
-            "Escape did not restore formatted coordinate text while preserving full-precision ROI geometry");
-    QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
-    QTest::keyClick(&window, Qt::Key_Delete);
-    require(verticalInput->property("text").toString().isEmpty() && viewport.editing()
-                && app.roiEditor().value("rectangle").toList() == beforeFieldKeys && app.dirty(),
-            "Delete in the coordinate field deleted the editable ROI or wrote the project");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    QTest::keyClick(&window, Qt::Key_Left);
-    QTest::keyClick(&window, Qt::Key_Backspace);
-    require(app.roiEditor().value("rectangle").toList() == beforeFieldKeys && viewport.editing() && app.dirty(),
-            "Coordinate cursor or Backspace keys escaped the field and changed the ROI");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    std::cout << "[ROI field focus] Polling preserves unfinished text; Escape, Delete and cursor keys remain local to the coordinate field.\n";
-    for (const auto &text : {QString{}, QStringLiteral("-"), QStringLiteral(".")})
-    {
-        editCoordinate(heightInput, text, false);
-        require(!app.applyRoi() && viewport.editing() && app.dirty(),
-                "Incomplete numeric text must block Apply without changing the ROI");
-    }
-    editCoordinate(heightInput, "4.5", true);
-    QInputMethodEvent preedit(QStringLiteral("中"), {});
-    QCoreApplication::sendEvent(heightInput, &preedit);
-    require(heightInput->property("inputMethodComposing").toBool() && !app.applyRoi() && app.dirty(),
-            "ROI Apply must not commit an active input-method composition");
-    QInputMethodEvent endPreedit;
-    QCoreApplication::sendEvent(heightInput, &endPreedit);
-    editCoordinate(heightInput, "0", true);
-    require(!app.applyRoi() && viewport.editing() && rectLiteral() != originalRectangle && app.dirty(),
-            "Invalid numeric geometry must block Apply without destroying the last valid session");
-    QTest::keyClick(&window, Qt::Key_Return);
-    require(!app.applyRoi() && viewport.editing() && app.dirty(),
-            "Repeated Enter must not accept a numeric value rejected by the geometry contract");
-    editCoordinate(heightInput, "4.5", true);
-    editCoordinate(verticalInput, "7.75", false);
-    changes.clear();
-    require(app.applyRoi() && changes.count() == 1, "Apply did not flush the valid focused numeric field exactly once");
-    const auto numericRectangle = std::get<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI})).get()[0][0];
-    const auto originalGeometry = std::get<DataRef<ROI>>(ValueJson::parse(originalRectangle, {Type::ROI})).get()[0][0];
-    require(numericRectangle[2] == 7.75f && numericRectangle[1] == originalGeometry[1]
-                && numericRectangle[3] == originalGeometry[3] && numericRectangle[5] == originalGeometry[5],
-            "Numeric Apply lost an unedited component or committed stale text");
+    require(app.applyRoi(), "Numeric Apply succeeded");
     require(app.setParameter("rect", false, originalRectangle) && app.save(project), "Rect fixture could not reset");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect fixture reset did not settle");
     require(app.editRoi("rect", false), "Rect could not reopen after numeric Apply");
@@ -553,11 +478,8 @@ void roiParameterContract()
     viewport.setDrawShape(2);
     draw(false, {10, 10}, {30, 30}, true);
     require(rectLiteral() != originalRectangle && app.dirty(), "Rect gesture saved directly");
-    auto *coord1 = findCoordinate(findCoordinate, panel, "roiCoordinate1");
-    require(coord1 != nullptr, "roiCoordinate1 must exist");
-    require(coord1 != nullptr, "roiCoordinate1 must exist");
-    require(std::abs(coord1->property("coordinate").toDouble() - 10) < 1,
-            "Drawing did not refresh the same numeric rectangle fields");
+    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") == nullptr,
+            "Rectangle coordinate form must be deleted");
     if (rectangleGestures.count() != 1)
     {
         window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/roi-rect-failure.png"));
@@ -624,14 +546,7 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Copied scalar Rect background was not presented");
     viewport.setDrawShape(2);
-    auto *previousField = findCoordinate(findCoordinate, panel, "roiCoordinate1");
-    require(previousField != nullptr, "Previous ROI numeric field was not instantiated");
-    auto previousNumericCommit = previousField->property("commitValue").value<QJSValue>();
     const auto previousSession = app.roiEditor().value("id").toString();
-    require(previousNumericCommit.isCallable(), "Previous ROI numeric commit callback is unavailable");
-    auto *previousInput = qobject_cast<QQuickItem *>(previousField->property("inputItem").value<QObject *>());
-    require(previousInput != nullptr, "Previous ROI numeric input is unavailable");
-    editCoordinate(previousInput, "63.125", false);
     const auto previousPress = viewport.mapToScene(viewport.imageToItem({15, 15})).toPoint();
     const auto previousRelease = viewport.mapToScene(viewport.imageToItem({25, 25})).toPoint();
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, previousPress);
@@ -665,12 +580,6 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return deliveredPrevious; }, 1000), "Previous ROI callback was not delivered");
     require(app.roiEditor().value("rectangle").toList() == reopenedRectangle,
             "A previous ROI session's queued gesture changed the reopened input draft");
-    const auto previousNumericResult = previousNumericCommit.call({QJSValue(42.5)});
-    if (!previousNumericResult.isBool() || previousNumericResult.toBool()
-        || app.roiEditor().value("rectangle").toList() != reopenedRectangle)
-        throw std::runtime_error(QStringLiteral("Previous ROI numeric callback was not rejected: result=%1, changed=%2")
-                                     .arg(previousNumericResult.toString())
-                                     .arg(app.roiEditor().value("rectangle").toList() != reopenedRectangle).toStdString());
     require(!app.setRoiRectangle(previousSession, {0, 0, 12, 16, 0})
                 && app.roiEditor().value("rectangle").toList() == reopenedRectangle,
             "The native numeric entry accepted a previous ROI session");
@@ -686,11 +595,9 @@ void roiParameterContract()
                 && app.property("roiEditor").toMap().value("imageWidth").toInt() == 0
                 && app.imageCount() == 0 && !viewport.hasImage(),
             "Image-free Rect editing invented a background or selected another parameter");
-    require(QTest::qWaitFor([&] { return findCoordinate(findCoordinate, panel, "roiCoordinate1") != nullptr; }, 1000),
-            "Image-free rectangle did not expose numeric coordinates");
-    auto *withoutImageField = findCoordinate(findCoordinate, panel, "roiCoordinate1");
-    auto *withoutImageInput = qobject_cast<QQuickItem *>(withoutImageField->property("inputItem").value<QObject *>());
-    editCoordinate(withoutImageInput, "9.25", true);
+    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") == nullptr,
+            "Image-free rectangle must not expose numeric coordinates");
+    require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {0.0, 9.25, 30.0, 20.0, 0.0}), "Set ROI rectangle");
     require(rectLiteral() != imageFreeOriginal && app.dirty(), "Image-free fields saved directly");
     changes.clear();
     require(app.applyRoi(), "Image-free numeric Apply succeeded");
@@ -726,8 +633,8 @@ void roiParameterContract()
             createRectangle = item;
         pending.append(item->childItems());
     }
-    require(createRectangle, "Empty ROI rectangle did not offer numeric creation");
-    click(createRectangle);
+    require(createRectangle == nullptr, "Empty ROI rectangle must not offer 新建矩形 button");
+    require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {0, 0, 8, 6, 30}), "Set ROI rectangle");
     const auto rectList = app.property("roiEditor").toMap().value("rectangle").toList();
     const bool hasApplied = app.applyRoi();
     require(rectList.size() == 5 && app.dirty() && hasApplied, "Image-free Rect creation did not produce a valid draft");
@@ -863,10 +770,9 @@ void roiParameterContract()
                       viewport.mapToScene(viewport.imageToItem({30, 25})).toPoint());
     require(viewport.selectedRoi() == 0, "New rectangle could not be reselected before deletion");
     QTest::keyClick(&window, Qt::Key_Delete);
-    require(QTest::qWaitFor([&] { return findCoordinate(findCoordinate, panel, "roiCoordinate0") == nullptr; }, 1000)
-                && viewport.selectedRoi() == -1 && viewport.drawShape() == 2
+    require(QTest::qWaitFor([&] { return viewport.selectedRoi() == -1 && viewport.drawShape() == 2; }, 1000)
                 && app.roiEditor().value("rectangle").toList().isEmpty(),
-            "Deleting the selected rectangle retained its selection, coordinate fields or old drawing mode");
+            "Deleting the selected rectangle retained its selection or old drawing mode");
     const auto afterDeletion = colorAt(renderedFrame(), {20, 15});
     require(afterDeletion.red() < 10 && afterDeletion.green() < 10 && afterDeletion.blue() < 10,
             "Deleting a rectangle left its old handle on the image");

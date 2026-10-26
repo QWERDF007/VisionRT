@@ -9,13 +9,10 @@ ColumnLayout {
     required property var parameter
     property string nodeId: app.selectedNode
     objectName: "parameter_" + parameter.id
-    property string structureDraft: ""
-    property string structureError: ""
     readonly property bool alwaysUpstream: parameter.type === "Image"
     readonly property bool upstream: (alwaysUpstream || parameter.mode === "upstream") && !parameter.init
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && !app.busy
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
-    readonly property bool structured: ["Array", "ROI"].indexOf(parameter.type) >= 0
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
     readonly property string pathKind: parameter.editor || ""
     readonly property real numberValue: Number(root.valueText)
@@ -30,7 +27,7 @@ ColumnLayout {
 
     function commit(text) { return root.editable && app.setParameter(parameter.id, parameter.init, text) }
     onPathKindChanged: { filePicker.close(); directoryPicker.close() }
-    onParameterKeyChanged: { filePicker.close(); directoryPicker.close(); structureDialog.close() }
+    onParameterKeyChanged: { filePicker.close(); directoryPicker.close() }
 
     RowLayout {
         Layout.fillWidth: true
@@ -105,7 +102,7 @@ ColumnLayout {
                                        : root.parameter.type === "Float" ? floatEditor
                                        : (root.parameter.type === "ROI" && root.parameter.editor === "rect") ? rectEditor
                                        : root.parameter.type === "ROI" ? regionsEditor
-                                       : root.structured ? structureEditor
+                                       : root.parameter.type === "Array" ? arrayEditor
                                        : textEditor
                     }
                 }
@@ -160,20 +157,6 @@ ColumnLayout {
             }
         }
 
-    }
-
-    RectangleEditor {
-        id: rectEditorItem
-        Layout.fillWidth: true
-        Layout.leftMargin: root.labelWidth + 6
-        readonly property bool hasImage: session && session.imageWidth > 0
-        visible: (root.parameter.type === "ROI" && root.parameter.editor === "rect") && !root.parameter.init
-            && app.roiEditor.node === root.nodeId && app.roiEditor.input === root.parameter.id
-        opacity: hasImage ? 0 : 1
-        Layout.preferredHeight: hasImage ? 0 : -1
-        clip: hasImage
-        enabled: root.editable
-        session: visible ? app.roiEditor : ({})
     }
 
     function currentUpstreamValue() {
@@ -531,50 +514,56 @@ ColumnLayout {
     }
 
     Component {
-        id: structureEditor
-        QuiButton {
-            id: structure
-            font: root.editorFont
-            implicitHeight: Theme.paramEditorHeight
-            leftPadding: 8
-            rightPadding: 8
-            opacity: 1
-            text: (root.parameter.typeDetail || root.parameter.type) + " · " + root.parameter.literal.replace(/\s+/g, " ").slice(0, 48)
-            focusPolicy: Qt.TabFocus
-            background: Rectangle { color: structure.hovered ? QuiColor.ItemHover : "transparent" }
-            contentItem: QuiText {
-                text: structure.text
-                font: structure.font
-                color: structure.enabled ? QuiColor.FontPrimary : QuiColor.FontCaption
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
+        id: arrayEditor
+        ParameterTextField {
+            id: field
+            placeholderText: "[]"
+            property string committedText: ""
+
+            actionIcon: (text.length > 0 && text !== "[]") ? QuiFontIcon.Clear : 0
+            actionText: "清空"
+            onActionRequested: {
+                text = "[]"
+                committedText = "[]"
+                root.commit("[]")
             }
-            onClicked: {
-                root.structureDraft = root.parameter.literal; root.structureError = ""; structureDialog.open()
+
+            function sync(force) {
+                const currentText = (root.valueText && root.valueText !== "null") ? root.valueText : "[]"
+                committedText = currentText
+                if (force || !inputItem.activeFocus) {
+                    text = committedText
+                    invalid = false
+                }
+            }
+
+            Component.onCompleted: sync(true)
+
+            onCommitRequested: {
+                let trimmed = text.trim()
+                if (trimmed === "" || trimmed === "[]" || trimmed === "null" || trimmed === "~") {
+                    trimmed = "[]"
+                    text = "[]"
+                }
+                if (trimmed === committedText) {
+                    invalid = false
+                    return
+                }
+                invalid = !root.commit(trimmed)
+                if (!invalid) {
+                    committedText = trimmed
+                }
+            }
+
+            onCancelRequested: sync(true)
+
+            Connections {
+                target: root
+                function onValueTextChanged() { field.sync(false) }
+                function onParameterKeyChanged() { field.sync(true) }
             }
         }
     }
     FileDialog { id: filePicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFile) }
     FolderDialog { id: directoryPicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFolder) }
-    WorkbenchDialog {
-        id: structureDialog; title: root.parameter.name + " · 结构数据"
-        closePolicy: Popup.CloseOnEscape
-        width: Math.min(760, parent ? parent.width - 32 : 760)
-        positiveButtonEnabled: root.editable
-        contentDelegate: Component {
-            ColumnLayout {
-                implicitHeight: 340; spacing: 8
-                QuiText { text: (root.parameter.typeDetail || root.parameter.type) + " · JSON"; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                ScrollView {
-                    Layout.fillWidth: true; Layout.fillHeight: true
-                    QuiTextArea { text: root.structureDraft; readOnly: !root.editable; selectByMouse: true; wrapMode: TextEdit.NoWrap; onTextChanged: root.structureDraft = text; font.family: "Consolas" }
-                }
-                QuiText { text: root.structureError; color: Theme.error; Layout.fillWidth: true; wrapMode: Text.Wrap }
-            }
-        }
-        onPositiveClickListener: function() {
-            if (root.editable && app.setParameter(root.parameter.id, root.parameter.init, root.structureDraft, true)) structureDialog.close()
-            else root.structureError = app.diagnostic
-        }
-    }
 }

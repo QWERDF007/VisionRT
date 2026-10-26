@@ -275,7 +275,7 @@ QString ValueJson::text(const PortValue &value, const TypeSpec &type, Purpose pu
         const auto array = json.toArray();
         if (array.isEmpty())
             return QStringLiteral("[]");
-        return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Indented)).trimmed();
+        return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact)).trimmed();
     }
     if (json.isObject())
     {

@@ -160,6 +160,7 @@ signals:
     void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::ROI::value_type::value_type &roi);
     void roiDeleted(const visionrt::RoiEditTarget &target);
     void roiEditCanceled();
+    void roiSelected(int index, QPointF point);
 
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
