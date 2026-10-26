@@ -214,12 +214,11 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(snapshot(failed, 1)->status.code == -2);
     assert(std::get<std::int64_t>(snapshot(failed, 1)->outputs.at("__status_code")) == -2);
     assert(isMissing(snapshot(failed, 1)->outputs.at("value")));
-    // A failed required data source blocks the consumer; the host publishes a
-    // terminal state without borrowing a tool error code.
-    assert(snapshot(failed, 2)->disposition == NodeDisposition::Blocked);
-    assert(snapshot(failed, 2)->status.code == 0);
+    // The upstream published no value, so the consumer's required input cannot be normalised:
+    // that is its own parameter error, not a host block and not a borrowed tool code.
+    assert(snapshot(failed, 2)->disposition == NodeDisposition::Failed);
     assert(isMissing(snapshot(failed, 2)->outputs.at("value")));
-    assert(snapshot(failed, 2)->status.message.find("阻塞") != std::string::npos);
+    assert(snapshot(failed, 2)->status.message.find("input") != std::string::npos);
     assert(snapshot(failed, 1)->round == snapshot(failed, 2)->round);
     assert(snapshot(failed, 1)->session == snapshot(failed, 2)->session);
 }
@@ -482,10 +481,9 @@ void receiverConsumesFailures()
                                  request.timeout       = 0ms;
                                  auto       next       = reader->receive(request, cursor);
                                  const bool consumed
-                                     = failed.status.code == 3 && failed.status.detail == "source detail"
-                                    && std::get<std::int64_t>(failed.outputs.at("source_status_code")) == 12
-                                    && isMissing(failed.outputs.at("value")) && next.status.code == 4
-                                    && isMissing(next.outputs.at("source_status_code"));
+                                     = failed.disposition == ReceiveDisposition::Missing
+                                    && failed.sourceStatus.code == 12 && failed.sourceStatus.detail == "source detail"
+                                    && isMissing(failed.value) && next.disposition == ReceiveDisposition::Timeout;
                                  return ToolResult{{}, {{"value", std::int64_t{consumed ? 1 : 0}}}};
                              };
                              return instance;
@@ -1261,8 +1259,9 @@ void explicitRequirednessAtExecution()
                         {
                             ++executed;
                             if (!initialization)
-                                assert(equalValues(inputs.at("limit"), explicitMissing ? PortValue{Missing{}}
-                                                                                     : PortValue{std::int64_t{5}}));
+                                // An explicit Missing literal is normalised to the declared default;
+                                // the value is never invented for a port without one.
+                                assert(equalValues(inputs.at("limit"), PortValue{std::int64_t{5}}));
                             return ToolResult{{}, {{"value", std::int64_t{1}}}};
                         },
                         [&]
@@ -1283,14 +1282,37 @@ void explicitRequirednessAtExecution()
                 project.flows.front().nodes = {configured};
                 assert(engine.start(project, registry, RunMode::Once));
                 const auto result = snapshot(finish(engine), 1);
-                const bool accepted = !required || !explicitMissing;
-                assert(static_cast<bool>(result->status) == accepted);
-                assert(initialized == (accepted ? 1 : 0));
-                assert(executed == (accepted ? 1 : 0));
-                if (!accepted)
-                    assert(result->status.message.find("limit") != std::string::npos);
+                // A declared default satisfies Missing regardless of `required`: the host fills the
+                // declaration, it never turns a missing draft into a parameter error.
+                assert(static_cast<bool>(result->status));
+                assert(initialized == 1);
+                assert(executed == 1);
             }
-    std::cout << "Explicit requiredness governs input and initialization Missing values independently of defaults\n";
+    // Without a default, a required port is a parameter error instead of an invented value.
+    {
+        RuntimeEngine engine(1);
+        ToolRegistry  registry;
+        auto          declared = definition("test.required.no_default");
+        PortDefinition limit{"limit", "限制", {Type::Int}};
+        limit.required = true;
+        declared.inputs.push_back(limit);
+        int executed = 0;
+        install(registry, declared,
+                [&](const Values &)
+                {
+                    ++executed;
+                    return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                });
+        auto configured = node(1, declared);
+        configured.inputs.emplace("limit", InputBinding{BindingMode::Literal, Missing{}, std::nullopt});
+        ProjectDefinition project;
+        project.flows.front().nodes = {configured};
+        assert(engine.start(project, registry, RunMode::Once));
+        const auto result = snapshot(finish(engine), 1);
+        assert(!result->status && result->status.message.find("limit") != std::string::npos);
+        assert(executed == 0);
+    }
+    std::cout << "Declared defaults satisfy Missing; required without default is a parameter error\n";
 }
 
 void managementDiagnosticsPreserveStatus()
@@ -1387,8 +1409,10 @@ void optionalOutputsAndCachedMissing()
     assert(!rejected && rejected.message.find("输出合同已变化") != std::string::npos);
 }
 
-void failedBusinessOutputsAreNotInputs()
+void failedBusinessOutputsRemainInputs()
 {
+    // A tool that reports a non-zero business status may still publish valid values. The host
+    // forwards them unchanged and never turns the status into a scheduling block.
     ToolRegistry registry;
     const auto   source = definition("test.failed_publication");
     install(registry, source,
@@ -1402,17 +1426,20 @@ void failedBusinessOutputsAreNotInputs()
     auto required      = definition("test.required_consumer", {"input"});
     int  requiredCalls = 0;
     install(registry, required,
-            [&](const Values &)
+            [&](const Values &inputs)
             {
                 ++requiredCalls;
+                assert(std::get<std::int64_t>(inputs.at("input")) == 99);
                 return ToolResult{{}, {{"value", std::int64_t{1}}}};
             });
-    auto optional               = definition("test.optional_consumer", {"input"});
+    int optionalCalls = 0;
+    auto optional     = definition("test.optional_consumer", {"input"});
     optional.inputs[0].required = false;
     install(registry, optional,
-            [](const Values &inputs)
+            [&](const Values &inputs)
             {
-                assert(isMissing(inputs.at("input")));
+                ++optionalCalls;
+                assert(std::get<std::int64_t>(inputs.at("input")) == 99);
                 return ToolResult{{}, {{"value", std::int64_t{42}}}};
             });
     auto observer           = definition("test.status_consumer", {"code", "message"});
@@ -1427,14 +1454,8 @@ void failedBusinessOutputsAreNotInputs()
     auto first = node(1, source), second = node(2, required), third = node(3, optional), fourth = node(4, observer);
     bind(second, "input", 1);
     bind(third, "input", 1);
-    fourth.inputs["code"] = {
-        BindingMode::Upstream, Missing{},
-         SourcePort{1, "__status_code"}
-    };
-    fourth.inputs["message"] = {
-        BindingMode::Upstream, Missing{},
-         SourcePort{1, "__status_message"}
-    };
+    fourth.inputs["code"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "__status_code"}};
+    fourth.inputs["message"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "__status_message"}};
     ProjectDefinition project;
     project.flows.front().nodes = {first, second, third, fourth};
     RuntimeEngine engine(1);
@@ -1443,10 +1464,10 @@ void failedBusinessOutputsAreNotInputs()
     assert(snapshot(result, 1)->status.code == 7);
     assert(snapshot(result, 1)->status.detail == "original failure detail");
     assert(std::get<std::int64_t>(snapshot(result, 1)->outputs.at("value")) == 99);
-    assert(requiredCalls == 0);
-    assert(snapshot(result, 2)->disposition == NodeDisposition::Blocked);
+    assert(requiredCalls == 1);
+    assert(optionalCalls == 1);
+    assert(snapshot(result, 2)->disposition == NodeDisposition::Succeeded);
     assert(snapshot(result, 2)->status.code == 0);
-    assert(isMissing(snapshot(result, 2)->outputs.at("value")));
     assert(snapshot(result, 3)->status.code == 0 && snapshot(result, 4)->status.code == 0);
 }
 
@@ -1455,7 +1476,7 @@ try
 {
     assert(argc == 2);
     std::cout << "1\n"; optionalOutputsAndCachedMissing();
-    std::cout << "2\n"; failedBusinessOutputsAreNotInputs();
+    std::cout << "2\n"; failedBusinessOutputsRemainInputs();
     std::cout << "3\n"; explicitRequirednessAtExecution();
     std::cout << "4\n"; managementDiagnosticsPreserveStatus();
     std::cout << "5\n"; singleNodeUpstreamValidity();

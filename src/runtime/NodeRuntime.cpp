@@ -1,4 +1,6 @@
+#include "core/InputNormalizer.h"
 #include "core/NodeContracts.h"
+#include "core/StatusCodes.h"
 #include "runtime/RuntimeInternal.h"
 
 #include <core/ToolValueValidation.h>
@@ -241,84 +243,59 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     bool        frameworkFailure = false;
     bool        enteredExecute   = false;
 
-    // Host gate: a false guard or a skipped control source never instantiates or
-    // executes the formal tool, and never reports fabricated business zeros.
-    if (config.executionGuard)
+    // Host gate: only an explicitly configured logical condition can skip a node.
+    // Upstream business status never gates a normal tool; the tool decides.
+    if (config.executionGuard && config.executionGuard->mode == BindingMode::Upstream
+        && supportsExecutionGuard(definition->nodeModel))
     {
-        const auto &guard    = *config.executionGuard;
-        const auto  upstream = frozen.runtimes.at(guard.node)->slot.latest();
-        const bool  current  = upstream && upstream->generation == context->generation
-                           && upstream->session == context->session && upstream->round == context->round;
-        if (!current)
+        const auto &guard = *config.executionGuard;
+        if (!guard.source)
         {
+            // Upstream mode without a bound source is a parameter error, not "always execute".
             disposition = NodeDisposition::Blocked;
-            gateMessage = "执行条件在本轮不可用，节点已阻塞";
-        }
-        else if (upstream->disposition == NodeDisposition::Skipped)
-        {
-            disposition = NodeDisposition::Skipped;
-            gateMessage = "执行条件来源已跳过";
-        }
-        else if (upstream->disposition != NodeDisposition::Succeeded || upstream->status.code != 0)
-        {
-            disposition = NodeDisposition::Blocked;
-            gateMessage = "执行条件失败，节点已阻塞";
+            gateMessage = "执行条件尚未选择上层来源";
         }
         else
         {
-            const auto  value = upstream->outputs.find(guard.port);
-            const auto *flag  = value == upstream->outputs.end() ? nullptr : std::get_if<bool>(&value->second);
-            if (!flag)
+            const auto upstream = frozen.runtimes.at(guard.source->node)->slot.latest();
+            const bool current  = upstream && upstream->generation == context->generation
+                               && upstream->session == context->session && upstream->round == context->round;
+            const PortValue *published = nullptr;
+            if (current)
+            {
+                const auto found = upstream->outputs.find(guard.source->port);
+                if (found != upstream->outputs.end())
+                    published = &found->second;
+            }
+            const auto *flag = published ? std::get_if<bool>(published) : nullptr;
+            if (!current || upstream->disposition == NodeDisposition::Skipped
+                || upstream->disposition == NodeDisposition::Blocked)
+            {
+                disposition = NodeDisposition::Blocked;
+                gateMessage = "执行条件在本轮不可用，节点已阻塞";
+            }
+            else if (!flag)
             {
                 disposition = NodeDisposition::Blocked;
                 gateMessage = "执行条件必须是布尔值，节点已阻塞";
             }
             else if (!*flag)
             {
+                // The user configured this logical control; a false flag is its normal result.
                 disposition = NodeDisposition::Skipped;
                 gateMessage = "执行条件为假";
             }
         }
     }
-    if (disposition == NodeDisposition::Running)
-    {
-        for (const auto &port : definition->inputs)
-        {
-            if (!port.required || port.id.starts_with("__"))
-                continue;
-            const auto binding = config.inputs.find(port.id);
-            if (binding == config.inputs.end() || binding->second.mode != BindingMode::Upstream
-                || !binding->second.source)
-                continue;
-            const auto upstream = frozen.runtimes.at(binding->second.source->node)->slot.latest();
-            const bool current  = upstream && upstream->generation == context->generation
-                              && upstream->session == context->session && upstream->round == context->round;
-            if (!current)
-                continue; // The frozen-run check reports stale publications later.
-            if (upstream->disposition == NodeDisposition::Skipped)
-            {
-                disposition = NodeDisposition::Skipped;
-                gateMessage = "上游节点本轮跳过";
-                break;
-            }
-            if (upstream->disposition != NodeDisposition::Succeeded)
-            {
-                disposition = NodeDisposition::Blocked;
-                gateMessage = "上游节点失败，节点已阻塞";
-                break;
-            }
-        }
-    }
-
     const auto publishTerminal = [&](std::string message)
     {
         snapshot->disposition = disposition;
-        snapshot->status      = {0, std::move(message)};
+        snapshot->status      = {kNotExecutedStatus, std::move(message)};
         snapshot->phase       = NodePhase::Prepare;
         for (const auto &port : definition->outputs)
             if (port.id != "__status_code" && port.id != "__status_message")
                 snapshot->outputs.emplace(port.id, Missing{});
-        snapshot->outputs.emplace("__status_code", std::int64_t{0});
+        snapshot->outputs.emplace("__status_code", kNotExecutedStatus);
         snapshot->outputs.emplace("__status_message", snapshot->status.message);
         snapshot->timing.totalMs = milliseconds(Clock::now() - started);
         slot.publish(std::move(snapshot));
@@ -363,28 +340,15 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                             const auto found = upstream->outputs.find(input.source->port);
                             if (found == upstream->outputs.end())
                                 throw ContractError("上游输出端口不存在");
-                            const bool systemOutput
-                                = input.source->port == "__status_code" || input.source->port == "__status_message";
-                            value = upstream->status || systemOutput ? found->second : PortValue{Missing{}};
+                            // A failed tool may still publish valid diagnostics or partial results;
+                            // dropping them would hide data the tool actually produced.
+                            value = found->second;
                         }
                     }
                 }
                 inputs.emplace(port.id, std::move(value));
             }
-            if (definition->nodeModel == NodeModel::Select)
-            {
-                const auto selector = inputs.find("selector");
-                const auto *flag    = selector == inputs.end() ? nullptr : std::get_if<bool>(&selector->second);
-                if (!flag)
-                    throw ContractError("合流节点缺少选择条件");
-                const auto chosen = inputs.find(*flag ? "if_true" : "if_false");
-                if (chosen == inputs.end() || isMissing(chosen->second))
-                {
-                    disposition = NodeDisposition::Blocked;
-                    gateMessage = "所选分支没有可用值，节点已阻塞";
-                }
-            }
-            validateToolValues(definition->inputs, inputs);
+            inputs = normalizeInputs(definition->inputs, std::move(inputs));
             prepareTimer.stop();
         }
         if (disposition != NodeDisposition::Running)
@@ -412,13 +376,13 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         const auto &parameters = configuration->parameters;
         if (instance && !initialized)
         {
-            validateToolValues(definition->initParams, parameters);
+            const auto normalizedParams = normalizeInputs(definition->initParams, parameters);
             ToolStatus status;
             {
                 ScopeTimer initTimer(snapshot->timing.initMs, &snapshot->timing.initMeasured);
                 try
                 {
-                    status = instance->initialize(parameters);
+                    status = instance->initialize(normalizedParams);
                 }
                 catch (const RegistryError &error)
                 {

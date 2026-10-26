@@ -92,13 +92,16 @@ std::optional<std::string> upstreamValidityError(
             return "上游节点 " + node.title() + " 尚未运行，请先运行该节点";
         if (snapshot->executionRevision != node.executionRevision)
             return "上游节点 " + node.title() + " 的参数已修改，请先重新运行该节点";
-        if (snapshot->status.code != 0 || snapshot->disposition != NodeDisposition::Succeeded)
-            return "上游节点 " + node.title() + " 未成功运行，请先重新运行该节点";
-        if (node.executionGuard)
+        // Reuse does not require a successful business status: a failed publication with
+        // valid outputs is a legitimate, current input.
+        if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
+            return "上游节点 " + node.title() + " 本轮未执行，请先运行该节点";
+        if (node.executionGuard && node.executionGuard->mode == BindingMode::Upstream
+            && node.executionGuard->source)
         {
-            const auto guard = runtimes.find(node.executionGuard->node);
+            const auto guard = runtimes.find(node.executionGuard->source->node);
             const auto flag  = guard == runtimes.end() ? ResultSlot::Snapshot{} : guard->second->slot.latest();
-            if (!flag || flag->generation != generation || flag->disposition != NodeDisposition::Succeeded)
+            if (!flag || flag->generation != generation)
                 return "节点 " + node.title() + " 的执行条件在本轮不可用，请先运行条件来源";
         }
         if (snapshot->toolId != node.toolId)
@@ -144,7 +147,9 @@ std::optional<std::string> upstreamValidityError(
                 return "上游节点 " + sourceIt->second->title() + " 的输出类型与 " + node.title() + " 的输入不匹配";
             try
             {
-                validateToolValue(*input->second, output->second);
+                // Structure only: range/option normalisation happens at the call boundary,
+                // so a currently out-of-range publication is reusable, not a stale one.
+                validateValue(input->second->type, output->second);
             }
             catch (const ContractError &error)
             {
@@ -211,6 +216,7 @@ struct RuntimeEngine::Impl
     std::mutex                                                        control;
     std::condition_variable                                           commandReady;
     RuntimeState                                                      state          = RuntimeState::Idle;
+    RunMode                                                           sessionMode    = RunMode::Once;
     bool                                                              shutdown       = false;
     bool                                                              stopRequested  = false;
     bool                                                              commandPending = false;
@@ -713,6 +719,7 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
             if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
                 return {1, *error};
         }
+        impl_->sessionMode   = mode;
         impl_->state         = mode == RunMode::Node ? RuntimeState::RunningNode
                              : mode == RunMode::Loop ? RuntimeState::RunningLoop
                                                      : RuntimeState::RunningOnce;
@@ -879,6 +886,7 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.generation        = impl_->generation;
     update.session           = impl_->session;
     update.round             = impl_->round;
+    update.mode              = impl_->sessionMode;
     update.flows             = impl_->flowTiming;
     update.roundMilliseconds = impl_->roundMilliseconds;
     if (impl_->session > 0)

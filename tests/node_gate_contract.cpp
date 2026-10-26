@@ -29,7 +29,7 @@ void require(bool condition, const std::string &message)
 ToolDefinition expressionTool()
 {
     ToolDefinition tool;
-    tool.schemaVersion  = 3;
+    tool.schemaVersion  = 4;
     tool.id             = "test.logic.expression";
     tool.displayName    = "表达式";
     tool.kind           = ToolKind::PythonClass;
@@ -48,17 +48,26 @@ ToolDefinition conditionTool()
     tool.id          = "test.logic.branch";
     tool.displayName = "条件分支";
     tool.nodeModel   = NodeModel::Condition;
+    PortDefinition mode;
+    mode.id           = "condition_mode";
+    mode.name         = "条件来源";
+    mode.type         = {Type::String};
+    mode.defaultValue = std::string{"formula"};
+    mode.options      = {std::string{"formula"}, std::string{"upstream"}};
+    tool.initParams.push_back(std::move(mode));
     tool.outputs     = {{"__status_code", "状态码", {Type::Int}},
                         {"__status_message", "状态消息", {Type::String}},
                         {"on_true", "成立", {Type::Bool}},
-                        {"on_false", "否则", {Type::Bool}}};
+                        {"on_false", "否则", {Type::Bool}},
+                        {"on_true_status", "成立分支状态", {Type::Int}},
+                        {"on_false_status", "否则分支状态", {Type::Int}}};
     return tool;
 }
 
 ToolDefinition selectTool()
 {
     ToolDefinition tool;
-    tool.schemaVersion = 3;
+    tool.schemaVersion = 4;
     tool.id            = "visionrt.control.select";
     tool.displayName   = "分支合流";
     tool.kind          = ToolKind::Host;
@@ -102,7 +111,7 @@ void install(ToolRegistry &registry, const ToolDefinition &tool, std::function<T
 ToolDefinition intTool(std::string id, std::vector<std::string> inputs = {})
 {
     ToolDefinition tool;
-    tool.schemaVersion = 3;
+    tool.schemaVersion = 4;
     tool.id            = std::move(id);
     tool.displayName   = tool.id;
     tool.version       = "1";
@@ -115,7 +124,7 @@ ToolDefinition intTool(std::string id, std::vector<std::string> inputs = {})
 ToolDefinition boolTool()
 {
     ToolDefinition tool;
-    tool.schemaVersion = 3;
+    tool.schemaVersion = 4;
     tool.id            = "test.logic.flag";
     tool.displayName   = "布尔来源";
     tool.version       = "1";
@@ -300,8 +309,10 @@ void materialisationAndTransactions()
     require(editor.setExpressionConfig("flow_1", conditionId, validCondition, condition),
             "a single hidden Bool condition must commit");
     const auto conditionContract = nodeContract(editor.project().flows.front().nodes.at(2), condition);
-    require(conditionContract.outputs.size() == 4 && conditionContract.outputs[2].id == "on_true"
-                && conditionContract.outputs[3].type == TypeSpec{Type::Bool},
+    require(conditionContract.outputs.size() == 6 && conditionContract.outputs[2].id == "on_true"
+                && conditionContract.outputs[3].type == TypeSpec{Type::Bool}
+                && conditionContract.outputs[4].id == "on_true_status"
+                && conditionContract.outputs[5].id == "on_false_status",
             "condition outputs are fixed regardless of the formula list");
 }
 
@@ -312,9 +323,9 @@ void guardAndSelect()
     const auto provider = intTool("test.provider");
     const auto select   = selectTool();
 
-    std::atomic<int>  flagMode{0}; // 0 false, 1 true, 2 failure
-    std::atomic<int>  executions{0};
-    const auto        flagRun = [&](const Values &) -> ToolResult
+    std::atomic<int> flagMode{0}; // 0 false, 1 true, 2 failure
+    std::atomic<int> executions{0};
+    const auto       flagRun = [&](const Values &) -> ToolResult
     {
         if (flagMode.load() == 2)
             return ToolResult{{3, "条件失败"}, {{"value", Missing{}}}};
@@ -332,11 +343,13 @@ void guardAndSelect()
     registerSelectTools(registry);
     registry.addDefinition(select);
 
-    auto source   = node(1, flag, 0);
+    auto source       = node(1, flag, 0);
     auto providerNode = node(3, provider, 0);
-    auto work     = node(2, counter, 1);
-    work.inputs["input"]   = {BindingMode::Upstream, Missing{}, SourcePort{3, "value"}};
-    work.executionGuard    = SourcePort{1, "value"};
+    auto work         = node(2, counter, 1);
+    work.inputs["input"] = {BindingMode::Upstream, Missing{}, SourcePort{3, "value"}};
+    // A guard left on a fixed tool is a legacy configuration: preserved, but the tool
+    // still runs and decides on its own.
+    work.executionGuard = ExecutionGuard{SourcePort{1, "value"}};
     ProjectDefinition project;
     project.flows.front().nodes = {source, providerNode, work};
 
@@ -348,46 +361,28 @@ void guardAndSelect()
     RuntimeEngine engine(2);
     started(engine, project, registry);
     auto result = finish(engine);
-    require(executions.load() == 0, "a false guard must not execute the formal tool");
-    require(snapshot(result, 2)->disposition == NodeDisposition::Skipped,
-            "a false guard publishes the skipped terminal state");
-    require(snapshot(result, 2)->status.message.find("条件为假") != std::string::npos,
-            "skipped message must explain the guard");
-    require(isMissing(snapshot(result, 2)->outputs.at("value")), "skipped outputs stay missing");
-
-    flagMode.store(1);
-    started(engine, project, registry);
-    result = finish(engine);
-    require(executions.load() == 1, "a true guard must execute exactly once");
+    require(executions.load() == 1, "a legacy fixed guard must not suppress the tool");
     require(snapshot(result, 2)->disposition == NodeDisposition::Succeeded,
-            "a true guard publishes success");
+            "a fixed tool decides its own business status regardless of a stored guard");
+    require(std::get<std::int64_t>(snapshot(result, 2)->outputs.at("value")) == 7,
+            "the fixed tool did not receive its normalized upstream value");
 
-    // A failing guard source blocks the node instead of falling into the false path.
-    flagMode.store(2);
-    started(engine, project, registry);
-    result = finish(engine);
-    require(snapshot(result, 2)->disposition == NodeDisposition::Blocked,
-            "a failed guard blocks the node");
-    require(snapshot(result, 2)->status.message.find("阻塞") != std::string::npos,
-            "blocked message must be explicit");
-    require(executions.load() == 1, "a blocked node never executes the tool");
-
-    // Merge: the unselected branch may be skipped, the selected one must exist.
+    // Merge: an unselected branch without a usable value must not stop the chosen one.
     RuntimeEngine merge(2);
     ToolRegistry  mergeRegistry;
+    const auto    failing = intTool("test.failing");
     install(mergeRegistry, flag, flagRun);
     install(mergeRegistry, provider, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{7}}}}; });
-    install(mergeRegistry, counter, [&](const Values &inputs)
-            { return ToolResult{{}, {{"value", std::get<std::int64_t>(inputs.at("input"))}}}; });
+    install(mergeRegistry, failing,
+            [](const Values &) { return ToolResult{{1, "分支无结果"}, {{"value", Missing{}}}}; });
     registerSelectTools(mergeRegistry);
     mergeRegistry.addDefinition(select);
     flagMode.store(0);
     auto selector = node(1, flag, 0);
-    auto branchA  = node(2, provider, 1);
-    branchA.executionGuard = SourcePort{1, "value"}; // skipped while the flag is false
-    auto branchB = node(3, provider, 1);
-    auto merge_  = node(4, select, 2);
-    merge_.selectType = TypeSpec{Type::Int};
+    auto branchA  = node(2, failing, 1);
+    auto branchB  = node(3, provider, 1);
+    auto merge_   = node(4, select, 2);
+    merge_.selectType         = TypeSpec{Type::Int};
     merge_.inputs["selector"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "value"}};
     merge_.inputs["if_true"]  = {BindingMode::Upstream, Missing{}, SourcePort{2, "value"}};
     merge_.inputs["if_false"] = {BindingMode::Upstream, Missing{}, SourcePort{3, "value"}};
@@ -395,9 +390,11 @@ void guardAndSelect()
     mergeProject.flows.front().nodes = {selector, branchA, branchB, merge_};
     started(merge, mergeProject, mergeRegistry);
     const auto merged = finish(merge);
-    require(snapshot(merged, 2)->disposition == NodeDisposition::Skipped, "unselected branch must skip");
+    require(snapshot(merged, 2)->disposition == NodeDisposition::Failed
+                && snapshot(merged, 2)->status.code == 1,
+            "a failed business status stays a tool-reported terminal state, not a host block");
     require(snapshot(merged, 4)->disposition == NodeDisposition::Succeeded,
-            "select must accept a skipped unselected branch");
+            "select must accept a branch without a value on the unselected side");
     require(std::get<std::int64_t>(snapshot(merged, 4)->outputs.at("value")) == 7,
             "select forwards the chosen branch value");
 }
@@ -428,14 +425,14 @@ void projectRoundtrip()
     bool guardRejected = false;
     try
     {
-        editor.setExecutionGuard("flow_1", conditionId, SourcePort{expressionId, "p2"});
+        editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, "p2"}}, condition);
     }
     catch (const ContractError &)
     {
         guardRejected = true;
     }
     require(guardRejected, "an Int output cannot act as an execution guard");
-    require(editor.setExecutionGuard("flow_1", conditionId, SourcePort{expressionId, "p3"}),
+    require(editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, "p3"}}, condition),
             "Boolean guard binding failed");
     const auto selectId = editor.addNode("flow_1", select, {0, 2});
     require(editor.setSelectType("flow_1", selectId, {Type::Float}, select), "select type commit failed");
@@ -452,7 +449,8 @@ void projectRoundtrip()
     require(nodes.at(0).expression && nodes.at(0).expression->program.size() == 2,
             "expression program did not survive the roundtrip");
     require(nodes.at(0).expression->nextPortSeq == 4, "port sequence lost");
-    require(nodes.at(1).executionGuard && nodes.at(1).executionGuard->port == "p3",
+    require(nodes.at(1).executionGuard && nodes.at(1).executionGuard->source
+                && nodes.at(1).executionGuard->source->port == "p3",
             "execution guard did not survive the roundtrip");
     require(nodes.at(2).selectType && *nodes.at(2).selectType == TypeSpec{Type::Float},
             "select type did not survive the roundtrip");

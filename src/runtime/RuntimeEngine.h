@@ -88,6 +88,9 @@ struct RuntimeUpdate
     std::uint64_t                    generation = 1;
     std::uint64_t                    session    = 0;
     std::uint64_t                    round      = 0;
+    // Mode of the running session. Consumers use it to keep single-node timings away from the
+    // complete-run statistics instead of guessing from the current UI state.
+    RunMode                          mode       = RunMode::Once;
     std::vector<NodeUpdate>          nodes;
     std::vector<FlowTiming>          flows;
     std::optional<double>            roundMilliseconds;

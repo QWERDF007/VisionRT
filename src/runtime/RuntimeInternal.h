@@ -76,7 +76,7 @@ public:
         context_ = context;
     }
 
-    ToolResult receive(const ReceiveRequest &request, ReceiveCursor &cursor) override;
+    ReceiveOutcome receive(const ReceiveRequest &request, ReceiveCursor &cursor) override;
 
 private:
     NodeId                            receiver_;

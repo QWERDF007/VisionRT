@@ -20,6 +20,17 @@ void require(bool condition, const char *message)
         throw std::runtime_error(message);
 }
 
+// Mirrors a tool that forwards every declared business output while ignoring the
+// host-owned status input.
+Values businessOutputs(const Values &inputs)
+{
+    Values outputs;
+    for (const auto &[id, value] : inputs)
+        if (!isHostOwnedPort(id))
+            outputs.emplace(id, value);
+    return outputs;
+}
+
 class Function final : public IToolInstance
 {
 public:
@@ -131,7 +142,7 @@ void nativeGraphSharing(std::size_t batchSize)
                     regions.push_back({
                         {0., 1., 2.}
                     });
-                    return ToolResult{{}, inputs};
+                    return ToolResult{{}, businessOutputs(inputs)};
                 });
         });
     ProjectEditor editor;
@@ -212,7 +223,7 @@ void explicitToolStoragePolicies()
                         if (policy == "inplace")
                         {
                             ++input.get()[0].at<std::uint16_t>(0, 0);
-                            return ToolResult{{}, inputs};
+                            return ToolResult{{}, businessOutputs(inputs)};
                         }
                         cv::Mat output
                             = policy == "clone" ? input.get()[0].clone() : cv::Mat(3, 4, CV_16UC1, cv::Scalar(42));
@@ -325,7 +336,7 @@ void toolCoordinatedBranches()
                                 {{"images", DataRef<Image>(Image{cv::Mat(3, 4, CV_16UC1, cv::Scalar(50000))})}}};
                         std::lock_guard lock(coordination->pixels);
                         for (int increment = 0; increment < 100; ++increment) ++input.get()[0].at<std::uint16_t>(0, 0);
-                        return ToolResult{{}, inputs};
+                        return ToolResult{{}, businessOutputs(inputs)};
                     });
             });
         const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});

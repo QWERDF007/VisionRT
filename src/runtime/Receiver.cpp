@@ -8,12 +8,36 @@
 
 namespace visionrt {
 namespace {
-ToolResult receiveError(std::int64_t code, std::string message)
+// The receiving tool owns the business policy for a terminal source. The
+// transport only reports what actually happened and which value exists.
+ToolResult receiveResult(const ReceiveOutcome &outcome)
 {
-    return {
-        {code, std::move(message)},
-        {{"value", Missing{}}, {"source_status_code", Missing{}}, {"source_status_message", Missing{}}}
-    };
+    ToolResult result;
+    result.outputs["source_status_code"]    = outcome.sourceStatus.code;
+    result.outputs["source_status_message"] = std::string(outcome.sourceStatus.message);
+    result.outputs["value"]                 = outcome.value;
+    switch (outcome.disposition)
+    {
+    case ReceiveDisposition::Value:
+        result.status = executionSuccess();
+        break;
+    case ReceiveDisposition::Missing:
+        result.status = {3, outcome.message};
+        break;
+    case ReceiveDisposition::Timeout:
+        result.status = {4, outcome.message};
+        break;
+    case ReceiveDisposition::Canceled:
+        result.status = {kCancelledStatus, outcome.message};
+        break;
+    case ReceiveDisposition::Capacity:
+        result.status = {5, outcome.message};
+        break;
+    case ReceiveDisposition::ProtocolError:
+        result.status = {1, outcome.message};
+        break;
+    }
+    return result;
 }
 
 class ReceiveTool final : public IToolInstance
@@ -49,7 +73,7 @@ public:
 
     ToolResult execute(const Values &) override
     {
-        return reader_->receive(request_, cursor_);
+        return receiveResult(reader_->receive(request_, cursor_));
     }
 
     ToolStatus release() override
@@ -207,19 +231,27 @@ std::optional<ToolStatus> validateReceiverPlan(const FrozenRun &frozen)
     return std::nullopt;
 }
 
-ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cursor)
+ReceiveOutcome NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cursor)
 {
+    const auto failure = [](ReceiveDisposition disposition, std::int64_t code, std::string message)
+    {
+        ReceiveOutcome outcome;
+        outcome.disposition  = disposition;
+        outcome.sourceStatus = {code, message};
+        outcome.message      = std::move(message);
+        return outcome;
+    };
     using Clock        = std::chrono::steady_clock;
     const auto started = Clock::now();
     if (request.timeout.count() < 0)
-        return receiveError(1, "timeout_ms 必须为非负整数");
+        return failure(ReceiveDisposition::ProtocolError, 1, "timeout_ms 必须为非负整数");
     const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::time_point::max() - started);
     if (request.timeout > remaining)
-        return receiveError(1, "timeout_ms 超出单调时钟可表示范围");
+        return failure(ReceiveDisposition::ProtocolError, 1, "timeout_ms 超出单调时钟可表示范围");
     const auto deadline = started + request.timeout;
     const auto context  = context_.lock();
     if (!context)
-        return receiveError(1, "没有活动的接收调用");
+        return failure(ReceiveDisposition::ProtocolError, 1, "没有活动的接收调用");
     NodeId sourceNode = 0;
     try
     {
@@ -227,7 +259,7 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
     }
     catch (const ContractError &error)
     {
-        return receiveError(1, error.what());
+        return failure(ReceiveDisposition::ProtocolError, 1, error.what());
     }
     const FlowDefinition *sourceFlow = nullptr;
     const FlowDefinition *ownFlow    = nullptr;
@@ -240,9 +272,9 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
                 ownFlow = &flow;
     }
     if (!sourceFlow)
-        return receiveError(1, "源流程不存在：" + request.flowId);
+        return failure(ReceiveDisposition::ProtocolError, 1, "源流程不存在：" + request.flowId);
     if (sourceFlow == ownFlow)
-        return receiveError(1, "跨流程接收需要不同流程；同一流程内请使用连线绑定");
+        return failure(ReceiveDisposition::ProtocolError, 1, "跨流程接收需要不同流程；同一流程内请使用连线绑定");
     const NodeDefinition *source = nullptr;
     for (const auto &node : sourceFlow->nodes)
         if (node.id == sourceNode)
@@ -251,10 +283,10 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
             break;
         }
     if (!source)
-        return receiveError(1, "源节点不存在：" + request.nodeSequence);
+        return failure(ReceiveDisposition::ProtocolError, 1, "源节点不存在：" + request.nodeSequence);
     const auto sourceType = source->signatures.outputs.find(request.port);
     if (sourceType == source->signatures.outputs.end() || sourceType->second != request.type)
-        return receiveError(2, "源输出端口类型与接收器不一致");
+        return failure(ReceiveDisposition::ProtocolError, 2, "源输出端口类型与接收器不一致");
     if (cursor.session != context->session || cursor.source != source->id)
         cursor = {context->session, source->id, 0};
     const auto fresh = [&](const NodeSnapshot &snapshot)
@@ -265,24 +297,20 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
     auto      &slot = context->frozen->runtimes.at(source->id)->slot;
     const auto take = [&](const ResultSlot::Snapshot &snapshot)
     {
-        cursor.publication = snapshot->publication;
-        // Terminal states published by the host end the wait immediately. A
-        // skipped or blocked source never falls back to a previous round value.
-        if (snapshot->disposition == NodeDisposition::Skipped)
-            return receiveError(6, "源节点本轮已跳过：" + snapshot->status.message);
-        if (snapshot->disposition == NodeDisposition::Blocked)
-            return receiveError(7, "源节点本轮被阻塞：" + snapshot->status.message);
-        auto result = receiveError(3, "源节点执行失败：" + snapshot->status.message);
-        result.status.detail                    = snapshot->status.detail;
-        result.outputs["source_status_code"] = snapshot->status.code;
-        result.outputs["source_status_message"] = std::string(snapshot->status.message);
-        if (!snapshot->status)
-            return result;
-        const auto output = snapshot->outputs.find(request.port);
+        cursor.publication       = snapshot->publication;
+        ReceiveOutcome outcome;
+        outcome.sourceStatus     = snapshot->status;
+        outcome.sourceStatus.detail = snapshot->status.detail;
+        const auto output        = snapshot->outputs.find(request.port);
         if (output == snapshot->outputs.end() || isMissing(output->second))
         {
-            result.status = {2, "源节点成功但输出端口没有值"};
-            return result;
+            outcome.disposition = ReceiveDisposition::Missing;
+            outcome.message     = snapshot->disposition == NodeDisposition::Skipped
+                                    ? "源节点本轮已跳过，没有可用值：" + snapshot->status.message
+                                : snapshot->disposition == NodeDisposition::Blocked
+                                    ? "源节点本轮被阻塞，没有可用值：" + snapshot->status.message
+                                    : "源节点没有发布该端口的可用值：" + snapshot->status.message;
+            return outcome;
         }
         try
         {
@@ -290,27 +318,28 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
         }
         catch (const ContractError &error)
         {
-            result.status = {2, error.what()};
-            return result;
+            outcome.disposition = ReceiveDisposition::ProtocolError;
+            outcome.message     = std::string("源输出值不符合接收声明：") + error.what();
+            return outcome;
         }
-        result.status           = {};
-        result.outputs["value"] = output->second;
-        return result;
+        outcome.disposition = ReceiveDisposition::Value;
+        outcome.value       = output->second;
+        return outcome;
     };
     const auto stop = context->stop ? context->stop->get_token() : std::stop_token{};
     if (stop.stop_requested())
-        return receiveError(kCancelledStatus, "运行已取消");
+        return failure(ReceiveDisposition::Canceled, kCancelledStatus, "运行已取消");
     auto snapshot = slot.latest();
     if (snapshot && fresh(*snapshot))
         return take(snapshot);
     if (request.timeout.count() == 0 || Clock::now() >= deadline)
-        return receiveError(4, "等待本次会话的新结果超时");
+        return failure(ReceiveDisposition::Timeout, 4, "等待本次会话的新结果超时");
     if (!budget_->acquire())
     {
         snapshot = slot.latest();
         if (snapshot && fresh(*snapshot))
             return take(snapshot);
-        return receiveError(5, "接收等待容量已耗尽，请减少同时等待的接收器或增加工作线程");
+        return failure(ReceiveDisposition::Capacity, 5, "接收等待容量已耗尽，请减少同时等待的接收器或增加工作线程");
     }
 
     struct Lease
@@ -325,9 +354,9 @@ ToolResult NodeReader::receive(const ReceiveRequest &request, ReceiveCursor &cur
 
     snapshot = slot.waitUntil(deadline, fresh, stop);
     if (stop.stop_requested())
-        return receiveError(kCancelledStatus, "运行已取消");
+        return failure(ReceiveDisposition::Canceled, kCancelledStatus, "运行已取消");
     if (!snapshot)
-        return receiveError(4, "等待本次会话的新结果超时");
+        return failure(ReceiveDisposition::Timeout, 4, "等待本次会话的新结果超时");
     return take(snapshot);
 }
 } // namespace runtime_detail
