@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/PythonLoadState.h"
 #include "core/ToolDefinition.h"
 #include "visionrt/contracts/Tool.h"
 
@@ -35,4 +36,15 @@ struct PlatformToolServices : ToolServices
 };
 
 using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)>;
+
+struct PythonFactoryFunctor
+{
+    std::shared_ptr<PythonLoadState>                                            loadState;
+    std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)> create;
+
+    std::unique_ptr<IToolInstance> operator()(const PlatformToolServices &services) const
+    {
+        return create(services);
+    }
+};
 } // namespace visionrt

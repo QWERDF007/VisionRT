@@ -12,10 +12,18 @@ void ToolTreeModel::setRegistry(const ToolRegistry &registry)
 {
     definitions_.clear();
     for (const auto &tool : registry.definitions())
+    {
+        // Assist helpers are driven by the interaction mapping and never appear
+        // in the ordinary tool menu.
+        if (tool.visibility == ToolVisibility::Assist)
+            continue;
+        const auto availability = registry.availability(tool.id);
         definitions_.push_back({QString::fromStdString(tool.category), QString::fromStdString(tool.subcategory),
                                 QString::fromStdString(tool.displayName), QString::fromStdString(tool.id),
                                 QString::fromStdString(tool.version),
-                                registry.availability(tool.id).state == ToolAvailability::Available});
+                                QString::fromStdString(availability.status.message),
+                                availability.state == ToolAvailability::Available});
+    }
     rebuild();
 }
 
@@ -25,6 +33,49 @@ void ToolTreeModel::setFilter(const QString &text)
         return;
     filter_ = text.trimmed();
     rebuild();
+}
+
+bool ToolTreeModel::updateToolStatus(const QString &toolId, bool available, const QString &status)
+{
+    bool changed = false;
+    for (auto &def : definitions_)
+    {
+        if (def.id == toolId)
+        {
+            if (def.available != available || def.status != status)
+            {
+                def.available = available;
+                def.status    = status;
+                changed       = true;
+            }
+            break;
+        }
+    }
+
+    for (int catRow = 0; catRow < static_cast<int>(root_.children.size()); ++catRow)
+    {
+        auto &cat = *root_.children[catRow];
+        for (int subRow = 0; subRow < static_cast<int>(cat.children.size()); ++subRow)
+        {
+            auto &sub = *cat.children[subRow];
+            for (int toolRow = 0; toolRow < static_cast<int>(sub.children.size()); ++toolRow)
+            {
+                auto &tool = *sub.children[toolRow];
+                if (tool.id == toolId)
+                {
+                    if (tool.available == available && tool.status == status)
+                        return changed;
+                    tool.available = available;
+                    tool.status    = status;
+                    const auto parentIdx = index(subRow, 0, index(catRow, 0, {}));
+                    const auto toolIdx   = index(toolRow, 0, parentIdx);
+                    emit dataChanged(toolIdx, toolIdx, {AvailableRole, StatusRole});
+                    return true;
+                }
+            }
+        }
+    }
+    return changed;
 }
 
 void ToolTreeModel::rebuild()
@@ -52,6 +103,7 @@ void ToolTreeModel::rebuild()
         child->name      = definition.name;
         child->id        = definition.id;
         child->version   = definition.version;
+        child->status    = definition.status;
         child->available = definition.available;
         child->parent    = &subgroup;
         subgroup.children.push_back(std::move(child));
@@ -113,6 +165,8 @@ QVariant ToolTreeModel::data(const QModelIndex &index, int role) const
         return entry.version;
     case AvailableRole:
         return entry.available;
+    case StatusRole:
+        return entry.status;
     case StableKeyRole:
         if (!entry.id.isEmpty())
             return entry.id;
@@ -130,6 +184,7 @@ QHash<int, QByteArray> ToolTreeModel::roleNames() const
         {       LeafRole,      "leaf"},
         {    VersionRole,   "version"},
         {  AvailableRole, "available"},
+        {     StatusRole,    "status"},
         {  StableKeyRole, "stableKey"}
     };
 }
@@ -138,8 +193,9 @@ Qt::ItemFlags ToolTreeModel::flags(const QModelIndex &index) const
 {
     if (!index.isValid())
         return Qt::NoItemFlags;
-    auto flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
-    if (!static_cast<Entry *>(index.internalPointer())->id.isEmpty())
+    const auto &entry = *static_cast<Entry *>(index.internalPointer());
+    auto        flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    if (!entry.id.isEmpty() && entry.available)
         flags |= Qt::ItemIsDragEnabled;
     return flags;
 }

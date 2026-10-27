@@ -7,6 +7,9 @@
 #include "runtime/Snapshot.h"
 #include "core/ValueJson.h"
 
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QGuiApplication>
 #include <QImage>
 #include <QJsonDocument>
@@ -34,6 +37,7 @@ void roiParameterContract();
 void pathEditorsContract();
 void flowCanvasContract();
 void startupProjectContract();
+void cancellationWindowContract();
 void popupSessionsContract();
 void outputCellReuseContract();
 void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, double scale);
@@ -59,8 +63,7 @@ void treeContract()
     tool.displayName = "精确整数";
     tool.version     = "1.0";
     tool.kind        = ToolKind::PythonFunction;
-    tool.script      = "precise.py";
-    tool.symbol      = "execute";
+    tool.entry       = PythonEntry{"fixture", "precise.py", "execute"};
     tool.category    = "数据";
     tool.subcategory = "整数";
     registry.addDefinition(tool);
@@ -80,14 +83,14 @@ void treeContract()
 void outputContract()
 {
     require(OutputModel::fullText({Missing{}, {Type::Int}}) == "null", "Missing must copy as JSON null");
-    const auto quoted = OutputModel::fullText({Utf8("中文 \"引号\"\n路径"), {Type::String}});
-    require(std::get<Utf8>(ValueJson::parse(quoted, {Type::String})).str() == "中文 \"引号\"\n路径",
+    const auto quoted = OutputModel::fullText({std::string("中文 \"引号\"\n路径"), {Type::String}});
+    require(std::get<std::string>(ValueJson::parse(quoted, {Type::String})) == "中文 \"引号\"\n路径",
             "output text must escape strings as JSON");
     require(OutputModel::fullText({std::numeric_limits<double>::infinity(), {Type::Float}}).contains("non_finite"),
             "nonfinite output must have an explicit JSON description");
-    require(typeText({Type::Rect}) == QStringLiteral("Rect"), "scalar rectangle type must be displayed safely");
-    const auto rectangle = Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F);
-    const OutputModel::Captured rectangleCapture{rectangle, {Type::Rect}};
+    require(typeText({Type::ROI}) == QStringLiteral("ROI"), "scalar rectangle type must be displayed safely");
+    const auto                  rectangle = DataRef<ROI>(ROI{{{2, 1.25, -2.5, 3.75, 4.5, 17.5}}});
+    const OutputModel::Captured rectangleCapture{rectangle, {Type::ROI}};
     require(OutputModel::fullText(rectangleCapture).contains("1.25"),
             "scalar rectangle output must retain floating geometry in full text");
     ToolDefinition tool;
@@ -101,7 +104,7 @@ void outputContract()
     snapshot->toolId = "test.output";
     snapshot->phase  = NodePhase::Convert;
     snapshot->status = {-2, "输出合同错误", "third-party \"detail\"\n完整详情"};
-    snapshot->outputs.emplace("value", Utf8(std::string(10000, 'x')));
+    snapshot->outputs.emplace("value", std::string(std::string(10000, 'x')));
     OutputModel model;
     model.setResult(&tool, snapshot,
                     {
@@ -111,7 +114,7 @@ void outputContract()
     require(model.get(1).value("portId").toString() == "__status_message", "status message is not second");
     require(model.get(0).value("preview").toString() == "-2", "status not taken from completed snapshot");
     require(model.get(1).value("preview").toString() == "输出合同错误", "status preview must contain only summary");
-    require(model.get(1).value("tooltip").toString().contains("完整详情"), "status tooltip lost technical detail");
+    require(model.get(1).value("tooltip").toString() == "输出合同错误", "status tooltip must contain only raw message");
     const auto diagnostic = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
     require(diagnostic.value("node").toString() == "18446744073709551614", "diagnostic JSON loses node precision");
     require(diagnostic.value("tool_id").toString() == "test.output" && diagnostic.value("phase") == "convert",
@@ -130,9 +133,9 @@ void outputContract()
     model.setResult(&tool, {}, {});
     require(model.get(2).value("type").toString() == QStringLiteral("未绑定"), "unbound output pretends to have a concrete type");
     require(!model.capture(2), "unbound output can be captured as a typed value");
-    const TypeSpec resolved{Type::NumericArray, DType::Float32, 2, Layout::BatchRagged};
+    const TypeSpec resolved{Type::Array, DType::Float32, 2};
     const TypeMap outputs{{"value", resolved}};
-    model.setResult(&tool, {}, {}, &outputs);
+    model.setResult(&tool, {}, {}, nullptr, &outputs);
     require(model.get(2).value("type").toString() == typeText(resolved), "resolved dtype/rank/layout not displayed");
     const auto lifecycle = std::make_shared<const NodeDiagnostic>(NodeDiagnostic{
         1,
@@ -140,11 +143,55 @@ void outputContract()
         NodePhase::Release,
         {-4, "释放失败", "uninitialized release detail"}
     });
-    model.setResult(&tool, {}, {}, &outputs, lifecycle);
+    model.setResult(&tool, {}, {}, nullptr, &outputs, lifecycle);
     require(isMissing(model.capture(0)->value), "release failure must not create an execution status");
     const auto releaseJson = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
     require(releaseJson.value("phase") == "release" && releaseJson.value("detail") == "uninitialized release detail",
             "release diagnostics without execution must remain independently exportable");
+
+    ToolDefinition typed;
+    typed.id          = "test.typed";
+    typed.displayName = "类型展示";
+    typed.version     = "1";
+    typed.outputs     = {
+        {  "zero",  "零", {Type::Int}},
+        {  "flag", "标志", {Type::Bool}},
+        {"list", "列表", {Type::Array, DType::Int64, 1}},
+        {  "text", "文本", {Type::String}}
+    };
+    auto typedSnapshot    = std::make_shared<NodeSnapshot>();
+    typedSnapshot->node   = 2;
+    typedSnapshot->toolId = typed.id;
+    typedSnapshot->status = {0, "运行成功"};
+    typedSnapshot->outputs = {
+        {  "zero", std::int64_t{0}},
+        {  "flag",              false},
+        {  "list", Array::empty(DType::Int64, 1)},
+        {  "text",    std::string{}},
+    };
+    OutputModel typedModel;
+    typedModel.setResult(&typed, typedSnapshot, {});
+    require(typedModel.get(2).value("preview").toString() == QStringLiteral("0"), "zero preview became blank");
+    require(typedModel.get(3).value("preview").toString() == QStringLiteral("false"), "false preview became blank");
+    require(typedModel.get(4).value("preview").toString() == QStringLiteral("[]"), "empty array preview became null");
+    require(typedModel.get(5).value("preview").toString().isEmpty(), "empty string preview is not blank");
+    require(std::get<std::int64_t>(typedModel.capture(2)->value) == 0
+                && !std::get<bool>(typedModel.capture(3)->value)
+                && std::holds_alternative<Array>(typedModel.capture(4)->value)
+                && std::get<std::string>(typedModel.capture(5)->value).empty(),
+            "typed outputs lost zero/false/empty values");
+    require(OutputModel::fullText(*typedModel.capture(2)) == QStringLiteral("0"), "zero export became null");
+    require(OutputModel::fullText(*typedModel.capture(3)) == QStringLiteral("false"), "false export became null");
+    require(OutputModel::fullText(*typedModel.capture(4)) == QStringLiteral("[]"), "empty array export became null");
+    require(OutputModel::fullText(*typedModel.capture(5)) == QStringLiteral("\"\""),
+            "empty string export became null");
+    typedModel.setResult(&typed, {}, {});
+    for (int row = 2; row <= 5; ++row)
+    {
+        require(typedModel.get(row).value("preview").toString().isEmpty(), "unexecuted output fabricated a preview");
+        const auto captured = typedModel.capture(row);
+        require(captured && isMissing(captured->value), "unexecuted output fabricated a typed value");
+    }
 }
 
 void pendingContract()
@@ -162,11 +209,35 @@ void pendingContract()
     app.resolveUnsaved("save", directory.path() + "/absent/project.vrt.json");
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved("discard");
-    require(closes == 1, "discard does not finish pending close exactly once");
+    require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
+    require(app.isClosing(), "app must report isClosing() after discard close");
+    app.runOnce();
+    app.refreshPython();
+    require(app.runState() == "Idle", "runOnce in Ready must not change runState");
+
+    // S-D03: Resolving unsaved decision with valid "save" writes to disk and completes close
+    {
+        QTemporaryDir saveDir;
+        AppController saveApp(1, saveDir.path());
+        int saveCloses = 0;
+        QObject::connect(&saveApp, &AppController::closeReady, [&] { ++saveCloses; });
+        saveApp.requestClose();
+        require(saveApp.dirty(), "new project without file should be dirty");
+        const QString validSavePath = saveDir.path() + "/saved_on_close.vrt.json";
+        saveApp.resolveUnsaved("save", validSavePath);
+        require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
+        require(QFile::exists(validSavePath), "resolveUnsaved save did not write file");
+        require(!saveApp.dirty(), "project should be clean after save on close");
+        require(saveApp.isClosing(), "saveApp must report isClosing() after save on close");
+        saveApp.runOnce();
+        saveApp.refreshPython();
+        require(saveApp.runState() == "Idle", "runOnce in Ready must not change runState");
+    }
 }
 
 #include <chrono>
 #include <thread>
+
 
 void durationTextContract()
 {
@@ -196,16 +267,32 @@ void durationTextContract()
             "uncalled tool used an unmeasured adapter duration");
     require(uncalled.preprocess == QStringLiteral("—") && uncalled.postprocess == QStringLiteral("—"),
             "framework stages were relabeled as algorithm stages");
+    require(uncalled.prepare == QStringLiteral("—") && uncalled.init == QStringLiteral("—")
+                && uncalled.validate == QStringLiteral("—"),
+            "unmeasured stages must display —");
     snapshot.timing.toolCallMeasured = true;
+    snapshot.timing.prepareMeasured = true;
+    snapshot.timing.initMeasured = true;
+    snapshot.timing.validateMeasured = true;
     const auto called = nodeTimingText(&snapshot, false);
     require(called.total == QStringLiteral("1234.57 ms") && called.toolCall == QStringLiteral("1.1 ms"),
             "node total and adapter call measurements were conflated");
+    require(called.prepare == QStringLiteral("27 ms") && called.init == QStringLiteral("31 ms")
+                && called.validate == QStringLiteral("43 ms"),
+            "measured framework stages did not display real values");
+    // The tooltip has exactly three rows: preparation and post-processing aggregate the measured
+    // phases; the operator row is the tool call itself.
+    require(called.preprocess == QStringLiteral("58 ms") && called.postprocess == QStringLiteral("43 ms"),
+            "tooltip phases did not aggregate the measured preparation/post-processing");
     const std::pair<double, QString> measurements[] = {
         {0.0, QStringLiteral("0 ms")}, {0.005, QStringLiteral("<0.01 ms")}, {1.1, QStringLiteral("1.1 ms")},
         {-1.0, QStringLiteral("—")},
         {std::numeric_limits<double>::quiet_NaN(), QStringLiteral("—")},
         {std::numeric_limits<double>::infinity(), QStringLiteral("—")}
     };
+    snapshot.timing.prepareMeasured = false;
+    snapshot.timing.initMeasured    = false;
+    snapshot.timing.validateMeasured = false;
     for (const auto &[value, expected] : measurements)
     {
         snapshot.timing.totalMs = value;
@@ -214,8 +301,37 @@ void durationTextContract()
         require(measured.total == expected && measured.toolCall == expected,
                 "controlled snapshot lost its measured zero, small value or invalid metric semantics");
         require(measured.preprocess == QStringLiteral("—") && measured.postprocess == QStringLiteral("—"),
-                "controlled snapshot fabricated independent algorithm measurements");
+                "unmeasured phases must stay unavailable instead of fabricating a zero");
     }
+    // A Python operator reports the real function call as its own time: the GIL wait and input
+    // mapping are preparation, the output conversion is post-processing, and the whole bridge is
+    // exactly their sum, so no stage is counted twice.
+    snapshot.timing.prepareMs            = 0;
+    snapshot.timing.initMs               = 0;
+    snapshot.timing.prepareMeasured      = false;
+    snapshot.timing.initMeasured         = false;
+    snapshot.timing.validateMeasured     = true;
+    snapshot.timing.validateMs           = 1.0;
+    snapshot.timing.pythonBridge         = true;
+    snapshot.timing.pythonInputMeasured  = true;
+    snapshot.timing.pythonCallMeasured   = true;
+    snapshot.timing.pythonOutputMeasured = true;
+    snapshot.timing.waitGilMs            = 2.0;
+    snapshot.timing.pythonInputMs        = 3.0;
+    snapshot.timing.pythonCallMs         = 4.0;
+    snapshot.timing.pythonOutputMs       = 3.0;
+    snapshot.timing.adapterExecuteMs     = 12.0;
+    const auto pythonCall = nodeTimingText(&snapshot, false);
+    require(pythonCall.toolCall == QStringLiteral("4 ms"),
+            "a Python operator must report its real call time instead of the whole adapter boundary");
+    require(pythonCall.preprocess == QStringLiteral("5 ms"),
+            "GIL wait and input mapping belong to preparation and must be counted once");
+    require(pythonCall.postprocess == QStringLiteral("4 ms"),
+            "output conversion belongs to post-processing and must be counted once");
+    snapshot.timing.pythonCallMeasured = false;
+    require(nodeTimingText(&snapshot, false).toolCall == QStringLiteral("—"),
+            "a bridge that never reached the function call must not claim operator time");
+
     const NodeSnapshot *previousSnapshots[] = {nullptr, &snapshot};
     for (const auto *previous : previousSnapshots)
     {
@@ -231,31 +347,32 @@ void durationTextContract()
 void nodeDiagnosticsContract()
 {
     QTemporaryDir directory;
-    QDir(directory.path()).mkpath("tools-package/assets/tools/custom/test_category/test_diag");
-    QFile pyFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.py");
+    QDir(directory.path()).mkpath("tools-package/tools/custom/test_category/test_diag");
+    QFile pyFile(directory.path() + "/tools-package/python/custom/test_category/test_diag/test_diag.py");
+    require(QDir().mkpath(QFileInfo(pyFile).absolutePath()), "cannot create Python fixture directory");
     if (pyFile.open(QIODevice::WriteOnly))
     {
         pyFile.write("def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'value': 42}\n");
         pyFile.close();
     }
-    QFile failPyFile(directory.path()
-                     + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.py");
+    QFile failPyFile(directory.path() + "/tools-package/python/custom/test_category/test_diag/test_diag_fail.py");
+    require(QDir().mkpath(QFileInfo(failPyFile).absolutePath()), "cannot create Python fixture directory");
     if (failPyFile.open(QIODevice::WriteOnly))
     {
         failPyFile.write("def run(inputs):\n    raise RuntimeError('diag boom')\n");
         failPyFile.close();
     }
-    QFile jsonFile(directory.path() + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag.json");
+    QFile jsonFile(directory.path() + "/tools-package/tools/custom/test_category/test_diag/test_diag.json");
     if (jsonFile.open(QIODevice::WriteOnly))
     {
         jsonFile.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.diag.python",
   "display_name": "诊断测试",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "test_diag.py", "symbol": "run"},
+  "entry": {"package": "test_category/test_diag", "file": "test_diag.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
     {"id": "x", "name": "输入", "type": "Int", "default": 1, "min": 0, "max": 100, "step": 1}
@@ -266,18 +383,17 @@ void nodeDiagnosticsContract()
 })json");
         jsonFile.close();
     }
-    QFile failJsonFile(directory.path()
-                       + "/tools-package/assets/tools/custom/test_category/test_diag/test_diag_fail.json");
+    QFile failJsonFile(directory.path() + "/tools-package/tools/custom/test_category/test_diag/test_diag_fail.json");
     if (failJsonFile.open(QIODevice::WriteOnly))
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.diag.fail",
   "display_name": "诊断失败",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "test_diag_fail.py", "symbol": "run"},
+  "entry": {"package": "test_category/test_diag", "file": "test_diag_fail.py", "symbol": "run"},
   "init_params": [],
   "inputs": [],
   "outputs": [
@@ -286,13 +402,12 @@ void nodeDiagnosticsContract()
 })json");
         failJsonFile.close();
     }
-    QFile unfulfilledJson(directory.path()
-                          + "/tools-package/assets/tools/custom/test_category/test_diag/unfulfilled.json");
+    QFile unfulfilledJson(directory.path() + "/tools-package/tools/custom/test_category/test_diag/unfulfilled.json");
     if (unfulfilledJson.open(QIODevice::WriteOnly))
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.diag.unfulfilled",
   "display_name": "未提供实现测试",
   "version": "1.0.0",
@@ -312,13 +427,11 @@ void nodeDiagnosticsContract()
   "schema_version": 1,
   "variant": "cpu",
   "tools": [
-    {"tool_id": "test.diag.python", "definition": "assets/tools/custom/test_category/test_diag/test_diag.json"},
-    {"tool_id": "test.diag.fail", "definition": "assets/tools/custom/test_category/test_diag/test_diag_fail.json"},
-    {"tool_id": "test.diag.unfulfilled", "definition": "assets/tools/custom/test_category/test_diag/unfulfilled.json", "module": "missing"}
+    {"tool_id": "test.diag.python", "definition": "tools/custom/test_category/test_diag/test_diag.json"},
+    {"tool_id": "test.diag.fail", "definition": "tools/custom/test_category/test_diag/test_diag_fail.json"},
+    {"tool_id": "test.diag.unfulfilled", "definition": "tools/custom/test_category/test_diag/unfulfilled.json"}
   ],
-  "modules": [
-    {"id": "missing", "library": "bin/notbuilt.dll"}
-  ],
+  "modules": [],
   "runtime_files": []
 })json");
         indexFile.close();
@@ -330,12 +443,73 @@ void nodeDiagnosticsContract()
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    app.addNode("test.diag.python", 100, 100);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.addNode("test.diag.unfulfilled", 200, 200);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.addNode("test.diag.fail", 300, 200);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
+    QFile projectFile(directory.path() + "/initial.vrt.json");
+    if (projectFile.open(QIODevice::WriteOnly))
+    {
+        projectFile.write(
+            R"json({
+  "format_version": 4,
+  "project": {"name": "诊断工程", "next_node_seq": "4", "next_flow_seq": "2"},
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "流程1",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "test.diag.python",
+          "tool_name_snapshot": "诊断测试",
+          "alias": "",
+          "pos": [100, 100],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {"x": {"type": "Int"}},
+            "outputs": {"value": {"type": "Int"}}
+          },
+          "inputs": {
+            "x": {"mode": "literal", "literal": 1}
+          }
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "test.diag.unfulfilled",
+          "tool_name_snapshot": "未提供实现测试",
+          "alias": "",
+          "pos": [200, 200],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {},
+            "outputs": {}
+          },
+          "inputs": {}
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "test.diag.fail",
+          "tool_name_snapshot": "诊断失败",
+          "alias": "",
+          "pos": [300, 200],
+          "init_params": {},
+          "type_snapshot": {
+            "init_params": {},
+            "inputs": {},
+            "outputs": {"value": {"type": "Int"}}
+          },
+          "inputs": {}
+        }
+      ]
+    }
+  ]
+})json");
+        projectFile.close();
+    }
+    app.requestOpen(directory.path() + "/initial.vrt.json");
+    app.resolveUnsaved("discard");
+    require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 3; }, 5000),
+            "project with unfulfilled tool did not open");
 
     const auto nodes = app.nodes();
     QStringList toolIds;
@@ -377,10 +551,12 @@ void nodeDiagnosticsContract()
             "executed node total timing is not measured");
     require(executedMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
             "executed node operator timing is not measured");
-    require(executedMap.value("timingPreprocessText").toString() == QStringLiteral("—"),
-            "executed node fabricates preprocess timing");
-    require(executedMap.value("timingPostprocessText").toString() == QStringLiteral("—"),
-            "executed node fabricates postprocess timing");
+    // The executed node measured its preparation and result validation, so the two aggregate
+    // rows must show real values instead of the unavailable placeholder.
+    require(executedMap.value("timingPreprocessText").toString().endsWith(QStringLiteral(" ms")),
+            "executed node lost its measured preprocess timing");
+    require(executedMap.value("timingPostprocessText").toString().endsWith(QStringLiteral(" ms")),
+            "executed node lost its measured postprocess timing");
 
     const auto unavailableMap = executedNodes.at(1).toMap();
     require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
@@ -444,22 +620,22 @@ void mainQmlContract(double scale)
     {"id": "test_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/counter.json"},
-    {"tool_id": "test.plugin.sleep", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/sleep.json"},
-    {"tool_id": "test.plugin.fail_init", "module": "test_module", "definition": "assets/tools/builtin/Plugin/Basic/fail.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/counter.json"},
+    {"tool_id": "test.plugin.sleep", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/sleep.json"},
+    {"tool_id": "test.plugin.fail_init", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/fail.json"}
   ],
   "runtime_files": []
 })json");
         indexFile.close();
     }
 
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/Plugin/Basic");
-    QFile sleepJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/sleep.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/Plugin/Basic");
+    QFile sleepJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/sleep.json");
     if (sleepJson.open(QIODevice::WriteOnly))
     {
         sleepJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.sleep",
   "display_name": "Plugin Sleep",
   "version": "1.0.0",
@@ -473,12 +649,12 @@ void mainQmlContract(double scale)
         sleepJson.close();
     }
 
-    QFile counterJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/counter.json");
+    QFile counterJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/counter.json");
     if (counterJson.open(QIODevice::WriteOnly))
     {
         counterJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "Plugin Counter",
   "version": "1.0.0",
@@ -494,12 +670,12 @@ void mainQmlContract(double scale)
         counterJson.close();
     }
 
-    QFile failJson(dirPath + "/tools-package/assets/tools/builtin/Plugin/Basic/fail.json");
+    QFile failJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/fail.json");
     if (failJson.open(QIODevice::WriteOnly))
     {
         failJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.fail_init",
   "display_name": "Fail Init Tool",
   "version": "1.0.0",
@@ -519,8 +695,7 @@ void mainQmlContract(double scale)
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto *theme = visionrt::Theme::instance();
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+    visionrt::registerStyleModule();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -536,7 +711,6 @@ void mainQmlContract(double scale)
 #endif
 
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", theme);
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
@@ -814,13 +988,13 @@ void packageDrivenCatalogAndRefreshContract()
         std::cout << "[Evidence T-05] Empty catalog on startup without package verified.\n";
 
         // 2. Placing JSON into old host directories without package does NOT populate tools
-        QDir(dirPath).mkpath("assets/tools/builtin/flow/func");
-        QFile legacyJson(dirPath + "/assets/tools/builtin/flow/func/platform_func.json");
+        QDir(dirPath).mkpath("tools/builtin/flow/func");
+        QFile legacyJson(dirPath + "/tools/builtin/flow/func/platform_func.json");
         if (legacyJson.open(QIODevice::WriteOnly))
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.legacy.func",
   "display_name": "遗留函数",
   "version": "1.0.0",
@@ -843,7 +1017,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.legacy.python",
   "display_name": "遗留脚本",
   "version": "1.0.0",
@@ -877,13 +1051,13 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Package builtin C++ counter
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/counter");
-    QFile rootCounterJson(dirPath + "/tools-package/assets/tools/builtin/pkg/counter/counter.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/pkg/counter");
+    QFile rootCounterJson(dirPath + "/tools-package/tools/builtin/pkg/counter/counter.json");
     if (rootCounterJson.open(QIODevice::WriteOnly))
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "计数器插件",
   "version": "1.0.0",
@@ -900,13 +1074,13 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Package builtin C++ function
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/pkg/function");
-    QFile rootFunctionJson(dirPath + "/tools-package/assets/tools/builtin/pkg/function/function.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/pkg/function");
+    QFile rootFunctionJson(dirPath + "/tools-package/tools/builtin/pkg/function/function.json");
     if (rootFunctionJson.open(QIODevice::WriteOnly))
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -923,8 +1097,9 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Package Python tool
-    QDir(dirPath).mkpath("tools-package/assets/tools/custom/user/py");
-    QFile pyScriptA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.py");
+    QDir(dirPath).mkpath("tools-package/tools/custom/user/py");
+    QFile pyScriptA(dirPath + "/tools-package/python/custom/user/py/user_node_a.py");
+    require(QDir().mkpath(QFileInfo(pyScriptA).absolutePath()), "cannot create Python fixture directory");
     if (pyScriptA.open(QIODevice::WriteOnly))
     {
         pyScriptA.write(
@@ -932,35 +1107,35 @@ void packageDrivenCatalogAndRefreshContract()
             "    return {'__status_code': 0, '__status_message': 'ok', 'result': 111, 'image': []}\n");
         pyScriptA.close();
     }
-    QFile root3JsonA(dirPath + "/tools-package/assets/tools/custom/user/py/user_node_a.json");
+    QFile root3JsonA(dirPath + "/tools-package/tools/custom/user/py/user_node_a.json");
     if (root3JsonA.open(QIODevice::WriteOnly))
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.user.pythonA",
   "display_name": "用户脚本A",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "user_node_a.py", "symbol": "run"},
+  "entry": {"package": "user/py", "file": "user_node_a.py", "symbol": "run"},
   "init_params": [],
   "inputs": [],
   "outputs": [
     {"id": "result", "name": "结果", "type": "Int"},
-    {"id": "image", "name": "图像", "type": "ImageBatch"}
+    {"id": "image", "name": "图像", "type": "Image"}
   ]
 })json");
         root3JsonA.close();
     }
 
     // Platform receiver tool with host_binding
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/flow/recv");
-    QFile recvJson(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.json");
+    QDir(dirPath).mkpath("tools-package/tools/builtin/flow/recv");
+    QFile recvJson(dirPath + "/tools-package/tools/builtin/flow/recv/receiver.json");
     if (recvJson.open(QIODevice::WriteOnly))
     {
         recvJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.custom.receiver",
   "display_name": "动态接收器",
   "version": "1.0.0",
@@ -983,13 +1158,13 @@ void packageDrivenCatalogAndRefreshContract()
     }
 
     // Unindexed JSON inside package
-    QDir(dirPath).mkpath("tools-package/assets/tools/builtin/unindexed");
-    QFile unindexedJson(dirPath + "/tools-package/assets/tools/builtin/unindexed/unindexed.json");
+    QDir(dirPath).mkpath("tools-package/unindexed");
+    QFile unindexedJson(dirPath + "/tools-package/unindexed/unindexed.json");
     if (unindexedJson.open(QIODevice::WriteOnly))
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.unindexed.tool",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -1013,10 +1188,10 @@ void packageDrivenCatalogAndRefreshContract()
     {"id": "test_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/pkg/counter/counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/pkg/function/function.json"},
-    {"tool_id": "test.user.pythonA", "definition": "assets/tools/custom/user/py/user_node_a.json"},
-    {"tool_id": "test.custom.receiver", "definition": "assets/tools/builtin/flow/recv/receiver.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/pkg/counter/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/pkg/function/function.json"},
+    {"tool_id": "test.user.pythonA", "definition": "tools/custom/user/py/user_node_a.json"},
+    {"tool_id": "test.custom.receiver", "definition": "tools/builtin/flow/recv/receiver.json"}
   ],
   "runtime_files": []
 })json");
@@ -1181,7 +1356,7 @@ void packageDrivenCatalogAndRefreshContract()
         std::cout << "[Evidence T-05] Cross-flow receive of dynamic host_binding node verified, value="
                   << recvPreview.toStdString() << "\n";
 
-        app.addNode("test.plugin.function", 200, 100);
+        app.addNode("test.plugin.function", 200, 200);
 
 
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
@@ -1256,13 +1431,13 @@ void packageDrivenCatalogAndRefreshContract()
 
         // 4. Change receiver declaration only (metadata-only identity change)
         std::cout << "[Evidence T-05] Changing receiver declaration identity and display name...\n";
-        QFile::remove(dirPath + "/tools-package/assets/tools/builtin/flow/recv/receiver.json");
-        QFile renamedJson(dirPath + "/tools-package/assets/tools/builtin/flow/recv/renamed.json");
+        QFile::remove(dirPath + "/tools-package/tools/builtin/flow/recv/receiver.json");
+        QFile renamedJson(dirPath + "/tools-package/tools/builtin/flow/recv/renamed.json");
         if (renamedJson.open(QIODevice::WriteOnly))
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.custom.renamed_recv",
   "display_name": "改名接收器",
   "version": "1.0.0",
@@ -1295,10 +1470,10 @@ void packageDrivenCatalogAndRefreshContract()
     {"id": "test_module", "library": "bin/test_plugin_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/pkg/counter/counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/pkg/function/function.json"},
-    {"tool_id": "test.user.pythonA", "definition": "assets/tools/custom/user/py/user_node_a.json"},
-    {"tool_id": "test.custom.renamed_recv", "definition": "assets/tools/builtin/flow/recv/renamed.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/pkg/counter/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/pkg/function/function.json"},
+    {"tool_id": "test.user.pythonA", "definition": "tools/custom/user/py/user_node_a.json"},
+    {"tool_id": "test.custom.renamed_recv", "definition": "tools/builtin/flow/recv/renamed.json"}
   ],
   "runtime_files": []
 })json");
@@ -1407,8 +1582,7 @@ void shortWindowContract()
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    auto *theme = visionrt::Theme::instance();
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", theme);
+    visionrt::registerStyleModule();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1424,7 +1598,6 @@ void shortWindowContract()
 #endif
 
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", theme);
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
 
@@ -1479,11 +1652,13 @@ void shortWindowContract()
 
 int main(int argc, char **argv)
 {
-    if (argc >= 2 && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
-                      || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"
-                      || std::string(argv[1]) == "--canvas-child" || std::string(argv[1]) == "--startup-child"
-                      || std::string(argv[1]) == "--catalog-child"
-                      || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"))
+    visionrt::registerStyleModule();
+    if (argc >= 2
+        && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
+            || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"
+            || std::string(argv[1]) == "--canvas-child" || std::string(argv[1]) == "--startup-child"
+            || std::string(argv[1]) == "--catalog-child" || std::string(argv[1]) == "--cancellation-child"
+            || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"))
     {
         QGuiApplication qt(argc, argv);
         try
@@ -1498,6 +1673,8 @@ int main(int argc, char **argv)
                 flowCanvasContract();
             else if (std::string(argv[1]) == "--startup-child")
                 startupProjectContract();
+            else if (std::string(argv[1]) == "--cancellation-child")
+                cancellationWindowContract();
             else if (std::string(argv[1]) == "--popups-child")
                 popupSessionsContract();
             else if (std::string(argv[1]) == "--output-reuse-child")

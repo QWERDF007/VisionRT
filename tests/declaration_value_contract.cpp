@@ -34,32 +34,29 @@ void rejects(F &&operation)
 int main()
 try
 {
-    const TypeSpec rectType{Type::Rect};
-    const auto rectValue = ValueJson::parse("[2, 1.25, -2.5, 3.75, 4.5, 17.5]", rectType);
-    assert(std::get<Roi>(rectValue).kind() == RoiKind::Rectangle);
-    assert(equalValues(rectValue, Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F)));
-    assert(typeOf(rectValue) == rectType);
-    assert(ValueJson::encodeType(rectType)["type"].toString() == "Rect");
-    assert(std::string_view(typeName(Type::Rect)) == "Rect");
+    const TypeSpec roiType{Type::ROI};
+    const auto     rectValue = ValueJson::parse("[[[2, 1.25, -2.5, 3.75, 4.5, 17.5]]]", roiType);
+    assert(roiKind(std::get<DataRef<ROI>>(rectValue).get()[0][0]) == RoiKind::Rectangle);
+    assert(typeOf(rectValue) == roiType);
+    assert(ValueJson::encodeType(roiType)["type"].toString() == "ROI");
+    assert(std::string_view(typeName(Type::ROI)) == "ROI");
     assert(std::string_view(dtypeName(DType::Float64)) == "float64");
     rejects([] { (void)typeName(static_cast<Type>(999)); });
-    assert(equalValues(ValueJson::decode(ValueJson::encode(rectValue, rectType), rectType), rectValue));
-    validateValue(rectType, Missing{});
-    rejects([&] { (void)ValueJson::parse("[3, 1, 2, 3]", rectType); });
-    rejects([&] { (void)ValueJson::parse("[[[2, 1, 2, 3, 4, 0]]]", rectType); });
-    rejects([&] { (void)ValueJson::parse("[2, 0, 0, 0, 4, 0]", rectType); });
-    rejects([&] { validateValue(rectType, RoiBatch{}); });
-    rejects([&] { validateValue(rectType, Roi::circle(1, 2, 3)); });
+    assert(equalValues(ValueJson::decode(ValueJson::encode(rectValue, roiType), roiType), rectValue));
+    validateValue(roiType, Missing{});
+    rejects([&] { (void)ValueJson::parse("[2, 1, 2, 3, 4, 0]", roiType); });
+    rejects([&] { (void)ValueJson::parse("[[[2, 0, 0, 0, 4, 0]]]", roiType); });
+    rejects([&] { validateValue(roiType, Array::empty(DType::Float64, 3)); });
 
     // Schema validation tests
     ToolDefinition valid;
-    valid.schemaVersion = 1;
+    valid.schemaVersion = 4;
     valid.id            = "valid.tool";
     valid.displayName   = "Valid Tool";
     valid.version       = "1.0.0";
     valid.kind          = ToolKind::Cpp;
 
-    valid.inputs.push_back({"in_img", "Input Image", {Type::ImageBatch}});
+    valid.inputs.push_back({"in_img", "Input Image", {Type::Image}});
     valid.inputs.push_back({"threshold",
                             "Threshold",
                             {Type::Int},
@@ -73,7 +70,7 @@ try
                             0});
     valid.outputs.push_back({"out_img",
                              "Output Image",
-                             {Type::ImageBatch},
+                             {Type::Image},
                              Missing{},
                              "",
                              "",
@@ -92,10 +89,11 @@ try
 
     {
         auto           geometryTool = valid;
-        PortDefinition input{"rect", "Rectangle", {Type::Rect}};
+        PortDefinition input{"rect", "Rectangle", {Type::ROI}};
+        input.editor     = "rect";
         input.imageInput = "in_img";
         geometryTool.inputs.push_back(input);
-        PortDefinition output{"rect", "Rectangle", {Type::Rect}};
+        PortDefinition output{"rect", "Rectangle", {Type::ROI}};
         output.imagePort = "out_img";
         geometryTool.outputs.push_back(output);
         validateToolDefinition(geometryTool);
@@ -107,7 +105,7 @@ try
     // 1. bad schemaVersion
     {
         auto bad          = valid;
-        bad.schemaVersion = 2;
+        bad.schemaVersion = 1;
         rejects([&] { validateToolDefinition(bad); });
     }
     // 2. empty tool id
@@ -130,8 +128,7 @@ try
     {
         auto bad = valid;
         bad.kind = ToolKind::PythonFunction;
-        bad.script = "tool.py";
-        bad.symbol = "execute";
+        bad.entry = PythonEntry{"fixture", "tool.py", "execute"};
         bad.initParams.push_back({"param1", "Param 1", {Type::Int}});
         rejects([&] { validateToolDefinition(bad); });
     }
@@ -189,7 +186,7 @@ try
         auto bad = valid;
         bad.inputs.push_back({"rois",
                               "ROIs",
-                              {Type::RoiBatch},
+                              {Type::ROI},
                               Missing{},
                               "",
                               "",
@@ -206,7 +203,7 @@ try
 
     const auto pathEditor = parseToolDefinitionJson(
         R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.path",
   "display_name": "Path",
   "version": "1.0.0",
@@ -218,25 +215,26 @@ try
   ],
   "outputs": []
 })json");
-    assert(pathEditor.inputs[1].editor == "path");
-    assert(pathEditor.inputs[1].pathModeFrom == "mode");
+    // The effective contract prepends the host-owned upstream_status input.
+    assert(pathEditor.inputs[2].editor == "path");
+    assert(pathEditor.inputs[2].pathModeFrom == "mode");
     {
         auto invalid                   = pathEditor;
-        invalid.inputs[1].pathModeFrom = "missing";
+        invalid.inputs[2].pathModeFrom = "missing";
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[1].pathModeFrom = "path";
+        invalid.inputs[2].pathModeFrom = "path";
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[1].pathModeFrom = "mode";
-        invalid.inputs[1].editor       = "file";
+        invalid.inputs[2].pathModeFrom = "mode";
+        invalid.inputs[2].editor       = "file";
         rejects([&] { validateToolDefinition(invalid); });
         invalid                        = pathEditor;
-        invalid.inputs[0].type         = {Type::Int};
-        invalid.inputs[0].defaultValue = std::int64_t{0};
-        invalid.inputs[0].options.clear();
+        invalid.inputs[1].type         = {Type::Int};
+        invalid.inputs[1].defaultValue = std::int64_t{0};
+        invalid.inputs[1].options.clear();
         rejects([&] { validateToolDefinition(invalid); });
         invalid = pathEditor;
-        invalid.inputs[1].pathModeFrom.clear();
-        rejects([&] { validateToolDefinition(invalid); });
+        invalid.inputs[2].pathModeFrom.clear();
+        validateToolDefinition(invalid);
     }
     {
         auto initialization       = pathEditor;

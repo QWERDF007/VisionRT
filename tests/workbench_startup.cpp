@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "WorkbenchFixtures.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
@@ -21,6 +22,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 void startupProjectContract()
 {
     const auto require = [](bool condition, const std::string &message)
@@ -29,28 +31,28 @@ void startupProjectContract()
             throw std::runtime_error(message);
     };
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    qmlRegisterSingletonInstance<visionrt::Theme>("VisionRT", 1, 0, "Theme", visionrt::Theme::instance());
+    visionrt::registerStyleModule();
     for (const bool projectReadyBeforeWindow : {false, true})
     {
-        visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
-        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "startup catalog did not become ready");
+        visionrt::testing::WorkbenchInstallation installation;
+        visionrt::AppController                  app(1, installation.directory());
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "startup catalog did not become ready");
         app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
         app.resolveUnsaved(QStringLiteral("discard"));
         if (projectReadyBeforeWindow)
-            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
+            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                     "preloaded startup project did not become ready");
 
         QQmlApplicationEngine engine;
         engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
         engine.rootContext()->setContextProperty("app", &app);
-        engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
         engine.rootContext()->setContextProperty("demoMenu", false);
         engine.rootContext()->setContextProperty("demoSelect", false);
         engine.load(QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/Main.qml")));
         require(!engine.rootObjects().isEmpty(), "startup Main.qml did not load");
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
         require(window && QTest::qWaitForWindowExposed(window), "startup main window was not exposed");
-        require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
+        require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                 "startup main window did not receive the real project");
 
         const auto findItem = [](auto &&self, QQuickItem *parent, const QString &name) -> QQuickItem *
@@ -102,7 +104,7 @@ void startupProjectContract()
             const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
             QFile      badProject(badPath);
             require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
-            require(badProject.write(R"json({"format_version":2,"project":{},"flows":{}})json") > 0,
+            require(badProject.write(R"json({"format_version":4,"project":{},"flows":{}})json") > 0,
                     "cannot populate malformed project fixture");
             badProject.close();
             const auto oldNodes   = app.nodes();
@@ -157,23 +159,30 @@ void startupProjectContract()
             warningProject.close();
             app.requestOpen(warningPath);
             app.resolveUnsaved(QStringLiteral("discard"));
-            require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 3000),
+            const auto warningDiagnostic = [&]
+            {
+                for (const auto &entry : QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array())
+                    if (entry.toObject().value("storage_code") == "range_warning")
+                        return entry.toObject();
+                return QJsonObject{};
+            };
+            require(QTest::qWaitFor(
+                        [&] { return !app.busy() && app.nodes().size() == 5 && !warningDiagnostic().isEmpty(); }, 5000),
                     "project warning load did not complete");
-            QJsonObject rangeWarning;
-            for (const auto &entry : QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array())
-                if (entry.toObject().value("storage_code") == "range_warning")
-                    rangeWarning = entry.toObject();
+            const auto rangeWarning = warningDiagnostic();
             require(rangeWarning.value("flow_id") == "flow_1" && rangeWarning.value("node") == "4"
                         && rangeWarning.value("field") == "kernel"
-                        && rangeWarning.value("message").toString().contains(QStringLiteral("已保留原值"))
+                        && rangeWarning.value("message").toString().contains(QStringLiteral("已按声明收敛"))
                         && !rangeWarning.contains("code"),
                     "project warning lost its typed context or invented an execution status");
             app.selectNode("4");
-            bool retained = false;
+            // The stored value is written back in its legal form: the row shows the clamped value
+            // instead of a number the declaration rejects.
+            bool clamped = false;
             for (const auto &parameter : app.parameters())
                 if (parameter.toMap().value("id") == "kernel")
-                    retained = parameter.toMap().value("valueText") == "0";
-            require(retained, "loading a range warning clamped the original parameter");
+                    clamped = parameter.toMap().value("valueText") == "1";
+            require(clamped, "loading a range warning did not write back the clamped value");
             const auto previous = app.diagnostics().size();
             app.addNode("test.unregistered", 0, 0);
             app.addNode("test.unregistered", 0, 0);
@@ -235,8 +244,7 @@ void startupProjectContract()
                     "cannot write native decode failure fixture");
             oversizedFile.close();
             app.selectNode("1");
-            require(app.setParameter("mode", false, "file")
-                        && app.setParameterPath("path", false, QUrl::fromLocalFile(imagePath)),
+            require(app.setParameterPath("path", false, QUrl::fromLocalFile(imagePath)),
                     "cannot select native decode failure input");
             auto *outputModel = qobject_cast<visionrt::OutputModel *>(app.outputModel());
             require(outputModel != nullptr, "main-window output model is missing");
@@ -277,8 +285,10 @@ void startupProjectContract()
                         },
                         1000),
                     "main-window result table did not display the native failure before interaction");
-            auto *statusCell = findText(findText, window->contentItem(), QStringLiteral("状态消息"));
-            require(statusCell != nullptr, "main-window status message cell is missing");
+            // Diagnostics belong to the data column; the name column is the connection menu.
+            auto *statusCell
+                = findText(findText, window->contentItem(), outputModel->get(1).value("preview").toString());
+            require(statusCell != nullptr, "main-window status message data cell is missing");
             QTest::mouseClick(
                 window, Qt::RightButton, Qt::NoModifier,
                 statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());

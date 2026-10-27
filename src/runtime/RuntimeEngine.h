@@ -48,6 +48,14 @@ struct RuntimeCompletion
     std::uint64_t token      = 0;
 };
 
+struct RuntimeReadback
+{
+    std::uint64_t generation                                = 0;
+    std::uint64_t session                                   = 0;
+    std::uint64_t round                                     = 0;
+    bool          operator==(const RuntimeReadback &) const = default;
+};
+
 enum class RuntimePhase
 {
     Setup,
@@ -80,14 +88,19 @@ struct RuntimeUpdate
     std::uint64_t                    generation = 1;
     std::uint64_t                    session    = 0;
     std::uint64_t                    round      = 0;
+    // Mode of the running session. Consumers use it to keep single-node timings away from the
+    // complete-run statistics instead of guessing from the current UI state.
+    RunMode                          mode       = RunMode::Once;
     std::vector<NodeUpdate>          nodes;
     std::vector<FlowTiming>          flows;
-    double                           roundMilliseconds = 0;
+    std::optional<double>            roundMilliseconds;
+    double                           sessionElapsedMilliseconds = 0;
     // Only events produced since the previous poll, ordered by sequence.
     std::vector<RuntimeDiagnostic>   diagnostics;
     // Events evicted before this poll; reported once by the consumer.
     std::size_t                      droppedDiagnostics = 0;
     std::optional<RuntimeCompletion> completion;
+    std::optional<RuntimeReadback>   readback;
 };
 
 // No QObject access. Poll at <=30 Hz; the one completion callback only wakes the GUI.
@@ -104,6 +117,9 @@ public:
     ToolStatus     start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
                          std::optional<NodeId> target = {});
     void           requestStop();
+    void           setReadbackEnabled(bool enabled);
+    bool           acknowledgeReadback(RuntimeReadback readback);
+    void           setReadbackCallback(std::function<void(RuntimeReadback)> callback);
     ToolStatus     requestReset();
     // Idle only. Releases Python instances/results before invoking background work.
     ToolStatus     requestRefresh(std::function<ToolStatus()> work);
@@ -111,9 +127,6 @@ public:
     RuntimeUpdate  pollLatest();
     bool           acknowledgeCompletion(RuntimeCompletion completion);
     void           setCompletionCallback(std::function<void(RuntimeCompletion)> callback);
-#ifdef VISIONRT_TEST_PROBES
-    void injectDiagnosticForTest(std::string message);
-#endif
 
 private:
     struct Impl;

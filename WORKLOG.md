@@ -30,6 +30,294 @@
 - ...
 -->
 
+### 2026-10-27 — T35 统一参数 / 最近工程 / 按需打包落地（ABI 5）
+
+**目标**
+- 依据 `docs/VisionRT_VisionTools_最新验收_统一参数_最近工程_按需打包_完整方案_Specs_Tickets_20261026.zip` 的 T35-03…T35-17，在现有 VisionRT / VisionTools / Contracts 代码上落地；临时目录 `F://tmp`。
+
+**当前状态**
+- 已完成 T35-03：`ToolResult` 收敛为单一 `outputs` 通道，工具以 `toolResult(outputs, status)` 自行写入 `__status_code` / `__status_message`；宿主不再拆分或补写状态；模块 ABI 升到 5；C++/Python/Receiver/Select/插件适配器与全部测试夹具同步。
+- 已完成 T35-04：VisionTools 各工具在 `execute` 首行解析 `upstream_status`，非零时不产生算法与磁盘副作用并返回未处理状态；无默认值的图像输入声明改为允许缺失，避免“未选中分支”被当成必填错误。
+- 已完成 T35-05：手动提交、声明默认值、工程加载与运行取值共用 `InputNormalizer`；加载时越界值按声明收敛并一次性告警，工程随之标脏。
+- 已完成 T35-09：输出可连接性由后端 `candidateInputsWithState` 派生（按结构版本缓存），名称列高亮与菜单只在存在合法且仍空闲的下游输入时可用；诊断改为走数据列。
+- 已完成 T35-10：Python 算子时间改报 `pythonCallMs`，GIL 等待与输入桥接计入预处理、输出转换计入后处理，各阶段带独立 measured 标志，不再用“总计减算子”推算。
+- 已完成 T35-11：EasyTouch 种子与光标统一到当前图像坐标系（`transformedRoiBounds`，圆按半径缩放），并新增坐标契约。
+- 已完成 T35-12/13/14（VisionTools）：历史缓存命中即提升为最近使用、超出预算时拒绝保留而非撑破预算；读图先构造完整候选（Catalog/Cursor/解码结果/缓存写入）再交换状态，失败不提前清空上次成功批次，reload 失败不混用像素；序列规划改为显式 `Found/End/RestartRequested`，目录尾部被删时非循环结束而非静默回头；计划内文件缺失时重扫一次再决策。
+- 已完成 T35-15/17：新增 `tools/package_profiles.json` 与 `tools/package_profile.py`（cpu / rtx40-runtime / rtx40-build / gpu-custom，按 SM 选择 builder 分区、PTX 仅在显式前向兼容时保留、未知布局拒绝打包），`package_tools.py` 支持 `--profile/--sm/--engine-build` 并把精确清单与排除原因写入包内 `dependencies.json`；TensorRT builder 资源安装从 `nvinfer_builder_resource*.dll` 通配改为按 `VISIONTOOLS_TRT_TARGET_SMS` 精确安装（本机实测仅安装 `_sm89_` 一个分区）；VisionRT 的 OpenCV 运行时从目录 `*.dll` 通配改为按实际链接的导入库推导。
+- 已完成 T35-16：新增 `RecentProjects`（最多 10 项、按平台大小写规则去重、同名项以最短父目录后缀区分、缺失文件保留可恢复）+ `UiPreferences` 同一文件原子读写与合并；`AppController` 暴露只读 `recentProjects` 与 `openRecentProject`，仅在 `replaceProject` 提交且 `completed == Open` 后记录，另存成功才入列、普通 Ctrl+S 不扰动顺序；文件菜单新增“最近打开工程”二级菜单，空列表与关闭期禁用。
+- 未完成：T35-18 的 GPU 实机与干净安装验收（本机无目标 40 系设备/完整 SDK 交付目录），以及 Windows 真实窗口的菜单键盘导航人工确认。
+
+**验证证据**
+- `cmake --build build`（VisionRT）→ 0 错误；
+- `ctest --test-dir build`（VisionRT）→ 82/83 通过；唯一失败 `build_incremental_contract` 为嵌套 MSVC 配置在此环境下的既有失败（`rc` 步骤返回 0 但被判定失败），与本次改动无关；
+- `ctest --test-dir build`（VisionTools）→ 15/15 通过，含新增 LRU/原子提交/序列尾部删除与 `test_package_profile`；
+- `cmake -S . -B build`（VisionTools）→ 输出 `TensorRT builder 资源：安装 1 个文件，目标 SM=89，PTX=OFF`；
+- 依据本机 TensorRT 10.16 实际文件名（`_sm75_/_sm86_/_sm89_/_sm120_/_ptx_`）运行选择逻辑：cpu 仅公共依赖、rtx40-runtime 无 builder 分区、rtx40-build 仅 `_sm89_`；
+- 未验证：GPU 实机 engine 加载与 build_wts 构建、无 GPU 目标机上的安装包启动。
+
+**下一步**
+- 在目标 40 系机器执行 `dependencies.json` 清单对应的真实 engine 加载与 build_wts→engine→推理验证，以及干净环境安装启动。
+
+
+### 2026-10-26 — 依据参数规范化 / EasyTouch / 统一主题复核方案落地，声明升 schema 4、工程升 format 5 并部署 F:\tmp\VisionRT
+
+**目标**
+- 依据《VisionRT_VisionTools_参数规范化_EasyTouch_统一主题_复核与完整方案_20261026-1646》（T-I01–T-I08、T-E01、T-R34、T-O34、T-T01–T03、T-U33、T-P01–T03），在 VisionRT / VisionTools 现有代码上落地；临时目录 `F:\tmp`，部署到 `F:\tmp\VisionRT`。
+- 按要求分阶段提交推送；`WORKLOG.md` 与 `docs/` 方案（含交互 HTML）不入库，但变更仍记录于本文件。
+
+**当前状态**
+- 已完成（契约）：新增 `src/core/InputNormalizer.{h,cpp}` 作为手动值、上层值与声明默认值的唯一规范化入口（min/max 收敛、options/default 补齐、Missing 规则）；`ToolDefinition` 物化宿主端口 `upstream_status` / `__status_code` / `__status_message`，作者重复声明即拒绝；`DefinitionJson` 导出按 `isHostOwnedPort` 过滤；工具声明 schema 4、工程 format 5；执行条件持久化为 `{mode, source}`，format 4 工程迁移保留原配置，旧工程加载静默补齐公共端口、不再产生结构告警。
+- 已完成（调度）：`NodeRuntime` 移除按上游业务状态的阻断与清空，失败但合法的发布继续参与下游取参并原样转发状态码/消息；`Receiver` 只报告 `ReceiveOutcome`，业务可用性交接收工具；条件节点 formula/upstream 双模式在运行期生效；单节点运行不再清零计时统计。
+- 已完成（界面）：参数行来源高亮由 `inputMode` 驱动（literal 模式不再显示上游高亮，解绑保留模式）；EasyTouch 工具栏开关 + `UiPreferences` 持久化 + `AssistPreview::releaseSession` 异步释放（复位/重扫/关闭分别触发）；底部与悬浮卡片计时收敛为预处理/算子/后处理三行，只统计完整运行会话；`VisionRT.Style` 统一由 `registerStyleModule()` 注册并扩充 Theme 语义属性；运行期间保存排队到运行结束后写入，文本读取优先于保存请求。
+- 已完成（VisionTools）：内置与自定义声明全部升 schema 4（索引 22 条工具、3 个模块）；条件分支新增 `condition_mode` 与 `on_true_status` / `on_false_status`；读图拆出 `ImageSequence`（批次规划）与解码缓存，`count` 上限 64，不循环时按需重扫、循环按游标推进，解码失败消息与 OpenCV 细节分离；补齐 `visiontools.image.rotate` / `visiontools.image.brightness` 工厂注册。
+- 已完成（工程化）：两仓分阶段提交并推送，均与 `origin/refactor/abi4-writable-data` 同步：VisionRT `ac33e6f`（核心契约）→ `43941db`（调度）→ `24eb73c`（界面/主题）→ `5c5e459`、`4ec2211`（测试稳定性）；VisionTools `83c6244`（声明升级）→ `d6bab3d`（读图重构与工厂注册）。
+- 已完成（测试稳定性）：工作台夹具与 `examples_contract` 复制工具包时跳过 `nvinfer*`。此前每个用例复制 3.2 GB 至 `%TEMP%`，系统盘占满导致 “catalog did not become ready” 随机失败；修复后全量耗时由约 11 min 降至约 3 min，重复运行稳定。
+- 已完成（部署）：`F:\tmp\VisionRT` 可用，工具包为 schema 4 版本；部署脚本在本代理环境被批量删除保护（>50 文件）中断，`platforms/`、`opencv_world480.dll`、`msvcp140*.dll` 由 `windeployqt` 与手工复制补齐。
+- 未完成：T-P01/T-P02 的 `ToolResult` 单通道与原生 ABI 提升未实施（仍为 `status + outputs` 双通道，Python 桥接仍拆状态）；主题只覆盖本轮涉及控件，未做全仓 QML 历史硬编码的逐文件清理与 100/125/150/200% 缩放全量复核。
+
+**验证证据**
+- VisionTools `ctest --test-dir build` → `100% tests passed, 0 tests failed out of 13`（`test_infer_whitebox_trace` 按设计 Skipped）。
+- VisionRT `ctest --test-dir build --output-on-failure` → `80/81` 通过；唯一失败 `build_incremental_contract` 属沙箱限制（vcvars 子进程链接期 `rc`/`mt` 不可用），非代码缺陷。
+- `visionrt_validate_tool.exe --package F:\Projects\VisionTools\dist\visiontools-deploy` → `Valid tools package`；`module_index.json` 中 modules=3、tools=22。
+- `F:\tmp\VisionRT\VisionRT.exe -v` → `VisionRT 0.1.0`（补齐 `platforms/`、`opencv_world480.dll`、`msvcp140*.dll` 前返回 `0xC0000135`）。
+- `installed_pipeline_contract.exe F:\tmp\VisionRT\tools-package` → `Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed`。
+- `installed_python_author_contract.exe F:\tmp\VisionRT\tools-package` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine`。
+- 部署包抽样哈希与 `dist/visiontools-deploy` 一致（条件分支声明、`vst_image.dll`、`opencv_world480.dll`、ROI 几何脚本）；部署目录 3.5 GB，无残留暂存/备份目录。
+
+**下一步**
+- 若继续：实施 T-P01/T-P02（`ToolResult{outputs}` + ABI 提升 + Python 桥接全量转换），完成主题全量迁移与多缩放复核。
+- 部署复现：`package_app.py` 在带批量删除保护的代理环境会中断，建议在无该保护的环境执行 `--force-clean`，或先清理目标目录后再补齐依赖与 Qt 插件。
+
+### 2026-10-25 — 依据 VisionRT_VisionTools_f6f57b03_验收报告与七工具完整改进方案 完成七工具补齐、schema 3 / 工程 format 4、节点模型物化与执行门控
+
+**目标**
+- 依据《VisionRT_VisionTools_f6f57b03_验收报告与七工具完整改进方案_Specs_Tickets_20261025》（工单 T31-RT-01 ~ T31-RT-06、T31-VT-01 ~ T31-VT-04，Specs、七工具目标规范、端口契约与验收矩阵），在 VisionRT / VisionTools 两仓现有代码上完成开发，临时目录使用 `D:\tmp`，完成后部署到 `E:\Softwares\VisionRT`。
+- 七工具目标：旋转图像、调整亮度、图像读取（批量/序列）、圆测量、行间距测量、评估表达式、条件分支；配套两个隐藏辅助工具（圆智能点选、行间距智能点选）与宿主合流节点。
+
+**当前状态**
+- 已完成 (VisionRT 宿主)：声明 schema 3（`node_model`、`visibility`、`interaction`、`alignment_input`）与工程 format 4（`expression_config`、`execution_guard`、`select_type`）的解析、校验、回写与往返；节点契约单一物化入口 `nodeContract(node, definition)` 与派生初始化参数 `nodeParameters()`；原子编辑事务 `setExpressionConfig` / `setExecutionGuard` / `setSelectType`（含 guard 依赖边合并、复制重映射、前向引用与 `nextPortSeq` 校验）；稳定 `port_id`；执行门控与 `NodeDisposition`（Pending/Running/Succeeded/Failed/Skipped/Blocked/Canceled），上游跳过/失败按必需性传播，`Receiver` 对 Skipped/Blocked 立即返回终态；host 节点 `visionrt.control.select` 合流（透传并保留 `Owner`）；辅助工具 `visibility=assist` 不进入工具菜单；QML 新增 `NodeModelBar`、`ExpressionEditor`、`GuardEditor`、`SelectTypeEditor`。
+- 已完成 (VisionTools 工具包)：新增 `visiontools.image.rotate`、`visiontools.image.brightness`、`visiontools.measure.circle`、`visiontools.measure.row_spacing`、`visiontools.logic.expression`、`visiontools.logic.branch`，重写 `visiontools.image.read`（file/directory/list、read_mode=all/sequence、end_policy=wrap/hold/error、recursive/extensions/paths_in/limit/max_batch_bytes）；新增隐藏辅助工具 `visiontools.assist.circle` / `visiontools.assist.row_spacing`（有界候选搜索 + 复用正式内核 + proposal 逆变换回参考坐标）；新增 `visiontools_metrology` 原生模块（`EdgeProfile` 双线性采样/切向平均/Gaussian/抛物线亚像素、`CircleFit` SVD 初值 + Huber 加权 GN + MAD 内点、`RowSpacingKernel` 配对 width/gap/pitch）；新增受限 AST 引擎（vendored simpleeval 1.0.3 + 白名单 + 资源上限）；`package_catalog.json` 与 22 条声明全部升级到 schema 3。
+- 已完成: 全量部署至 `E:\Softwares\VisionRT`（2777 个文件），安装态链路验证通过。
+
+**验证证据**
+- `cmake --build build -- -j 6` + `ctest`（VisionTools，13 项）→ `100% tests passed, 0 tests failed out of 13`（`test_infer_whitebox_trace` 因无 GPU 轨迹按设计 Skipped）。
+- `ctest --timeout 900`（VisionRT，串行全量 77 项）→ `99% tests passed, 1 tests failed out of 77`，唯一失败为 `build_incremental_contract`。
+- `ctest -R "^build_incremental_contract$" --output-on-failure` → 失败根因是沙箱 Program Blacklist 禁止 `reg.exe`，`vcvars64.bat` 无法初始化，`tools/build.cmd` 内 `cmake` 找不到 `rc.exe`（`CMAKE_MT-NOTFOUND`）；非代码缺陷。以等价 MSVC 环境（`D:\tmp\msvc_env.sh` + `chcp 65001`）手动复刻同一契约：首次构建 `8` → 改头文件后两处 TU 重编 `[1/3][2/3][3/3]` 输出 `40` → 再构建 `ninja: no work to do.` → `ninja -t deps` 中 `payload.h` 计数 `2`；证据留存 `D:\tmp\evidence\build_incremental_probe.txt`。
+- `ctest -R "^python_contract$"` → 通过（修正过时断言：工具包 Python 工具由 5 个增至 7 个，新增 `visiontools.logic.expression` / `visiontools.logic.branch`）。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --validator build/bin/visionrt_validate_tool.exe --no-clean` → `tools package verification passed successfully`、`package verification complete: 2777 files`。
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → `VisionRT 0.1.0`。
+- `build\bin\installed_pipeline_contract.exe E:\Softwares\VisionRT\tools-package` → `Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed`。
+- `build\bin\installed_python_author_contract.exe E:\Softwares\VisionRT\tools-package` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine`。
+- 部署包清单核对 → 模块 `visiontools_infer` / `visiontools_metrology` / `visiontools_preprocess` 共 3 个，工具 22 条且全部 `schema 3`；`node_model` 分布 fixed/expression/condition/select 与 `visibility=assist` 均正确。
+- 已知环境限制（非代码缺陷）：单个 UI 测试在全新进程内单独运行时偶发窗口激活失败（`QTest::qWaitForWindowActive` 之后的鼠标/键盘事件丢失）；同一测试在 ctest 套件内连续 3 轮稳定通过。
+
+**下一步**
+- 等待用户验收；如需继续，按后续 spec / 工单迭代。
+
+### 2026-10-25 — 依据 VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025-1405 完成工单 T-E01 ~ T-E04、关闭终态入口统一、有效绑定状态统一与 YOLO 填充框预过滤
+
+**目标**
+- 依据《VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025-1405》（工单 T-E01 ~ T-E04，规范 S-E01 ~ S-E04）全面达成整改要求：
+  1. T-E01 / S-E01: 统一关闭终态入口。在 `AppController::Impl` 引入单一内部关闭谓词 `isClosing() const noexcept { return closing || closePhase != ClosePhase::None; }`，彻底封闭 `ClosePhase::Ready` 阶段 `Impl::idle()` 返回 true 导致新任务重新开放的缺陷；`idle()`、`start()`、`refresh()`、`rescanTools()`、`synchronizeNodes()`、`save()`、`deleteNodes()`、`copyNodes()`、`readsAllowed()` 与 `requestOutputText()` 统一使用 `isClosing()` 拦截；`Main.qml` 同步绑定 `app.closing` 禁用单次运行、循环运行、运行时复位及刷新工具入口；`closeReady` 同步槽尝试执行 `runOnce()`、`refreshPython()` 及配置编辑全部被拒绝，无新实例构造与初始化。
+  2. T-E02 / S-E02: 统一有效绑定状态。在 `ProjectEditor.h` 导出 `effectiveSource`，统一语义为仅在 `mode == Upstream && source.has_value()` 时有效；`candidateInputsWithState`、`compatibleInputs` 与 `bindFreeInput` 统一使用 `effectiveSource` 判断端口占用状态；端口处于 `BindingMode::Literal` 模式下保留旧 `source` 草稿时判定为 Free，允许在级联菜单选择并成功提交新连接切换为 `Upstream`；仅当处于 `Upstream` 且被其他来源占用时判定为 Occupied 并拒绝静默覆盖。
+  3. T-E03 / S-E03: YOLO padding 无效候选框预过滤。在 `VisionTools/src/infer/YoloPostprocess.cpp` 中，候选框加入 `selected` 前先计算原图映射裁剪后的面积 `sourceBox.x2 > sourceBox.x1 && sourceBox.y2 > sourceBox.y1`；完全位于 letterbox padding 区的无效候选框不进入 `selected`，不消耗 `maximum_detections` 配额，不参与 NMS，不得抑制原图有效区域内的真实检测框；保留 raw trace 记录；测试断言 disjoint 与 overlap 场景均正确保留 1 个有效框。
+  4. T-E04 / S-E04: 同版本安装验证与证据整理。构建两仓库最新代码，打包 VisionTools 工具包（`dist/VisionTools.zip`），部署打包至 `E:\Softwares\VisionRT`（2758 个文件），运行 76 项 CTest 及安装态端到端测试，验证无头版本及工作台进程启动与优雅退出。
+
+**当前状态**
+- 已完成: 工单 T-E01 ~ T-E04 全部实现合入；
+- 已完成: 解压并更新最新验收文档 `VisionRT_VisionTools_6df386ee_验收与完整改进方案_20261025`，清理旧文档目录并更新 `docs/README.md`；
+- 已完成: VisionTools 端修复并扩充 `test_infer_contract.cpp`，10 项测试 100% Passed，成功打包并验证 `dist/VisionTools.zip`；
+- 已完成: VisionRT 端全量 76 项 CTest 套件 100% Passed（耗时 167.09s）；
+- 已完成: 生产打包部署至 `E:\Softwares\VisionRT`（2758 个文件）；
+- 已完成: 针对已部署安装包 `E:\Softwares\VisionRT\tools-package` 运行 `installed_pipeline_contract` 及 `installed_python_author_contract` 全部通过；
+- 已完成: 实际验证 `E:\Softwares\VisionRT\VisionRT.exe -v` 输出 `VisionRT 0.1.0`；
+- 已完成: 启动真实部署进程 `VisionRT.exe`（PID 15808），验证加载 `E:\Softwares\VisionRT\python312.dll`、`opencv_world480.dll` 及 Qt 模块后干净关闭；
+- 已完成: VisionTools 代码已提交并推送至 `origin/refactor/abi4-writable-data`（commit: `b24307b`）。
+
+**验证证据**
+- `git -C D:\Project\VisionTools commit -m "fix：YOLO填充无效候选框预过滤避免占用上限与抑制有效框"` → `[refactor/abi4-writable-data b24307b]` 提交成功并推送至 origin。
+- `.\tools\build.cmd ctest --test-dir build --output-on-failure` (VisionTools) → `100% tests passed, 0 tests failed out of 10`。
+- `python tools\package_tools.py --config Release --build-dir build --install-dir dist\VisionTools --verify-runtime` (VisionTools) → `已打包 13 个工具：D:\Project\VisionTools\dist\VisionTools.zip`。
+- `.\tools\build.cmd ninja -C build` (VisionRT) → `[9/10] Linking CXX executable bin\workbench_lifecycle_contract.exe`，0 警告 0 错误构建成功。
+- `.\tools\build.cmd ctest --test-dir build --output-on-failure` (VisionRT) → `100% tests passed, 0 tests failed out of 76`（耗时 167.09s，关键测试 `project_editor_contract`、`workbench_lifecycle_contract`、`workbench_contract` 均通过）。
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --force-clean` → `package verification complete: 2758 files`, `package complete: E:\Softwares\VisionRT`。
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → `VisionRT 0.1.0` (退出码 0)。
+- `build\bin\installed_pipeline_contract.exe E:\Softwares\VisionRT\tools-package` → `Python allocation -> native cropped view -> parent deletion -> final owner release passed; Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed` (退出码 0)。
+- `build\bin\installed_python_author_contract.exe E:\Softwares\VisionRT\tools-package` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine` (退出码 0)。
+- `verify_installed_gui.py` → 实际启动 PID 15808，加载 `E:\Softwares\VisionRT\python312.dll` 与 `opencv_world480.dll`，界面展示后优雅退出。
+
+**下一步**
+- 向用户汇报验收交付结果，根据用户反馈进行后续轮次。
+
+
+### 2026-10-25 — 依据 VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025-1303 完成工单 T-D01 ~ T-D03、关闭期间保存入口封闭与并发回归判别性增强
+
+**目标**
+- 依据《VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025-1303》（工单 T-D01 ~ T-D03，规范 S-D01 ~ S-D05）全面达成整改要求：
+  1. T-D01 / S-D01 / S-D02 / S-D03: 关闭期间保存与同步入口封闭。`AppController::save` 在 `closing` 或 `closePhase != None` 时立即拒绝，不弹 `savePathRequired` 对话框，不写盘；`synchronizeNodes` 在关闭阶段直接早退，禁止向运行时提交 `requestSynchronize`（实例构造不增加）；`drainReaders` 在关闭期间排空并清理所有排队请求（含 `SaveRequest`），`updateReadback` 统一拦截；`Main.qml` 中保存与另存动作在 `app.closing` 时禁用；未保存确认选择“保存”仍先写盘再进入异步重置关窗。
+  2. T-D02 / S-D04: 提升关键并发回归可判别性。
+     - `runtime_readback_contract`：Stop/Reset 屏障使用 50ms 有界轮询窗口，连续检验 coordinator 处于 Stopping 且未收到 ACK 前绝不发布 completion，start 持续被拒，原地写工具未再次执行；
+     - `ui_readback_contract`：构造大文本生成任务执行中、管理入口主动触发 `resetRuntime` 的 outer drain 场景，验证 `consumeTextMailbox` 在外层 drain 中交付，同步重入的内层 drain 正确保持并恢复 outer draining 保护；
+     - `workbench_lifecycle_contract`：外部持有 Python 图像进入 AwaitOwners 期间，直接调用 `app.save()`、无路径保存及发送 Ctrl+S 快捷键均被严格拒绝，无新实例构造，释放外部 owner 后自动关闭并恰好触发一次 `closeReady`；
+     - `workbench_contract`：`pendingContract` 补充未保存工程确认选择 `save` 的正向测试，验证工程正确写盘后顺利进入关闭。
+  3. T-D03 / S-D05: 生产打包与安装部署收尾。使用 `package_app.py` 严格重新打包部署至 `E:\Softwares\VisionRT`（2758个文件），记录实际解释器路径、NumPy 路径与 Python DLL，运行 `installed_pipeline_contract`、`installed_python_author_contract`、无头版本及工作台启动截屏验证。
+
+**当前状态**
+- 已完成: 工单 T-D01 ~ T-D03 全部实现合入；
+- 已完成: 解压并更新最新验收文档 `VisionRT_f3fc0827_验收报告_完整方案_Specs_Tickets_20261025`，删除旧文档并更新 `docs/README.md`；
+- 已完成: 全量 76 项 CTest 套件 100% Passed（耗时 164.30s）；
+- 已完成: 生产打包部署至 `E:\Softwares\VisionRT`（2758 个文件）；
+- 已完成: 针对已部署安装包 `E:\Softwares\VisionRT	ools-package` 运行 `installed_pipeline_contract` 及 `installed_python_author_contract` 全部通过；
+- 已完成: 验证 `VisionRT.exe -v`（输出 `VisionRT 0.1.0`）及工作台截屏 `--screenshot D:	mp\installed_workbench.png`。
+
+**验证证据**
+- `$env:TEMP = 'D:\tmp'; $env:TMP = 'D:\tmp'; tools\build.cmd ctest --test-dir build --output-on-failure` → 100% tests passed, 0 tests failed out of 76 (Total Test time = 164.30 sec);
+- `.\build\bin\workbench_lifecycle_contract.exe` → `WORKBENCH_LIFECYCLE_PASS stop_reset_close=1 completions=1 next_round=0 initialized=1 releases=1` (Exit code: 0);
+- `.\build\bin\runtime_readback_contract.exe` → `Read-safe stages gate loop/once/node dispatch, preserve Stop and include reader time` (Exit code: 0);
+- `.\build\bin\ui_readback_contract.exe` → `READBACK_CONTRACT_PASS queued_ms=440 values=100000 frame=38 index=1` (Exit code: 0);
+- `.\build\bin\workbench_contract.exe` → `workbench contract passed` (Exit code: 0);
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --force-clean` → package complete: E:\Softwares\VisionRT (2758 files);
+- `& "E:\Softwares\VisionRT\VisionRT.exe" -v` → `VisionRT 0.1.0` (Exit code: 0);
+- `& "E:\Softwares\VisionRT\VisionRT.exe" --screenshot "D:\tmp\installed_workbench.png" --screenshot-delay 2000` → Screenshot captured to `D:\tmp\installed_workbench.png` (Exit code: 0);
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → `Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed` (Exit code: 0);
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine` (Exit code: 0);
+- 部署解释器与 DLL 来源验证：
+  - 应用路径：`E:\Softwares\VisionRT`
+  - 解释器目录：`E:\Softwares\VisionRT\python`
+  - Python DLL：`E:\Softwares\VisionRT\python312.dll`
+  - 标准库：`E:\Softwares\VisionRT\python\Lib`
+  - NumPy 路径：`E:\Softwares\VisionRT\python\Lib\site-packages\numpy` (`__init__.py` 存在).
+
+**下一步**
+- 保持架构整洁，等待进一步需求或发布指令。
+
+### 2026-10-25 — 依据 VisionRT_7e158d77_验收报告_完整方案_Specs_Tickets_20261025-1210 完成工单 T-C01 ~ T-C05、关窗异步重置状态机、阶段测量绑定与排空屏障
+
+**目标**
+- 依据《VisionRT_7e158d77_验收报告_完整方案_Specs_Tickets_20261025-1210》（工单 T-C01 ~ T-C05，规范 S-C01 ~ S-C06）全面达成整改要求：
+  1. T-C01 / S-C01 / S-C02: 关窗引入 `ClosePhase`（`None`, `Resetting`, `AwaitOwners`, `Ready`），关窗获准后先提交 coordinator `requestReset()` 异步释放运行节点与内部 Python `ResultSlot`，在 `AwaitOwners` 阶段等待外部引用归还，GUI 保持事件循环与心跳，重复关窗只发一次 `closeReady`。
+  2. T-C02 / S-C03: 阶段测量真实接通 QML 画布，`FlowCanvas.qml` 扩展展示 6 行耗时指标（算子、宿主准备、初始化、结果校验、预处理、后处理）；`NodeRuntime` 中 `ScopeTimer` 绑定 `measured` 标志指针，异常退出路径也完成测量，真实 0 与未进入阶段严格独立。
+  3. T-C03 / S-C04: `DrainGuard` 支持递归状态恢复，`consumeTextMailbox` 成功/异常路径均受 `draining` 保护，`updateReadback` 入口拦截 `draining`，`drainReaders` 取消 `TextRequest` 但保留 `SaveRequest`。
+  4. T-C04 / S-C05: 补齐针对性契约回归测试：
+     - `runtime_readback_contract`：Stop/Reset 负例增加 50ms 协调器处理延迟，断言未收到 ACK 前保持 Stopping 状态、start 被拒、completion 未发布、原地写工具未重复执行，ACK 后顺利完成；
+     - `workbench_lifecycle_contract`：已运行 Python 图像工具直接关闭（不预先 resetRuntime），外部持有 Mat/ROI owner 时维持在 AwaitOwners 且窗口保持显示，释放 owner 后自动触发 closeReady 并关闭，重复关窗仅触发一次；
+     - `ui_readback_contract`：`outputTextReady` 交付期间同步重入触发管理操作（如 `resetRuntime`），排空保护不泄漏外层状态。
+  5. T-C05 / S-C06: 完整应用与部署解释器目录验证，执行严格打包部署至 `E:\Softwares\VisionRT`（2758个文件），记录固定 SHA、Python DLL（`python312.dll`）与 NumPy 路径、无头应用版本 `-v` 与完整工作台启动截屏，运行 `installed_pipeline_contract` 与 `installed_python_author_contract` 端到端验证。
+
+**当前状态**
+- 已完成: 工单 T-C01 ~ T-C05 全部实现合入并经测试验证；
+- 已完成: 解压并更新最新验收文档，删除旧版复验文档目录并更新 `docs/README.md`；
+- 已完成: 全量 76 项 CTest 套件 100% Passed（耗时 165.18s）；
+- 已完成: 生产打包部署至 `E:\Softwares\VisionRT`，验证无头版本 `VisionRT.exe -v`（输出 `VisionRT 0.1.0`）及工作台启动截图；
+- 已完成: 针对已部署安装包 `E:\Softwares\VisionRT	ools-package` 运行 `installed_pipeline_contract` 及 `installed_python_author_contract` 全部通过；
+- 已完成: 本地临时文件与测试均在 `D:	mp` 下执行。
+
+**验证证据**
+- `$env:TEMP = 'D:\tmp'; $env:TMP = 'D:\tmp'; tools\build.cmd ctest --test-dir build --output-on-failure` → 100% tests passed, 0 tests failed out of 76 (Total Test time = 165.18 sec);
+- `.\build\bin\runtime_readback_contract.exe` → `Read-safe stages gate loop/once/node dispatch, preserve Stop and include reader time` (Exit code: 0);
+- `.\build\bin\workbench_lifecycle_contract.exe` → `WORKBENCH_LIFECYCLE_PASS stop_reset_close=1 completions=1 next_round=0 initialized=1 releases=1` (Exit code: 0);
+- `.\build\bin\ui_readback_contract.exe` → `READBACK_CONTRACT_PASS queued_ms=435 values=100000 frame=38 index=1` (Exit code: 0);
+- `.\build\bin\workbench_contract.exe` → `workbench contract passed` (Exit code: 0);
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --force-clean` → package complete: E:\Softwares\VisionRT (2758 files);
+- `& "E:\Softwares\VisionRT\VisionRT.exe" -v` → `VisionRT 0.1.0` (Exit code: 0);
+- `& "E:\Softwares\VisionRT\VisionRT.exe" --screenshot "D:\tmp\installed_workbench.png" --screenshot-delay 2000` → Screenshot captured to `D:\tmp\installed_workbench.png` (Exit code: 0);
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → `Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed` (Exit code: 0);
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine` (Exit code: 0);
+- Python 部署证据：
+  - `E:\Softwares\VisionRT\VisionRT.exe`: SHA256 `c2549d295430a5570b2e7398bda611fa353ac2b26dd5ffdaf893d3d5b2ebc8a7`
+  - `E:\Softwares\VisionRT\python312.dll`: SHA256 `72c1bea78e0c49f746889a3af8c4973e044e50e319c1c976dd98059a403404da`
+  - NumPy: `E:\Softwares\VisionRT\python\Lib\site-packages\numpy` (__init__.py 存在).
+
+**下一步**
+- 保持主线架构整洁，面向后续发布或新功能迭代。
+
+### 2026-10-25 — 依据 VisionRT_复验报告_完整方案_Specs_Tickets_20261025-1107 完成工单 T-B01 ~ T-B07、读回屏障与安装态端到端链路闭环
+
+**目标**
+- 依据《VisionRT_复验报告_完整方案_Specs_Tickets_20261025》（工单 T-B01 ~ T-B07，规范 S01 ~ S09）全面达成整改要求：
+  1. T-B01: Once/Node 与 Loop 读回屏障统一。Stop 仅停止新调度，必须等待已有读回 token ACK 后才推进完成与固定 elapsed；start 与 acknowledgeCompletion 严格拒绝未完成读回。
+  2. T-B02: 移除 GUI 线程持锁同步释放实例的 `clearResults()` 捷径，复用 coordinator 异步收尾协议并在锁外安全释放析构；Closing 状态机阻断新工作且保护事件循环。
+  3. T-B03: 完善 drainReaders 排空屏障，引入 DrainGuard 禁止消费过程中递归派发，安全排空已就绪信箱并丢弃过期请求。
+  4. T-B04: ProjectStorage 校验收敛至 `validateBinding` 单一真相源，将有效依赖与闲置模式分离，Literal 闲置来源不产生虚假不可执行诊断，切回 Upstream 严格拒绝。
+  5. T-B05: 声明级（DeclarationContext）与结果级（ResultContext）上下文彻底解耦，连线菜单不携带 publication，结果更新不再误失效定义，ROI 交互序列变更准确隔离前置未授权绑定。
+  6. T-B06: 阶段耗时真实指标映射，NodeRuntime 精确测量 prepare/init/validate，UI DurationText 严格区分未测（—）与真实 0，不虚假填 0 也不侵占纯算法指标。
+  7. T-B07: 生产可用性安装态闭环验证，打包部署至 `E:\Softwares\VisionRT`，在干净独立环境下端到端执行 C++ 与 Python 图像及 ROI 链路。
+
+**当前状态**
+- 已完成: 工单 T-B01 ~ T-B07 全部实现合入；
+- 已完成: 编写并增强 `runtime_readback_contract`（Once/Node/Loop Stop 读回屏障）、`project_storage_contract`（Literal 闲置来源）、`workbench_contract`（阶段耗时真实性）针对性契约测试；
+- 已完成: 全量 76 项 CTest 套件 100% Passed（耗时 164.33s）；
+- 已完成: 生产打包部署至 `E:\Softwares\VisionRT`，验证无头版本 `VisionRT.exe -v`（输出 `VisionRT 0.1.0`）；
+- 已完成: 针对已部署安装包 `E:\Softwares\VisionRT\tools-package` 运行 `installed_pipeline_contract`（C++ -> Python -> C++ 图像/数组/ROI 内存所有权与裁剪回环验证 Passed）及 `installed_python_author_contract`（Python 算子真实运行验证 Passed）；
+- 已完成: 清理旧版本复验文档，更新 `docs/README.md`。
+
+**验证证据**
+- `$env:TEMP = 'D:\tmp'; $env:TMP = 'D:\tmp'; tools\build.cmd ctest --test-dir build --output-on-failure` → 100% tests passed, 0 tests failed out of 76 (Total Test time = 164.33 sec);
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --force-clean` → package complete: E:\Softwares\VisionRT (2758 files);
+- `& "E:\Softwares\VisionRT\VisionRT.exe" -v` → VisionRT 0.1.0 (Exit code: 0);
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → `Python allocation -> native cropped view -> parent deletion -> final owner release passed` & `Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed` (Exit code: 0);
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine` (Exit code: 0).
+
+**下一步**
+- 保持当前稳定基线，持续推进业务层端到端算子接入。
+
+### 2026-10-25 — 依据 VisionRT_最新提交验收与完整改进方案_20261025 完成工单 T-A01 ~ T-A10、全量测试闭环与部署
+
+**目标**
+- 依据《VisionRT_最新提交验收与完整改进方案_20261025》（工单 T-A01 ~ T-A10，规范 S01 ~ S18）全面达成整改要求：
+  1. T-A01/T-A02: 循环读回解耦（Loop每轮只发布轻量状态，停止后最终读回；修复读回通知锁外数据竞争与协调锁协议）；
+  2. T-A03: 关闭状态机与内部 owner 释放（引入 explicit closing 状态机，关闭前释放节点结果、快照、输出与读任务，守卫防止重复触发 closeReady）；
+  3. T-A04: 异步信箱（TextMailbox）与完成通知（按值传递信箱持有所有权，排空读取时安全消费就绪结果）；
+  4. T-A05: 中文类型显示统一（displayTypeName 覆盖源选择与级联菜单）与名称级联菜单搜索；
+  5. T-A06/T-A09: 时钟口径（round 耗时携带 measured/optional 标志，未测算法阶段返回 —）与阶段耗时展示；
+  6. T-A07: PythonImages 引入 BufferLease RAII 守卫保护 Py_buffer 申请失败路径；
+  7. T-A08: Win32 加载错误码读取时序修正（紧随 LoadLibraryExW 读取 GetLastError() 并 RAII 恢复错误模式）；
+  8. T-A10: 连接校验收敛至 ProjectEditor SSOT（validateBinding 统一候选、加载与执行规则）；
+  9. 清理历史文档，将测试重定位至 D:\tmp，并通过全量 76 项 CTest，最终打包部署至 E:\Softwares\VisionRT 并验证无头启动。
+
+**当前状态**
+- 已完成: T-A01 ~ T-A10 对应实现及规范改动全部合入并通过测试；
+- 已完成: 文档归档清理完成，docs/README.md 统一索引至最新方案；
+- 已完成: CTest 全量 76/76 单元与集成测试套件 100% Passed；
+- 已完成: 生产打包并部署至 E:\Softwares\VisionRT，无头验证 VisionRT.exe -v 正常退出（打印 VisionRT 0.1.0）。
+
+**验证证据**
+- `$env:TEMP = 'D:\tmp'; $env:TMP = 'D:\tmp'; tools\build.cmd ctest --test-dir build --output-on-failure` → 100% tests passed, 0 tests failed out of 76 (Total Test time = 160.48 sec);
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --allow-missing-dependencies` → package complete: E:\Softwares\VisionRT (2758 files);
+- `& "E:\Softwares\VisionRT\VisionRT.exe" -v` → VisionRT 0.1.0 (Exit code: 0).
+
+**下一步**
+- 继续维护主线并配合下游 VisionTools 进行端到端算子接入验证。
+
+### 2026-10-24 — 依据 VisionRT_更新验收与完整改进方案_20261024 完成工单 AC-01 ~ AC-10、弹窗治理与全量测试闭环
+
+**目标**
+- 依据《VisionRT_更新验收与完整改进方案_20261024》（AC-01 ~ AC-10 工单与 F01 ~ F10 问题治理，S01 ~ S13 规范）完成全量改进交付：
+  1. 修复 Windows 下 visionrt_validate_tool.exe - 损坏的映像 (0xc000012f) 系统临界错误弹窗治理；
+  2. 实现时钟刷新独立信号 timingChanged，消除持续时钟更新对 runtimeChanged 的误触及 QML 重新构建；
+  3. 严格遵循 S05 上下层连线层级约束（source.y < target.y），修复性能与工作台测试中违规的层级布局；
+  4. 修复 QML 级联菜单与系统输出菜单路由逻辑，修正 WorkbenchTextDialog 关闭行为；
+  5. 修复运行时管理完成与空闲状态通知顺序，确保刷新/生命周期诊断在空闲事件触发前完成装配；
+  6. 实现类型中文本地化映射（DisplayTypes），输出表格与连线悬浮统一显示中文类型；
+  7. 跑通全量 76 项 CTest 套件（100% Passed），打包部署至 E:/Softwares/VisionRT 验证无头启动。
+
+**当前状态**
+- 已完成 (弹窗治理): PluginLoader.cpp 与 visionrt_validate_tool.cpp 引入 SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX)，彻底杜绝损坏 DLL 加载时的 Windows 系统崩溃/损坏映像弹窗，CLI 校验耗时降至 0.5 秒；
+- 已完成 (时钟与事件解耦): timingText 单独绑定 timingChanged 信号，poll() 避免触发 runtimeChanged，ui_notifications_contract Passed；
+- 已完成 (层级约束与连线校验): ProjectEditor 中实现 validateBinding 并强制 source.position.y < target.position.y，performance_contract 与 workbench_canvas 节点坐标对齐，测试通过；
+- 已完成 (菜单与文本对话框): OutputPanel.qml 对非系统输出展示级联菜单，系统输出正常展示诊断/数据菜单；WorkbenchTextDialog Esc 与取消键平稳退出；
+- 已完成 (完成事件与读回状态机): AppController::Impl::poll() 在完成时先同步内部状态与更新输出，再向外派发 runtimeChanged，确保 text -> catalog -> idle 顺序严格满足且消除脏状态残留；
+- 已完成 (全量契约测试): CTest 76 项测试套件 100% 全部通过 (76/76 Passed)；
+- 已完成 (打包部署与真实环境验收): 成功执行 package_app.py 部署至 E:/Softwares/VisionRT 并通过 VisionRT.exe -v 验证，退出码为 0。
+
+**验证证据**
+- ctest --test-dir build --output-on-failure -> 76/76 tests passed, 100% tests passed out of 76 (Total Test time = 164.18 sec)
+- python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --allow-missing-dependencies -> package complete: E:/Softwares/VisionRT (2758 files)
+- E:/Softwares/VisionRT/VisionRT.exe -v -> 输出 VisionRT 0.1.0，退出码 0
+
+**下一步**
+- 保持当前基线稳定，交付给用户进行真实环境交互验收。
+
 ### 2026-10-18 — 依据 VisionRT_Next_Phase_20261018 完成架构清理与深度解耦交付 (RT-T01 ~ RT-T04 / RT-S01 ~ RT-S04)
 
 **目标**

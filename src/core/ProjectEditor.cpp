@@ -8,6 +8,13 @@
 #include <utility>
 
 namespace visionrt {
+
+const std::optional<SourcePort> &effectiveSource(const InputBinding &binding)
+{
+    static const std::optional<SourcePort> none;
+    return binding.mode == BindingMode::Upstream ? binding.source : none;
+}
+
 namespace {
 constexpr auto maximumCounter = std::numeric_limits<std::uint64_t>::max();
 
@@ -56,15 +63,10 @@ const InputBinding &inputBinding(const NodeDefinition &node, std::string_view in
 void validateLiteral(const TypeSpec &type, const PortValue &value)
 {
     validateValue(type, value);
-    if (const auto *images = std::get_if<ImageBatch>(&value); images && !images->images().empty())
+    if (const auto *images = std::get_if<DataRef<Image>>(&value); images && !images->get().empty())
         throw ContractError("图像字面量只能是 Missing 或空批次");
 }
 
-const std::optional<SourcePort> &effectiveSource(const InputBinding &binding)
-{
-    static const std::optional<SourcePort> none;
-    return binding.mode == BindingMode::Upstream ? binding.source : none;
-}
 
 bool sameEffectiveValue(const InputBinding &left, const InputBinding &right)
 {
@@ -96,24 +98,178 @@ PortRelations deriveRelations(const FlowDefinition &flow, NodeId replacedNode = 
             if (!effectiveSource(binding))
                 continue;
             const auto &source = *binding.source;
-            try
+            const auto check = visionrt::validateBinding(flow, source.node, source.port, target.id, input);
+            if (!check)
             {
-                const auto found = nodes.find(source.node);
-                if (found == nodes.end())
-                    throw ContractError("上游节点不属于当前流程");
-                if (!compatible(signature(found->second->signatures.outputs, source.port),
-                                signature(target.signatures.inputs, input)))
-                    throw ContractError("上游输出与输入端口类型不兼容");
-                result.active.push_back({source, {target.id, input}});
-            }
-            catch (const ContractError &error)
-            {
-                result.errors.push_back(std::string(error.what()) + "：节点 " + std::to_string(source.node) + "."
+                result.errors.push_back(check.message + "：节点 " + std::to_string(source.node) + "."
                                         + source.port + " -> 节点 " + std::to_string(target.id) + "." + input);
+            }
+            else
+            {
+                result.active.push_back({source, {target.id, input}});
             }
         }
     }
     return result;
+}
+
+
+bool symbolCharacter(unsigned char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c >= 0x80;
+}
+
+bool validSymbol(const std::string &symbol)
+{
+    if (symbol.empty() || (symbol.front() >= '0' && symbol.front() <= '9') || symbol.starts_with("__"))
+        return false;
+    if (symbol == "True" || symbol == "False" || symbol == "None")
+        return false;
+    return std::all_of(symbol.begin(), symbol.end(), [](char c) { return symbolCharacter(static_cast<unsigned char>(c)); });
+}
+
+// Identifiers referenced by an expression, ignoring string literals. Used only to
+// reject forward references inside one transaction; the Python engine performs
+// the authoritative compile.
+std::vector<std::string> referencedSymbols(const std::string &expression)
+{
+    std::vector<std::string> result;
+    std::string              current;
+    bool                     inString = false;
+    char                     quote    = 0;
+    for (std::size_t index = 0; index <= expression.size(); ++index)
+    {
+        const char c = index == expression.size() ? ' ' : expression[index];
+        if (inString)
+        {
+            if (c == '\\' && index + 1 < expression.size())
+            {
+                ++index;
+                continue;
+            }
+            if (c == quote)
+                inString = false;
+            continue;
+        }
+        if (c == '\'' || c == '"')
+        {
+            inString = true;
+            quote    = c;
+            current.clear();
+            continue;
+        }
+        if (symbolCharacter(static_cast<unsigned char>(c)))
+            current.push_back(c);
+        else
+        {
+            if (!current.empty() && !(current.front() >= '0' && current.front() <= '9'))
+                result.push_back(current);
+            current.clear();
+        }
+    }
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+}
+
+void validateExpressionConfig(const ExpressionConfig &config)
+{
+    std::set<std::string> ports, symbols, earlier;
+    std::uint64_t         maximumSequence = 0;
+    const auto            registerPort     = [&](const std::string &id)
+    {
+        if (id.empty() || id.starts_with("__") || id.starts_with("p") == false
+            || !std::all_of(id.begin() + 1, id.end(), [](char c) { return c >= '0' && c <= '9'; }))
+            throw ContractError("表达式端口标识非法：" + id);
+        if (!ports.insert(id).second)
+            throw ContractError("表达式端口标识重复：" + id);
+        maximumSequence = std::max(maximumSequence, static_cast<std::uint64_t>(std::stoull(id.substr(1))));
+    };
+    for (const auto &variable : config.variables)
+    {
+        registerPort(variable.portId);
+        validateTypeSpec(variable.type);
+        if (!validSymbol(variable.symbol))
+            throw ContractError("变量符号非法：" + variable.symbol);
+        if (!symbols.insert(variable.symbol).second)
+            throw ContractError("符号重复：" + variable.symbol);
+        validateUtf8(variable.name);
+        earlier.insert(variable.symbol);
+    }
+    std::set<std::string> declared;
+    for (const auto &result : config.program)
+        declared.insert(result.symbol);
+    std::set<std::string> resultPorts;
+    for (const auto &result : config.program)
+    {
+        registerPort(result.portId);
+        validateTypeSpec(result.type);
+        if (!validSymbol(result.symbol))
+            throw ContractError("结果符号非法：" + result.symbol);
+        if (!symbols.insert(result.symbol).second)
+            throw ContractError("符号重复：" + result.symbol);
+        if (result.expression.find_first_not_of(" \t") == std::string::npos)
+            throw ContractError("表达式不能为空：" + result.name);
+        validateUtf8(result.expression);
+        for (const auto &reference : referencedSymbols(result.expression))
+        {
+            if (declared.contains(reference) && !earlier.contains(reference))
+                throw ContractError("表达式引用了后续结果：" + reference);
+        }
+        earlier.insert(result.symbol);
+        if (result.exposed && !resultPorts.insert(result.portId).second)
+            throw ContractError("可见结果端口重复：" + result.portId);
+    }
+    if (config.nextPortSeq <= maximumSequence)
+        throw ContractError("表达式端口序号必须大于已用序号");
+}
+
+TypeMap portTypes(const std::vector<PortDefinition> &ports)
+{
+    TypeMap result;
+    for (const auto &port : ports)
+        if (!port.typeFrom)
+            result.emplace(port.id, port.type);
+    return result;
+}
+
+// Rebuilds the declared signature and prunes or adds input bindings so that the
+// stored configuration always matches the materialised contract.
+void applyContract(NodeDefinition &node, const ToolDefinition &tool)
+{
+    const auto contract = nodeContract(node, tool);
+    auto       inputs   = portTypes(contract.inputs);
+    // Formula variables are inactive while a condition node reads an upstream Bool, but their
+    // bindings stay stored so switching back does not lose the user's configuration. Only a
+    // variable the user actually deleted leaves this set.
+    std::set<std::string, std::less<>> retained;
+    if (tool.nodeModel == NodeModel::Condition && conditionUsesUpstream(node) && node.expression)
+        for (const auto &variable : node.expression->variables)
+        {
+            retained.insert(variable.portId);
+            if (const auto previous = node.signatures.inputs.find(variable.portId);
+                previous != node.signatures.inputs.end())
+                inputs.insert_or_assign(variable.portId, previous->second);
+        }
+    for (auto it = node.inputs.begin(); it != node.inputs.end();)
+    {
+        if (!inputs.contains(it->first))
+            it = node.inputs.erase(it);
+        else
+            ++it;
+    }
+    for (const auto &port : contract.inputs)
+    {
+        if (node.inputs.contains(port.id))
+            continue;
+        const bool hasDefault   = !isMissing(port.defaultValue);
+        const bool canBeLiteral = port.type.type != Type::Image && hasDefault;
+        node.inputs.emplace(port.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
+                                                   copyProjectLiteral(port.defaultValue),
+                                                   {}});
+    }
+    node.signatures.inputs = std::move(inputs);
+    setOutputDeclarations(node, tool);
 }
 
 std::vector<DependencyEdge> deriveEdges(const PortRelations &relations)
@@ -246,7 +402,7 @@ CopiedNodes duplicateNodes(std::span<const NodeDefinition *const> selected, Node
     for (const auto *node : selected) result.mapping.emplace(node->id, next++);
     for (const auto *original : selected)
     {
-        auto node              = *original;
+        auto node              = copyNodeConfiguration(*original);
         node.id                = result.mapping.at(original->id);
         node.position          = translated(node.position, dx, dy);
         node.executionRevision = 0;
@@ -259,6 +415,14 @@ CopiedNodes duplicateNodes(std::span<const NodeDefinition *const> selected, Node
                 binding.source.reset();
             else
                 binding.source->node = mapped->second;
+        }
+        if (node.executionGuard && node.executionGuard->source)
+        {
+            const auto mapped = result.mapping.find(node.executionGuard->source->node);
+            if (mapped == result.mapping.end())
+                node.executionGuard.reset();
+            else
+                node.executionGuard->source->node = mapped->second;
         }
         result.nodes.push_back(std::move(node));
     }
@@ -353,12 +517,142 @@ ReferencesToClear referencesTo(ProjectDefinition &project, const std::set<NodeId
 }
 } // namespace
 
+BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, const std::string &sourcePort,
+                            NodeId targetNodeId, const std::string &targetInputPort,
+                            const PositionLookup &positions)
+{
+    if (sourceNodeId == targetNodeId)
+        return {BindingError::Self, "不能连接自身节点"};
+
+    const NodeDefinition *sourceNode = nullptr;
+    const NodeDefinition *targetNode = nullptr;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == sourceNodeId)
+            sourceNode = &node;
+        if (node.id == targetNodeId)
+            targetNode = &node;
+    }
+    if (!sourceNode || !targetNode)
+        return {BindingError::OtherFlow, "上游节点或目标节点不属于当前流程"};
+
+    GridPoint sourcePos = sourceNode->position;
+    GridPoint targetPos = targetNode->position;
+    if (positions)
+    {
+        if (auto p = positions(sourceNodeId))
+            sourcePos = *p;
+        if (auto p = positions(targetNodeId))
+            targetPos = *p;
+    }
+
+    if (sourcePos.y >= targetPos.y)
+        return {BindingError::SameOrUpperRow, "只能连接上级节点的输出（违反上下层层级约束：上游 Y 必须严格小于下游 Y）"};
+
+    const auto sourceOut = sourceNode->signatures.outputs.find(sourcePort);
+    if (sourceOut == sourceNode->signatures.outputs.end())
+        return {BindingError::MissingPort, "上游输出端口不存在：" + sourcePort};
+
+    const auto targetIn = targetNode->signatures.inputs.find(targetInputPort);
+    if (targetIn == targetNode->signatures.inputs.end())
+        return {BindingError::MissingPort, "目标输入端口不存在：" + targetInputPort};
+
+    if (!compatible(sourceOut->second, targetIn->second))
+        return {BindingError::TypeMismatch, "上游输出与输入端口类型不兼容：" + std::to_string(sourceNodeId) + "."
+                                                + sourcePort + " -> " + std::to_string(targetNodeId) + "." + targetInputPort};
+
+    return {BindingError::None, {}};
+}
+
+BindingCheck validateGuard(const FlowDefinition &flow, const SourcePort &source, NodeId targetNodeId,
+                           const PositionLookup &positions)
+{
+    if (source.node == targetNodeId)
+        return {BindingError::Self, "执行条件不能引用节点自身"};
+    const NodeDefinition *sourceNode = nullptr;
+    const NodeDefinition *targetNode = nullptr;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == source.node)
+            sourceNode = &node;
+        if (node.id == targetNodeId)
+            targetNode = &node;
+    }
+    if (!sourceNode || !targetNode)
+        return {BindingError::OtherFlow, "执行条件的源节点或目标节点不属于当前流程"};
+    GridPoint sourcePos = sourceNode->position;
+    GridPoint targetPos = targetNode->position;
+    if (positions)
+    {
+        if (auto p = positions(source.node))
+            sourcePos = *p;
+        if (auto p = positions(targetNodeId))
+            targetPos = *p;
+    }
+    if (sourcePos.y >= targetPos.y)
+        return {BindingError::SameOrUpperRow, "执行条件只能引用上级节点（上游 Y 必须严格小于下游 Y）"};
+    const auto output = sourceNode->signatures.outputs.find(source.port);
+    if (output == sourceNode->signatures.outputs.end())
+        return {BindingError::MissingPort, "执行条件的源输出端口不存在：" + source.port};
+    if (output->second != TypeSpec{Type::Bool})
+        return {BindingError::TypeMismatch, "执行条件必须引用 Bool 输出：" + source.port};
+    return {BindingError::None, {}};
+}
+
+std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow, const SourcePort &source)
+{
+    const NodeDefinition *sourceNode = nullptr;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == source.node)
+        {
+            sourceNode = &node;
+            break;
+        }
+    }
+    if (!sourceNode)
+        return {};
+
+    std::vector<CandidateInput> result;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.id == source.node || !node.unresolved.isEmpty())
+            continue;
+        for (const auto &[input, binding] : node.inputs)
+        {
+            const auto check = validateBinding(flow, source.node, source.port, node.id, input);
+            if (!check)
+                continue;
+
+            const auto &eff = effectiveSource(binding);
+            const bool connected = (eff && *eff == source);
+            const bool occupied = (eff && *eff != source);
+
+            result.push_back(CandidateInput{node.id, input, connected, occupied});
+        }
+    }
+    return result;
+}
+
+
 std::vector<DependencyEdge> dependencyEdges(const FlowDefinition &flow)
 {
     const auto relations = portRelations(flow);
     if (!relations.errors.empty())
         throw ContractError(relations.errors.front());
-    return deriveEdges(relations);
+    auto edges = deriveEdges(relations);
+    for (const auto &node : flow.nodes)
+    {
+        if (!node.executionGuard || !node.executionGuard->source)
+            continue;
+        const auto check = validateGuard(flow, *node.executionGuard->source, node.id);
+        if (!check)
+            throw ContractError("执行条件无效：" + check.message);
+        edges.emplace_back(node.executionGuard->source->node, node.id);
+    }
+    std::sort(edges.begin(), edges.end());
+    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+    return edges;
 }
 
 PortRelations portRelations(const FlowDefinition &flow)
@@ -426,28 +720,44 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     requireIncrement(target.structureRevision);
     if (tool.id.empty())
         throw ContractError("工具标识不能为空");
+    // A node contract always carries the host-owned ports, so a definition handed in by a caller
+    // is normalised before it becomes a node. Otherwise a hand-built contract would give the node a
+    // port set the runtime can never satisfy.
+    ToolDefinition definition = tool;
+    normalizeToolDefinition(definition);
     NodeDefinition node;
     node.id               = edit.project_.nextNodeId;
-    node.toolId           = tool.id;
-    node.toolNameSnapshot = tool.displayName;
-    for (const auto &parameter : tool.initParams)
-    {
-        validateLiteral(parameter.type, parameter.defaultValue);
-        if (!node.signatures.initParams.emplace(parameter.id, parameter.type).second)
-            throw ContractError("初始化参数标识重复");
-        node.initParams.emplace(parameter.id, parameter.defaultValue);
-    }
-    for (const auto &input : tool.inputs)
+    node.toolId           = definition.id;
+    node.toolNameSnapshot = definition.displayName;
+    if (definition.nodeModel == NodeModel::Expression || definition.nodeModel == NodeModel::Condition)
+        node.expression = ExpressionConfig{};
+    if (definition.nodeModel == NodeModel::Select)
+        node.selectType = TypeSpec{Type::Int};
+    const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
+    if (!definition.derivesPorts())
+        for (const auto &parameter : contract.initParams)
+        {
+            validateLiteral(parameter.type, parameter.defaultValue);
+            if (!node.signatures.initParams.emplace(parameter.id, parameter.type).second)
+                throw ContractError("初始化参数标识重复");
+            node.initParams.emplace(parameter.id, copyProjectLiteral(parameter.defaultValue));
+        }
+    else
+        for (const auto &parameter : contract.initParams)
+            node.signatures.initParams.insert_or_assign(parameter.id, parameter.type);
+    for (const auto &input : contract.inputs)
     {
         validateLiteral(input.type, input.defaultValue);
         if (node.signatures.initParams.contains(input.id)
             || !node.signatures.inputs.emplace(input.id, input.type).second)
             throw ContractError("输入参数标识重复");
         const bool hasDefault = !isMissing(input.defaultValue);
-        const bool canBeLiteral = input.type.type != Type::ImageBatch && hasDefault;
-        node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream, input.defaultValue, {}});
+        const bool canBeLiteral = input.type.type != Type::Image && hasDefault;
+        node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
+                                                   copyProjectLiteral(input.defaultValue),
+                                                   {}});
     }
-    for (const auto &output : tool.outputs)
+    for (const auto &output : contract.outputs)
     {
         if (output.typeFrom)
             continue;
@@ -458,7 +768,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     const GridPoint origin{};
     const auto [x, y] = nearestTranslation(std::span(&origin, 1), target, preferred);
     node.position     = translated(origin, x, y);
-    setOutputDeclarations(node, tool);
+    setOutputDeclarations(node, definition);
     target.nodes.push_back(std::move(node));
     ++target.structureRevision;
     const auto id = edit.project_.nextNodeId++;
@@ -472,7 +782,7 @@ bool ProjectEditor::bindFreeInput(std::string_view flowId, const SourcePort &sou
     const auto &currentFlow = flow(flowId);
     requireEditable(findNode(currentFlow, source.node));
     auto binding = inputBinding(findNode(currentFlow, target.node), target.port);
-    if (binding.source)
+    if (effectiveSource(binding))
         throw ContractError("输入端口已关联上游：" + std::to_string(target.node) + "." + target.port);
     binding.mode   = BindingMode::Upstream;
     binding.source = source;
@@ -490,11 +800,15 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
     if (binding.mode != BindingMode::Literal && binding.mode != BindingMode::Upstream)
         throw ContractError("输入绑定模式无效");
     validateLiteral(type, binding.literal);
-    if (binding.source
-        && !compatible(signature(findNode(target, binding.source->node).signatures.outputs, binding.source->port),
-                       type))
-        throw ContractError("上游输出与输入端口类型不兼容：" + std::to_string(binding.source->node) + "."
-                            + binding.source->port + " -> " + std::to_string(id) + "." + std::string(input));
+    if (binding.source)
+    {
+        const auto check = visionrt::validateBinding(target, binding.source->node, binding.source->port, id, std::string(input));
+        if (!check)
+        {
+            if (binding.mode == BindingMode::Upstream || check.reason != BindingError::SameOrUpperRow)
+                throw ContractError(check.message);
+        }
+    }
     if (current.mode == binding.mode && current.source == binding.source
         && equalValues(current.literal, binding.literal))
         return false;
@@ -507,6 +821,7 @@ bool ProjectEditor::setBinding(std::string_view flowId, NodeId id, std::string_v
         requireIncrement(target.structureRevision);
     if (executionChanged)
         requireIncrement(node.executionRevision);
+    binding.literal                 = copyProjectLiteral(binding.literal);
     node.inputs.find(input)->second = std::move(binding);
     if (structureChanged)
         ++target.structureRevision;
@@ -521,7 +836,7 @@ bool ProjectEditor::setMode(std::string_view flowId, NodeId id, std::string_view
     requireIdle();
     const auto &n = findNode(flow(flowId), id);
     const auto typeIt = n.signatures.inputs.find(std::string(input));
-    if (typeIt != n.signatures.inputs.end() && typeIt->second.type == Type::ImageBatch && mode != BindingMode::Upstream)
+    if (typeIt != n.signatures.inputs.end() && typeIt->second.type == Type::Image && mode != BindingMode::Upstream)
         return false;
     auto binding = inputBinding(n, input);
     binding.mode = mode;
@@ -550,6 +865,39 @@ bool ProjectEditor::setLiteral(std::string_view flowId, NodeId id, std::string_v
     return setBinding(flowId, id, input, std::move(binding));
 }
 
+bool ProjectEditor::setLiteralBindings(std::string_view flowId, NodeId id,
+                                       std::span<const std::pair<std::string, PortValue>> values)
+{
+    requireIdle();
+    if (values.empty())
+        return false;
+    ProjectEditor edit(project_);
+    auto         &node = findNode(edit.flow(flowId), id);
+    requireEditable(node);
+    bool changed = false;
+    for (const auto &[input, value] : values)
+    {
+        const auto &binding = inputBinding(node, input);
+        if (binding.mode == BindingMode::Upstream || effectiveSource(binding))
+            throw ContractError("该参数由上游提供：" + input);
+        const auto &type = signature(node.signatures.inputs, input);
+        if (type.type == Type::Image)
+            throw ContractError("图像输入不能写入字面量：" + input);
+        validateLiteral(type, value);
+        if (equalValues(binding.literal, value))
+            continue;
+        auto &mutableBinding  = node.inputs.find(input)->second;
+        mutableBinding.literal = copyProjectLiteral(value);
+        changed                = true;
+    }
+    if (!changed)
+        return false;
+    requireIncrement(node.executionRevision);
+    ++node.executionRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
 bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string_view parameter, PortValue value)
 {
     requireIdle();
@@ -563,8 +911,227 @@ bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, std::string
     if (equalValues(found->second, value))
         return false;
     requireIncrement(node.executionRevision);
-    found->second = std::move(value);
+    found->second = copyProjectLiteral(value);
     ++node.executionRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
+bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, ExpressionConfig config,
+                                         const ToolDefinition &tool)
+{
+    requireIdle();
+    ProjectEditor edit(project_);
+    auto         &target = edit.flow(flowId);
+    auto         &node   = findNode(target, id);
+    requireEditable(node);
+    if (node.toolId != tool.id)
+        throw ContractError("工具定义与节点不匹配");
+    if (tool.nodeModel != NodeModel::Expression && tool.nodeModel != NodeModel::Condition)
+        throw ContractError("该节点不使用表达式配置");
+    validateExpressionConfig(config);
+    // Identifiers already handed out stay retired: a later transaction may raise the sequence but
+    // never lower it, so stale contexts can not be pointed at a freshly allocated port.
+    if (node.expression && config.nextPortSeq < node.expression->nextPortSeq)
+        throw ContractError("表达式端口序号不得回退：当前 " + std::to_string(node.expression->nextPortSeq)
+                            + "，提交 " + std::to_string(config.nextPortSeq));
+    if (tool.nodeModel == NodeModel::Condition)
+    {
+        if (config.program.size() != 1)
+            throw ContractError("条件节点必须恰好一条公式");
+        const auto &condition = config.program.front();
+        if (condition.type != TypeSpec{Type::Bool} || condition.exposed)
+            throw ContractError("条件公式必须是 Bool 类型且不暴露端口");
+    }
+    if (node.expression && *node.expression == config)
+        return false;
+
+    auto candidate       = node;
+    candidate.expression = config;
+    const auto contract  = nodeContract(candidate, tool);
+    TypeMap    nextInputs;
+    for (const auto &port : contract.inputs)
+        nextInputs.emplace(port.id, port.type);
+    for (const auto &[portId, binding] : node.inputs)
+    {
+        const auto next = nextInputs.find(portId);
+        const bool changed = next == nextInputs.end() || !compatible(next->second, signature(node.signatures.inputs, portId));
+        if (changed && binding.mode == BindingMode::Upstream && binding.source)
+            throw ContractError("输入端口仍由上游提供，请先解除绑定：" + portId);
+    }
+    std::set<std::string> nextOutputs;
+    for (const auto &port : contract.outputs)
+        if (!port.id.starts_with("__"))
+            nextOutputs.insert(port.id);
+    for (const auto &[portId, type] : node.signatures.outputs)
+    {
+        if (portId.starts_with("__"))
+            continue;
+        const auto next = std::find_if(contract.outputs.begin(), contract.outputs.end(),
+                                       [&](const auto &port) { return port.id == portId; });
+        const bool kept = next != contract.outputs.end() && next->type == type;
+        if (kept)
+            continue;
+        const auto used = std::count_if(target.nodes.begin(), target.nodes.end(), [&](const auto &consumer)
+        {
+            return std::any_of(consumer.inputs.begin(), consumer.inputs.end(), [&](const auto &entry)
+            { return entry.second.mode == BindingMode::Upstream && entry.second.source
+                  && entry.second.source->node == id && entry.second.source->port == portId; });
+        });
+        if (used != 0)
+            throw ContractError("输出端口仍被连接，不能删除或修改类型：" + portId);
+    }
+    requireIncrement(node.executionRevision);
+    requireIncrement(target.structureRevision);
+    node.expression = std::move(config);
+    applyContract(node, tool);
+    ++node.executionRevision;
+    ++target.structureRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
+bool ProjectEditor::setExecutionGuard(std::string_view flowId, NodeId id, std::optional<ExecutionGuard> guard,
+                                     const ToolDefinition &tool)
+{
+    requireIdle();
+    ProjectEditor edit(project_);
+    auto         &target = edit.flow(flowId);
+    auto         &node   = findNode(target, id);
+    requireEditable(node);
+    if (node.executionGuard == guard)
+        return false;
+    if (guard && !supportsExecutionGuard(tool.nodeModel))
+        throw ContractError("该工具不支持执行条件：" + node.toolId);
+    if (guard && guard->mode == BindingMode::Upstream && guard->source)
+    {
+        const auto check = validateGuard(target, *guard->source, id);
+        if (!check)
+            throw ContractError(check.message);
+    }
+    node.executionGuard = std::move(guard);
+    if (hasDependencyCycle(target))
+        throw ContractError("执行条件形成依赖循环");
+    requireIncrement(node.executionRevision);
+    requireIncrement(target.structureRevision);
+    ++node.executionRevision;
+    ++target.structureRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
+bool ProjectEditor::setConditionMode(std::string_view flowId, NodeId id, BindingMode mode,
+                                    const ToolDefinition &tool)
+{
+    requireIdle();
+    ProjectEditor edit(project_);
+    auto         &target = edit.flow(flowId);
+    auto         &node   = findNode(target, id);
+    requireEditable(node);
+    if (tool.nodeModel != NodeModel::Condition)
+        throw ContractError("只有条件节点支持来源模式切换：" + node.toolId);
+    if (conditionUsesUpstream(node) == (mode == BindingMode::Upstream))
+        return false;
+
+    std::set<std::string, std::less<>> nextOutputs;
+    for (const auto &port : tool.outputs)
+        if (!port.id.starts_with("__"))
+            nextOutputs.insert(port.id);
+    for (const auto &[portId, type] : node.signatures.outputs)
+    {
+        if (portId.starts_with("__"))
+            continue;
+        const auto next = std::find_if(tool.outputs.begin(), tool.outputs.end(),
+                                       [&](const auto &port) { return port.id == portId; });
+        const bool kept = next != tool.outputs.end() && next->type == type;
+        if (kept)
+            continue;
+        const auto used = std::count_if(target.nodes.begin(), target.nodes.end(), [&](const auto &consumer)
+        {
+            return std::any_of(consumer.inputs.begin(), consumer.inputs.end(), [&](const auto &entry)
+            { return entry.second.mode == BindingMode::Upstream && entry.second.source
+                  && entry.second.source->node == id && entry.second.source->port == portId; });
+        });
+        if (used != 0)
+            throw ContractError("输出端口仍被连接，不能切换来源模式：" + portId);
+    }
+
+    if (!node.inputs.contains("condition"))
+        node.inputs.emplace("condition", InputBinding{});
+    auto &binding = node.inputs.at("condition");
+    binding.mode  = mode;
+    if (mode == BindingMode::Literal)
+        binding.literal = Missing{};
+    else if (!isMissing(binding.literal))
+        throw ContractError("上层模式下条件输入不能保存字面量");
+
+    applyContract(node, tool);
+    const auto contract = nodeContract(node, tool);
+    for (const auto &port : contract.inputs)
+    {
+        const auto found = node.inputs.find(port.id);
+        if (found == node.inputs.end())
+            throw ContractError("条件节点缺少输入绑定：" + port.id);
+        try
+        {
+            validateLiteral(port.type, found->second.literal);
+        }
+        catch (const ContractError &error)
+        {
+            throw ContractError("输入 " + port.id + " 的已存值在新模式下无效：" + error.what());
+        }
+        if (found->second.mode == BindingMode::Upstream && found->second.source)
+        {
+            const auto check
+                = validateBinding(target, found->second.source->node, found->second.source->port, id, port.id);
+            if (!check)
+                throw ContractError("输入 " + port.id + " 的已存来源在新模式下无效：" + check.message);
+        }
+    }
+    if (hasDependencyCycle(target))
+        throw ContractError("来源模式切换形成依赖循环");
+    requireIncrement(node.executionRevision);
+    requireIncrement(target.structureRevision);
+    ++node.executionRevision;
+    ++target.structureRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
+bool ProjectEditor::setSelectType(std::string_view flowId, NodeId id, TypeSpec type, const ToolDefinition &tool)
+{
+    requireIdle();
+    ProjectEditor edit(project_);
+    auto         &target = edit.flow(flowId);
+    auto         &node   = findNode(target, id);
+    requireEditable(node);
+    if (node.toolId != tool.id)
+        throw ContractError("工具定义与节点不匹配");
+    if (tool.nodeModel != NodeModel::Select)
+        throw ContractError("该节点不是合流节点");
+    validateTypeSpec(type);
+    if (node.selectType && *node.selectType == type)
+        return false;
+    for (const auto *port : {"if_true", "if_false", "value"})
+    {
+        const auto binding = node.inputs.find(port);
+        if (binding != node.inputs.end() && binding->second.mode == BindingMode::Upstream && binding->second.source)
+            throw ContractError("合流端口仍由上游提供，请先解除绑定：" + std::string(port));
+        const auto used = std::find_if(target.nodes.begin(), target.nodes.end(), [&](const auto &consumer)
+        {
+            return std::any_of(consumer.inputs.begin(), consumer.inputs.end(), [&](const auto &entry)
+            { return entry.second.mode == BindingMode::Upstream && entry.second.source
+                  && entry.second.source->node == id && entry.second.source->port == port; });
+        });
+        if (used != target.nodes.end())
+            throw ContractError("合流输出仍被连接，不能修改类型：value");
+    }
+    requireIncrement(node.executionRevision);
+    requireIncrement(target.structureRevision);
+    node.selectType = type;
+    applyContract(node, tool);
+    ++node.executionRevision;
+    ++target.structureRevision;
     commit(std::move(edit.project_));
     return true;
 }
@@ -594,7 +1161,8 @@ std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId
             continue;
         for (const auto &[port, output] : source.signatures.outputs)
         {
-            if (!compatible(output, type))
+            const auto check = validateBinding(target, source.id, port, id, std::string(input));
+            if (!check)
                 continue;
             candidate.source = SourcePort{source.id, port};
             if (!containsCycle(deriveEdges(deriveRelations(target, id, input, &candidate))))
@@ -617,7 +1185,10 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
             continue;
         for (const auto &[input, binding] : node.inputs)
         {
-            if (binding.source || !compatible(type, signature(node.signatures.inputs, input)))
+            if (effectiveSource(binding))
+                continue;
+            const auto check = validateBinding(target, source.node, source.port, node.id, input);
+            if (!check)
                 continue;
             auto candidate   = binding;
             candidate.mode   = BindingMode::Upstream;
@@ -770,6 +1341,29 @@ bool ProjectEditor::moveNodes(std::string_view flowId, std::span<const NodeId> n
     for (const auto &node : target.nodes)
         if (!moving.contains(node.id) && destinations.contains({node.position.x, node.position.y}))
             throw ContractError("移动位置与已有节点重叠");
+
+    auto candidatePos = [&](NodeId id) -> std::optional<GridPoint> {
+        if (moving.contains(id))
+        {
+            const auto it = std::find_if(target.nodes.begin(), target.nodes.end(), [id](const auto &n) { return n.id == id; });
+            if (it != target.nodes.end())
+                return translated(it->position, delta.x, delta.y);
+        }
+        return std::nullopt;
+    };
+
+    for (const auto &node : target.nodes)
+    {
+        for (const auto &[input, binding] : node.inputs)
+        {
+            if (binding.mode == BindingMode::Upstream && binding.source)
+            {
+                const auto check = validateBinding(target, binding.source->node, binding.source->port, node.id, input, candidatePos);
+                if (!check)
+                    throw ContractError("移动后连接不再满足上下层关系");
+            }
+        }
+    }
     for (auto &node : target.nodes)
         if (moving.contains(node.id))
             node.position = translated(node.position, delta.x, delta.y);
@@ -781,7 +1375,7 @@ CopiedSelection ProjectEditor::copySelection(std::string_view flowId, std::span<
 {
     requireIdle();
     CopiedSelection result;
-    for (const auto *node : selection(flow(flowId), nodes)) result.nodes.push_back(*node);
+    for (const auto *node : selection(flow(flowId), nodes)) result.nodes.push_back(copyNodeConfiguration(*node));
     return result;
 }
 

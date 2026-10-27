@@ -1,6 +1,8 @@
 #include "ui/AppController_p.h"
 #include "core/ValueJson.h"
 
+#include "core/InputNormalizer.h"
+
 #include <core/ToolValueValidation.h>
 
 #include <cmath>
@@ -19,8 +21,16 @@ bool AppController::Impl::applyParameter(const QString &id, bool initialization,
         throw ContractError("参数不存在：" + id.toStdString());
     if (const auto *declaration = parameter(id.toStdString(), initialization))
     {
+        // Manual edits run through the same normalisation as upstream values: declared ranges
+        // clamp and options fall back to the declared default. Missing stays Missing in the
+        // project; the effective value is produced when the tool runs.
         if (!isMissing(value))
-            validateToolValue(*declaration, value);
+        {
+            auto normalized = normalizeInput(*declaration, value);
+            if (!normalized.adjustment.empty())
+                report(QString::fromStdString(id.toStdString() + "：" + normalized.adjustment));
+            value = std::move(normalized.value);
+        }
     }
     else if (signature->second.type == Type::Float && !isMissing(value)
              && !std::isfinite(std::get<double>(value)))
@@ -41,8 +51,8 @@ bool AppController::setParameter(const QString &id, bool initialization, const Q
         const auto signature = signatures.find(id.toStdString());
         if (signature == signatures.end())
             throw ContractError("参数不存在：" + id.toStdString());
-        auto value = signature->second.type == Type::String && !jsonInput
-            ? PortValue{Utf8(text.toUtf8().toStdString())} : ValueJson::parse(text, signature->second);
+        auto value = signature->second.type == Type::String && !jsonInput ? PortValue{text.toUtf8().toStdString()}
+                                                                          : ValueJson::parse(text, signature->second);
         return impl_->applyParameter(id, initialization, std::move(value));
     });
 }
@@ -50,13 +60,9 @@ bool AppController::setParameter(const QString &id, bool initialization, const Q
 bool AppController::setRectParameter(const QString &id, bool initialization, double x, double y, double width,
                                     double height, double angle)
 {
-    return impl_->command([&]
-    {
-        return impl_->applyParameter(id, initialization,
-                                     Roi::rectangle(static_cast<float>(x), static_cast<float>(y),
-                                                    static_cast<float>(width), static_cast<float>(height),
-                                                    static_cast<float>(angle)));
-    });
+    return impl_->command(
+        [&]
+        { return impl_->applyParameter(id, initialization, DataRef<ROI>(ROI{{{2., x, y, width, height, angle}}})); });
 }
 
 bool AppController::setParameterPath(const QString &id, bool initialization, const QUrl &url)
@@ -65,7 +71,7 @@ bool AppController::setParameterPath(const QString &id, bool initialization, con
     {
         if (!url.isLocalFile())
             throw ContractError("参数路径必须是本地文件或目录：" + id.toStdString());
-        return impl_->applyParameter(id, initialization, Utf8(url.toLocalFile().toUtf8().toStdString()));
+        return impl_->applyParameter(id, initialization, url.toLocalFile().toUtf8().toStdString());
     });
 }
 
@@ -88,11 +94,12 @@ bool AppController::stepIntegerParameter(const QString &id, bool initialization,
         const auto value = ValueJson::parse(literal, signature->second);
         if (isMissing(value))
             throw ContractError("步进前请输入有效整数");
-        const auto current = std::get<std::int64_t>(value);
-        std::int64_t step = 1;
-        if (const auto *declaration = impl_->parameter(id.toStdString(), initialization))
+        std::int64_t current = std::get<std::int64_t>(value);
+        std::int64_t step    = 1;
+        const auto  *declaration = impl_->parameter(id.toStdString(), initialization);
+        if (declaration)
         {
-            validateToolValue(*declaration, value);
+            current = std::get<std::int64_t>(normalizeInput(*declaration, value).value);
             if (declaration->step)
             {
                 const auto *declared = std::get_if<std::int64_t>(&*declaration->step);
@@ -104,7 +111,9 @@ bool AppController::stepIntegerParameter(const QString &id, bool initialization,
         if ((direction > 0 && current > std::numeric_limits<std::int64_t>::max() - step)
             || (direction < 0 && current < std::numeric_limits<std::int64_t>::min() + step))
             throw ContractError("参数步进超出 int64 范围：" + id.toStdString());
-        return impl_->applyParameter(id, initialization, current + direction * step);
+        const std::int64_t target = current + direction * step;
+        // The stepped value is clamped by the same declaration rule instead of being rejected.
+        return impl_->applyParameter(id, initialization, target);
     });
 }
 

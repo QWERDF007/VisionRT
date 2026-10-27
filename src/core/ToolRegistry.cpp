@@ -46,7 +46,7 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
 
 ToolDefinition parseDefinition(const std::filesystem::path &path, bool builtin)
 {
-    return parseToolDefinitionFile(path, builtin);
+    return parseToolDefinitionFile(path, {builtin ? ToolOrigin::Builtin : ToolOrigin::Custom, {}});
 }
 
 ToolStatus ToolRegistry::add(const ToolFactoryDescriptor &descriptor) noexcept
@@ -80,11 +80,13 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
     std::map<std::string, std::size_t, std::less<>> index;
     for (const auto &tool : package.tools)
     {
-        validateToolDefinition(tool.definition);
-        validateContract(tool.definition);
-        if (!index.emplace(tool.definition.id, definitions.size()).second)
-            throw ContractError("工具包内 tool_id 重复：" + tool.definition.id);
-        definitions.push_back(tool.definition);
+        auto definition = tool.definition;
+        normalizeToolDefinition(definition);
+        validateToolDefinition(definition);
+        validateContract(definition);
+        if (!index.emplace(definition.id, definitions.size()).second)
+            throw ContractError("工具包内 tool_id 重复：" + definition.id);
+        definitions.push_back(std::move(definition));
     }
     if (pluginLoader_)
         pluginLoader_->registerPackage(package);
@@ -114,6 +116,7 @@ void ToolRegistry::loadNativeImplementations() const
 
 void ToolRegistry::addDefinition(ToolDefinition definition)
 {
+    normalizeToolDefinition(definition);
     validateToolDefinition(definition);
     if (const auto *previous = find(definition.id))
         throw ContractError("tool_id 重复：" + definition.id + "，声明位于 " + pathText(previous->definitionPath)
@@ -133,6 +136,7 @@ void ToolRegistry::replaceDefinition(ToolDefinition definition)
         addDefinition(std::move(definition));
         return;
     }
+    normalizeToolDefinition(definition);
     validateToolDefinition(definition);
     validateContract(definition);
     definitions_[existing->second] = std::move(definition);
@@ -143,6 +147,7 @@ void ToolRegistry::registerCpp(ToolDefinition contract, ToolFactory factory)
 {
     if (!factory || contract.kind != ToolKind::Cpp)
         throw ContractError("C++ 工厂注册无效：需要 cpp 工具种类和非空工厂");
+    normalizeToolDefinition(contract);
     validateToolDefinition(contract);
     const auto id = contract.id;
     if (cpp_.contains(id))
@@ -167,7 +172,18 @@ void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory facto
     const auto *definition = find(toolId);
     if (!definition || (definition->kind != ToolKind::PythonFunction && definition->kind != ToolKind::PythonClass))
         throw ContractError("注册 Python 实现需要已加载的 Python 工具声明：" + toolId);
-    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(status)});
+    std::shared_ptr<PythonLoadState> loadState;
+    if (const auto *pyFunctor = factory.target<PythonFactoryFunctor>())
+        loadState = pyFunctor->loadState;
+    if (!loadState)
+        loadState = std::make_shared<PythonLoadState>(std::move(status));
+    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(loadState)});
+}
+
+std::shared_ptr<PythonLoadState> ToolRegistry::pythonLoadState(std::string_view id) const
+{
+    const auto it = python_.find(id);
+    return it != python_.end() ? it->second.loadState : nullptr;
 }
 
 void ToolRegistry::registerHostBinding(std::string bindingName, HostBindingFactory factory)
@@ -215,10 +231,17 @@ Availability ToolRegistry::availability(std::string_view id) const
         };
     }
     const auto implementation = python_.find(id);
-    if (implementation != python_.end() && implementation->second.factory && implementation->second.status)
-        return {ToolAvailability::Available, {}};
-    if (implementation != python_.end() && !implementation->second.status)
-        return {ToolAvailability::ImplementationUnavailable, implementation->second.status};
+    if (implementation != python_.end())
+    {
+        if (implementation->second.loadState)
+        {
+            const auto snap = implementation->second.loadState->snapshot();
+            if (!snap.status)
+                return {ToolAvailability::ImplementationUnavailable, snap.status};
+            if (implementation->second.factory && snap.status)
+                return {ToolAvailability::Available, {}};
+        }
+    }
     return {
         ToolAvailability::ImplementationUnavailable,
         {-3, "Python 实现尚未加载：" + std::string(id)}
@@ -270,11 +293,22 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
         if (pluginLoader_)
             return pluginLoader_->createAdapter(definition.id, services);
     }
-    const auto &factory  = python_.find(id)->second.factory;
-    auto        instance = factory(services);
-    if (!instance)
-        throw RegistryError(ToolAvailability::ImplementationUnavailable, "工具工厂返回空实例：" + std::string(id));
-    return instance;
+    const auto it = python_.find(id);
+    if (it == python_.end() || !it->second.factory)
+        throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 实现尚未加载：" + std::string(id));
+    try
+    {
+        auto instance = it->second.factory(services);
+        if (!instance)
+            throw RegistryError(ToolAvailability::ImplementationUnavailable, "工具工厂返回空实例：" + std::string(id));
+        return instance;
+    }
+    catch (const RegistryError &error)
+    {
+        if (it->second.loadState && error.reason == ToolAvailability::ImplementationUnavailable)
+            it->second.loadState->update(error.status);
+        throw;
+    }
 }
 
 } // namespace visionrt

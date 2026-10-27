@@ -1,6 +1,8 @@
 #include "core/ToolPackage.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -28,30 +30,33 @@ void rejects(Action action)
 
 void write(const QString &path, const QByteArray &bytes)
 {
+    assert(QDir().mkpath(QFileInfo(path).absolutePath()));
     QFile file(path);
     assert(file.open(QIODevice::WriteOnly));
     assert(file.write(bytes) == bytes.size());
 }
 
 const QByteArray declaration = R"json({
-    "schema_version":1,"tool_id":"test.package","display_name":"包工具","version":"1",
+    "schema_version":4,"tool_id":"test.package","display_name":"包工具","version":"1",
     "kind":"cpp","init_params":[],"inputs":[],"outputs":[]
 })json";
 
 QJsonObject index()
 {
     return {
-        {"schema_version",                                                           1                          },
-        {       "variant",                                                                                 "cpu"},
-        {       "modules",                 QJsonArray{QJsonObject{{"id", "module"}, {"library", "missing.dll"}}}},
-        {         "tools",
-         QJsonArray{QJsonObject{{"tool_id", "test.package"}, {"definition", "tool.json"}, {"module", "module"}}}},
-        { "runtime_files",                                                             QJsonArray{"runtime.dll"}}
+        {"schema_version",                                                                     1},
+        {       "variant",                                                                 "cpu"},
+        {       "modules", QJsonArray{QJsonObject{{"id", "module"}, {"library", "missing.dll"}}}},
+        {         "tools",        QJsonArray{QJsonObject{{"tool_id", "test.package"},
+        {"definition", "tools/builtin/tool.json"},
+        {"module", "module"}}}                                        },
+        { "runtime_files",                                             QJsonArray{"runtime.dll"}}
     };
 }
 }
 
 int main()
+try
 {
     QTemporaryDir directory;
     assert(directory.isValid());
@@ -61,7 +66,7 @@ int main()
     {
         write(indexPath, QJsonDocument(value).toJson());
     };
-    write(directory.path() + "/tool.json", declaration);
+    write(directory.path() + "/tools/builtin/tool.json", declaration);
     write(directory.path() + "/unindexed.json", "not a declaration");
     putIndex(index());
     const auto package = readToolsPackage(root);
@@ -123,10 +128,11 @@ int main()
     auto tool     = QJsonDocument::fromJson(declaration).object();
     tool["kind"]  = "python_function";
     tool["entry"] = QJsonObject{
-        {  "file", "script.py"},
-        {"symbol",   "execute"}
+        {"package",   "fixture"},
+        {   "file", "script.py"},
+        { "symbol",   "execute"}
     };
-    write(directory.path() + "/tool.json", QJsonDocument(tool).toJson());
+    write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(tool).toJson());
     rejects([&] { readToolsPackage(root); });
     auto pythonIndex = index();
     auto pythonTool  = pythonIndex["tools"].toArray().first().toObject();
@@ -137,36 +143,57 @@ int main()
     putIndex(pythonIndex);
     assert(readToolsPackage(root).tools.front().definition.kind == ToolKind::PythonFunction);
     rejects([&] { validateToolsPackage(root); });
-    write(directory.path() + "/script.py", "def execute(inputs): return {}\n");
+    write(directory.path() + "/python/builtin/fixture/script.py", "def execute(inputs): return {}\n");
     validateToolsPackage(root);
 
     tool["entry"] = QJsonObject{
-        {  "file", "../outside.py"},
-        {"symbol",       "execute"}
+        {"package",       "fixture"},
+        {   "file", "../outside.py"},
+        { "symbol",       "execute"}
     };
-    write(directory.path() + "/tool.json", QJsonDocument(tool).toJson());
+    write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(tool).toJson());
     rejects([&] { readToolsPackage(root); });
-    std::filesystem::create_directories(root / "nested");
-    pythonTool["definition"] = "nested/tool.json";
+    assert(QFile::remove(directory.path() + "/tools/builtin/tool.json"));
+    std::filesystem::create_directories(root / "tools/builtin/nested");
+    pythonTool["definition"] = "tools/builtin/nested/tool.json";
     pythonIndex["tools"]     = QJsonArray{pythonTool};
     putIndex(pythonIndex);
     tool["entry"] = QJsonObject{
-        {  "file", "../script.py"},
-        {"symbol",      "execute"}
+        {"package",   "fixture"},
+        {   "file", "script.py"},
+        { "symbol",   "execute"}
     };
-    tool["resources"] = QJsonArray{"../runtime.dll"};
-    write(directory.path() + "/nested/tool.json", QJsonDocument(tool).toJson());
+    tool["resources"] = QJsonArray{"runtime.dll"};
+    write(directory.path() + "/python/builtin/fixture/runtime.dll", "resource");
+    write(directory.path() + "/tools/builtin/nested/tool.json", QJsonDocument(tool).toJson());
     validateToolsPackage(root);
-    assert(readToolsPackage(root).tools.front().definition.script == root / "script.py");
+    assert(readToolsPackage(root).tools.front().definition.pythonScript() == root / "python/builtin/fixture/script.py");
 
+    tool.remove("resources");
     tool["kind"]  = "host";
     tool["entry"] = QJsonObject{
         {"binding", "visionrt.receiver"}
     };
-    write(directory.path() + "/nested/tool.json", QJsonDocument(tool).toJson());
+    write(directory.path() + "/tools/builtin/nested/tool.json", QJsonDocument(tool).toJson());
     assert(readToolsPackage(root).tools.front().definition.hostBinding == "visionrt.receiver");
+    assert(QFile::remove(directory.path() + "/tools/builtin/nested/tool.json"));
+    putIndex(index());
+    auto resourceTool          = QJsonDocument::fromJson(declaration).object();
+    resourceTool["resources"]  = QJsonArray{"../../outside_resource.bin"};
+    write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(resourceTool).toJson());
+    write(directory.path() + "/outside_resource.bin", "outside");
+    rejects([&] { readToolsPackage(root); });
+    resourceTool["resources"] = QJsonArray{"local.dll"};
+    write(directory.path() + "/tools/builtin/local.dll", "local");
+    write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(resourceTool).toJson());
+    assert(readToolsPackage(root).tools.front().definition.resources.size() == 1);
     assert(QFile::remove(indexPath));
     write(directory.path() + "/module_index.yaml", "schema_version: 2");
     rejects([&] { readToolsPackage(root); });
     std::cout << "JSON package identity, isolation, containment and delivery validation verified\n";
+}
+catch (const std::exception &error)
+{
+    std::cerr << error.what() << std::endl;
+    return 1;
 }

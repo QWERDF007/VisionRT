@@ -1,6 +1,10 @@
 #include "core/ProjectStorage.h"
 
+#include "core/InputNormalizer.h"
+#include "core/ProjectEditor.h"
+
 #include "core/NodeContracts.h"
+#include "core/Sequence.h"
 #include "core/ToolRegistry.h"
 #include "core/ValueJson.h"
 
@@ -18,7 +22,10 @@
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 2;
+constexpr int projectFormatVersion = 5;
+// Format 4 projects are migrated in memory: execution conditions move to the
+// explicit mode object and fixed-tool guards are reported instead of executed.
+constexpr int minimumProjectFormatVersion = 4;
 
 QString qtPath(const std::filesystem::path &path)
 {
@@ -59,14 +66,7 @@ std::string text(const QJsonValue &node, std::string_view context, bool nonempty
 
 std::uint64_t sequence(const QJsonValue &node, std::string_view context)
 {
-    const auto value = text(node, context, true);
-    if (!std::all_of(value.begin(), value.end(), [](char c) { return c >= '0' && c <= '9'; }))
-        invalid(std::string(context) + " 必须是无符号十进制 uint64");
-    std::uint64_t result    = 0;
-    const auto    converted = std::from_chars(value.data(), value.data() + value.size(), result);
-    if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size())
-        invalid(std::string(context) + " 超出 uint64 范围");
-    return result;
+    return parseSequence(text(node, context, true), context);
 }
 
 TypeMap decodeTypes(const QJsonValue &node, std::string_view context)
@@ -93,11 +93,22 @@ void diagnose(ProjectLoadResult &result, ProjectStorageCode code, const FlowDefi
 }
 
 void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const NodeDefinition &node,
-                  const PortDefinition &port, const PortValue &value)
+                  const PortDefinition &port, PortValue &value)
 {
+    // Loading consumes the same normalisation as editing and running: a stored value outside the
+    // declared range is written back in its legal form with a visible diagnostic. A value the
+    // declaration cannot represent at all is kept untouched and reported.
+    if (isMissing(value))
+        return;
     try
     {
-        validateToolValue(port, value);
+        auto normalized = normalizeInput(port, value);
+        if (!equalValues(normalized.value, value))
+        {
+            value = std::move(normalized.value);
+            diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.id,
+                     "保存的值不符合当前约束，已按声明收敛：" + normalized.adjustment, true);
+        }
     }
     catch (const ContractError &error)
     {
@@ -109,18 +120,29 @@ void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const N
 PortValue defaultValue(const PortDefinition &port)
 {
     validateValue(port.type, port.defaultValue);
-    return port.defaultValue;
+    return copyProjectLiteral(port.defaultValue);
 }
 
 void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node, const QJsonObject &raw,
                    const ToolDefinition &definition, std::set<std::string, std::less<>> &changedOutputs)
 {
-    auto       initTypes    = types(definition.initParams);
-    auto       inputTypes   = types(definition.inputs);
+    const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
+    auto       initTypes    = types(contract.initParams);
+    auto       inputTypes   = types(contract.inputs);
+    // Host-owned ports are materialised by the current contract. A project saved before they
+    // existed is migrated in memory: the binding gets its declared default and the signature is
+    // completed without turning a version upgrade into a user-visible schema warning.
+    auto       savedInputs  = node.signatures.inputs;
+    for (const auto &[id, type] : inputTypes)
+        if (isHostOwnedPort(id))
+            savedInputs.emplace(id, type);
     const auto savedOutputs = node.signatures.outputs;
     setOutputDeclarations(node, definition);
     auto outputTypes        = std::move(node.signatures.outputs);
     node.signatures.outputs = savedOutputs;
+    for (const auto &[id, type] : outputTypes)
+        if (isHostOwnedPort(id))
+            node.signatures.outputs.emplace(id, type);
     for (const auto &[id, previous] : node.signatures.outputs)
     {
         const auto current = outputTypes.find(id);
@@ -130,13 +152,27 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     for (const auto &[id, current] : outputTypes)
         if (!node.signatures.outputs.contains(id))
             changedOutputs.insert(id);
-    if (node.signatures.initParams != initTypes || node.signatures.inputs != inputTypes
+    for (const auto &[id, value] : node.initParams)
+    {
+        if (initTypes.contains(id))
+            continue;
+        const auto key = QString::fromStdString(id);
+        node.retiredInitParams.insert(
+            key, QJsonObject{
+                     {"value",                                   raw.value("init_params").toObject().value(key)},
+                     { "type", raw.value("type_snapshot").toObject().value("init_params").toObject().value(key)}
+        });
+        node.signatures.initParams.erase(id);
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + id,
+                 "当前工具声明未定义此初始化参数，已保留原值和类型，不参与执行");
+    }
+    if (node.signatures.initParams != initTypes || savedInputs != inputTypes
         || node.signatures.outputs != outputTypes)
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "type_snapshot",
                  "保存的端口类型已与当前工具定义同步", true);
 
     Values parameters;
-    for (const auto &port : definition.initParams)
+    for (const auto &port : definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams)
     {
         const auto old       = node.initParams.find(port.id);
         const auto signature = node.signatures.initParams.find(port.id);
@@ -149,14 +185,8 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         rangeWarning(result, flow, node, port, value);
         parameters.emplace(port.id, std::move(value));
     }
-    for (const auto &[id, value] : node.initParams)
-    {
-        if (!initTypes.contains(id))
-            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + id,
-                     "已丢弃声明中不再存在的初始化参数", true);
-    }
     std::map<std::string, InputBinding, std::less<>> inputs;
-    for (const auto &port : definition.inputs)
+    for (const auto &port : contract.inputs)
     {
         const auto old       = node.inputs.find(port.id);
         const auto signature = node.signatures.inputs.find(port.id);
@@ -178,8 +208,9 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             binding.literal = defaultValue(port);
             if (old != node.inputs.end())
                 binding.mode = old->second.mode;
-            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
-                     "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
+            if (!isHostOwnedPort(port.id))
+                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
+                         "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
         }
         if (binding.mode == BindingMode::Literal || !binding.source)
             rangeWarning(result, flow, node, port, binding.literal);
@@ -261,6 +292,13 @@ void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
             visit(visit, i);
 }
 
+QJsonObject object(const QJsonValue &value, const char *context)
+{
+    if (!value.isObject())
+        invalid(std::string(context) + " 必须是 JSON 对象");
+    return value.toObject();
+}
+
 ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolRegistry &registry)
 {
     if (!document.json().isObject())
@@ -269,9 +307,10 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
     if (!root.value("format_version").isDouble())
         invalid("format_version 必须是整数");
     const auto version = std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int}));
-    if (version != projectFormatVersion)
-        invalid("format_version 不受支持，要求 " + std::to_string(projectFormatVersion) + "，实际 "
-                + std::to_string(version));
+    if (version < minimumProjectFormatVersion || version > projectFormatVersion)
+        invalid("format_version 不受支持，要求 " + std::to_string(minimumProjectFormatVersion) + "–"
+                + std::to_string(projectFormatVersion) + "，实际 " + std::to_string(version));
+    const bool legacyFormat = version < projectFormatVersion;
     const auto metadata = map(root.value("project"), "project");
     if (!root.value("flows").isArray())
         invalid("flows 必须是数组");
@@ -393,6 +432,67 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 }
                 node.inputs.emplace(id, std::move(binding));
             }
+            if (raw.contains("expression_config"))
+            {
+                const auto config = map(raw.value("expression_config"), "expression_config");
+                ExpressionConfig expression;
+                expression.nextPortSeq = sequence(config.value("next_port_seq"), "next_port_seq");
+                if (!config.value("variables").isArray() || !config.value("program").isArray())
+                    invalid("expression_config.variables 与 program 必须是数组");
+                const auto variables = config.value("variables").toArray();
+                for (qsizetype index = 0; index < variables.size(); ++index)
+                {
+                    const auto item = map(variables[index], "expression variable");
+                    ExpressionVariable variable;
+                    variable.portId     = text(item.value("port_id"), "variable.port_id", true);
+                    variable.name       = text(item.value("name"), "variable.name", true);
+                    variable.symbol     = text(item.value("symbol"), "variable.symbol", true);
+                    if (!item.value("allow_missing").isBool())
+                        invalid("variable.allow_missing 必须是布尔值");
+                    variable.allowMissing = item.value("allow_missing").toBool();
+                    variable.type = ValueJson::decodeType(object(item.value("type"), "variable.type"));
+                    expression.variables.push_back(std::move(variable));
+                }
+                const auto program = config.value("program").toArray();
+                for (qsizetype index = 0; index < program.size(); ++index)
+                {
+                    const auto item = map(program[index], "expression result");
+                    ExpressionResult result;
+                    result.portId     = text(item.value("port_id"), "result.port_id", true);
+                    result.name       = text(item.value("name"), "result.name", true);
+                    result.symbol     = text(item.value("symbol"), "result.symbol", true);
+                    result.expression = text(item.value("expression"), "result.expression", true);
+                    if (!item.value("exposed").isBool())
+                        invalid("result.exposed 必须是布尔值");
+                    result.exposed = item.value("exposed").toBool();
+                    result.type    = ValueJson::decodeType(object(item.value("type"), "result.type"));
+                    expression.program.push_back(std::move(result));
+                }
+                node.expression = std::move(expression);
+            }
+            if (raw.contains("execution_guard"))
+            {
+                const auto guard = map(raw.value("execution_guard"), "execution_guard");
+                ExecutionGuard parsed;
+                if (guard.contains("mode"))
+                {
+                    const auto mode = text(guard.value("mode"), "guard.mode");
+                    if (mode == "literal")
+                        parsed.mode = BindingMode::Literal;
+                    else if (mode != "upstream")
+                        invalid("执行条件模式无效：" + mode);
+                }
+                const auto source = guard.value("source");
+                if (source.isObject())
+                    parsed.source = SourcePort{sequence(source.toObject().value("node_seq"), "guard.source.node_seq"),
+                                               text(source.toObject().value("port_id"), "guard.source.port_id", true)};
+                else if (legacyFormat && guard.contains("node_seq"))
+                    parsed.source = SourcePort{sequence(guard.value("node_seq"), "guard.node_seq"),
+                                               text(guard.value("port_id"), "guard.port_id", true)};
+                node.executionGuard = std::move(parsed);
+            }
+            if (raw.contains("select_type"))
+                node.selectType = ValueJson::decodeType(map(raw.value("select_type"), "select_type"));
             if (!definition)
             {
                 node.unresolved = raw;
@@ -400,7 +500,12 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                          "工具定义缺失，原始配置已保留：" + node.toolId);
             }
             else
+            {
                 reconcileNode(result, flow, node, raw, *definition, changedOutputs[node.id]);
+                if (node.executionGuard && !supportsExecutionGuard(definition->nodeModel))
+                    diagnose(result, ProjectStorageCode::LegacyExecutionGuard, flow, node, "execution_guard",
+                             "普通工具不再支持执行条件，原配置已保留但不再执行；请改用上层工具状态输入重新配置");
+            }
             flow.nodes.push_back(std::move(node));
         }
         project.flows.push_back(std::move(flow));
@@ -434,7 +539,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 continue;
             for (auto &[id, binding] : node.inputs)
             {
-                if (!binding.source)
+                if (binding.mode != BindingMode::Upstream || !binding.source)
                     continue;
                 const auto source = nodes.find(binding.source->node);
                 if (source != nodes.end() && !source->second->unresolved.isEmpty())
@@ -443,15 +548,22 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                              "上游工具定义缺失，引用已保留以便恢复");
                     continue;
                 }
-                bool valid = false;
-                if (source != nodes.end())
+                const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, id);
+                if (!check)
                 {
-                    const auto output = source->second->signatures.outputs.find(binding.source->port);
-                    valid             = output != source->second->signatures.outputs.end()
-                         && compatible(output->second, node.signatures.inputs.at(id))
-                         && !changedOutputs[source->second->id].contains(binding.source->port);
+                    if (check.reason == BindingError::SameOrUpperRow)
+                    {
+                        diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
+                                 "上游节点未在当前节点上方（违反上游 Y < 下游 Y 层级约束），绑定已保留供修复，不可执行");
+                    }
+                    else
+                    {
+                        binding.source.reset();
+                        diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
+                                 "上游不存在、输出已变更、跨流程或类型不兼容，引用已清除", true);
+                    }
                 }
-                if (!valid)
+                else if (source != nodes.end() && changedOutputs[source->second->id].contains(binding.source->port))
                 {
                     binding.source.reset();
                     diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + id,
@@ -489,6 +601,14 @@ QJsonObject encodeProject(const ProjectDefinition &project)
             if (!unresolved)
             {
                 QJsonObject parameters;
+                auto        parameterTypes = encodeTypes(node.signatures.initParams);
+                for (auto parameter = node.retiredInitParams.begin(); parameter != node.retiredInitParams.end();
+                     ++parameter)
+                {
+                    const auto record = parameter.value().toObject();
+                    parameters.insert(parameter.key(), record.value("value"));
+                    parameterTypes.insert(parameter.key(), record.value("type"));
+                }
                 for (const auto &[id, value] : node.initParams)
                 {
                     const auto signature = node.signatures.initParams.find(id);
@@ -496,11 +616,49 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                         invalid("无法保存缺少 type_snapshot 的初始化参数：" + id);
                     parameters.insert(QString::fromStdString(id), ValueJson::encode(value, signature->second));
                 }
+                raw.remove("expression_config");
+                raw.remove("execution_guard");
+                raw.remove("select_type");
+                if (node.expression)
+                {
+                    QJsonArray variables;
+                    for (const auto &variable : node.expression->variables)
+                        variables.append(QJsonObject{{"port_id", QString::fromStdString(variable.portId)},
+                                                     {"name", QString::fromStdString(variable.name)},
+                                                     {"symbol", QString::fromStdString(variable.symbol)},
+                                                     {"type", ValueJson::encodeType(variable.type)},
+                                                     {"allow_missing", variable.allowMissing}});
+                    QJsonArray program;
+                    for (const auto &result : node.expression->program)
+                        program.append(QJsonObject{{"port_id", QString::fromStdString(result.portId)},
+                                                   {"name", QString::fromStdString(result.name)},
+                                                   {"symbol", QString::fromStdString(result.symbol)},
+                                                   {"expression", QString::fromStdString(result.expression)},
+                                                   {"type", ValueJson::encodeType(result.type)},
+                                                   {"exposed", result.exposed}});
+                    raw.insert("expression_config",
+                               QJsonObject{{"next_port_seq", QString::number(node.expression->nextPortSeq)},
+                                           {"variables", variables},
+                                           {"program", program}});
+                }
+                if (node.executionGuard)
+                {
+                    QJsonObject guard{{"mode", node.executionGuard->mode == BindingMode::Upstream ? "upstream"
+                                                                                                  : "literal"}};
+                    if (node.executionGuard->source)
+                        guard.insert("source", QJsonObject{
+                                                   {"node_seq", QString::number(node.executionGuard->source->node)},
+                                                   { "port_id", QString::fromStdString(node.executionGuard->source->port)}
+                    });
+                    raw.insert("execution_guard", guard);
+                }
+                if (node.selectType)
+                    raw.insert("select_type", ValueJson::encodeType(*node.selectType));
                 raw.insert("init_params", parameters);
                 raw.insert("type_snapshot", QJsonObject{
-                                                {"init_params", encodeTypes(node.signatures.initParams)},
-                                                {     "inputs",     encodeTypes(node.signatures.inputs)},
-                                                {    "outputs",    encodeTypes(node.signatures.outputs)}
+                                                {"init_params",                       parameterTypes},
+                                                {     "inputs",  encodeTypes(node.signatures.inputs)},
+                                                {    "outputs", encodeTypes(node.signatures.outputs)}
                 });
             }
             auto inputs = unresolved ? raw.value("inputs").toObject() : QJsonObject{};
@@ -549,21 +707,24 @@ void rewritePath(PortValue &value, const PortDefinition &port, const std::filesy
 {
     if (!isPathPort(port))
         return;
-    auto *string = std::get_if<Utf8>(&value);
-    if (!string || string->str().empty())
+    auto *string = std::get_if<std::string>(&value);
+    if (!string || string->empty())
         return;
-    const auto original = std::filesystem::u8path(string->str());
+    const auto original = std::filesystem::u8path(*string);
     if (original.is_relative() && oldDirectory.empty())
         return;
     const auto absolute = (original.is_absolute() ? original : oldDirectory / original).lexically_normal();
     const auto relative = absolute.lexically_relative(newDirectory);
-    value               = Utf8(utf8Path(relative.empty() ? absolute : relative));
+    value               = utf8Path(relative.empty() ? absolute : relative);
 }
 } // namespace
 
 ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
 {
     const auto absolute = std::filesystem::absolute(path).lexically_normal();
+    const auto extension = qtPath(absolute.extension()).toLower();
+    if (extension == ".yaml" || extension == ".yml")
+        invalid("工程格式不受支持，请使用 JSON 工程：" + utf8Path(absolute));
     QFile      file(qtPath(absolute));
     if (!file.open(QIODevice::ReadOnly))
         throw std::runtime_error("无法打开工程 " + utf8Path(absolute) + "：" + file.errorString().toStdString());
@@ -624,7 +785,8 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
             {
                 if (diagnostic.node != updated.id || diagnostic.code != ProjectStorageCode::SchemaChanged)
                     continue;
-                if (diagnostic.field.starts_with("init_params."))
+                if (diagnostic.field.starts_with("init_params.")
+                    && updated.initParams.contains(diagnostic.field.substr(12)))
                     changedExecution = true;
                 if (diagnostic.field.starts_with("inputs."))
                 {
@@ -674,6 +836,9 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
                                            "未知工具字段已保留，另存为后可能需要修复相对路径"});
                     continue;
                 }
+                if (!node.retiredInitParams.isEmpty() && oldDirectory != target.parent_path())
+                    diagnostics.push_back({ProjectStorageCode::UnknownPaths, flow.id, node.id, "init_params",
+                                           "未识别的初始化参数已保留原文，另存后请核对其中的相对路径"});
                 for (const auto &port : definition->initParams)
                 {
                     const auto value = node.initParams.find(port.id);
@@ -684,7 +849,7 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
                 {
                     const auto value = node.inputs.find(port.id);
                     if (value != node.inputs.end())
-                        rewritePath(value->second.literal, port, oldDirectory, target.parent_path());
+                    rewritePath(value->second.literal, port, oldDirectory, target.parent_path());
                 }
             }
         }

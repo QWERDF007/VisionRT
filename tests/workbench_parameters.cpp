@@ -1,8 +1,10 @@
+#include <iostream>
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QFont>
 #include <QDir>
 #include <QGuiApplication>
@@ -19,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void parameterStatesContract(visionrt::AppController &app);
 
 void parameterEditorsContract()
@@ -31,10 +34,11 @@ void parameterEditorsContract()
     };
     QTemporaryDir directory;
     require(directory.isValid(), "parameter fixture directory is invalid");
-    QDir(directory.path()).mkpath("tools-package/assets/tools/custom/Test/Parameters");
+    QDir(directory.path()).mkpath("tools-package/tools/custom/Test/Parameters");
     const auto write = [&](const QString &name, const QByteArray &content)
     {
         QFile file(directory.path() + "/tools-package/" + name);
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly), "cannot create parameter fixture");
         require(file.write(content) == content.size(), "parameter fixture write failed");
     };
@@ -43,22 +47,22 @@ void parameterEditorsContract()
   "schema_version": 1,
   "variant": "test",
   "tools": [
-    {"tool_id": "test.parameters", "definition": "assets/tools/custom/Test/Parameters/tool.json"}
+    {"tool_id": "test.parameters", "definition": "tools/custom/Test/Parameters/tool.json"}
   ],
   "modules": [],
   "runtime_files": []
 })json");
-    write("assets/tools/custom/Test/Parameters/run.py",
+    write("python/custom/Test/Parameters/run.py",
           "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', "
           "'ratio': inputs['ratio'], 'count': inputs['count']}\n");
-    write("assets/tools/custom/Test/Parameters/tool.json",
+    write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.parameters",
   "display_name": "参数测试",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "run.py", "symbol": "run"},
+  "entry": {"package": "Test/Parameters", "file": "run.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
     {"id": "ratio", "name": "比例", "type": "Float", "default": 0.15, "min": 0, "max": 1, "step": 0.05, "decimals": 2},
@@ -66,12 +70,12 @@ void parameterEditorsContract()
     {"id": "path", "name": "路径", "type": "String", "default": "原始路径", "editor": "file"},
     {"id": "enabled", "name": "启用", "type": "Bool", "default": true},
     {"id": "mode", "name": "色彩", "type": "String", "default": "bgr", "options": ["bgr", "gray"]},
-    {"id": "labels", "name": "标签列表", "type": "StringArray", "rank": 1, "default": {"shape": [2], "data": ["a", "b"]}},
+    {"id": "labels", "name": "标签列表", "type": "Array", "dtype": "string", "rank": 1, "default": ["a", "b"]},
     {"id": "note", "name": "备注", "type": "String", "default": "中文备注"},
     {"id": "directory", "name": "数据目录", "type": "String", "default": "F:/tmp", "editor": "directory"},
-    {"id": "weights", "name": "数值数组", "type": "NumericArray", "dtype": "float64", "rank": 1, "default": {"shape": [2], "data": [0, 1]}},
-    {"id": "images", "name": "图像", "type": "ImageBatch", "default": [], "required": false},
-    {"id": "rois", "name": "区域", "type": "RoiBatch", "default": [], "image_input": "images"}
+    {"id": "weights", "name": "数值数组", "type": "Array", "dtype": "float64", "rank": 1, "default": [0, 1]},
+    {"id": "images", "name": "图像", "type": "Image", "default": [], "required": false},
+    {"id": "rois", "name": "区域", "type": "ROI", "default": [], "image_input": "images"}
   ],
   "outputs": [
     {"id": "ratio", "name": "比例", "type": "Float"},
@@ -83,7 +87,7 @@ void parameterEditorsContract()
     for (int attempt = 0; app.busy() && attempt < 100; ++attempt)
         QTest::qWait(10);
     require(!app.busy(), "parameter tool initialization did not finish");
-    app.addNode("test.parameters", 0, 0);
+    app.addNode("test.parameters", 0, 100);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     if (app.nodes().size() != 1)
         throw std::runtime_error("parameter fixture tool was not discovered: " + app.diagnostic().toStdString());
@@ -94,7 +98,6 @@ void parameterEditorsContract()
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"
@@ -418,17 +421,35 @@ void parameterEditorsContract()
     }
     auto *labelsRow = findItem(findItem, panel, "parameter_labels");
     require(labelsRow != nullptr, "parameter panel did not render the structure row");
-    QQuickItem *structureButton = nullptr;
-    for (auto *item : labelsRow->findChildren<QQuickItem *>())
-        if (item->property("text").toString().startsWith("StringArray")
-            && item->metaObject()->indexOfSignal("clicked()") >= 0)
-            structureButton = item;
-    require(structureButton != nullptr, "structured parameter editor is missing");
-    QObject *dialog = nullptr;
-    for (auto *object : labelsRow->findChildren<QObject *>())
-        if (object->property("title").toString().endsWith(QStringLiteral("结构数据")))
-            dialog = object;
-    require(dialog != nullptr, "structure dialog is missing");
+    auto *labelsInput = textInput(labelsRow);
+    require(labelsInput != nullptr, "array parameter does not expose its editable input");
+    labelsInput->forceActiveFocus();
+    require(labelsInput->property("text").toString() == "[\"a\",\"b\"]", "array parameter initial text mismatch");
+    const auto originalLabels = value("labels");
+    require(app.save(project) && !app.dirty(), "cannot save array baseline");
+    panel->setEnabled(false);
+    labelsInput->forceActiveFocus();
+    QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(&window, Qt::Key_X);
+    QTest::keyClick(&window, Qt::Key_Return);
+    require(value("labels") == originalLabels, "disabled array field still allowed editing");
+    panel->setEnabled(true);
+    labelsInput->forceActiveFocus();
+    labelsInput->setProperty("text", "invalid structure");
+    QTest::keyClick(&window, Qt::Key_Return);
+    require(value("labels") == originalLabels, "invalid structure replaced a typed parameter");
+    QTest::keyClick(&window, Qt::Key_Escape);
+    require(labelsInput->property("text").toString() == originalLabels, "Escape did not restore array value");
+    labelsInput->setProperty("text", "[\"中文\", \"with spaces\"]");
+    QTest::keyClick(&window, Qt::Key_Return);
+    const auto committedLabels = value("labels");
+    require(committedLabels.contains(QStringLiteral("中文")) && committedLabels.contains("with spaces"),
+            "array text input did not preserve typed string values");
+    labelsInput->forceActiveFocus();
+    labelsInput->setProperty("text", "unfinished structure");
+    QTest::keyClick(&window, Qt::Key_Escape);
+    require(labelsInput->property("text").toString() == committedLabels, "Escape did not restore array draft");
+    require(value("labels") == committedLabels, "Escape committed an unfinished array draft");
     const auto click = [&](QQuickItem *item)
     {
         require(item && item->isVisible() && item->isEnabled(), "parameter action is unavailable");
@@ -436,72 +457,6 @@ void parameterEditorsContract()
                           item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
         QTest::qWait(120);
     };
-    const auto dialogItems = [&]
-    {
-        QList<QQuickItem *> result;
-        QList<QQuickItem *> pending{qobject_cast<QQuickItem *>(dialog->property("contentItem").value<QObject *>())};
-        while (!pending.isEmpty())
-        {
-            auto *item = pending.takeLast();
-            require(item != nullptr, "structure dialog content is missing");
-            result.append(item);
-            pending.append(item->childItems());
-        }
-        return result;
-    };
-    click(structureButton);
-    require(dialog->property("visible").toBool(), "clicking a structure field did not open its dialog");
-    QQuickItem *structureInput = nullptr;
-    QQuickItem *confirm = nullptr;
-    for (auto *item : dialogItems())
-    {
-        if (item->inherits("QQuickTextEdit")) structureInput = item;
-        if (item->property("text").toString() == QStringLiteral("确认")
-            && item->metaObject()->indexOfSignal("clicked()") >= 0) confirm = item;
-    }
-    require(structureInput != nullptr && confirm != nullptr, "structure dialog editing controls are missing");
-    const auto originalLabels = value("labels");
-    require(app.save(project) && !app.dirty(), "cannot save disabled structure baseline");
-    const auto originalDraft = structureInput->property("text").toString();
-    const auto beforeDisabledStructure = parameterChanges.count();
-    panel->setEnabled(false);
-    structureInput->forceActiveFocus();
-    QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
-    QTest::keyClick(&window, Qt::Key_X);
-    QTest::keyClick(&window, Qt::Key_Return);
-    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                      confirm->mapToScene(QPointF(confirm->width() / 2, confirm->height() / 2)).toPoint());
-    QTest::qWait(30);
-    require(!confirm->isEnabled() && structureInput->property("readOnly").toBool()
-                && structureInput->property("text").toString() == originalDraft
-                && value("labels") == originalLabels && !app.dirty()
-                && parameterChanges.count() == beforeDisabledStructure && dialog->property("visible").toBool(),
-            "disabled structure field still allowed editing or confirmation through its popup");
-    panel->setEnabled(true);
-    require(confirm->isEnabled() && !structureInput->property("readOnly").toBool(),
-            "structure popup did not recover after enabling its parameter panel");
-    structureInput->setProperty("text", "invalid structure");
-    click(confirm);
-    require(value("labels") == originalLabels, "invalid structure replaced a typed parameter");
-    require(dialog->property("visible").toBool() && !labelsRow->property("structureError").toString().isEmpty(),
-            "invalid structure did not keep the draft and report its validation error");
-    structureInput->setProperty("text", "{\"shape\": [2], \"data\": [\"中文\", \"with spaces\"]}");
-    click(confirm);
-    require(!dialog->property("visible").toBool(), "valid structure did not close its dialog");
-    const auto committedLabels = value("labels");
-    require(committedLabels.contains(QStringLiteral("中文")) && committedLabels.contains("with spaces"),
-            "structure confirmation did not preserve typed string values");
-    click(structureButton);
-    structureInput = nullptr;
-    for (auto *item : dialogItems())
-        if (item->inherits("QQuickTextEdit")) structureInput = item;
-    require(structureInput != nullptr, "reopened structure editor is missing");
-    structureInput->forceActiveFocus();
-    structureInput->setProperty("text", "unfinished structure");
-    QTest::keyClick(&window, Qt::Key_Escape);
-    QTest::qWait(120);
-    require(!dialog->property("visible").toBool(), "Escape did not close an unfinished structure edit");
-    require(value("labels") == committedLabels, "Escape committed an unfinished structure draft");
     const auto visibleText = [&](const QString &text) -> QQuickItem *
     {
         QList<QQuickItem *> pending{window.contentItem()};
@@ -526,7 +481,7 @@ void parameterEditorsContract()
     auto *group = visibleText(candidate.value("title").toString());
     require(group != nullptr, "upstream dropdown did not expose its source node group");
     click(group);
-    auto *output = visibleText(QStringLiteral("比例 (Float)"));
+    auto *output = visibleText(QStringLiteral("比例 (浮点数)"));
     require(output != nullptr, "upstream dropdown did not expose its typed source output");
     click(output);
     const auto wires = app.wires();
@@ -616,8 +571,8 @@ void parameterEditorsContract()
         QMap<QString, QString> boundaryResults;
         for (int row = 0; row < outputs->rowCount(); ++row)
         {
-            const auto output = outputs->get(row);
-            boundaryResults.insert(output.value("portId").toString(), output.value("preview").toString());
+            const auto result = outputs->get(row);
+            boundaryResults.insert(result.value("portId").toString(), result.value("preview").toString());
         }
         require(boundaryResults.value("__status_code") == "0" && boundaryResults.value("count") == integer,
                 "integer boundary changed during Python execution");

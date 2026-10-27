@@ -4,7 +4,7 @@
 
 namespace visionrt {
 ToolDefinition parseToolDefinitionJson(const std::string &content, const std::filesystem::path &definitionPath = {},
-                                       bool builtin = false);
-ToolDefinition parseToolDefinitionFile(const std::filesystem::path &path, bool builtin = false);
+                                       ToolSource source = {});
+ToolDefinition parseToolDefinitionFile(const std::filesystem::path &path, ToolSource source = {});
 std::string    emitNormalizedToolJson(const ToolDefinition &definition);
 }

@@ -40,7 +40,7 @@ bool samePorts(const std::vector<PortDefinition> &a, const std::vector<PortDefin
 bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
 {
     return a.id == b.id && a.version == b.version && a.kind == b.kind && a.hostBinding == b.hostBinding
-        && a.script == b.script && a.symbol == b.symbol && samePorts(a.inputs, b.inputs)
+        && a.entry == b.entry && a.source == b.source && samePorts(a.inputs, b.inputs)
         && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
 }
 
@@ -92,8 +92,18 @@ std::optional<std::string> upstreamValidityError(
             return "上游节点 " + node.title() + " 尚未运行，请先运行该节点";
         if (snapshot->executionRevision != node.executionRevision)
             return "上游节点 " + node.title() + " 的参数已修改，请先重新运行该节点";
-        if (snapshot->status.code != 0)
-            return "上游节点 " + node.title() + " 未成功运行，请先重新运行该节点";
+        // Reuse does not require a successful business status: a failed publication with
+        // valid outputs is a legitimate, current input.
+        if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
+            return "上游节点 " + node.title() + " 本轮未执行，请先运行该节点";
+        if (node.executionGuard && node.executionGuard->mode == BindingMode::Upstream
+            && node.executionGuard->source)
+        {
+            const auto guard = runtimes.find(node.executionGuard->source->node);
+            const auto flag  = guard == runtimes.end() ? ResultSlot::Snapshot{} : guard->second->slot.latest();
+            if (!flag || flag->generation != generation)
+                return "节点 " + node.title() + " 的执行条件在本轮不可用，请先运行条件来源";
+        }
         if (snapshot->toolId != node.toolId)
             return "上游节点 " + node.title() + " 的工具已变化，请先重新运行该节点";
         const auto *definition = frozen.registry.find(node.toolId);
@@ -137,7 +147,9 @@ std::optional<std::string> upstreamValidityError(
                 return "上游节点 " + sourceIt->second->title() + " 的输出类型与 " + node.title() + " 的输入不匹配";
             try
             {
-                validateToolValue(*input->second, output->second);
+                // Structure only: range/option normalisation happens at the call boundary,
+                // so a currently out-of-range publication is reusable, not a stale one.
+                validateValue(input->second->type, output->second);
             }
             catch (const ContractError &error)
             {
@@ -189,12 +201,14 @@ struct RuntimeEngine::Impl
             std::lock_guard lock(control);
             shutdown      = true;
             stopRequested = true;
+            readback.reset();
             stop          = activeStop;
         }
         if (stop)
             stop->request_stop();
-        commandReady.notify_one();
-        coordinator.join();
+        commandReady.notify_all();
+        if (coordinator.joinable())
+            coordinator.join();
     }
 
     tf::Executor                                                      executor;
@@ -202,6 +216,7 @@ struct RuntimeEngine::Impl
     std::mutex                                                        control;
     std::condition_variable                                           commandReady;
     RuntimeState                                                      state          = RuntimeState::Idle;
+    RunMode                                                           sessionMode    = RunMode::Once;
     bool                                                              shutdown       = false;
     bool                                                              stopRequested  = false;
     bool                                                              commandPending = false;
@@ -217,11 +232,16 @@ struct RuntimeEngine::Impl
     std::uint64_t                                                     completionToken = 0;
     std::optional<RuntimeCompletion>                                  completion;
     std::function<void(RuntimeCompletion)>                            callback;
+    bool                                                              readbackEnabled = false;
+    std::function<void(RuntimeReadback)>                              readbackCallback;
+    std::optional<RuntimeReadback>                                    readback;
     std::vector<FlowTiming>                                           flowTiming;
-    double                                                            roundMilliseconds = 0;
+    std::optional<double>                                             roundMilliseconds;
+    Clock::time_point                                                 sessionStartTime;
+    std::optional<Clock::time_point>                                  sessionEndTime;
+    double                                                            sessionElapsedMs = 0;
     std::deque<RuntimeDiagnostic>                                     diagnostics;
     std::uint64_t                                                     nextDiagnosticSequence = 1;
-    std::uint64_t                                                     deliveredDiagnosticSequence = 0;
     std::size_t                                                       droppedDiagnostics = 0;
     std::shared_ptr<std::stop_source>                                 activeStop;
     std::thread                                                       coordinator;
@@ -262,14 +282,6 @@ struct RuntimeEngine::Impl
             diagnose(phase, ToolStatus{-1, exceptionSummary(phase), "未知异常"});
         }
         return false;
-    }
-
-    void resetDiagnostics()
-    {
-        diagnostics.clear();
-        nextDiagnosticSequence      = 1;
-        deliveredDiagnosticSequence = 0;
-        droppedDiagnostics          = 0;
     }
 
     void synchronize(const ProjectDefinition &project, const ToolRegistry &registry, const std::set<NodeId> &retry = {})
@@ -329,6 +341,23 @@ struct RuntimeEngine::Impl
         {
             if (std::find(frozen->selected.begin(), frozen->selected.end(), flow.id) == frozen->selected.end())
                 continue;
+            if (frozen->mode == RunMode::Node && frozen->target)
+            {
+                for (const auto &node : flow.nodes)
+                {
+                    if (node.id != *frozen->target)
+                        continue;
+                    for (const auto &[input, binding] : node.inputs)
+                    {
+                        if (binding.mode == BindingMode::Upstream && binding.source)
+                        {
+                            const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
+                            if (!check)
+                                throw ContractError("单节点执行失败：" + check.message);
+                        }
+                    }
+                }
+            }
             auto edges = frozen->mode == RunMode::Node ? std::vector<DependencyEdge>{} : dependencyEdges(flow);
             std::vector<NodeId>         ids;
             std::vector<ToolDefinition> contracts;
@@ -421,7 +450,7 @@ struct RuntimeEngine::Impl
             std::vector<Submission> submitted;
             submitted.reserve(selected.size());
             const auto roundStart = Clock::now();
-            auto       roundEnd   = roundStart;
+
             for (const auto &plan : selected)
             {
                 if (!attempt(RuntimePhase::Submission,
@@ -448,18 +477,58 @@ struct RuntimeEngine::Impl
                 {
                     timings.push_back(
                         {submission.plan->id, milliseconds(submission.clock->end - submission.clock->start)});
-                    roundEnd = std::max(roundEnd, submission.clock->end);
                 }
             }
             for (const auto &plan : selected) plan->activeRound.reset();
+            const auto roundEnd = Clock::now();
+            const double calculatedRoundMs = milliseconds(roundEnd - roundStart);
             {
-                std::lock_guard lock(control);
-                flowTiming        = std::move(timings);
-                roundMilliseconds = milliseconds(roundEnd - roundStart);
+                std::unique_lock lock(control);
+                flowTiming = std::move(timings);
+                roundMilliseconds = calculatedRoundMs;
+                sessionElapsedMs = milliseconds(roundEnd - sessionStartTime);
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
+                std::function<void(RuntimeReadback)> notifyReadback;
+                std::optional<RuntimeReadback>       currentReadback;
+                const bool requiresReadback = readbackEnabled && !shutdown && frozen->mode != RunMode::Loop;
+                if (requiresReadback)
+                {
+                    readback = RuntimeReadback{generation, session, round};
+                    currentReadback = readback;
+                    notifyReadback = readbackCallback;
+                }
+                lock.unlock();
+                if (notifyReadback && currentReadback)
+                    notifyReadback(*currentReadback);
+                lock.lock();
+                if (requiresReadback && !shutdown && readback.has_value())
+                {
+                    commandReady.wait(lock, [&] { return !readback || shutdown; });
+                }
             }
             if (infrastructureError || frozen->mode != RunMode::Loop)
                 break;
+        }
+
+        if (frozen->mode == RunMode::Loop)
+        {
+            std::function<void(RuntimeReadback)> notifyFinal;
+            std::optional<RuntimeReadback>       finalReadback;
+            std::unique_lock lock(control);
+            if (readbackEnabled && !shutdown)
+            {
+                readback = RuntimeReadback{generation, session, round};
+                finalReadback = readback;
+                notifyFinal = readbackCallback;
+            }
+            lock.unlock();
+            if (notifyFinal && finalReadback)
+                notifyFinal(*finalReadback);
+            lock.lock();
+            if (readbackEnabled && !shutdown && readback.has_value())
+            {
+                commandReady.wait(lock, [&] { return !readback || shutdown; });
+            }
         }
     }
 
@@ -488,8 +557,12 @@ struct RuntimeEngine::Impl
             session = 0;
             round   = 0;
             flowTiming.clear();
-            roundMilliseconds = 0;
-            resetDiagnostics();
+            roundMilliseconds.reset();
+            sessionElapsedMs  = 0;
+            sessionEndTime.reset();
+            diagnostics.clear();
+            nextDiagnosticSequence = 1;
+            droppedDiagnostics     = 0;
         }
     }
 
@@ -527,6 +600,8 @@ struct RuntimeEngine::Impl
             RuntimeCompletion                      finished;
             {
                 std::lock_guard lock(control);
+                sessionEndTime = Clock::now();
+                sessionElapsedMs = milliseconds(*sessionEndTime - sessionStartTime);
                 management = Management::None;
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
                 finished   = {generation, ++completionToken};
@@ -565,8 +640,8 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                                 std::optional<NodeId> target)
 {
     std::lock_guard lock(impl_->control);
-    if (impl_->state != RuntimeState::Idle || impl_->shutdown)
-        return {1, "运行时忙，不能开始执行"};
+    if (impl_->state != RuntimeState::Idle || impl_->shutdown || impl_->readback.has_value())
+        return {1, "运行时忙或读回尚未完成，不能开始执行"};
     try
     {
         auto frozen      = std::make_shared<FrozenRun>();
@@ -620,20 +695,42 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
             return {1, "目标节点不存在：" + (target ? std::to_string(*target) : "未指定")};
         if (frozen->selected.empty() || !nonempty)
             return {1, "请至少选择一个非空流程"};
+        if (auto receiverError = validateReceiverPlan(*frozen))
+            return *receiverError;
         if (mode == RunMode::Node)
         {
+            for (const auto &flow : frozen->project.flows)
+            {
+                for (const auto &node : flow.nodes)
+                {
+                    if (node.id != *target)
+                        continue;
+                    for (const auto &[input, binding] : node.inputs)
+                    {
+                        if (binding.mode == BindingMode::Upstream && binding.source)
+                        {
+                            const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
+                            if (!check)
+                                return {1, "单节点执行失败：" + check.message};
+                        }
+                    }
+                }
+            }
             if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
                 return {1, *error};
         }
+        impl_->sessionMode   = mode;
         impl_->state         = mode == RunMode::Node ? RuntimeState::RunningNode
                              : mode == RunMode::Loop ? RuntimeState::RunningLoop
                                                      : RuntimeState::RunningOnce;
         impl_->stopRequested = false;
         impl_->activeStop    = std::make_shared<std::stop_source>();
         impl_->completion.reset();
-        impl_->resetDiagnostics();
         impl_->flowTiming.clear();
-        impl_->roundMilliseconds = 0;
+        impl_->roundMilliseconds.reset();
+        impl_->sessionStartTime = Clock::now();
+        impl_->sessionEndTime.reset();
+        impl_->sessionElapsedMs = 0;
         ++impl_->session;
         impl_->round          = 0;
         impl_->command        = std::move(frozen);
@@ -655,6 +752,29 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
     }
 }
 
+void RuntimeEngine::setReadbackEnabled(bool enabled)
+{
+    {
+        std::lock_guard lock(impl_->control);
+        impl_->readbackEnabled = enabled;
+        if (!enabled)
+            impl_->readback.reset();
+    }
+    impl_->commandReady.notify_all();
+}
+
+bool RuntimeEngine::acknowledgeReadback(RuntimeReadback readback)
+{
+    {
+        std::lock_guard lock(impl_->control);
+        if (!impl_->readback || *impl_->readback != readback)
+            return false;
+        impl_->readback.reset();
+    }
+    impl_->commandReady.notify_all();
+    return true;
+}
+
 void RuntimeEngine::requestStop()
 {
     std::shared_ptr<std::stop_source> stop;
@@ -670,6 +790,7 @@ void RuntimeEngine::requestStop()
     }
     if (stop)
         stop->request_stop();
+    impl_->commandReady.notify_all();
 }
 
 ToolStatus RuntimeEngine::requestReset()
@@ -684,7 +805,6 @@ ToolStatus RuntimeEngine::requestReset()
     if (impl_->state == RuntimeState::Idle)
     {
         impl_->state = RuntimeState::Resetting;
-        impl_->resetDiagnostics();
         impl_->commandPending = true;
         impl_->commandReady.notify_one();
     }
@@ -753,7 +873,6 @@ ToolStatus RuntimeEngine::requestRefresh(std::function<ToolStatus()> work)
     impl_->management     = Impl::Management::Refresh;
     impl_->managementWork = std::move(work);
     impl_->state          = RuntimeState::Refreshing;
-    impl_->resetDiagnostics();
     impl_->commandPending = true;
     impl_->commandReady.notify_one();
     return {};
@@ -767,18 +886,27 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     update.generation        = impl_->generation;
     update.session           = impl_->session;
     update.round             = impl_->round;
+    update.mode              = impl_->sessionMode;
     update.flows             = impl_->flowTiming;
     update.roundMilliseconds = impl_->roundMilliseconds;
-    for (const auto &diagnostic : impl_->diagnostics)
+    if (impl_->session > 0)
     {
-        if (diagnostic.sequence <= impl_->deliveredDiagnosticSequence)
-            continue;
-        update.diagnostics.push_back(diagnostic);
-        impl_->deliveredDiagnosticSequence = diagnostic.sequence;
+        if (impl_->sessionEndTime)
+            update.sessionElapsedMilliseconds = impl_->sessionElapsedMs;
+        else
+            update.sessionElapsedMilliseconds = milliseconds(Clock::now() - impl_->sessionStartTime);
     }
+    else
+    {
+        update.sessionElapsedMilliseconds = 0;
+    }
+    update.diagnostics.reserve(impl_->diagnostics.size());
+    for (auto &diagnostic : impl_->diagnostics) update.diagnostics.push_back(std::move(diagnostic));
+    impl_->diagnostics.clear();
     update.droppedDiagnostics = impl_->droppedDiagnostics;
     impl_->droppedDiagnostics = 0;
     update.completion         = impl_->completion;
+    update.readback           = impl_->readback;
     update.nodes.reserve(impl_->nodes.size());
     for (const auto &[id, runtime] : impl_->nodes)
     {
@@ -792,22 +920,21 @@ RuntimeUpdate RuntimeEngine::pollLatest()
     return update;
 }
 
-#ifdef VISIONRT_TEST_PROBES
-void RuntimeEngine::injectDiagnosticForTest(std::string message)
-{
-    impl_->diagnose(RuntimePhase::Management, ToolStatus{0, std::move(message)});
-}
-#endif
-
 bool RuntimeEngine::acknowledgeCompletion(RuntimeCompletion completion)
 {
     std::lock_guard lock(impl_->control);
     if (!impl_->completion || completion.generation != impl_->generation
-        || completion.token != impl_->completion->token)
+        || completion.token != impl_->completion->token || impl_->readback.has_value())
         return false;
     impl_->completion.reset();
     impl_->state = RuntimeState::Idle;
     return true;
+}
+
+void RuntimeEngine::setReadbackCallback(std::function<void(RuntimeReadback)> callback)
+{
+    std::lock_guard lock(impl_->control);
+    impl_->readbackCallback = std::move(callback);
 }
 
 void RuntimeEngine::setCompletionCallback(std::function<void(RuntimeCompletion)> callback)

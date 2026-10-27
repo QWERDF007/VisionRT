@@ -1,5 +1,5 @@
 {
-  "format_version": 2,
+  "format_version": 4,
   "project": {
     "name": "GPU-YOLO与缺陷过滤全链工程",
     "next_node_seq": "4",
@@ -17,27 +17,30 @@
           "tool_name_snapshot": "图像读取",
           "alias": "读图",
           "pos": [
-            60,
-            100
+            0,
+            0
           ],
           "init_params": {},
           "type_snapshot": {
             "init_params": {},
             "inputs": {
-              "mode": {
+              "count": {
+                "type": "Int"
+              },
+              "order": {
                 "type": "String"
               },
               "path": {
                 "type": "String"
               },
-              "color": {
+              "recursive": {
+                "type": "Bool"
+              },
+              "reload": {
+                "type": "Bool"
+              },
+              "traversal": {
                 "type": "String"
-              },
-              "limit": {
-                "type": "Int"
-              },
-              "max_batch_bytes": {
-                "type": "Int"
               }
             },
             "outputs": {
@@ -47,36 +50,49 @@
               "__status_message": {
                 "type": "String"
               },
+              "current_index": {
+                "type": "Int"
+              },
+              "end_reached": {
+                "type": "Bool"
+              },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "paths": {
-                "type": "StringArray",
+                "dtype": "string",
                 "rank": 1,
-                "layout": "dense"
+                "type": "Array"
+              },
+              "total_count": {
+                "type": "Int"
               }
             }
           },
           "inputs": {
-            "mode": {
+            "count": {
               "mode": "literal",
-              "literal": "directory"
+              "literal": 2
+            },
+            "order": {
+              "mode": "literal",
+              "literal": "顺序（下一张）"
             },
             "path": {
               "mode": "literal",
               "literal": "images"
             },
-            "color": {
+            "recursive": {
               "mode": "literal",
-              "literal": "bgr"
+              "literal": false
             },
-            "limit": {
+            "reload": {
               "mode": "literal",
-              "literal": 0
+              "literal": false
             },
-            "max_batch_bytes": {
+            "traversal": {
               "mode": "literal",
-              "literal": 0
+              "literal": "循环"
             }
           }
         },
@@ -86,8 +102,8 @@
           "tool_name_snapshot": "YOLO目标检测",
           "alias": "YOLO推理",
           "pos": [
-            300,
-            100
+            2,
+            0
           ],
           "init_params": {
             "model_name": "yolov8n",
@@ -136,7 +152,7 @@
             },
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "conf_threshold": {
                 "type": "Float"
@@ -156,27 +172,25 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               },
               "scores": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float32",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "classes": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "class_names": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 2,
-                "layout": "batch_ragged"
+                "dtype": "string"
               }
             }
           },
@@ -209,35 +223,33 @@
           "tool_name_snapshot": "缺陷过滤",
           "alias": "结果过滤",
           "pos": [
-            540,
-            100
+            2,
+            2
           ],
           "init_params": {},
           "type_snapshot": {
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               },
               "scores": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float32",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "classes": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "class_names": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 2,
-                "layout": "batch_ragged"
+                "dtype": "string"
               },
               "min_score": {
                 "type": "Float"
@@ -246,10 +258,9 @@
                 "type": "Float"
               },
               "allowed_classes": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 1,
-                "layout": "dense"
+                "rank": 1
               }
             },
             "outputs": {
@@ -260,33 +271,30 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               },
               "scores": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float32",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "classes": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "class_names": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 2,
-                "layout": "batch_ragged"
+                "dtype": "string"
               },
               "counts": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 1,
-                "layout": "dense"
+                "rank": 1
               }
             }
           },
@@ -337,16 +345,11 @@
             },
             "min_area": {
               "mode": "literal",
-              "literal": 10.0
+              "literal": 10
             },
             "allowed_classes": {
               "mode": "literal",
-              "literal": {
-                "shape": [
-                  0
-                ],
-                "data": []
-              }
+              "literal": []
             }
           }
         }

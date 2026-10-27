@@ -14,6 +14,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void parameterStatesContract(visionrt::AppController &app)
 {
     using namespace visionrt;
@@ -21,11 +22,16 @@ void parameterStatesContract(visionrt::AppController &app)
     {
         if (!condition) throw std::runtime_error(message);
     };
+    require(
+        app.setParameter(
+            "labels", false,
+            R"json(["用于验证窄字段省略显示的超长中文标签内容用于验证窄字段省略显示的超长中文标签内容用于验证窄字段省略显示的超长中文标签内容", "b"])json"),
+        "cannot set the long structure field fixture");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "long structure field synchronization did not finish");
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", Theme::instance());
     engine.rootContext()->setContextProperty("demoMenu", false);
     engine.rootContext()->setContextProperty("demoSelect", false);
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/Main.qml")));
@@ -64,13 +70,13 @@ void parameterStatesContract(visionrt::AppController &app)
     }
     auto *labelsRow = findItem(findItem, panel, "parameter_labels");
     require(labelsRow != nullptr, "structure row is missing from actual field state review");
-    QQuickItem *structureText = nullptr;
+    QQuickItem *arrayInput = nullptr;
     for (auto *candidate : labelsRow->findChildren<QQuickItem *>())
-        if (candidate->property("text").toString().startsWith("StringArray")
-            && candidate->metaObject()->indexOfSignal("clicked()") >= 0)
-            structureText = qobject_cast<QQuickItem *>(candidate->property("contentItem").value<QObject *>());
-    require(structureText && structureText->property("truncated").toBool(),
-            "long structure value overflows its field instead of being visibly elided");
+        if (candidate->property("actionIcon").isValid())
+            arrayInput = qobject_cast<QQuickItem *>(candidate->property("inputItem").value<QObject *>());
+    require(arrayInput != nullptr, "array input is missing from actual field state review");
+    require(arrayInput->property("clip").toBool() && arrayInput->property("contentWidth").toReal() > arrayInput->width(),
+            "long structure value overflows its field instead of being clipped");
     require(QDir().mkpath("build/evidence"), "cannot create parameter state evidence directory");
     const auto capture = [&](const QString &state)
     {

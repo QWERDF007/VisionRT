@@ -14,6 +14,9 @@ struct NodeTimingText
     QString toolCall;
     QString preprocess = QStringLiteral("—");
     QString postprocess = QStringLiteral("—");
+    QString prepare = QStringLiteral("—");
+    QString init = QStringLiteral("—");
+    QString validate = QStringLiteral("—");
 };
 
 NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running);
@@ -22,5 +25,11 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running);
 // negative or non-finite measurement is reported as unavailable instead of a
 // fabricated zero.
 QString durationText(std::optional<double> milliseconds);
+
+// Format session duration as HH:MM:SS:mmm
+QString formatElapsed(double milliseconds);
+
+// Format milliseconds as "xxx ms" or "— ms"
+QString formatMs(std::optional<double> milliseconds);
 
 } // namespace visionrt

@@ -1,5 +1,6 @@
 import QtQuick
 import quickui
+import VisionRT.Style 1.0
 
 QuiStepperField {
     id: root

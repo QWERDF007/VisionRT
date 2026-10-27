@@ -1,0 +1,5 @@
+#pragma once
+
+namespace visionrt::python {
+inline constexpr const char loaderSource[] = R"VISIONRT_PY(@VISIONRT_PYTHON_LOADER@)VISIONRT_PY";
+}

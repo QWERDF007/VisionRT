@@ -1,5 +1,5 @@
 {
-  "format_version": 2,
+  "format_version": 4,
   "project": {
     "name": "CPU与Python全链示例工程",
     "next_node_seq": "6",
@@ -24,19 +24,22 @@
           "type_snapshot": {
             "init_params": {},
             "inputs": {
-              "color": {
-                "type": "String"
-              },
-              "limit": {
+              "count": {
                 "type": "Int"
               },
-              "max_batch_bytes": {
-                "type": "Int"
-              },
-              "mode": {
+              "order": {
                 "type": "String"
               },
               "path": {
+                "type": "String"
+              },
+              "recursive": {
+                "type": "Bool"
+              },
+              "reload": {
+                "type": "Bool"
+              },
+              "traversal": {
                 "type": "String"
               }
             },
@@ -47,36 +50,49 @@
               "__status_message": {
                 "type": "String"
               },
+              "current_index": {
+                "type": "Int"
+              },
+              "end_reached": {
+                "type": "Bool"
+              },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "paths": {
-                "type": "StringArray",
+                "dtype": "string",
                 "rank": 1,
-                "layout": "dense"
+                "type": "Array"
+              },
+              "total_count": {
+                "type": "Int"
               }
             }
           },
           "inputs": {
-            "color": {
+            "count": {
               "mode": "literal",
-              "literal": "bgr"
+              "literal": 2
             },
-            "limit": {
+            "order": {
               "mode": "literal",
-              "literal": 0
-            },
-            "max_batch_bytes": {
-              "mode": "literal",
-              "literal": 0
-            },
-            "mode": {
-              "mode": "literal",
-              "literal": "directory"
+              "literal": "顺序（下一张）"
             },
             "path": {
               "mode": "literal",
               "literal": "images"
+            },
+            "recursive": {
+              "mode": "literal",
+              "literal": false
+            },
+            "reload": {
+              "mode": "literal",
+              "literal": false
+            },
+            "traversal": {
+              "mode": "literal",
+              "literal": "循环"
             }
           }
         },
@@ -87,7 +103,7 @@
           "alias": "投影定位",
           "pos": [
             2,
-            0
+            1
           ],
           "init_params": {},
           "type_snapshot": {
@@ -97,7 +113,7 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "merge_gap": {
                 "type": "Int"
@@ -126,10 +142,10 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               }
             }
           },
@@ -186,10 +202,10 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rect": {
-                "type": "Rect"
+                "type": "ROI"
               }
             },
             "outputs": {
@@ -200,13 +216,12 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "origins": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float64",
-                "rank": 2,
-                "layout": "dense"
+                "rank": 2
               }
             }
           },
@@ -222,12 +237,16 @@
             "rect": {
               "mode": "literal",
               "literal": [
-                2,
-                10,
-                10,
-                20,
-                40,
-                0
+                [
+                  [
+                    2,
+                    10,
+                    10,
+                    20,
+                    40,
+                    0
+                  ]
+                ]
               ]
             }
           }
@@ -246,7 +265,7 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "kernel": {
                 "type": "Int"
@@ -266,7 +285,7 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             }
           },
@@ -307,7 +326,7 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             },
             "outputs": {
@@ -318,10 +337,9 @@
                 "type": "String"
               },
               "means": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float64",
-                "rank": 1,
-                "layout": "dense"
+                "rank": 1
               }
             }
           },

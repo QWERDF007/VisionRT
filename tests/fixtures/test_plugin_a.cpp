@@ -24,10 +24,7 @@ public:
     {
         visionrt::Values out;
         out.emplace("val", static_cast<std::int64_t>(dep_a_val()));
-        return {
-            {0, "ok"},
-            std::move(out)
-        };
+        return visionrt::toolResult(std::move(out), {0, "ok"});
     }
 
     visionrt::ToolStatus release() override

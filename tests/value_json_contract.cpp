@@ -2,70 +2,77 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <map>
 
 using namespace visionrt;
 
 namespace {
 template<class Action>
-void rejects(Action action, const char *context = "invalid JSON contract")
+void rejects(Action action)
 {
     bool rejected = false;
     try { action(); }
     catch (const ContractError &) { rejected = true; }
-    if (!rejected)
-        std::cerr << "Unexpectedly accepted: " << context << '\n';
     assert(rejected);
 }
 
 void roundtrip(const PortValue &value, const TypeSpec &type)
 {
     assert(ValueJson::decodeType(ValueJson::encodeType(type)) == type);
-    const auto encoded = ValueJson::text(value, type);
-    assert(equalValues(value, ValueJson::parse(encoded, type)));
-}
-
-template<class Element>
-void arrays(DType dtype, std::span<const Element> elements)
-{
-    for (const auto layout : {Layout::Dense, Layout::BatchRagged})
-    {
-        const TypeSpec type{Type::NumericArray, dtype, 2, layout};
-        const auto shape = layout == Layout::Dense ? std::vector<std::int64_t>{1, 2}
-                                                   : std::vector<std::int64_t>{2};
-        auto buffer = NumericBuffer::copy(dtype, shape, std::as_bytes(elements));
-        std::vector<NumericBuffer> buffers{buffer};
-        if (layout == Layout::BatchRagged)
-            buffers.push_back(NumericBuffer::copy(dtype, {0}, {}));
-        roundtrip(NumericArray(dtype, 2, layout, std::move(buffers)), type);
-    }
+    assert(equalValues(value, ValueJson::parse(ValueJson::text(value, type), type)));
 }
 }
 
 int main()
 {
-    const ValueJson::Document document(R"json({
-        "nodes": [{"integer": -9223372036854775809,
-                   "valid": -9223372036854775808,
-                   "real": -9223372036854775809,
-                   "array": {"shape": [1], "data": [-9223372036854775809]},
-                   "text": "quoted \\\"123\\\" and -9223372036854775809"}]
-    })json");
+    const TypeSpec type{Type::Array, DType::Int64, 2};
+    const auto     value = ValueJson::parse("[[9007199254740993], [], [-9223372036854775808]]", type);
+    const auto    &items = std::get<Array>(value).get<NestedVector<std::int64_t, 2>>();
+    assert(items.size() == 3 && items[0][0] == 9007199254740993LL && items[1].empty());
+    assert(items[2][0] == std::numeric_limits<std::int64_t>::min());
+    assert(equalValues(value, ValueJson::parse(ValueJson::text(value, type), type)));
+    assert(ValueJson::encode(value, type).toArray()[1].toArray().isEmpty());
+    assert(ValueJson::decodeType(ValueJson::encodeType(type)) == type);
+    const std::map<DType, QString> leaves{
+        {  DType::UInt8,                                                     "[0,255]"},
+        {  DType::Int32,                                    "[-2147483648,2147483647]"},
+        {  DType::Int64, "[-9223372036854775808,9223372036854775807,9007199254740993]"},
+        {DType::Float32,                                                 "[1.25,-2.5]"},
+        {DType::Float64,                                         "[16777217.125,-2.5]"},
+        {   DType::Bool,                                                "[true,false]"},
+        { DType::String,                          R"(["中文","\"\\\n", "null", ""])"}
+    };
+    std::size_t checked = 0;
+    for (const auto &arrayType : Array::supportedTypes())
+    {
+        auto source = leaves.at(*arrayType.dtype);
+        for (int rank = 1; rank < arrayType.rank; ++rank) source = '[' + source + ", []]";
+        const auto decoded = ValueJson::parse(source, arrayType);
+        assert(ValueJson::encode(decoded, arrayType).toArray() == QJsonDocument::fromJson(source.toUtf8()).array());
+        roundtrip(decoded, arrayType);
+        roundtrip(Array::empty(*arrayType.dtype, arrayType.rank), arrayType);
+        if (arrayType.rank > 1)
+            rejects([&] { ValueJson::parse(leaves.at(*arrayType.dtype), arrayType); });
+        ++checked;
+    }
+    assert(checked == 28);
+    const ValueJson::Document document(R"json({"nodes":[{
+        "integer":-9223372036854775809,"valid":-9223372036854775808,
+        "real":-9223372036854775809,"array":[[],[-9223372036854775809]],
+        "text":"quoted \"123\" and -9223372036854775809"}]})json");
     rejects([&] { document.decode({"nodes", "0", "integer"}, {Type::Int}); });
-    rejects([&] { document.decode({"nodes", "0", "array"}, {Type::NumericArray, DType::Int64, 1}); });
+    rejects([&] { document.decode({"nodes", "0", "array"}, type); });
     assert(std::get<std::int64_t>(document.decode({"nodes", "0", "valid"}, {Type::Int}))
            == std::numeric_limits<std::int64_t>::min());
     assert(std::isfinite(std::get<double>(document.decode({"nodes", "0", "real"}, {Type::Float}))));
-    assert(std::get<Utf8>(document.decode({"nodes", "0", "text"}, {Type::String})).str()
-           .ends_with("-9223372036854775809"));
+    assert(std::get<std::string>(document.decode({"nodes", "0", "text"}, {Type::String}))
+               .ends_with("-9223372036854775809"));
     rejects([&] { document.decode({"nodes", "2", "valid"}, {Type::Int}); });
-    rejects([] { ValueJson::Document(R"({"broken": [1,]})"); });
-    const ValueJson::Document ragged(R"({"array":[{"shape":[1],"data":[-9223372036854775809]}]})");
-    rejects([&] { ragged.decode({"array"}, {Type::NumericArray, DType::Int64, 2, Layout::BatchRagged}); });
+    rejects([] { ValueJson::Document(R"({"broken":[1,]})"); });
     for (const auto number : {std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max(),
                               std::int64_t{9007199254740991}, std::int64_t{9007199254740993}})
     {
@@ -75,54 +82,87 @@ int main()
     roundtrip(Missing{}, {Type::String});
     roundtrip(std::int64_t{0}, {Type::Int});
     roundtrip(false, {Type::Bool});
-    roundtrip(Utf8(""), {Type::String});
+    roundtrip(std::string{}, {Type::String});
+    roundtrip(std::string("中文 \"引号\"\nC:\\Images\\null"), {Type::String});
     roundtrip(1.25, {Type::Float});
-    roundtrip(Utf8("中文 \"引号\"\nC:\\Images\\null"), {Type::String});
-    roundtrip(ImageBatch{}, {Type::ImageBatch});
-    roundtrip(NumericArray(DType::Int64, 2, Layout::BatchRagged, {}),
-              {Type::NumericArray, DType::Int64, 2, Layout::BatchRagged});
-    roundtrip(NumericArray(DType::Float64, 1, Layout::Dense,
-              {NumericBuffer::copy(DType::Float64, {0}, {})}), {Type::NumericArray, DType::Float64, 1});
-    roundtrip(Roi::rectangle(1.25F, -2.5F, 3.75F, 4.5F, 17.5F), {Type::Rect});
-    roundtrip(RoiBatch({{}, {Roi::circle(2, 3, 1), Roi::rectangle(1, 2, 3, 4, 5)}}), {Type::RoiBatch});
-    roundtrip(StringArray(1, Layout::Dense, {StringBuffer({2}, {"中文", "\"\\\n"})}),
-              {Type::StringArray, {}, 1});
-    roundtrip(StringArray(2, Layout::BatchRagged, {StringBuffer({0}, {}), StringBuffer({1}, {"null"})}),
-              {Type::StringArray, {}, 2, Layout::BatchRagged});
-    const std::array<std::uint8_t, 2> bytes{0, 255};
-    const std::array<std::int32_t, 2> integers{std::numeric_limits<std::int32_t>::min(), 17};
-    const std::array<std::int64_t, 2> wide{std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max()};
-    const std::array<float, 2> single{1.25F, -2.5F};
-    const std::array<double, 2> real{1.25, -2.5};
-    const std::array<bool, 2> flags{true, false};
-    arrays<std::uint8_t>(DType::UInt8, bytes);
-    arrays<std::int32_t>(DType::Int32, integers);
-    arrays<std::int64_t>(DType::Int64, wide);
-    arrays<float>(DType::Float32, single);
-    arrays<double>(DType::Float64, real);
-    arrays<bool>(DType::Bool, flags);
-    const TypeSpec numeric{Type::NumericArray, DType::Int64, 1};
+    roundtrip(DataRef<Image>(Image{}), {Type::Image});
+    const DataRef<ROI> regions(ROI{
+        {},
+        {{3, 2, 3, 1}, {2, 16777217.125, -2.5, 3.75, 4.5, 17.5}}
+    });
+    roundtrip(regions, {Type::ROI});
+    const auto emptyRoi   = ValueJson::parse("[]", {Type::ROI});
+    const auto emptyGroup = ValueJson::parse("[[]]", {Type::ROI});
+    roundtrip(emptyRoi, {Type::ROI});
+    roundtrip(emptyGroup, {Type::ROI});
+    assert(!equalValues(emptyRoi, emptyGroup));
     for (const auto invalid : {"", "1,2", "1 trailing", "~", "yes", "[1,]", "NaN", "Infinity", ".nan"})
-        rejects([&] { ValueJson::parse(invalid, {Type::Float}); }, invalid);
-    for (const auto invalid : {"true", "\"17\"", "1.5", "9223372036854775808", "-9223372036854775809"})
-        rejects([&] { ValueJson::parse(invalid, {Type::Int}); }, invalid);
+        rejects([&] { ValueJson::parse(invalid, {Type::Float}); });
+    for (const auto invalid : {"true", "\"17\"", "1.5", "1.0", "1e2", "9223372036854775808", "-9223372036854775809"})
+    {
+        rejects([&] { ValueJson::parse(invalid, {Type::Int}); });
+        rejects([&] { ValueJson::parse('[' + QString(invalid) + ']', {Type::Array, DType::Int64, 1}); });
+    }
     rejects([] { ValueJson::parse("1", {Type::Bool}); });
     rejects([] { ValueJson::parse("false", {Type::String}); });
-    rejects([] { ValueJson::decode(QJsonValue(QJsonValue::Undefined), {Type::Int}); });
-    rejects([&] { ValueJson::parse("{\"shape\":[2],\"data\":[1]}", numeric); });
-    rejects([&] { ValueJson::parse("{\"shape\":[-1],\"data\":[]}", numeric); });
-    rejects([&] { ValueJson::parse("{\"shape\":[1],\"data\":[1.5]}", numeric); });
-    rejects([&] { ValueJson::parse("{\"shape\":[1],\"data\":[-9223372036854775809]}", numeric); });
-    rejects([&] { ValueJson::parse("{\"shape\":[0],\"data\":[],\"other\":0}", numeric); });
-    rejects([] { ValueJson::parse("{\"shape\":[1],\"data\":[256]}", {Type::NumericArray, DType::UInt8, 1}); });
-    rejects([] { ValueJson::parse("{\"shape\":[1],\"data\":[1]}", {Type::NumericArray, DType::Bool, 1}); });
-    rejects([] { ValueJson::parse("{\"shape\":[1],\"data\":[1e100]}", {Type::NumericArray, DType::Float32, 1}); });
-    rejects([] { ValueJson::parse("[3,1,2,3]", {Type::Rect}); });
-    rejects([] { ValueJson::parse("[1]", {Type::ImageBatch}); });
-    rejects([] { ValueJson::decodeType({{"type", "Unknown"}}); });
+    rejects([] { ValueJson::decode(QJsonValue::Undefined, {Type::Int}); });
+    rejects([] { ValueJson::parse(R"({"shape":[1],"data":[1]})", {Type::Array, DType::Int64, 1}); });
+    rejects([] { ValueJson::parse("[[1]]", {Type::Array, DType::Int64, 1}); });
+    for (const auto invalid : {"[-1]", "[256]", "[true]"})
+        rejects([&] { ValueJson::parse(invalid, {Type::Array, DType::UInt8, 1}); });
+    rejects([] { ValueJson::parse("[2147483648]", {Type::Array, DType::Int32, 1}); });
+    rejects([] { ValueJson::parse("[1]", {Type::Array, DType::Bool, 1}); });
+    rejects([] { ValueJson::parse("[1]", {Type::Array, DType::String, 1}); });
+    rejects([] { ValueJson::parse("[1e100]", {Type::Array, DType::Float32, 1}); });
+    for (const auto invalid : {"[3,1,2,3]", "[[[2,0,0,0,1,0]]]", "[[[3,1,2,-1]]]", "[[[9,1,2]]]"})
+        rejects([&] { ValueJson::parse(invalid, {Type::ROI}); });
+    rejects([] { ValueJson::parse("[1]", {Type::Image}); });
+    for (const auto old : {"NumericArray", "StringArray", "ImageBatch", "Rect", "RoiBatch", "Unknown"})
+        rejects(
+            [&]
+            {
+                ValueJson::decodeType({
+                    {"type", old}
+                });
+            });
     rejects([] { ValueJson::decodeType({{"type", "Int"}, {"rank", 1}}); });
-    rejects([] { ValueJson::decodeType({{"type", "NumericArray"}, {"dtype", "float64"}, {"rank", 1.5}}); });
-    rejects([] { ValueJson::decodeType({{"type", "StringArray"}, {"rank", 1}, {"layout", "unknown"}}); });
+    rejects(
+        []
+        {
+            ValueJson::decodeType({
+                { "type",   "Array"},
+                {"dtype", "float64"},
+                { "rank",       1.5}
+            });
+        });
+    for (const auto rank : {0, 5})
+        rejects(
+            [&]
+            {
+                ValueJson::decodeType({
+                    { "type",  "Array"},
+                    {"dtype", "string"},
+                    { "rank",     rank}
+                });
+            });
+    rejects(
+        []
+        {
+            ValueJson::decodeType({
+                {"type", "Array"},
+                {"rank",       1}
+            });
+        });
+    rejects(
+        []
+        {
+            ValueJson::decodeType({
+                {  "type",  "Array"},
+                { "dtype", "string"},
+                {  "rank",        1},
+                {"layout",  "dense"}
+            });
+        });
     for (const auto number : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
                               -std::numeric_limits<double>::infinity()})
     {
@@ -131,18 +171,22 @@ int main()
         assert(display.value("type") == "Float" && display.value("non_finite").isString());
         rejects([&] { ValueJson::decode(display, {Type::Float}); });
     }
-    const std::array<double, 3> mixed{0, std::numeric_limits<double>::infinity(), 2};
-    const PortValue mixedArray = NumericArray(DType::Float64, 1, Layout::Dense,
-        {NumericBuffer::copy(DType::Float64, {3}, std::as_bytes(std::span(mixed)))});
-    rejects([&] { ValueJson::text(mixedArray, {Type::NumericArray, DType::Float64, 1}); });
-    const auto data = ValueJson::encode(mixedArray, {Type::NumericArray, DType::Float64, 1},
-                                       ValueJson::Purpose::Display).toObject().value("data").toArray();
-    assert(data.size() == 3 && data[0].toInteger() == 0 && data[1].toObject().value("type") == "float64"
-           && data[1].toObject().value("non_finite") == "Infinity" && data[2].toInteger() == 2);
-    const PortValue images = ImageBatch({OwnedImage::take(cv::Mat(2, 3, CV_8UC1, cv::Scalar(7)))});
-    rejects([&] { ValueJson::text(images, {Type::ImageBatch}); });
-    const auto description = ValueJson::encode(images, {Type::ImageBatch}, ValueJson::Purpose::Display).toObject();
-    assert(description.value("type") == "ImageBatch" && description.value("count").toInteger() == 1);
+    const TypeSpec  floating{Type::Array, DType::Float64, 2};
+    const PortValue mixed = Array(NestedVector<double, 2>{
+        {0, std::numeric_limits<double>::infinity(), 2},
+        {}
+    });
+    rejects([&] { ValueJson::text(mixed, floating); });
+    const auto display = ValueJson::encode(mixed, floating, ValueJson::Purpose::Display).toArray();
+    const auto data    = display[0].toArray();
+    assert(display[1].toArray().isEmpty() && data.size() == 3 && data[0].toInteger() == 0 && data[2].toInteger() == 2);
+    assert(data[1].toObject().value("type") == "float64" && data[1].toObject().value("non_finite") == "Infinity");
+    rejects([&] { ValueJson::decode(display, floating); });
+    const PortValue images = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(7))});
+    rejects([&] { ValueJson::text(images, {Type::Image}); });
+    const auto description = ValueJson::encode(images, {Type::Image}, ValueJson::Purpose::Display).toObject();
+    assert(description.value("type") == "Image" && description.value("count").toInteger() == 1);
     assert(description.value("images").toArray()[0].toObject().value("rows").toInteger() == 2);
-    std::cout << "Qt JSON values preserve types, int64 precision and explicit output descriptions\n";
+    rejects([&] { ValueJson::decode(description, {Type::Image}); });
+    std::cout << "28 native nested array types, ROI precision, int64 lexemes and explicit display descriptions\n";
 }

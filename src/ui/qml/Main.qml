@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Window
 import quickui
+import VisionRT.Style 1.0
 
 ApplicationWindow {
     id: window
@@ -74,6 +75,7 @@ ApplicationWindow {
         flowCanvas.focusSearch()
     }
     function saveProject(asNew) {
+        if (app.closing) return
         unsavedSaving = false
         if (asNew) saveFile.open()
         else app.save()
@@ -103,16 +105,16 @@ ApplicationWindow {
     onClosing: function(event) {
         if (!closingApproved) { event.accepted = false; app.requestClose() }
     }
-    Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; onTriggered: app.requestNew() }
-    Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; onTriggered: openFile.open() }
-    Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; onTriggered: window.saveProject(false) }
-    Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; onTriggered: window.saveProject(true) }
-    Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: !app.busy; onTriggered: app.runOnce() }
+    Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; enabled: !app.closing; onTriggered: app.requestNew() }
+    Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; enabled: !app.closing; onTriggered: openFile.open() }
+    Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(false) }
+    Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(true) }
+    Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: !app.busy && !app.closing; onTriggered: app.runOnce() }
     Action {
         id: loopAction
         text: app.runState === "Stopping" ? "等待本轮结束" : app.runState === "RunningLoop" ? "停止循环" : "循环"
         shortcut: "F6"
-        enabled: !app.busy || app.runState === "RunningLoop"
+        enabled: (!app.busy || app.runState === "RunningLoop") && !app.closing
         onTriggered: app.toggleLoop()
     }
     Shortcut { sequence: "Ctrl+F"; onActivated: window.focusSearch() }
@@ -244,7 +246,7 @@ ApplicationWindow {
                 display: AbstractButton.TextBesideIcon
                 normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
                 textColor: Theme.menuButtonText; iconColor: Theme.menuButtonIcon
-                implicitHeight: Theme.menuButtonHeight; enabled: !app.busy
+                implicitHeight: Theme.menuButtonHeight; enabled: !app.busy && !app.closing
                 focusPolicy: Qt.TabFocus
                 onClicked: resetDialog.open()
             }
@@ -254,6 +256,27 @@ ApplicationWindow {
         id: fileMenu
         QuiMenuItem { action: newAction }
         QuiMenuItem { action: openAction }
+        // The recent list is a submenu of the file menu: newest first, at most ten entries, disabled
+        // while there is nothing to offer or while the application is closing.
+        QuiMenuItem {
+            id: recentMenu
+            text: "最近打开工程"
+            enabled: app.recentProjects.length > 0 && !app.closing
+            // A menu declared inside a menu item becomes its submenu; the property itself is
+            // read-only, so the nesting is the assignment.
+            QuiMenu {
+                Repeater {
+                    model: app.recentProjects
+                    delegate: QuiMenuItem {
+                        text: modelData.text
+                        onTriggered: app.openRecentProject(modelData.path)
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 600
+                        ToolTip.text: modelData.tooltip
+                    }
+                }
+            }
+        }
         QuiMenuItem { action: saveAction }
         QuiMenuItem { action: saveAsAction }
         MenuSeparator {}
@@ -262,11 +285,10 @@ ApplicationWindow {
     QuiMenu {
         id: settingsMenu
         QuiMenuItem { text: "重置界面布局"; onTriggered: window.resetLayout() }
-        QuiMenuItem { text: "浅色工业主题"; enabled: false }
     }
     QuiMenu {
         id: toolsMenu
-        QuiMenuItem { text: "刷新 Python 工具"; enabled: !app.busy; onTriggered: app.refreshPython() }
+        QuiMenuItem { text: "刷新 Python 工具"; enabled: !app.busy && !app.closing; onTriggered: app.refreshPython() }
     }
     QuiMenu {
         id: helpMenu
@@ -278,7 +300,7 @@ ApplicationWindow {
         QuiMenuItem { action: runAction }
         QuiMenuItem { action: loopAction }
         MenuSeparator {}
-        QuiMenuItem { text: "运行时复位"; enabled: !app.busy; onTriggered: resetDialog.open() }
+        QuiMenuItem { text: "运行时复位"; enabled: !app.busy && !app.closing; onTriggered: resetDialog.open() }
     }
 
     QuiSplitView {
@@ -482,11 +504,7 @@ ApplicationWindow {
                     iconColor: "#57606a"
                 }
                 QuiText {
-                    text: {
-                        let name = "流程1"
-                        for (let f of app.flows) if (f.id === app.currentFlow) { name = f.name; break }
-                        return name + "运行时间: " + (app.timingText || "0ms")
-                    }
+                    text: app.timingText
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
                     color: "#57606a"
                 }
