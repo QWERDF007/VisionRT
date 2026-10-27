@@ -2,6 +2,19 @@
 
 namespace visionrt {
 
+void registerStyleModule()
+{
+    static const bool registered = []
+    {
+        // One Theme per QML engine, created and owned by that engine. Defaults live only in
+        // initLightIndustrialPalette(), so every instance starts from the same source.
+        qmlRegisterSingletonType<Theme>("VisionRT.Style", 1, 0, "Theme",
+                                        [](QQmlEngine *, QJSEngine *) -> QObject * { return new Theme; });
+        return true;
+    }();
+    Q_UNUSED(registered);
+}
+
 Theme *Theme::instance()
 {
     static Theme themeInstance;
@@ -90,6 +103,13 @@ void Theme::initLightIndustrialPalette()
     bindingActiveColor_      = QColor("#1677ff");
     bindingInactiveColor_    = QColor("#8c959f");
 
+    // 输入来源按钮（选中态只表示输入模式）
+    sourceButtonActiveBackground_ = QColor("#1677ff");
+    sourceButtonActiveBorder_     = QColor("#1677ff");
+    sourceButtonActiveIcon_       = QColor("#ffffff");
+    sourceButtonIdleIcon_         = QColor("#8c959f");
+    sourceFieldErrorColor_        = QColor("#cf222e");
+
     // 全局通用色彩
     windowBg_      = QColor("#f5f7fa");
     surfaceBg_     = QColor("#ffffff");
@@ -102,6 +122,16 @@ void Theme::initLightIndustrialPalette()
     error_         = QColor("#cf222e");
     success_       = QColor("#1a7f37");
     warning_       = QColor("#9a6700");
+    disabledText_  = QColor("#8c959f");
+    tooltipBg_     = QColor("#ffffff");
+    tooltipText_   = QColor("#24292f");
+    viewportBg_    = QColor("#eaebef");
+    assistHintText_ = QColor("#0f6f6f");
+    zoomText_      = QColor("#57606a");
+
+    inputRoiColor_  = QColor(255, 220, 0);
+    outputRoiColor_ = QColor(0, 120, 255);
+    assistRoiColor_ = QColor(0, 190, 190);
 
     // 流程画布节点四态色彩与徽标
     nodeStateGray_       = QColor("#8c959f");
@@ -168,6 +198,42 @@ void Theme::initLightIndustrialPalette()
     radiusSmall_     = 3;
     radiusBase_      = 4;
     radiusLarge_     = 6;
+
+    // 结果面板与 tooltip
+    toolbarWidth_          = 32;
+    toolbarButtonSize_     = 26;
+    thumbnailPanelWidth_   = 116;
+    thumbnailRowHeight_    = 86;
+    thumbnailImageHeight_  = 60;
+    tooltipWidth_          = 232;
+    tooltipRowHeight_      = 16;
+    roiStrokeWidth_        = 2;
+    roiHandleSize_         = 4;
+    dialogWidth_           = 520;
+    dialogMaxHeight_       = 560;
+    menuItemHeight_        = 26;
+
+    sourceButtonDisabledOpacity_ = 0.45;
+
+    // 字体默认值：家族、字号、字重的唯一来源
+    const QString family = QStringLiteral("Microsoft YaHei UI");
+    bodyFont_    = QFont(family, -1, QFont::Normal);
+    bodyFont_.setPixelSize(fontSizeBase_);
+    captionFont_ = QFont(family, -1, QFont::Normal);
+    captionFont_.setPixelSize(fontSizeSmall_);
+    titleFont_   = QFont(family, -1, QFont::DemiBold);
+    titleFont_.setPixelSize(fontSizeMedium_);
+    monoFont_    = QFont(QStringLiteral("Consolas"), -1, QFont::Normal);
+    monoFont_.setPixelSize(fontSizeBase_);
+
+    iconFitWindow_  = 0xe740; // QuiFontIcon.FullScreen
+    iconZoomIn_     = 0xe8a3; // QuiFontIcon.ZoomIn
+    iconZoomOut_    = 0xe71f; // QuiFontIcon.ZoomOut
+    iconOneToOne_   = 0xeb9f; // QuiFontIcon.Photo2
+    iconEasyTouch_  = 0xe721; // QuiFontIcon.Search
+    iconEdit_       = 0xe70f; // QuiFontIcon.Edit
+    iconClear_      = 0xe74d; // QuiFontIcon.Delete
+    iconFolderOpen_ = 0xe838; // QuiFontIcon.FolderOpen
 }
 
 } // namespace visionrt

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
 import quickui
+import VisionRT.Style 1.0
 
 Rectangle {
     id: root
@@ -22,7 +23,16 @@ Rectangle {
 
     readonly property string nodeState: root.node.state || "idle"
     readonly property bool isError: root.nodeState === "failed" || root.node.missing === true
+    // Gated nodes never enter the algorithm: they keep a neutral canvas colour plus an explicit
+    // badge, so a skipped branch can not be mistaken for a green success.
+    readonly property bool isSkipped: root.nodeState === "skipped"
+    readonly property bool isBlocked: root.nodeState === "blocked"
+    // A result produced before the latest parameter edit is still visible, but it is no longer
+    // evidence for the current configuration.
+    readonly property bool isStale: root.node.stale === true && !root.isError
+                                    && root.nodeState !== "running" && root.nodeState !== "idle"
     readonly property color statusDotColor: {
+        if (root.isBlocked) return Theme.nodeStateOrange
         if (root.nodeState === "running") return Theme.nodeStateGreen
         if (root.nodeState === "failed") return Theme.nodeStateRed
         return Theme.nodeStateGray
@@ -87,11 +97,30 @@ Rectangle {
                 Layout.alignment: Qt.AlignVCenter
             }
             QuiText {
-                visible: !root.node.defMissing && !root.node.implUnavailable && root.nodeState === "failed"
-                text: "执行错误"
+                visible: root.isSkipped
+                objectName: "nodeBadgeSkip_" + root.node.id
+                text: "跳过"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: Theme.nodeStateRed
+                color: Theme.nodeStateGray
+                Layout.alignment: Qt.AlignVCenter
+            }
+            QuiText {
+                visible: root.isBlocked
+                objectName: "nodeBadgeBlock_" + root.node.id
+                text: "阻塞"
+                renderType: Text.QtRendering
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
+                color: Theme.nodeStateOrange
+                Layout.alignment: Qt.AlignVCenter
+            }
+            QuiText {
+                visible: root.isStale
+                objectName: "nodeBadgeStale_" + root.node.id
+                text: "待运行"
+                renderType: Text.QtRendering
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
+                color: Theme.nodeStateOrange
                 Layout.alignment: Qt.AlignVCenter
             }
             Item { Layout.fillWidth: true }
@@ -158,7 +187,10 @@ Rectangle {
         id: pointer; anchors.fill: parent; hoverEnabled: true; preventStealing: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: function(mouse) { root.pointerPressed(mouse, root) }
-        onPositionChanged: function(mouse) { if (pressed) root.pointerMoved(mouse, root) }
+        onPositionChanged: function(mouse) {
+            if (pressed) root.pointerMoved(mouse, root)
+            else root.hoverEntered()
+        }
         onReleased: function(mouse) { root.pointerReleased(mouse, root) }
         onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !app.busy) root.executeRequested() }
         onEntered: root.hoverEntered()

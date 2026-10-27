@@ -42,6 +42,48 @@ struct GridPoint
 
 using TypeMap = std::map<std::string, TypeSpec, std::less<>>;
 
+// Node-owned dynamic port configuration. port_id values are stable node-local
+// identifiers allocated from nextPortSeq; symbols are the formula identifiers and
+// names are free-form UI text.
+struct ExpressionVariable
+{
+    std::string portId;
+    std::string name;
+    std::string symbol;
+    TypeSpec    type;
+    bool        allowMissing = false;
+    bool        operator==(const ExpressionVariable &) const = default;
+};
+
+struct ExpressionResult
+{
+    std::string portId;
+    std::string name;
+    std::string symbol;
+    std::string expression;
+    TypeSpec    type;
+    bool        exposed = true;
+    bool        operator==(const ExpressionResult &) const = default;
+};
+
+struct ExpressionConfig
+{
+    std::uint64_t                   nextPortSeq = 1;
+    std::vector<ExpressionVariable> variables;
+    std::vector<ExpressionResult>   program;
+    bool operator==(const ExpressionConfig &) const = default;
+};
+
+// Explicit execution condition of a logical node. `mode` is the single stored
+// input mode (absent guard means the default user-input mode); a literal-mode
+// guard keeps its old source only for switching back and never highlights or runs.
+struct ExecutionGuard
+{
+    std::optional<SourcePort> source;
+    BindingMode               mode = BindingMode::Upstream;
+    bool operator==(const ExecutionGuard &) const = default;
+};
+
 struct TypeSnapshot
 {
     TypeMap initParams;
@@ -61,8 +103,12 @@ struct NodeDefinition
     TypeSnapshot                                     signatures;
     std::map<std::string, PortTypeReference, std::less<>> outputTypeSources;
     std::map<std::string, std::string, std::less<>> outputTypeErrors;
+    std::optional<ExpressionConfig>                  expression;
+    std::optional<ExecutionGuard>                    executionGuard;
+    std::optional<TypeSpec>                          selectType;
     std::uint64_t                                    executionRevision = 0;
     QJsonObject                                      unresolved;
+    QJsonObject                                      retiredInitParams;
     std::string                                      title() const;
 };
 
@@ -86,4 +132,7 @@ struct ProjectDefinition
     std::filesystem::path path;
     bool                  dirty = true;
 };
+
+PortValue      copyProjectLiteral(const PortValue &value);
+NodeDefinition copyNodeConfiguration(const NodeDefinition &node);
 } // namespace visionrt

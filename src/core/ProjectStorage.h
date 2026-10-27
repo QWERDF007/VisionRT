@@ -17,7 +17,10 @@ enum class ProjectStorageCode
     DuplicateFlowName,
     LayoutConflict,
     RangeWarning,
-    UnknownPaths
+    UnknownPaths,
+    // A format-4 execution condition on a fixed tool is preserved but no longer
+    // applied; the project needs an explicit state-input migration.
+    LegacyExecutionGuard
 };
 
 struct ProjectStorageDiagnostic

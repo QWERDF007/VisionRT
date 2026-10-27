@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 QuiSplitView {
     id: root
@@ -65,10 +66,10 @@ QuiSplitView {
             parameterGroups = result
     }
     function focusRoi() {
-        if (!root.enabled || app.busy) return
+        if (!root.enabled || app.runtimeBusy) return
         roiNodeId = app.selectedNode
         for (let p of app.parameters) {
-            if ((p.type === "RoiBatch" || p.type === "Rect") && !p.init) {
+            if (p.type === "ROI" && !p.init) {
                 currentTab = Math.max(0, tabs.indexOf(p.tab || "基本输入"))
                 app.startRoiDraw(p.id, 2)
                 return
@@ -141,7 +142,7 @@ QuiSplitView {
                         Layout.margins: 4; Layout.rightMargin: 8
                         radius: Theme.radiusBase
                         color: runMouse.pressed ? Theme.executeButtonPressedBg : (runMouse.containsMouse ? Theme.executeButtonHoverBg : Theme.executeButtonNormalBg)
-                        enabled: !app.busy && app.selectedNode.length > 0
+                        enabled: !app.runtimeBusy && app.selectedNode.length > 0
                         opacity: enabled ? 1.0 : 0.4
                         RowLayout {
                             anchors.centerIn: parent; spacing: 5
@@ -215,6 +216,7 @@ QuiSplitView {
                                             sourceComponent: ParameterEditor {
                                                 nodeId: parameterGroup.modelData.nodeId
                                                 parameter: parameterRow.currentParameter
+                                                panel: root
                                             }
                                         }
                                     }
@@ -233,4 +235,35 @@ QuiSplitView {
         SplitView.preferredWidth: 480
     }
     WorkbenchDialog { id: roiNotice; title: "输入 ROI 编辑"; message: "请选择具有区域输入的节点，然后选择要编辑的参数。"; useNegativeButton: false; positiveText: "关闭" }
+
+    Loader { id: expressionEditorLoader; active: false; source: "ExpressionEditor.qml" }
+    Loader { id: guardEditorLoader; active: false; source: "GuardEditor.qml" }
+    Loader { id: selectTypeEditorLoader; active: false; source: "SelectTypeEditor.qml" }
+
+    function openExpressionEditor(nodeId, draftText) {
+        if (!expressionEditorLoader.active) expressionEditorLoader.active = true
+        let invoke = function() {
+            if (!expressionEditorLoader.item) return
+            if (draftText !== undefined && draftText !== null && draftText !== "") {
+                expressionEditorLoader.item.openNodeWithDraft(nodeId, draftText)
+            } else {
+                expressionEditorLoader.item.openNode(nodeId)
+            }
+        }
+        if (expressionEditorLoader.item) invoke()
+        else Qt.callLater(invoke)
+    }
+    function openExpressionEditorWithDraft(nodeId, draftText) {
+        openExpressionEditor(nodeId, draftText)
+    }
+    function openGuardEditor(nodeId) {
+        if (!guardEditorLoader.active) guardEditorLoader.active = true
+        if (guardEditorLoader.item) guardEditorLoader.item.openFor(nodeId)
+        else Qt.callLater(function() { if (guardEditorLoader.item) guardEditorLoader.item.openFor(nodeId) })
+    }
+    function openSelectTypeEditor(nodeId) {
+        if (!selectTypeEditorLoader.active) selectTypeEditorLoader.active = true
+        if (selectTypeEditorLoader.item) selectTypeEditorLoader.item.openFor(nodeId)
+        else Qt.callLater(function() { if (selectTypeEditorLoader.item) selectTypeEditorLoader.item.openFor(nodeId) })
+    }
 }

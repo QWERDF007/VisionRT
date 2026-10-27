@@ -23,7 +23,7 @@ public:
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return {{}, {{"value", value_}}};
+        return visionrt::toolResult({{"value", value_}}, {});
     }
 
     visionrt::ToolStatus release() override

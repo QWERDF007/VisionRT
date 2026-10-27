@@ -208,12 +208,16 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
                           + std::to_string(error) + "）"};
         return nullptr;
     }
+    DWORD oldErrorMode = 0;
+    const BOOL modeSet = SetThreadErrorMode(SEM_FAILCRITICALERRORS, &oldErrorMode);
     HMODULE handle = LoadLibraryExW(absPath.wstring().c_str(), nullptr,
                                     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    const DWORD loadError = handle ? 0 : GetLastError();
+    if (modeSet)
+        SetThreadErrorMode(oldErrorMode, nullptr);
     if (!handle)
     {
-        const DWORD err = GetLastError();
-        status = {-3, "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(err) + "）"};
+        status = {-3, "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(loadError) + "）"};
         return nullptr;
     }
     loaded->handle = handle;
@@ -361,26 +365,16 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     {
         const auto status
             = failureStatus_.code != 0 ? failureStatus_ : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
-        return ToolResult{status, {}};
+        // A node that cannot be executed has no tool answer; the framework reports it as a
+        // diagnostic instead of inventing output values.
+        throw ContractError(status.detail.empty() ? status.message : status.message + "：" + status.detail);
     }
-    try
-    {
-        return raw_->execute(inputs);
-    }
-    catch (const std::exception &error)
-    {
-        return ToolResult{
-            {-1, "工具执行异常", error.what()},
-            {}
-        };
-    }
-    catch (...)
-    {
-        return ToolResult{
-            {-1, "工具执行发生未知异常"},
-            {}
-        };
-    }
+    // A plugin that throws never produced a complete output set, so the exception is the honest
+    // report and the host turns it into a framework diagnostic.
+    auto        result     = raw_->execute(inputs);
+    const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
+    for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
+    return result;
 }
 
 ToolStatus DomainToolAdapter::release()

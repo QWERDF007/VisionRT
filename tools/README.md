@@ -43,3 +43,7 @@ python tools\package_app.py --deploy-tools-only --install-dir install\VisionRT -
 tools\build.cmd ctest --test-dir build --output-on-failure -R package_app_contract
 tools\build.cmd ctest --test-dir build --output-on-failure -R dependency_manifest_contract
 ```
+
+## 原生通知探针
+
+Windows 安装 Node.js 与 Windows SDK Debugging Tools，并构建 `ui_notifications_contract`、`viewport_lifetime_contract` 及其匹配 PDB 后，运行 `node tools/verify_ui_notifications.cjs <build目录> <cdb.exe> <ctest.exe> [证据目录]`。测试环境与命令取自 CTest；断言及证据格式见[探针源码](verify_ui_notifications.cjs)，场景见[静默通知契约](../tests/ui_notifications_contract.cpp)与[视口析构契约](../tests/viewport_lifetime_contract.cpp)。

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 Item {
     id: root
@@ -14,6 +15,10 @@ Item {
     property bool flat: true
     property int actionIcon: 0
     property string actionText: ""
+    // A second trailing action with the same shell, used by path parameters that need one direct
+    // "choose file" and one direct "choose folder" button.
+    property int secondaryActionIcon: 0
+    property string secondaryActionText: ""
     property int leadingActionIcon: 0
     property string leadingActionText: ""
     property color leadingActionColor: Theme.textPrimary
@@ -24,6 +29,7 @@ Item {
     signal commitRequested()
     signal cancelRequested()
     signal actionRequested()
+    signal secondaryActionRequested()
     signal leadingActionRequested()
 
     implicitWidth: 200
@@ -135,6 +141,30 @@ Item {
             }
 
             Rectangle {
+                visible: secondaryBtn.visible
+                Layout.preferredWidth: 1
+                Layout.fillHeight: true
+                color: Theme.paramEditorBorder
+            }
+
+            QuiTextIconButton {
+                id: secondaryBtn
+                visible: root.secondaryActionIcon > 0
+                Layout.preferredWidth: Theme.paramActionBtnWidth
+                Layout.fillHeight: true
+                iconSource: root.secondaryActionIcon
+                iconSize: Theme.paramActionIconSize
+                normalColor: "transparent"
+                hoverColor: Theme.paramRowHoverBg
+                focusPolicy: Qt.NoFocus
+                text: root.secondaryActionText
+                enabled: root.enabled && !root.readOnly
+                onClicked: root.secondaryActionRequested()
+                ToolTip.visible: hovered && text.length > 0
+                ToolTip.text: text
+            }
+
+            Rectangle {
                 visible: trailingBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
@@ -161,7 +191,9 @@ Item {
     }
 
     QuiToolTip {
-        visible: hover.hovered && (!leadingBtn.visible || !leadingBtn.hovered) && (!trailingBtn.visible || !trailingBtn.hovered) && input.text.length > 0
+        visible: hover.hovered && (!leadingBtn.visible || !leadingBtn.hovered)
+                 && (!secondaryBtn.visible || !secondaryBtn.hovered)
+                 && (!trailingBtn.visible || !trailingBtn.hovered) && input.text.length > 0
         text: input.text
         delay: 500
     }

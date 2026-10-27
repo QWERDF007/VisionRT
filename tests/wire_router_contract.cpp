@@ -66,6 +66,8 @@ int main()
     assert(routes.size() == 1 && routes.front().ports.size() == 2);
     verify(routes);
     assert(router.route(nodes, {}).empty());
+    routes = router.route(nodes, relations);
+    verify(routes);
     relations.push_back({{sourceId, "value"}, {999, "value"}});
     routes = router.route(nodes, relations);
     assert(routes.size() == 2);
@@ -73,6 +75,14 @@ int main()
     const auto valid  = std::find_if(routes.begin(), routes.end(), [](const auto &wire) { return wire.target == 3; });
     assert(broken != routes.end() && !broken->error.empty());
     assert(valid != routes.end() && valid->error.empty() && valid->points.size() >= 2);
+    const auto brokenRelations = relations;
+    relations.pop_back();
+    routes = router.route(nodes, relations);
+    assert(routes.size() == 1 && routes.front().error.empty() && routes.front().target == 3);
+    verify(routes);
+    relations = brokenRelations;
+    routes    = router.route(nodes, relations);
+    assert(routes.size() == 2);
     nodes[0].rectangle.setX(std::numeric_limits<double>::quiet_NaN());
     routes = router.route(nodes, relations);
     assert(std::any_of(routes.begin(), routes.end(), [](const auto &wire) { return !wire.error.empty(); }));

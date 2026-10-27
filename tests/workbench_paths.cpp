@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -18,6 +19,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void pathEditorsContract()
 {
     const auto require = [](bool condition, const char *message)
@@ -31,10 +33,11 @@ void pathEditorsContract()
     QTemporaryDir directory;
     require(directory.isValid(), "path fixture directory is invalid");
     QDir root(directory.path());
-    require(root.mkpath("tools-package/assets/tools/custom/Test"), "cannot create path tool directory");
+    require(root.mkpath("tools-package/tools/custom/Test"), "cannot create path tool directory");
     const auto write = [&](const QString &path, const QByteArray &content)
     {
         QFile file(root.filePath(path));
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly), "cannot create path fixture file");
         require(file.write(content) == content.size(), "path fixture write failed");
     };
@@ -43,20 +46,21 @@ void pathEditorsContract()
   "schema_version": 1,
   "variant": "test",
   "tools": [
-    {"tool_id": "test.paths", "definition": "assets/tools/custom/Test/paths.json"}
+    {"tool_id": "test.paths", "definition": "tools/custom/Test/paths.json"}
   ],
   "modules": [],
   "runtime_files": []
 })json");
-    write("tools-package/assets/tools/custom/Test/run.py", "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
-    write("tools-package/assets/tools/custom/Test/paths.json",
+    write("tools-package/python/custom/Test/run.py",
+          "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
+    write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.paths",
   "display_name": "路径测试",
   "version": "1.0.0",
   "kind": "python_function",
-  "entry": {"file": "run.py", "symbol": "run"},
+  "entry": {"package": "Test", "file": "run.py", "symbol": "run"},
   "init_params": [],
   "inputs": [
     {"id": "file", "name": "文件", "type": "String", "default": "original file", "editor": "file"},
@@ -76,14 +80,13 @@ void pathEditorsContract()
 
     visionrt::AppController app(1, directory.path());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "path tool initialization did not finish");
-    app.addNode("test.paths", 0, 0);
+    app.addNode("test.paths", 0, 10);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     require(app.nodes().size() == 1, "path fixture tool was not discovered");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
     QQmlEngine engine;
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"
@@ -105,7 +108,15 @@ void pathEditorsContract()
     require(QTest::qWaitForWindowActive(&window), "path window did not become active");
     const auto findVisible = [&](const auto &matches) -> QQuickItem *
     {
-        QList<QQuickItem *> pending{window.contentItem()};
+        QList<QQuickItem *> pending;
+        for (auto *w : QGuiApplication::topLevelWindows())
+        {
+            if (auto *qw = qobject_cast<QQuickWindow *>(w))
+            {
+                if (qw->isVisible() && qw->contentItem())
+                    pending.append(qw->contentItem());
+            }
+        }
         while (!pending.isEmpty())
         {
             auto *item = pending.takeLast();
@@ -122,7 +133,8 @@ void pathEditorsContract()
                 ? QString("%1 text=%2 enabled=%3").arg(item->metaObject()->className(), item->property("text").toString())
                     .arg(item->isEnabled()).toStdString()
                 : std::string("missing item")));
-        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+        auto *win = item->window() ? item->window() : &window;
+        QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier,
                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
         QTest::qWait(50);
     };
@@ -149,6 +161,7 @@ void pathEditorsContract()
                 "path chooser did not accept its initial folder");
         const auto openPicker = [&]
         {
+            picker->setProperty("currentFolder", QUrl::fromLocalFile(root.filePath(nested)));
             click(findVisible([&](QQuickItem *item)
             {
                 return item->property("text").toString() == (id == "file" ? QStringLiteral("选择文件") : QStringLiteral("选择文件夹"))
@@ -163,7 +176,16 @@ void pathEditorsContract()
         const auto original = value(id);
         QSignalSpy changes(&app, &visionrt::AppController::parametersChanged);
         openPicker();
-        QTest::keyClick(&window, Qt::Key_Escape);
+        std::cerr << "AFTER OPEN PICKER: visible=" << picker->property("visible").toBool() << std::endl;
+        for (auto *w : QGuiApplication::topLevelWindows()) {
+            std::cerr << "  WIN: " << w->metaObject()->className() << " active=" << w->isActive() << " visible=" << w->isVisible() << std::endl;
+        }
+        // Try keyClick on all windows
+        for (auto *w : QGuiApplication::topLevelWindows()) {
+            if (w->isVisible()) {
+                QTest::keyClick(w, Qt::Key_Escape);
+            }
+        }
         require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500), "Escape did not cancel the chooser");
         require(value(id) == original && !app.dirty() && changes.isEmpty(), "cancelled path selection changed the project");
         openPicker();
@@ -218,7 +240,7 @@ void pathEditorsContract()
     require(!app.setParameterPath("path", false, QUrl("https://example.invalid/image.png")) && value("path") == localPath,
             "a remote URL was submitted as a local path");
     const auto targetNode = app.selectedNode();
-    app.addNode("test.paths", 1, 0);
+    app.addNode("test.paths", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto modeSource = app.selectedNode();
     app.selectNode(targetNode);

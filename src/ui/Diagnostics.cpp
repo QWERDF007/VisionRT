@@ -1,5 +1,7 @@
 #include "ui/Diagnostics.h"
 
+#include "core/StatusCodes.h"
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStringList>
@@ -7,6 +9,26 @@
 #include <utility>
 
 namespace visionrt {
+QString statusSummary(const ToolStatus &status)
+{
+    return statusDisplay(status).summary;
+}
+
+StatusDisplay statusDisplay(const ToolStatus &status)
+{
+    // A tool answers with one status message. When it puts the curated reason on the first line and
+    // the implementation text after a line break, the row shows the reason and the diagnostic keeps
+    // the rest; nothing is dropped and the contract still has a single message key.
+    const auto    lines = statusLines(status.message);
+    StatusDisplay display{QString::fromStdString(std::string(lines.summary)),
+                          QString::fromStdString(std::string(lines.detail))};
+    if (!status.detail.empty())
+        display.detail = QString::fromStdString(status.detail);
+    if (display.summary.trimmed().isEmpty() && status.code != 0)
+        display.summary = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
+    return display;
+}
+
 namespace {
 std::pair<const char *, const char *> phaseNames(NodePhase phase)
 {
@@ -96,10 +118,7 @@ QString summary(const QString &message)
 
 QString summary(const ToolStatus &status)
 {
-    auto message = QString::fromStdString(status.message);
-    if (message.trimmed().isEmpty() && status.code != 0)
-        message = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
-    return message;
+    return statusSummary(status);
 }
 
 QString summary(const NodeDiagnostic &diagnostic)
@@ -135,9 +154,9 @@ QJsonObject encode(const QString &message)
 QJsonObject encode(const ToolStatus &status)
 {
     return {
-        {   "code",       static_cast<qint64>(status.code)},
-        {"message", QString::fromStdString(status.message)},
-        { "detail",  QString::fromStdString(status.detail)}
+        {   "code",                      static_cast<qint64>(status.code)},
+        {"message",                              statusDisplay(status).summary},
+        { "detail",                              statusDisplay(status).detail}
     };
 }
 
@@ -158,6 +177,28 @@ QJsonObject encode(const RuntimeDiagnostic &diagnostic)
     object.insert("runtime_phase", QString::fromUtf8(phaseName(diagnostic.phase)));
     return object;
 }
+}
+
+QString dispositionName(NodeDisposition disposition)
+{
+    switch (disposition)
+    {
+    case NodeDisposition::Pending:
+        return QStringLiteral("pending");
+    case NodeDisposition::Running:
+        return QStringLiteral("running");
+    case NodeDisposition::Succeeded:
+        return QStringLiteral("succeeded");
+    case NodeDisposition::Failed:
+        return QStringLiteral("failed");
+    case NodeDisposition::Skipped:
+        return QStringLiteral("skipped");
+    case NodeDisposition::Blocked:
+        return QStringLiteral("blocked");
+    case NodeDisposition::Canceled:
+        return QStringLiteral("canceled");
+    }
+    return QStringLiteral("pending");
 }
 
 QString diagnosticMessage(const NodeDiagnostic &diagnostic)

@@ -1,9 +1,10 @@
 include_guard(GLOBAL)
 
 if(NOT TARGET quickui::quickui)
-    find_package(quickui CONFIG QUIET)
-    if(NOT TARGET quickui::quickui AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/QuickUI/CMakeLists.txt")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/QuickUI/CMakeLists.txt")
         add_subdirectory(3rdparty/QuickUI EXCLUDE_FROM_ALL)
+    else()
+        find_package(quickui CONFIG QUIET)
     endif()
 endif()
 

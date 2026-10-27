@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QFont>
 #include <QObject>
 #include <QtGlobal>
 #include <QtQml>
@@ -26,6 +27,26 @@ public:                                                                    \
                                                                            \
 private:                                                                   \
     QColor Name##_;
+
+#define THEME_FONT_PROP(Name)                                             \
+    Q_PROPERTY(QFont Name READ Name WRITE set##Name NOTIFY Name##Changed) \
+public:                                                                   \
+    QFont Name() const                                                    \
+    {                                                                     \
+        return Name##_;                                                   \
+    }                                                                     \
+    void set##Name(const QFont &font)                                     \
+    {                                                                     \
+        if (Name##_ != font)                                              \
+        {                                                                 \
+            Name##_ = font;                                               \
+            Q_EMIT Name##Changed();                                       \
+        }                                                                 \
+    }                                                                     \
+    Q_SIGNAL void Name##Changed();                                        \
+                                                                          \
+private:                                                                  \
+    QFont Name##_;
 
 #define THEME_INT_PROP(Name)                                            \
     Q_PROPERTY(int Name READ Name WRITE set##Name NOTIFY Name##Changed) \
@@ -66,6 +87,10 @@ public:                                                                   \
                                                                           \
 private:                                                                  \
     qreal Name##_;
+
+// Registers the single VisionRT.Style module singleton used by the application
+// and by every test that loads workbench QML. Idempotent.
+void registerStyleModule();
 
 class Theme : public QObject
 {
@@ -149,6 +174,12 @@ public:
     THEME_COLOR_PROP(paramActionHoverBg)
     THEME_COLOR_PROP(bindingActiveColor)
     THEME_COLOR_PROP(bindingInactiveColor)
+    // 输入来源按钮：选中态只表示输入模式，绑定是否有效由来源框单独诊断
+    THEME_COLOR_PROP(sourceButtonActiveBackground)
+    THEME_COLOR_PROP(sourceButtonActiveBorder)
+    THEME_COLOR_PROP(sourceButtonActiveIcon)
+    THEME_COLOR_PROP(sourceButtonIdleIcon)
+    THEME_COLOR_PROP(sourceFieldErrorColor)
 
     // 全局通用色彩
     THEME_COLOR_PROP(windowBg)
@@ -162,6 +193,17 @@ public:
     THEME_COLOR_PROP(error)
     THEME_COLOR_PROP(success)
     THEME_COLOR_PROP(warning)
+    THEME_COLOR_PROP(disabledText)
+    THEME_COLOR_PROP(tooltipBg)
+    THEME_COLOR_PROP(tooltipText)
+    THEME_COLOR_PROP(viewportBg)
+    THEME_COLOR_PROP(assistHintText)
+    THEME_COLOR_PROP(zoomText)
+
+    // 图像视口自绘 ROI（仅显示，不改变业务坐标）
+    THEME_COLOR_PROP(inputRoiColor)
+    THEME_COLOR_PROP(outputRoiColor)
+    THEME_COLOR_PROP(assistRoiColor)
 
     // 流程画布节点四态色彩
     THEME_COLOR_PROP(nodeStateGray)
@@ -213,6 +255,20 @@ public:
     THEME_INT_PROP(paramRoiIconSize)
     THEME_INT_PROP(paramActionIconSize)
 
+    // 结果面板、中间工具栏与 tooltip 的语义尺寸
+    THEME_INT_PROP(toolbarWidth)
+    THEME_INT_PROP(toolbarButtonSize)
+    THEME_INT_PROP(thumbnailPanelWidth)
+    THEME_INT_PROP(thumbnailRowHeight)
+    THEME_INT_PROP(thumbnailImageHeight)
+    THEME_INT_PROP(tooltipWidth)
+    THEME_INT_PROP(tooltipRowHeight)
+    THEME_INT_PROP(roiStrokeWidth)
+    THEME_INT_PROP(roiHandleSize)
+    THEME_INT_PROP(dialogWidth)
+    THEME_INT_PROP(dialogMaxHeight)
+    THEME_INT_PROP(menuItemHeight)
+
     // 全局字号、图标与圆角
     THEME_INT_PROP(fontSizeCaption)
     THEME_INT_PROP(fontSizeSmall)
@@ -229,12 +285,31 @@ public:
     THEME_INT_PROP(radiusBase)
     THEME_INT_PROP(radiusLarge)
 
+    // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
+    THEME_FONT_PROP(bodyFont)
+    THEME_FONT_PROP(captionFont)
+    THEME_FONT_PROP(titleFont)
+    THEME_FONT_PROP(monoFont)
+
+    // 语义图标（字体 glyph），业务组件不直接选码点
+    THEME_INT_PROP(iconFitWindow)
+    THEME_INT_PROP(iconZoomIn)
+    THEME_INT_PROP(iconZoomOut)
+    THEME_INT_PROP(iconOneToOne)
+    THEME_INT_PROP(iconEasyTouch)
+    THEME_INT_PROP(iconEdit)
+    THEME_INT_PROP(iconClear)
+    THEME_INT_PROP(iconFolderOpen)
+
+    THEME_REAL_PROP(sourceButtonDisabledOpacity)
+
 private:
     void initLightIndustrialPalette();
 };
 
 #undef THEME_COLOR_PROP
 #undef THEME_INT_PROP
+#undef THEME_FONT_PROP
 #undef THEME_REAL_PROP
 
 } // namespace visionrt

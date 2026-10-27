@@ -1,5 +1,5 @@
 {
-  "format_version": 2,
+  "format_version": 4,
   "project": {
     "name": "节点错误诊断复现工程",
     "next_node_seq": "5",
@@ -24,53 +24,75 @@
           "type_snapshot": {
             "init_params": {},
             "inputs": {
-              "mode": {
+              "count": {
+                "type": "Int"
+              },
+              "order": {
                 "type": "String"
               },
               "path": {
                 "type": "String"
               },
-              "color": {
+              "recursive": {
+                "type": "Bool"
+              },
+              "reload": {
+                "type": "Bool"
+              },
+              "traversal": {
                 "type": "String"
-              },
-              "limit": {
-                "type": "Int"
-              },
-              "max_batch_bytes": {
-                "type": "Int"
               }
             },
             "outputs": {
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
+              },
+              "current_index": {
+                "type": "Int"
+              },
+              "end_reached": {
+                "type": "Bool"
+              },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "paths": {
-                "type": "StringArray",
+                "dtype": "string",
                 "rank": 1,
-                "layout": "dense"
+                "type": "Array"
+              },
+              "total_count": {
+                "type": "Int"
               }
             }
           },
           "inputs": {
-            "mode": {
+            "count": {
               "mode": "literal",
-              "literal": "directory"
+              "literal": 2
+            },
+            "order": {
+              "mode": "literal",
+              "literal": "顺序（下一张）"
             },
             "path": {
               "mode": "literal",
               "literal": "images"
             },
-            "color": {
+            "recursive": {
               "mode": "literal",
-              "literal": "bgr"
+              "literal": false
             },
-            "limit": {
+            "reload": {
               "mode": "literal",
-              "literal": 0
+              "literal": false
             },
-            "max_batch_bytes": {
+            "traversal": {
               "mode": "literal",
-              "literal": 0
+              "literal": "循环"
             }
           }
         },
@@ -81,17 +103,17 @@
           "alias": "裁剪(缺矩形输入负例)",
           "pos": [
             2,
-            0
+            1
           ],
           "init_params": {},
           "type_snapshot": {
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rect": {
-                "type": "Rect"
+                "type": "ROI"
               }
             },
             "outputs": {
@@ -102,13 +124,12 @@
                 "type": "String"
               },
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "origins": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float64",
-                "rank": 2,
-                "layout": "dense"
+                "rank": 2
               }
             }
           },
@@ -118,7 +139,8 @@
               "source": {
                 "node_seq": "1",
                 "port_id": "images"
-              }
+              },
+              "literal": null
             },
             "rect": {
               "mode": "literal",
@@ -182,7 +204,7 @@
             },
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "conf_threshold": {
                 "type": "Float"
@@ -196,27 +218,31 @@
             },
             "outputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               },
               "rois": {
-                "type": "RoiBatch"
+                "type": "ROI"
               },
               "scores": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "float32",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "classes": {
-                "type": "NumericArray",
+                "type": "Array",
                 "dtype": "int64",
-                "rank": 2,
-                "layout": "batch_ragged"
+                "rank": 2
               },
               "class_names": {
-                "type": "StringArray",
+                "type": "Array",
                 "rank": 2,
-                "layout": "batch_ragged"
+                "dtype": "string"
+              },
+              "__status_code": {
+                "type": "Int"
+              },
+              "__status_message": {
+                "type": "String"
               }
             }
           },
@@ -226,7 +252,8 @@
               "source": {
                 "node_seq": "1",
                 "port_id": "images"
-              }
+              },
+              "literal": null
             },
             "conf_threshold": {
               "mode": "literal",
@@ -263,12 +290,12 @@
             "init_params": {},
             "inputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             },
             "outputs": {
               "images": {
-                "type": "ImageBatch"
+                "type": "Image"
               }
             }
           },
@@ -278,7 +305,8 @@
               "source": {
                 "node_seq": "1",
                 "port_id": "images"
-              }
+              },
+              "literal": null
             }
           }
         }

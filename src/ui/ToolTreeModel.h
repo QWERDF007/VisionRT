@@ -17,12 +17,14 @@ public:
         LeafRole,
         VersionRole,
         AvailableRole,
+        StatusRole,
         StableKeyRole
     };
 
     explicit ToolTreeModel(QObject *parent = nullptr);
     void                   setRegistry(const ToolRegistry &registry);
     void                   setFilter(const QString &text);
+    bool                   updateToolStatus(const QString &toolId, bool available, const QString &status);
     QModelIndex            index(int row, int column, const QModelIndex &parent = {}) const override;
     QModelIndex            parent(const QModelIndex &index) const override;
     int                    rowCount(const QModelIndex &parent = {}) const override;
@@ -34,7 +36,7 @@ public:
 private:
     struct Entry
     {
-        QString                             name, id, version;
+        QString                             name, id, version, status;
         bool                                available = false;
         Entry                              *parent    = nullptr;
         std::vector<std::unique_ptr<Entry>> children;
@@ -42,7 +44,7 @@ private:
 
     struct Definition
     {
-        QString category, group, name, id, version;
+        QString category, group, name, id, version, status;
         bool    available;
     };
 

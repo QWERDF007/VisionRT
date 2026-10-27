@@ -3,6 +3,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
+#include "result_view.h"
 #include "core/DefinitionJson.h"
 #include "plugins/PluginLoader.h"
 
@@ -17,6 +18,7 @@ using namespace visionrt;
 #include "runtime/RuntimeEngine.h"
 #if defined(VISIONRT_BUILD_APP)
 #    include "ui/AppController.h"
+#    include "ui/OutputModel.h"
 #endif
 #include <QCoreApplication>
 #include <QDir>
@@ -80,15 +82,15 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     assert(initStatus1.code == 0);
 
     auto res1 = adapter1->execute({});
-    assert(res1.status.code == 0);
+    assert(testview::status(res1).code == 0);
     assert(std::get<std::int64_t>(res1.outputs.at("count")) == 11);
 
     auto res2 = adapter1->execute({});
-    assert(res2.status.code == 0);
+    assert(testview::status(res2).code == 0);
     assert(std::get<std::int64_t>(res2.outputs.at("count")) == 12);
 
     auto res3 = adapter1->execute({});
-    assert(res3.status.code == 0);
+    assert(testview::status(res3).code == 0);
     assert(std::get<std::int64_t>(res3.outputs.at("count")) == 13);
 
     auto relStatus1 = adapter1->release();
@@ -103,7 +105,7 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     assert(initStatus2.code == 0);
 
     auto res4 = adapter2->execute({});
-    assert(res4.status.code == 0);
+    assert(testview::status(res4).code == 0);
     assert(std::get<std::int64_t>(res4.outputs.at("count")) == 101);
 
     assert(adapter2->release().code == 0);
@@ -149,7 +151,7 @@ void faultInjection(const std::filesystem::path &modulePath)
         }
         catch (const RegistryError &error)
         {
-            assert(error.status.code == -3 && !error.status.message.empty());
+            assert(testview::status(error).code == -3 && !testview::status(error).message.empty());
         }
     }
 
@@ -158,8 +160,9 @@ void faultInjection(const std::filesystem::path &modulePath)
     auto failInitAdapter = loader->createAdapter("test.plugin.fail_init", services);
     auto failInitStatus  = failInitAdapter->initialize({});
     assert(failInitStatus.code == 7);
-    auto failExec = failInitAdapter->execute({});
-    assert(failExec.status.code == 7);
+    // A tool the framework never initialised has no answer to give; the failure surfaces as the
+    // diagnostic the node reports.
+    assert(testview::executionFailure(*failInitAdapter) == "Simulated plugin initialization failure");
 }
 
 void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &modulePath)
@@ -186,9 +189,9 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
         }
         catch (const RegistryError &error)
         {
-            assert(error.status.code == code);
+            assert(testview::status(error).code == code);
             if (code == 5)
-                assert(error.status.detail == "factory diagnostic");
+                assert(testview::status(error).detail == "factory diagnostic");
         }
     }
     assert(releaseCalls() == before + 1);
@@ -224,7 +227,7 @@ void nativeOutputRequiredness(const std::filesystem::path &modulePath)
             const auto declaration
                 = QJsonDocument(
                       QJsonObject{
-                          {"schema_version",                                   1                                            },
+                          {"schema_version",                                   4                                            },
                           {       "tool_id",                                                       "test.plugin.publication"},
                           {  "display_name",                                                                  "输出发布"},
                           {       "version",                                                                         "1.0.0"},
@@ -394,13 +397,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(temp.isValid());
     const auto base           = std::filesystem::u8path(temp.path().toUtf8().toStdString());
     const auto pkgDir         = base / std::filesystem::path(u8"工具 包 with space");
-    const auto declarationDir = pkgDir / std::filesystem::path(u8"assets/tools/builtin/测试/数学");
+    const auto declarationDir = pkgDir / std::filesystem::path(u8"tools/builtin/测试/数学");
     std::filesystem::create_directories(pkgDir / "bin");
     std::filesystem::copy_file(modulePath, pkgDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
 
     writeText(declarationDir / "counter.json", R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "打包计数器",
   "version": "1.0.0",
@@ -414,7 +417,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
   ]
 })json");
     writeText(declarationDir / "function.json", R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.function",
   "display_name": "打包函数",
   "version": "1.0.0",
@@ -427,9 +430,9 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {"id": "y", "name": "输出Y", "type": "Int"}
   ]
 })json");
-    // Present on disk but absent from the index: must never be discovered.
+    // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.ghost.packaged",
   "display_name": "未索引工具",
   "version": "1.0.0",
@@ -447,11 +450,23 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/function.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/测试/数学/counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/function.json"}
   ],
   "runtime_files": ["bin/test_module.dll"]
 })json");
+
+    bool unindexedRejected = false;
+    try
+    {
+        readToolsPackage(pkgDir);
+    }
+    catch (const ContractError &)
+    {
+        unindexedRejected = true;
+    }
+    assert(unindexedRejected);
+    std::filesystem::remove(declarationDir / "ghost.json");
 
     const auto package = readToolsPackage(pkgDir);
     assert(package.tools.size() == 2);
@@ -475,7 +490,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
     writeText(legacyDir / "legacy.json", R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.legacy",
   "display_name": "旧目录工具",
   "version": "1.0.0",
@@ -494,7 +509,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
     writeText(duplicateDir / "counter.json", R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "重复计数器",
   "version": "2.0.0",
@@ -521,7 +536,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     initParams.emplace("initial", std::int64_t{10});
     assert(instance->initialize(initParams).code == 0);
     auto counterResult = instance->execute({});
-    assert(counterResult.status.code == 0);
+    assert(testview::status(counterResult).code == 0);
     assert(std::get<std::int64_t>(counterResult.outputs.at("count")) == 11);
     assert(instance->release().code == 0);
 
@@ -531,7 +546,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     Values functionInputs;
     functionInputs.emplace("x", std::int64_t{21});
     auto functionResult = function->execute(functionInputs);
-    assert(functionResult.status.code == 0);
+    assert(testview::status(functionResult).code == 0);
     assert(std::get<std::int64_t>(functionResult.outputs.at("y")) == 42);
     assert(function->release().code == 0);
 
@@ -540,8 +555,8 @@ void packageRegistration(const std::filesystem::path &modulePath)
     std::filesystem::create_directories(otherDir / "bin");
     std::filesystem::copy_file(modulePath, otherDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
-    writeText(otherDir / std::filesystem::path(u8"assets/tools/custom/Python/示例/function.json"), R"json({
-  "schema_version": 1,
+    writeText(otherDir / std::filesystem::path(u8"tools/custom/Python/示例/function.json"), R"json({
+  "schema_version": 4,
   "tool_id": "test.plugin.function",
   "display_name": "另一包函数",
   "version": "1.0.0",
@@ -561,7 +576,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/custom/Python/示例/function.json"}
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/custom/Python/示例/function.json"}
   ],
   "runtime_files": []
 })json");
@@ -572,7 +587,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(registry.find("test.plugin.counter") == nullptr);
     assert(registry.find("test.plugin.legacy") == nullptr);
     const auto *relocated = registry.find("test.plugin.function");
-    assert(relocated->builtin);
+    assert(relocated->source.origin == ToolOrigin::Custom);
     assert(registry.availability("test.plugin.function").state == ToolAvailability::Available);
 
     // A package that fails validation leaves the registered tool set untouched.
@@ -601,7 +616,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     // Create tools-package directory structure
     const auto pkgDir  = appDir / "tools-package";
     const auto binDir  = pkgDir / "bin";
-    const auto jsonDir = pkgDir / std::filesystem::path(u8"assets/tools/builtin/测试/数学");
+    const auto jsonDir = pkgDir / std::filesystem::path(u8"tools/builtin/测试/数学");
     std::filesystem::create_directories(binDir);
     std::filesystem::create_directories(jsonDir);
 
@@ -621,7 +636,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.counter.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.counter.json"}
   ],
   "runtime_files": []
 })json";
@@ -632,7 +647,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
         const char *jsonContent = R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.counter",
   "display_name": "实际打包插件",
   "version": "1.0.0",
@@ -715,7 +730,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(funcJsonFile));
         assert(f.open(QIODevice::WriteOnly));
         const char *funcJsonContent = R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.function",
   "display_name": "函数插件",
   "version": "1.0.0",
@@ -740,8 +755,8 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.counter.json"},
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.counter.json"},
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.function.json"}
   ],
   "runtime_files": []
 })json";
@@ -765,7 +780,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(foundB);
 
     // Add node for Tool B, bind x to node A's count, runOnce
-    app.addNode("test.plugin.function", 300, 100);
+    app.addNode("test.plugin.function", 100, 200);
     waitForIdle();
     assert(app.nodes().size() == 2);
     const auto nodeBId = app.nodes().last().toMap().value("id").toString();
@@ -777,7 +792,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         assert(n.toMap().value("state").toString() == "succeeded");
     }
 
-    // 3. Delete Tool A mapping from module_index.json and rescan
+    assert(std::filesystem::remove(jsonDir / "test.plugin.counter.json"));
     {
         QFile f(toQString(indexFile));
         assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -788,7 +803,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.function.json"}
   ],
   "runtime_files": []
 })json";
@@ -818,26 +833,56 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(nodeAUnavailable);
     assert(nodeBAvailable);
 
-    // 4. Bad index rescan: corrupt module_index.json and rescan
+    QByteArray validIndex;
     {
-        QFile f(toQString(indexFile));
-        assert(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        const char *badJson = R"({"invalid": [)";
-        f.write(badJson);
+        QFile file(toQString(indexFile));
+        assert(file.open(QIODevice::ReadOnly));
+        validIndex = file.readAll();
     }
-    app.rescanTools();
-    // Bad index is rejected immediately; Tool B remains available!
-    defs   = app.toolDefinitions();
-    foundB = false;
-    for (const auto &d : defs)
+    app.selectNode(nodeBId);
+    assert(app.setParameterMode("x", false));
+    waitForIdle();
+    assert(app.setParameter("x", false, "21"));
+    waitForIdle();
+    const auto stableCatalog  = app.toolDefinitions();
+    auto       duplicateIndex = QJsonDocument::fromJson(validIndex).object();
+    auto       duplicateTools = duplicateIndex["tools"].toArray();
+    duplicateTools.append(duplicateTools.first());
+    duplicateIndex["tools"]          = duplicateTools;
+    auto escapedIndex                = QJsonDocument::fromJson(validIndex).object();
+    auto escapedTools                = escapedIndex["tools"].toArray();
+    auto escapedTool                 = escapedTools.first().toObject();
+    escapedTool["definition"]        = "../outside.json";
+    escapedTools[0]                  = escapedTool;
+    escapedIndex["tools"]            = escapedTools;
+    int        reportedRefreshErrors = 0;
+    const auto diagnosticConnection
+        = QObject::connect(&app, &AppController::diagnosticChanged, &app, [&] { ++reportedRefreshErrors; });
+    for (const auto &badIndex :
+         {QByteArray(R"({"invalid": [)"), QJsonDocument(duplicateIndex).toJson(QJsonDocument::Compact),
+          QJsonDocument(escapedIndex).toJson(QJsonDocument::Compact)})
     {
-        if (d.toMap().value("id").toString() == "test.plugin.function")
         {
-            foundB = true;
-            assert(d.toMap().value("available").toBool());
+            QFile file(toQString(indexFile));
+            assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            assert(file.write(badIndex) == badIndex.size());
         }
+        const auto beforeErrors = reportedRefreshErrors;
+        app.rescanTools();
+        waitForIdle();
+        assert(app.toolDefinitions() == stableCatalog);
+        assert(reportedRefreshErrors > beforeErrors && !app.diagnostic().isEmpty());
+        assert(app.nodes().size() == 2);
+        app.selectNode(nodeBId);
+        app.runNode();
+        waitForIdle();
+        auto *output = qobject_cast<OutputModel *>(app.outputModel());
+        assert(output);
+        const auto captured = output->capture("y");
+        assert(captured && std::get<std::int64_t>(captured->value) == 42);
+        std::cout << "Rejected package refresh preserves completed catalog and real DLL output=42\n";
     }
-    assert(foundB);
+    QObject::disconnect(diagnosticConnection);
 
     // 5. Restore valid index, test consecutive rescan idempotency
     {
@@ -850,7 +895,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {"id": "test_module", "library": "bin/test_module.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "assets/tools/builtin/测试/数学/test.plugin.function.json"}
+    {"tool_id": "test.plugin.function", "module": "test_module", "definition": "tools/builtin/测试/数学/test.plugin.function.json"}
   ],
   "runtime_files": []
 })json";
@@ -885,22 +930,25 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.runState() == "Idle");
     assert(app.nodes().isEmpty() && instances() == 0);
+    assert(std::filesystem::remove(funcJsonFile));
     {
         QFile definition(toQString(jsonDir / "release.json"));
         assert(definition.open(QIODevice::WriteOnly));
-        definition.write(R"({"schema_version":1,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
+        definition.write(R"({"schema_version":4,"tool_id":"test.plugin.release_fail","display_name":"释放诊断",
                             "version":"1.0.0","kind":"cpp","init_params":[],"inputs":[],"outputs":[]})");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
         index.write(
             R"({"schema_version":1,"variant":"cpu","modules":[{"id":"test_module","library":"bin/test_module.dll"}],
                         "tools":[{"tool_id":"test.plugin.release_fail","module":"test_module",
-                                  "definition":"assets/tools/builtin/测试/数学/release.json"}],"runtime_files":[]})");
+                                  "definition":"tools/builtin/测试/数学/release.json"}],"runtime_files":[]})");
     }
     app.rescanTools();
     waitForIdle();
+    assert(!app.toolMetadata("test.plugin.release_fail").isEmpty());
     app.addNode("test.plugin.release_fail", 100, 100);
     waitForIdle();
+    assert(app.nodes().size() == 1);
     app.runOnce();
     waitForIdle();
     assert(app.nodes().first().toMap().value("state") == "succeeded");
@@ -1000,7 +1048,7 @@ void registryIntegration(const std::filesystem::path &modulePath)
 
     assert(instance->initialize({}).code == 0);
     auto res = instance->execute({});
-    assert(res.status.code == 0);
+    assert(testview::status(res).code == 0);
     assert(std::get<std::int64_t>(res.outputs.at("count")) == 1);
     assert(instance->release().code == 0);
 }
@@ -1058,7 +1106,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
                 if (ad && ad->initialize({}).code == 0)
                 {
                     auto r = ad->execute({});
-                    if (r.status.code == 0)
+                    if (testview::status(r).code == 0)
                     {
                         val1 = std::get<std::int64_t>(r.outputs.at("val"));
                     }
@@ -1079,7 +1127,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
                 if (ad && ad->initialize({}).code == 0)
                 {
                     auto r = ad->execute({});
-                    if (r.status.code == 0)
+                    if (testview::status(r).code == 0)
                     {
                         val2 = std::get<std::int64_t>(r.outputs.at("val"));
                     }
@@ -1118,9 +1166,9 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     std::filesystem::copy_file(pluginAPath, targetDll, std::filesystem::copy_options::overwrite_existing);
     std::filesystem::copy_file(depAPath, targetDep, std::filesystem::copy_options::overwrite_existing);
 
-    writeText(unicodeDir / std::filesystem::path(u8"assets/tools/builtin/测试/示例") / "plugin_a.json",
+    writeText(unicodeDir / std::filesystem::path(u8"tools/builtin/测试/示例") / "plugin_a.json",
               R"json({
-  "schema_version": 1,
+  "schema_version": 4,
   "tool_id": "test.plugin.a",
   "display_name": "插件甲",
   "version": "1.0.0",
@@ -1138,7 +1186,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     {"id": "mod_a", "library": "bin/plugin_a.dll"}
   ],
   "tools": [
-    {"tool_id": "test.plugin.a", "module": "mod_a", "definition": "assets/tools/builtin/测试/示例/plugin_a.json"}
+    {"tool_id": "test.plugin.a", "module": "mod_a", "definition": "tools/builtin/测试/示例/plugin_a.json"}
   ],
   "runtime_files": []
 })json");
@@ -1156,7 +1204,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     const auto state = registry.availability("test.plugin.a");
     if (state.state != ToolAvailability::Available)
     {
-        std::cerr << "Unavailable: " << state.status.message << "\n";
+        std::cerr << "Unavailable: " << testview::status(state).message << "\n";
     }
     assert(state.state == ToolAvailability::Available);
 
@@ -1170,7 +1218,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     }
     assert(initStatus.code == 0);
     auto res = instance->execute({});
-    assert(res.status.code == 0);
+    assert(testview::status(res).code == 0);
     assert(std::get<std::int64_t>(res.outputs.at("val")) == 111);
 
     // Cross-release snapshot check: hold output while releasing adapter and loader
@@ -1244,7 +1292,7 @@ static int runMissingDepChild(const std::filesystem::path &pluginAPath, const st
         return 5;
     }
     auto res = ad->execute({});
-    if (res.status.code != 0)
+    if (testview::status(res).code != 0)
     {
         std::cerr << "Failed to execute ok adapter\n";
         return 6;

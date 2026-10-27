@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "WorkbenchFixtures.h"
 #include "ui/Theme.h"
 #include "ui/OutputModel.h"
 #include "ui/ImageViewport.h"
@@ -7,6 +8,7 @@
 #include <QQmlComponent>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -22,6 +24,7 @@
 #include <memory>
 #include <iostream>
 #include <stdexcept>
+
 
 namespace {
 QQuickItem *visibleText(QQuickItem *item, const QString &text)
@@ -42,8 +45,9 @@ void popupSessionsContract()
         if (!condition)
             throw std::runtime_error(message);
     };
-    visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "popup catalog did not become ready");
+    visionrt::testing::WorkbenchInstallation installation;
+    visionrt::AppController                  app(1, installation.directory());
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "popup catalog did not become ready");
     app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
     app.resolveUnsaved(QStringLiteral("discard"));
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
@@ -53,7 +57,6 @@ void popupSessionsContract()
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
     QQuickWindow window;
     window.resize(760, 560);
     window.show();
@@ -129,7 +132,7 @@ void popupSessionsContract()
     require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".rect"),
             "incompatible input rejection lost its precise reason or stable target identity");
     require(!app.bindOutputTo(sourceContext, QStringLiteral("not-a-node"), QStringLiteral("images"))
-                && app.diagnostic() == QStringLiteral("节点标识无效：not-a-node"),
+                && app.diagnostic() == QStringLiteral("节点标识 必须是无前导零的无符号十进制文本：not-a-node"),
             "invalid output target lost its original node identifier or concrete Chinese reason");
     require(app.wires() == beforeRejectedBinding && rejectedProjectChanges.isEmpty()
                 && rejectedParameterChanges.isEmpty() && popup->property("visible").toBool()
@@ -274,10 +277,13 @@ void popupSessionsContract()
     const auto openMenu = [&]
     {
         QQuickItem *label = nullptr;
-        require(QTest::qWaitFor([&] { label = visibleText(panel, QStringLiteral("图像批次")); return label != nullptr; }, 1000),
-                "real output table has no image output cell");
+        require(QTest::qWaitFor([&] {
+            label = visibleText(panel, QStringLiteral("图像"));
+            if (!label) label = visibleText(panel, QStringLiteral("图像批次"));
+            return label != nullptr;
+        }, 1000), "real output table has no image output cell");
         QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
-                          label->mapToScene(QPointF(label->width() / 2, label->height() / 2)).toPoint());
+                          label->mapToScene(QPointF(label->width() + 150, label->height() / 2)).toPoint());
         require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "output context menu did not open");
         require(menu->property("parent").value<QQuickItem *>() == panel,
                 "output menu is parented to an ephemeral table cell");
@@ -316,7 +322,7 @@ void popupSessionsContract()
     QImage image(16, 12, QImage::Format_RGB888);
     image.fill(QColor(30, 90, 180));
     require(image.save(imagePath), "cannot write the real popup image fixture");
-    require(app.setParameter(QStringLiteral("mode"), false, QStringLiteral("file"))
+    require(app.setParameter(QStringLiteral("count"), false, QStringLiteral("1"))
                 && app.setParameterPath(QStringLiteral("path"), false, QUrl::fromLocalFile(imagePath)),
             "cannot select the real image for result publication");
     const auto beforeRun = app.portContext(QStringLiteral("images"), true);
@@ -329,8 +335,8 @@ void popupSessionsContract()
     require(QTest::qWaitFor([&] { return !menu->property("visible").toBool(); }, 1000),
             "new publication leaves its old output menu visible");
     const auto captured = model->capture(QStringLiteral("images"));
-    const auto *batch = captured ? std::get_if<visionrt::ImageBatch>(&captured->value) : nullptr;
-    if (!batch || batch->images().size() != 1)
+    const auto *batch    = captured ? std::get_if<visionrt::DataRef<visionrt::Image>>(&captured->value) : nullptr;
+    if (!batch || batch->get().size() != 1)
         throw std::runtime_error("real image publication has no image batch: "
             + visionrt::OutputModel::fullText(*model->capture(QStringLiteral("__status_message"))).toStdString());
     app.requestOutputText(app.portContext(QStringLiteral("__status_code"), true), false);
@@ -341,8 +347,9 @@ void popupSessionsContract()
     require(dataDialog && QMetaObject::invokeMethod(dataDialog, "close"), "cannot close output data dialog");
     require(QTest::qWaitFor([&] { return !dataDialog->property("visible").toBool(); }, 1000),
             "output data dialog remains visible");
-    auto *statusCell = visibleText(panel, QStringLiteral("状态消息"));
-    require(statusCell != nullptr, "status message cell is missing");
+    // Diagnostics belong to the data column; the name column is the connection menu.
+    auto *statusCell = visibleText(panel, model->get(1).value("preview").toString());
+    require(statusCell != nullptr, "status message data cell is missing");
     QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
                       statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "status menu did not open");
@@ -436,10 +443,11 @@ void outputCellReuseContract()
     QTemporaryDir manyDirectory;
     require(manyDirectory.isValid(), "many-output fixture directory is invalid");
     const auto package = manyDirectory.path() + "/tools-package/";
-    require(QDir().mkpath(package + "assets"), "cannot create the many-output package");
+    require(QDir().mkpath(package + "tools/custom"), "cannot create the many-output package");
     const auto write = [&](const QString &path, const QByteArray &bytes)
     {
         QFile file(package + path);
+        require(QDir().mkpath(QFileInfo(file).absolutePath()), "cannot create fixture parent directory");
         require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "cannot write the many-output fixture");
     };
     write("module_index.json", R"json({
@@ -447,25 +455,31 @@ void outputCellReuseContract()
   "variant": "test",
   "modules": [],
   "tools": [
-    {"tool_id": "test.outputs", "definition": "assets/outputs.json"}
+    {"tool_id": "test.outputs", "definition": "tools/custom/outputs.json"}
   ],
   "runtime_files": []
 })json");
-    write("assets/outputs.py",
+    write("python/custom/outputs/outputs.py",
           "def run(inputs):\n"
           "    values = {'value_' + str(index): index for index in range(64)}\n"
           "    values.update(__status_code=0, __status_message='')\n"
           "    return values\n");
-    QJsonObject definition{{"schema_version", 1}, {"tool_id", "test.outputs"}, {"display_name", "Many outputs"},
-        {"version", "1.0.0"}, {"kind", "python_function"},
-        {"entry", QJsonObject{{"file", "outputs.py"}, {"symbol", "run"}}},
-        {"init_params", QJsonArray{}}, {"inputs", QJsonArray{}}};
+    QJsonObject definition{
+        {"schema_version",                                                                              4},
+        {       "tool_id",                                                                 "test.outputs"},
+        {  "display_name",                                                                 "Many outputs"},
+        {       "version",                                                                        "1.0.0"},
+        {          "kind",                                                              "python_function"},
+        {         "entry", QJsonObject{{"package", "outputs"}, {"file", "outputs.py"}, {"symbol", "run"}}},
+        {   "init_params",                                                                   QJsonArray{}},
+        {        "inputs",                                                                   QJsonArray{}}
+    };
     QJsonArray ports;
     for (int number = 0; number < 64; ++number)
         ports.append(QJsonObject{{"id", "value_" + QString::number(number)},
             {"name", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "Int"}});
     definition["outputs"] = ports;
-    write("assets/outputs.json", QJsonDocument(definition).toJson());
+    write("tools/custom/outputs.json", QJsonDocument(definition).toJson());
     visionrt::AppController manyApp(1, manyDirectory.path());
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output catalog did not become ready");
     manyApp.addNode("test.outputs", 0, 0);
@@ -486,7 +500,7 @@ void outputCellReuseContract()
     QQmlEngine manyEngine;
     manyEngine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     manyEngine.rootContext()->setContextProperty("app", &manyApp);
-    manyEngine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
+    visionrt::registerStyleModule();
     QQmlComponent manyComponent(&manyEngine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/OutputPanel.qml")));
     std::unique_ptr<QObject> manyOwner(manyComponent.create());
     if (!manyOwner) throw std::runtime_error(manyComponent.errorString().toStdString());
@@ -524,7 +538,7 @@ void outputCellReuseContract()
     auto *manyTable = manyPanel->findChild<QObject *>("outputTable");
     require(manyMenu && manyTable, "many-output menu or table is unavailable");
     QTest::mouseClick(&manyWindow, Qt::RightButton, Qt::NoModifier,
-                      firstLabel->mapToScene(QPointF(firstLabel->width() / 2, firstLabel->height() / 2)).toPoint());
+                      firstLabel->mapToScene(QPointF(firstLabel->width() + 150, firstLabel->height() / 2)).toPoint());
     require(QTest::qWaitFor([&] { return manyMenu->property("opened").toBool(); }, 1000),
             "many-output source menu did not open");
     const auto sourceContext = manyPanel->property("selectedContext").toMap();

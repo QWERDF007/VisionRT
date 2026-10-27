@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/PythonLoadState.h"
 #include "core/Tool.h"
 #include "visionrt/contracts/Registry.h"
 
@@ -68,7 +69,6 @@ public:
         return registrationStatus_;
     }
 
-    // Replaces the tool set with a validated package: inside the package root the index is the single discovery source.
     void registerPackage(const ToolsPackage &package);
     void loadNativeImplementations() const;
     void addDefinition(ToolDefinition definition);
@@ -81,10 +81,11 @@ public:
         = std::function<std::unique_ptr<IToolInstance>(const ToolDefinition &, const PlatformToolServices &)>;
     void registerHostBinding(std::string bindingName, HostBindingFactory factory);
 
-    const ToolDefinition          *find(std::string_view id) const;
-    Availability                   availability(std::string_view id) const;
-    std::unique_ptr<IToolInstance> create(std::string_view id, const PlatformToolServices &services) const;
-    std::unique_ptr<IToolInstance> create(const ToolDefinition &definition, const PlatformToolServices &services) const;
+    const ToolDefinition            *find(std::string_view id) const;
+    Availability                     availability(std::string_view id) const;
+    std::shared_ptr<PythonLoadState> pythonLoadState(std::string_view id) const;
+    std::unique_ptr<IToolInstance>   create(std::string_view id, const PlatformToolServices &services) const;
+    std::unique_ptr<IToolInstance>   create(const ToolDefinition &definition, const PlatformToolServices &services) const;
 
     const std::vector<ToolDefinition> &definitions() const noexcept
     {
@@ -113,8 +114,8 @@ private:
 
     struct PythonImplementation
     {
-        ToolFactory factory;
-        ToolStatus  status;
+        ToolFactory                      factory;
+        std::shared_ptr<PythonLoadState> loadState;
     };
 
     std::shared_ptr<PluginLoader>                            pluginLoader_;

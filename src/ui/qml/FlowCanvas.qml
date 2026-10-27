@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
+import VisionRT.Style 1.0
 
 FocusScope {
     id: root
@@ -10,6 +11,9 @@ FocusScope {
     property real zoom: 1
     property real panX: 0
     property real panY: 0
+    onZoomChanged: root.hideHover()
+    onPanXChanged: root.hideHover()
+    onPanYChanged: root.hideHover()
     property var flowViews: ({})
     property bool fitRequested: true
     property string viewedFlow: ""
@@ -36,7 +40,8 @@ FocusScope {
     readonly property var hoverNode: hoverNodeId === "" ? null : findNode(hoverNodeId)
     readonly property int cellWidth: 180
     readonly property int cellHeight: 80
-    readonly property var routedWires: {
+    property var routedWires: []
+    readonly property var routeGeometry: {
         if (app.wires.length === 0) return []
         const geometry = []
         for (let index = 0; index < nodeRepeater.count; ++index) {
@@ -45,8 +50,11 @@ FocusScope {
             const item = loader.item
             geometry.push({id: loader.modelData, rectangle: Qt.rect(item.x, item.y, item.width, item.height)})
         }
-        return app.routeWires(geometry)
+        return geometry
     }
+
+    onRouteGeometryChanged: Qt.callLater(root.updateRoutes)
+    function updateRoutes() { routedWires = app.routeWires(routeGeometry) }
 
     function selected(id) { return selection.indexOf(id) !== -1 }
     function findNode(id) { for (let n of app.nodes) if (n.id === id) return n; return null }
@@ -55,7 +63,8 @@ FocusScope {
         if (ids.length !== nodeIds.length || ids.some(function(v, i) { return v !== nodeIds[i] })) nodeIds = ids
     }
     function enterNode(id) {
-        if (root.gesture !== "" || root.hoverNodeId === id) return
+        if (root.gesture !== "") return
+        if (root.hoverNodeId === id && (root.hoverCardVisible || hoverTimer.running)) return
         root.hoverNodeId = id
         root.hoverCardVisible = false
         hoverTimer.restart()
@@ -206,8 +215,7 @@ FocusScope {
         interval: 500
         repeat: false
         onTriggered: {
-            if (root.hoverNodeId !== "" && root.hoverNode !== null && root.gesture === ""
-                    && (!root.Window.window || root.Window.window.active))
+            if (root.hoverNodeId !== "" && root.hoverNode !== null && root.gesture === "")
                 root.hoverCardVisible = true
         }
     }
@@ -225,6 +233,7 @@ FocusScope {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
+                    objectName: "flowTitle"
                     text: "流程图绘制区"
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
                     color: "#24292f"
@@ -271,6 +280,7 @@ FocusScope {
                 }
                 Rectangle {
                     id: flowDropdown
+                    objectName: "flowDropdown"
                     Layout.preferredWidth: 120; Layout.preferredHeight: 24; radius: 3
                     color: "#ffffff"; border.color: "#c5ccd5"; border.width: 1
                     RowLayout {
@@ -307,6 +317,7 @@ FocusScope {
                     }
                 }
                 QuiTextIconButton {
+                    objectName: "flowFitButton"
                     iconSource: QuiFontIcon.FullScreen
                     implicitWidth: 26; implicitHeight: 24
                     text: "适应全部节点"
@@ -323,6 +334,7 @@ FocusScope {
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
                 Rectangle {
+                    objectName: "flowAddButton"
                     Layout.preferredWidth: 22; Layout.preferredHeight: 22; radius: 3
                     color: addMouse.containsMouse ? "#f0f2f5" : "#ffffff"
                     border.color: "#d0d7de"; border.width: 1
@@ -346,6 +358,7 @@ FocusScope {
                             model: app.flows
                             Rectangle {
                                 id: flowTabItem
+                                objectName: "flowTab_" + modelData.id
                                 required property var modelData
                                 readonly property bool isActive: app.currentFlow === modelData.id
                                 height: 25; width: tabRow.width + 16
@@ -379,6 +392,7 @@ FocusScope {
                                         border.color: flowTabItem.modelData.selected ? "#2da44e" : "#8c959f"
                                         border.width: 1
                                         MouseArea {
+                                            objectName: "flowTabToggle_" + flowTabItem.modelData.id
                                             anchors.fill: parent; anchors.margins: -4
                                             enabled: !app.busy
                                             onClicked: app.setFlowSelected(flowTabItem.modelData.id, !flowTabItem.modelData.selected)
@@ -395,7 +409,8 @@ FocusScope {
                                         visible: true
                                         opacity: app.flows.length > 1 ? 1.0 : 0.4
                                         MouseArea {
-                                            id: tabCloseMouse; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
+                                            id: tabCloseMouse; objectName: "flowTabClose_" + flowTabItem.modelData.id
+                                            anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
                                             enabled: !app.busy && app.flows.length > 1
                                             onClicked: {
                                                 root.contextFlow = flowTabItem.modelData.id
@@ -576,12 +591,12 @@ FocusScope {
                 objectName: "nodeHoverCard"
                 visible: root.hoverCardVisible && root.hoverNode !== null
                 z: 30
-                width: 232
+                width: Theme.tooltipWidth
                 height: hoverColumn.implicitHeight + 16
                 x: root.hoverCardX()
                 y: root.hoverCardY()
                 radius: Theme.radiusBase
-                color: "#ffffff"
+                color: Theme.tooltipBg
                 border.color: Theme.border
                 border.width: 1
                 enabled: false
@@ -592,13 +607,13 @@ FocusScope {
                         Layout.fillWidth: true
                         text: root.hoverNode ? root.hoverNode.title : ""
                         wrapMode: Text.Wrap
-                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                        font: Theme.titleFont
                         color: Theme.textPrimary
                     }
                     Repeater {
                         model: [
-                            { label: "算子", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
                             { label: "预处理", value: root.hoverNode ? root.hoverNode.timingPreprocessText : "" },
+                            { label: "算子时间", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
                             { label: "后处理", value: root.hoverNode ? root.hoverNode.timingPostprocessText : "" }
                         ]
                         RowLayout {
@@ -606,32 +621,16 @@ FocusScope {
                             Layout.fillWidth: true
                             QuiText {
                                 text: modelData.label
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                                font: Theme.captionFont
                                 color: Theme.textSecondary
                             }
                             Item { Layout.fillWidth: true }
                             QuiText {
                                 text: modelData.value
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+                                font: Theme.captionFont
                                 color: Theme.textPrimary
                             }
                         }
-                    }
-                    QuiText {
-                        Layout.fillWidth: true
-                        visible: text.length > 0
-                        text: root.hoverNode ? root.hoverNode.statusMessage || "" : ""
-                        wrapMode: Text.Wrap
-                        color: Theme.error
-                        font: QuiFont.Caption
-                    }
-                    QuiText {
-                        Layout.fillWidth: true
-                        visible: text.length > 0
-                        text: root.hoverNode ? root.hoverNode.lifecycleMessage || "" : ""
-                        wrapMode: Text.Wrap
-                        color: Theme.error
-                        font: QuiFont.Caption
                     }
                 }
             }
@@ -684,7 +683,9 @@ FocusScope {
     }
     QuiMenu {
         id: blankMenu
+        objectName: "flowBlankMenu"
         QuiMenuItem {
+            objectName: "flowBlankPaste"
             text: "粘贴"; enabled: app.canPaste && !app.busy
             onTriggered: {
                 let p = root.gridPointAt(root.contextPoint.x, root.contextPoint.y)
@@ -694,16 +695,19 @@ FocusScope {
     }
     QuiMenu {
         id: flowMenu
+        objectName: "flowContextMenu"
         QuiMenuItem { text: "重命名流程…"; enabled: !app.busy; onTriggered: { for (let f of app.flows) if (f.id === root.contextFlow) root.openName("flow", f.name) } }
         QuiMenuItem { text: "复制流程"; enabled: !app.busy; onTriggered: app.copyFlow(root.contextFlow) }
         QuiMenuItem { text: "删除流程…"; enabled: !app.busy && app.flows.length > 1; onTriggered: deleteFlowDialog.open() }
     }
     WorkbenchDialog {
-        id: deleteFlowDialog; title: "删除流程"; message: "删除该流程及全部节点？此操作无法撤销。"
+        id: deleteFlowDialog; objectName: "flowDeleteDialog"
+        title: "删除流程"; message: "删除该流程及全部节点？此操作无法撤销。"
         onPositiveClicked: app.deleteFlow(root.contextFlow)
     }
     WorkbenchDialog {
-        id: nameDialog; title: root.nameOperation === "node" ? "节点备注" : "流程名称"
+        id: nameDialog; objectName: "flowNameDialog"
+        title: root.nameOperation === "node" ? "节点备注" : "流程名称"
         positiveButtonEnabled: !app.busy && root.nameDraft.trim().length > 0
         contentDelegate: Component {
             QuiTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }

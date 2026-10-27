@@ -18,7 +18,7 @@ VisionRT.exe --project examples/pipeline_cpu_python.vrt.json
 
 - [存取契约](../tests/project_storage_contract.cpp)：工程候选、身份、占位与另存为。
 - [样例执行契约](../tests/examples_contract.cpp)、[测试注册](../CMakeLists.txt)：真实工具包、Python、保存重开和错误路径。
-- [元数据契约](../tests/example_metadata_contract.cpp)：样例初始化选项与工具声明的一致性。
+- [元数据契约](../tests/example_metadata_contract.cpp)：样例初始化/输入选项、保存签名与工具声明的一致性。
 - [GPU 契约及参数](../tests/gpu_tools_contract.cpp)：权重构建、引擎重载和独立推理参考。
 
 ## GPU 资源准备

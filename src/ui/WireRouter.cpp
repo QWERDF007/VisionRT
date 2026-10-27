@@ -104,12 +104,8 @@ const std::vector<RoutedWire> &WireRouter::route(std::span<const NodeBounds> nod
     routes.insert(routes.end(), std::make_move_iterator(failed.begin()), std::make_move_iterator(failed.end()));
     std::sort(routes.begin(), routes.end(), [](const auto &left, const auto &right)
     { return std::tie(left.source, left.target) < std::tie(right.source, right.target); });
-    const bool complete = std::all_of(routes.begin(), routes.end(), [](const auto &wire) { return wire.error.empty(); });
-    if (complete)
-    {
-        impl_->nodes.assign(nodes.begin(), nodes.end());
-        impl_->relations.assign(relations.begin(), relations.end());
-    }
+    impl_->nodes.assign(nodes.begin(), nodes.end());
+    impl_->relations.assign(relations.begin(), relations.end());
     impl_->routes = std::move(routes);
     return impl_->routes;
 }

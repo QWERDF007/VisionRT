@@ -6,8 +6,15 @@
 #include <QCoreApplication>
 #include <iostream>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
     QCoreApplication   app(argc, argv);
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("VisionRT 工具声明、索引与模块校验"));

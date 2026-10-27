@@ -36,10 +36,7 @@ public:
         std::this_thread::sleep_for(std::chrono::milliseconds(80));
         visionrt::Values out;
         out.emplace("y", std::int64_t{42});
-        return {
-            {0, "ok"},
-            std::move(out)
-        };
+        return visionrt::toolResult(std::move(out), {0, "ok"});
     }
 
     visionrt::ToolStatus release() override
@@ -80,10 +77,7 @@ public:
         ++count_;
         visionrt::Values outputs;
         outputs.emplace("count", count_);
-        return {
-            {0, "ok"},
-            std::move(outputs)
-        };
+        return visionrt::toolResult(std::move(outputs), {0, "ok"});
     }
 
     visionrt::ToolStatus release() override
@@ -116,10 +110,7 @@ public:
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return {
-            {0, "ok"},
-            {}
-        };
+        return visionrt::toolResult({}, {0, "ok"});
     }
 
     visionrt::ToolStatus release() override
@@ -157,10 +148,7 @@ public:
             x = std::get<std::int64_t>(it->second);
         }
         out.emplace("y", x * 2);
-        return {
-            {0, "ok"},
-            std::move(out)
-        };
+        return visionrt::toolResult(std::move(out), {0, "ok"});
     }
 
     visionrt::ToolStatus release() override
@@ -189,10 +177,7 @@ public:
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return {
-            {0, "ok"},
-            {}
-        };
+        return visionrt::toolResult({}, {0, "ok"});
     }
 
     visionrt::ToolStatus release() override
@@ -221,10 +206,7 @@ public:
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return {
-            {0, "ok"},
-            {}
-        };
+        return visionrt::toolResult({}, {0, "ok"});
     }
 
     visionrt::ToolStatus release() override
@@ -244,10 +226,7 @@ public:
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return {
-            {code, code == 0 ? "" : "业务输出缺失"},
-            {{"value", visionrt::Missing{}}}
-        };
+        return visionrt::toolResult({{"value", visionrt::Missing{}}}, {code, code == 0 ? "" : "业务输出缺失"});
     }
 
     visionrt::ToolStatus release() override

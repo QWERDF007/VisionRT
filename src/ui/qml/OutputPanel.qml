@@ -15,8 +15,17 @@ Rectangle {
     property bool selectedSystem: true
     property bool selectedDiagnostic: false
     property string fullText: ""
-    function showMenu(options, item, point) {
-        selectedContext = app.portContext(options.portId, true)
+    property var cascadeTools: []
+    function showNameMenu(options, item, point) {
+        selectedContext = app.portDeclarationContext(options.portId, true)
+        if (!app.portContextCurrent(selectedContext)) return
+        selectedName = options.name; selectedSystem = options.system
+        cascadeTools = app.cascadeOutputCandidates(selectedContext)
+        let position = item.mapToItem(root, point.x, point.y)
+        nameMenu.popup(root, position.x, position.y)
+    }
+    function showDataMenu(options, item, point) {
+        selectedContext = app.portResultContext(options.portId)
         if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
         selectedDiagnostic = options.diagnostic || false
@@ -30,8 +39,8 @@ Rectangle {
         outputMenu.close()
     }
     function invalidateMenu() {
-        pendingAction = null; selectedContext = ({})
-        outputMenu.close(); binding.close()
+        if (!pendingAction) selectedContext = ({})
+        outputMenu.close(); nameMenu.close(); binding.close()
     }
     function validateMenu() {
         if (app.busy || !app.portContextCurrent(selectedContext)) invalidateMenu()
@@ -100,10 +109,12 @@ Rectangle {
                     display: data.display === undefined ? "" : String(data.display),
                     portId: data.portId || "",
                     name: data.name || "",
-                    type: data.type || "",
+                    type: data.typeDisplay || data.type || "",
+                    typeMachine: data.type || "",
                     tooltip: data.tooltip || "",
                     diagnostic: data.diagnostic || false,
                     count: data.count || 0,
+                    connectable: data.connectable === true,
                     system: data.system === true
                 }
             }
@@ -134,24 +145,32 @@ Rectangle {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                 font: QuiFont.Body
-                color: cell.options.column === 0 && !cell.options.system ? QuiColor.Highlight : QuiColor.FontPrimary
+                // Only a port with a legal, still free downstream input looks actionable. An existing
+                // connection keeps its reference count but never stands in for a new target.
+                color: cell.options.column === 0 && cell.options.connectable ? QuiColor.Highlight : QuiColor.FontPrimary
                 text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system && root.relations ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
             }
             MouseArea {
                 id: cellPointer; anchors.fill: parent; hoverEnabled: true
                 acceptedButtons: Qt.RightButton
-                onClicked: function(mouse) { root.showMenu(cell.options, cell, Qt.point(mouse.x, mouse.y)) }
+                onClicked: function(mouse) {
+                    if (cell.options.column === 0) {
+                        // The name menu is a connection menu: no candidate and no existing relation
+                        // means there is nothing to offer, so no menu opens at all.
+                        if (!cell.options.connectable && (cell.options.count || 0) === 0) return
+                        root.showNameMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
+                    } else {
+                        root.showDataMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
+                    }
+                }
             }
             QuiToolTip {
                 visible: cellPointer.containsMouse && text.length > 0
                 text: {
                     if (cell.options.column === 0) {
-                        let t = cell.options.name || ""
-                        if (cell.options.portId && cell.options.portId !== cell.options.name)
-                            t += "(" + cell.options.portId + ")"
-                        if (cell.options.type)
-                            t += "(" + cell.options.type + ")"
-                        return t
+                        let n = cell.options.name || cell.options.portId || ""
+                        let t = cell.options.type || ""
+                        return t.length > 0 ? (n + "（" + t + "）") : n
                     }
                     if (cell.options.column === 2)
                         return cell.options.tooltip || cell.options.display || ""
@@ -182,7 +201,86 @@ Rectangle {
         QuiMenuItem { text: "复制诊断 JSON"; visible: root.selectedSystem; enabled: app.portContextCurrent(root.selectedContext) && root.selectedDiagnostic; onTriggered: root.queueAction("diagnostic-copy") }
         QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: root.queueAction("bind") }
     }
-    BindingPopup { id: binding }
+    BindingPopup { id: binding; objectName: "bindingPopup" }
+    QuiMenu {
+        id: nameMenu
+        objectName: "outputNameMenu"
+        parent: root
+        property string search: ""
+        property var filteredTools: {
+            if (!search || search.trim() === "") return root.cascadeTools
+            let q = search.trim().toLowerCase()
+            let res = []
+            for (let tool of root.cascadeTools) {
+                let toolMatch = (tool.title || "").toLowerCase().indexOf(q) >= 0
+                let matchedInputs = []
+                for (let input of tool.inputs) {
+                    let inputName = (input.title || input.name || "").toLowerCase()
+                    let portName = (input.port || "").toLowerCase()
+                    if (toolMatch || inputName.indexOf(q) >= 0 || portName.indexOf(q) >= 0) {
+                        matchedInputs.push(input)
+                    }
+                }
+                if (matchedInputs.length > 0) {
+                    res.push({
+                        node: tool.node,
+                        title: tool.title,
+                        inputs: matchedInputs
+                    })
+                }
+            }
+            return res
+        }
+        onAboutToShow: search = ""
+        onClosed: search = ""
+        Item {
+            implicitWidth: 180
+            implicitHeight: 32
+            QuiTextField {
+                id: nameSearchField
+                anchors.fill: parent
+                anchors.margins: 4
+                placeholderText: "搜索工具或输入..."
+                text: nameMenu.search
+                onTextChanged: nameMenu.search = text
+            }
+        }
+        Instantiator {
+            model: nameMenu.filteredTools
+            delegate: QuiMenu {
+                id: toolSubMenu
+                required property var modelData
+                property string targetNode: modelData.node
+                title: modelData.title
+                Instantiator {
+                    model: toolSubMenu.modelData.inputs
+                    delegate: QuiMenuItem {
+                        required property var modelData
+                        text: modelData.connected ? ("✓ " + (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
+                            : modelData.occupied ? ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + " · 已被占用)")
+                            : ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
+                        enabled: !app.busy && !modelData.occupied
+                        onTriggered: {
+                            if (modelData.connected) {
+                                app.unbindOutputFrom(root.selectedContext, toolSubMenu.targetNode, modelData.port)
+                            } else {
+                                app.bindOutputTo(root.selectedContext, toolSubMenu.targetNode, modelData.port)
+                            }
+                        }
+                    }
+                    onObjectAdded: function(index, object) { toolSubMenu.insertItem(index, object) }
+                    onObjectRemoved: function(index, object) { toolSubMenu.removeItem(object) }
+                }
+            }
+            onObjectAdded: function(index, object) { nameMenu.insertMenu(index + 1, object) }
+            onObjectRemoved: function(index, object) { nameMenu.removeMenu(object) }
+        }
+        QuiMenuItem {
+            visible: nameMenu.filteredTools.length === 0
+            text: root.cascadeTools.length === 0 ? "无可连接的下层输入" : "未找到匹配项"
+            enabled: false
+        }
+    }
     WorkbenchTextDialog {
         id: dataDialog; objectName: "outputDataDialog"; title: "输出数据 · 点击时的快照"
         text: root.fullText

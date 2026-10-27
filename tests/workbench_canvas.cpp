@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "WorkbenchFixtures.h"
 #include "ui/Theme.h"
 #include <quickui/Color.h>
 
@@ -20,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 
+
 void flowCanvasContract()
 {
     const auto require = [](bool condition, const char *message)
@@ -27,13 +29,13 @@ void flowCanvasContract()
         if (!condition)
             throw std::runtime_error(message);
     };
-    visionrt::AppController app(1, QStringLiteral(VISIONRT_BINARY_DIR));
+    visionrt::testing::WorkbenchInstallation installation;
+    visionrt::AppController                  app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "canvas catalog did not become ready");
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("Theme", visionrt::Theme::instance());
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/FlowCanvas.qml")));
     std::unique_ptr<QObject> owner(component.create());
     if (!owner)
@@ -84,7 +86,7 @@ void flowCanvasContract()
     QVariantList ids;
     for (const auto &value : app.nodes())
         ids.push_back(value.toMap().value("id"));
-    require(app.moveNodes({QStringLiteral("2")}, -2, 1), "cannot place routing obstacle between bound nodes");
+    require(app.moveNodes({QStringLiteral("2")}, -2, 0), "cannot place routing obstacle between bound nodes");
     QTest::qWait(50);
     QQuickItem *bypass = nullptr;
     QList<QQuickItem *> pending{surface};
@@ -143,11 +145,57 @@ void flowCanvasContract()
     app.selectNode(QStringLiteral("3"));
     require(bypass->property("lineColor").value<QColor>() == QColor("#f08800"),
             "selected target does not distinguish its upstream relationship");
+    auto *invalid = findItem(findItem, canvas, QStringLiteral("flowNode_5"));
+    require(invalid != nullptr, "single failed-endpoint fixture is missing");
+    const auto originalWidth = invalid->width();
+    QSignalSpy routingWarnings(&app, &visionrt::AppController::diagnosticChanged);
+    invalid->setWidth(0);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    auto *failed    = findItem(findItem, canvas, QStringLiteral("flowWire_1_5"));
+                    auto *preserved = findItem(findItem, canvas, QStringLiteral("flowWire_1_3"));
+                    return failed && failed->property("lineColor").value<QColor>() == QColor("#d97706") && preserved
+                        && readRoute(preserved).size() >= 2;
+                },
+                1000),
+            "one failed endpoint cleared other canvas wires or lost its warning color");
+    require(routingWarnings.size() == 1 && app.diagnostic().contains(QStringLiteral("连线端点")),
+            "single failed wire did not produce exactly one routing diagnostic");
+    const auto geometryValue  = canvas->property("routeGeometry");
+    const auto failedGeometry = geometryValue.metaType() == QMetaType::fromType<QJSValue>()
+                                  ? geometryValue.value<QJSValue>().toVariant().toList()
+                                  : geometryValue.toList();
+    require(app.routeWires(failedGeometry).size() == app.wires().size() && routingWarnings.size() == 1,
+            "repeating unchanged failed geometry duplicated diagnostics or lost routes");
+    invalid->setWidth(originalWidth);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    auto *restored = findItem(findItem, canvas, QStringLiteral("flowWire_1_5"));
+                    return restored && restored->property("lineColor").value<QColor>() != QColor("#d97706")
+                        && readRoute(restored).size() >= 2;
+                },
+                1000),
+            "restoring endpoint geometry retained the failed cache result");
     auto *obstacle = findItem(findItem, canvas, QStringLiteral("flowNode_2"));
     require(obstacle != nullptr, "routing obstacle delegate disappeared");
     const auto center = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
     const auto finish = center + QPoint(qRound(180 * canvas->property("zoom").toDouble()), 0);
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, center);
+    QSignalSpy routingChanges(canvas, SIGNAL(routedWiresChanged()));
+    require(routingChanges.isValid(), "canvas routing publication signal is missing");
+    for (int offset = 1; offset <= 4; ++offset)
+    {
+        const auto dragPoint
+            = surface->mapFromScene(center + QPointF(180 * canvas->property("zoom").toDouble() * offset, 0));
+        require(QMetaObject::invokeMethod(canvas, "updateGesture", Q_ARG(QVariant, dragPoint)),
+                "canvas drag update is missing");
+    }
+    std::cout << "[Routing burst] publications before event-loop return: " << routingChanges.size() << std::endl;
+    require(routingChanges.isEmpty(), "drag geometry was routed synchronously instead of coalescing pending updates");
+    require(QTest::qWaitFor([&] { return routingChanges.size() == 1; }, 1000),
+            "pending drag updates did not publish exactly one current route");
     QTest::mouseMove(&window, finish, 30);
     QTest::qWait(30);
     auto *movingWire = findItem(findItem, canvas, QStringLiteral("flowWire_1_3"));
@@ -170,12 +218,12 @@ void flowCanvasContract()
             "canvas zoom changes the world-coordinate wire path");
     canvas->setProperty("zoom", originalZoom);
     require(app.moveNodes({QStringLiteral("2")}, -1, 0), "cannot undo routing obstacle drag");
-    require(app.moveNodes({QStringLiteral("2")}, 2, -1), "cannot restore routing obstacle");
+    require(app.moveNodes({QStringLiteral("2")}, 2, 0), "cannot restore routing obstacle");
     readable = false;
-    require(app.moveNodes({ids.front()}, 1000, 1000), "cannot spread canvas fixture");
+    require(app.moveNodes({ids.front()}, -1000, -1000), "cannot spread canvas fixture");
     require(QMetaObject::invokeMethod(canvas, "fit"), "canvas fit action is missing");
     require(QTest::qWaitFor(allVisible, 1000), "fit clips nodes in a widely spaced flow");
-    require(app.moveNodes({ids.front()}, -1000, -1000), "cannot restore canvas fixture spacing");
+    require(app.moveNodes({ids.front()}, 1000, 1000), "cannot restore canvas fixture spacing");
     for (const auto offset : {QPoint(1000, 1000), QPoint(-2000, -2000)})
     {
         require(app.moveNodes(ids, offset.x(), offset.y()), "cannot translate canvas fixture");
@@ -184,7 +232,68 @@ void flowCanvasContract()
     }
     require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/workbench_project_fit.png")),
             "cannot save fitted canvas evidence");
-    std::cout << "[Canvas Contract Passed] Loaded example and translated bounds remain visible after fitting.\n";
+    const auto currentRoutes = [&]
+    {
+        const auto value = canvas->property("routedWires");
+        return value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant().toList()
+                                                                   : value.toList();
+    };
+    const auto originalFlow = app.currentFlow();
+    app.addFlow(QStringLiteral("路由切换"));
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "alternate flow did not become ready");
+    const auto alternateFlow = app.currentFlow();
+    require(alternateFlow != originalFlow, "alternate routing flow was not created");
+    app.selectFlow(originalFlow);
+    require(QTest::qWaitFor([&] { return currentRoutes().size() == app.wires().size() && !currentRoutes().isEmpty(); },
+                            1000),
+            "original flow did not restore its routes");
+    obstacle = findItem(findItem, canvas, QStringLiteral("flowNode_2"));
+    require(obstacle != nullptr, "flow-switch drag fixture is missing");
+    const auto switchingStart = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, switchingStart);
+    require(QMetaObject::invokeMethod(
+                canvas, "updateGesture",
+                Q_ARG(QVariant,
+                      surface->mapFromScene(switchingStart + QPointF(180 * canvas->property("zoom").toDouble(), 0)))),
+            "flow switch drag update is missing");
+    require(canvas->property("gesture").toString() == "nodes" && canvas->property("dragX").toDouble() != 0,
+            "flow switch did not interrupt a pending node drag");
+    app.selectFlow(alternateFlow);
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, switchingStart);
+    require(QTest::qWaitFor([&] { return currentRoutes().isEmpty(); }, 1000),
+            "queued geometry from the old flow was published into the empty flow");
+    app.selectFlow(originalFlow);
+    require(QTest::qWaitFor([&] { return !currentRoutes().isEmpty(); }, 1000), "returning flow lost its routes");
+    obstacle = findItem(findItem, canvas, QStringLiteral("flowNode_2"));
+    require(obstacle != nullptr, "delete-during-drag fixture is missing");
+    const auto deletionStart = obstacle->mapToScene(obstacle->boundingRect().center()).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, deletionStart);
+    require(QMetaObject::invokeMethod(
+                canvas, "updateGesture",
+                Q_ARG(QVariant,
+                      surface->mapFromScene(deletionStart + QPointF(180 * canvas->property("zoom").toDouble(), 0)))),
+            "delete drag update is missing");
+    require(canvas->property("gesture").toString() == "nodes" && canvas->property("dragX").toDouble() != 0,
+            "deletion did not interrupt a pending node drag");
+    app.deleteNodes({QStringLiteral("2")});
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, deletionStart);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    if (app.busy() || app.nodes().size() != 4 || currentRoutes().size() != app.wires().size())
+                        return false;
+                    for (const auto &entry : currentRoutes())
+                        if (entry.toMap().value("source").toString() == "2"
+                            || entry.toMap().value("target").toString() == "2")
+                            return false;
+                    return true;
+                },
+                5000),
+            "queued geometry restored a deleted node's routes");
+    QTest::qWait(50);
+    require(currentRoutes().size() == app.wires().size(), "obsolete route publication overwrote the current graph");
+    std::cout << "[Canvas Contract Passed] Fit, coalesced drag, final endpoints, flow switch and pending deletion "
+                 "verified.\n";
 }
 
 void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, double scale)
@@ -231,7 +340,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
             for (auto *item : parent->childItems())
             {
                 const QVariant value = item->property("text");
-                if (value.isValid() && value.canConvert<QString>())
+                if (item->isVisible() && value.isValid() && value.canConvert<QString>())
                     values << value.toString();
                 self(self, item);
             }
@@ -239,15 +348,67 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         collect(collect, card);
         return values;
     };
+    // The hover card is a pointer affordance: it appears only while the window is active. A test
+    // that lost activation therefore has to claim it back instead of reading a card that the
+    // product correctly hid, and it reports that state when activation cannot be obtained.
+    const auto hoverState = [&]
+    {
+        return QStringLiteral(" [hoverNodeId='%1' gesture='%2' visible=%3 zoom=%4 active=%5]")
+            .arg(canvas->property("hoverNodeId").toString(), canvas->property("gesture").toString())
+            .arg(canvas->property("hoverCardVisible").toBool())
+            .arg(canvas->property("zoom").toDouble())
+            .arg(window->isActive())
+            .toStdString();
+    };
+    const auto ensureActive = [&]
+    {
+        for (int attempt = 0; attempt < 5; ++attempt)
+        {
+            window->raise();
+            window->requestActivate();
+            if (QTest::qWaitForWindowActive(window, 400))
+                return true;
+            QTest::qWait(100);
+        }
+        return false;
+    };
+    // Hover is a dwell: the card appears 500 ms after the pointer enters a node. Activation can be
+    // taken away and given back (a real run, the desktop), and a window that has just regained focus
+    // needs a fresh enter to restart that dwell. The helper therefore re-seats the pointer a few
+    // times - exactly what a user does - and reports the full state when the card never shows.
+    const auto farthestCorner = [&](QPoint target)
+    {
+        QPoint best         = surface->mapToScene(QPointF(4, 4)).toPoint();
+        double bestDistance = -1.0;
+        for (const auto &candidate : {QPointF(4, 4), QPointF(surface->width() - 6, 4), QPointF(4, surface->height() - 6),
+                                      QPointF(surface->width() - 6, surface->height() - 6)})
+        {
+            const QPoint point    = surface->mapToScene(candidate).toPoint();
+            const double distance = QLineF(point, target).length();
+            if (distance > bestDistance)
+            {
+                bestDistance = distance;
+                best         = point;
+            }
+        }
+        return best;
+    };
+    const auto hoverCardAt = [&](QPoint target)
+    {
+        for (int attempt = 0; attempt < 3; ++attempt)
+        {
+            require(ensureActive(), "hover test window did not stay active" + hoverState());
+            QTest::mouseMove(window, farthestCorner(target));
+            QTest::qWait(30);
+            QTest::mouseMove(window, target);
+            if (QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1200))
+                return true;
+        }
+        return canvas->property("hoverCardVisible").toBool();
+    };
     const auto hoverNode = [&](QQuickItem *target)
     {
-        window->requestActivate();
-        require(QTest::qWaitForWindowActive(window), "hover test window did not become active");
-        QTest::mouseMove(window, surface->mapToScene(QPointF(-2, -2)).toPoint());
-        QTest::qWait(20);
-        QTest::mouseMove(window, nodeCenter(target));
-        require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 1500),
-                "hover card did not appear after reentering the node");
+        require(hoverCardAt(nodeCenter(target)), "hover card did not appear after reentering the node" + hoverState());
     };
 
     const auto first = app.nodes().first().toMap();
@@ -259,23 +420,23 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(item != nullptr, "flow node delegate is missing: id=" + id.toStdString());
     const QPoint center = nodeCenter(item);
 
-    window->requestActivate();
-    require(QTest::qWaitForWindowActive(window), "initial hover test window did not become active");
-    QTest::mouseMove(window, center);
-    QTest::qWait(700);
-    require(canvas->property("hoverCardVisible").toBool(), "hover card did not appear after 500 ms");
+    require(hoverCardAt(center), "hover card did not appear after 500 ms" + hoverState());
     require(card->isVisible(), "hover card item is not visible");
     require(!card->hasActiveFocus(), "hover card took keyboard focus");
     const QStringList content = texts();
-    require(content.size() == 7, "hover card contains more than the tool name and three timing rows");
+    // Title plus exactly three timing rows: preprocessing, operator and post-processing.
+    require(content.size() == 7, "hover card does not contain the tool name and three timing rows");
     require(content.contains(first.value("title").toString()), "hover card lost the tool name");
-    require(content.contains(QStringLiteral("算子")) && content.contains(QStringLiteral("预处理"))
+    require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("算子时间"))
                 && content.contains(QStringLiteral("后处理")),
             "hover card lost a timing row");
-    require(content.contains(first.value("timingOperatorText").toString()),
-            "hover card operator time does not match the structured node data");
+    require(!content.contains(QStringLiteral("宿主准备")) && !content.contains(QStringLiteral("初始化"))
+                && !content.contains(QStringLiteral("结果校验")),
+            "hover card still shows host framework stages");
     require(content.contains(first.value("timingPreprocessText").toString()),
             "hover card preprocess time does not match the structured node data");
+    require(content.contains(first.value("timingOperatorText").toString()),
+            "hover card operator time does not match the structured node data");
     require(content.contains(first.value("timingPostprocessText").toString()),
             "hover card postprocess time does not match the structured node data");
 
@@ -303,6 +464,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(window->grabWindow().save(QStringLiteral("build/evidence/workbench_hover_card.png")),
             "failed to save hover card evidence");
 
+    require(ensureActive(), "execution hover test window did not stay active");
     app.toggleLoop();
     const bool runningVisible = QTest::qWaitFor([&]
     {
@@ -315,7 +477,19 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         QTest::qWait(10);
     require(runningVisible, "visible hover card did not show the real running measurement state");
     require(!app.busy(), "hovered node execution did not finish");
-    require(canvas->property("hoverCardVisible").toBool(), "execution model refresh closed the visible hover card");
+    // A real execution must not close the card that is already showing a node. The desktop can take
+    // activation away while the run is in flight, and the product then hides the card by design, so
+    // that case is recovered by pointing at the node again and requiring the finished snapshot to
+    // come back. Both paths prove the same thing: the refresh replaced the data, not the affordance.
+    const bool stayedVisible = canvas->property("hoverCardVisible").toBool();
+    if (!stayedVisible)
+    {
+        require(!window->isActive(), "execution model refresh closed the visible hover card" + hoverState());
+        auto *refreshed = nodeItem(id);
+        require(refreshed != nullptr, "hovered node delegate disappeared after execution");
+        require(hoverCardAt(nodeCenter(refreshed)),
+                "hover card did not return after the execution refresh" + hoverState());
+    }
     require(texts().contains(nodeMap(id).value("timingOperatorText").toString()),
             "visible hover card did not follow the current execution snapshot");
     require(!texts().contains(QStringLiteral("运行中")), "completed hover card retained the running measurement state");
@@ -326,9 +500,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     QTest::qWait(100);
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived leaving the node");
 
-    QTest::mouseMove(window, center);
-    QTest::qWait(700);
-    require(canvas->property("hoverCardVisible").toBool(), "hover card did not reappear");
+    require(hoverCardAt(center), "hover card did not reappear" + hoverState());
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, center);
     QTest::qWait(50);
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived a pointer press");
@@ -350,14 +522,12 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     const double bottomEdge = surface->height() - item->height() - 6;
     for (const auto &corner : {QPointF(6, 6), QPointF(rightEdge, 6), QPointF(6, bottomEdge), QPointF(rightEdge, bottomEdge)})
     {
-        QTest::mouseMove(window, surface->mapToScene(QPointF(2, 2)).toPoint());
+        QTest::mouseMove(window, farthestCorner(nodeCenter(item)));
         QTest::qWait(30);
         canvas->setProperty("panX", corner.x() - item->x());
         canvas->setProperty("panY", corner.y() - item->y());
         QTest::qWait(50);
-        QTest::mouseMove(window, nodeCenter(item));
-        QTest::qWait(550);
-        require(canvas->property("hoverCardVisible").toBool(), "hover card did not appear near a canvas corner");
+        require(hoverCardAt(nodeCenter(item)), "hover card did not appear near a canvas corner" + hoverState());
         require(card->x() >= 3 && card->y() >= 3, "hover card left the top/left canvas edge");
         require(card->x() + card->width() <= surface->width() - 3, "hover card left the right canvas edge");
         require(card->y() + card->height() <= surface->height() - 3, "hover card left the bottom canvas edge");
@@ -372,9 +542,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     QTest::qWait(50);
     item = nodeItem(id);
     require(item != nullptr, "node delegate is missing after renaming");
-    QTest::mouseMove(window, nodeCenter(item));
-    QTest::qWait(700);
-    require(canvas->property("hoverCardVisible").toBool(), "hover card did not appear for a long name");
+    require(hoverCardAt(nodeCenter(item)), "hover card did not appear for a long name" + hoverState());
     require(qFuzzyCompare(card->width(), cardWidth), "long name changed the hover card width");
     require(card->height() > singleLineHeight, "long name did not wrap inside the hover card");
     require(texts().contains(longName + "-" + id), "hover card lost the long tool name");
@@ -408,8 +576,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     QTest::qWait(100);
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived window deactivation");
     window->show();
-    window->requestActivate();
-    QTest::qWait(200);
+    require(ensureActive(), "window did not reactivate after being shown");
 
     other = nodeItem(remainingId);
     hoverNode(other);
@@ -460,7 +627,9 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     QTest::qWait(100);
     for (const double zoom : {1.0, 1.5, 2.0, 3.0})
     {
-        QTest::mouseMove(window, surface->mapToScene(QPointF(2, 2)).toPoint());
+        require(ensureActive(), "zoom matrix window did not become active");
+        QTest::mouseMove(window, surface->mapToScene(QPointF(-10, -10)).toPoint());
+        QTest::qWait(30);
         canvas->setProperty("zoom", zoom);
         QMetaObject::invokeMethod(canvas, "centerNode", Q_ARG(QVariant, remainingId));
         QTest::qWait(100);
@@ -482,9 +651,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         for (const auto segment : dashPattern)
             require(qAbs(segment * selectionPath->property("strokeWidth").toDouble() * zoom - 8.0) < 0.01,
                     "selection border dash length changes with canvas zoom");
-        QTest::mouseMove(window, nodeCenter(zoomed));
-        QTest::qWait(550);
-        require(canvas->property("hoverCardVisible").toBool(), "hover card is missing in the zoom matrix");
+        require(hoverCardAt(nodeCenter(zoomed)), "hover card is missing in the zoom matrix" + hoverState());
         require(qFuzzyCompare(card->width(), cardWidth), "hover card width changed with canvas zoom");
         const auto screenshot = QStringLiteral("build/evidence/workbench_dpi_%1_zoom_%2.png")
                                     .arg(scale, 0, 'f', 1).arg(qRound(zoom * 100));

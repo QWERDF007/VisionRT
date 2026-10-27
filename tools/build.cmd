@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 
 set "PROJECT_ROOT=%~dp0.."
 pushd "%PROJECT_ROOT%"

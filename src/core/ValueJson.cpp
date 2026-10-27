@@ -61,43 +61,23 @@ Element number(const QJsonValue &json)
     }
 }
 
-std::vector<std::int64_t> shape(const QJsonObject &buffer, int rank)
+template<class Vector>
+Vector decodeNested(const QJsonValue &json)
 {
-    for (auto field = buffer.begin(); field != buffer.end(); ++field)
-        if (field.key() != "shape" && field.key() != "data")
-            throw ContractError("JSON 数组缓冲区包含未知字段：" + field.key().toStdString());
-    const auto dimensions = array(buffer.value("shape"));
-    const auto data = array(buffer.value("data"));
-    if (dimensions.size() != rank)
-        throw ContractError("JSON 数组形状与声明的 rank 不一致");
-    std::vector<std::int64_t> result;
-    result.reserve(static_cast<std::size_t>(dimensions.size()));
-    for (const auto dimension : dimensions)
-        result.push_back(integer(dimension));
-    if (checkedElementCount(result) != static_cast<std::size_t>(data.size()))
-        throw ContractError("JSON 数组数据长度与形状不一致");
+    using Element      = typename Vector::value_type;
+    const auto entries = array(json);
+    Vector     result;
+    result.reserve(static_cast<std::size_t>(entries.size()));
+    for (const auto entry : entries)
+    {
+        if constexpr (std::is_same_v<Element, std::string>)
+            result.push_back(string(entry));
+        else if constexpr (std::is_arithmetic_v<Element>)
+            result.push_back(number<Element>(entry));
+        else
+            result.push_back(decodeNested<Element>(entry));
+    }
     return result;
-}
-
-QJsonObject object(const QJsonValue &json)
-{
-    if (!json.isObject())
-        throw ContractError("JSON 数组缓冲区必须是对象");
-    return json.toObject();
-}
-
-template<class Element>
-NumericBuffer numericBuffer(const QJsonValue &json, DType dtype, int rank)
-{
-    const auto buffer = object(json);
-    auto dimensions = shape(buffer, rank);
-    (void)checkedByteCount(dimensions, sizeof(Element));
-    const auto data = array(buffer.value("data"));
-    const auto count = static_cast<std::size_t>(data.size());
-    auto values = std::make_unique_for_overwrite<Element[]>(count);
-    for (std::size_t index = 0; index < count; ++index)
-        values[index] = number<Element>(data[static_cast<qsizetype>(index)]);
-    return NumericBuffer::copy(dtype, std::move(dimensions), std::as_bytes(std::span(values.get(), count)));
 }
 
 QJsonValue real(double value, const char *type, ValueJson::Purpose purpose)
@@ -109,21 +89,23 @@ QJsonValue real(double value, const char *type, ValueJson::Purpose purpose)
     return QJsonObject{{"type", type}, {"non_finite", std::isnan(value) ? "NaN" : value < 0 ? "-Infinity" : "Infinity"}};
 }
 
-template<class Element>
-QJsonArray elements(std::span<const Element> values, ValueJson::Purpose purpose = ValueJson::Purpose::Literal,
-                    const char *type = "Float")
+template<class Vector>
+QJsonArray encodeNested(const Vector &values, ValueJson::Purpose purpose, const char *type)
 {
+    using Element = typename Vector::value_type;
     QJsonArray result;
     for (const auto &value : values)
     {
-        if constexpr (std::is_same_v<Element, bool>)
-            result.append(value);
+        if constexpr (std::is_same_v<Element, std::string>)
+            result.append(utf8(value));
+        else if constexpr (std::is_same_v<Element, bool>)
+            result.append(static_cast<bool>(value));
         else if constexpr (std::is_integral_v<Element>)
             result.append(static_cast<qint64>(value));
         else if constexpr (std::is_floating_point_v<Element>)
             result.append(real(value, type, purpose));
         else
-            result.append(utf8(value));
+            result.append(encodeNested(value, purpose, type));
     }
     return result;
 }
@@ -132,12 +114,12 @@ QJsonArray elements(std::span<const Element> values, ValueJson::Purpose purpose 
 TypeSpec ValueJson::decodeType(const QJsonObject &json)
 {
     for (auto field = json.begin(); field != json.end(); ++field)
-        if (field.key() != "type" && field.key() != "dtype" && field.key() != "rank" && field.key() != "layout")
+        if (field.key() != "type" && field.key() != "dtype" && field.key() != "rank")
             throw ContractError("TypeSpec 包含未知字段：" + field.key().toStdString());
     TypeSpec type;
     const auto name = string(json.value("type"));
     bool found = false;
-    for (int index = 0; index <= static_cast<int>(Type::Rect); ++index)
+    for (int index = 0; index <= static_cast<int>(Type::ROI); ++index)
         if (name == typeName(static_cast<Type>(index)))
         {
             type.type = static_cast<Type>(index);
@@ -146,14 +128,11 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
         }
     if (!found)
         throw ContractError("未知类型：" + name);
-    const bool isArray = type.type == Type::NumericArray || type.type == Type::StringArray;
-    if (!isArray && (json.contains("dtype") || json.contains("rank") || json.contains("layout")))
-        throw ContractError("只有数组类型可以声明 dtype、rank 和 layout");
     if (json.contains("dtype"))
     {
         const auto dtype = string(json.value("dtype"));
         found = false;
-        for (int index = 0; index <= static_cast<int>(DType::Bool); ++index)
+        for (int index = 0; index <= static_cast<int>(DType::String); ++index)
             if (dtype == dtypeName(static_cast<DType>(index)))
             {
                 type.dtype = static_cast<DType>(index);
@@ -163,20 +142,12 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
         if (!found)
             throw ContractError("未知 dtype：" + dtype);
     }
-    if (isArray)
+    if (json.contains("rank"))
     {
         const auto rank = integer(json.value("rank"));
-        if (rank < 0 || rank > std::numeric_limits<int>::max())
-            throw ContractError("数组 rank 超出整数范围");
+        if (rank < 1 || rank > kMaxArrayRank)
+            throw ContractError("数组 rank 必须在支持范围内");
         type.rank = static_cast<int>(rank);
-        if (json.contains("layout"))
-        {
-            const auto layout = string(json.value("layout"));
-            if (layout == "batch_ragged")
-                type.layout = Layout::BatchRagged;
-            else if (layout != "dense")
-                throw ContractError("未知 layout：" + layout);
-        }
     }
     validateTypeSpec(type);
     return type;
@@ -186,12 +157,10 @@ QJsonObject ValueJson::encodeType(const TypeSpec &type)
 {
     validateTypeSpec(type);
     QJsonObject json{{"type", typeName(type.type)}};
-    if (type.type == Type::NumericArray || type.type == Type::StringArray)
+    if (type.type == Type::Array)
     {
-        if (type.dtype)
-            json.insert("dtype", dtypeName(*type.dtype));
+        json.insert("dtype", dtypeName(*type.dtype));
         json.insert("rank", type.rank);
-        json.insert("layout", type.layout == Layout::Dense ? "dense" : "batch_ragged");
     }
     return json;
 }
@@ -203,144 +172,91 @@ PortValue ValueJson::decode(const QJsonValue &json, const TypeSpec &type)
         return Missing{};
     if (json.isUndefined())
         throw ContractError("缺少 JSON 值；未定义字段不能代替 null");
+    PortValue result;
     switch (type.type)
     {
-    case Type::Int: return integer(json);
-    case Type::Float: return number<double>(json);
-    case Type::Bool: return number<bool>(json);
-    case Type::String: return Utf8(string(json));
-    case Type::ImageBatch:
+    case Type::Int:
+        result = integer(json);
+        break;
+    case Type::Float:
+        result = number<double>(json);
+        break;
+    case Type::Bool:
+        result = number<bool>(json);
+        break;
+    case Type::String:
+        result = string(json);
+        break;
+    case Type::Image:
         if (!array(json).isEmpty())
             throw ContractError("图像字面量只能是 null 或空数组");
-        return ImageBatch{};
-    case Type::NumericArray:
+        result = DataRef<Image>(Image{});
+        break;
+    case Type::Array:
     {
-        std::vector<NumericBuffer> buffers;
-        const auto entries = type.layout == Layout::Dense ? QJsonArray{json} : array(json);
-        const int rank = type.rank - (type.layout == Layout::BatchRagged ? 1 : 0);
-        for (const auto entry : entries)
-            switch (*type.dtype)
+        auto values = Array::empty(*type.dtype, type.rank);
+        values.visit(
+            [&](const auto &reference)
             {
-            case DType::UInt8: buffers.push_back(numericBuffer<std::uint8_t>(entry, *type.dtype, rank)); break;
-            case DType::Int32: buffers.push_back(numericBuffer<std::int32_t>(entry, *type.dtype, rank)); break;
-            case DType::Int64: buffers.push_back(numericBuffer<std::int64_t>(entry, *type.dtype, rank)); break;
-            case DType::Float32: buffers.push_back(numericBuffer<float>(entry, *type.dtype, rank)); break;
-            case DType::Float64: buffers.push_back(numericBuffer<double>(entry, *type.dtype, rank)); break;
-            case DType::Bool: buffers.push_back(numericBuffer<bool>(entry, *type.dtype, rank)); break;
-            }
-        return NumericArray(*type.dtype, type.rank, type.layout, std::move(buffers));
+                using Vector    = std::remove_cvref_t<decltype(reference.get())>;
+                reference.get() = decodeNested<Vector>(json);
+            });
+        result = std::move(values);
+        break;
     }
-    case Type::StringArray:
-    {
-        std::vector<StringBuffer> buffers;
-        const auto entries = type.layout == Layout::Dense ? QJsonArray{json} : array(json);
-        const int rank = type.rank - (type.layout == Layout::BatchRagged ? 1 : 0);
-        for (const auto entry : entries)
-        {
-            const auto buffer = object(entry);
-            auto dimensions = shape(buffer, rank);
-            std::vector<std::string> values;
-            for (const auto value : array(buffer.value("data")))
-                values.push_back(string(value));
-            buffers.emplace_back(std::move(dimensions), std::move(values));
-        }
-        return StringArray(type.rank, type.layout, std::move(buffers));
+    case Type::ROI:
+        result = DataRef<ROI>(decodeNested<ROI>(json));
+        break;
     }
-    case Type::Rect:
-    {
-        std::vector<float> encoded;
-        for (const auto value : array(json))
-            encoded.push_back(number<float>(value));
-        PortValue rectangle = Roi::decode(encoded);
-        validateValue(type, rectangle);
-        return rectangle;
-    }
-    case Type::RoiBatch:
-    {
-        std::vector<std::vector<Roi>> images;
-        for (const auto image : array(json))
-        {
-            auto &rois = images.emplace_back();
-            for (const auto roi : array(image))
-            {
-                std::vector<float> encoded;
-                for (const auto value : array(roi))
-                    encoded.push_back(number<float>(value));
-                rois.push_back(Roi::decode(encoded));
-            }
-        }
-        return RoiBatch(std::move(images));
-    }
-    }
-    throw ContractError("不支持的值类型");
+    validateValue(type, result);
+    return result;
 }
 
 QJsonValue ValueJson::encode(const PortValue &value, const TypeSpec &type, Purpose purpose)
 {
     validateValue(type, value);
-    return std::visit([&](const auto &item) -> QJsonValue
-    {
-        using Item = std::decay_t<decltype(item)>;
-        if constexpr (std::is_same_v<Item, Missing>)
-            return QJsonValue(QJsonValue::Null);
-        else if constexpr (std::is_same_v<Item, std::int64_t>)
-            return static_cast<qint64>(item);
-        else if constexpr (std::is_same_v<Item, double>)
-            return real(item, "Float", purpose);
-        else if constexpr (std::is_same_v<Item, bool>)
-            return item;
-        else if constexpr (std::is_same_v<Item, Utf8>)
-            return utf8(item.str());
-        else if constexpr (std::is_same_v<Item, Roi>)
-            return elements(item.encoded());
-        else if constexpr (std::is_same_v<Item, ImageBatch>)
+    return std::visit(
+        [&](const auto &item) -> QJsonValue
         {
-            if (purpose == Purpose::Literal)
+            using Item = std::decay_t<decltype(item)>;
+            if constexpr (std::is_same_v<Item, Missing>)
+                return QJsonValue::Null;
+            else if constexpr (std::is_same_v<Item, std::int64_t>)
+                return static_cast<qint64>(item);
+            else if constexpr (std::is_same_v<Item, double>)
+                return real(item, "Float", purpose);
+            else if constexpr (std::is_same_v<Item, bool>)
+                return item;
+            else if constexpr (std::is_same_v<Item, std::string>)
+                return utf8(item);
+            else if constexpr (std::is_same_v<Item, Array>)
+                return item.visit([&](const auto &reference) -> QJsonValue
+                                  { return encodeNested(reference.get(), purpose, dtypeName(*type.dtype)); });
+            else if constexpr (std::is_same_v<Item, DataRef<ROI>>)
+                return encodeNested(item.get(), purpose, "float64");
+            else
             {
-                if (!item.images().empty())
-                    throw ContractError("不能将运行图像保存为 JSON 字面量");
-                return QJsonArray{};
+                if (purpose == Purpose::Literal)
+                {
+                    if (!item.get().empty())
+                        throw ContractError("图像字面量只能是 null 或空数组");
+                    return QJsonArray{};
+                }
+                QJsonArray images;
+                for (const auto &image : item.get())
+                    images.append(QJsonObject{
+                        {    "rows",       image.rows},
+                        {    "cols",       image.cols},
+                        {"channels", image.channels()}
+                    });
+                return QJsonObject{
+                    {  "type",                                "Image"},
+                    { "count", static_cast<qint64>(item.get().size())},
+                    {"images",                                 images}
+                };
             }
-            QJsonArray images;
-            for (const auto &image : item.images())
-                images.append(QJsonObject{{"rows", image.rows()}, {"cols", image.cols()}, {"channels", image.channels()}});
-            return QJsonObject{{"type", "ImageBatch"}, {"count", static_cast<qint64>(images.size())}, {"images", images}};
-        }
-        else if constexpr (std::is_same_v<Item, RoiBatch>)
-        {
-            QJsonArray images;
-            for (const auto &image : item.images())
-            {
-                QJsonArray rois;
-                for (const auto &roi : image)
-                    rois.append(elements(roi.encoded()));
-                images.append(rois);
-            }
-            return images;
-        }
-        else
-        {
-            QJsonArray buffers;
-            for (const auto &buffer : item.buffers())
-            {
-                QJsonArray data;
-                if constexpr (std::is_same_v<Item, StringArray>)
-                    data = elements(buffer.values());
-                else
-                    switch (buffer.dtype())
-                    {
-                    case DType::UInt8: data = elements(buffer.template values<std::uint8_t>()); break;
-                    case DType::Int32: data = elements(buffer.template values<std::int32_t>()); break;
-                    case DType::Int64: data = elements(buffer.template values<std::int64_t>()); break;
-                    case DType::Float32: data = elements(buffer.template values<float>(), purpose, dtypeName(buffer.dtype())); break;
-                    case DType::Float64: data = elements(buffer.template values<double>(), purpose, dtypeName(buffer.dtype())); break;
-                    case DType::Bool: data = elements(buffer.template values<bool>()); break;
-                    }
-                buffers.append(QJsonObject{{"shape", elements(buffer.shape())}, {"data", data}});
-            }
-            return item.layout() == Layout::Dense ? QJsonValue(buffers[0]) : QJsonValue(buffers);
-        }
-    }, value);
+        },
+        value);
 }
 
 PortValue ValueJson::parse(const QString &text, const TypeSpec &type)
@@ -355,9 +271,19 @@ QString ValueJson::text(const PortValue &value, const TypeSpec &type, Purpose pu
 {
     const auto json = encode(value, type, purpose);
     if (json.isArray())
-        return QString::fromUtf8(QJsonDocument(json.toArray()).toJson(QJsonDocument::Indented)).trimmed();
+    {
+        const auto array = json.toArray();
+        if (array.isEmpty())
+            return QStringLiteral("[]");
+        return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact)).trimmed();
+    }
     if (json.isObject())
-        return QString::fromUtf8(QJsonDocument(json.toObject()).toJson(QJsonDocument::Indented)).trimmed();
+    {
+        const auto object = json.toObject();
+        if (object.isEmpty())
+            return QStringLiteral("{}");
+        return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Indented)).trimmed();
+    }
     const auto wrapped = QJsonDocument(QJsonArray{json}).toJson(QJsonDocument::Compact);
     return QString::fromUtf8(wrapped.mid(1, wrapped.size() - 2));
 }
