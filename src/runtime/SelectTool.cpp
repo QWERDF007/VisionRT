@@ -24,22 +24,25 @@ public:
 
     ToolResult execute(const Values &inputs) override
     {
+        const auto missingValue = [this](ToolStatus status) {
+            return toolResult({{"value", Missing{}}}, std::move(status));
+        };
         const auto selector = inputs.find("selector");
         const auto *flag    = selector == inputs.end() ? nullptr : std::get_if<bool>(&selector->second);
         if (!flag)
-            return {{1, "合流节点缺少布尔选择条件"}, {{"value", Missing{}}}};
+            return missingValue({1, "合流节点缺少布尔选择条件"});
         const auto &chosen = inputs.find(*flag ? "if_true" : "if_false");
         if (chosen == inputs.end() || isMissing(chosen->second))
-            return {{1, *flag ? "成立分支没有可用值" : "否则分支没有可用值"}, {{"value", Missing{}}}};
+            return missingValue({1, *flag ? "成立分支没有可用值" : "否则分支没有可用值"});
         try
         {
             validateValue(type_, chosen->second);
         }
         catch (const ContractError &error)
         {
-            return {{1, error.what()}, {{"value", Missing{}}}};
+            return missingValue({1, error.what()});
         }
-        return {executionSuccess(), {{"value", chosen->second}}};
+        return toolResult({{"value", chosen->second}}, executionSuccess());
     }
 
     ToolStatus release() override

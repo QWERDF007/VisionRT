@@ -1,4 +1,5 @@
 #include <pybind11/embed.h>
+#include "result_view.h"
 
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"
@@ -221,7 +222,7 @@ def execute(inputs):
     registry.loadNativeImplementations();
     for (const auto &loaded : python.refresh(registry.definitions()))
     {
-        require(loaded.status.code == 0, "Installed Python definition unavailable");
+        require(testview::status(loaded).code == 0, "Installed Python definition unavailable");
         registry.setPythonImplementation(loaded.toolId, python.factory(*registry.find(loaded.toolId)), loaded.status);
     }
     ProjectEditor editor;
@@ -307,7 +308,7 @@ def execute(inputs):
     const auto released = [&]
     {
         const auto counts = probe->execute({});
-        require(counts.status.code == 0, "Ownership probe execution failed");
+        require(testview::status(counts).code == 0, "Ownership probe execution failed");
         require(std::get<std::int64_t>(counts.outputs.at("allocated")) == 1, "Python allocation count differs");
         return std::get<std::int64_t>(counts.outputs.at("released"));
     };

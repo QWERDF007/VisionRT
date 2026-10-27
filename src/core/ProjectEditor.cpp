@@ -720,16 +720,21 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     requireIncrement(target.structureRevision);
     if (tool.id.empty())
         throw ContractError("工具标识不能为空");
+    // A node contract always carries the host-owned ports, so a definition handed in by a caller
+    // is normalised before it becomes a node. Otherwise a hand-built contract would give the node a
+    // port set the runtime can never satisfy.
+    ToolDefinition definition = tool;
+    normalizeToolDefinition(definition);
     NodeDefinition node;
     node.id               = edit.project_.nextNodeId;
-    node.toolId           = tool.id;
-    node.toolNameSnapshot = tool.displayName;
-    if (tool.nodeModel == NodeModel::Expression || tool.nodeModel == NodeModel::Condition)
+    node.toolId           = definition.id;
+    node.toolNameSnapshot = definition.displayName;
+    if (definition.nodeModel == NodeModel::Expression || definition.nodeModel == NodeModel::Condition)
         node.expression = ExpressionConfig{};
-    if (tool.nodeModel == NodeModel::Select)
+    if (definition.nodeModel == NodeModel::Select)
         node.selectType = TypeSpec{Type::Int};
-    const auto contract = tool.derivesPorts() ? nodeContract(node, tool) : tool;
-    if (!tool.derivesPorts())
+    const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
+    if (!definition.derivesPorts())
         for (const auto &parameter : contract.initParams)
         {
             validateLiteral(parameter.type, parameter.defaultValue);
@@ -763,7 +768,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     const GridPoint origin{};
     const auto [x, y] = nearestTranslation(std::span(&origin, 1), target, preferred);
     node.position     = translated(origin, x, y);
-    setOutputDeclarations(node, tool);
+    setOutputDeclarations(node, definition);
     target.nodes.push_back(std::move(node));
     ++target.structureRevision;
     const auto id = edit.project_.nextNodeId++;

@@ -365,29 +365,16 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     {
         const auto status
             = failureStatus_.code != 0 ? failureStatus_ : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
-        return ToolResult{status, {}};
+        // A node that cannot be executed has no tool answer; the framework reports it as a
+        // diagnostic instead of inventing output values.
+        throw ContractError(status.detail.empty() ? status.message : status.message + "：" + status.detail);
     }
-    try
-    {
-        auto        result     = raw_->execute(inputs);
-        const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
-        for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
-        return result;
-    }
-    catch (const std::exception &error)
-    {
-        return ToolResult{
-            {-1, "工具执行异常", error.what()},
-            {}
-        };
-    }
-    catch (...)
-    {
-        return ToolResult{
-            {-1, "工具执行发生未知异常"},
-            {}
-        };
-    }
+    // A plugin that throws never produced a complete output set, so the exception is the honest
+    // report and the host turns it into a framework diagnostic.
+    auto        result     = raw_->execute(inputs);
+    const Owner dependency = std::const_pointer_cast<LoadedModule>(module_);
+    for (auto &[id, value] : result.outputs) value = retainValue(value, dependency);
+    return result;
 }
 
 ToolStatus DomainToolAdapter::release()

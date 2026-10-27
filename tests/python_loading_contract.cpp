@@ -1,4 +1,5 @@
 #include "core/DefinitionJson.h"
+#include "result_view.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
 
@@ -51,7 +52,7 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
 std::int64_t execute(IToolInstance &instance)
 {
     const auto result = instance.execute({});
-    assert(result.status.code == 0);
+    assert(testview::status(result).code == 0);
     return std::get<std::int64_t>(result.outputs.at("value"));
 }
 
@@ -69,7 +70,7 @@ void unavailable(const ToolFactory &factory)
     }
     catch (const RegistryError &error)
     {
-        failed = error.reason == ToolAvailability::ImplementationUnavailable && error.status.code == -3;
+        failed = error.reason == ToolAvailability::ImplementationUnavailable && testview::status(error).code == -3;
     }
     assert(failed);
 }
@@ -401,7 +402,7 @@ void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::pat
     }
     catch (const RegistryError &error)
     {
-        brokenFailed = error.status.detail.find("controlled original failure") != std::string::npos;
+        brokenFailed = testview::status(error).detail.find("controlled original failure") != std::string::npos;
     }
     assert(brokenFailed);
 
@@ -482,7 +483,7 @@ try
                                  assert(instance->initialize({}).code == 0);
                                  assert(std::filesystem::exists(code / "imported.txt"));
                                  const auto result = instance->execute({});
-                                 assert(result.status.code == 0);
+                                 assert(testview::status(result).code == 0);
                                  assert(std::get<std::int64_t>(result.outputs.at("value")) == 23);
                                  assert(instance->release().code == 0);
                                  instance.reset();

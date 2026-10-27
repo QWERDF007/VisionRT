@@ -1,4 +1,5 @@
 #include "core/ProjectStorage.h"
+#include "result_view.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonRuntime.h"
@@ -215,7 +216,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         inputs.emplace("min_area", 0.0);
 
         auto res = inst->execute(inputs);
-        assert((res.status.code == 0));
+        assert((testview::status(res).code == 0));
         const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
         assert((outCounts && !outCounts->get<NestedVector<std::int64_t, 1>>().empty()));
         assert((outCounts->get<NestedVector<std::int64_t, 1>>()[0] == 0));
@@ -269,7 +270,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         inputs.emplace("min_area", 0.0);
 
         auto res = inst->execute(inputs);
-        assert((res.status.code == 0));
+        assert((testview::status(res).code == 0));
         const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
         assert((outCounts && !outCounts->get<NestedVector<std::int64_t, 1>>().empty()));
         assert((outCounts->get<NestedVector<std::int64_t, 1>>()[0] == 2));
@@ -360,7 +361,7 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     inputs.emplace("constant_offset", 5.0);
 
     auto res = inst->execute(inputs);
-    assert((res.status.code == 0));
+    assert((testview::status(res).code == 0));
     const auto *outImages = std::get_if<DataRef<Image>>(&res.outputs["images"]);
     assert((outImages && !outImages->get().empty()));
     const auto &outImg = outImages->get()[0];
@@ -403,11 +404,11 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     inputs.emplace("padding", std::int64_t{0});
 
     auto res = inst->execute(inputs);
-    if (res.status.code != 0)
+    if (testview::status(res).code != 0)
     {
-        std::cerr << "ROI projection execute failed: " << res.status.message << std::endl;
+        std::cerr << "ROI projection execute failed: " << testview::status(res).message << std::endl;
     }
-    assert((res.status.code == 0));
+    assert((testview::status(res).code == 0));
     const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
     assert((outRois && outRois->get().size() == 1 && !outRois->get()[0].empty()));
     const auto &r = outRois->get()[0][0];

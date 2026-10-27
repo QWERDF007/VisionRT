@@ -3,6 +3,7 @@
 #endif
 
 #include "core/ToolPackage.h"
+#include "result_view.h"
 #include "plugins/PluginLoader.h"
 
 #include <QLibrary>
@@ -12,6 +13,7 @@
 using namespace visionrt;
 
 int main(int argc, char **argv)
+try
 {
     assert(argc == 6);
     auto       loader = std::make_shared<PluginLoader>();
@@ -85,12 +87,14 @@ int main(int argc, char **argv)
         auto       instance          = catalog.create(id, {});
         assert(instance && createCalls() == before + 1);
         assert(initializeCalls() == initializedBefore);
-        assert(instance->execute({}).status.code == -2);
+        // Executing an instance the framework never initialised has no tool answer; the failure is
+        // the diagnostic the node would report.
+        assert(testview::executionFailure(*instance).find("尚未初始化") != std::string::npos);
         assert(instance->initialize({}));
         assert(initializeCalls() == initializedBefore + 1);
         assert(createCalls() == before + 1);
         const auto result = instance->execute({});
-        assert(result.status);
+        assert(testview::status(result));
         assert(std::get<std::int64_t>(result.outputs.at("value")) == expected);
         assert(instance->initialize({}).code == -2);
         assert(instance->release());
@@ -106,8 +110,8 @@ int main(int argc, char **argv)
     }
     catch (const RegistryError &error)
     {
-        assert(error.status.code == -3 && error.status.message.find("not.registered") != std::string::npos);
-        assert(!error.status.detail.empty());
+        assert(testview::status(error).code == -3 && testview::status(error).message.find("not.registered") != std::string::npos);
+        assert(!testview::status(error).detail.empty());
     }
     assert(createCalls() == 2);
     for (int index = 2; index < argc; ++index)
@@ -134,5 +138,10 @@ int main(int argc, char **argv)
     assert(std::get<std::int64_t>(retained->execute({}).outputs.at("value")) == 11);
     assert(retained->release());
     assert(ownership.expired());
-    std::cout << "ABI4 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
+    std::cout << "ABI5 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
+}
+catch (const std::exception &error)
+{
+    std::cerr << "module registration contract failed: " << error.what() << std::endl;
+    return 1;
 }

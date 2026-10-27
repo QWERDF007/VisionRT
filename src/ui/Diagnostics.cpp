@@ -1,5 +1,7 @@
 #include "ui/Diagnostics.h"
 
+#include "core/StatusCodes.h"
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStringList>
@@ -9,10 +11,22 @@
 namespace visionrt {
 QString statusSummary(const ToolStatus &status)
 {
-    auto message = QString::fromStdString(status.message);
-    if (message.trimmed().isEmpty() && status.code != 0)
-        message = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
-    return message;
+    return statusDisplay(status).summary;
+}
+
+StatusDisplay statusDisplay(const ToolStatus &status)
+{
+    // A tool answers with one status message. When it puts the curated reason on the first line and
+    // the implementation text after a line break, the row shows the reason and the diagnostic keeps
+    // the rest; nothing is dropped and the contract still has a single message key.
+    const auto    lines = statusLines(status.message);
+    StatusDisplay display{QString::fromStdString(std::string(lines.summary)),
+                          QString::fromStdString(std::string(lines.detail))};
+    if (!status.detail.empty())
+        display.detail = QString::fromStdString(status.detail);
+    if (display.summary.trimmed().isEmpty() && status.code != 0)
+        display.summary = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
+    return display;
 }
 
 namespace {
@@ -140,9 +154,9 @@ QJsonObject encode(const QString &message)
 QJsonObject encode(const ToolStatus &status)
 {
     return {
-        {   "code",       static_cast<qint64>(status.code)},
-        {"message", QString::fromStdString(status.message)},
-        { "detail",  QString::fromStdString(status.detail)}
+        {   "code",                      static_cast<qint64>(status.code)},
+        {"message",                              statusDisplay(status).summary},
+        { "detail",                              statusDisplay(status).detail}
     };
 }
 

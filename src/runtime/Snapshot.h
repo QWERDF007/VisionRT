@@ -41,13 +41,6 @@ struct NodeDiagnostic
     ToolStatus  status;
 };
 
-class IToolFailureContext
-{
-public:
-    virtual ~IToolFailureContext()                  = default;
-    virtual NodePhase failurePhase() const noexcept = 0;
-};
-
 struct ExecutionMetrics
 {
     double totalMs          = 0; // 总墙钟
@@ -59,7 +52,12 @@ struct ExecutionMetrics
     bool   toolCallMeasured = false; // 本次执行是否真正进入工具调用边界
     double validateMs       = 0; // 结果统一检查与格式验证墙钟
     bool   validateMeasured = false;
-    // Python 包含项（已包含在 adapterExecuteMs 中，不能再累加到 totalMs）
+    // Python 包含项（已包含在 adapterExecuteMs 中，不能再累加到 totalMs）。桥接算子是 Python 实现，
+    // 因此算子时间取 pythonCallMs，其余阶段各带独立 measured 标志。
+    bool   pythonBridge        = false;
+    bool   pythonInputMeasured = false; // 是否进入 GIL 等待与输入桥接
+    bool   pythonCallMeasured  = false; // 是否进入真实函数调用
+    bool   pythonOutputMeasured = false; // 是否进入输出转换
     double waitGilMs      = 0; // Python 获取 GIL 等待时间
     double pythonInputMs  = 0; // Python 输入映射耗时
     double pythonCallMs   = 0; // Python 函数/类执行耗时

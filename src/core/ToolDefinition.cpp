@@ -265,6 +265,25 @@ std::span<const std::string_view> toolTabs() noexcept {
 
 void normalizeToolDefinition(ToolDefinition &def)
 {
+    // Every contract carries the two status outputs, whatever the node model: the tool writes them
+    // like any other port and the host never adds or rewrites one. Materialising here keeps a
+    // hand-built contract and a parsed declaration identical.
+    for (const auto id : {kStatusMessagePort, kStatusCodePort})
+    {
+        const auto existing = std::find_if(def.outputs.begin(), def.outputs.end(),
+                                           [&](const auto &port) { return port.id == id; });
+        PortDefinition canonical;
+        canonical.id         = std::string(id);
+        canonical.name       = id == kStatusCodePort ? "状态码" : "状态消息";
+        canonical.type       = TypeSpec{id == kStatusCodePort ? Type::Int : Type::String};
+        canonical.required   = true;
+        canonical.defaultValue = Missing{};
+        if (existing == def.outputs.end())
+            def.outputs.insert(def.outputs.begin(), std::move(canonical));
+        else
+            *existing = std::move(canonical);
+    }
+
     if (def.nodeModel != NodeModel::Fixed)
         return;
 

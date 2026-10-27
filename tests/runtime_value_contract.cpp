@@ -5,6 +5,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <array>
 #include <iostream>
 #include <mutex>
 #include <set>
@@ -114,7 +115,7 @@ void nativeGraphSharing(std::size_t batchSize)
     registry.addDefinition(mutator);
     registry.registerCpp(
         source, [values](const ToolServices &)
-        { return std::make_unique<Function>([values](const Values &) { return ToolResult{{}, values}; }); });
+        { return std::make_unique<Function>([values](const Values &) { return toolResult(values, {}); }); });
     registry.registerCpp(
         mutator,
         [&](const ToolServices &)
@@ -142,7 +143,7 @@ void nativeGraphSharing(std::size_t batchSize)
                     regions.push_back({
                         {0., 1., 2.}
                     });
-                    return ToolResult{{}, businessOutputs(inputs)};
+                    return toolResult(businessOutputs(inputs), {});
                 });
         });
     ProjectEditor editor;
@@ -198,7 +199,7 @@ void explicitToolStoragePolicies()
     registry.registerCpp(source,
                          [images](const ToolServices &) {
                              return std::make_unique<Function>([images](const Values &)
-                                                               { return ToolResult{{}, {{"images", images}}}; });
+                                                               { return toolResult({{"images", images}}, {}); });
                          });
     ProjectEditor       editor;
     const auto          producer = editor.addNode("flow_1", *registry.find(source.id), {});
@@ -223,13 +224,13 @@ void explicitToolStoragePolicies()
                         if (policy == "inplace")
                         {
                             ++input.get()[0].at<std::uint16_t>(0, 0);
-                            return ToolResult{{}, businessOutputs(inputs)};
+                            return toolResult(businessOutputs(inputs), {});
                         }
                         cv::Mat output
                             = policy == "clone" ? input.get()[0].clone() : cv::Mat(3, 4, CV_16UC1, cv::Scalar(42));
                         if (policy == "clone")
                             output.at<std::uint16_t>(0, 0) += 10;
-                        return ToolResult{{}, {{"images", DataRef<Image>(Image{std::move(output)})}}};
+                        return toolResult({{"images", DataRef<Image>(Image{std::move(output)})}}, {});
                     });
             });
         const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
@@ -293,7 +294,7 @@ void toolCoordinatedBranches()
     registry.registerCpp(source,
                          [images](const ToolServices &) {
                              return std::make_unique<Function>([images](const Values &)
-                                                               { return ToolResult{{}, {{"images", images}}}; });
+                                                               { return toolResult({{"images", images}}, {}); });
                          });
     ProjectEditor       editor;
     const auto          producer = editor.addNode("flow_1", *registry.find(source.id), {});
@@ -331,12 +332,10 @@ void toolCoordinatedBranches()
                                         "host serialized independent ready branches before tool-owned coordination");
                         }
                         if (policy == "independent")
-                            return ToolResult{
-                                {},
-                                {{"images", DataRef<Image>(Image{cv::Mat(3, 4, CV_16UC1, cv::Scalar(50000))})}}};
+                            return toolResult({{"images", DataRef<Image>(Image{cv::Mat(3, 4, CV_16UC1, cv::Scalar(50000))})}}, {});
                         std::lock_guard lock(coordination->pixels);
                         for (int increment = 0; increment < 100; ++increment) ++input.get()[0].at<std::uint16_t>(0, 0);
-                        return ToolResult{{}, businessOutputs(inputs)};
+                        return toolResult(businessOutputs(inputs), {});
                     });
             });
         const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
@@ -384,12 +383,50 @@ void toolCoordinatedBranches()
 }
 }
 
+
+// An ROI seed is stored in reference coordinates while the cursor is measured in the current image.
+// The bounds helper is the single place that maps one frame into the other, so a translated,
+// rotated or scaled alignment must never move a nearby seed away from the pointer.
+void assistSeedFrame()
+{
+    const std::vector<double> rectangle{2.0, 10.0, 20.0, 4.0, 4.0, 0.0};
+    const std::array<double, 9> identity{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    const auto                 same = transformedRoiBounds(rectangle, identity);
+    require(same[0] == cv::Point2d(10.0, 20.0) && same[1] == cv::Point2d(14.0, 24.0),
+            "identity alignment changed the reference geometry");
+
+    const std::array<double, 9> translated{1, 0, 100, 0, 1, -50, 0, 0, 1};
+    const auto                 moved = transformedRoiBounds(rectangle, translated);
+    require(moved[0] == cv::Point2d(110.0, -30.0) && moved[1] == cv::Point2d(114.0, -26.0),
+            "translated alignment did not move the seed into the image frame");
+
+    const std::array<double, 9> scaled{2, 0, 0, 0, 2, 0, 0, 0, 1};
+    const auto                 grown = transformedRoiBounds(rectangle, scaled);
+    require(grown[0] == cv::Point2d(20.0, 40.0) && grown[1] == cv::Point2d(28.0, 48.0),
+            "scaled alignment did not scale the seed");
+
+    // A quarter turn keeps the size and moves the box: the pointer must still hit it where it is.
+    const std::array<double, 9> rotated{0, -1, 0, 1, 0, 0, 0, 0, 1};
+    const auto                 turned = transformedRoiBounds(rectangle, rotated);
+    require(std::abs(turned[0].x + 24.0) < 1e-9 && std::abs(turned[0].y - 10.0) < 1e-9
+                && std::abs(turned[1].x + 20.0) < 1e-9 && std::abs(turned[1].y - 14.0) < 1e-9,
+            "rotated alignment did not report the seed bounds in the image frame");
+
+    // A circle keeps its shape, so its radius follows the alignment scale instead of collapsing.
+    const std::vector<double> circle{3.0, 0.0, 0.0, 5.0};
+    const auto                ring = transformedRoiBounds(circle, scaled);
+    require(ring[0] == cv::Point2d(-10.0, -10.0) && ring[1] == cv::Point2d(10.0, 10.0),
+            "circle bounds ignored the alignment scale");
+    std::cout << "Assist seeds are compared in the current image frame\n";
+}
+
 int main()
 try
 {
     for (const auto count : {1, 8, 32}) nativeGraphSharing(count);
     explicitToolStoragePolicies();
     toolCoordinatedBranches();
+    assistSeedFrame();
     return 0;
 }
 catch (const std::exception &error)

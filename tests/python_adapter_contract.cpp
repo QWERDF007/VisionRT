@@ -1,4 +1,5 @@
 #include "core/DefinitionJson.h"
+#include "result_view.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
 #include <pybind11/embed.h>
@@ -142,12 +143,12 @@ def absent(inputs):
             .attr("compile")((sources.directory / "helper.py").string(), py::arg("doraise") = true);
     }
     const auto loaded = runtime.refresh(definitions);
-    for (const auto &record : loaded) assert(record.status.code == 0);
+    for (const auto &record : loaded) assert(testview::status(record).code == 0);
     const ToolServices services;
     {
         auto       instance = runtime.factory(optional)(services);
         const auto result   = instance->execute({});
-        assert(result.status.code == 0 && isMissing(result.outputs.at("value")));
+        assert(testview::status(result).code == 0 && isMissing(result.outputs.at("value")));
         assert(instance->release());
     }
     {
@@ -173,36 +174,34 @@ def absent(inputs):
     assert(initialization.code == -1 && initialization.message == "Python 初始化异常");
     assert(initialization.detail.find("initialization detail") != std::string::npos);
     assert(initialization.detail.find("entry.py") != std::string::npos);
-    const auto execution = failures->execute({});
-    assert(execution.status.code == -1 && execution.status.message == "Python 执行异常");
-    assert(execution.status.detail.find("execution detail") != std::string::npos);
-    assert(dynamic_cast<IToolFailureContext &>(*failures).failurePhase() == NodePhase::Execute);
-    assert(execution.outputs.size() == 1 && isMissing(execution.outputs.at("value")));
+    const auto execution = testview::executionFailure(*failures);
+    assert(execution.find("Python 执行异常") != std::string::npos);
+    assert(execution.find("execution detail") != std::string::npos);
     const auto cleanup = failures->release();
     assert(cleanup.code == -4 && cleanup.message == "Python 释放异常");
     assert(cleanup.detail.find("release detail") != std::string::npos);
     failures.reset();
     for (const auto &definition : {missing, extra, wrong})
     {
-        auto       instance = runtime.factory(definition)(services);
-        const auto result   = instance->execute({});
-        assert(result.status.code == -2 && result.outputs.size() == 1);
-        assert(dynamic_cast<IToolFailureContext &>(*instance).failurePhase() == NodePhase::Convert);
-        assert(result.status.message.find("技术详情") == std::string::npos && result.status.detail.empty());
+        auto        instance = runtime.factory(definition)(services);
+        const auto failed    = testview::executionFailure(*instance);
+        assert(failed.find("技术详情") == std::string::npos);
         if (definition.id == wrong.id)
-            assert(result.status.message.find("Python int") != std::string::npos);
-        assert(isMissing(result.outputs.at("value")));
+            assert(failed.find("Python int") != std::string::npos);
+        else
+            // A key set that does not match the declaration is refused before any value is read.
+            assert(failed.find("输出键必须与声明端口") != std::string::npos);
     }
     {
         auto       instance = runtime.factory(business)(services);
         const auto result   = instance->execute({});
-        assert(result.status.code == 5 && std::get<std::int64_t>(result.outputs.at("value")) == 7);
+        assert(testview::status(result).code == 5 && std::get<std::int64_t>(result.outputs.at("value")) == 7);
     }
     {
+        // A declared port the tool answered with the wrong type is a broken answer, not a value.
         auto       instance = runtime.factory(partial)(services);
-        const auto result   = instance->execute({});
-        assert(result.status.code == -2 && result.outputs.size() == 2);
-        assert(isMissing(result.outputs.at("value")) && isMissing(result.outputs.at("other")));
+        const auto failed   = testview::executionFailure(*instance);
+        assert(failed.find("other") != std::string::npos);
     }
     const auto oldFactory = runtime.factory(function);
     {
@@ -246,7 +245,7 @@ def execute(inputs):
         }
         catch (const RegistryError &error)
         {
-            assert(error.status.code == -3 && error.status.detail.find("SyntaxError") != std::string::npos);
+            assert(testview::status(error).code == -3 && testview::status(error).detail.find("SyntaxError") != std::string::npos);
         }
     }
     {
@@ -314,14 +313,14 @@ class PathProbe:
         {"input_mode",              std::string("file")},
         {"input_path", std::string("图像/输入.png")}
     });
-    assert(result.status.code == 0);
+    assert(testview::status(result).code == 0);
     assert(std::get<std::string>(result.outputs.at("resolved")) == expectedBase + "|" + expectedInput);
 
     const auto empty = instance->execute({
         {"input_mode", std::string("file")},
         {"input_path",     std::string("")}
     });
-    assert(empty.status.code == 0);
+    assert(testview::status(empty).code == 0);
     assert(std::get<std::string>(empty.outputs.at("resolved")) == expectedBase + "|");
     instance.reset();
     runtime.refresh({});

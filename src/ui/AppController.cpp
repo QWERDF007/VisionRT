@@ -117,6 +117,10 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     , outputs(owner)
     , converter(owner)
 {
+    // Read once, synchronously, while the window is still being built: a corrupt or slow
+    // preferences file must not stand between the user and the first project.
+    recentProjects = RecentProjects::load();
+
     pluginLoader = std::make_shared<PluginLoader>();
     registry.setPluginLoader(pluginLoader);
     registerReceiveTools(registry);
@@ -839,15 +843,18 @@ void AppController::Impl::advancePending()
         setState(RuntimeState::Resetting);
         return;
     }
-    const auto completed = pending;
-    pending              = Pending::None;
+    const auto completed  = pending;
+    const auto openedPath = pendingPath;
+    pending               = Pending::None;
     pendingPath.clear();
     awaitingDecision = false;
     pendingApproved  = false;
     pendingReset     = false;
+    bool replacementCommitted = false;
     if (replacement)
     {
         editor.replaceProject(std::move(*replacement));
+        replacementCommitted = true;
         ++projectEpoch;
         replacement.reset();
         flow = editor.project().flows.empty() ? QString{} : workbench::q(editor.project().flows.front().id);
@@ -860,6 +867,8 @@ void AppController::Impl::advancePending()
         emit q->selectionChanged();
         emit q->projectReplaced();
     }
+    if (completed == Pending::Open && replacementCommitted)
+        recordRecent(openedPath);
     if (completed == Pending::Close)
     {
         closing = true;
@@ -872,6 +881,15 @@ void AppController::Impl::advancePending()
     }
     else if (completed == Pending::Reset)
         synchronizeNodes();
+}
+
+void AppController::Impl::recordRecent(const QString &path)
+{
+    auto updated = RecentProjects::record(path);
+    if (updated == recentProjects)
+        return;
+    recentProjects = std::move(updated);
+    emit q->recentProjectsChanged();
 }
 
 void AppController::Impl::finishClose()
@@ -1232,7 +1250,7 @@ QVariantList AppController::nodes() const
                                          : QStringLiteral("节点未执行：") + q(snapshot->status.message))
                                   : diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase,
                                                        snapshot->status});
-                statusDetail = q(snapshot->status.detail);
+                statusDetail = statusDisplay(snapshot->status).detail;
             }
             const auto timing = nodeTimingText(snapshot.get(), running);
             if (impl_->instanceErrors.contains(node.id))
@@ -1606,6 +1624,18 @@ void AppController::requestOpen(const QString &path)
         impl_->request(Impl::Pending::Open, path);
 }
 
+void AppController::openRecentProject(const QString &path)
+{
+    // The list is only a shortcut: it enters through the same pending-open state machine as the
+    // file dialog, so the unsaved decision, the drain and the reset cannot be bypassed.
+    requestOpen(path);
+}
+
+QVariantList AppController::recentProjects() const
+{
+    return RecentProjects::toVariantList(impl_->recentProjects);
+}
+
 void AppController::requestClose()
 {
     impl_->request(Impl::Pending::Close);
@@ -1656,7 +1686,8 @@ bool AppController::save(const QString &path)
 {
     if (impl_->isClosing())
         return false;
-    auto destination = path.isEmpty() ? impl_->editor.project().path : workbench::localPath(path);
+    const auto previousPath = impl_->editor.project().path;
+    auto destination = path.isEmpty() ? previousPath : workbench::localPath(path);
     if (destination.empty())
     {
         emit savePathRequired();
@@ -1686,6 +1717,10 @@ bool AppController::save(const QString &path)
         impl_->synchronizeNodes();
         impl_->storageDiagnostics(diagnostics);
         emit projectChanged();
+        // A first save or a save-as puts the new file in the recent list; a plain Ctrl+S writes the
+        // same file again and must leave the order alone.
+        if (destination != previousPath)
+            impl_->recordRecent(workbench::pathText(destination));
         return true;
     }
     catch (const std::exception &error)

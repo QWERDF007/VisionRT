@@ -482,8 +482,14 @@ ColumnLayout {
                 }
             }
             Component.onCompleted: sync(true)
-            actionIcon: (root.parameter.editor === "file" || root.parameter.editor === "directory" || root.parameter.editor === "path") ? QuiFontIcon.FolderOpen : 0
-            actionText: root.parameter.editor === "directory" ? "选择文件夹" : (root.parameter.editor === "path" ? "选择路径" : "选择文件")
+            // A path parameter exposes both native pickers directly: one click, one dialog, no
+            // intermediate menu. file/directory declarations keep only their own action.
+            actionIcon: root.parameter.editor === "file" || root.parameter.editor === "path"
+                            ? QuiFontIcon.Document
+                            : (root.parameter.editor === "directory" ? QuiFontIcon.FolderOpen : 0)
+            actionText: root.parameter.editor === "directory" ? "选择文件夹" : "选择文件"
+            secondaryActionIcon: root.parameter.editor === "path" ? QuiFontIcon.FolderOpen : 0
+            secondaryActionText: "选择文件夹"
             onCommitRequested: {
                 if (text === root.valueText) {
                     invalid = false
@@ -496,14 +502,12 @@ ColumnLayout {
                 invalid = false
             }
             onActionRequested: {
-                if (root.parameter.editor === "path") {
-                    pathMenu.open()
-                } else if (root.parameter.editor === "directory") {
+                if (root.parameter.editor === "directory")
                     directoryPicker.open()
-                } else {
+                else
                     filePicker.open()
-                }
             }
+            onSecondaryActionRequested: directoryPicker.open()
             Connections {
                 target: root
                 function onValueTextChanged() { field.sync(false) }
@@ -714,15 +718,4 @@ ColumnLayout {
     }
     FileDialog { id: filePicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFile) }
     FolderDialog { id: directoryPicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFolder) }
-    Menu {
-        id: pathMenu
-        MenuItem {
-            text: "选择文件…"
-            onTriggered: filePicker.open()
-        }
-        MenuItem {
-            text: "选择文件夹…"
-            onTriggered: directoryPicker.open()
-        }
-    }
 }

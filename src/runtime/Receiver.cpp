@@ -12,32 +12,33 @@ namespace {
 // transport only reports what actually happened and which value exists.
 ToolResult receiveResult(const ReceiveOutcome &outcome)
 {
-    ToolResult result;
-    result.outputs["source_status_code"]    = outcome.sourceStatus.code;
-    result.outputs["source_status_message"] = std::string(outcome.sourceStatus.message);
-    result.outputs["value"]                 = outcome.value;
+    Values outputs;
+    outputs["source_status_code"]    = outcome.sourceStatus.code;
+    outputs["source_status_message"] = std::string(outcome.sourceStatus.message);
+    outputs["value"]                 = outcome.value;
+    ToolStatus status;
     switch (outcome.disposition)
     {
     case ReceiveDisposition::Value:
-        result.status = executionSuccess();
+        status = executionSuccess();
         break;
     case ReceiveDisposition::Missing:
-        result.status = {3, outcome.message};
+        status = {3, outcome.message};
         break;
     case ReceiveDisposition::Timeout:
-        result.status = {4, outcome.message};
+        status = {4, outcome.message};
         break;
     case ReceiveDisposition::Canceled:
-        result.status = {kCancelledStatus, outcome.message};
+        status = {kCancelledStatus, outcome.message};
         break;
     case ReceiveDisposition::Capacity:
-        result.status = {5, outcome.message};
+        status = {5, outcome.message};
         break;
     case ReceiveDisposition::ProtocolError:
-        result.status = {1, outcome.message};
+        status = {1, outcome.message};
         break;
     }
-    return result;
+    return toolResult(std::move(outputs), std::move(status));
 }
 
 class ReceiveTool final : public IToolInstance

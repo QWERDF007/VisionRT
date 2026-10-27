@@ -236,12 +236,34 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->toolId            = definition->id;
     snapshot->outputTypes       = resolvedOutputTypes(*definition);
     snapshot->executionRevision = config.executionRevision;
+    // Python tools report their own inner stages; copying them in one place keeps a stage from being
+    // counted twice or inherited from a previous round.
+    const auto applyPythonMetrics = [&]
+    {
+        auto *python = dynamic_cast<IPythonExecutionMetrics *>(instance.get());
+        if (!python)
+            return;
+        const auto metrics                      = python->pythonMetrics();
+        snapshot->timing.pythonBridge           = metrics.pythonBridge;
+        snapshot->timing.pythonInputMeasured    = metrics.pythonInputMeasured;
+        snapshot->timing.pythonCallMeasured     = metrics.pythonCallMeasured;
+        snapshot->timing.pythonOutputMeasured   = metrics.pythonOutputMeasured;
+        snapshot->timing.waitGilMs              = metrics.waitGilMs;
+        snapshot->timing.pythonInputMs          = metrics.pythonInputMs;
+        snapshot->timing.pythonCallMs           = metrics.pythonCallMs;
+        snapshot->timing.pythonOutputMs         = metrics.pythonOutputMs;
+    };
+
     ToolResult      result;
     NodeDisposition disposition  = NodeDisposition::Running;
     std::string     gateMessage;
     auto            phase            = NodePhase::Prepare;
-    bool        frameworkFailure = false;
-    bool        enteredExecute   = false;
+    // The framework's own verdict for this node. It is never derived from a tool's business status:
+    // a tool that ran and answered is a success even when it reports a non-zero code.
+    ToolStatus      frameworkStatus;
+    ToolStatus      businessStatus;
+    bool            frameworkFailure = false;
+    bool            enteredExecute   = false;
 
     // Host gate: only an explicitly configured logical condition can skip a node.
     // Upstream business status never gates a normal tool; the tool decides.
@@ -293,10 +315,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         snapshot->status      = {kNotExecutedStatus, std::move(message)};
         snapshot->phase       = NodePhase::Prepare;
         for (const auto &port : definition->outputs)
-            if (port.id != "__status_code" && port.id != "__status_message")
+            if (port.id != kStatusCodePort && port.id != kStatusMessagePort)
                 snapshot->outputs.emplace(port.id, Missing{});
-        snapshot->outputs.emplace("__status_code", kNotExecutedStatus);
-        snapshot->outputs.emplace("__status_message", snapshot->status.message);
+        snapshot->outputs.emplace(std::string(kStatusCodePort), kNotExecutedStatus);
+        snapshot->outputs.emplace(std::string(kStatusMessagePort), snapshot->status.message);
         snapshot->timing.totalMs = milliseconds(Clock::now() - started);
         slot.publish(std::move(snapshot));
     };
@@ -423,59 +445,37 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 result = instance->execute(inputs);
                 execTimer.stop();
             }
-            if (!result.status)
-            {
-                if (const auto *diagnostics = dynamic_cast<const IToolFailureContext *>(instance.get()))
-                    phase = diagnostics->failurePhase();
-            }
             snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
-            if (auto *py = dynamic_cast<IPythonExecutionMetrics *>(instance.get()))
-            {
-                const auto m                    = py->pythonMetrics();
-                snapshot->timing.waitGilMs      = m.waitGilMs;
-                snapshot->timing.pythonInputMs  = m.pythonInputMs;
-                snapshot->timing.pythonCallMs   = m.pythonCallMs;
-                snapshot->timing.pythonOutputMs = m.pythonOutputMs;
-            }
+            applyPythonMetrics();
         }
         else
         {
+            // No instance ever existed, so there is no tool answer to show. The gate that stopped
+            // the node owns its terminal state instead.
             const auto diagnostic = preparation.load(std::memory_order_acquire);
-            result.status         = diagnostic->status;
+            frameworkStatus       = diagnostic->status;
             phase                 = diagnostic->phase;
             frameworkFailure      = true;
         }
         snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
-        frameworkFailure = frameworkFailure || result.status.code < 0;
-        if (!frameworkFailure)
         {
             const auto invocationPhase = phase;
             phase                      = NodePhase::Convert;
             ScopeTimer convertTimer(snapshot->timing.convertMs, &snapshot->timing.validateMeasured);
-            validateUtf8(result.status.message);
-            validateUtf8(result.status.detail);
-            const auto businessCount
-                = std::count_if(definition->outputs.begin(), definition->outputs.end(), [](const auto &port)
-                                { return port.id != "__status_code" && port.id != "__status_message"; });
-            if (result.outputs.size() != static_cast<std::size_t>(businessCount))
-                throw ContractError("输出端口与声明不一致");
-            for (const auto &port : definition->outputs)
+            if (!frameworkFailure)
             {
-                if (port.id == "__status_code" || port.id == "__status_message")
-                    continue;
-                const auto output = result.outputs.find(port.id);
-                if (output == result.outputs.end())
-                    throw ContractError("缺少输出端口：" + port.id);
-                validateToolOutput(port, output->second, result.status);
-            }
-            for (const auto &output : definition->outputs)
-            {
-                if (output.sameGeometryAsInput.empty())
-                    continue;
-                for (const auto &input : definition->inputs)
+                // The tool owns every declared port, status keys included. A non-zero business code
+                // is legal data and never turns into a framework failure.
+                businessStatus = validateToolExecution(definition->outputs, result.outputs);
+                for (const auto &output : definition->outputs)
                 {
-                    if (input.type.type == Type::ROI && input.imageInput == output.sameGeometryAsInput)
-                        snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
+                    if (output.sameGeometryAsInput.empty())
+                        continue;
+                    for (const auto &input : definition->inputs)
+                    {
+                        if (input.type.type == Type::ROI && input.imageInput == output.sameGeometryAsInput)
+                            snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
+                    }
                 }
             }
             convertTimer.stop();
@@ -485,61 +485,55 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     catch (const RegistryError &error)
     {
-        result.status         = error.status;
-        frameworkFailure      = true;
+        frameworkStatus  = error.status;
+        frameworkFailure = true;
     }
     catch (const ContractError &error)
     {
-        result.status    = {-2, error.what()};
+        frameworkStatus  = {-2, error.what()};
         frameworkFailure = true;
     }
     catch (const std::exception &error)
     {
-        result.status    = {-1, exceptionSummary(phase), error.what()};
+        frameworkStatus  = {-1, exceptionSummary(phase), error.what()};
         frameworkFailure = true;
     }
     catch (...)
     {
-        result.status    = {-1, exceptionSummary(phase), "未知异常"};
+        frameworkStatus  = {-1, exceptionSummary(phase), "未知异常"};
         frameworkFailure = true;
     }
     snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
     snapshot->timing.validateMs       = snapshot->timing.convertMs;
     if (enteredExecute && instance)
-    {
-        if (auto *py = dynamic_cast<IPythonExecutionMetrics *>(instance.get()))
-        {
-            const auto m                    = py->pythonMetrics();
-            snapshot->timing.waitGilMs      = m.waitGilMs;
-            snapshot->timing.pythonInputMs  = m.pythonInputMs;
-            snapshot->timing.pythonCallMs   = m.pythonCallMs;
-            snapshot->timing.pythonOutputMs = m.pythonOutputMs;
-        }
-    }
+        applyPythonMetrics();
     if (frameworkFailure)
     {
+        // The framework stopped the node, so it publishes the terminal state of that node. This is
+        // not a tool answer: every business port is Missing and the status carries the diagnostic.
         result.outputs.clear();
         snapshot->roiInputs.clear();
-        if (definition)
-            for (const auto &port : definition->outputs)
-                if (port.id != "__status_code" && port.id != "__status_message")
-                    result.outputs.emplace(port.id, Missing{});
+        snapshot->status = std::move(frameworkStatus);
+        for (const auto &port : definition->outputs)
+            if (port.id != kStatusCodePort && port.id != kStatusMessagePort)
+                result.outputs.emplace(port.id, Missing{});
+        result.outputs.emplace(std::string(kStatusCodePort), snapshot->status.code);
+        result.outputs.emplace(std::string(kStatusMessagePort), snapshot->status.message);
     }
-    snapshot->status  = normalizeExecutionStatus(std::move(result.status));
+    else
+        snapshot->status = std::move(businessStatus);
     if (disposition == NodeDisposition::Running)
     {
-        if (result.status.code == kCancelledStatus)
-            disposition = NodeDisposition::Canceled;
-        else if (result.status.code == 0)
-            disposition = NodeDisposition::Succeeded;
-        else
+        if (frameworkFailure)
             disposition = NodeDisposition::Failed;
+        else if (snapshot->status.code == kCancelledStatus)
+            disposition = NodeDisposition::Canceled;
+        else
+            disposition = NodeDisposition::Succeeded;
     }
     snapshot->disposition = disposition;
     snapshot->phase   = phase;
     snapshot->outputs = std::move(result.outputs);
-    snapshot->outputs.emplace("__status_code", snapshot->status.code);
-    snapshot->outputs.emplace("__status_message", std::string(snapshot->status.message));
     snapshot->timing.totalMs = milliseconds(Clock::now() - started);
     slot.publish(std::move(snapshot));
 }

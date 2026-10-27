@@ -37,7 +37,7 @@ public:
     ToolResult execute(const Values &) override
     {
         values_.get<NestedVector<std::int64_t, 1>>()[0] = ++calls_;
-        return {{}, {{"value", values_}}};
+        return toolResult({{"value", values_}}, {});
     }
 
 private:

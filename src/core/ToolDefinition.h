@@ -133,11 +133,9 @@ bool isPathPort(const PortDefinition& port);
 // never inherits the privilege by accident.
 bool supportsExecutionGuard(NodeModel model) noexcept;
 
-// Canonical host-provided ports: materialised into every effective contract and
-// never written by tool declaration files.
-inline constexpr std::string_view kUpstreamStatusPort  = "upstream_status";
-inline constexpr std::string_view kStatusCodePort      = "__status_code";
-inline constexpr std::string_view kStatusMessagePort   = "__status_message";
+// Canonical host-provided ports live in the contract header so a tool and the host can never
+// disagree about their spelling. Materialised into every effective contract and never written by
+// tool declaration files.
 
 bool isHostOwnedPort(std::string_view id) noexcept;
 

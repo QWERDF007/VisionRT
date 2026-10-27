@@ -1,4 +1,5 @@
 #include "core/DefinitionJson.h"
+#include "result_view.h"
 #include "python/PythonRuntime.h"
 
 #include <pybind11/embed.h>
@@ -170,7 +171,7 @@ def execute(inputs):
                                     auto instance = runtime->factory(definition)({});
                                     assert(instance->initialize({}).code == 0);
                                     auto result = instance->execute({});
-                                    assert(result.status.code == 0);
+                                    assert(testview::status(result).code == 0);
                                     return result;
                                 });
     auto       output     = execution.get();

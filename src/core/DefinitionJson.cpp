@@ -326,9 +326,6 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             for (const auto &port : *list)
                 if (isHostOwnedPort(port.id))
                     throw ContractError("工具声明不得定义宿主公共端口：" + port.id);
-        PortDefinition code{"__status_code", "状态码", {Type::Int}};
-        PortDefinition message{"__status_message", "状态消息", {Type::String}};
-        definition.outputs.insert(definition.outputs.begin(), {std::move(code), std::move(message)});
         normalizeToolDefinition(definition);
         validateToolDefinition(definition);
         return definition;

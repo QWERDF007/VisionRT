@@ -172,15 +172,17 @@ void startupProjectContract()
             const auto rangeWarning = warningDiagnostic();
             require(rangeWarning.value("flow_id") == "flow_1" && rangeWarning.value("node") == "4"
                         && rangeWarning.value("field") == "kernel"
-                        && rangeWarning.value("message").toString().contains(QStringLiteral("已保留原值"))
+                        && rangeWarning.value("message").toString().contains(QStringLiteral("已按声明收敛"))
                         && !rangeWarning.contains("code"),
                     "project warning lost its typed context or invented an execution status");
             app.selectNode("4");
-            bool retained = false;
+            // The stored value is written back in its legal form: the row shows the clamped value
+            // instead of a number the declaration rejects.
+            bool clamped = false;
             for (const auto &parameter : app.parameters())
                 if (parameter.toMap().value("id") == "kernel")
-                    retained = parameter.toMap().value("valueText") == "0";
-            require(retained, "loading a range warning clamped the original parameter");
+                    clamped = parameter.toMap().value("valueText") == "1";
+            require(clamped, "loading a range warning did not write back the clamped value");
             const auto previous = app.diagnostics().size();
             app.addNode("test.unregistered", 0, 0);
             app.addNode("test.unregistered", 0, 0);
@@ -283,8 +285,10 @@ void startupProjectContract()
                         },
                         1000),
                     "main-window result table did not display the native failure before interaction");
-            auto *statusCell = findText(findText, window->contentItem(), QStringLiteral("状态消息"));
-            require(statusCell != nullptr, "main-window status message cell is missing");
+            // Diagnostics belong to the data column; the name column is the connection menu.
+            auto *statusCell
+                = findText(findText, window->contentItem(), outputModel->get(1).value("preview").toString());
+            require(statusCell != nullptr, "main-window status message data cell is missing");
             QTest::mouseClick(
                 window, Qt::RightButton, Qt::NoModifier,
                 statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());

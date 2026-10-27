@@ -10,7 +10,15 @@ namespace visionrt {
 using ApplicationDiagnostic
     = std::variant<QString, ToolStatus, NodeDiagnostic, RuntimeDiagnostic, ProjectStorageDiagnostic>;
 
-QString     statusSummary(const ToolStatus &status);
+// How a status message is presented: the curated first line as the summary, the rest as detail.
+struct StatusDisplay
+{
+    QString summary;
+    QString detail;
+};
+
+StatusDisplay statusDisplay(const ToolStatus &status);
+QString       statusSummary(const ToolStatus &status);
 QString     dispositionName(NodeDisposition disposition);
 QString     diagnosticMessage(const NodeDiagnostic &diagnostic);
 QString     diagnosticMessage(const ApplicationDiagnostic &diagnostic);

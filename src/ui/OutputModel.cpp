@@ -185,6 +185,7 @@ void OutputModel::clear()
 
 void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                             const std::map<std::string, std::size_t, std::less<>> &references,
+                            const std::map<std::string, bool, std::less<>> *connectable,
                             const TypeMap *nodeOutputs, std::shared_ptr<const NodeDiagnostic> lifecycle)
 {
     beginResetModel();
@@ -209,6 +210,12 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
         }
         if (system)
             captured.lifecycle = lifecycle;
+        bool       canConnect = false;
+        if (connectable)
+        {
+            const auto found = connectable->find(id);
+            canConnect       = found != connectable->end() && found->second;
+        }
         Row        row{q(id),
                        q(name),
                        typeText(type),
@@ -216,6 +223,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                        {},
                        count == references.end() ? 0 : count->second,
                        system,
+                       canConnect,
                        std::move(captured)};
         row.preview = preview(row.captured.value, 256);
         row.tooltip = preview(row.captured.value, 4096);
@@ -319,6 +327,7 @@ QVariantMap OutputModel::get(int row) const
         {   "tooltip",                                                           item.tooltip},
         {     "count",                                    static_cast<qulonglong>(item.count)},
         {    "system",                                                            item.system},
+        {"connectable",                                                        item.connectable},
         {"diagnostic", static_cast<bool>(item.captured.diagnostic || item.captured.lifecycle)},
         {  "rowIndex",                                                                    row}
     };
@@ -370,6 +379,8 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
         return row.preview;
     case CountRole:
         return static_cast<qulonglong>(row.count);
+    case ConnectableRole:
+        return rows_.at(static_cast<std::size_t>(index.row())).connectable;
     case SystemRole:
         return row.system;
     case DiagnosticRole:
@@ -402,6 +413,7 @@ QHash<int, QByteArray> OutputModel::roleNames() const
         {    TooltipRole,    "tooltip"},
         {      CountRole,      "count"},
         {     SystemRole,     "system"},
+        { ConnectableRole, "connectable"},
         { DiagnosticRole, "diagnostic"},
         {   RowIndexRole,   "rowIndex"}
     };

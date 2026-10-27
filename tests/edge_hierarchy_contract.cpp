@@ -55,7 +55,7 @@ class PassTool final : public IToolInstance
 {
 public:
     ToolStatus initialize(const Values &) override { return {}; }
-    ToolResult execute(const Values &inputs) override { return {{}, inputs}; }
+    ToolResult execute(const Values &inputs) override { return toolResult(inputs, {}); }
     ToolStatus release() override { return {}; }
 };
 } // namespace

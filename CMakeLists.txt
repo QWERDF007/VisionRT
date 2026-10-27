@@ -95,6 +95,9 @@ if(VISIONRT_BUILD_APP)
         src/ui/AppController.cpp
         src/ui/AppControllerAssist.cpp
         src/ui/UiPreferences.cpp
+        src/ui/UiPreferences.h
+        src/ui/RecentProjects.cpp
+        src/ui/RecentProjects.h
         src/ui/AppControllerBindings.cpp
         src/ui/AppControllerDisplay.cpp
         src/ui/AppControllerReadback.cpp
@@ -343,6 +346,7 @@ if(BUILD_TESTING)
         target_link_libraries(ui_result_isolation_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_result_isolation_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+        visionrt_contract(recent_projects_contract visionrt_ui)
         visionrt_contract(ui_storage_contract visionrt_ui)
         target_link_libraries(ui_storage_contract PRIVATE Qt6::Test)
         if(WIN32)

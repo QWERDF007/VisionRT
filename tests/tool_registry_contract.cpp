@@ -1,4 +1,5 @@
 #include "core/ToolPackage.h"
+#include "result_view.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 
@@ -33,7 +34,7 @@ public:
 
     ToolResult execute(const Values &inputs) override
     {
-        return {{}, inputs};
+        return toolResult(inputs, {});
     }
 
     ToolStatus release() override
@@ -112,8 +113,8 @@ int main()
     assert(registry.availability(python.id).state == ToolAvailability::ImplementationUnavailable);
     registry.setPythonImplementation(python.id, {}, {-2, "Python 入口合同无效", "original import detail"});
     const auto failed = registry.availability(python.id);
-    assert(failed.status.code == -2 && failed.status.message == "Python 入口合同无效");
-    assert(failed.status.detail == "original import detail");
+    assert(testview::status(failed).code == -2 && testview::status(failed).message == "Python 入口合同无效");
+    assert(testview::status(failed).detail == "original import detail");
     try
     {
         registry.create(python.id, {});
@@ -121,8 +122,8 @@ int main()
     }
     catch (const RegistryError &error)
     {
-        assert(error.status.code == -2 && error.status.message == failed.status.message);
-        assert(error.status.detail == failed.status.detail);
+        assert(testview::status(error).code == -2 && testview::status(error).message == testview::status(failed).message);
+        assert(testview::status(error).detail == testview::status(failed).detail);
     }
 
     auto host        = definition("test.receiver");

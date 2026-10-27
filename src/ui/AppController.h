@@ -53,6 +53,9 @@ class AppController : public QObject
     Q_PROPERTY(QString assistDisabledReason READ assistDisabledReason NOTIFY assistChanged)
     Q_PROPERTY(QString assistHint READ assistHint NOTIFY assistChanged)
     Q_PROPERTY(QVariantList assistPreview READ assistPreview NOTIFY assistChanged)
+    // Newest first, already labelled for a menu: text plus full-path tooltip. It is pure UI state,
+    // so it never dirties the project and never becomes a second opening entry point.
+    Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY recentProjectsChanged)
 public:
     AppController(std::size_t workers, const QString &applicationDirectory, QObject *parent = nullptr);
     ~AppController() override;
@@ -131,6 +134,8 @@ public:
     Q_INVOKABLE void         rescanTools();
     Q_INVOKABLE void         requestNew();
     Q_INVOKABLE void         requestOpen(const QString &path);
+    // Reuses requestOpen, so the recent list never bypasses the unsaved decision, drain or reset.
+    Q_INVOKABLE void         openRecentProject(const QString &path);
     Q_INVOKABLE void         requestClose();
     Q_INVOKABLE bool         isCloseReady() const;
     Q_INVOKABLE bool         isClosing() const;
@@ -173,6 +178,7 @@ public:
     QString                  assistDisabledReason() const;
     QString                  assistHint() const;
     QVariantList             assistPreview() const;
+    QVariantList             recentProjects() const;
     Q_INVOKABLE QVariantList toolDefinitions() const;
     Q_INVOKABLE QVariantMap  toolMetadata(const QString &toolId) const;
     // Smart point-selection. Hover previews a candidate, click learns and commits a proposal,
@@ -182,6 +188,7 @@ public:
     Q_INVOKABLE void         assistCancel();
 signals:
     void projectChanged();
+    void recentProjectsChanged();
     void nodesChanged();
     void selectionChanged();
     void parametersChanged();

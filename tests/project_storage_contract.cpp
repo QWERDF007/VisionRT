@@ -381,9 +381,11 @@ void typedArraysAndRanges(const QString &directory)
     const auto rangedNode = savedNode("7", "");
     put(file, QJsonDocument(savedProject({rangedNode})).toJson());
     const auto ranged = ProjectStorage(rangedRegistry).load(path(file));
-    require(std::get<std::int64_t>(ranged.project.flows[0].nodes[0].inputs.at("value").literal) == 9007199254740993LL
-                && has(ranged.diagnostics, ProjectStorageCode::RangeWarning),
-            "saved range violation was clamped");
+    // Loading consumes the same normalisation as editing: an out-of-range stored value is written
+    // back in its legal form, reported once, and the project becomes dirty because it changed.
+    require(std::get<std::int64_t>(ranged.project.flows[0].nodes[0].inputs.at("value").literal) == 10
+                && has(ranged.diagnostics, ProjectStorageCode::RangeWarning) && ranged.project.dirty,
+            "saved range violation was not clamped to the declared maximum");
     auto overflow = QJsonDocument(savedProject({rangedNode})).toJson();
     overflow.replace("9007199254740993", "-9223372036854775809");
     put(file, overflow);

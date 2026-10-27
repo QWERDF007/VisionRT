@@ -6,6 +6,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
+#include "result_view.h"
 #include <python/PythonInterop.h>
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
@@ -231,7 +232,7 @@ void test200NodesExecution()
             {
                 v = std::get<std::int64_t>(in.at("in"));
             }
-            return ToolResult{{}, {{"out", v + 1}}};
+            return toolResult({{"out", v + 1}}, {});
         }
 
         ToolStatus release() override
@@ -370,7 +371,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
 
         ToolResult execute(const Values &) override
         {
-            return ToolResult{{}, {{"batch", batch_}}};
+            return toolResult({{"batch", batch_}}, {});
         }
 
         ToolStatus release() override
@@ -420,10 +421,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
             if (!in.contains("batch") || isMissing(in.at("batch")))
             {
                 mismatch_ = true;
-                return ToolResult{
-                    {1, "missing batch"},
-                    {{"matched", std::int64_t{0}}}
-                };
+                return toolResult({{"matched", std::int64_t{0}}}, {1, "missing batch"});
             }
             const auto &b = std::get<DataRef<Image>>(in.at("batch"));
             if (static_cast<int>(b.get().size()) != 10)
@@ -441,7 +439,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
                 }
             }
             count_++;
-            return ToolResult{{}, {{"matched", std::int64_t{1}}}};
+            return toolResult({{"matched", std::int64_t{1}}}, {});
         }
 
         ToolStatus release() override
@@ -672,10 +670,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
             cv::Mat                 mat(720, 1280, CV_8UC3, cv::Scalar(step_ % 256, 120, 200));
             Image                   imgs;
             imgs.push_back(mat);
-            return ToolResult{
-                {},
-                {{"val", step_}, {"image", DataRef<Image>(std::move(imgs))}}
-            };
+            return toolResult({{"val", step_}, {"image", DataRef<Image>(std::move(imgs))}}, {});
         }
 
         ToolStatus release() override
@@ -716,10 +711,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
                 auto frame = DisplayConverter::convert(inBatch.get().front(), "BGR");
                 require(!frame.image.isNull(), "Display conversion in loop returned null image");
             }
-            return ToolResult{
-                {},
-                {{"out_val", v * 2}, {"out_image", inBatch}}
-            };
+            return toolResult({{"out_val", v * 2}, {"out_image", inBatch}}, {});
         }
 
         ToolStatus release() override
@@ -995,10 +987,17 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         auto u1 = waitCompletion(*engine);
         require(u1.nodes.size() == 1 && u1.nodes[0].snapshot != nullptr, "Round 1 snapshot missing");
         const auto &s1 = *u1.nodes[0].snapshot;
-        require(s1.status.code == 0, "Round 1 status must be 0");
+        require(testview::status(s1).code == 0, "Round 1 status must be 0");
         require(std::get<std::int64_t>(s1.outputs.at("out")) == 20, "Round 1 output value mismatch");
         require(s1.timing.pythonCallMs > 0.0, "Round 1 pythonCallMs must be > 0");
         require(s1.timing.adapterExecuteMs > 0.0, "Round 1 adapterExecuteMs must be > 0");
+        // A Python operator declares its own stages; the bridge parts are inside the adapter boundary
+        // and are reported once, never added on top.
+        require(s1.timing.pythonBridge && s1.timing.pythonCallMeasured,
+                "Round 1 must report a Python operator with a measured call stage");
+        require(s1.timing.waitGilMs + s1.timing.pythonInputMs + s1.timing.pythonCallMs + s1.timing.pythonOutputMs
+                    <= s1.timing.adapterExecuteMs + 1e-6,
+                "Round 1 bridge stages overlapped the operator time");
         std::cout << "  -> Round 1 Success: pythonCallMs=" << s1.timing.pythonCallMs
                   << " ms, adapterExecuteMs=" << s1.timing.adapterExecuteMs << " ms [PASS]\n";
 
@@ -1012,7 +1011,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         auto u2 = waitCompletion(*engine);
         require(u2.nodes.size() == 1 && u2.nodes[0].snapshot != nullptr, "Round 2 snapshot missing");
         const auto &s2 = *u2.nodes[0].snapshot;
-        require(s2.status.code < 0, "Round 2 must fail in prepare");
+        require(testview::status(s2).code < 0, "Round 2 must fail in prepare");
         require(isMissing(s2.outputs.at("out")), "Round 2 failed outputs must be Missing");
         require(s2.timing.executeMs == 0.0, "Round 2 executeMs must be strictly 0");
         require(s2.timing.adapterExecuteMs == 0.0, "Round 2 adapterExecuteMs must be strictly 0");
@@ -1032,8 +1031,11 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         auto u3 = waitCompletion(*engine);
         require(u3.nodes.size() == 1 && u3.nodes[0].snapshot != nullptr, "Round 3 snapshot missing");
         const auto &s3 = *u3.nodes[0].snapshot;
-        require(s3.status.code < 0, "Round 3 must fail with exception");
-        require(s3.status.detail.find("simulated python execution failure") != std::string::npos,
+        require(testview::status(s3).code < 0, "Round 3 must fail with exception");
+        // A bridge that raises never produced a tool answer, so the framework reports the
+        // exception text as its diagnostic message.
+        require(testview::status(s3).message.find("simulated python execution failure") != std::string::npos
+                    && testview::status(s3).detail.empty(),
                 "Round 3 exception detail mismatch");
         require(isMissing(s3.outputs.at("out")), "Round 3 output must be Missing");
         require(s3.timing.pythonCallMs > 0.0, "Round 3 pythonCallMs must retain real error timing");
@@ -1051,7 +1053,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         auto u4 = waitCompletion(*engine);
         require(u4.nodes.size() == 1 && u4.nodes[0].snapshot != nullptr, "Round 4 snapshot missing");
         const auto &s4 = *u4.nodes[0].snapshot;
-        require(s4.status.code < 0, "Round 4 must fail with output conversion error");
+        require(testview::status(s4).code < 0, "Round 4 must fail with output conversion error");
         require(isMissing(s4.outputs.at("out")), "Round 4 output must be Missing");
         require(s4.timing.pythonCallMs > 0.0, "Round 4 pythonCallMs must be > 0");
         require(s4.timing.pythonOutputMs > 0.0, "Round 4 pythonOutputMs must retain actual conversion error timing");

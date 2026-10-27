@@ -30,6 +30,64 @@
 - ...
 -->
 
+### 2026-10-27 — T35 统一参数 / 最近工程 / 按需打包落地（ABI 5）
+
+**目标**
+- 依据 `docs/VisionRT_VisionTools_最新验收_统一参数_最近工程_按需打包_完整方案_Specs_Tickets_20261026.zip` 的 T35-03…T35-17，在现有 VisionRT / VisionTools / Contracts 代码上落地；临时目录 `F://tmp`。
+
+**当前状态**
+- 已完成 T35-03：`ToolResult` 收敛为单一 `outputs` 通道，工具以 `toolResult(outputs, status)` 自行写入 `__status_code` / `__status_message`；宿主不再拆分或补写状态；模块 ABI 升到 5；C++/Python/Receiver/Select/插件适配器与全部测试夹具同步。
+- 已完成 T35-04：VisionTools 各工具在 `execute` 首行解析 `upstream_status`，非零时不产生算法与磁盘副作用并返回未处理状态；无默认值的图像输入声明改为允许缺失，避免“未选中分支”被当成必填错误。
+- 已完成 T35-05：手动提交、声明默认值、工程加载与运行取值共用 `InputNormalizer`；加载时越界值按声明收敛并一次性告警，工程随之标脏。
+- 已完成 T35-09：输出可连接性由后端 `candidateInputsWithState` 派生（按结构版本缓存），名称列高亮与菜单只在存在合法且仍空闲的下游输入时可用；诊断改为走数据列。
+- 已完成 T35-10：Python 算子时间改报 `pythonCallMs`，GIL 等待与输入桥接计入预处理、输出转换计入后处理，各阶段带独立 measured 标志，不再用“总计减算子”推算。
+- 已完成 T35-11：EasyTouch 种子与光标统一到当前图像坐标系（`transformedRoiBounds`，圆按半径缩放），并新增坐标契约。
+- 已完成 T35-12/13/14（VisionTools）：历史缓存命中即提升为最近使用、超出预算时拒绝保留而非撑破预算；读图先构造完整候选（Catalog/Cursor/解码结果/缓存写入）再交换状态，失败不提前清空上次成功批次，reload 失败不混用像素；序列规划改为显式 `Found/End/RestartRequested`，目录尾部被删时非循环结束而非静默回头；计划内文件缺失时重扫一次再决策。
+- 已完成 T35-15/17：新增 `tools/package_profiles.json` 与 `tools/package_profile.py`（cpu / rtx40-runtime / rtx40-build / gpu-custom，按 SM 选择 builder 分区、PTX 仅在显式前向兼容时保留、未知布局拒绝打包），`package_tools.py` 支持 `--profile/--sm/--engine-build` 并把精确清单与排除原因写入包内 `dependencies.json`；TensorRT builder 资源安装从 `nvinfer_builder_resource*.dll` 通配改为按 `VISIONTOOLS_TRT_TARGET_SMS` 精确安装（本机实测仅安装 `_sm89_` 一个分区）；VisionRT 的 OpenCV 运行时从目录 `*.dll` 通配改为按实际链接的导入库推导。
+- 已完成 T35-16：新增 `RecentProjects`（最多 10 项、按平台大小写规则去重、同名项以最短父目录后缀区分、缺失文件保留可恢复）+ `UiPreferences` 同一文件原子读写与合并；`AppController` 暴露只读 `recentProjects` 与 `openRecentProject`，仅在 `replaceProject` 提交且 `completed == Open` 后记录，另存成功才入列、普通 Ctrl+S 不扰动顺序；文件菜单新增“最近打开工程”二级菜单，空列表与关闭期禁用。
+- 未完成：T35-18 的 GPU 实机与干净安装验收（本机无目标 40 系设备/完整 SDK 交付目录），以及 Windows 真实窗口的菜单键盘导航人工确认。
+
+**验证证据**
+- `cmake --build build`（VisionRT）→ 0 错误；
+- `ctest --test-dir build`（VisionRT）→ 82/83 通过；唯一失败 `build_incremental_contract` 为嵌套 MSVC 配置在此环境下的既有失败（`rc` 步骤返回 0 但被判定失败），与本次改动无关；
+- `ctest --test-dir build`（VisionTools）→ 15/15 通过，含新增 LRU/原子提交/序列尾部删除与 `test_package_profile`；
+- `cmake -S . -B build`（VisionTools）→ 输出 `TensorRT builder 资源：安装 1 个文件，目标 SM=89，PTX=OFF`；
+- 依据本机 TensorRT 10.16 实际文件名（`_sm75_/_sm86_/_sm89_/_sm120_/_ptx_`）运行选择逻辑：cpu 仅公共依赖、rtx40-runtime 无 builder 分区、rtx40-build 仅 `_sm89_`；
+- 未验证：GPU 实机 engine 加载与 build_wts 构建、无 GPU 目标机上的安装包启动。
+
+**下一步**
+- 在目标 40 系机器执行 `dependencies.json` 清单对应的真实 engine 加载与 build_wts→engine→推理验证，以及干净环境安装启动。
+
+
+### 2026-10-26 — 依据参数规范化 / EasyTouch / 统一主题复核方案落地，声明升 schema 4、工程升 format 5 并部署 F:\tmp\VisionRT
+
+**目标**
+- 依据《VisionRT_VisionTools_参数规范化_EasyTouch_统一主题_复核与完整方案_20261026-1646》（T-I01–T-I08、T-E01、T-R34、T-O34、T-T01–T03、T-U33、T-P01–T03），在 VisionRT / VisionTools 现有代码上落地；临时目录 `F:\tmp`，部署到 `F:\tmp\VisionRT`。
+- 按要求分阶段提交推送；`WORKLOG.md` 与 `docs/` 方案（含交互 HTML）不入库，但变更仍记录于本文件。
+
+**当前状态**
+- 已完成（契约）：新增 `src/core/InputNormalizer.{h,cpp}` 作为手动值、上层值与声明默认值的唯一规范化入口（min/max 收敛、options/default 补齐、Missing 规则）；`ToolDefinition` 物化宿主端口 `upstream_status` / `__status_code` / `__status_message`，作者重复声明即拒绝；`DefinitionJson` 导出按 `isHostOwnedPort` 过滤；工具声明 schema 4、工程 format 5；执行条件持久化为 `{mode, source}`，format 4 工程迁移保留原配置，旧工程加载静默补齐公共端口、不再产生结构告警。
+- 已完成（调度）：`NodeRuntime` 移除按上游业务状态的阻断与清空，失败但合法的发布继续参与下游取参并原样转发状态码/消息；`Receiver` 只报告 `ReceiveOutcome`，业务可用性交接收工具；条件节点 formula/upstream 双模式在运行期生效；单节点运行不再清零计时统计。
+- 已完成（界面）：参数行来源高亮由 `inputMode` 驱动（literal 模式不再显示上游高亮，解绑保留模式）；EasyTouch 工具栏开关 + `UiPreferences` 持久化 + `AssistPreview::releaseSession` 异步释放（复位/重扫/关闭分别触发）；底部与悬浮卡片计时收敛为预处理/算子/后处理三行，只统计完整运行会话；`VisionRT.Style` 统一由 `registerStyleModule()` 注册并扩充 Theme 语义属性；运行期间保存排队到运行结束后写入，文本读取优先于保存请求。
+- 已完成（VisionTools）：内置与自定义声明全部升 schema 4（索引 22 条工具、3 个模块）；条件分支新增 `condition_mode` 与 `on_true_status` / `on_false_status`；读图拆出 `ImageSequence`（批次规划）与解码缓存，`count` 上限 64，不循环时按需重扫、循环按游标推进，解码失败消息与 OpenCV 细节分离；补齐 `visiontools.image.rotate` / `visiontools.image.brightness` 工厂注册。
+- 已完成（工程化）：两仓分阶段提交并推送，均与 `origin/refactor/abi4-writable-data` 同步：VisionRT `ac33e6f`（核心契约）→ `43941db`（调度）→ `24eb73c`（界面/主题）→ `5c5e459`、`4ec2211`（测试稳定性）；VisionTools `83c6244`（声明升级）→ `d6bab3d`（读图重构与工厂注册）。
+- 已完成（测试稳定性）：工作台夹具与 `examples_contract` 复制工具包时跳过 `nvinfer*`。此前每个用例复制 3.2 GB 至 `%TEMP%`，系统盘占满导致 “catalog did not become ready” 随机失败；修复后全量耗时由约 11 min 降至约 3 min，重复运行稳定。
+- 已完成（部署）：`F:\tmp\VisionRT` 可用，工具包为 schema 4 版本；部署脚本在本代理环境被批量删除保护（>50 文件）中断，`platforms/`、`opencv_world480.dll`、`msvcp140*.dll` 由 `windeployqt` 与手工复制补齐。
+- 未完成：T-P01/T-P02 的 `ToolResult` 单通道与原生 ABI 提升未实施（仍为 `status + outputs` 双通道，Python 桥接仍拆状态）；主题只覆盖本轮涉及控件，未做全仓 QML 历史硬编码的逐文件清理与 100/125/150/200% 缩放全量复核。
+
+**验证证据**
+- VisionTools `ctest --test-dir build` → `100% tests passed, 0 tests failed out of 13`（`test_infer_whitebox_trace` 按设计 Skipped）。
+- VisionRT `ctest --test-dir build --output-on-failure` → `80/81` 通过；唯一失败 `build_incremental_contract` 属沙箱限制（vcvars 子进程链接期 `rc`/`mt` 不可用），非代码缺陷。
+- `visionrt_validate_tool.exe --package F:\Projects\VisionTools\dist\visiontools-deploy` → `Valid tools package`；`module_index.json` 中 modules=3、tools=22。
+- `F:\tmp\VisionRT\VisionRT.exe -v` → `VisionRT 0.1.0`（补齐 `platforms/`、`opencv_world480.dll`、`msvcp140*.dll` 前返回 `0xC0000135`）。
+- `installed_pipeline_contract.exe F:\tmp\VisionRT\tools-package` → `Installed C++ -> Python -> C++ Image/Array/ROI and project roundtrip passed`。
+- `installed_python_author_contract.exe F:\tmp\VisionRT\tools-package` → `Installed Python ROI and image-edit author tools executed through RuntimeEngine`。
+- 部署包抽样哈希与 `dist/visiontools-deploy` 一致（条件分支声明、`vst_image.dll`、`opencv_world480.dll`、ROI 几何脚本）；部署目录 3.5 GB，无残留暂存/备份目录。
+
+**下一步**
+- 若继续：实施 T-P01/T-P02（`ToolResult{outputs}` + ABI 提升 + Python 桥接全量转换），完成主题全量迁移与多缩放复核。
+- 部署复现：`package_app.py` 在带批量删除保护的代理环境会中断，建议在无该保护的环境执行 `--force-clean`，或先清理目标目录后再补齐依赖与 Qt 插件。
+
 ### 2026-10-25 — 依据 VisionRT_VisionTools_f6f57b03_验收报告与七工具完整改进方案 完成七工具补齐、schema 3 / 工程 format 4、节点模型物化与执行门控
 
 **目标**

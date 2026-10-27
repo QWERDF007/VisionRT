@@ -347,8 +347,9 @@ void popupSessionsContract()
     require(dataDialog && QMetaObject::invokeMethod(dataDialog, "close"), "cannot close output data dialog");
     require(QTest::qWaitFor([&] { return !dataDialog->property("visible").toBool(); }, 1000),
             "output data dialog remains visible");
-    auto *statusCell = visibleText(panel, QStringLiteral("状态消息"));
-    require(statusCell != nullptr, "status message cell is missing");
+    // Diagnostics belong to the data column; the name column is the connection menu.
+    auto *statusCell = visibleText(panel, model->get(1).value("preview").toString());
+    require(statusCell != nullptr, "status message data cell is missing");
     QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
                       statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "status menu did not open");

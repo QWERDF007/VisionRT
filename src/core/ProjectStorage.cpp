@@ -1,4 +1,6 @@
 #include "core/ProjectStorage.h"
+
+#include "core/InputNormalizer.h"
 #include "core/ProjectEditor.h"
 
 #include "core/NodeContracts.h"
@@ -91,11 +93,22 @@ void diagnose(ProjectLoadResult &result, ProjectStorageCode code, const FlowDefi
 }
 
 void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const NodeDefinition &node,
-                  const PortDefinition &port, const PortValue &value)
+                  const PortDefinition &port, PortValue &value)
 {
+    // Loading consumes the same normalisation as editing and running: a stored value outside the
+    // declared range is written back in its legal form with a visible diagnostic. A value the
+    // declaration cannot represent at all is kept untouched and reported.
+    if (isMissing(value))
+        return;
     try
     {
-        validateToolValue(port, value);
+        auto normalized = normalizeInput(port, value);
+        if (!equalValues(normalized.value, value))
+        {
+            value = std::move(normalized.value);
+            diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.id,
+                     "保存的值不符合当前约束，已按声明收敛：" + normalized.adjustment, true);
+        }
     }
     catch (const ContractError &error)
     {
@@ -127,6 +140,9 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     setOutputDeclarations(node, definition);
     auto outputTypes        = std::move(node.signatures.outputs);
     node.signatures.outputs = savedOutputs;
+    for (const auto &[id, type] : outputTypes)
+        if (isHostOwnedPort(id))
+            node.signatures.outputs.emplace(id, type);
     for (const auto &[id, previous] : node.signatures.outputs)
     {
         const auto current = outputTypes.find(id);
@@ -833,7 +849,7 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
                 {
                     const auto value = node.inputs.find(port.id);
                     if (value != node.inputs.end())
-                        rewritePath(value->second.literal, port, oldDirectory, target.parent_path());
+                    rewritePath(value->second.literal, port, oldDirectory, target.parent_path());
                 }
             }
         }

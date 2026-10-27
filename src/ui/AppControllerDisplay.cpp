@@ -85,8 +85,27 @@ void AppController::Impl::updateResults()
             for (const auto &relation : portRelations(*current).active)
                 if (relation.source.node == node->id)
                     ++references[relation.source.port];
+        // An output name may only look actionable when a legal and still free downstream input
+        // exists. The answer comes from the same candidate/validate rule the binding menu uses and
+        // is recomputed when the graph changes, not on every readback.
+        const auto *flow = currentFlow();
+        if (flow && (connectableRevision != flow->structureRevision || connectableNode != node->id))
+        {
+            connectableOutputs.clear();
+            for (const auto &[id, type] : node->signatures.outputs)
+            {
+                for (const auto &candidate : candidateInputsWithState(*flow, SourcePort{node->id, id}))
+                    if (!candidate.connected && !candidate.occupied)
+                    {
+                        connectableOutputs.emplace(id, true);
+                        break;
+                    }
+            }
+            connectableRevision = flow->structureRevision;
+            connectableNode     = node->id;
+        }
         const auto lifecycle = lifecycleErrors.find(node->id);
-        outputs.setResult(tool, snapshot, references, &node->signatures.outputs,
+        outputs.setResult(tool, snapshot, references, &connectableOutputs, &node->signatures.outputs,
                           lifecycle == lifecycleErrors.end() ? nullptr : lifecycle->second);
         std::vector<std::string> imagePorts;
         for (const auto &[id, type] : node->signatures.outputs)

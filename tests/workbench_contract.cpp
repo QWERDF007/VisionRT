@@ -135,7 +135,7 @@ void outputContract()
     require(!model.capture(2), "unbound output can be captured as a typed value");
     const TypeSpec resolved{Type::Array, DType::Float32, 2};
     const TypeMap outputs{{"value", resolved}};
-    model.setResult(&tool, {}, {}, &outputs);
+    model.setResult(&tool, {}, {}, nullptr, &outputs);
     require(model.get(2).value("type").toString() == typeText(resolved), "resolved dtype/rank/layout not displayed");
     const auto lifecycle = std::make_shared<const NodeDiagnostic>(NodeDiagnostic{
         1,
@@ -143,7 +143,7 @@ void outputContract()
         NodePhase::Release,
         {-4, "释放失败", "uninitialized release detail"}
     });
-    model.setResult(&tool, {}, {}, &outputs, lifecycle);
+    model.setResult(&tool, {}, {}, nullptr, &outputs, lifecycle);
     require(isMissing(model.capture(0)->value), "release failure must not create an execution status");
     const auto releaseJson = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
     require(releaseJson.value("phase") == "release" && releaseJson.value("detail") == "uninitialized release detail",
@@ -303,6 +303,35 @@ void durationTextContract()
         require(measured.preprocess == QStringLiteral("—") && measured.postprocess == QStringLiteral("—"),
                 "unmeasured phases must stay unavailable instead of fabricating a zero");
     }
+    // A Python operator reports the real function call as its own time: the GIL wait and input
+    // mapping are preparation, the output conversion is post-processing, and the whole bridge is
+    // exactly their sum, so no stage is counted twice.
+    snapshot.timing.prepareMs            = 0;
+    snapshot.timing.initMs               = 0;
+    snapshot.timing.prepareMeasured      = false;
+    snapshot.timing.initMeasured         = false;
+    snapshot.timing.validateMeasured     = true;
+    snapshot.timing.validateMs           = 1.0;
+    snapshot.timing.pythonBridge         = true;
+    snapshot.timing.pythonInputMeasured  = true;
+    snapshot.timing.pythonCallMeasured   = true;
+    snapshot.timing.pythonOutputMeasured = true;
+    snapshot.timing.waitGilMs            = 2.0;
+    snapshot.timing.pythonInputMs        = 3.0;
+    snapshot.timing.pythonCallMs         = 4.0;
+    snapshot.timing.pythonOutputMs       = 3.0;
+    snapshot.timing.adapterExecuteMs     = 12.0;
+    const auto pythonCall = nodeTimingText(&snapshot, false);
+    require(pythonCall.toolCall == QStringLiteral("4 ms"),
+            "a Python operator must report its real call time instead of the whole adapter boundary");
+    require(pythonCall.preprocess == QStringLiteral("5 ms"),
+            "GIL wait and input mapping belong to preparation and must be counted once");
+    require(pythonCall.postprocess == QStringLiteral("4 ms"),
+            "output conversion belongs to post-processing and must be counted once");
+    snapshot.timing.pythonCallMeasured = false;
+    require(nodeTimingText(&snapshot, false).toolCall == QStringLiteral("—"),
+            "a bridge that never reached the function call must not claim operator time");
+
     const NodeSnapshot *previousSnapshots[] = {nullptr, &snapshot};
     for (const auto *previous : previousSnapshots)
     {

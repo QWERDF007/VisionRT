@@ -6,6 +6,7 @@
 #include "core/ProjectStorage.h"
 #include "runtime/RuntimeEngine.h"
 #include "runtime/SelectTool.h"
+#include "result_view.h"
 
 #include <atomic>
 #include <chrono>
@@ -328,8 +329,8 @@ void guardAndSelect()
     const auto       flagRun = [&](const Values &) -> ToolResult
     {
         if (flagMode.load() == 2)
-            return ToolResult{{3, "条件失败"}, {{"value", Missing{}}}};
-        return ToolResult{{}, {{"value", flagMode.load() == 1}}};
+            return toolResult({{"value", Missing{}}}, {3, "条件失败"});
+        return toolResult({{"value", flagMode.load() == 1}}, {});
     };
     ToolRegistry registry;
     install(registry, flag, flagRun);
@@ -337,9 +338,9 @@ void guardAndSelect()
             [&](const Values &inputs)
             {
                 ++executions;
-                return ToolResult{{}, {{"value", std::get<std::int64_t>(inputs.at("input"))}}};
+                return toolResult({{"value", std::get<std::int64_t>(inputs.at("input"))}}, {});
             });
-    install(registry, provider, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{7}}}}; });
+    install(registry, provider, [](const Values &) { return toolResult({{"value", std::int64_t{7}}}, {}); });
     registerSelectTools(registry);
     registry.addDefinition(select);
 
@@ -372,9 +373,9 @@ void guardAndSelect()
     ToolRegistry  mergeRegistry;
     const auto    failing = intTool("test.failing");
     install(mergeRegistry, flag, flagRun);
-    install(mergeRegistry, provider, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{7}}}}; });
+    install(mergeRegistry, provider, [](const Values &) { return toolResult({{"value", std::int64_t{7}}}, {}); });
     install(mergeRegistry, failing,
-            [](const Values &) { return ToolResult{{1, "分支无结果"}, {{"value", Missing{}}}}; });
+            [](const Values &) { return toolResult({{"value", Missing{}}}, {1, "分支无结果"}); });
     registerSelectTools(mergeRegistry);
     mergeRegistry.addDefinition(select);
     flagMode.store(0);
@@ -390,8 +391,10 @@ void guardAndSelect()
     mergeProject.flows.front().nodes = {selector, branchA, branchB, merge_};
     started(merge, mergeProject, mergeRegistry);
     const auto merged = finish(merge);
-    require(snapshot(merged, 2)->disposition == NodeDisposition::Failed
-                && snapshot(merged, 2)->status.code == 1,
+    // The tool ran and answered, so the framework calls it a success; the non-zero code is the
+    // tool's own verdict and stays in the published data.
+    require(snapshot(merged, 2)->disposition == NodeDisposition::Succeeded
+                && testview::status(*snapshot(merged, 2)).code == 1,
             "a failed business status stays a tool-reported terminal state, not a host block");
     require(snapshot(merged, 4)->disposition == NodeDisposition::Succeeded,
             "select must accept a branch without a value on the unselected side");

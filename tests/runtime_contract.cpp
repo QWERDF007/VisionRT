@@ -1,4 +1,5 @@
 #include "runtime/Receiver.h"
+#include "result_view.h"
 #include "runtime/RuntimeEngine.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
@@ -146,20 +147,15 @@ void branchesOverlapAndJoin()
                 ++visits;
                 arrived.notify_all();
                 if (!arrived.wait_for(lock, 2s, [&] { return active == 2; }))
-                    return ToolResult{
-                        {1, "branches did not overlap"},
-                        {{"value", Missing{}}}
-                    };
-                return ToolResult{{}, {{"value", std::int64_t{7}}}};
+                    return toolResult({{"value", Missing{}}}, {1, "branches did not overlap"});
+                return toolResult({{"value", std::int64_t{7}}}, {});
             });
     auto join = definition("test.join", {"a", "a_again", "b"});
     install(registry, join,
             [](const Values &in)
             {
-                return ToolResult{
-                    {},
-                    {{"value", std::get<std::int64_t>(in.at("a")) + std::get<std::int64_t>(in.at("a_again"))
-                                   + std::get<std::int64_t>(in.at("b"))}}};
+                return toolResult({{"value", std::get<std::int64_t>(in.at("a")) + std::get<std::int64_t>(in.at("a_again"))
+                                   + std::get<std::int64_t>(in.at("b"))}}, {});
             });
     auto a = node(1, branch), b = node(2, branch), c = node(3, join);
     bind(c, "a", 1);
@@ -186,16 +182,15 @@ void failureReplacesOldValueAndManualUsesCache()
             [&](const Values &)
             {
                 if (++calls == 1)
-                    return ToolResult{{}, {{"value", std::int64_t{42}}}};
-                return ToolResult{{}, {}};
+                    return toolResult({{"value", std::int64_t{42}}}, {});
+                return toolResult({}, {});
             });
     auto consumer = definition("test.consumer", {"input"});
     install(registry, consumer,
             [](const Values &in)
             {
-                return ToolResult{{},
-                                  {{"value", isMissing(in.at("input")) ? std::int64_t{-99}
-                                                                       : std::get<std::int64_t>(in.at("input"))}}};
+                return toolResult({{"value", isMissing(in.at("input")) ? std::int64_t{-99}
+                                                                       : std::get<std::int64_t>(in.at("input"))}}, {});
             });
     auto a = node(1, source), b = node(2, consumer);
     bind(b, "input", 1);
@@ -236,7 +231,7 @@ void initializationSuppressionRetryAndReset()
         [&](const Values &)
         {
             ++executions;
-            return ToolResult{{}, {{"value", std::int64_t{8}}}};
+            return toolResult({{"value", std::int64_t{8}}}, {});
         },
         [&]
         {
@@ -256,7 +251,7 @@ void initializationSuppressionRetryAndReset()
             {
                 if (++rounds == 3)
                     engine.requestStop();
-                return ToolResult{{}, {{"value", std::int64_t{rounds}}}};
+                return toolResult({{"value", std::int64_t{rounds}}}, {});
             });
     auto a = node(1, resource), b = node(2, observer);
     bind(b, "input", 1);
@@ -305,7 +300,7 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
             {
                 ++fastCalls;
                 gate.notify_all();
-                return ToolResult{{}, {{"value", in.at("input")}}};
+                return toolResult({{"value", in.at("input")}}, {});
             });
     auto slow = definition("test.slow");
     install(registry, slow,
@@ -316,11 +311,8 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
                 entered = true;
                 gate.notify_all();
                 if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
-                    return ToolResult{
-                        {1, "test gate timeout"},
-                        {{"value", Missing{}}}
-                    };
-                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                    return toolResult({{"value", Missing{}}}, {1, "test gate timeout"});
+                return toolResult({{"value", std::int64_t{1}}}, {});
             });
     auto a = node(1, fast), b = node(2, slow);
     a.inputs["input"].literal = std::int64_t{17};
@@ -363,7 +355,7 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
             [&](const Values &)
             {
                 ++sourceCalls;
-                return ToolResult{{}, {{"value", std::int64_t{25}}}};
+                return toolResult({{"value", std::int64_t{25}}}, {});
             });
     auto        sender  = node(1, source);
     const auto *receive = registry.find("visionrt.flow.receive");
@@ -462,10 +454,8 @@ void receiverConsumesFailures()
     install(registry, source,
             [](const Values &)
             {
-                return ToolResult{
-                    {12, "源执行失败", "source detail"},
-                    {{"value", Missing{}}}
-                };
+                // The contract has one status message, so a tool squeezes its detail into it.
+                return toolResult({{"value", Missing{}}}, {12, "源执行失败\nsource detail"});
             });
     auto sender   = node(1, source);
     auto consumer = definition("test.cursor");
@@ -482,9 +472,10 @@ void receiverConsumesFailures()
                                  auto       next       = reader->receive(request, cursor);
                                  const bool consumed
                                      = failed.disposition == ReceiveDisposition::Missing
-                                    && failed.sourceStatus.code == 12 && failed.sourceStatus.detail == "source detail"
+                                    && failed.sourceStatus.code == 12
+                                    && failed.sourceStatus.message == "源执行失败\nsource detail"
                                     && isMissing(failed.value) && next.disposition == ReceiveDisposition::Timeout;
-                                 return ToolResult{{}, {{"value", std::int64_t{consumed ? 1 : 0}}}};
+                                 return toolResult({{"value", std::int64_t{consumed ? 1 : 0}}}, {});
                              };
                              return instance;
                          });
@@ -514,11 +505,8 @@ void executionDiagnostics()
                 if (scenario == 0)
                     throw std::runtime_error("third-party detail");
                 if (scenario == 1)
-                    return {{}, {{"value", std::string("wrong type")}}};
-                return {
-                    {7, "业务条件未满足", "business detail"},
-                    {{"value", std::int64_t{42}}}
-                };
+                    return toolResult({{"value", std::string("wrong type")}}, {});
+                return toolResult({{"value", std::int64_t{42}}}, {7, "业务条件未满足", "business detail"});
             },
             [scenario] { return scenario == 3 ? ToolStatus{6, "资源未准备", "init detail"} : ToolStatus{}; });
         ProjectDefinition project;
@@ -541,7 +529,9 @@ void executionDiagnostics()
         else if (scenario == 2)
         {
             assert(result->phase == NodePhase::Execute && result->status.code == 7);
-            assert(result->status.message == "业务条件未满足" && result->status.detail == "business detail");
+            // A business status carries one message: the tool folds its own detail into it and the
+            // host forwards that exact text.
+            assert(result->status.message == "业务条件未满足\nbusiness detail" && result->status.detail.empty());
         }
         else
         {
@@ -570,12 +560,9 @@ void managementWaitsForActiveInvocation()
                 entered = true;
                 gate.notify_all();
                 if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
-                    return ToolResult{
-                        {1, "test gate timeout"},
-                        {{"value", Missing{}}}
-                    };
+                    return toolResult({{"value", Missing{}}}, {1, "test gate timeout"});
                 finishedExecution = true;
-                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                return toolResult({{"value", std::int64_t{1}}}, {});
             },
             [] { return ToolStatus{}; },
             [&]
@@ -632,7 +619,7 @@ void executionMetricsAndTimingSeparation()
         ToolResult execute(const Values &) override
         {
             std::this_thread::sleep_for(10ms);
-            return ToolResult{{}, {{"value", std::int64_t{42}}}};
+            return toolResult({{"value", std::int64_t{42}}}, {});
         }
 
         ToolStatus release() override
@@ -758,7 +745,7 @@ void crossRoundPythonMetricIsolation()
             {
                 throw std::runtime_error("simulated failure after delay in execute");
             }
-            return ToolResult{{}, {{"value", std::int64_t{42}}}};
+            return toolResult({{"value", std::int64_t{42}}}, {});
         }
 
         ToolStatus release() override
@@ -877,7 +864,7 @@ void hostBindingReceiverContract()
 
     auto availUnknown = registry.availability("test.unknown.receiver");
     assert(availUnknown.state == ToolAvailability::ImplementationUnavailable);
-    assert(availUnknown.status.message == "宿主绑定未注册：visionrt.nonexistent_binding");
+    assert(testview::status(availUnknown).message == "宿主绑定未注册：visionrt.nonexistent_binding");
 
     bool thrownUnknown = false;
     try
@@ -906,7 +893,7 @@ void hostBindingReceiverContract()
     assert(thrownMissingVal);
 
     auto source = definition("test.sender");
-    install(registry, source, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{999}}}}; });
+    install(registry, source, [](const Values &) { return toolResult({{"value", std::int64_t{999}}}, {}); });
     auto senderNode         = node(1, source);
     auto receiverNode       = node(2, *registry.find("test.custom.receiver"));
     receiverNode.initParams = {
@@ -963,7 +950,7 @@ void hostBindingReceiverContract()
     auto strSource            = definition("test.str_sender");
     strSource.outputs[0].type = {Type::String};
     install(strRegistry, strSource,
-            [](const Values &) { return ToolResult{{}, {{"value", std::string("dynamic host binding works")}}}; });
+            [](const Values &) { return toolResult({{"value", std::string("dynamic host binding works")}}, {}); });
     auto strSenderNode         = node(1, strSource);
     auto strReceiverNode       = node(2, *strRegistry.find("test.str.receiver"));
     strReceiverNode.initParams = {
@@ -1017,7 +1004,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         registerReceiveTools(registry);
         auto source = definition("test.typed.sender");
         source.outputs.front().type = type;
-        install(registry, source, [value](const Values &) { return ToolResult{{}, {{"value", value}}}; });
+        install(registry, source, [value](const Values &) { return toolResult({{"value", value}}, {}); });
         ProjectEditor editor;
         const auto sourceFlow = editor.addFlow("source");
         const auto sender = editor.addNode(sourceFlow, source, {});
@@ -1034,6 +1021,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         const auto file = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / std::filesystem::path(u8"工程.vrt.json");
         storage.save(project, file);
         const auto loaded = storage.load(file);
+        for (const auto &d : loaded.diagnostics) std::cerr << "DIAG " << d.message << "\n";
         assert(loaded.diagnostics.empty());
         assert(loaded.project.flows.front().nodes.front().signatures.outputs.at("value") == type);
         assert(engine.start(loaded.project, registry, RunMode::Once));
@@ -1043,7 +1031,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         if (type == TypeSpec{Type::Int})
         {
             auto sinkDefinition = definition("test.integer.sink", {"input"});
-            install(registry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
+            install(registry, sinkDefinition, [](const Values &) { return toolResult({{"value", std::int64_t{0}}}, {}); });
             const auto sink = editor.addNode("flow_1", sinkDefinition, {0, 1});
             editor.setSource("flow_1", sink, "input", SourcePort{receiver, "value"});
             editor.setMode("flow_1", sink, "input", BindingMode::Upstream);
@@ -1053,8 +1041,8 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
             changedRegistry.loadNativeImplementations();
             registerReceiveTools(changedRegistry);
             install(changedRegistry, source,
-                    [](const Values &) { return ToolResult{{}, {{"value", std::string("changed")}}}; });
-            install(changedRegistry, sinkDefinition, [](const Values &) { return ToolResult{{}, {{"value", std::int64_t{0}}}}; });
+                    [](const Values &) { return toolResult({{"value", std::string("changed")}}, {}); });
+            install(changedRegistry, sinkDefinition, [](const Values &) { return toolResult({{"value", std::int64_t{0}}}, {}); });
             const auto rejected = engine.start(editor.project(), changedRegistry, RunMode::Once);
             assert(!rejected && rejected.message.find("类型不兼容") != std::string::npos);
             const auto reconciled = ProjectStorage(changedRegistry).reconcile(editor.project());
@@ -1081,7 +1069,7 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
             {
                 std::unique_lock lock(gateMutex);
                 gate.wait_for(lock, 5s, [&] { return released; });
-                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                return toolResult({{"value", std::int64_t{1}}}, {});
             });
     auto sender = node(1, source);
     auto typed = *registry.find("visionrt.flow.receive");
@@ -1177,21 +1165,21 @@ void singleNodeUpstreamValidity()
             [&](const Values &)
             {
                 ++executions[0];
-                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                return toolResult({{"value", std::int64_t{1}}}, {});
             });
     auto middle = definition("test.chain.middle", {"input"});
     install(registry, middle,
             [&](const Values &in)
             {
                 ++executions[1];
-                return ToolResult{{}, {{"value", std::get<std::int64_t>(in.at("input")) + 1}}};
+                return toolResult({{"value", std::get<std::int64_t>(in.at("input")) + 1}}, {});
             });
     auto last = definition("test.chain.last", {"input"});
     install(registry, last,
             [&](const Values &in)
             {
                 ++executions[2];
-                return ToolResult{{}, {{"value", std::get<std::int64_t>(in.at("input")) + 1}}};
+                return toolResult({{"value", std::get<std::int64_t>(in.at("input")) + 1}}, {});
             });
     auto a = node(1, first), b = node(2, middle), c = node(3, last);
     bind(b, "input", 1);
@@ -1262,7 +1250,7 @@ void explicitRequirednessAtExecution()
                                 // An explicit Missing literal is normalised to the declared default;
                                 // the value is never invented for a port without one.
                                 assert(equalValues(inputs.at("limit"), PortValue{std::int64_t{5}}));
-                            return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                            return toolResult({{"value", std::int64_t{1}}}, {});
                         },
                         [&]
                         {
@@ -1301,7 +1289,7 @@ void explicitRequirednessAtExecution()
                 [&](const Values &)
                 {
                     ++executed;
-                    return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                    return toolResult({{"value", std::int64_t{1}}}, {});
                 });
         auto configured = node(1, declared);
         configured.inputs.emplace("limit", InputBinding{BindingMode::Literal, Missing{}, std::nullopt});
@@ -1368,7 +1356,7 @@ void optionalOutputsAndCachedMissing()
                                      auto instance = std::make_unique<Function>();
                                      instance->run = [](const Values &)
                                      {
-                                         return ToolResult{{}, {{"value", Missing{}}}};
+                                         return toolResult({{"value", Missing{}}}, {});
                                      };
                                      return instance;
                                  });
@@ -1378,10 +1366,10 @@ void optionalOutputsAndCachedMissing()
             [](const Values &inputs)
             {
                 assert(isMissing(inputs.at("input")));
-                return ToolResult{{}, {{"value", std::int64_t{42}}}};
+                return toolResult({{"value", std::int64_t{42}}}, {});
             });
     auto sink = definition("test.optional_sink", {"input"});
-    install(registry, sink, [](const Values &inputs) { return ToolResult{{}, {{"value", inputs.at("input")}}}; });
+    install(registry, sink, [](const Values &inputs) { return toolResult({{"value", inputs.at("input")}}, {}); });
     ProjectDefinition project;
     auto              first = node(1, source), second = node(2, middle), third = node(3, sink);
     bind(second, "input", 1);
@@ -1418,10 +1406,7 @@ void failedBusinessOutputsRemainInputs()
     install(registry, source,
             [](const Values &)
             {
-                return ToolResult{
-                    {7, "业务执行失败", "original failure detail"},
-                    {{"value", std::int64_t{99}}}
-                };
+                return toolResult({{"value", std::int64_t{99}}}, {7, "业务执行失败"});
             });
     auto required      = definition("test.required_consumer", {"input"});
     int  requiredCalls = 0;
@@ -1430,7 +1415,7 @@ void failedBusinessOutputsRemainInputs()
             {
                 ++requiredCalls;
                 assert(std::get<std::int64_t>(inputs.at("input")) == 99);
-                return ToolResult{{}, {{"value", std::int64_t{1}}}};
+                return toolResult({{"value", std::int64_t{1}}}, {});
             });
     int optionalCalls = 0;
     auto optional     = definition("test.optional_consumer", {"input"});
@@ -1440,7 +1425,7 @@ void failedBusinessOutputsRemainInputs()
             {
                 ++optionalCalls;
                 assert(std::get<std::int64_t>(inputs.at("input")) == 99);
-                return ToolResult{{}, {{"value", std::int64_t{42}}}};
+                return toolResult({{"value", std::int64_t{42}}}, {});
             });
     auto observer           = definition("test.status_consumer", {"code", "message"});
     observer.inputs[1].type = {Type::String};
@@ -1449,7 +1434,7 @@ void failedBusinessOutputsRemainInputs()
             {
                 assert(std::get<std::int64_t>(inputs.at("code")) == 7);
                 assert(std::get<std::string>(inputs.at("message")) == "业务执行失败");
-                return ToolResult{{}, {{"value", inputs.at("code")}}};
+                return toolResult({{"value", inputs.at("code")}}, {});
             });
     auto first = node(1, source), second = node(2, required), third = node(3, optional), fourth = node(4, observer);
     bind(second, "input", 1);
@@ -1462,7 +1447,8 @@ void failedBusinessOutputsRemainInputs()
     assert(engine.start(project, registry, RunMode::Once));
     const auto result = finish(engine);
     assert(snapshot(result, 1)->status.code == 7);
-    assert(snapshot(result, 1)->status.detail == "original failure detail");
+    // A tool answers with one message; the host neither rewrites it nor invents a detail.
+    assert(snapshot(result, 1)->status.message == "业务执行失败" && snapshot(result, 1)->status.detail.empty());
     assert(std::get<std::int64_t>(snapshot(result, 1)->outputs.at("value")) == 99);
     assert(requiredCalls == 1);
     assert(optionalCalls == 1);

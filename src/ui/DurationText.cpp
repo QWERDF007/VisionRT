@@ -22,16 +22,21 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 
     const auto &t = snapshot->timing;
     QString totalStr = durationText(t.totalMs);
-    QString toolCallStr = t.toolCallMeasured ? durationText(t.adapterExecuteMs) : QStringLiteral("—");
+    // Operator time is the tool's own work: the execute boundary for a native operator, the real
+    // function call for a Python one, where the bridge cost belongs to the neighbouring stages.
+    QString toolCallStr = !t.toolCallMeasured || (t.pythonBridge && !t.pythonCallMeasured)
+                            ? QStringLiteral("—")
+                            : durationText(t.pythonBridge ? t.pythonCallMs : t.adapterExecuteMs);
     QString prepareStr = t.prepareMeasured ? durationText(t.prepareMs) : QStringLiteral("—");
     QString initStr = t.initMeasured ? durationText(t.initMs) : QStringLiteral("—");
     QString validateStr = t.validateMeasured ? durationText(t.validateMs) : QStringLiteral("—");
 
-    // Tooltip phases. Python bridging is counted once: the GIL wait and input mapping are input
-    // preparation, the output copy belongs to post-processing, and the call itself is the operator
-    // time. No phase is guessed from a total minus the operator time.
-    const bool preprocessMeasured = t.prepareMeasured || t.initMeasured || t.pythonInputMs > 0.0;
-    const bool postprocessMeasured = t.validateMeasured || t.pythonOutputMs > 0.0;
+    // Tooltip phases. Bridging is counted once: the GIL wait and input mapping are input
+    // preparation, the output copy belongs to post-processing, and the function call is the
+    // operator time. Each stage keeps its own measured flag, so an unentered stage stays "—" and a
+    // real zero is still a zero.
+    const bool preprocessMeasured  = t.prepareMeasured || t.initMeasured || t.pythonInputMeasured;
+    const bool postprocessMeasured = t.validateMeasured || t.pythonOutputMeasured;
     const auto preprocessMs        = t.prepareMs + t.initMs + t.waitGilMs + t.pythonInputMs;
     const auto postprocessMs       = t.validateMs + t.pythonOutputMs;
     QString    preprocessStr  = preprocessMeasured ? durationText(preprocessMs) : QStringLiteral("—");

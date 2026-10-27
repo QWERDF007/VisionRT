@@ -21,35 +21,30 @@ const PortDefinition *firstRoiInput(const ToolDefinition &tool)
 
 // Only the seed the user is pointing at may steer the candidate. Passing the whole group would let
 // a distant ROI hijack a click on empty space, which is exactly what point-and-click must avoid.
-bool nearCursor(const ROI::value_type::value_type &record, const QPointF &cursor, double margin)
+// Seeds are stored in reference coordinates while the cursor lives in the current image, so the
+// comparison happens in one frame: the record is mapped through the per-image alignment first.
+bool nearCursor(std::span<const double> record, const std::array<double, 9> &referenceToImage,
+                const QPointF &cursor, double margin)
 {
     if (record.size() < 3)
         return false;
-    double minX = record[1], maxX = record[1], minY = record[2], maxY = record[2];
-    const auto accumulate = [&](double x, double y)
-    {
-        minX = std::min(minX, x);
-        maxX = std::max(maxX, x);
-        minY = std::min(minY, y);
-        maxY = std::max(maxY, y);
-    };
-    switch (roiKind(std::span<const double>(record)))
-    {
-    case RoiKind::Circle:
-        accumulate(record[1] - record[3], record[2] - record[3]);
-        accumulate(record[1] + record[3], record[2] + record[3]);
-        break;
-    case RoiKind::Rectangle:
-        for (const auto &corner : rectangleCorners(record))
-            accumulate(corner.x, corner.y);
-        break;
-    default:
-        for (std::size_t index = 1; index + 1 < record.size(); index += 2)
-            accumulate(record[index], record[index + 1]);
-        break;
-    }
-    return cursor.x() >= minX - margin && cursor.x() <= maxX + margin && cursor.y() >= minY - margin
-        && cursor.y() <= maxY + margin;
+    const auto bounds = transformedRoiBounds(record, referenceToImage);
+    return cursor.x() >= bounds[0].x - margin && cursor.x() <= bounds[1].x + margin
+        && cursor.y() >= bounds[0].y - margin && cursor.y() <= bounds[1].y + margin;
+}
+
+// Identity in the current frame: a reference ROI already lives in the image the user sees.
+constexpr std::array<double, 9> kNoAlignment{1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+std::array<double, 9> alignmentFor(const Matrices &matrices, int index)
+{
+    if (matrices.empty())
+        return kNoAlignment;
+    const auto &matrix = matrices[static_cast<std::size_t>(index < static_cast<int>(matrices.size()) ? index : 0)];
+    if (matrix.size() != 3 || matrix[0].size() != 3 || matrix[1].size() != 3 || matrix[2].size() != 3)
+        return kNoAlignment;
+    return {matrix[0][0], matrix[0][1], matrix[0][2], matrix[1][0], matrix[1][1],
+            matrix[1][2], matrix[2][0], matrix[2][1], matrix[2][2]};
 }
 
 const PortDefinition *mappedTarget(const ToolDefinition &tool, const InteractionMapping &mapping,
@@ -209,6 +204,19 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
             return reject(QStringLiteral("该参数由上游提供"));
     }
 
+    // The seed the user points at is stored in reference coordinates while the cursor is measured in
+    // the current image, so the frame mapping is resolved once here and the hit test uses it.
+    const auto seedAlignment = [&]
+    {
+        if (roiPort->alignmentInput.empty())
+            return kNoAlignment;
+        const auto alignment = resolvedInput(*node, roiPort->alignmentInput);
+        const auto *array    = std::get_if<Array>(&alignment);
+        if (!array || array->type() != TypeSpec{Type::Array, DType::Float64, 3})
+            return kNoAlignment;
+        return alignmentFor(array->get<Matrices>(), index);
+    }();
+
     Values inputs;
     for (const auto &[helperPort, nodeInput] : mapping.inputMap)
     {
@@ -222,7 +230,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
             if (const auto *groups = std::get_if<DataRef<ROI>>(&seedValue))
                 if (index < static_cast<int>(groups->get().size()))
                     for (const auto &record : groups->get()[static_cast<std::size_t>(index)])
-                        if (nearCursor(record, cursor, 8.0))
+                        if (nearCursor(record, seedAlignment, cursor, 8.0))
                             seeds.push_back(record);
             inputs.emplace(helperPort, DataRef<ROI>(ROI{std::move(seeds)}));
         }
@@ -338,10 +346,12 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                 if (current == node->inputs.end() || current->second.mode == BindingMode::Upstream
                     || effectiveSource(current->second))
                     continue;
-                validateValue(target->type, suggestion->second);
-                if (equalValues(current->second.literal, suggestion->second))
+                // A recommendation is a manual commit like any other: declared ranges clamp it,
+                // options fall back to their declared default, and the stored value is the legal one.
+                const auto normalized = normalizeInput(*target, suggestion->second);
+                if (equalValues(current->second.literal, normalized.value))
                     continue;
-                edits.emplace_back(nodeInput, suggestion->second);
+                edits.emplace_back(nodeInput, normalized.value);
             }
         }
         edits.insert(edits.begin(), {roiPort->id, DataRef<ROI>(std::move(groups))});

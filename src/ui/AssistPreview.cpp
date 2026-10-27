@@ -284,20 +284,12 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
         }
         validateToolValues(session.helper.inputs, request.inputs);
         auto result = instance_->execute(request.inputs);
-        outcome.status = result.status;
-        if (!result.status)
+        // The helper is a tool like any other: it owns the whole output set, status keys included.
+        outcome.status = validateToolExecution(session.helper.outputs, result.outputs);
+        if (!outcome.status)
         {
-            outcome.quality = helperMessage(result.status.message);
+            outcome.quality = helperMessage(outcome.status.message);
             return outcome;
-        }
-        for (const auto &port : session.helper.outputs)
-        {
-            if (port.id == "__status_code" || port.id == "__status_message")
-                continue;
-            const auto found = result.outputs.find(port.id);
-            if (found == result.outputs.end())
-                throw ContractError("辅助工具缺少输出端口：" + port.id);
-            validateToolOutput(port, found->second, result.status);
         }
         outcome.outputs = result.outputs;
         const auto valid = result.outputs.find(kValid);

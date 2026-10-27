@@ -77,7 +77,7 @@ public:
         outputs.emplace("quality", std::string{});
         outputs.emplace("preview", DataRef<ROI>(ROI{}));
         outputs.emplace("proposal", DataRef<ROI>(ROI{}));
-        return ToolResult{{0, "运行成功"}, std::move(outputs)};
+        return toolResult(std::move(outputs), {0, "运行成功"});
     }
 
     ToolStatus release() override

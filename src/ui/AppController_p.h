@@ -10,6 +10,7 @@
 #include "ui/Diagnostics.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
+#include "ui/RecentProjects.h"
 #include "ui/ToolTreeModel.h"
 #include "ui/WireRouter.h"
 
@@ -38,6 +39,13 @@ struct AppController::Impl
 {
     explicit Impl(AppController *owner, std::size_t workers, const QString &directory);
     ~Impl();
+
+    // Records a project that reached a committed open or a successful save-as. A repeated record of
+    // the list head is a no-op so a plain Ctrl+S never churns the menu.
+    void recordRecent(const QString &path);
+    // Newest-first history shown by the file menu; loaded once so a broken preferences file can
+    // never delay the first project open.
+    QVector<RecentProjectEntry> recentProjects;
     void requireAvailableTool(std::string_view toolId) const;
     AppController                         *q;
     std::filesystem::path                  applicationDirectory;
@@ -125,6 +133,11 @@ struct AppController::Impl
     std::optional<RoiEditTarget>         displayRoiTarget;
     quint64                              displayRequest   = 0;
     QString                              imageOutput;
+    // Connectability depends on graph structure only, so it is recomputed when the revision moves
+    // rather than on every readback or frame.
+    std::map<std::string, bool, std::less<>> connectableOutputs;
+    std::uint64_t                            connectableRevision = 0;
+    NodeId                                   connectableNode     = 0;
     int                                  index = 0;
     int                                  count = 0;
     NodeId                               displayedNode = 0;

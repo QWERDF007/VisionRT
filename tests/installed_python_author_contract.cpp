@@ -1,4 +1,5 @@
 #include "core/ProjectEditor.h"
+#include "result_view.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
 #include "core/ToolRegistry.h"
@@ -62,7 +63,7 @@ try
     PythonRuntime python;
     for (const auto &loaded : python.refresh(registry.definitions()))
     {
-        assert(loaded.status.code == 0);
+        assert(testview::status(loaded).code == 0);
         registry.setPythonImplementation(loaded.toolId, python.factory(*registry.find(loaded.toolId)), loaded.status);
     }
     const auto *read = registry.find("visionrt.image.read");

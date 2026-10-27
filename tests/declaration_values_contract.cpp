@@ -3,6 +3,7 @@
 #endif
 
 #include "core/DefinitionJson.h"
+#include "core/InputNormalizer.h"
 #include "core/ToolDefinition.h"
 #include "core/ToolValueValidation.h"
 
@@ -118,7 +119,8 @@ int main()
             "路径编辑器");
     }
 
-    // CT-02: one execution status rule shared by tools and the host.
+    // CT-02: one execution result shape. The tool writes both status keys and the host keeps the
+    // message byte for byte, blank and negative codes included.
     {
         assert(executionSuccess().code == 0);
         assert(executionSuccess().message == "运行成功");
@@ -127,22 +129,20 @@ int main()
         assert(executionSuccess("已处理 3 张").message == "已处理 3 张");
         assert(ToolStatus{}.message.empty());
 
-        const auto success = normalizeExecutionStatus({0, ""});
-        assert(success.code == 0 && success.message == "运行成功");
-        const auto described = normalizeExecutionStatus({0, "自定义说明"});
-        assert(described.message == "自定义说明");
-        const auto failure = normalizeExecutionStatus({7, " \t"});
-        assert(failure.code == 7 && failure.message == "运行失败（错误码：7）");
-        const auto business = normalizeExecutionStatus({2, "输入图像为空"});
-        assert(business.code == 2 && business.message == "输入图像为空");
-        const auto cancelled = normalizeExecutionStatus({-5, ""});
-        assert(cancelled.code == -5 && cancelled.message == "运行已取消");
-        const auto cancelledWithReason = normalizeExecutionStatus({-5, "用户停止"});
-        assert(cancelledWithReason.message == "用户停止");
+        const auto success = toolResult({{"value", std::int64_t{3}}}, {0, ""});
+        assert(success.outputs.size() == 3);
+        assert(std::get<std::int64_t>(success.outputs.at("__status_code")) == 0);
+        assert(std::get<std::string>(success.outputs.at("__status_message")).empty());
+        assert(std::get<std::int64_t>(success.outputs.at("value")) == 3);
 
-        const auto once  = normalizeExecutionStatus({-1, ""});
-        const auto twice = normalizeExecutionStatus(once);
-        assert(once.code == twice.code && once.message == twice.message);
+        const auto described = toolResult({}, {2, "输入图像为空"});
+        assert(std::get<std::int64_t>(described.outputs.at("__status_code")) == 2);
+        assert(std::get<std::string>(described.outputs.at("__status_message")) == "输入图像为空");
+
+        // A negative code is data, not a framework failure, and it survives untouched.
+        const auto negative = toolResult({}, {-7, "  保留原样"});
+        assert(std::get<std::int64_t>(negative.outputs.at("__status_code")) == -7);
+        assert(std::get<std::string>(negative.outputs.at("__status_message")) == "  保留原样");
         assert(static_cast<bool>(ToolStatus{0, ""}));
         assert(!static_cast<bool>(ToolStatus{-1, ""}));
     }
@@ -292,6 +292,49 @@ int main()
         auto optional = port("optional", {Type::Image}, false);
         validateToolValue(optional, DataRef<Image>(Image{}));
         rejects([&] { validateToolValue(optional, std::int64_t{0}); }, "optional");
+    }
+
+    // CT-04: one legalisation entry for manual edits, upstream values, declared defaults and loaded
+    // projects. It clamps declared ranges, falls back to a declared default outside the option set,
+    // keeps int64 precision and never coerces a wrong type.
+    {
+        auto choice         = port("mode", {Type::Int});
+        choice.options      = {PortValue{std::int64_t{1}}, PortValue{std::int64_t{2}}};
+        choice.defaultValue = PortValue{std::int64_t{2}};
+        const auto fallback = normalizeInput(choice, std::int64_t{5});
+        assert(equalValues(fallback.value, PortValue{std::int64_t{2}}) && !fallback.adjustment.empty());
+        auto ranged    = port("threshold", {Type::Int});
+        ranged.minimum = PortValue{std::int64_t{0}};
+        ranged.maximum = PortValue{std::int64_t{10}};
+        assert(equalValues(normalizeInput(ranged, std::int64_t{99}).value, PortValue{std::int64_t{10}}));
+        assert(equalValues(normalizeInput(ranged, std::int64_t{9007199254740993LL}).value,
+                           PortValue{std::int64_t{10}}));
+        assert(equalValues(normalizeInput(ranged, std::int64_t{-99}).value, PortValue{std::int64_t{0}}));
+
+        // Zero, false, an empty string and an empty array are real values, never Missing.
+        assert(!isMissing(normalizeInput(port("count", {Type::Int}), std::int64_t{0}).value));
+        assert(!isMissing(normalizeInput(port("flag", {Type::Bool}), false).value));
+        assert(!isMissing(normalizeInput(port("text", {Type::String}), std::string{}).value));
+        assert(!isMissing(normalizeInput(port("list", {Type::Array, DType::Int64, 1}),
+                                        Array(NestedVector<std::int64_t, 1>{})).value));
+
+        // A declared array port refuses a scalar with the same element dtype instead of reading it
+        // as an array, and an int port refuses a float even when the value is integral.
+        rejects([&] { normalizeInput(port("list", {Type::Array, DType::Int64, 1}), std::int64_t{1}); },
+                "list");
+        rejects(
+            [&]
+            {
+                normalizeInput(port("count", {Type::Int}), Array(NestedVector<std::int64_t, 1>{1}));
+            },
+            "count");
+        rejects([&] { normalizeInput(port("ratio", {Type::Float}), std::numeric_limits<double>::quiet_NaN()); },
+                "ratio");
+        rejects([&] { normalizeInput(port("ratio", {Type::Float}), std::numeric_limits<double>::infinity()); },
+                "ratio");
+        // A boolean is not an integer, and a float is not truncated into one.
+        rejects([&] { normalizeInput(ranged, true); }, "threshold");
+        rejects([&] { normalizeInput(ranged, 1.5); }, "threshold");
     }
 
     {

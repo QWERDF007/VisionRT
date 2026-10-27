@@ -72,11 +72,6 @@ struct RuntimeState
     }
 };
 
-bool isBusinessOutput(const PortDefinition &output)
-{
-    return output.id != "__status_code" && output.id != "__status_message";
-}
-
 ToolStatus errorStatus(std::int64_t code, const char *summary, const std::string &detail)
 {
     return {code, summary, detail};
@@ -114,8 +109,6 @@ ToolStatus parseStatus(const py::dict &result, const PythonStorage &storage)
     status.code = std::get<std::int64_t>(fromPython({Type::Int}, result["__status_code"], storage, "__status_code"));
     status.message
         = std::get<std::string>(fromPython({Type::String}, result["__status_message"], storage, "__status_message"));
-    if (status.code < 0)
-        throw ContractError("工具不得返回负状态码，负状态码由宿主框架保留");
     return status;
 }
 
@@ -229,7 +222,6 @@ struct ToolObjects
 class PythonTool final
     : public IToolInstance
     , public IPythonExecutionMetrics
-    , public IToolFailureContext
 {
 public:
     PythonTool(std::shared_ptr<RuntimeState> state, std::shared_ptr<const ToolDefinition> definition,
@@ -270,11 +262,6 @@ public:
         return metrics_;
     }
 
-    NodePhase failurePhase() const noexcept override
-    {
-        return phase_;
-    }
-
     ToolStatus initialize(const Values &parameters) override
     {
         phase_ = NodePhase::Initialize;
@@ -309,30 +296,22 @@ public:
 
     ToolResult execute(const Values &inputs) override
     {
-        metrics_                       = {};
-        phase_                         = NodePhase::Execute;
-        const auto fail = [&](ToolStatus status)
-        {
-            ToolResult res;
-            res.status = std::move(status);
-            for (const auto &output : definition_.outputs)
-                if (isBusinessOutput(output))
-                    res.outputs.emplace(output.id, Missing{});
-            return res;
-        };
+        metrics_ = {};
+        phase_   = NodePhase::Execute;
+        // The bridge reports a failure by throwing: a node whose bridge could not produce a full
+        // output set has no tool answer, so the host turns it into a framework diagnostic.
         if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
-            return fail({-1, "Python 实例跨代或运行时不可用，不能执行"});
-        const auto             waiting = std::chrono::steady_clock::now();
+            throw ContractError("Python 实例跨代或运行时不可用，不能执行");
+        const auto             waiting        = std::chrono::steady_clock::now();
+        metrics_.pythonBridge                 = true;
+        metrics_.pythonInputMeasured          = true;
         py::gil_scoped_acquire gil;
         metrics_.waitGilMs
             = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - waiting).count();
         if (!objects_ || objects_->isReleasingOrReleased())
-            return fail({-1, "Python 实例已释放，不能执行"});
-        auto loadStatus = ensureLoaded();
-        if (!loadStatus)
-            return fail(loadStatus);
-
-        ToolResult result;
+            throw ContractError("Python 实例已释放，不能执行");
+        if (const auto loadStatus = ensureLoaded(); !loadStatus)
+            throw ContractError(loadStatus.message);
 
         struct ScopeTimer
         {
@@ -372,6 +351,7 @@ public:
                 auto       parameters = inputDictionary(inputs, definition_.inputs, services_);
                 inputTimer.stop();
 
+                metrics_.pythonCallMeasured = true;
                 ScopeTimer callTimer(metrics_.pythonCallMs);
                 phase_   = NodePhase::Execute;
                 returned = objects_->execute(parameters);
@@ -380,60 +360,65 @@ public:
         }
         catch (const py::error_already_set &error)
         {
-            return fail(errorStatus(-1, phase_ == NodePhase::Prepare ? "Python 输入转换异常" : "Python 执行异常",
-                                    error.what()));
+            throw ContractError(std::string(phase_ == NodePhase::Prepare ? "Python 输入转换异常：" : "Python 执行异常：")
+                                + error.what());
         }
         catch (const ContractError &error)
         {
-            return fail({-2, error.what()});
+            throw ContractError(error.what());
         }
         catch (const std::exception &error)
         {
-            return fail(errorStatus(-1, phase_ == NodePhase::Prepare ? "Python 输入转换异常" : "Python 执行异常",
-                                    error.what()));
+            throw ContractError(std::string(phase_ == NodePhase::Prepare ? "Python 输入转换异常：" : "Python 执行异常：")
+                                + error.what());
         }
-        phase_ = NodePhase::Convert;
-        try
+
+        phase_                          = NodePhase::Convert;
+        metrics_.pythonOutputMeasured   = true;
+        Values     outputs;
+        ToolStatus status;
         {
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
-            auto       dictionary = resultDictionary(returned);
-            result.status         = parseStatus(dictionary, state_->storage);
-            if (dictionary.size() != businessOutputCount_ + 2)
-                throw ContractError("输出键必须与声明端口及两个状态键完全一致");
-            for (const auto &output : definition_.outputs)
+            try
             {
-                if (!isBusinessOutput(output))
-                    continue;
-                if (!dictionary.contains(py::str(output.id)))
-                    throw ContractError("缺少声明的输出键：" + output.id);
-                PortValue value;
-                try
+                auto dictionary = resultDictionary(returned);
+                status          = parseStatus(dictionary, state_->storage);
+                if (dictionary.size() != definition_.outputs.size())
+                    throw ContractError("输出键必须与声明端口及两个状态键完全一致");
+                for (const auto &output : definition_.outputs)
                 {
-                    value = fromPython(output.type, dictionary[py::str(output.id)], state_->storage, output.id);
+                    const auto key = py::str(output.id);
+                    if (!dictionary.contains(key))
+                        throw ContractError("缺少声明的输出键：" + output.id);
+                    PortValue value;
+                    try
+                    {
+                        value = fromPython(output.type, dictionary[key], state_->storage, output.id);
+                    }
+                    catch (const std::exception &error)
+                    {
+                        throw ContractError("输出端口 " + output.id + "：" + error.what());
+                    }
+                    validateToolOutput(output, value, status);
+                    outputs.emplace(output.id, std::move(value));
                 }
-                catch (const std::exception &error)
-                {
-                    throw ContractError("输出端口 " + output.id + "：" + error.what());
-                }
-                validateToolOutput(output, value, result.status);
-                result.outputs.emplace(output.id, std::move(value));
+                outputTimer.stop();
             }
-            outputTimer.stop();
-        }
-        catch (const py::error_already_set &error)
-        {
-            return fail(errorStatus(-2, "Python 输出转换异常", error.what()));
-        }
-        catch (const ContractError &error)
-        {
-            return fail({-2, error.what()});
-        }
-        catch (const std::exception &error)
-        {
-            return fail(errorStatus(-2, "Python 输出转换异常", error.what()));
+            catch (const py::error_already_set &error)
+            {
+                throw ContractError(std::string("Python 输出转换异常：") + error.what());
+            }
+            catch (const ContractError &error)
+            {
+                throw ContractError(error.what());
+            }
+            catch (const std::exception &error)
+            {
+                throw ContractError(std::string("Python 输出转换异常：") + error.what());
+            }
         }
         phase_ = NodePhase::Execute;
-        return result;
+        return toolResult(std::move(outputs), std::move(status));
     }
 
     ToolStatus releaseWithGil() noexcept
@@ -570,8 +555,6 @@ private:
     std::shared_ptr<RuntimeState>         state_;
     std::shared_ptr<const ToolDefinition> definitionOwner_;
     const ToolDefinition                 &definition_;
-    const std::size_t                     businessOutputCount_ = static_cast<std::size_t>(
-        std::count_if(definition_.outputs.begin(), definition_.outputs.end(), isBusinessOutput));
     ToolServices                 services_;
     std::shared_ptr<PythonLoadState> sharedLoadState_;
     std::shared_ptr<ToolObjects> objects_;
@@ -752,14 +735,18 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
 {
     py::gil_scoped_acquire gil;
     auto state = impl_->state;
+    // A tool instance always works on the normalised contract, so the output key set it demands
+    // from the Python function matches what the host will validate.
+    ToolDefinition normalized = definition;
+    normalizeToolDefinition(normalized);
     std::shared_ptr<PythonLoadState> loadState;
-    const auto it = state->implementations.find(definition.id);
+    const auto it = state->implementations.find(normalized.id);
     if (it != state->implementations.end())
         loadState = it->second.loadState;
     else
-        loadState = std::make_shared<PythonLoadState>(ToolStatus{-3, "Python 实现未注册：" + definition.id});
+        loadState = std::make_shared<PythonLoadState>(ToolStatus{-3, "Python 实现未注册：" + normalized.id});
 
-    auto defPtr = std::make_shared<const ToolDefinition>(definition);
+    auto defPtr = std::make_shared<const ToolDefinition>(std::move(normalized));
     auto createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState,
                        generation = state->generation](
                           const PlatformToolServices &services) -> std::unique_ptr<IToolInstance>

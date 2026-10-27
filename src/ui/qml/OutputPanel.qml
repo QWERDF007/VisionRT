@@ -114,6 +114,7 @@ Rectangle {
                     tooltip: data.tooltip || "",
                     diagnostic: data.diagnostic || false,
                     count: data.count || 0,
+                    connectable: data.connectable === true,
                     system: data.system === true
                 }
             }
@@ -144,14 +145,19 @@ Rectangle {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                 font: QuiFont.Body
-                color: cell.options.column === 0 && !cell.options.system ? QuiColor.Highlight : QuiColor.FontPrimary
+                // Only a port with a legal, still free downstream input looks actionable. An existing
+                // connection keeps its reference count but never stands in for a new target.
+                color: cell.options.column === 0 && cell.options.connectable ? QuiColor.Highlight : QuiColor.FontPrimary
                 text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system && root.relations ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
             }
             MouseArea {
                 id: cellPointer; anchors.fill: parent; hoverEnabled: true
                 acceptedButtons: Qt.RightButton
                 onClicked: function(mouse) {
-                    if (cell.options.column === 0 && !cell.options.system) {
+                    if (cell.options.column === 0) {
+                        // The name menu is a connection menu: no candidate and no existing relation
+                        // means there is nothing to offer, so no menu opens at all.
+                        if (!cell.options.connectable && (cell.options.count || 0) === 0) return
                         root.showNameMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
                     } else {
                         root.showDataMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))

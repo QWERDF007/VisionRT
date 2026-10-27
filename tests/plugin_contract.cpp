@@ -3,6 +3,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
+#include "result_view.h"
 #include "core/DefinitionJson.h"
 #include "plugins/PluginLoader.h"
 
@@ -81,15 +82,15 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     assert(initStatus1.code == 0);
 
     auto res1 = adapter1->execute({});
-    assert(res1.status.code == 0);
+    assert(testview::status(res1).code == 0);
     assert(std::get<std::int64_t>(res1.outputs.at("count")) == 11);
 
     auto res2 = adapter1->execute({});
-    assert(res2.status.code == 0);
+    assert(testview::status(res2).code == 0);
     assert(std::get<std::int64_t>(res2.outputs.at("count")) == 12);
 
     auto res3 = adapter1->execute({});
-    assert(res3.status.code == 0);
+    assert(testview::status(res3).code == 0);
     assert(std::get<std::int64_t>(res3.outputs.at("count")) == 13);
 
     auto relStatus1 = adapter1->release();
@@ -104,7 +105,7 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     assert(initStatus2.code == 0);
 
     auto res4 = adapter2->execute({});
-    assert(res4.status.code == 0);
+    assert(testview::status(res4).code == 0);
     assert(std::get<std::int64_t>(res4.outputs.at("count")) == 101);
 
     assert(adapter2->release().code == 0);
@@ -150,7 +151,7 @@ void faultInjection(const std::filesystem::path &modulePath)
         }
         catch (const RegistryError &error)
         {
-            assert(error.status.code == -3 && !error.status.message.empty());
+            assert(testview::status(error).code == -3 && !testview::status(error).message.empty());
         }
     }
 
@@ -159,8 +160,9 @@ void faultInjection(const std::filesystem::path &modulePath)
     auto failInitAdapter = loader->createAdapter("test.plugin.fail_init", services);
     auto failInitStatus  = failInitAdapter->initialize({});
     assert(failInitStatus.code == 7);
-    auto failExec = failInitAdapter->execute({});
-    assert(failExec.status.code == 7);
+    // A tool the framework never initialised has no answer to give; the failure surfaces as the
+    // diagnostic the node reports.
+    assert(testview::executionFailure(*failInitAdapter) == "Simulated plugin initialization failure");
 }
 
 void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &modulePath)
@@ -187,9 +189,9 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
         }
         catch (const RegistryError &error)
         {
-            assert(error.status.code == code);
+            assert(testview::status(error).code == code);
             if (code == 5)
-                assert(error.status.detail == "factory diagnostic");
+                assert(testview::status(error).detail == "factory diagnostic");
         }
     }
     assert(releaseCalls() == before + 1);
@@ -534,7 +536,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     initParams.emplace("initial", std::int64_t{10});
     assert(instance->initialize(initParams).code == 0);
     auto counterResult = instance->execute({});
-    assert(counterResult.status.code == 0);
+    assert(testview::status(counterResult).code == 0);
     assert(std::get<std::int64_t>(counterResult.outputs.at("count")) == 11);
     assert(instance->release().code == 0);
 
@@ -544,7 +546,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     Values functionInputs;
     functionInputs.emplace("x", std::int64_t{21});
     auto functionResult = function->execute(functionInputs);
-    assert(functionResult.status.code == 0);
+    assert(testview::status(functionResult).code == 0);
     assert(std::get<std::int64_t>(functionResult.outputs.at("y")) == 42);
     assert(function->release().code == 0);
 
@@ -1046,7 +1048,7 @@ void registryIntegration(const std::filesystem::path &modulePath)
 
     assert(instance->initialize({}).code == 0);
     auto res = instance->execute({});
-    assert(res.status.code == 0);
+    assert(testview::status(res).code == 0);
     assert(std::get<std::int64_t>(res.outputs.at("count")) == 1);
     assert(instance->release().code == 0);
 }
@@ -1104,7 +1106,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
                 if (ad && ad->initialize({}).code == 0)
                 {
                     auto r = ad->execute({});
-                    if (r.status.code == 0)
+                    if (testview::status(r).code == 0)
                     {
                         val1 = std::get<std::int64_t>(r.outputs.at("val"));
                     }
@@ -1125,7 +1127,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
                 if (ad && ad->initialize({}).code == 0)
                 {
                     auto r = ad->execute({});
-                    if (r.status.code == 0)
+                    if (testview::status(r).code == 0)
                     {
                         val2 = std::get<std::int64_t>(r.outputs.at("val"));
                     }
@@ -1202,7 +1204,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     const auto state = registry.availability("test.plugin.a");
     if (state.state != ToolAvailability::Available)
     {
-        std::cerr << "Unavailable: " << state.status.message << "\n";
+        std::cerr << "Unavailable: " << testview::status(state).message << "\n";
     }
     assert(state.state == ToolAvailability::Available);
 
@@ -1216,7 +1218,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     }
     assert(initStatus.code == 0);
     auto res = instance->execute({});
-    assert(res.status.code == 0);
+    assert(testview::status(res).code == 0);
     assert(std::get<std::int64_t>(res.outputs.at("val")) == 111);
 
     // Cross-release snapshot check: hold output while releasing adapter and loader
@@ -1290,7 +1292,7 @@ static int runMissingDepChild(const std::filesystem::path &pluginAPath, const st
         return 5;
     }
     auto res = ad->execute({});
-    if (res.status.code != 0)
+    if (testview::status(res).code != 0)
     {
         std::cerr << "Failed to execute ok adapter\n";
         return 6;
