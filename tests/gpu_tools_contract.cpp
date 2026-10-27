@@ -53,8 +53,8 @@ int main(int argc, char **argv)
         if (!temporary.isValid())
             throw std::runtime_error("Cannot create the GPU project directory");
         loaded.project.path = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / "gpu.vrt.json";
-        reader.inputs.at("mode").literal             = std::string("file");
         reader.inputs.at("path").literal             = std::string(image.generic_string());
+        reader.inputs.at("count").literal            = std::int64_t{1}; // single-image detection reference
         detector.initParams.at("model_path")         = std::string(weights.generic_string());
         detector.initParams.at("engine_output_path") = std::string(enginePath.generic_string());
         struct Reference

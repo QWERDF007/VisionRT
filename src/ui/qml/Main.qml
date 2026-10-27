@@ -510,23 +510,6 @@ ApplicationWindow {
                 }
             }
 
-            // Diagnostics when present
-            RowLayout {
-                visible: app.diagnostic.length > 0
-                spacing: 5
-                QuiTextIcon {
-                    iconSource: QuiFontIcon.Warning
-                    iconSize: 12
-                    iconColor: "#d96b27"
-                }
-                QuiText {
-                    Layout.maximumWidth: window.width * 0.40
-                    elide: Text.ElideRight
-                    text: app.diagnostic
-                    color: "#d96b27"
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
-                }
-            }
             Item { Layout.fillWidth: true }
             QuiText {
                 text: "说明文档"
@@ -535,17 +518,18 @@ ApplicationWindow {
                 MouseArea { id: docMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: authorHelp.open() }
             }
             Rectangle {
-                Layout.preferredHeight: 20; Layout.preferredWidth: noticeRow.width + 10; radius: 3
-                color: noticeMouse.containsMouse ? "#feebe9" : "transparent"
+                Layout.preferredHeight: 20; Layout.preferredWidth: logRow.width + 12; radius: 3
+                color: logMouse.containsMouse ? "#eaf2fd" : "transparent"
                 RowLayout {
-                    id: noticeRow; anchors.centerIn: parent; spacing: 4
-                    QuiTextIcon { iconSource: QuiFontIcon.Warning; iconSize: Theme.iconSizeSmall; iconColor: Theme.error }
-                    QuiText { text: "提示信息"; font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall }); color: Theme.error }
+                    id: logRow; anchors.centerIn: parent; spacing: 4
+                    width: implicitWidth
+                    QuiTextIcon { iconSource: QuiFontIcon.Document; iconSize: Theme.iconSizeSmall; iconColor: Theme.textSecondary }
+                    QuiText { text: "日志"; font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall }); color: Theme.textSecondary }
                 }
                 MouseArea {
-                    id: noticeMouse; anchors.fill: parent; hoverEnabled: true
+                    id: logMouse; anchors.fill: parent; hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: noticeDialog.open()
+                    onClicked: logDialog.showAndRaise()
                 }
             }
         }
@@ -585,20 +569,9 @@ ApplicationWindow {
         useNegativeButton: false; positiveText: "关闭"
         message: "工具声明与实现由 VisionTools 维护。通过工具库打包脚本生成 ZIP，再由 VisionRT 部署入口安装。安装元数据只读；修改后重新打包，在退出宿主后更换工具包。"
     }
-    WorkbenchTextDialog {
-        id: noticeDialog; objectName: "applicationDiagnosticDialog"; title: "应用操作提示"
-        text: app.diagnostics.join("\n\n")
-        useNeutralButton: true; neutralText: "查看 JSON"
-        onNeutralClickListener: function() {
-            noticeJsonDialog.text = app.diagnosticsJson()
-            noticeJsonDialog.open()
-        }
-        useNegativeButton: true; negativeText: "复制 JSON"
-        onNegativeClickListener: function() { app.copyDiagnostics() }
-    }
-    WorkbenchTextDialog {
-        id: noticeJsonDialog; objectName: "applicationDiagnosticJsonDialog"; title: "应用诊断 JSON"
-        monospace: true
+    LogDialog {
+        id: logDialog; objectName: "logWindow"
+        transientParent: window
     }
     QuiInfoBar { id: info; root: window.contentItem; maxWidth: Math.min(520, window.width - 40) }
     Timer { id: toastExpiry; interval: 6000; onTriggered: { info.clearAllInfo(); window.toastCount = 0 } }

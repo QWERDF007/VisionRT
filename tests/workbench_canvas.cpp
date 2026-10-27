@@ -671,7 +671,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     {
         return canvas->property("hoverCardVisible").toBool()
             && nodeMap(remainingId).value("state").toString() == QStringLiteral("idle")
-            && nodeMap(remainingId).value("timingText").toString() == QStringLiteral("未运行");
+            && nodeMap(remainingId).value("timingText").toString() == QStringLiteral("—");
     }, 1000), "visible hover card fabricated an execution result before the first run");
     app.runNode();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "long-name rendering fixture did not execute");

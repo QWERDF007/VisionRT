@@ -193,7 +193,9 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     auto add = [&](std::string id, std::string name, TypeSpec type, bool system)
     {
         PortValue value = Missing{};
-        if (snapshot)
+        // A framework-stopped node has no tool answer: its diagnostic must never appear as port
+        // data. Only a real ToolResult fills the two status rows.
+        if (snapshot && (!system || snapshot->toolResultPublished))
         {
             if (id == "__status_code")
                 value = snapshot->status.code;

@@ -36,6 +36,8 @@ class AppController : public QObject
     Q_PROPERTY(QString selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
     Q_PROPERTY(QAbstractItemModel *toolModel READ toolModel CONSTANT)
     Q_PROPERTY(QAbstractItemModel *outputModel READ outputModel CONSTANT)
+    // 日志窗口模型：服务未启动时为空，启动后按可见性批量追加
+    Q_PROPERTY(QAbstractItemModel *logModel READ logModel CONSTANT)
     Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
     Q_PROPERTY(QString timingText READ timingText NOTIFY timingChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY projectChanged)
@@ -84,6 +86,7 @@ public:
     QString             selectedImageOutput() const;
     QAbstractItemModel *toolModel() const;
     QAbstractItemModel *outputModel() const;
+    QAbstractItemModel *logModel();
     QVariantList        searchResults() const;
     QString             timingText() const;
     bool                dirty() const;
@@ -123,7 +126,6 @@ public:
     Q_INVOKABLE bool         bindInput(const QVariantMap &context, const QString &node, const QString &output);
     Q_INVOKABLE bool         unbindInput(const QVariantMap &context);
     Q_INVOKABLE QVariantList cascadeOutputCandidates(const QVariantMap &context) const;
-    Q_INVOKABLE QVariantList relationTargets(const QVariantMap &context) const;
     Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, const QString &input);
     Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, const QString &input);
     Q_INVOKABLE void         runOnce();
@@ -140,6 +142,10 @@ public:
     Q_INVOKABLE bool         isCloseReady() const;
     Q_INVOKABLE bool         isClosing() const;
     Q_INVOKABLE void         resolveUnsaved(const QString &decision, const QString &savePath = {});
+    // The log window reports whether it can actually show records; hidden windows stay passive.
+    Q_INVOKABLE void         setLogViewActive(bool active);
+    // A field that rejects its own draft never reaches setParameter; the window still records it.
+    Q_INVOKABLE void         logParameterDraftRejected(const QString &detail);
     Q_INVOKABLE bool         save(const QString &path = {});
     Q_INVOKABLE void         setImageIndex(int index);
     Q_INVOKABLE void         setImageOutput(const QString &output);

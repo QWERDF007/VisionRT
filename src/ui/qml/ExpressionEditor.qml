@@ -38,7 +38,7 @@ Dialog {
         openNodeWithDraft(id, "")
     }
 
-    function openNodeWithDraft(id, initialDraft) {
+    function openNodeWithDraft(id, initialDraft, hasDraft) {
         nodeId = id
         let config = app.expressionConfig(id)
         model = config.model || "expression"
@@ -46,13 +46,20 @@ Dialog {
         nextSeq = config.nextPortSeq || 1
         variables = (config.variables || []).map(function(item) { return Object.assign({}, item) })
         program = (config.program || []).map(function(item) { return Object.assign({}, item) })
-        if (initialDraft !== undefined && initialDraft !== null && initialDraft !== "") {
-            if (program.length === 1) {
-                program[0].expression = initialDraft
-            } else if (program.length === 0) {
-                addProgram()
-                program[0].expression = initialDraft
+        // The presence of a draft is explicit: an empty draft is the user clearing the field, not
+        // "no draft", so the committed formula must not come back just because the text is empty.
+        if (hasDraft === true) {
+            let rows = program.slice()
+            if (rows.length === 0) {
+                rows.push({ portId: allocatePort(), name: "结果1", symbol: "r1", expression: "",
+                            type: conditionMode ? "Bool" : "Float", dtype: "", rank: -1,
+                            exposed: !conditionMode })
             }
+            if (rows.length === 1) {
+                rows[0] = Object.assign({}, rows[0])
+                rows[0].expression = initialDraft === undefined || initialDraft === null ? "" : initialDraft
+            }
+            program = rows
         }
         open()
     }

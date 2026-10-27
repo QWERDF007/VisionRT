@@ -18,7 +18,6 @@ ColumnLayout {
     // The source button only reports the input mode. It never infers the mode from a
     // source, from the guard text or from this round's success.
     readonly property bool upstream: parameter.inputMode === "upstream"
-    readonly property bool sourceMissing: upstream && !root.parameter.source && !root.parameter.init
     // Condition rows edit the single `condition` port, ordinary rows their own port.
     readonly property string bindingPort: root.conditionRow ? "condition" : root.parameter.id
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && !app.busy
@@ -32,8 +31,8 @@ ColumnLayout {
     readonly property int decimalPlaces: parameter.decimals === undefined || parameter.decimals < 0 ? 6 : parameter.decimals
     readonly property int labelWidth: 96
     readonly property int actionWidth: Theme.paramActionBtnWidth
-    readonly property font editorFont: Theme.bodyFont
-    spacing: 6
+    readonly property font editorFont: Theme.parameterFont
+    spacing: Theme.parameterRowSpacing
 
     function getPanel() {
         if (root.panel) return root.panel
@@ -52,14 +51,14 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 6
-        implicitHeight: Theme.paramEditorHeight
+        implicitHeight: Theme.parameterRowHeight
 
         QuiText {
             objectName: "parameterLabel"
             text: root.parameter.name; Layout.preferredWidth: root.labelWidth
             Layout.alignment: Qt.AlignVCenter
-            font: Theme.bodyFont
-            color: Theme.paramLabelText
+            font: Theme.parameterFont
+            color: Theme.parameterTextColor
             elide: Text.ElideRight
             MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
             QuiToolTip {
@@ -83,15 +82,10 @@ ColumnLayout {
             color: frameHover.hovered ? Theme.paramRowHoverBg : Theme.paramEditorBg
             clip: true
 
-            readonly property color frameBorderColor: {
-                if (root.sourceMissing)
-                    return Theme.sourceFieldErrorColor
-                if (editorLoader.item && editorLoader.item.invalid)
-                    return Theme.error
-                if (frameHover.hovered || isEditorFocused)
-                    return Theme.paramEditorFocusBorder
-                return Theme.paramEditorBorder
-            }
+            // Validation never paints the field red: an unnormalisable draft stays visible and is
+            // reported to the log, while the committed value keeps its own state.
+            readonly property color frameBorderColor: (frameHover.hovered || isEditorFocused)
+                    ? Theme.paramEditorFocusBorder : Theme.paramEditorBorder
 
             readonly property bool isEditorFocused: {
                 if (!editorLoader.item) return false
@@ -227,16 +221,9 @@ ColumnLayout {
                 subOptions: []
             })
         }
-        if (!candidates || candidates.length === 0) {
-            if (!root.parameter.source) {
-                groups.push({
-                    label: "无可用兼容输出",
-                    value: "__none__",
-                    subOptions: []
-                })
-            }
+        // An empty candidate list stays empty: no placeholder row is invented for it.
+        if (!candidates || candidates.length === 0)
             return groups
-        }
         let nodeMap = {}
         for (let i = 0; i < candidates.length; ++i) {
             let c = candidates[i]
@@ -269,7 +256,7 @@ ColumnLayout {
             implicitHeight: Theme.paramEditorHeight
             savedValue: root.currentUpstreamValue()
             Accessible.name: root.parameter.name
-            displayText: root.parameter.source ? root.parameter.source : "请选择"
+            displayText: root.parameter.source || ""
             optionGroups: root.buildBindingGroups()
             onAboutToOpen: {
                 bindingContext = app.portContext(root.bindingPort)
@@ -311,6 +298,7 @@ ColumnLayout {
     Component {
         id: integerEditor
         IntegerParameterEditor {
+            parameterId: root.parameter.id
             flat: true
             font: root.editorFont
             valueText: root.valueText
@@ -336,6 +324,12 @@ ColumnLayout {
             maxValue: root.maximumValue
             Component.onCompleted: spin.value = root.numberValue
             commitValue: function(number) { return root.commit(String(number)) }
+            // The shared editor repaints itself red on a rejected draft; parameter rows keep one
+            // text colour and leave the draft in place for correction.
+            onInvalidChanged: if (invalid) {
+                app.logParameterDraftRejected(root.parameter.id + "：" + text)
+                invalid = false
+            }
             Connections {
                 target: root
                 function onValueTextChanged() { spin.value = root.numberValue; spin.invalid = false }
@@ -396,7 +390,7 @@ ColumnLayout {
                     if (model[index].value === root.valueText) return index
                 return -1
             }
-            displayText: currentIndex < 0 ? root.valueText + "（当前不可用）" : model[currentIndex].label
+            displayText: currentIndex < 0 ? root.valueText : model[currentIndex].label
             onActivated: function(index) { root.commit(model[index].value) }
             HoverHandler { id: choiceHover }
             QuiToolTip {
@@ -413,12 +407,6 @@ ColumnLayout {
             flat: true
             readOnly: !root.parameter.isSingleFormula
             font: Theme.monoFont
-            placeholderText: {
-                if (root.guardRow) return root.upstream ? "请选择上层布尔输出" : "无（始终执行）"
-                if (root.parameter.editor === "select_type") return "请选择合流类型"
-                if (root.conditionRow) return "请输入条件公式"
-                return "请输入公式"
-            }
             actionText: {
                 if (root.parameter.editor === "guard") return "设置执行条件"
                 if (root.parameter.editor === "select_type") return "选择合流类型"
@@ -426,12 +414,20 @@ ColumnLayout {
                 return "编辑公式"
             }
             property string committedText: ""
+            // hasDraft records that the field holds user text, including an empty string. Without
+            // it an empty draft is indistinguishable from "never edited" and would reload the old
+            // formula on the next edit or cancel.
+            property bool hasDraft: false
+            onTextChanged: if (inputItem.activeFocus) hasDraft = true
             function sync(force) {
                 const currentText = root.parameter.displayText || ""
                 committedText = currentText
-                if (force || !inputItem.activeFocus) {
+                // An existing draft survives parameter refreshes: clearing the field and opening
+                // the formula editor must not silently restore the committed formula.
+                if (force || (!inputItem.activeFocus && !hasDraft)) {
                     text = committedText
                     invalid = false
+                    hasDraft = false
                 }
             }
             Component.onCompleted: sync(true)
@@ -439,12 +435,13 @@ ColumnLayout {
                 if (root.parameter.isSingleFormula) {
                     let ok = app.applySingleExpression(root.nodeId, commitText)
                     invalid = !ok
-                    if (ok) committedText = commitText
+                    if (ok) { committedText = commitText; hasDraft = false }
                 }
             }
             onCancelRequested: {
                 text = committedText
                 invalid = false
+                hasDraft = false
             }
             onActionRequested: {
                 let p = root.getPanel()
@@ -454,7 +451,8 @@ ColumnLayout {
                 } else if (root.parameter.editor === "select_type") {
                     p.openSelectTypeEditor(root.nodeId)
                 } else {
-                    p.openExpressionEditor(root.nodeId, field.text)
+                    p.openExpressionEditor(root.nodeId, field.text,
+                                           field.hasDraft || field.text !== field.committedText)
                 }
             }
             Connections {
@@ -471,7 +469,6 @@ ColumnLayout {
         ParameterTextField {
             id: field
             flat: true
-            placeholderText: "请选择"
             property string committedText: ""
             function sync(force) {
                 const dirty = text !== committedText
@@ -669,7 +666,6 @@ ColumnLayout {
         id: arrayEditor
         ParameterTextField {
             id: field
-            placeholderText: "[]"
             property string committedText: ""
 
             actionIcon: (text.length > 0 && text !== "[]") ? QuiFontIcon.Clear : 0

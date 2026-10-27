@@ -106,8 +106,13 @@ void parameterStatesContract(visionrt::AppController &app)
     QTest::keyClick(window, Qt::Key_A, Qt::ControlModifier);
     QTest::keyClick(window, Qt::Key_X);
     QTest::keyClick(window, Qt::Key_Return);
-    require(ratio->property("invalid").toBool(), "actual numeric field did not reject an invalid keyboard draft");
-    capture("invalid");
+    // Validation still rejects the draft, but the field keeps it without painting itself red and
+    // the committed value is untouched.
+    require(ratioInput->property("text").toString() == QStringLiteral("x"),
+            "a rejected numeric draft was replaced instead of kept for correction");
+    require(!ratio->property("invalid").toBool(),
+            "a rejected numeric draft still paints the field as invalid");
+    capture("rejected_draft");
     QTest::keyClick(window, Qt::Key_Escape);
     auto *choiceRow = findItem(findItem, panel, "parameter_mode");
     QQuickItem *choice = nullptr;

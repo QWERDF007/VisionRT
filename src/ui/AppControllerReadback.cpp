@@ -260,25 +260,8 @@ void AppController::requestOutputText(const QVariantMap &context, bool copy, boo
         return;
     if (diagnostic && !captured->diagnostic && !captured->lifecycle)
         return;
-    auto estimated
-        = diagnostic && captured->diagnostic
-            ? (captured->diagnostic->status.message.size() + captured->diagnostic->status.detail.size()) * 6 + 1024
-            : OutputModel::estimatedTextBytes(*captured);
-    if (diagnostic && captured->lifecycle)
-        estimated
-            += (captured->lifecycle->status.message.size() + captured->lifecycle->status.detail.size()) * 6 + 1024;
-    if (estimated > 16 * 1024 * 1024
-        && (impl_->approvedTextContext != textTarget(context) || impl_->approvedCopy != copy
-            || impl_->approvedDiagnostic != diagnostic))
-    {
-        impl_->approvedTextContext = textTarget(context);
-        impl_->approvedCopy        = copy;
-        impl_->approvedDiagnostic  = diagnostic;
-        emit outputTextReady(QStringLiteral("完整数据预计约 %1 MiB。再次点击同一查看/复制操作以确认；不会截断全文。")
-                                 .arg(static_cast<double>(estimated) / (1024 * 1024), 0, 'f', 1));
-        return;
-    }
-    impl_->approvedTextContext.clear();
+    // Copy always runs; a large value is formatted on the bounded worker rather than gated behind a
+    // second confirmation dialog, and it is never truncated into something that looks complete.
     const auto generation = impl_->generation;
     auto       mailbox    = std::make_shared<Impl::TextMailbox>();
     mailbox->generation   = generation;

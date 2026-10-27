@@ -408,6 +408,30 @@ def copy_dependencies(
             continue
         if not dependency_matches_config(dep, config):
             continue
+        manifest_name = str(dep.get("runtime_manifest") or "")
+        if manifest_name:
+            # The build wrote the exact libraries it linked for this configuration; scanning the
+            # vendor directory instead would deploy debug or unused DLLs.
+            manifest = build_dir / manifest_name.replace("{config}", config)
+            if not manifest.is_file():
+                missing_dependencies.append(f"{dep_name} (manifest: {manifest})")
+                continue
+            exact = [Path(line.strip()) for line in manifest.read_text(encoding="utf-8").splitlines()
+                     if line.strip()]
+            if not exact:
+                missing_dependencies.append(f"{dep_name} (empty manifest: {manifest})")
+                continue
+            for runtime in exact:
+                source = runtime.resolve(strict=True)
+                destination_key = runtime.name.lower()
+                prev_source = copied_runtimes.get(destination_key)
+                if prev_source is not None:
+                    if prev_source != source:
+                        warn(f"runtime dependency collision for {runtime.name}: {prev_source} and {source}")
+                    continue
+                copy_file(source, target_dir / runtime.name)
+                copied_runtimes[destination_key] = source
+            continue
         patterns = dependency_patterns(dep, platform)
         if not patterns:
             continue

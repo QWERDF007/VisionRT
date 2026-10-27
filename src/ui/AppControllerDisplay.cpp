@@ -70,7 +70,7 @@ void AppController::Impl::updateResults()
     }
     const auto *node = currentNode();
     displayedNode    = node ? node->id : 0;
-    const auto *tool = currentTool();
+    const auto *tool = effectiveTool();
     if (!node)
     {
         outputs.clear();
@@ -87,30 +87,18 @@ void AppController::Impl::updateResults()
                     ++references[relation.source.port];
         // An output name may only look actionable when a legal and still free downstream input
         // exists. The answer comes from the same candidate/validate rule the binding menu uses and
-        // is recomputed when the graph changes, not on every readback.
-        const auto *flow = currentFlow();
-        if (flow && (connectableRevision != flow->structureRevision || connectableNode != node->id))
-        {
-            connectableOutputs.clear();
-            for (const auto &[id, type] : node->signatures.outputs)
-            {
-                for (const auto &candidate : candidateInputsWithState(*flow, SourcePort{node->id, id}))
-                    if (!candidate.connected && !candidate.occupied)
-                    {
-                        connectableOutputs.emplace(id, true);
-                        break;
-                    }
-            }
-            connectableRevision = flow->structureRevision;
-            connectableNode     = node->id;
-        }
+        // is cached per project/flow/revision/node, not per readback or frame.
+        if (const auto *flow = currentFlow())
+            refreshConnectable(*flow, *node);
         const auto lifecycle = lifecycleErrors.find(node->id);
-        outputs.setResult(tool, snapshot, references, &connectableOutputs, &node->signatures.outputs,
+        outputs.setResult(tool, snapshot, references, connectable.valid ? &connectable.connectable : nullptr,
+                          &node->signatures.outputs,
                           lifecycle == lifecycleErrors.end() ? nullptr : lifecycle->second);
         std::vector<std::string> imagePorts;
-        for (const auto &[id, type] : node->signatures.outputs)
-            if (type.type == Type::Image)
-                imagePorts.push_back(id);
+        if (tool)
+            for (const auto &port : tool->outputs)
+                if (port.type.type == Type::Image && node->signatures.outputs.contains(port.id))
+                    imagePorts.push_back(port.id);
         if (std::find(imagePorts.begin(), imagePorts.end(), imageOutput.toStdString()) == imagePorts.end())
             imageOutput = imagePorts.empty() ? QString{} : workbench::q(imagePorts.front());
     }
@@ -161,7 +149,7 @@ void AppController::Impl::updateDisplay()
         if ((!batch || batch->get().empty()) && executionFailed && currentNode())
         {
             const auto *node = currentNode();
-            if (const auto *tool = currentTool())
+            if (const auto *tool = effectiveTool())
             {
                 const auto *selectedImage = workbench::port(tool->outputs, imageOutput.toStdString());
                 if (selectedImage && !selectedImage->sameGeometryAsInput.empty())
@@ -211,7 +199,7 @@ void AppController::Impl::updateDisplay()
         const auto *declaration = parameter(roi->input, false);
         const auto *node = currentNode();
         imageInput = declaration->imageInput;
-        if (const auto *tool = currentTool())
+        if (const auto *tool = effectiveTool())
             for (const auto &port : tool->inputs)
                 if (port.id != roi->input && port.type.type == Type::ROI && port.imageInput == imageInput)
                 {
@@ -221,7 +209,7 @@ void AppController::Impl::updateDisplay()
     }
     else if (const auto *node = currentNode())
     {
-        if (const auto *tool = currentTool())
+        if (const auto *tool = effectiveTool())
         {
             const auto *image = workbench::port(tool->outputs, imageOutput.toStdString());
             if (image)
@@ -272,7 +260,7 @@ void AppController::Impl::updateDisplay()
             }
         }
     }
-    if (const auto *tool = currentTool(); tool && snapshot)
+    if (const auto *tool = effectiveTool(); tool && snapshot)
         for (const auto &port : tool->outputs)
         {
             if (port.type.type != Type::ROI)
@@ -382,7 +370,7 @@ void AppController::attachViewport(QObject *object)
                              if (!impl_->idle())
                                  return;
                              const auto *node = impl_->currentNode();
-                             const auto *tool = impl_->currentTool();
+                             const auto *tool = impl_->effectiveTool();
                              if (!node || !tool)
                                  return;
                              for (const auto &port : tool->inputs)
@@ -415,7 +403,7 @@ QVariantList AppController::imageOutputs() const
         });
         return result;
     }
-    if (const auto *tool = impl_->currentTool())
+    if (const auto *tool = impl_->effectiveTool())
     {
         const auto *node = impl_->currentNode();
         for (const auto &output : tool->outputs)

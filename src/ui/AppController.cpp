@@ -1,4 +1,6 @@
 #include "common/Version.h"
+#include "log/LogService.h"
+#include "core/NodeContracts.h"
 #include "core/Sequence.h"
 #include "runtime/Receiver.h"
 #include "runtime/SelectTool.h"
@@ -315,9 +317,64 @@ const ToolDefinition *AppController::Impl::currentTool() const
     return node ? registry.find(node->toolId) : nullptr;
 }
 
+const ToolDefinition *AppController::Impl::effectiveTool() const
+{
+    const auto *node = currentNode();
+    if (!node)
+        return nullptr;
+    const auto *source = registry.find(node->toolId);
+    if (!source)
+        return nullptr;
+    if (contractCache.contract && contractCache.source == source && contractCache.node == node->id
+        && contractCache.executionRevision == node->executionRevision && contractCache.epoch == projectEpoch)
+        return contractCache.contract.get();
+    contractCache.source            = source;
+    contractCache.node              = node->id;
+    contractCache.executionRevision = node->executionRevision;
+    contractCache.epoch             = projectEpoch;
+    try
+    {
+        contractCache.contract = std::make_shared<const ToolDefinition>(nodeContract(*node, *source));
+    }
+    catch (const ContractError &)
+    {
+        // An incomplete node configuration still has declared ports to show; the raw declaration
+        // keeps the unresolved rows visible instead of presenting a half-materialised contract.
+        contractCache.contract = std::make_shared<const ToolDefinition>(*source);
+    }
+    return contractCache.contract.get();
+}
+
+void AppController::Impl::refreshConnectable(const FlowDefinition &flow, const NodeDefinition &node) const
+{
+    if (connectable.valid && connectable.node == node.id && connectable.epoch == projectEpoch
+        && connectable.structureRevision == flow.structureRevision && connectable.flow.toStdString() == flow.id)
+        return;
+    connectable.epoch             = projectEpoch;
+    connectable.flow              = workbench::q(flow.id);
+    connectable.structureRevision = flow.structureRevision;
+    connectable.node              = node.id;
+    connectable.valid             = true;
+    connectable.connectable.clear();
+    connectable.candidates.clear();
+    for (const auto &[id, type] : node.signatures.outputs)
+    {
+        auto candidates = candidateInputsWithState(flow, SourcePort{node.id, id});
+        bool free       = false;
+        for (const auto &candidate : candidates)
+            if (!candidate.connected && !candidate.occupied)
+            {
+                free = true;
+                break;
+            }
+        connectable.connectable.emplace(id, free);
+        connectable.candidates.emplace(id, std::move(candidates));
+    }
+}
+
 const PortDefinition *AppController::Impl::parameter(const std::string &id, bool initialization) const
 {
-    const auto *tool = currentTool();
+    const auto *tool = effectiveTool();
     return tool ? workbench::port(initialization ? tool->initParams : tool->inputs, id) : nullptr;
 }
 
@@ -674,6 +731,10 @@ void AppController::Impl::beginRun(RunMode mode)
         report(result);
         return;
     }
+    LogService::write(LogLevel::Info, QStringLiteral("运行"),
+                      mode == RunMode::Once ? QStringLiteral("开始单次运行")
+                      : mode == RunMode::Loop ? QStringLiteral("开始循环运行")
+                                              : QStringLiteral("开始单节点运行"));
     if (mode != RunMode::Node)
     {
         // A successfully accepted complete run starts a new statistics session immediately.
@@ -769,7 +830,9 @@ void AppController::Impl::advancePending()
         auto deletion = std::move(*pendingDeletion);
         pendingDeletion.reset();
         pending = Pending::None;
-        command([&] { return editor.removeNodes(deletion.flow, deletion.nodes); }, true);
+        if (command([&] { return editor.removeNodes(deletion.flow, deletion.nodes); }, true))
+            LogService::write(LogLevel::Info, QStringLiteral("工程"),
+                              QStringLiteral("删除 %1 个节点").arg(static_cast<qulonglong>(deletion.nodes.size())));
         return;
     }
     if (!pendingApproved && editor.project().dirty)
@@ -868,7 +931,11 @@ void AppController::Impl::advancePending()
         emit q->projectReplaced();
     }
     if (completed == Pending::Open && replacementCommitted)
+    {
         recordRecent(openedPath);
+        LogService::write(LogLevel::Info, QStringLiteral("工程"),
+                          QStringLiteral("打开工程 %1").arg(workbench::pathText(workbench::localPath(openedPath))));
+    }
     if (completed == Pending::Close)
     {
         closing = true;
@@ -1232,8 +1299,7 @@ QVariantList AppController::nodes() const
                     state = "failed";
                     break;
                 default:
-                    state = snapshot->status.code == 0 ? "succeeded"
-                          : snapshot->status.code == kCancelledStatus ? "cancelled" : "failed";
+                    state = snapshot->status.code == 0 ? "succeeded" : "failed";
                     break;
                 }
             std::int64_t statusCode = 0;
@@ -1434,7 +1500,11 @@ void AppController::addNode(const QString &toolId, int x, int y)
                 return true;
             },
             true))
+    {
+        LogService::write(LogLevel::Info, QStringLiteral("工程"),
+                          QStringLiteral("添加节点 %1（节点 %2）").arg(toolId, QString::number(added)));
         selectNode(QString::number(added));
+    }
 }
 
 bool AppController::moveNodes(const QVariantList &values, int dx, int dy)
@@ -1589,6 +1659,7 @@ void AppController::toggleLoop()
 {
     if (impl_->state == RuntimeState::RunningLoop)
     {
+        LogService::write(LogLevel::Info, QStringLiteral("运行"), QStringLiteral("请求停止循环运行"));
         impl_->runtime->requestStop();
         impl_->setState(RuntimeState::Stopping);
     }
@@ -1721,6 +1792,8 @@ bool AppController::save(const QString &path)
         // same file again and must leave the order alone.
         if (destination != previousPath)
             impl_->recordRecent(workbench::pathText(destination));
+        LogService::write(LogLevel::Info, QStringLiteral("工程"),
+                          QStringLiteral("保存工程 %1").arg(workbench::pathText(destination)));
         return true;
     }
     catch (const std::exception &error)

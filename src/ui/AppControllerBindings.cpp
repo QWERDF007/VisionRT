@@ -1,5 +1,7 @@
 #include "ui/OutputModel.h"
+#include "core/NodeContracts.h"
 #include "ui/AppController_p.h"
+#include "log/LogService.h"
 
 namespace visionrt {
 using workbench::nodeId;
@@ -48,6 +50,9 @@ QVariantMap AppController::portResultContext(const QString &port) const
                        {"interaction", QString::number(impl_->roiSerial)},
                        {"structure", QString::number(flow->structureRevision)},
                        {"revision", QString::number(node->executionRevision)},
+                       // A missing value is a real row without data; copy must be visibly disabled
+                       // instead of placing an empty string on the clipboard.
+                       {"available", !std::holds_alternative<Missing>(captured->value)},
                        {"publication", QString::number(captured->publication)}};
 }
 
@@ -140,8 +145,8 @@ bool AppController::bindInput(const QVariantMap &context, const QString &node, c
 {
     if (context.value("output").toBool() || !portContextCurrent(context))
         return false;
-    const auto input = context.value("port").toString();
-    return impl_->command(
+    const auto input  = context.value("port").toString();
+    const auto result = impl_->command(
         [&]
         {
             const auto *target = impl_->currentNode();
@@ -154,14 +159,18 @@ bool AppController::bindInput(const QVariantMap &context, const QString &node, c
             return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input.toStdString(),
                                             std::move(binding));
         });
+    if (result)
+        LogService::write(LogLevel::Info, QStringLiteral("连接"),
+                          QStringLiteral("绑定 %1.%2 ← %3.%4").arg(impl_->selected, input, node, output));
+    return result;
 }
 
 bool AppController::unbindInput(const QVariantMap &context)
 {
     if (context.value("output").toBool() || !portContextCurrent(context))
         return false;
-    const auto input = context.value("port").toString();
-    return impl_->command(
+    const auto input  = context.value("port").toString();
+    const auto result = impl_->command(
         [&]
         {
             const auto *node = impl_->currentNode();
@@ -170,6 +179,10 @@ bool AppController::unbindInput(const QVariantMap &context)
             impl_->finishRoi();
             return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input.toStdString());
         });
+    if (result)
+        LogService::write(LogLevel::Info, QStringLiteral("连接"),
+                          QStringLiteral("解除绑定 %1.%2").arg(impl_->selected, input));
+    return result;
 }
 
 QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) const
@@ -184,19 +197,38 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
     const auto outputPortId = context.value("port").toString().toStdString();
     if (!sourceNode->signatures.outputs.contains(outputPortId))
         return {};
-    const SourcePort source{sourceNode->id, outputPortId};
-
-    auto candidates = candidateInputsWithState(*flow, source);
+    // The menu and the name highlight share one candidate query per project/flow/revision/node.
+    impl_->refreshConnectable(*flow, *sourceNode);
+    const auto cached = impl_->connectable.candidates.find(outputPortId);
+    if (cached == impl_->connectable.candidates.end())
+        return {};
 
     std::map<NodeId, QVariantList> nodeInputsMap;
-    for (const auto &candidate : candidates)
+    for (const auto &candidate : cached->second)
     {
+        // Only a free or already-connected input is a legal target for this output. An input owned
+        // by another source is not a candidate at all, so the menu never offers a disabled row for
+        // a connection that cannot be made.
+        if (candidate.occupied)
+            continue;
         const auto *target = impl_->findNode(candidate.node);
         if (!target)
             continue;
         const auto *definition = impl_->registry.find(target->toolId);
-        const auto *portDef = definition ? workbench::port(definition->inputs, candidate.port) : nullptr;
-        const auto &inputType = target->signatures.inputs.at(candidate.port);
+        std::optional<ToolDefinition> contract;
+        try
+        {
+            if (definition)
+                contract = nodeContract(*target, *definition);
+        }
+        catch (const ContractError &)
+        {
+        }
+        const auto *portDef   = contract ? workbench::port(contract->inputs, candidate.port) : nullptr;
+        const auto  typeFound = target->signatures.inputs.find(candidate.port);
+        if (typeFound == target->signatures.inputs.end())
+            continue;
+        const auto &inputType = typeFound->second;
 
         nodeInputsMap[candidate.node].push_back(QVariantMap{
             {"port", q(candidate.port)},
@@ -240,49 +272,6 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
             {"gridX", g.node->position.x},
             {"inputs", g.inputs}
         });
-    }
-    return result;
-}
-
-QVariantList AppController::relationTargets(const QVariantMap &context) const
-{
-    if (!context.value("output").toBool())
-        return {};
-    QVariantList result;
-    if (!portContextCurrent(context))
-        return result;
-    const auto *node = impl_->currentNode();
-    const auto *flow = impl_->currentFlow();
-    if (!node || !flow)
-        return result;
-    try
-    {
-        const SourcePort source{node->id, context.value("port").toString().toStdString()};
-        auto inputs = impl_->editor.compatibleInputs(impl_->flow.toStdString(), source);
-        for (const auto &relation : portRelations(*flow).active)
-            if (relation.source == source)
-                inputs.push_back(relation.target);
-        for (const auto &input : inputs)
-        {
-            const auto *target = impl_->findNode(input.node);
-            if (!target)
-                continue;
-            const auto *definition = impl_->registry.find(target->toolId);
-            const auto *port       = definition ? workbench::port(definition->inputs, input.port) : nullptr;
-            result.push_back(QVariantMap{
-                { "node",             QString::number(input.node)},
-                {"title",                      q(target->title())},
-                { "port",                           q(input.port)},
-                { "name",    port ? q(port->name) : q(input.port)},
-                { "type", port ? displayTypeName(port->type) : QString{}},
-                {"connected", target->inputs.at(input.port).mode == BindingMode::Upstream
-                                  && target->inputs.at(input.port).source == source}
-            });
-        }
-    }
-    catch (const std::exception &error)
-    {
-        impl_->report(error, QStringLiteral("输出关联目标读取失败"));
     }
     return result;
 }

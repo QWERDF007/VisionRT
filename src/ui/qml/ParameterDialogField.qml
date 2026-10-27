@@ -10,7 +10,6 @@ Item {
     property alias text: input.text
     property alias inputItem: input
     property alias font: input.font
-    property string placeholderText: ""
     property bool readOnly: false
     property bool invalid: false
     property bool flat: true
@@ -23,7 +22,7 @@ Item {
     signal actionRequested()
 
     implicitWidth: 200
-    implicitHeight: Theme.paramEditorHeight
+    implicitHeight: Theme.parameterRowHeight
 
     HoverHandler {
         id: hover
@@ -55,8 +54,8 @@ Item {
                     leftPadding: 8
                     rightPadding: root.actionIcon > 0 ? 6 : 4
                     verticalAlignment: Text.AlignVCenter
-                    font: Theme.bodyFont
-                    color: !root.enabled ? Theme.disabledText : root.invalid ? Theme.error : Theme.textPrimary
+                    font: Theme.parameterFont
+                    color: root.enabled ? Theme.parameterTextColor : Theme.disabledText
                     selectionColor: Theme.highlight
                     selectedTextColor: Theme.surfaceBg
                     selectByMouse: true
@@ -106,18 +105,6 @@ Item {
                     onPressed: function(mouse) { mouse.accepted = false }
                 }
 
-                QuiText {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 8
-                    anchors.right: parent.right
-                    anchors.rightMargin: root.actionIcon > 0 ? 30 : 6
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: input.text.length === 0 && !input.activeFocus
-                    text: root.placeholderText
-                    elide: Text.ElideRight
-                    color: QuiColor.FontCaption
-                    font: input.font
-                }
             }
 
             Rectangle {

@@ -147,11 +147,9 @@ QVariantList AppController::parameters() const
     if (!impl_->readsAllowed())
         return impl_->parameterRowsNode == node->id ? impl_->parameterRows : QVariantList{};
     const auto                    *tool = impl_->currentTool();
-    // Only derived node models need materialisation for row generation; fixed
-    // declarations keep unresolved type_from entries that resolve at run time.
-    std::optional<ToolDefinition> contract;
-    if (tool)
-        contract = tool->derivesPorts() ? nodeContract(*node, *tool) : *tool;
+    // Rows come from the materialised contract, the same definition execution consumes; the raw
+    // declaration is still the source for type_from selection options.
+    const auto *contract = impl_->effectiveTool();
     auto add = [&](const std::string &id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
     {
         PortValue literal = Missing{};
@@ -166,7 +164,9 @@ QVariantList AppController::parameters() const
         {
             literal = found->second.literal;
             mode    = found->second.mode == BindingMode::Literal ? "literal" : "upstream";
-            if (found->second.source)
+            // Switching to manual input cancels the relation immediately; the stored source no
+            // longer describes this row because it is not the effective binding.
+            if (found->second.mode == BindingMode::Upstream && found->second.source)
             {
                 const auto *parent    = impl_->findNode(found->second.source->node);
                 const auto *parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
@@ -247,7 +247,9 @@ QVariantList AppController::parameters() const
                 }
         const auto *string     = std::get_if<std::string>(&literal);
         const auto  inputFound = node->inputs.find(id);
-        const bool  hasSource  = (inputFound != node->inputs.end() && inputFound->second.source.has_value());
+        const bool  hasSource  = inputFound != node->inputs.end()
+                                 && inputFound->second.mode == BindingMode::Upstream
+                                 && inputFound->second.source.has_value();
         QString editorKind = declaration ? q(declaration->editor) : QString{};
         if (declaration && declaration->editor == "path")
         {
@@ -527,14 +529,15 @@ QVariantList AppController::parameters() const
                     selectText, false);
         }
 
-        for (const auto &port : contract->inputs)
-        {
-            // A condition node maps its single condition input onto the dedicated condition row;
-            // enumerating the raw port again would show the same value twice.
-            if (tool->nodeModel == NodeModel::Condition && port.id == "condition")
-                continue;
-            add(port.id, port.type, false, &port);
-        }
+        if (contract)
+            for (const auto &port : contract->inputs)
+            {
+                // A condition node maps its single condition input onto the dedicated condition row;
+                // enumerating the raw port again would show the same value twice.
+                if (tool && tool->nodeModel == NodeModel::Condition && port.id == "condition")
+                    continue;
+                add(port.id, port.type, false, &port);
+            }
     }
     else
     {

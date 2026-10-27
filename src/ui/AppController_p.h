@@ -1,5 +1,6 @@
 #pragma once
 #include "core/ProjectEditor.h"
+#include "log/LogModel.h"
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonRuntime.h"
@@ -59,6 +60,7 @@ struct AppController::Impl
     std::unique_ptr<RuntimeEngine>         runtime;
     ToolTreeModel                          tools;
     OutputModel                            outputs;
+    std::unique_ptr<LogModel>              logModel;
     DisplayConverter                       converter;
     QTimer                                 timer;
     RuntimeState                           state        = RuntimeState::Idle;
@@ -133,11 +135,32 @@ struct AppController::Impl
     std::optional<RoiEditTarget>         displayRoiTarget;
     quint64                              displayRequest   = 0;
     QString                              imageOutput;
-    // Connectability depends on graph structure only, so it is recomputed when the revision moves
-    // rather than on every readback or frame.
-    std::map<std::string, bool, std::less<>> connectableOutputs;
-    std::uint64_t                            connectableRevision = 0;
-    NodeId                                   connectableNode     = 0;
+    // The UI consumes the same materialised contract execution does: expression results, condition
+    // variables and select ports must have one name/type/signature source. The cache is an identity
+    // check on the node revision, never a second derivation.
+    struct ContractCache
+    {
+        NodeId                node              = 0;
+        std::uint64_t         executionRevision = 0;
+        std::uint64_t         epoch             = 0;
+        const ToolDefinition *source            = nullptr;
+        std::shared_ptr<const ToolDefinition> contract;
+    };
+    mutable ContractCache contractCache;
+
+    // Connectability depends on the project, flow, graph revision and node only, so one query serves
+    // both the name highlight and the downstream candidate menu instead of rescanning per frame.
+    struct ConnectableState
+    {
+        std::uint64_t                                                epoch = 0;
+        QString                                                      flow;
+        std::uint64_t                                                structureRevision = 0;
+        NodeId                                                       node              = 0;
+        bool                                                         valid             = false;
+        std::map<std::string, bool, std::less<>>                     connectable;
+        std::map<std::string, std::vector<CandidateInput>, std::less<>> candidates;
+    };
+    mutable ConnectableState connectable;
     int                                  index = 0;
     int                                  count = 0;
     NodeId                               displayedNode = 0;
@@ -215,13 +238,14 @@ struct AppController::Impl
     std::function<void()>                drainContinuation;
     bool                                 pendingDrained = false;
     void                                 consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
-    QVariantMap                         approvedTextContext;
-    bool                                 approvedCopy = false;
-    bool                                 approvedDiagnostic = false;
     const FlowDefinition                *currentFlow() const;
     const NodeDefinition                *currentNode() const;
     const NodeDefinition                *findNode(NodeId id) const;
     const ToolDefinition                *currentTool() const;
+    // Materialised contract for the selected node; the only definition UI rows may consume.
+    const ToolDefinition                *effectiveTool() const;
+    void                                 refreshConnectable(const FlowDefinition &flow,
+                                                             const NodeDefinition &node) const;
     const PortDefinition                *parameter(const std::string &id, bool initialization) const;
     bool                                 idle();
     bool                                 applyParameter(const QString &id, bool initialization, PortValue value);

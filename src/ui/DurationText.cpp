@@ -10,15 +10,17 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
     if (running)
         return {QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("—"), QStringLiteral("—"),
                 QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("运行中")};
+    // A node that never ran has no measurement to show; the disposition badge (and nothing else)
+    // carries the state, so the timing fields stay empty instead of inventing a zero.
     if (!snapshot)
-        return {QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("—"), QStringLiteral("—"),
-                QStringLiteral("未运行"), QStringLiteral("未运行"), QStringLiteral("未运行")};
+        return {QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"),
+                QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—")};
 
     // A gated node never entered the algorithm, so it must not look like a zero-millisecond
     // success. The gate decision itself is reported through the disposition badge instead.
     if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
-        return {QStringLiteral("未执行"), QStringLiteral("未执行"), QStringLiteral("—"), QStringLiteral("—"),
-                QStringLiteral("未执行"), QStringLiteral("未执行"), QStringLiteral("未执行")};
+        return {QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"),
+                QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—")};
 
     const auto &t = snapshot->timing;
     QString totalStr = durationText(t.totalMs);
@@ -49,17 +51,10 @@ QString durationText(std::optional<double> milliseconds)
 {
     if (!milliseconds || !std::isfinite(*milliseconds) || *milliseconds < 0.0)
         return QStringLiteral("—");
-    const double value = *milliseconds;
-    if (value == 0.0)
-        return QStringLiteral("0 ms");
-    if (value < 0.01)
-        return QStringLiteral("<0.01 ms");
-    QString text = QString::number(value, 'f', 2);
-    while (text.endsWith(QLatin1Char('0')))
-        text.chop(1);
-    if (text.endsWith(QLatin1Char('.')))
-        text.chop(1);
-    return text + QStringLiteral(" ms");
+    // One rule for every millisecond display: below one microsecond reads as zero, everything else
+    // is rounded to three decimals with no trimmed zeros.
+    const double value = *milliseconds < 0.001 ? 0.0 : *milliseconds;
+    return QStringLiteral("%1 ms").arg(value, 0, 'f', 3);
 }
 
 QString formatElapsed(double milliseconds)
@@ -82,8 +77,6 @@ QString formatElapsed(double milliseconds)
 
 QString formatMs(std::optional<double> milliseconds)
 {
-    if (!milliseconds || !std::isfinite(*milliseconds) || *milliseconds < 0.0)
-        return QStringLiteral("— ms");
-    return QStringLiteral("%1 ms").arg(*milliseconds, 0, 'f', 2);
+    return durationText(milliseconds);
 }
 } // namespace visionrt

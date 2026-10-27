@@ -207,7 +207,10 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(engine.start(project, registry, RunMode::Once));
     auto failed = finish(engine);
     assert(snapshot(failed, 1)->status.code == -2);
-    assert(std::get<std::int64_t>(snapshot(failed, 1)->outputs.at("__status_code")) == -2);
+    // A framework failure is a diagnostic, not a tool answer: no status port is invented for it.
+    assert(!snapshot(failed, 1)->toolResultPublished);
+    assert(!snapshot(failed, 1)->outputs.contains("__status_code"));
+    assert(!snapshot(failed, 1)->outputs.contains("__status_message"));
     assert(isMissing(snapshot(failed, 1)->outputs.at("value")));
     // The upstream published no value, so the consumer's required input cannot be normalised:
     // that is its own parameter error, not a host block and not a borrowed tool code.
@@ -514,8 +517,20 @@ void executionDiagnostics()
         assert(engine.start(project, registry, RunMode::Once));
         const auto result = snapshot(finish(engine), 1);
         assert(result->status.message.find("节点") == std::string::npos);
-        assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == result->status.code);
-        assert(std::get<std::string>(result->outputs.at("__status_message")) == result->status.message);
+        if (scenario == 2)
+        {
+            assert(result->toolResultPublished);
+            assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == result->status.code);
+            assert(std::get<std::string>(result->outputs.at("__status_message")) == result->status.message);
+        }
+        else
+        {
+            // The framework stopped the node before any ToolResult existed, so no status port may
+            // be fabricated from the framework diagnostic.
+            assert(!result->toolResultPublished);
+            assert(!result->outputs.contains("__status_code"));
+            assert(!result->outputs.contains("__status_message"));
+        }
         if (scenario == 0)
         {
             assert(result->phase == NodePhase::Execute && result->status.code == -1);
@@ -1146,6 +1161,7 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
             {
                 const auto cancelled = snapshot(result, 2);
                 assert(cancelled && cancelled->status.code == kCancelledStatus);
+                assert(cancelled->disposition == NodeDisposition::Canceled);
                 assert(cancelled->status.message == "运行已取消");
             }
         }
@@ -1457,6 +1473,26 @@ void failedBusinessOutputsRemainInputs()
     assert(snapshot(result, 3)->status.code == 0 && snapshot(result, 4)->status.code == 0);
 }
 
+void businessNegativeIsNotCancellation()
+{
+    RuntimeEngine engine(1);
+    ToolRegistry  registry;
+    const auto    tool = definition("test.negative_status");
+    install(registry, tool,
+            [](const Values &)
+            { return toolResult({{"value", std::int64_t{1}}}, {kCancelledStatus, "业务负数"}); });
+    ProjectDefinition project;
+    project.flows.front().nodes = {node(1, tool)};
+    assert(engine.start(project, registry, RunMode::Once));
+    const auto result = snapshot(finish(engine), 1);
+    // A tool answers with a legal negative business code; the scheduler did not cancel anything.
+    assert(result->disposition == NodeDisposition::Succeeded);
+    assert(result->toolResultPublished);
+    assert(result->status.code == kCancelledStatus && result->status.message == "业务负数");
+    assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == kCancelledStatus);
+    assert(std::get<std::string>(result->outputs.at("__status_message")) == "业务负数");
+}
+
 int main(int argc, char **argv)
 try
 {
@@ -1480,6 +1516,7 @@ try
     std::cout << "17\n"; executionMetricsAndTimingSeparation();
     std::cout << "18\n"; timingRecordedOnFailure();
     std::cout << "19\n"; crossRoundPythonMetricIsolation();
+    std::cout << "20\n"; businessNegativeIsNotCancellation();
     std::cout << "runtime contracts passed\n";
     return 0;
 }

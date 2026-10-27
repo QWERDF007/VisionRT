@@ -509,9 +509,16 @@ void parameterEditorsContract()
     require(app.save(project), "cannot save missing-source baseline");
     QSignalSpy missingSourceChanges(&app, &AppController::parametersChanged);
     click(upstream);
-    click(visibleText(QStringLiteral("无可用兼容输出")));
+    // An empty candidate list stays empty: no placeholder row and no unbind action are invented.
+    require(visibleText(QStringLiteral("无可用兼容输出")) == nullptr,
+            "an empty candidate list invented a placeholder row");
+    require(visibleText(QStringLiteral("解除绑定")) == nullptr,
+            "an empty candidate list offered an unbind action");
+    auto *missingPopup = upstream->property("popup").value<QObject *>();
+    require(missingPopup && QMetaObject::invokeMethod(missingPopup, "close", Qt::DirectConnection),
+            "cannot close the empty candidate group");
     require(app.wires().isEmpty() && value("ratio") == "0.35" && !app.dirty() && missingSourceChanges.isEmpty(),
-            "choosing an unavailable source changed the project");
+            "opening an unavailable candidate list changed the project");
     require(app.setParameterMode("ratio", false), "integer round-trip fixture could not restore literal inputs");
     const auto parameterGroup = [&]() -> QQuickItem *
     {

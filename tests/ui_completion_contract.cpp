@@ -69,7 +69,6 @@ def refreshed(inputs):
     bool           staleAtIdle     = false;
     int            idleTransitions = 0;
     int            catalogs        = 0;
-    int            approvals       = 0;
     QStringList    events;
     QList<QString> texts;
     QQuickWindow   window;
@@ -91,14 +90,9 @@ def refreshed(inputs):
     QObject::connect(&app, &AppController::outputTextReady, &app,
                      [&](const QString &text)
                      {
-                         if (text.startsWith(QStringLiteral("完整数据预计")))
-                             ++approvals;
-                         else
-                         {
-                             texts.push_back(text);
-                             if (monitor)
-                                 events.push_back("text");
-                         }
+                         texts.push_back(text);
+                         if (monitor)
+                             events.push_back("text");
                      });
     QObject::connect(&app, &AppController::runtimeChanged, &app,
                      [&]
@@ -132,13 +126,11 @@ def refreshed(inputs):
                     5000),
                 "completion viewport has stale pixels");
     };
+    // Copy is a bounded background task: a large value is formatted once and never gated behind a
+    // second confirmation or truncated into something that looks complete.
     const auto exportLarge = [&]
     {
-        const auto before  = approvals;
-        const auto context = app.portContext("values", true);
-        app.requestOutputText(context, false, false);
-        require(approvals == before + 1, "large export did not request its explicit confirmation");
-        app.requestOutputText(context, false, false);
+        app.requestOutputText(app.portContext("values", true), false, false);
     };
     const auto verifyText = [&](const QString &text)
     {
