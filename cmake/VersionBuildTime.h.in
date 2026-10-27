@@ -2,3 +2,4 @@
 
 // Generated build metadata consumed only by Version.cpp.
 #define @LIBPREFIX@_BUILD_TIME "@BUILD_TIME@"
+#define @LIBPREFIX@_CONTRACTS_BUILD_TIME "@CONTRACTS_BUILD_TIME@"

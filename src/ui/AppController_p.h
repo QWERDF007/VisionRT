@@ -14,6 +14,7 @@
 #include "ui/RecentProjects.h"
 #include "ui/ToolTreeModel.h"
 #include "ui/WireRouter.h"
+#include "common/Version.h"
 
 #include <QPointer>
 #include <QPointF>
@@ -51,6 +52,8 @@ struct AppController::Impl
     AppController                         *q;
     std::filesystem::path                  applicationDirectory;
     std::filesystem::path                  toolsPackageRoot;
+    bool                                   toolsPackageInstalled{false};
+    std::optional<ComponentBuildInfo>      toolsPackageBuildInfo;
     std::shared_ptr<PluginLoader>          pluginLoader;
     ToolRegistry                           registry;
     ProjectEditor                          editor;

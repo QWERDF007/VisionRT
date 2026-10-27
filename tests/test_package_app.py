@@ -181,6 +181,16 @@ class ToolsDeploymentContract(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((self.package / "module_index.json").is_file())
 
+    def test_build_info_is_preserved_when_present(self) -> None:
+        self.write_source()
+        (self.source / "build_info.json").write_text(
+            '{"schema_version": 1, "component": "VisionTools", "version": "0.1.0", "commit": "abc", "build_time_utc": "2026-10-27 12:00:00 UTC"}\n',
+            encoding="utf-8")
+        package_app.deploy_tools_package(self.install, self.archive(), self.validator)
+        self.assertTrue((self.package / "build_info.json").is_file())
+        content = (self.package / "build_info.json").read_text(encoding="utf-8")
+        self.assertIn('"commit": "abc"', content)
+
 
 class InstallationContract(unittest.TestCase):
     def test_qt_deployment_prefers_the_selected_build(self) -> None:

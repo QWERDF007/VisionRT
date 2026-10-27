@@ -6,6 +6,13 @@
 
 namespace visionrt {
 
+struct ComponentBuildInfo
+{
+    std::string version;
+    std::string commit;
+    std::string build_time;
+};
+
 struct VersionInfo
 {
     int         major{VISIONRT_VERSION_MAJOR};
@@ -18,6 +25,9 @@ struct VersionInfo
     std::string build_time;
     std::string version_string;
     std::string full_string;
+    std::string contracts_version;
+    std::string contracts_commit;
+    std::string contracts_build_time;
 };
 
 // 获取结构化版本信息
@@ -37,5 +47,8 @@ std::string GetBuildTimeString();
 
 // 获取完整版本信息字符串，格式："<version> - [<branch>] - (<commit>)"
 std::string GetFullVersionString();
+
+// 获取宿主实际引用的 Contracts 元数据
+ComponentBuildInfo GetContractsVersion();
 
 } // namespace visionrt

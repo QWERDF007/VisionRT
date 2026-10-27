@@ -65,6 +65,14 @@ bool AppController::setRectParameter(const QString &id, bool initialization, dou
         { return impl_->applyParameter(id, initialization, DataRef<ROI>(ROI{{{2., x, y, width, height, angle}}})); });
 }
 
+bool AppController::setParameterPath(const QString &id, bool initialization, const QString &path)
+{
+    return impl_->command([&]
+    {
+        return impl_->applyParameter(id, initialization, path.toUtf8().toStdString());
+    });
+}
+
 bool AppController::setParameterPath(const QString &id, bool initialization, const QUrl &url)
 {
     return impl_->command([&]

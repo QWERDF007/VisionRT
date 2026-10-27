@@ -52,6 +52,17 @@ int main()
     assert(info.build_time == build_time_str);
     assert(info.full_string == full_str);
 
+    // 4. 验证 Contracts 版本
+    ComponentBuildInfo contracts = GetContractsVersion();
+    assert(contracts.version == "0.1.0");
+    assert(!contracts.commit.empty());
+    assert(contracts.commit.length() == 40);
+    assert(!contracts.build_time.empty());
+    assert(info.contracts_version == contracts.version);
+    assert(info.contracts_commit == contracts.commit);
+    assert(info.contracts_build_time == contracts.build_time);
+
     std::cout << "Version Contract Passed: " << full_str << " (Built at " << build_time_str << ")\n";
+    std::cout << "Contracts: " << contracts.version << " commit: " << contracts.commit << " (" << contracts.build_time << ")\n";
     return 0;
 }

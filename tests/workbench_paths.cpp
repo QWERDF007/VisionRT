@@ -1,5 +1,7 @@
 #include "ui/AppController.h"
 #include "ui/Theme.h"
+#include "WorkbenchFixtures.h"
+#include <quickui/QuiNativeFileDialog.h>
 
 #include <QDir>
 #include <QFile>
@@ -19,6 +21,7 @@
 #include <memory>
 #include <stdexcept>
 
+void readImageToolUiContract();
 
 void pathEditorsContract()
 {
@@ -269,13 +272,212 @@ void pathEditorsContract()
     const auto relativePath = nested + "/" + fileName;
     require(app.setParameter("file", false, relativePath) && value("file") == relativePath,
             "Text editing implicitly resolved a relative path instead of preserving its value");
+    require(app.setParameterPath("file", false, unsavedPath) && value("file") == unsavedPath,
+            "AppController::setParameterPath QString overload rejected valid local path");
+    const auto testLocal = root.filePath(QStringLiteral("测试 目录 # 1/文件 %20.png"));
+    const auto testUrl = QUrl::fromLocalFile(testLocal);
+    require(quickui::QuiNativeFileDialog::toLocalPath(testUrl) == testLocal,
+            "QuiNativeFileDialog::toLocalPath damaged spaces or percent");
+    require(quickui::QuiNativeFileDialog::toFileUrl(testLocal) == testUrl,
+            "QuiNativeFileDialog::toFileUrl damaged local file path");
+
     const auto unsavedProject = root.filePath("unsaved_paths.vrt.json");
     require(app.save(unsavedProject), "Unsaved path project could not save");
     app.requestOpen(unsavedProject);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "Relative path project did not reopen");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
-    require(value("file") == relativePath && !app.dirty(),
-            "Relative unicode path changed during first save and reopen");
+    require(value("file") == unsavedPath && !app.dirty(),
+            "Selected unicode path changed during first save and reopen");
     std::cout << "[Path project state] Unsaved projects accept local URLs without saving; relative Unicode paths retain their text after save/reopen.\n";
-    std::cout << "[Evidence T-05] Qt non-native file/folder choosers: actual selection, cancel, unicode/long paths and save/reopen verified.\n";
+    std::cout << "[Evidence T-05] QuickUI QuiFileFolderDialog and QuiNativeFileDialog single-button path contracts verified.\n";
+
+    readImageToolUiContract();
+}
+
+void readImageToolUiContract()
+{
+    const auto require = [](bool condition, const char *message)
+    {
+        if (!condition)
+            throw std::runtime_error(message);
+    };
+
+    const auto previous = QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs);
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    const auto restore = qScopeGuard([&] { QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, previous); });
+
+    visionrt::testing::WorkbenchInstallation installation;
+    visionrt::AppController app(1, installation.directory());
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "image read catalog did not become ready");
+
+    app.addNode("visionrt.image.read", 0, 10);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "image read node did not synchronize");
+    require(app.nodes().size() == 1, "image read tool was not added");
+    const auto nodeId = app.nodes().front().toMap().value("id").toString();
+    app.selectNode(nodeId);
+
+    const auto baselineProject = installation.directory() + "/baseline_read_image.vrt.json";
+    require(app.save(baselineProject), "cannot save baseline project");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "baseline save did not settle");
+    require(!app.dirty(), "baseline project is dirty");
+
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
+    engine.rootContext()->setContextProperty("app", &app);
+    QQmlComponent component(&engine);
+    component.setData(
+        "import QtQuick\nimport \".\"\n"
+        "Item { id: root; property string fieldId: 'path'; width: 700; height: 36; "
+        "readonly property var currentParameter: app.parameters.find(function(row) { return row.id === root.fieldId }); "
+        "Loader { anchors.fill: parent; active: root.currentParameter !== undefined; "
+        "sourceComponent: ParameterEditor { parameter: root.currentParameter } } }",
+        QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ReadImageContract.qml")));
+    std::unique_ptr<QObject> owner(component.create());
+    if (!owner)
+        throw std::runtime_error(component.errorString().toStdString());
+    auto *editor = qobject_cast<QQuickItem *>(owner.get());
+    require(editor != nullptr, "read image parameter root is not an item");
+    QQuickWindow window;
+    window.resize(980, 640);
+    editor->setParentItem(window.contentItem());
+    window.show();
+    window.requestActivate();
+    require(QTest::qWaitForWindowActive(&window), "read image window did not become active");
+
+    const auto findVisible = [&](const auto &matches) -> QQuickItem *
+    {
+        QList<QQuickItem *> pending;
+        for (auto *w : QGuiApplication::topLevelWindows())
+        {
+            if (auto *qw = qobject_cast<QQuickWindow *>(w))
+            {
+                if (qw->isVisible() && qw->contentItem())
+                    pending.append(qw->contentItem());
+            }
+        }
+        while (!pending.isEmpty())
+        {
+            auto *item = pending.takeLast();
+            if (item->isVisible() && matches(item))
+                return item;
+            pending.append(item->childItems());
+        }
+        return nullptr;
+    };
+
+    const auto click = [&](QQuickItem *item)
+    {
+        if (!item || !item->isVisible() || !item->isEnabled())
+            throw std::runtime_error("read image dialog action unavailable");
+        auto *win = item->window() ? item->window() : &window;
+        QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier,
+                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        QTest::qWait(50);
+    };
+
+    const auto value = [&](const QString &id)
+    {
+        for (const auto &entry : app.parameters())
+            if (entry.toMap().value("id").toString() == id)
+                return entry.toMap().value("valueText").toString();
+        return QString{};
+    };
+
+    // 1. Verify single button UI on ParameterEditor for editor === "path"
+    auto *chooseBtn = findVisible([&](QQuickItem *item) {
+        return item->property("text").toString() == QStringLiteral("选择路径")
+            && item->metaObject()->indexOfSignal("clicked()") >= 0;
+    });
+    require(chooseBtn != nullptr, "read image path parameter does not have single '选择路径' button");
+
+    // Verify QuiFileFolderDialog exists and mode is FileOrFolder
+    QObject *picker = nullptr;
+    for (auto *object : editor->findChildren<QObject *>())
+    {
+        if (object->property("selectedPath").isValid() && object->property("dialogMode").isValid())
+            picker = object;
+    }
+    require(picker != nullptr, "QuiFileFolderDialog is missing on read image path parameter");
+    require(picker->property("dialogMode").toInt() == 0, "read image path dialogMode is not FileOrFolder (0)");
+
+    // 2. Test opening and cancelling the dialog
+    click(chooseBtn);
+    require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),
+            "clicking '选择路径' did not open picker");
+    for (auto *w : QGuiApplication::topLevelWindows()) {
+        if (w->isVisible()) {
+            QTest::keyClick(w, Qt::Key_Escape);
+        }
+    }
+    require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500),
+            "Escape did not cancel the path picker");
+    require(value("path").isEmpty() && !app.dirty(), "cancelled picker changed parameter or marked project dirty");
+
+    // 3. Test File selection: F:/Projects/InferRT/assets/pics/bus.jpg
+    const QString imageFile = QStringLiteral("F:/Projects/InferRT/assets/pics/bus.jpg");
+    require(QFile::exists(imageFile), "InferRT test asset bus.jpg is missing");
+    click(chooseBtn);
+    require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),
+            "picker did not open for file selection");
+    QMetaObject::invokeMethod(picker, "accepted", Q_ARG(QString, imageFile));
+    QMetaObject::invokeMethod(picker, "close");
+    require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500),
+            "accepting path did not close picker");
+    require(value("path") == imageFile, "path parameter was not set to selected image file");
+    require(app.dirty(), "selecting image file did not mark project dirty");
+
+    // Run pipeline once with the selected image file
+    app.runOnce();
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "pipeline execution with bus.jpg timed out");
+    require(app.runState() == QStringLiteral("Idle"), "pipeline execution failed to return to Idle");
+    for (const auto &d : app.diagnostics()) {
+        require(!d.contains(QStringLiteral("visionrt.image.read")) && !d.contains(QStringLiteral("图像读取")),
+                "pipeline execution with bus.jpg produced node errors");
+    }
+    require(!app.imageOutputs().isEmpty(), "image read produced no image outputs for bus.jpg");
+
+    // 4. Test Directory selection: F:/Projects/InferRT/assets/pics
+    const QString imageDir = QStringLiteral("F:/Projects/InferRT/assets/pics");
+    require(QDir(imageDir).exists(), "InferRT test asset dir pics is missing");
+    click(chooseBtn);
+    require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),
+            "picker did not open for directory selection");
+    QMetaObject::invokeMethod(picker, "accepted", Q_ARG(QString, imageDir));
+    QMetaObject::invokeMethod(picker, "close");
+    require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500),
+            "accepting directory path did not close picker");
+    require(value("path") == imageDir, "path parameter was not set to selected directory");
+
+    require(app.setParameter("count", false, "6"), "failed to set count parameter to 6");
+
+    // Run pipeline once with the selected image directory
+    app.runOnce();
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "pipeline execution with directory timed out");
+    require(app.runState() == QStringLiteral("Idle"), "directory pipeline execution failed to return to Idle");
+    for (const auto &d : app.diagnostics()) {
+        require(!d.contains(QStringLiteral("visionrt.image.read")) && !d.contains(QStringLiteral("图像读取")),
+                "directory pipeline execution produced node errors");
+    }
+    require(!app.imageOutputs().isEmpty(), "image read produced no image outputs for directory");
+    require(app.imageCount() == 6, "directory image read did not load all 6 images");
+
+    // Verify switching image index in directory
+    app.setImageIndex(1);
+    require(app.imageIndex() == 1, "image index switch failed");
+
+    // 5. Save and Reopen project
+    QTemporaryDir tempSaveDir;
+    require(tempSaveDir.isValid(), "temporary save dir invalid");
+    const auto savedProjectPath = tempSaveDir.filePath("test_image_read.vrt.json");
+    require(app.save(savedProjectPath), "failed to save image read project");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "save did not finish");
+
+    app.requestOpen(savedProjectPath);
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "reopen did not finish");
+    require(app.nodes().size() == 1, "reopened project has no nodes");
+    app.selectNode(app.nodes().front().toMap().value("id").toString());
+    require(value("path") == imageDir, "saved directory path did not survive reopen");
+
+    std::cout << "[Evidence ReadImage UI] '读取图像' tool single-button path picker successfully tested for both image file ("
+              << imageFile.toStdString() << ") and image directory (" << imageDir.toStdString() << ") with pipeline execution and 6 images verified.\n";
 }
