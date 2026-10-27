@@ -81,3 +81,9 @@ __pycache__/
 *.zip
 visionrt-next/
 logs/
+
+# 本地智能体数据与 docs 方案产物（不入库）
+.workbuddy/
+docs/*.html
+docs/*.json
+docs/*.visual-check.*
