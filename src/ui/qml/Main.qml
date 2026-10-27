@@ -563,7 +563,7 @@ ApplicationWindow {
         id: resetDialog; title: "运行时复位"; message: "清除运行结果并释放实例？所有未保存的工程配置和当前布局将保留。"
         positiveText: "复位"; onPositiveClicked: app.resetRuntime()
     }
-    WorkbenchDialog { id: about; title: "关于 VisionRT"; message: app.aboutText; useNegativeButton: false; positiveText: "关闭" }
+    AboutVisionRTDialog { id: about }
     WorkbenchDialog {
         id: authorHelp; title: "工具作者说明"; width: Math.min(700, window.width - 40)
         useNegativeButton: false; positiveText: "关闭"

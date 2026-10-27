@@ -10,9 +10,13 @@
 
 #include <core/ToolPackage.h>
 
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QUrl>
 #include <algorithm>
 #include <cmath>
@@ -1125,9 +1129,33 @@ void AppController::Impl::loadToolsPackage()
     if (candidate.empty())
     {
         toolsPackageRoot.clear();
+        toolsPackageInstalled = false;
+        toolsPackageBuildInfo.reset();
         registry.registerPackage({});
+        emit q->aboutTextChanged();
         return;
     }
+
+    toolsPackageInstalled = true;
+    toolsPackageBuildInfo.reset();
+
+    const auto buildInfoPath = candidate / "build_info.json";
+    QFile infoFile(workbench::pathText(buildInfoPath));
+    if (infoFile.open(QIODevice::ReadOnly))
+    {
+        QJsonParseError parseError;
+        const auto doc = QJsonDocument::fromJson(infoFile.readAll(), &parseError);
+        if (!parseError.error && doc.isObject())
+        {
+            const auto obj = doc.object();
+            ComponentBuildInfo info;
+            info.version = obj.value(QStringLiteral("version")).toString().toStdString();
+            info.commit = obj.value(QStringLiteral("commit")).toString().toStdString();
+            info.build_time = obj.value(QStringLiteral("build_time_utc")).toString().toStdString();
+            toolsPackageBuildInfo = std::move(info);
+        }
+    }
+
     try
     {
         registry.registerPackage(readToolsPackage(candidate));
@@ -1141,6 +1169,7 @@ void AppController::Impl::loadToolsPackage()
         }
         report(error, QStringLiteral("工具目录读取失败：") + workbench::pathText(candidate));
     }
+    emit q->aboutTextChanged();
 }
 
 void AppController::Impl::rescanTools()
@@ -1230,9 +1259,65 @@ bool AppController::canPaste() const
 
 QString AppController::aboutText() const
 {
-    return QStringLiteral("VisionRT %1\nCopyright © VisionRT contributors\nQt %2\nPython: %3")
-        .arg(q(GetVersionString()), QString::fromLatin1(qVersion()),
-             impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"));
+    auto sanitize = [](const std::string &str) -> QString {
+        const QString s = QString::fromStdString(str).trimmed();
+        if (s.isEmpty() || s.compare(QStringLiteral("unknown"), Qt::CaseInsensitive) == 0 || s.contains(QStringLiteral("NOTFOUND")))
+        {
+            return QStringLiteral("未知");
+        }
+        return s;
+    };
+
+    QStringList lines;
+
+    // VisionRT
+    lines << QStringLiteral("VisionRT");
+    lines << QStringLiteral("版本          %1").arg(sanitize(GetVersionString()));
+    lines << QStringLiteral("Commit        %1").arg(sanitize(GetCommitHashString()));
+    lines << QStringLiteral("构建时间      %1").arg(sanitize(GetBuildTimeString()));
+    lines << QString();
+
+    // VisionTools
+    lines << QStringLiteral("VisionTools");
+    if (!impl_->toolsPackageInstalled)
+    {
+        lines << QStringLiteral("状态          未安装");
+    }
+    else if (!impl_->toolsPackageBuildInfo.has_value())
+    {
+        lines << QStringLiteral("状态          构建信息不可用");
+    }
+    else
+    {
+        lines << QStringLiteral("版本          %1").arg(sanitize(impl_->toolsPackageBuildInfo->version));
+        lines << QStringLiteral("Commit        %1").arg(sanitize(impl_->toolsPackageBuildInfo->commit));
+        lines << QStringLiteral("构建时间      %1").arg(sanitize(impl_->toolsPackageBuildInfo->build_time));
+    }
+    lines << QString();
+
+    // VisionRTContracts
+    const auto contracts = GetContractsVersion();
+    lines << QStringLiteral("VisionRTContracts");
+    lines << QStringLiteral("版本          %1").arg(sanitize(contracts.version));
+    lines << QStringLiteral("Commit        %1").arg(sanitize(contracts.commit));
+    lines << QStringLiteral("构建时间      %1").arg(sanitize(contracts.build_time));
+    lines << QString();
+
+    // Environment
+    lines << QStringLiteral("运行环境");
+    lines << QStringLiteral("Qt            %1").arg(QString::fromLatin1(qVersion()));
+    lines << QStringLiteral("Python        %1").arg(impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"));
+    lines << QString();
+
+    // Copyright
+    lines << QStringLiteral("Copyright © VisionRT contributors");
+
+    return lines.join(QLatin1Char('\n'));
+}
+
+void AppController::copyAboutText() const
+{
+    QGuiApplication::clipboard()->setText(aboutText());
 }
 
 QAbstractItemModel *AppController::toolModel() const

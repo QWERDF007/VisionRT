@@ -43,7 +43,7 @@ class AppController : public QObject
     Q_PROPERTY(bool dirty READ dirty NOTIFY projectChanged)
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
     Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
-    Q_PROPERTY(QString aboutText READ aboutText CONSTANT)
+    Q_PROPERTY(QString aboutText READ aboutText NOTIFY aboutTextChanged)
     Q_PROPERTY(QString nodeModel READ nodeModel NOTIFY parametersChanged)
     Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
     Q_PROPERTY(bool executionGuardActive READ executionGuardActive NOTIFY parametersChanged)
@@ -92,6 +92,7 @@ public:
     bool                dirty() const;
     bool                canPaste() const;
     QString             aboutText() const;
+    Q_INVOKABLE void    copyAboutText() const;
     PythonRuntime      *pythonRuntime() const;
 
     Q_INVOKABLE void         attachViewport(QObject *viewport);
@@ -114,6 +115,7 @@ public:
     Q_INVOKABLE void         setFlowSelected(const QString &id, bool selected);
     Q_INVOKABLE bool         setParameter(const QString &id, bool initialization, const QString &text, bool jsonInput = false);
     Q_INVOKABLE bool         setRectParameter(const QString &id, bool initialization, double x, double y, double width, double height, double angle = 0.0);
+    Q_INVOKABLE bool         setParameterPath(const QString &id, bool initialization, const QString &path);
     Q_INVOKABLE bool         setParameterPath(const QString &id, bool initialization, const QUrl &url);
     Q_INVOKABLE bool         stepIntegerParameter(const QString &id, bool initialization, int direction,
                                                   const QString &literal);
@@ -212,6 +214,7 @@ signals:
     void nodeLocated(const QString &node);
     void outputTextReady(const QString &text);
     void catalogChanged();
+    void aboutTextChanged();
     void pasteChanged();
     void assistChanged();
 

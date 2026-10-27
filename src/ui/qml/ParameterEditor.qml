@@ -45,8 +45,8 @@ ColumnLayout {
     }
 
     function commit(text) { return root.editable && app.setParameter(parameter.id, parameter.init, text) }
-    onPathKindChanged: { filePicker.close(); directoryPicker.close() }
-    onParameterKeyChanged: { filePicker.close(); directoryPicker.close() }
+    onPathKindChanged: { pathPicker.close() }
+    onParameterKeyChanged: { pathPicker.close() }
 
     RowLayout {
         Layout.fillWidth: true
@@ -479,14 +479,17 @@ ColumnLayout {
                 }
             }
             Component.onCompleted: sync(true)
-            // A path parameter exposes both native pickers directly: one click, one dialog, no
-            // intermediate menu. file/directory declarations keep only their own action.
-            actionIcon: root.parameter.editor === "file" || root.parameter.editor === "path"
+            // Path parameters use a unified picker dialog supporting both files and folders.
+            actionIcon: root.parameter.editor === "file"
                             ? QuiFontIcon.Document
-                            : (root.parameter.editor === "directory" ? QuiFontIcon.FolderOpen : 0)
-            actionText: root.parameter.editor === "directory" ? "选择文件夹" : "选择文件"
-            secondaryActionIcon: root.parameter.editor === "path" ? QuiFontIcon.FolderOpen : 0
-            secondaryActionText: "选择文件夹"
+                            : (root.parameter.editor === "directory" || root.parameter.editor === "path"
+                                ? QuiFontIcon.FolderOpen
+                                : 0)
+            actionText: root.parameter.editor === "directory" ? "选择文件夹"
+                      : (root.parameter.editor === "file" ? "选择文件"
+                      : (root.parameter.editor === "path" ? "选择路径" : ""))
+            secondaryActionIcon: 0
+            secondaryActionText: ""
             onCommitRequested: {
                 if (text === root.valueText) {
                     invalid = false
@@ -498,13 +501,7 @@ ColumnLayout {
                 text = root.valueText
                 invalid = false
             }
-            onActionRequested: {
-                if (root.parameter.editor === "directory")
-                    directoryPicker.open()
-                else
-                    filePicker.open()
-            }
-            onSecondaryActionRequested: directoryPicker.open()
+            onActionRequested: pathPicker.open()
             Connections {
                 target: root
                 function onValueTextChanged() { field.sync(false) }
@@ -712,6 +709,18 @@ ColumnLayout {
             }
         }
     }
-    FileDialog { id: filePicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFile) }
-    FolderDialog { id: directoryPicker; title: "选择 " + root.parameter.name; onAccepted: if (root.editable) app.setParameterPath(root.parameter.id, root.parameter.init, selectedFolder) }
+    QuiFileFolderDialog {
+        id: pathPicker
+        title: "选择 " + root.parameter.name
+        currentFolder: root.valueText
+        dialogMode: root.parameter.editor === "directory"
+                        ? QuiFileFolderDialog.DialogMode.Folder
+                        : (root.parameter.editor === "file"
+                            ? QuiFileFolderDialog.DialogMode.File
+                            : QuiFileFolderDialog.DialogMode.FileOrFolder)
+        onAccepted: (path) => {
+            if (root.editable)
+                app.setParameterPath(root.parameter.id, root.parameter.init, path)
+        }
+    }
 }

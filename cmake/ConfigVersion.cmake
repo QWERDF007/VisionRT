@@ -48,8 +48,46 @@ function(configure_version target LIBPREFIX incpath VERSION_FULL)
         set(VERSION_BUILD "${tmp}")
     endif()
 
-    # cmake 构建时间
-    string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S %z")
+    # 构建时间（UTC 格式：YYYY-MM-DD HH:mm:ss UTC，符合 Spec AB-03）
+    string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S UTC" UTC)
+
+    # 采集宿主实际引用的 Contracts 元数据 (Ticket AR-02 / Spec AB-04)
+    set(CONTRACTS_COMMIT "unknown")
+    set(CONTRACTS_BRANCH "unknown")
+    set(CONTRACTS_VERSION "0.1.0")
+    if(TARGET VisionRTContracts)
+        get_target_property(_cv_prop VisionRTContracts VISIONRT_CONTRACTS_VERSION)
+        if(_cv_prop)
+            set(CONTRACTS_VERSION "${_cv_prop}")
+        endif()
+    elseif(DEFINED VISIONRT_CONTRACTS_VERSION)
+        set(CONTRACTS_VERSION "${VISIONRT_CONTRACTS_VERSION}")
+    endif()
+
+    find_package(Git QUIET)
+    if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts"
+            OUTPUT_VARIABLE _c_commit
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(_c_commit)
+            set(CONTRACTS_COMMIT "${_c_commit}")
+        endif()
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts"
+            OUTPUT_VARIABLE _c_branch
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(_c_branch)
+            set(CONTRACTS_BRANCH "${_c_branch}")
+        endif()
+    endif()
+    set(CONTRACTS_BUILD_TIME "${BUILD_TIME}")
 
     # 由模板生成版本头文件
     configure_file(${config_version_script_path}/VersionDef.h.in

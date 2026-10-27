@@ -1,5 +1,6 @@
 #include "ui/AppController.h"
 #include "WorkbenchFixtures.h"
+#include "common/Version.h"
 #include "ui/Theme.h"
 #include "ui/OutputModel.h"
 #include "ui/ImageViewport.h"
@@ -11,6 +12,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QJSValue>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -105,6 +107,8 @@ bool hasWire(visionrt::AppController &app, const QString &source, const QString 
     return false;
 }
 }
+
+void aboutDialogContract();
 
 void popupSessionsContract()
 {
@@ -305,6 +309,130 @@ void popupSessionsContract()
     app.selectNode(QStringLiteral("3"));
     app.endRoiPreview();
     window.hide();
+
+    aboutDialogContract();
+}
+
+void aboutDialogContract()
+{
+    const auto require = [](bool condition, const char *message)
+    {
+        if (!condition)
+            throw std::runtime_error(message);
+    };
+
+    visionrt::testing::WorkbenchInstallation installation;
+    visionrt::AppController app(1, installation.directory());
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "catalog did not become ready");
+
+    // 1. Check aboutText structure
+    const QString about = app.aboutText();
+    require(!about.isEmpty(), "aboutText is empty");
+    require(about.contains("VisionRT"), "aboutText missing VisionRT header");
+    require(about.contains("VisionTools"), "aboutText missing VisionTools header");
+    require(about.contains("VisionRTContracts"), "aboutText missing VisionRTContracts header");
+    require(about.contains("运行环境"), "aboutText missing 运行环境 header");
+    require(about.contains("Qt"), "aboutText missing Qt line");
+    require(about.contains("Python"), "aboutText missing Python line");
+    require(about.contains("Copyright © VisionRT contributors"), "aboutText missing Copyright");
+
+    // Check 40-char commit SHA for VisionRT and Contracts
+    const auto contracts = visionrt::GetContractsVersion();
+    require(!contracts.commit.empty() && contracts.commit.length() == 40, "Contracts commit is not 40 chars");
+    require(!contracts.version.empty(), "Contracts version is empty");
+    require(about.contains(QString::fromStdString(contracts.commit)), "aboutText does not contain Contracts commit");
+
+    const std::string hostCommit = visionrt::GetCommitHashString();
+    require(!hostCommit.empty() && hostCommit.length() == 40, "VisionRT commit is not 40 chars");
+    require(about.contains(QString::fromStdString(hostCommit)), "aboutText does not contain VisionRT commit");
+
+    // 2. Check copyAboutText
+    QGuiApplication::clipboard()->clear();
+    app.copyAboutText();
+    require(QGuiApplication::clipboard()->text() == about, "copyAboutText did not match aboutText exactly");
+
+    // 3. Test uninstalled tools package
+    {
+        QTemporaryDir emptyDir;
+        visionrt::AppController emptyApp(1, emptyDir.path());
+        require(QTest::qWaitFor([&] { return !emptyApp.busy(); }, 5000), "emptyApp did not settle");
+        const QString emptyAbout = emptyApp.aboutText();
+        require(emptyAbout.contains(QStringLiteral("VisionTools\n状态          未安装")), "uninstalled package did not show '状态          未安装'");
+    }
+
+    // 4. Test missing build_info.json
+    {
+        QTemporaryDir missingInfoDir;
+        QDir root(missingInfoDir.path());
+        root.mkpath("tools-package");
+        QFile file(root.filePath("tools-package/module_index.json"));
+        require(file.open(QIODevice::WriteOnly), "cannot create module_index.json fixture");
+        file.write("{\"schema_version\":1,\"tools\":[],\"modules\":[],\"runtime_files\":[]}");
+        file.close();
+
+        visionrt::AppController missingApp(1, missingInfoDir.path());
+        require(QTest::qWaitFor([&] { return !missingApp.busy(); }, 5000), "missingApp did not settle");
+        const QString missingAbout = missingApp.aboutText();
+        require(missingAbout.contains(QStringLiteral("VisionTools\n状态          构建信息不可用")), "missing build_info did not show '状态          构建信息不可用'");
+    }
+
+    // 5. QML AboutVisionRTDialog UI verification
+    QQmlEngine engine;
+    quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
+    engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
+    engine.rootContext()->setContextProperty("app", &app);
+
+    QQuickWindow window;
+    window.resize(800, 600);
+    window.show();
+    require(QTest::qWaitForWindowExposed(&window), "dialog window not exposed");
+
+    QQmlComponent dialogComp(&engine);
+    dialogComp.setData(
+        "import QtQuick\nimport quickui\nimport \".\"\n"
+        "Item {\n"
+        "    id: testRoot\n"
+        "    anchors.fill: parent\n"
+        "    AboutVisionRTDialog { id: about; objectName: \"aboutDialog\" }\n"
+        "}\n",
+        QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/AboutTestRoot.qml")));
+    std::unique_ptr<QObject> rootOwner(dialogComp.create());
+    if (!rootOwner)
+        throw std::runtime_error(dialogComp.errorString().toStdString());
+
+    auto *rootItem = qobject_cast<QQuickItem *>(rootOwner.get());
+    rootItem->setParentItem(window.contentItem());
+
+    auto *dialog = rootItem->findChild<QObject *>("aboutDialog");
+    require(dialog != nullptr, "aboutDialog not found in test root");
+
+    QMetaObject::invokeMethod(dialog, "open");
+    require(QTest::qWaitFor([&] { return dialog->property("visible").toBool(); }, 2000), "About dialog did not open");
+
+    // Verify TextArea content
+    auto *textArea = dialog->findChild<QObject *>("aboutTextArea");
+    require(textArea != nullptr, "aboutTextArea is missing in dialog");
+    require(textArea->property("text").toString() == about, "aboutTextArea text does not match app.aboutText");
+    require(textArea->property("readOnly").toBool(), "aboutTextArea is not readOnly");
+    require(textArea->property("selectByMouse").toBool(), "aboutTextArea does not have selectByMouse");
+
+    // Verify context menu exists
+    auto *aboutMenu = dialog->findChild<QObject *>("aboutMenu");
+    require(aboutMenu != nullptr, "aboutMenu is missing in AboutVisionRTDialog");
+
+    // Verify '复制全部' neutral button copies without closing
+    QGuiApplication::clipboard()->clear();
+    const auto neutralListener = dialog->property("onNeutralClickListener").value<QJSValue>();
+    require(neutralListener.isCallable(), "onNeutralClickListener is not callable");
+    neutralListener.call();
+    require(QGuiApplication::clipboard()->text() == about, "neutral button did not copy aboutText");
+    require(dialog->property("visible").toBool(), "neutral button closed the About dialog");
+
+    // Verify '关闭' closes dialog
+    QMetaObject::invokeMethod(dialog, "close");
+    require(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 2000), "close did not close About dialog");
+
+    std::cout << "[Evidence About UI] AboutVisionRTDialog verified: 3-component versions, 40-char SHAs, clipboard copy, uninstalled state, missing metadata state, and QML dialog actions.\n";
 }
 
 void outputCellReuseContract()
