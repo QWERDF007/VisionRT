@@ -1,3 +1,4 @@
+#include "log/LogService.h"
 #include "ui/AppController.h"
 #include "WorkbenchFixtures.h"
 #include "ui/ImageViewport.h"
@@ -123,17 +124,14 @@ void startupProjectContract()
                     "project contract reason was hidden behind an unrelated summary or exception detail");
             require(app.nodes() == oldNodes && app.flows() == oldFlows && app.title() == oldTitle,
                     "malformed project replaced the active project");
-            auto *failureNotice = window->findChild<QObject *>("applicationDiagnosticDialog");
-            require(failureNotice && QMetaObject::invokeMethod(failureNotice, "open"),
-                    "project diagnostic dialog is missing");
-            require(QTest::qWaitFor([&] { return failureNotice->property("opened").toBool(); }, 1000)
-                        && failureNotice->property("text").toString().contains(app.diagnostic()),
-                    "real window did not display the precise project rejection");
+            // The precise rejection stays in the framework diagnostic and now reaches the log
+            // window instead of a dedicated prompt dialog.
+            require(window->findChild<QObject *>("applicationDiagnosticDialog") == nullptr,
+                    "the removed project diagnostic dialog is still instantiated");
+            require(window->findChild<QObject *>("logWindow") != nullptr,
+                    "the project failure has no log surface");
             require(window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/project_load_failure.png")),
                     "cannot capture project failure diagnostic");
-            require(QMetaObject::invokeMethod(failureNotice, "close"), "cannot close project failure diagnostic");
-            require(QTest::qWaitFor([&] { return !failureNotice->property("visible").toBool(); }, 1000),
-                    "project failure diagnostic did not close");
             QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
             require(example.open(QIODevice::ReadOnly), "cannot read project warning fixture");
             auto document     = QJsonDocument::fromJson(example.readAll()).object();
@@ -189,14 +187,21 @@ void startupProjectContract()
             require(app.diagnostics().size() == previous + 2, "same-text application events were deduplicated");
             require(app.diagnostic() == QStringLiteral("工具定义缺失：test.unregistered"),
                     "application diagnostics lost the known Chinese reason or stable tool ID");
-            auto *notice = window->findChild<QObject *>("applicationDiagnosticDialog");
-            require(notice && QMetaObject::invokeMethod(notice, "open"), "application diagnostic dialog is missing");
-            require(QTest::qWaitFor([&] { return notice->property("opened").toBool(); }, 1000),
-                    "application diagnostic dialog did not open");
-            const auto summaries = notice->property("text").toString();
-            require(summaries.count(app.diagnostic()) >= 2, "QML hides a same-text new diagnostic event");
-            require(summaries.contains(QStringLiteral("流程 flow_1 · 节点 4 · 字段 kernel：")),
-                    "real diagnostic dialog omitted project warning context");
+            // The old prompt/JSON dialogs are gone; diagnostics stay in the in-memory buffer and
+            // the single log window is the only surface that displays them.
+            require(window->findChild<QObject *>("applicationDiagnosticDialog") == nullptr,
+                    "the removed application diagnostic dialog is still instantiated");
+            require(window->findChild<QObject *>("applicationDiagnosticJsonDialog") == nullptr,
+                    "the removed application diagnostic JSON dialog is still instantiated");
+            auto *logWindow = window->findChild<QObject *>("logWindow");
+            require(logWindow != nullptr, "the log window is missing");
+            require(!logWindow->property("visible").toBool(), "the log window must start hidden");
+            require((logWindow->property("flags").toInt() & Qt::Dialog) == Qt::Dialog,
+                    "the log window is not a dialog window");
+            require(logWindow->property("modality").toInt() == Qt::NonModal,
+                    "the log window must not be modal");
+            require(logWindow->property("transientParent").value<QObject *>() == window,
+                    "the log window is not transient for the main window");
             const auto findText = [](auto &&self, QQuickItem *parent, const QString &text) -> QQuickItem *
             {
                 if (parent->isVisible() && parent->property("text").toString() == text)
@@ -206,35 +211,37 @@ void startupProjectContract()
                         return found;
                 return nullptr;
             };
-            auto *viewJson = findText(findText, window->contentItem(), "查看 JSON");
-            require(viewJson, "application JSON action is missing");
-            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
-                              viewJson->mapToScene(QPointF(viewJson->width() / 2, viewJson->height() / 2)).toPoint());
-            auto *detail = window->findChild<QObject *>("applicationDiagnosticJsonDialog");
-            require(detail && QTest::qWaitFor([&] { return detail->property("opened").toBool(); }, 1000),
-                    "application diagnostic JSON did not open");
-            const auto jsonText = detail->property("text").toString();
-            const auto json     = QJsonDocument::fromJson(jsonText.toUtf8()).array();
-            require(json.size() == app.diagnostics().size(), "application JSON omitted log entries");
-            require(json.at(0).toObject().value("message") == json.at(1).toObject().value("message"),
-                    "application JSON omitted a same-text new event");
-            require(window->grabWindow().save(
-                        QStringLiteral(VISIONRT_BINARY_DIR "/evidence/application_diagnostics_json.png")),
-                    "cannot capture application diagnostic JSON");
-            require(QMetaObject::invokeMethod(detail, "close"), "cannot close application diagnostic JSON");
-            require(QTest::qWaitFor([&] { return !detail->property("visible").toBool(); }, 1000),
-                    "application JSON did not close");
-            auto *copyJson = findText(findText, window->contentItem(), "复制 JSON");
-            require(copyJson, "application JSON copy action is missing");
-            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
-                              copyJson->mapToScene(QPointF(copyJson->width() / 2, copyJson->height() / 2)).toPoint());
-            require(QGuiApplication::clipboard()->text() == jsonText, "application JSON clipboard text is incomplete");
-            require(
-                window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/application_diagnostics.png")),
-                "cannot capture application diagnostics");
-            require(QMetaObject::invokeMethod(notice, "close"), "cannot close application diagnostics");
-            require(QTest::qWaitFor([&] { return !notice->property("visible").toBool(); }, 1000),
-                    "application diagnostics did not close before native failure");
+            require(findText(findText, window->contentItem(), QStringLiteral("日志")) != nullptr,
+                    "the footer has no log entry");
+            visionrt::LogConfig logConfig;
+            logConfig.uiCapacity        = 100;
+            logConfig.uiBatchIntervalMs = 20;
+            logConfig.uiBatchMaximum    = 50;
+            logConfig.fileBytes         = 64 * 1024;
+            logConfig.fileCount         = 2;
+            auto &logService             = visionrt::LogService::instance();
+            struct LogStop
+            {
+                ~LogStop() { visionrt::LogService::instance().shutdown(); }
+            } logStop;
+            require(logService.start(logConfig, directory.filePath(QStringLiteral("logs/window.log"))),
+                    "cannot start the log service for the window contract");
+            require(QMetaObject::invokeMethod(logWindow, "showAndRaise"), "cannot show the log window");
+            require(QTest::qWaitFor([&] { return logWindow->property("visible").toBool(); }, 1000),
+                    "the log window did not become visible");
+            require(app.logModel() != nullptr, "the log window has no model");
+            visionrt::LogService::write(visionrt::LogLevel::Info, QStringLiteral("窗口契约"),
+                                        QStringLiteral("日志窗口可见行"));
+            require(QTest::qWaitFor([&] { return app.logModel()->rowCount() >= 1; }, 3000),
+                    "the visible log window did not receive a bounded batch");
+            QTest::qWait(100);
+            auto *logQuick = qobject_cast<QQuickWindow *>(logWindow);
+            require(logQuick != nullptr, "the log window is not a quick window");
+            require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_window.png")),
+                    "cannot capture the log window");
+            require(QMetaObject::invokeMethod(logWindow, "close"), "cannot close the log window");
+            require(QTest::qWaitFor([&] { return !logWindow->property("visible").toBool(); }, 1000),
+                    "closing the log window did not hide it");
             const auto oversized = visionrt::testing::oversizedBmp();
             const auto imagePath = directory.filePath(QStringLiteral("超尺寸图像.bmp"));
             QFile      oversizedFile(imagePath);
@@ -285,37 +292,28 @@ void startupProjectContract()
                         },
                         1000),
                     "main-window result table did not display the native failure before interaction");
-            // Diagnostics belong to the data column; the name column is the connection menu.
+            // The data column copies its value. The raw native detail stays in the framework
+            // diagnostic that logs and tests consume, and never leaks into the node summary.
             auto *statusCell
                 = findText(findText, window->contentItem(), outputModel->get(1).value("preview").toString());
             require(statusCell != nullptr, "main-window status message data cell is missing");
             QTest::mouseClick(
                 window, Qt::RightButton, Qt::NoModifier,
                 statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());
-            QQuickItem *viewDecode = nullptr;
             auto       *decodeMenu = window->findChild<QObject *>(QStringLiteral("outputMenu"));
-            const bool  menuReady  = QTest::qWaitFor(
+            const bool  copyReady  = QTest::qWaitFor(
                 [&]
                 {
-                    viewDecode = findText(findText, window->contentItem(), QStringLiteral("查看诊断 JSON"));
-                    return decodeMenu && decodeMenu->property("opened").toBool() && viewDecode
-                        && viewDecode->isEnabled();
+                    auto *copy = decodeMenu ? decodeMenu->findChild<QObject *>(QStringLiteral("outputCopyAction"))
+                                            : nullptr;
+                    return copy && copy->property("enabled").toBool();
                 },
                 1000);
-            require(menuReady, "native decode diagnostic menu action is unavailable");
-            QSignalSpy nativeText(&app, &visionrt::AppController::outputTextReady);
-            QTest::mouseClick(
-                window, Qt::LeftButton, Qt::NoModifier,
-                viewDecode->mapToScene(QPointF(viewDecode->width() / 2, viewDecode->height() / 2)).toPoint());
-            auto *decodeDialog = window->findChild<QObject *>(QStringLiteral("outputDataDialog"));
-            require(decodeDialog && QTest::qWaitFor([&] { return decodeDialog->property("opened").toBool(); }, 1000)
-                        && decodeDialog->property("text").toString() == decodeJson && nativeText.count() == 1
-                        && nativeText.last().front().toString() == decodeJson,
-                    "main-window JSON cannot show the complete native exception detail exactly once");
-            require(window->grabWindow().save(
-                        QStringLiteral(VISIONRT_BINARY_DIR "/evidence/native_decode_diagnostics.png")),
-                    "cannot capture native decode diagnostics");
-            require(QMetaObject::invokeMethod(decodeDialog, "close"), "cannot close native decode diagnostics");
+            require(copyReady, "the data column does not offer copy for a real failed value");
+            require(findText(findText, window->contentItem(), QStringLiteral("查看诊断 JSON")) == nullptr,
+                    "the removed diagnostic entry is still offered");
+            require(decodeMenu->property("count").toInt() == 1, "the data column still offers more than copy");
+            QMetaObject::invokeMethod(decodeMenu, "close", Qt::DirectConnection);
         }
     }
 }

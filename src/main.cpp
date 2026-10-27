@@ -1,4 +1,6 @@
 #include "common/Version.h"
+#include "log/LogService.h"
+#include "log/LogModel.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
@@ -56,6 +58,13 @@ int main(int argc, char *argv[])
         qputenv("VISIONRT_PYTHON_HOME", parser.value("python-home").toUtf8());
     try
     {
+        // Logging covers every producer below it and is released only after the controller and the
+        // QML engine are gone, so a late Python owner still has a live logger.
+        visionrt::LogService::instance().start();
+        struct LogShutdown
+        {
+            ~LogShutdown() { visionrt::LogService::instance().shutdown(); }
+        } logShutdown;
         QMetaObject::Connection startupConnection;
         visionrt::AppController controller(workers, QCoreApplication::applicationDirPath());
         if (parser.isSet("project"))

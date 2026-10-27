@@ -1,5 +1,7 @@
 #include "ui/AppController_p.h"
 
+#include "log/LogService.h"
+
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -13,8 +15,12 @@ void AppController::Impl::report(const QString &text)
 
 void AppController::Impl::report(ApplicationDiagnostic entry)
 {
-    if (diagnosticMessage(entry).isEmpty())
+    const auto message = diagnosticMessage(entry);
+    if (message.isEmpty())
         return;
+    // Every application event is one log line as well. The diagnostic buffer stays as the compact
+    // in-memory history the rest of the UI and the tests already consume.
+    LogService::write(LogLevel::Error, QStringLiteral("应用"), message);
     diagnostics.push_back(std::move(entry));
     while (diagnostics.size() > 100) diagnostics.pop_front();
     emit q->diagnosticChanged();
@@ -28,6 +34,23 @@ void AppController::Impl::report(const std::exception &error, const QString &sum
         report(ToolStatus{-2, error.what()});
     else
         report(ToolStatus{-1, summary.toStdString(), error.what()});
+}
+
+void AppController::setLogViewActive(bool active)
+{
+    LogService::instance().setViewActive(active);
+}
+
+void AppController::logParameterDraftRejected(const QString &detail)
+{
+    LogService::write(LogLevel::Warn, QStringLiteral("参数"), QStringLiteral("参数草稿被拒绝：") + detail);
+}
+
+QAbstractItemModel *AppController::logModel()
+{
+    if (!impl_->logModel)
+        impl_->logModel = std::make_unique<LogModel>();
+    return impl_->logModel.get();
 }
 
 QString AppController::diagnostic() const

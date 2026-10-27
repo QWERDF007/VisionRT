@@ -311,9 +311,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     const auto publishTerminal = [&](std::string message)
     {
-        snapshot->disposition = disposition;
-        snapshot->status      = {kNotExecutedStatus, std::move(message)};
-        snapshot->phase       = NodePhase::Prepare;
+        snapshot->disposition         = disposition;
+        snapshot->status              = {kNotExecutedStatus, std::move(message)};
+        snapshot->toolResultPublished = false;
+        snapshot->phase               = NodePhase::Prepare;
         for (const auto &port : definition->outputs)
             if (port.id != kStatusCodePort && port.id != kStatusMessagePort)
                 snapshot->outputs.emplace(port.id, Missing{});
@@ -509,24 +510,29 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         applyPythonMetrics();
     if (frameworkFailure)
     {
-        // The framework stopped the node, so it publishes the terminal state of that node. This is
-        // not a tool answer: every business port is Missing and the status carries the diagnostic.
+        // The framework stopped the node, so it owns the terminal state. There is no tool answer to
+        // publish: business ports are structurally Missing, but the status keys are only created by
+        // a tool result and must never be synthesised here.
         result.outputs.clear();
         snapshot->roiInputs.clear();
         snapshot->status = std::move(frameworkStatus);
         for (const auto &port : definition->outputs)
             if (port.id != kStatusCodePort && port.id != kStatusMessagePort)
                 result.outputs.emplace(port.id, Missing{});
-        result.outputs.emplace(std::string(kStatusCodePort), snapshot->status.code);
-        result.outputs.emplace(std::string(kStatusMessagePort), snapshot->status.message);
     }
     else
-        snapshot->status = std::move(businessStatus);
+    {
+        snapshot->status              = std::move(businessStatus);
+        snapshot->toolResultPublished = true;
+    }
     if (disposition == NodeDisposition::Running)
     {
         if (frameworkFailure)
             disposition = NodeDisposition::Failed;
-        else if (snapshot->status.code == kCancelledStatus)
+        else if (context->stop && context->stop->stop_requested() && snapshot->status.code == kCancelledStatus)
+            // Cancellation needs the scheduler fact; a tool's negative code alone never means the
+            // user cancelled. The host receiver reports kCancelledStatus only after observing that
+            // same stop, so both signals together identify a genuinely cancelled invocation.
             disposition = NodeDisposition::Canceled;
         else
             disposition = NodeDisposition::Succeeded;

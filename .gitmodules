@@ -16,3 +16,8 @@
 [submodule "3rdparty/adaptagrams"]
 	path = 3rdparty/adaptagrams
 	url = https://github.com/mjwybrow/adaptagrams.git
+
+[submodule "3rdparty/spdlog"]
+	path = 3rdparty/spdlog
+	url = https://github.com/gabime/spdlog.git
+	branch = v1.15.3

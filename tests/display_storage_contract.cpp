@@ -130,14 +130,57 @@ void drainReleasesSourcesBeforeNextExecution()
 }
 }
 
+void variableChannelsAndAlpha()
+{
+    // A declaration that says BGR must not reject a grey or four-channel image: the layout is
+    // inferred from the data, while an explicit RGB/RGBA stays explicit when channels agree.
+    const auto grey = DisplayConverter::convert(cv::Mat(2, 3, CV_8UC1, cv::Scalar(77)), "BGR");
+    require(grey.error.isEmpty() && !grey.image.isNull(), "declared BGR rejected a grey image");
+    require(grey.image.pixelColor(0, 0).red() == 77, "inferred grey image lost its value");
+
+    cv::Mat rgba(1, 3, CV_8UC4);
+    rgba.at<cv::Vec4b>(0, 0) = {10, 20, 30, 0};
+    rgba.at<cv::Vec4b>(0, 1) = {10, 20, 30, 128};
+    rgba.at<cv::Vec4b>(0, 2) = {10, 20, 30, 255};
+    const auto four = DisplayConverter::convert(rgba, "BGR");
+    require(four.error.isEmpty(), "declared BGR rejected a BGRA image");
+    require(four.image.pixelColor(0, 0).alpha() == 0 && four.image.pixelColor(1, 0).alpha() == 128
+                && four.image.pixelColor(2, 0).alpha() == 255,
+            "8-bit alpha was not preserved");
+
+    // Higher integer depths keep a fixed alpha range instead of stretching it with the colour
+    // extremes: a fully transparent image must stay transparent.
+    cv::Mat deep(1, 3, CV_16UC4, cv::Scalar(1000, 2000, 3000, 0));
+    deep.at<cv::Vec4w>(0, 1)[3] = 32768;
+    deep.at<cv::Vec4w>(0, 2)[3] = 65535;
+    const auto deepFrame = DisplayConverter::convert(deep, "BGRA");
+    require(deepFrame.error.isEmpty(), "16-bit BGRA image was rejected");
+    const auto alpha0 = deepFrame.image.pixelColor(0, 0).alpha();
+    const auto alpha1 = deepFrame.image.pixelColor(1, 0).alpha();
+    const auto alpha2 = deepFrame.image.pixelColor(2, 0).alpha();
+    require(alpha0 == 0 && std::abs(alpha1 - 128) <= 1 && alpha2 == 255,
+            "16-bit alpha was stretched by the colour range");
+    require(deepFrame.image.pixelColor(0, 0) == deepFrame.image.pixelColor(2, 0)
+                    || deepFrame.image.pixelColor(0, 0).rgb() == deepFrame.image.pixelColor(2, 0).rgb(),
+            "constant colour must not depend on the alpha sample");
+
+    cv::Mat floats(1, 2, CV_32FC4, cv::Scalar(0.25f, 0.5f, 0.75f, 0.5f));
+    floats.at<cv::Vec4f>(0, 1)[3] = 1.5f;
+    const auto floatFrame = DisplayConverter::convert(floats, "RGBA");
+    require(floatFrame.error.isEmpty(), "float RGBA image was rejected");
+    require(floatFrame.image.pixelColor(0, 0).alpha() == 128 && floatFrame.image.pixelColor(1, 0).alpha() == 255,
+            "float alpha must clamp to its unit range");
+}
+
 int main(int argc, char **argv)
 try
 {
     QCoreApplication application(argc, argv);
     ownedDisplayPixels();
+    variableChannelsAndAlpha();
     asynchronousSourcesRetainOwners();
     drainReleasesSourcesBeforeNextExecution();
-    std::cout << "Owned display frames preserve color and normalization without retaining mutable business pixels\n";
+    std::cout << "Owned display frames preserve color, channel inference and alpha without retaining mutable business pixels\n";
 }
 catch (const std::exception &error)
 {

@@ -27,10 +27,6 @@ Rectangle {
     // badge, so a skipped branch can not be mistaken for a green success.
     readonly property bool isSkipped: root.nodeState === "skipped"
     readonly property bool isBlocked: root.nodeState === "blocked"
-    // A result produced before the latest parameter edit is still visible, but it is no longer
-    // evidence for the current configuration.
-    readonly property bool isStale: root.node.stale === true && !root.isError
-                                    && root.nodeState !== "running" && root.nodeState !== "idle"
     readonly property color statusDotColor: {
         if (root.isBlocked) return Theme.nodeStateOrange
         if (root.nodeState === "running") return Theme.nodeStateGreen
@@ -109,15 +105,6 @@ Rectangle {
                 visible: root.isBlocked
                 objectName: "nodeBadgeBlock_" + root.node.id
                 text: "阻塞"
-                renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: Theme.nodeStateOrange
-                Layout.alignment: Qt.AlignVCenter
-            }
-            QuiText {
-                visible: root.isStale
-                objectName: "nodeBadgeStale_" + root.node.id
-                text: "待运行"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
                 color: Theme.nodeStateOrange

@@ -10,40 +10,48 @@ Rectangle {
     border.width: 0
     property bool relations: false
     property var selectedContext: ({})
-    property var pendingAction: null
+    // The copy request is released only after the menu has actually closed, so the popup teardown
+    // can never race the bounded readback that is about to capture the same publication.
+    property var pendingContext: ({})
     property string selectedName: ""
     property bool selectedSystem: true
-    property bool selectedDiagnostic: false
-    property string fullText: ""
     property var cascadeTools: []
     function showNameMenu(options, item, point) {
         selectedContext = app.portDeclarationContext(options.portId, true)
         if (!app.portContextCurrent(selectedContext)) return
         selectedName = options.name; selectedSystem = options.system
+        // The name column is the connection menu: an empty candidate list opens nothing at all
+        // instead of offering a placeholder row.
         cascadeTools = app.cascadeOutputCandidates(selectedContext)
+        if (cascadeTools.length === 0) return
         let position = item.mapToItem(root, point.x, point.y)
         nameMenu.popup(root, position.x, position.y)
     }
     function showDataMenu(options, item, point) {
-        selectedContext = app.portResultContext(options.portId)
-        if (!app.portContextCurrent(selectedContext)) return
+        // A row without a published value still opens its menu so that copy is visibly disabled
+        // rather than silently missing.
+        const resultContext = app.portResultContext(options.portId)
+        selectedContext = resultContext
         selectedName = options.name; selectedSystem = options.system
-        selectedDiagnostic = options.diagnostic || false
-        pendingAction = null
+        pendingContext = ({})
         let position = item.mapToItem(root, point.x, point.y)
-        outputMenu.popup(root, position.x, position.y)
+        copyMenu.popup(root, position.x, position.y)
     }
-    function queueAction(action) {
-        if (!app.portContextCurrent(selectedContext)) return
-        pendingAction = { action: action, context: selectedContext, name: selectedName }
-        outputMenu.close()
+    function copyEnabled() {
+        return !app.busy && !isEmptyContext(selectedContext) && selectedContext.available !== false
+                && app.portContextCurrent(selectedContext)
+    }
+    function isEmptyContext(context) {
+        return !context || Object.keys(context).length === 0
     }
     function invalidateMenu() {
-        if (!pendingAction) selectedContext = ({})
-        outputMenu.close(); nameMenu.close(); binding.close()
+        pendingContext = ({})
+        selectedContext = ({})
+        copyMenu.close(); nameMenu.close()
     }
     function validateMenu() {
-        if (app.busy || !app.portContextCurrent(selectedContext)) invalidateMenu()
+        if (app.busy || isEmptyContext(selectedContext) || !app.portContextCurrent(selectedContext))
+            invalidateMenu()
     }
     ColumnLayout {
         anchors.fill: parent; spacing: 0
@@ -112,7 +120,6 @@ Rectangle {
                     type: data.typeDisplay || data.type || "",
                     typeMachine: data.type || "",
                     tooltip: data.tooltip || "",
-                    diagnostic: data.diagnostic || false,
                     count: data.count || 0,
                     connectable: data.connectable === true,
                     system: data.system === true
@@ -154,14 +161,11 @@ Rectangle {
                 id: cellPointer; anchors.fill: parent; hoverEnabled: true
                 acceptedButtons: Qt.RightButton
                 onClicked: function(mouse) {
-                    if (cell.options.column === 0) {
-                        // The name menu is a connection menu: no candidate and no existing relation
-                        // means there is nothing to offer, so no menu opens at all.
-                        if (!cell.options.connectable && (cell.options.count || 0) === 0) return
+                    // Column 0 is the connection menu; the data column only ever offers copy.
+                    if (cell.options.column === 0)
                         root.showNameMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
-                    } else {
+                    else
                         root.showDataMenu(cell.options, cell, Qt.point(mouse.x, mouse.y))
-                    }
                 }
             }
             QuiToolTip {
@@ -185,23 +189,25 @@ Rectangle {
         }
     }
     QuiMenu {
-        id: outputMenu
+        id: copyMenu
         objectName: "outputMenu"
         parent: root
         onClosed: {
-            let pending = root.pendingAction
-            root.pendingAction = null; root.selectedContext = ({})
-            if (!pending || !app.portContextCurrent(pending.context)) return
-            if (pending.action === "bind") binding.openOutput(pending.context, pending.name)
-            else app.requestOutputText(pending.context, pending.action.endsWith("copy"), pending.action.startsWith("diagnostic"))
+            const pending = root.pendingContext
+            root.pendingContext = ({})
+            root.selectedContext = ({})
+            if (root.isEmptyContext(pending) || !app.portContextCurrent(pending)) return
+            // Copy stays a bounded background task with a readback acknowledgement; the GUI thread
+            // never serialises the value and never truncates it into something that looks complete.
+            app.requestOutputText(pending, true, false)
         }
-        QuiMenuItem { text: "查看数据"; enabled: app.portContextCurrent(root.selectedContext); onTriggered: root.queueAction("view") }
-        QuiMenuItem { text: "复制数据"; enabled: app.portContextCurrent(root.selectedContext); onTriggered: root.queueAction("copy") }
-        QuiMenuItem { text: "查看诊断 JSON"; visible: root.selectedSystem; enabled: app.portContextCurrent(root.selectedContext) && root.selectedDiagnostic; onTriggered: root.queueAction("diagnostic-view") }
-        QuiMenuItem { text: "复制诊断 JSON"; visible: root.selectedSystem; enabled: app.portContextCurrent(root.selectedContext) && root.selectedDiagnostic; onTriggered: root.queueAction("diagnostic-copy") }
-        QuiMenuItem { text: "关联已有节点…"; enabled: !app.busy && !root.selectedSystem; onTriggered: root.queueAction("bind") }
+        QuiMenuItem {
+            objectName: "outputCopyAction"
+            text: "复制"
+            enabled: root.copyEnabled()
+            onTriggered: root.pendingContext = root.selectedContext
+        }
     }
-    BindingPopup { id: binding; objectName: "bindingPopup" }
     QuiMenu {
         id: nameMenu
         objectName: "outputNameMenu"
@@ -257,9 +263,8 @@ Rectangle {
                     delegate: QuiMenuItem {
                         required property var modelData
                         text: modelData.connected ? ("✓ " + (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
-                            : modelData.occupied ? ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + " · 已被占用)")
                             : ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
-                        enabled: !app.busy && !modelData.occupied
+                        enabled: !app.busy
                         onTriggered: {
                             if (modelData.connected) {
                                 app.unbindOutputFrom(root.selectedContext, toolSubMenu.targetNode, modelData.port)
@@ -275,21 +280,9 @@ Rectangle {
             onObjectAdded: function(index, object) { nameMenu.insertMenu(index + 1, object) }
             onObjectRemoved: function(index, object) { nameMenu.removeMenu(object) }
         }
-        QuiMenuItem {
-            visible: nameMenu.filteredTools.length === 0
-            text: root.cascadeTools.length === 0 ? "无可连接的下层输入" : "未找到匹配项"
-            enabled: false
-        }
-    }
-    WorkbenchTextDialog {
-        id: dataDialog; objectName: "outputDataDialog"; title: "输出数据 · 点击时的快照"
-        text: root.fullText
-        monospace: true
-        description: "超大数据会先提示预计体积；确认需要后关闭此窗，再次点击原“查看数据 / 复制数据”操作。"
     }
     Connections {
         target: app
-        function onOutputTextReady(text) { root.fullText = text; dataDialog.open() }
         function onSelectionChanged() { root.validateMenu() }
         function onNodesChanged() { root.validateMenu() }
         function onParametersChanged() { root.validateMenu() }

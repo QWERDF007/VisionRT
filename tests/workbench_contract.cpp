@@ -104,6 +104,7 @@ void outputContract()
     snapshot->toolId = "test.output";
     snapshot->phase  = NodePhase::Convert;
     snapshot->status = {-2, "输出合同错误", "third-party \"detail\"\n完整详情"};
+    snapshot->toolResultPublished = true;
     snapshot->outputs.emplace("value", std::string(std::string(10000, 'x')));
     OutputModel model;
     model.setResult(&tool, snapshot,
@@ -247,13 +248,14 @@ void durationTextContract()
             "NaN measurement must be unavailable");
     require(durationText(std::numeric_limits<double>::infinity()) == QStringLiteral("—"),
             "infinite measurement must be unavailable");
-    require(durationText(0.0) == QStringLiteral("0 ms"), "measured zero must stay zero");
-    require(durationText(0.005) == QStringLiteral("<0.01 ms"), "sub-centisecond measurement is not compact");
-    require(durationText(0.01) == QStringLiteral("0.01 ms"), "centisecond measurement lost precision");
-    require(durationText(1.10) == QStringLiteral("1.1 ms"), "trailing zeros are not removed");
-    require(durationText(1234.567) == QStringLiteral("1234.57 ms"), "two-decimal rounding is wrong");
+    require(durationText(0.0) == QStringLiteral("0.000 ms"), "measured zero must stay zero");
+    require(durationText(0.0009) == QStringLiteral("0.000 ms"), "sub-microsecond measurement must read as zero");
+    require(durationText(0.001) == QStringLiteral("0.001 ms"), "microsecond measurement lost precision");
+    require(durationText(0.0199) == QStringLiteral("0.020 ms"), "millisecond rounding is wrong");
+    require(durationText(1.2) == QStringLiteral("1.200 ms"), "three-decimal format is not fixed");
+    require(durationText(1234.567) == QStringLiteral("1234.567 ms"), "three-decimal rounding is wrong");
     const auto absent = nodeTimingText(nullptr, false);
-    require(absent.total == QStringLiteral("未运行") && absent.toolCall == QStringLiteral("未运行")
+    require(absent.total == QStringLiteral("—") && absent.toolCall == QStringLiteral("—")
                 && absent.preprocess == QStringLiteral("—") && absent.postprocess == QStringLiteral("—"),
             "absent execution snapshot fabricated a measurement");
     NodeSnapshot snapshot;
@@ -263,7 +265,7 @@ void durationTextContract()
     snapshot.timing.initMs = 31;
     snapshot.timing.validateMs = 43;
     const auto uncalled = nodeTimingText(&snapshot, false);
-    require(uncalled.total == QStringLiteral("1234.57 ms") && uncalled.toolCall == QStringLiteral("—"),
+    require(uncalled.total == QStringLiteral("1234.567 ms") && uncalled.toolCall == QStringLiteral("—"),
             "uncalled tool used an unmeasured adapter duration");
     require(uncalled.preprocess == QStringLiteral("—") && uncalled.postprocess == QStringLiteral("—"),
             "framework stages were relabeled as algorithm stages");
@@ -275,18 +277,19 @@ void durationTextContract()
     snapshot.timing.initMeasured = true;
     snapshot.timing.validateMeasured = true;
     const auto called = nodeTimingText(&snapshot, false);
-    require(called.total == QStringLiteral("1234.57 ms") && called.toolCall == QStringLiteral("1.1 ms"),
+    require(called.total == QStringLiteral("1234.567 ms") && called.toolCall == QStringLiteral("1.100 ms"),
             "node total and adapter call measurements were conflated");
-    require(called.prepare == QStringLiteral("27 ms") && called.init == QStringLiteral("31 ms")
-                && called.validate == QStringLiteral("43 ms"),
+    require(called.prepare == QStringLiteral("27.000 ms") && called.init == QStringLiteral("31.000 ms")
+                && called.validate == QStringLiteral("43.000 ms"),
             "measured framework stages did not display real values");
     // The tooltip has exactly three rows: preparation and post-processing aggregate the measured
     // phases; the operator row is the tool call itself.
-    require(called.preprocess == QStringLiteral("58 ms") && called.postprocess == QStringLiteral("43 ms"),
+    require(called.preprocess == QStringLiteral("58.000 ms") && called.postprocess == QStringLiteral("43.000 ms"),
             "tooltip phases did not aggregate the measured preparation/post-processing");
     const std::pair<double, QString> measurements[] = {
-        {0.0, QStringLiteral("0 ms")}, {0.005, QStringLiteral("<0.01 ms")}, {1.1, QStringLiteral("1.1 ms")},
-        {-1.0, QStringLiteral("—")},
+        {0.0, QStringLiteral("0.000 ms")}, {0.0009, QStringLiteral("0.000 ms")},
+        {0.001, QStringLiteral("0.001 ms")}, {0.0199, QStringLiteral("0.020 ms")},
+        {1.2, QStringLiteral("1.200 ms")}, {-1.0, QStringLiteral("—")},
         {std::numeric_limits<double>::quiet_NaN(), QStringLiteral("—")},
         {std::numeric_limits<double>::infinity(), QStringLiteral("—")}
     };
@@ -322,11 +325,11 @@ void durationTextContract()
     snapshot.timing.pythonOutputMs       = 3.0;
     snapshot.timing.adapterExecuteMs     = 12.0;
     const auto pythonCall = nodeTimingText(&snapshot, false);
-    require(pythonCall.toolCall == QStringLiteral("4 ms"),
+    require(pythonCall.toolCall == QStringLiteral("4.000 ms"),
             "a Python operator must report its real call time instead of the whole adapter boundary");
-    require(pythonCall.preprocess == QStringLiteral("5 ms"),
+    require(pythonCall.preprocess == QStringLiteral("5.000 ms"),
             "GIL wait and input mapping belong to preparation and must be counted once");
-    require(pythonCall.postprocess == QStringLiteral("4 ms"),
+    require(pythonCall.postprocess == QStringLiteral("4.000 ms"),
             "output conversion belongs to post-processing and must be counted once");
     snapshot.timing.pythonCallMeasured = false;
     require(nodeTimingText(&snapshot, false).toolCall == QStringLiteral("—"),
@@ -525,9 +528,9 @@ void nodeDiagnosticsContract()
     require(map0.contains("implUnavailable"), "node missing implUnavailable");
     require(map0.value("implUnavailable").toBool() == false, "available node marked implUnavailable");
     require(!map0.contains("timingDetail"), "obsolete timingDetail source must be removed");
-    require(map0.value("timingText").toString() == QStringLiteral("未运行"), "unrun node total is not 未运行");
-    require(map0.value("timingOperatorText").toString() == QStringLiteral("未运行"),
-            "unrun node operator time is not 未运行");
+    require(map0.value("timingText").toString() == QStringLiteral("—"), "unrun node total must stay unavailable");
+    require(map0.value("timingOperatorText").toString() == QStringLiteral("—"),
+            "unrun node operator time must stay unavailable");
     require(map0.value("timingPreprocessText").toString() == QStringLiteral("—"),
             "unmeasured preprocess time must be unavailable");
     require(map0.value("timingPostprocessText").toString() == QStringLiteral("—"),
@@ -1648,6 +1651,16 @@ void shortWindowContract()
               << "), screenshot=" << screenshotPath.string() << "\n";
     std::cout << "[SHORT WINDOW CONTRACT PASSED]\n";
 }
+
+// Windowless core scenarios shared by the aggregate run; kept in one place so the aggregate main
+// cannot drift from the child-process dispatch table above.
+void coreContracts()
+{
+    treeContract();
+    pendingContract();
+    durationTextContract();
+    nodeDiagnosticsContract();
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -1725,19 +1738,17 @@ int main(int argc, char **argv)
     QGuiApplication qt(argc, argv);
     try
     {
-        treeContract();
+        coreContracts();
         require(AppController::staticMetaObject.indexOfMethod("saveToolMetadata(QVariantMap)") < 0,
                 "installed tool metadata must not expose a second authoring entry");
         outputContract();
-        pendingContract();
-        durationTextContract();
-        nodeDiagnosticsContract();
         packageDrivenCatalogAndRefreshContract();
         parameterEditorsContract();
         pathEditorsContract();
 
         const QString appPath = QCoreApplication::applicationFilePath();
 
+        // ROI geometry drives real window focus and must stay in an isolated child process.
         {
             QProcess roiProc;
             roiProc.start(appPath, {"--roi-child"});

@@ -6,6 +6,7 @@ QuiStepperField {
     id: root
 
     property string valueText: ""
+    property string parameterId: ""
     property bool canDecrement: false
     property bool canIncrement: false
     property var commitValue
@@ -34,11 +35,14 @@ QuiStepperField {
             invalid = false
             return
         }
+        // A rejected draft stays in the field for the user to correct; validation is reported to
+        // the log instead of painting the row red.
         if (commitValue(text)) {
             _lastValue = text
             invalid = false
         } else {
-            invalid = true
+            app.logParameterDraftRejected(parameterId + "：" + text)
+            invalid = false
         }
     }
     onCancelRequested: {
@@ -47,12 +51,10 @@ QuiStepperField {
     }
     onDecreaseRequested: {
         _lastValue = text
-        if (!stepValue(-1, text))
-            invalid = true
+        stepValue(-1, text)
     }
     onIncreaseRequested: {
         _lastValue = text
-        if (!stepValue(1, text))
-            invalid = true
+        stepValue(1, text)
     }
 }

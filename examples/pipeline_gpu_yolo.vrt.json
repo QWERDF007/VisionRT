@@ -72,7 +72,7 @@
           "inputs": {
             "count": {
               "mode": "literal",
-              "literal": 2
+              "literal": 1
             },
             "order": {
               "mode": "literal",
@@ -103,7 +103,7 @@
           "alias": "YOLO推理",
           "pos": [
             2,
-            0
+            1
           ],
           "init_params": {
             "model_name": "yolov8n",

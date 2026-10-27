@@ -9,7 +9,6 @@ Item {
 
     property alias text: input.text
     property alias inputItem: input
-    property string placeholderText: ""
     property bool readOnly: false
     property bool invalid: false
     property bool flat: true
@@ -33,7 +32,7 @@ Item {
     signal leadingActionRequested()
 
     implicitWidth: 200
-    implicitHeight: Theme.paramEditorHeight
+    implicitHeight: Theme.parameterRowHeight
 
     function finishEditing() {
         if (root.enabled && !root.readOnly && !input.inputMethodComposing)
@@ -102,8 +101,10 @@ Item {
                     leftPadding: root.leadingActionIcon > 0 || root.leadingActionDelegate !== null ? 6 : 8
                     rightPadding: root.actionIcon > 0 ? 6 : 4
                     verticalAlignment: Text.AlignVCenter
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.paramEditorFontSize })
-                    color: !root.enabled ? QuiColor.FontCaption : root.invalid ? QuiColor.Error : (input.text === "[]" ? QuiColor.FontCaption : QuiColor.FontPrimary)
+                    font: Theme.parameterFont
+                    // One text colour for every parameter kind; a rejected draft is reported to the
+                    // log and keeps its text instead of painting the field red.
+                    color: root.enabled ? Theme.parameterTextColor : Theme.disabledText
                     selectionColor: Theme.highlight
                     selectedTextColor: "#ffffff"
                     selectByMouse: true
@@ -126,18 +127,6 @@ Item {
                     }
                 }
 
-                QuiText {
-                    anchors.left: parent.left
-                    anchors.leftMargin: root.leadingActionIcon > 0 || root.leadingActionDelegate !== null ? 6 : 8
-                    anchors.right: parent.right
-                    anchors.rightMargin: root.actionIcon > 0 ? 30 : 6
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: input.text.length === 0 && !input.activeFocus
-                    text: root.placeholderText
-                    elide: Text.ElideRight
-                    color: QuiColor.FontCaption
-                    font: input.font
-                }
             }
 
             Rectangle {

@@ -5,14 +5,16 @@
 #include "ui/ImageViewport.h"
 #include <quickui/Color.h>
 
-#include <QQmlComponent>
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaObject>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -36,6 +38,72 @@ QQuickItem *visibleText(QQuickItem *item, const QString &text)
             return found;
     return nullptr;
 }
+
+// Output cells are pooled delegates that carry the row/column they currently represent. Looking a
+// cell up by identity instead of by its visible text keeps this contract independent of formatting.
+QQuickItem *outputCell(QQuickItem *item, const QString &portId, int column)
+{
+    const auto options = item->property("options").toMap();
+    if (item->isVisible() && options.value("portId").toString() == portId
+        && options.value("column").toInt() == column && options.contains("connectable"))
+        return item;
+    for (auto *child : item->childItems())
+        if (auto *found = outputCell(child, portId, column))
+            return found;
+    return nullptr;
+}
+
+QQuickItem *waitForCell(QQuickItem *panel, const QString &portId, int column, int timeout = 3000)
+{
+    QPointer<QQuickItem> found;
+    QTest::qWaitFor([&] {
+        found = outputCell(panel, portId, column);
+        return !found.isNull();
+    }, timeout);
+    return found.data();
+}
+
+void rightClick(QQuickWindow &window, QQuickItem *item)
+{
+    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
+                      item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+}
+
+void leftClick(QQuickWindow &window, QObject *object)
+{
+    auto *item = qobject_cast<QQuickItem *>(object);
+    if (!item)
+        throw std::runtime_error("menu action is not a visual item");
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+                      item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+}
+
+QObject *findByProperty(QObject *root, const char *name, const QString &value)
+{
+    for (auto *child : root->findChildren<QObject *>())
+        if (child->property(name).toString() == value)
+            return child;
+    return nullptr;
+}
+
+QObject *findByTextPrefix(QObject *root, const QString &prefix)
+{
+    for (auto *child : root->findChildren<QObject *>())
+        if (child->property("text").toString().startsWith(prefix))
+            return child;
+    return nullptr;
+}
+
+bool hasWire(visionrt::AppController &app, const QString &source, const QString &target)
+{
+    for (const auto &wire : app.wires())
+    {
+        const auto entry = wire.toMap();
+        if (entry.value("source").toString() == source && entry.value("target").toString() == target)
+            return true;
+    }
+    return false;
+}
 }
 
 void popupSessionsContract()
@@ -58,180 +126,143 @@ void popupSessionsContract()
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQuickWindow window;
-    window.resize(760, 560);
+    window.resize(900, 600);
     window.show();
     require(QTest::qWaitForWindowExposed(&window), "popup window was not exposed");
-    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/BindingPopup.qml")));
-    std::unique_ptr<QObject> popup(component.create());
-    if (!popup)
-        throw std::runtime_error(component.errorString().toStdString());
-    require(popup->setProperty("parent", QVariant::fromValue(window.contentItem())), "popup parent was not assigned");
-    const auto openOutput = [&]
-    {
-        require(QMetaObject::invokeMethod(popup.get(), "openOutput", Q_ARG(QVariant, app.portContext(QStringLiteral("images"), true)),
-                                         Q_ARG(QVariant, QStringLiteral("图像批次"))), "cannot open output association selector");
-        require(QTest::qWaitFor([&] { return popup->property("opened").toBool(); }, 1000),
-                "output association selector did not open");
-    };
-    openOutput();
-    QQuickWindow otherWindow;
-    otherWindow.resize(180, 100);
-    otherWindow.show();
-    otherWindow.requestActivate();
-    require(QTest::qWaitForWindowActive(&otherWindow, 1000), "cannot activate another real Qt window");
-    require(QTest::qWaitFor([&] { return !popup->property("visible").toBool(); }, 1000),
-            "output association selector survives deactivating its window");
-    otherWindow.close();
-    window.requestActivate();
-    require(QTest::qWaitForWindowActive(&window, 1000), "cannot reactivate the popup window");
-    openOutput();
-    app.selectNode(QStringLiteral("3"));
-    require(QTest::qWaitFor([&] { return !popup->property("visible").toBool(); }, 1000),
-            "output association selector survives switching away from its source node");
+    QQmlComponent panelComponent(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/OutputPanel.qml")));
+    std::unique_ptr<QObject> panelOwner(panelComponent.create());
+    if (!panelOwner)
+        throw std::runtime_error(panelComponent.errorString().toStdString());
+    auto *panel = qobject_cast<QQuickItem *>(panelOwner.get());
+    require(panel != nullptr, "output panel is not a visual item");
+    panel->setParentItem(window.contentItem());
+    panel->setSize(QSizeF(900, 600));
+    auto *menu     = panel->findChild<QObject *>(QStringLiteral("outputMenu"));
+    auto *nameMenu = panel->findChild<QObject *>(QStringLiteral("outputNameMenu"));
+    require(menu && nameMenu, "output panel has no stable copy or connection menu");
+    require(panel->findChild<QObject *>(QStringLiteral("bindingPopup")) == nullptr,
+            "the removed association popup is still instantiated");
+    require(panel->findChild<QObject *>(QStringLiteral("outputDataDialog")) == nullptr,
+            "the removed data viewer is still instantiated");
 
-    const auto oldInput = app.portContext(QStringLiteral("images"));
-    require(!oldInput.isEmpty(), "crop input has no stable context");
-    app.selectNode(QStringLiteral("5"));
-    const auto unchangedWires = app.wires();
-    QSignalSpy changes(&app, &visionrt::AppController::parametersChanged);
-    require(!app.bindInput(oldInput, QStringLiteral("4"), QStringLiteral("images"))
-                && !app.unbindInput(oldInput) && app.wires() == unchangedWires && changes.isEmpty(),
-            "an obsolete input context writes to the newly selected node");
+    // A name without any legal, unoccupied downstream input opens nothing at all: no placeholder row
+    // and no connection menu that cannot do anything.
+    // `paths` is an Array output and no downstream input accepts an Array, so this name has no
+    // legal target at all.
+    auto *pathsName = waitForCell(panel, QStringLiteral("paths"), 0);
+    require(pathsName != nullptr, "paths name cell is missing");
+    rightClick(window, pathsName);
+    QTest::qWait(200);
+    require(!nameMenu->property("opened").toBool() && !menu->property("opened").toBool(),
+            "a name cell without a legal downstream input opened a menu");
 
+    // The data column has exactly one action. Before execution the value does not exist, so copy is
+    // visible but disabled instead of silently disappearing.
+    auto *statusData = waitForCell(panel, QStringLiteral("__status_code"), 2);
+    require(statusData != nullptr, "status code data cell is missing");
+    rightClick(window, statusData);
+    require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
+            "data column did not open its menu");
+    auto *copyAction = menu->findChild<QObject *>(QStringLiteral("outputCopyAction"));
+    require(copyAction != nullptr && !copyAction->property("enabled").toBool(),
+            "copy of an unexecuted output is not disabled");
+    const auto dataActions = menu->property("count").toInt();
+    require(dataActions == 1, "the data column still offers actions other than copy");
+    QMetaObject::invokeMethod(menu, "close", Qt::DirectConnection);
+    require(QTest::qWaitFor([&] { return !menu->property("visible").toBool(); }, 1000),
+            "data menu did not close");
+
+    // Run the real tool so copy works on a published value.
+    QTemporaryDir directory;
+    require(directory.isValid(), "popup image directory is invalid");
+    const auto imagePath = directory.filePath(QStringLiteral("弹层预览.png"));
+    QImage image(16, 12, QImage::Format_RGB888);
+    image.fill(QColor(30, 90, 180));
+    require(image.save(imagePath), "cannot write the real popup image fixture");
+    require(app.setParameter(QStringLiteral("count"), false, QStringLiteral("1"))
+                && app.setParameterPath(QStringLiteral("path"), false, QUrl::fromLocalFile(imagePath)),
+            "cannot select the real image for result publication");
+    auto *model = qobject_cast<visionrt::OutputModel *>(app.outputModel());
+    require(model != nullptr, "output model is unavailable");
+    app.runNode();
+    require(QTest::qWaitFor([&] { return !app.busy() && model->capture(QStringLiteral("images"))
+            && model->capture(QStringLiteral("images"))->publication > 0; }, 5000),
+            "real image execution did not publish a new result");
+    auto *imageData = waitForCell(panel, QStringLiteral("images"), 2);
+    require(imageData != nullptr, "image data cell is missing after publication");
+    const auto fullText = visionrt::OutputModel::fullText(*model->capture(QStringLiteral("images")));
+    QGuiApplication::clipboard()->clear();
+    QSignalSpy textReady(&app, &visionrt::AppController::outputTextReady);
+    rightClick(window, imageData);
+    require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
+            "image data menu did not open");
+    copyAction = menu->findChild<QObject *>(QStringLiteral("outputCopyAction"));
+    require(copyAction != nullptr && copyAction->property("enabled").toBool(),
+            "copy of a published value is disabled");
+    leftClick(window, copyAction);
+    require(QTest::qWaitFor([&] { return textReady.count() == 1; }, 5000),
+            "copy never completed its bounded background readback");
+    require(QGuiApplication::clipboard()->text() == fullText,
+            "copy did not place the complete value on the clipboard");
+    require(!menu->property("visible").toBool(), "copy left its context menu open");
+
+    // The name column is the connection menu: it lists the free downstream inputs grouped by node,
+    // and the entry it creates is the same relation the graph then contains.
     app.addNode(QStringLiteral("visionrt.image.crop"), 8, 8);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto target = app.selectedNode();
-    require(app.nodes().size() == 6 && !target.isEmpty(), "cannot create the output association target");
+    require(app.nodes().size() == 6 && !target.isEmpty(), "cannot create the connection target");
     app.selectNode(QStringLiteral("1"));
+    auto *imageName = waitForCell(panel, QStringLiteral("images"), 0);
+    require(imageName != nullptr, "image name cell is missing");
+    rightClick(window, imageName);
+    require(QTest::qWaitFor([&] { return nameMenu->property("opened").toBool(); }, 1000),
+            "name column did not open the connection menu");
+    auto *targetMenu = findByProperty(nameMenu, "targetNode", target);
+    require(targetMenu != nullptr, "connection menu does not group the compatible node");
+    auto *imageInput = findByTextPrefix(targetMenu, QStringLiteral("图像"));
+    require(imageInput != nullptr && imageInput->property("enabled").toBool(),
+            "connection menu has no enabled image input for the free target");
+    require(QMetaObject::invokeMethod(imageInput, "triggered", Qt::DirectConnection), "cannot trigger the connection menu entry");
+    require(QTest::qWaitFor([&] { return hasWire(app, QStringLiteral("1"), target); }, 1000),
+            "the connection menu entry did not create the relation");
+    require(QTest::qWaitFor([&] { return !nameMenu->property("visible").toBool(); }, 1000),
+            "the connection menu stayed open after committing a relation");
+    rightClick(window, waitForCell(panel, QStringLiteral("images"), 0));
+    require(QTest::qWaitFor([&] { return nameMenu->property("opened").toBool(); }, 1000),
+            "connection menu did not reopen for the connected output");
+    targetMenu = findByProperty(nameMenu, "targetNode", target);
+    require(targetMenu != nullptr, "connected target disappeared from the connection menu");
+    auto *connected = findByTextPrefix(targetMenu, QStringLiteral("✓"));
+    require(connected != nullptr && connected->property("enabled").toBool(),
+            "connected input is not offered for explicit disconnection");
+    require(QMetaObject::invokeMethod(connected, "triggered", Qt::DirectConnection), "cannot trigger the connected entry");
+    require(QTest::qWaitFor([&] { return !hasWire(app, QStringLiteral("1"), target); }, 1000),
+            "triggering the connected entry did not disconnect it");
+
+    // An output context stays bound to its node even when the same port id exists elsewhere.
     const auto oldOutput = app.portContext(QStringLiteral("images"), true);
     app.selectNode(QStringLiteral("4"));
     require(!app.bindOutputTo(oldOutput, target, QStringLiteral("images")),
             "an obsolete output context connects the newly selected source");
     app.selectNode(QStringLiteral("1"));
-    require(app.bindOutputTo(app.portContext(QStringLiteral("images"), true), target, QStringLiteral("images")),
+    const auto current = app.portContext(QStringLiteral("images"), true);
+    require(app.bindOutputTo(current, target, QStringLiteral("images")),
             "a current output context cannot connect a compatible input");
-    bool connected = false;
-    for (const auto &wire : app.wires())
-    {
-        const auto entry = wire.toMap();
-        if (entry.value("source").toString() == "1" && entry.value("target").toString() == target)
-            connected = true;
-    }
-    require(connected, "output association did not preserve the captured source identity");
-    openOutput();
-    const auto sourceContext = app.portContext(QStringLiteral("images"), true);
-    const auto beforeRejectedBinding = app.wires();
-    QSignalSpy rejectedProjectChanges(&app, &visionrt::AppController::projectChanged);
-    QSignalSpy rejectedParameterChanges(&app, &visionrt::AppController::parametersChanged);
-    require(!app.bindOutputTo(sourceContext, target, QStringLiteral("images")),
+    const auto occupied = app.portContext(QStringLiteral("images"), true);
+    require(!app.bindOutputTo(occupied, target, QStringLiteral("images")),
             "output connection replaced an occupied input");
     require(app.diagnostic() == QStringLiteral("输入端口已关联上游：%1.images").arg(target),
             "occupied input rejection lost its precise reason or stable target identity");
-    require(!app.bindOutputTo(sourceContext, target, QStringLiteral("rect")),
+    require(!app.bindOutputTo(occupied, target, QStringLiteral("rect")),
             "output connection accepted an incompatible input");
     require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".rect"),
             "incompatible input rejection lost its precise reason or stable target identity");
-    require(!app.bindOutputTo(sourceContext, QStringLiteral("not-a-node"), QStringLiteral("images"))
+    require(!app.bindOutputTo(occupied, QStringLiteral("not-a-node"), QStringLiteral("images"))
                 && app.diagnostic() == QStringLiteral("节点标识 必须是无前导零的无符号十进制文本：not-a-node"),
             "invalid output target lost its original node identifier or concrete Chinese reason");
-    require(app.wires() == beforeRejectedBinding && rejectedProjectChanges.isEmpty()
-                && rejectedParameterChanges.isEmpty() && popup->property("visible").toBool()
-                && popup->property("context").toMap() == sourceContext,
-            "a rejected output connection changed bindings or dismissed its current selector");
-    app.renameNode(target, QStringLiteral("输出断开目标"));
-    require(QTest::qWaitFor([&]
-    {
-        if (!popup->property("visible").toBool())
-            return true;
-        for (const auto &entry : popup->property("candidates").toList())
-            if (entry.toMap().value("node").toString() == target
-                && entry.toMap().value("title").toString() == QStringLiteral("输出断开目标-") + target)
-                return true;
-        return false;
-    }, 1000), "output target candidates retained an obsolete node title");
-    if (!popup->property("visible").toBool())
-        openOutput();
-    const auto connectedTargets = app.relationTargets(app.portContext(QStringLiteral("images"), true));
-    bool connectedTargetListed = false;
-    for (const auto &entry : connectedTargets)
-    {
-        const auto relation = entry.toMap();
-        if (relation.value("node").toString() == target && relation.value("port").toString() == "images")
-            connectedTargetListed = relation.value("connected").toBool();
-    }
-    require(connectedTargetListed, "output association selector omits its existing connected input");
-    QPointer<QQuickItem> disconnect;
-    require(QTest::qWaitFor([&]
-    {
-        QList<QQuickItem *> pending{window.contentItem()};
-        while (!pending.isEmpty())
-        {
-            auto *item = pending.takeLast();
-            if (item->objectName() == QStringLiteral("disconnectOutput_") + target + "_images"
-                && item->isVisible() && item->isEnabled())
-            {
-                disconnect = item;
-                return true;
-            }
-            pending.append(item->childItems());
-        }
-        return false;
-    }, 1000),
-            "connected output target has no visible disconnect action");
-    const auto beforeDisconnect = app.wires();
-    QVariantList retainedWires;
-    for (const auto &wire : beforeDisconnect)
-        if (wire.toMap().value("target").toString() != target)
-            retainedWires.push_back(wire);
-    const auto imageReferences = [&]
-    {
-        auto *model = app.outputModel();
-        for (int row = 0; row < model->rowCount(); ++row)
-            if (model->data(model->index(row, 0), visionrt::OutputModel::PortIdRole).toString() == "images")
-                return model->data(model->index(row, 0), visionrt::OutputModel::CountRole).toInt();
-        return -1;
-    };
-    if (imageReferences() != 4)
-        throw std::runtime_error("connected output reference count: " + std::to_string(imageReferences())
-                                 + "; active relations: " + std::to_string(beforeDisconnect.size()));
-    QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
-    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/output_connections.png")),
-            "cannot capture the connected output targets");
-    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                      disconnect->mapToScene(QPointF(disconnect->width() / 2, disconnect->height() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return !popup->property("visible").toBool(); }, 1000)
-                && app.wires().size() == beforeDisconnect.size() - 1,
-            "disconnecting one output target left the selector open or removed the wrong number of relations");
-    require(app.wires() == retainedWires && imageReferences() == 3,
-            "output disconnect changed an unrelated relation or left a stale reference count");
-    app.selectNode(target);
-    bool disconnected = false;
-    for (const auto &entry : app.parameters())
-        if (entry.toMap().value("id").toString() == "images")
-            disconnected = entry.toMap().value("sourceNode").toString().isEmpty();
-    require(disconnected, "output disconnect did not clear the exact target input");
-    app.selectNode(QStringLiteral("1"));
-    require(app.bindOutputTo(app.portContext(QStringLiteral("images"), true), target, QStringLiteral("images")),
-            "output target could not reconnect after explicit disconnection");
-    const auto replacedSourceContext = app.portContext(QStringLiteral("images"), true);
-    app.selectNode(target);
-    require(!app.unbindOutputFrom(replacedSourceContext, target, QStringLiteral("images")),
-            "an obsolete source context disconnected an input after changing selection");
-    require(app.bindInput(app.portContext(QStringLiteral("images")), QStringLiteral("4"), QStringLiteral("images")),
-            "cannot replace the target input with a different compatible source");
-    app.selectNode(QStringLiteral("1"));
-    const auto replacementWires = app.wires();
-    QSignalSpy replacementChanges(&app, &visionrt::AppController::projectChanged);
-    require(!app.unbindOutputFrom(app.portContext(QStringLiteral("images"), true), target, QStringLiteral("images"))
-                && app.wires() == replacementWires && replacementChanges.isEmpty(),
-            "disconnecting the former output removed a replacement connection");
-    require(app.diagnostic() == QStringLiteral("输入端口未连接到当前输出：%1.images").arg(target),
-            "disconnect rejection lost its actual connection mismatch or target identity");
-    for (const auto &entry : app.relationTargets(app.portContext(QStringLiteral("images"), true)))
-        require(entry.toMap().value("node").toString() != target
-                    || entry.toMap().value("port").toString() != "images",
-                "the former source still lists an input occupied by a different output");
 
+    // Reopening a project invalidates every captured context without touching the new graph.
     const auto openProject = [&]
     {
         app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
@@ -243,193 +274,35 @@ void popupSessionsContract()
     openProject();
     const auto previousProject = app.portContext(QStringLiteral("images"), true);
     openProject();
-    auto previousIdentity = previousProject;
-    auto currentIdentity = app.portContext(QStringLiteral("images"), true);
-    previousIdentity.remove("project");
-    currentIdentity.remove("project");
-    require(previousIdentity == currentIdentity && !app.portContextCurrent(previousProject),
-            "reopening the same project leaves old popup contexts authorized");
+    require(!app.portContextCurrent(previousProject),
+            "reopening the same project leaves old output contexts authorized");
     const auto reopenedWires = app.wires();
     require(!app.unbindOutputFrom(previousProject, QStringLiteral("3"), QStringLiteral("images"))
                 && app.wires() == reopenedWires,
             "an obsolete project context disconnected the reopened project's matching input");
-    QSignalSpy textReady(&app, &visionrt::AppController::outputTextReady);
-    app.requestOutputText(previousProject, false);
+    QSignalSpy projectText(&app, &visionrt::AppController::outputTextReady);
+    app.requestOutputText(previousProject, true, false);
     QTest::qWait(60);
-    require(textReady.isEmpty(), "obsolete output context reads a new project's value");
-    app.requestOutputText(app.portContext(QStringLiteral("__status_message"), true), false);
+    require(projectText.isEmpty(), "obsolete output context reads a new project's value");
+    app.requestOutputText(app.portContext(QStringLiteral("__status_message"), true), true, false);
     app.selectNode(QStringLiteral("3"));
     QTest::qWait(150);
-    require(textReady.isEmpty(), "late output text opens on a different selected node");
+    require(projectText.isEmpty(), "late output copy completes on a different selected node");
     app.selectNode(QStringLiteral("1"));
 
-    QQmlComponent panelComponent(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/OutputPanel.qml")));
-    std::unique_ptr<QObject> panelOwner(panelComponent.create());
-    if (!panelOwner)
-        throw std::runtime_error(panelComponent.errorString().toStdString());
-    auto *panel = qobject_cast<QQuickItem *>(panelOwner.get());
-    require(panel != nullptr, "output panel is not a visual item");
-    panel->setParentItem(window.contentItem());
-    panel->setSize(QSizeF(760, 560));
-    auto *menu = panel->findChild<QObject *>(QStringLiteral("outputMenu"));
-    auto *selector = panel->findChild<QObject *>(QStringLiteral("bindingPopup"));
-    require(menu && selector, "output panel has no stable menu or association selector");
-    const auto openMenu = [&]
-    {
-        QQuickItem *label = nullptr;
-        require(QTest::qWaitFor([&] {
-            label = visibleText(panel, QStringLiteral("图像"));
-            if (!label) label = visibleText(panel, QStringLiteral("图像批次"));
-            return label != nullptr;
-        }, 1000), "real output table has no image output cell");
-        QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
-                          label->mapToScene(QPointF(label->width() + 150, label->height() / 2)).toPoint());
-        require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "output context menu did not open");
-        require(menu->property("parent").value<QQuickItem *>() == panel,
-                "output menu is parented to an ephemeral table cell");
-    };
-    openMenu();
-    auto *model = qobject_cast<visionrt::OutputModel *>(app.outputModel());
-    require(model != nullptr, "output model is unavailable");
-    QSignalSpy reset(model, &QAbstractItemModel::modelReset);
-    QTest::qWait(150);
-    require(reset.isEmpty() && menu->property("opened").toBool(), "idle snapshots reset or close the active output menu");
+    // A model reset closes the open menu instead of leaving it bound to a destroyed row.
+    rightClick(window, waitForCell(panel, QStringLiteral("__status_code"), 2));
+    require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
+            "status data menu did not open for the reset case");
     model->clear();
     require(QTest::qWaitFor([&] { return !menu->property("visible").toBool(); }, 1000),
             "real output model reset leaves a detached context menu");
-    app.selectNode(QStringLiteral("3"));
-    app.selectNode(QStringLiteral("1"));
-    openMenu();
-    auto *associate = visibleText(window.contentItem(), QStringLiteral("关联已有节点…"));
-    require(associate != nullptr, "association action is missing");
-    QSignalSpy closed(menu, SIGNAL(closed()));
-    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                      associate->mapToScene(QPointF(associate->width() / 2, associate->height() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return selector->property("opened").toBool(); }, 1000),
-            "output menu did not hand off to the association selector");
-    require(closed.count() == 1 && !menu->property("visible").toBool(), "selector opened before the source menu actually closed");
-    require(QDir(QStringLiteral(VISIONRT_BINARY_DIR)).mkpath("evidence"), "cannot create popup evidence directory");
-    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/workbench_popup_binding.png")),
-            "cannot capture the real output association selector");
-    app.selectNode(QStringLiteral("3"));
-    require(QTest::qWaitFor([&] { return !selector->property("visible").toBool(); }, 1000),
-            "panel association selector survives a target change");
-
-    app.selectNode(QStringLiteral("1"));
-    QTemporaryDir directory;
-    require(directory.isValid(), "popup image directory is invalid");
-    const auto imagePath = directory.filePath(QStringLiteral("弹层预览.png"));
-    QImage image(16, 12, QImage::Format_RGB888);
-    image.fill(QColor(30, 90, 180));
-    require(image.save(imagePath), "cannot write the real popup image fixture");
-    require(app.setParameter(QStringLiteral("count"), false, QStringLiteral("1"))
-                && app.setParameterPath(QStringLiteral("path"), false, QUrl::fromLocalFile(imagePath)),
-            "cannot select the real image for result publication");
-    const auto beforeRun = app.portContext(QStringLiteral("images"), true);
-    openMenu();
-    app.runNode();
-    require(QTest::qWaitFor([&] { return !app.busy() && model->capture(QStringLiteral("images"))
-            && model->capture(QStringLiteral("images"))->publication > 0; }, 5000),
-            "real image execution did not publish a new result");
-    require(!app.portContextCurrent(beforeRun), "new publication keeps an obsolete output context authorized");
-    require(QTest::qWaitFor([&] { return !menu->property("visible").toBool(); }, 1000),
-            "new publication leaves its old output menu visible");
-    const auto captured = model->capture(QStringLiteral("images"));
-    const auto *batch    = captured ? std::get_if<visionrt::DataRef<visionrt::Image>>(&captured->value) : nullptr;
-    if (!batch || batch->get().size() != 1)
-        throw std::runtime_error("real image publication has no image batch: "
-            + visionrt::OutputModel::fullText(*model->capture(QStringLiteral("__status_message"))).toStdString());
-    app.requestOutputText(app.portContext(QStringLiteral("__status_code"), true), false);
-    require(QTest::qWaitFor([&] { return textReady.count() == 1; }, 1000)
-                && textReady.last().front().toString() == QStringLiteral("0"),
-            "current output context cannot display the real execution status");
-    auto *dataDialog = panel->findChild<QObject *>(QStringLiteral("outputDataDialog"));
-    require(dataDialog && QMetaObject::invokeMethod(dataDialog, "close"), "cannot close output data dialog");
-    require(QTest::qWaitFor([&] { return !dataDialog->property("visible").toBool(); }, 1000),
-            "output data dialog remains visible");
-    // Diagnostics belong to the data column; the name column is the connection menu.
-    auto *statusCell = visibleText(panel, model->get(1).value("preview").toString());
-    require(statusCell != nullptr, "status message data cell is missing");
-    QTest::mouseClick(&window, Qt::RightButton, Qt::NoModifier,
-                      statusCell->mapToScene(QPointF(statusCell->width() / 2, statusCell->height() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000), "status menu did not open");
-    auto *viewDiagnostic = visibleText(window.contentItem(), QStringLiteral("查看诊断 JSON"));
-    require(viewDiagnostic != nullptr && viewDiagnostic->isEnabled(), "diagnostic action is unavailable");
-    textReady.clear();
-    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                      viewDiagnostic->mapToScene(QPointF(viewDiagnostic->width() / 2, viewDiagnostic->height() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return textReady.count() == 1 && dataDialog->property("opened").toBool(); }, 1500),
-            "diagnostic menu did not open the frozen JSON result");
-    const auto diagnostic = QJsonDocument::fromJson(textReady.last().front().toString().toUtf8()).object();
-    require(diagnostic.value("phase") == "execute" && diagnostic.value("message") == "运行成功"
-                && diagnostic.contains("detail"), "diagnostic menu loses execution status fields");
-    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/workbench_diagnostic_json.png")),
-            "cannot capture the real diagnostic JSON dialog");
-    require(QMetaObject::invokeMethod(dataDialog, "close"), "cannot close diagnostic JSON dialog");
-    require(QTest::qWaitFor([&] { return !dataDialog->property("visible").toBool(); }, 1000),
-            "diagnostic dialog remains visible after closing");
 
     visionrt::ImageViewport viewport(window.contentItem());
     viewport.setWidth(300);
     viewport.setHeight(280);
     app.attachViewport(&viewport);
     app.selectNode(QStringLiteral("3"));
-    const auto beforeRoi = app.portContext(QStringLiteral("images"));
-    openOutput();
-    require(app.editRoi(QStringLiteral("rect"), false), "cannot enter the real crop ROI editor");
-    require(QTest::qWaitFor([&] { return !popup->property("visible").toBool(); }, 1000),
-            "output association selector remains open when ROI editing starts");
-    require(!app.portContextCurrent(beforeRoi) && !app.unbindInput(beforeRoi),
-            "a pre-ROI input operation is still authorized in the ROI session");
-    app.endRoiPreview();
-    require(!app.portContextCurrent(beforeRoi), "ending ROI editing revived a canceled binding operation");
-
-    QQmlComponent inputComponent(&engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ParameterEditor.qml")));
-    QVariantMap imageParameter;
-    for (const auto &entry : app.parameters())
-        if (entry.toMap().value("id").toString() == QStringLiteral("images")) imageParameter = entry.toMap();
-    std::unique_ptr<QObject> inputOwner(inputComponent.createWithInitialProperties({{"parameter", imageParameter}}));
-    if (!inputOwner) throw std::runtime_error(inputComponent.errorString().toStdString());
-    auto *inputPanel = qobject_cast<QQuickItem *>(inputOwner.get());
-    require(inputPanel != nullptr, "input binding row is not a visual item");
-    inputPanel->setParentItem(window.contentItem());
-    inputPanel->setWidth(740);
-    auto *inputCombo = inputPanel->findChild<QObject *>(QStringLiteral("parameterUpstream"));
-    require(inputCombo != nullptr, "input binding group was not instantiated");
-    auto *inputPopup = inputCombo->property("popup").value<QObject *>();
-    require(inputPopup && QMetaObject::invokeMethod(inputPopup, "open"), "cannot open the input binding group");
-    require(QTest::qWaitFor([&] { return inputPopup->property("opened").toBool(); }, 1000),
-            "input binding group did not open");
-    const auto inputContext = app.portContext(QStringLiteral("images"));
-    const auto inputWires = app.wires();
-    const auto inputValue = inputCombo->property("savedValue");
-    QSignalSpy rejectedInputChanges(&app, &visionrt::AppController::parametersChanged);
-    require(!app.bindInput(inputContext, QStringLiteral("4"), QStringLiteral("images"))
-                && app.wires() == inputWires && rejectedInputChanges.isEmpty()
-                && inputCombo->property("savedValue") == inputValue && inputPopup->property("visible").toBool(),
-            "rejecting a cyclic upstream connection changed the selected value or dismissed the input group");
-    otherWindow.show();
-    otherWindow.requestActivate();
-    require(QTest::qWaitForWindowActive(&otherWindow, 1000), "cannot deactivate the input binding window");
-    require(QTest::qWaitFor([&] { return !inputPopup->property("visible").toBool(); }, 1000),
-            "input binding group survives deactivating its window");
-    otherWindow.close();
-    window.requestActivate();
-    require(QTest::qWaitForWindowActive(&window, 1000), "cannot reactivate the input binding window");
-    require(QMetaObject::invokeMethod(inputPopup, "open"), "cannot reopen the input binding group");
-    require(QTest::qWaitFor([&] { return inputPopup->property("opened").toBool(); }, 1000),
-            "reopened input binding group did not open");
-    app.selectNode(QStringLiteral("4"));
-    require(QTest::qWaitFor([&] { return !inputPopup->property("visible").toBool(); }, 1000)
-                && !app.unbindInput(inputContext) && app.wires() == inputWires,
-            "switching the input target left its selector open or authorized an obsolete disconnection");
-    app.selectNode(QStringLiteral("3"));
-    require(QMetaObject::invokeMethod(inputPopup, "open"), "cannot restore the crop input binding group");
-    require(QTest::qWaitFor([&] { return inputPopup->property("opened").toBool(); }, 1000),
-            "crop input binding group did not reopen");
-    require(app.editRoi(QStringLiteral("rect"), false), "cannot start ROI editing with an open input selector");
-    require(QTest::qWaitFor([&] { return !inputPopup->property("visible").toBool(); }, 1000),
-            "input binding group remains open when ROI editing starts");
     app.endRoiPreview();
     window.hide();
 }
@@ -534,11 +407,12 @@ void outputCellReuseContract()
             "output cell reuse monitor did not finish loading");
     std::unique_ptr<QObject> monitor(monitorComponent.createWithInitialProperties({{"cell", QVariant::fromValue(sourceCell.data())}}));
     if (!monitor) throw std::runtime_error(monitorComponent.errorString().toStdString());
-    auto *manyMenu = manyPanel->findChild<QObject *>("outputMenu");
+    auto *manyMenu  = manyPanel->findChild<QObject *>("outputMenu");
     auto *manyTable = manyPanel->findChild<QObject *>("outputTable");
     require(manyMenu && manyTable, "many-output menu or table is unavailable");
-    QTest::mouseClick(&manyWindow, Qt::RightButton, Qt::NoModifier,
-                      firstLabel->mapToScene(QPointF(firstLabel->width() + 150, firstLabel->height() / 2)).toPoint());
+    auto *valueData = waitForCell(manyPanel, "value_0", 2);
+    require(valueData != nullptr, "many-output data cell is missing");
+    rightClick(manyWindow, valueData);
     require(QTest::qWaitFor([&] { return manyMenu->property("opened").toBool(); }, 1000),
             "many-output source menu did not open");
     const auto sourceContext = manyPanel->property("selectedContext").toMap();
@@ -554,13 +428,15 @@ void outputCellReuseContract()
                 && manyMenu->property("parent").value<QQuickItem *>() == manyPanel
                 && manyPanel->property("selectedContext").toMap() == sourceContext,
             "cell reuse detached the menu or rebound it to the recycled row");
-    QSignalSpy reusedText(&manyApp, &visionrt::AppController::outputTextReady);
-    auto *viewAction = visibleText(manyWindow.contentItem(), QStringLiteral("查看数据"));
-    require(viewAction != nullptr, "reused-cell menu has no view action");
-    QTest::mouseClick(&manyWindow, Qt::LeftButton, Qt::NoModifier,
-                      viewAction->mapToScene(QPointF(viewAction->width() / 2, viewAction->height() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return reusedText.count() == 1; }, 1000)
-                && reusedText.front().front().toString() == "0" && !manyMenu->property("visible").toBool(),
-            "reused-cell menu read another row instead of its captured output value");
+    QGuiApplication::clipboard()->clear();
+    QSignalSpy copiedText(&manyApp, &visionrt::AppController::outputTextReady);
+    auto *copyAction = manyMenu->findChild<QObject *>("outputCopyAction");
+    require(copyAction != nullptr && copyAction->property("enabled").toBool(),
+            "reused-cell menu has no enabled copy action");
+    leftClick(manyWindow, copyAction);
+    require(QTest::qWaitFor([&] { return copiedText.count() == 1; }, 3000)
+                && QGuiApplication::clipboard()->text() == QStringLiteral("0")
+                && !manyMenu->property("visible").toBool(),
+            "reused-cell copy read another row instead of its captured output value");
     std::cout << "[Output cell reuse] A real pooled cell changed ports while its stable menu retained the original source and value.\n";
 }

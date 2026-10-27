@@ -261,7 +261,11 @@ void nativeOutputRequiredness(const std::filesystem::path &modulePath)
             const auto result   = snapshot(finish(engine), 1);
             const auto expected = code == 0 && required ? -2 : code;
             assert(result->status.code == expected && isMissing(result->outputs.at("value")));
-            assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == expected);
+            if (result->toolResultPublished)
+                assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == expected);
+            else
+                // A framework stop has no tool answer, so it must not publish status ports either.
+                assert(!result->outputs.contains("__status_code") && !result->outputs.contains("__status_message"));
             assert(result->outputTypes.at("value") == TypeSpec{Type::Int});
         }
 }

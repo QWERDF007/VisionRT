@@ -200,8 +200,7 @@ QuiSplitView {
                                     anchors.leftMargin: 8
                                     anchors.right: parent.right
                                     anchors.rightMargin: 8
-                                    spacing: 6
-                                    QuiText { text: "下次执行重建资源"; visible: modelData.init; font: QuiFont.Caption; color: Theme.warning }
+                                    spacing: Theme.parameterRowSpacing
                                     Repeater {
                                         model: modelData.parameters
                                         Loader {
@@ -240,21 +239,22 @@ QuiSplitView {
     Loader { id: guardEditorLoader; active: false; source: "GuardEditor.qml" }
     Loader { id: selectTypeEditorLoader; active: false; source: "SelectTypeEditor.qml" }
 
-    function openExpressionEditor(nodeId, draftText) {
+    function openExpressionEditor(nodeId, draftText, hasDraft) {
         if (!expressionEditorLoader.active) expressionEditorLoader.active = true
         let invoke = function() {
             if (!expressionEditorLoader.item) return
-            if (draftText !== undefined && draftText !== null && draftText !== "") {
-                expressionEditorLoader.item.openNodeWithDraft(nodeId, draftText)
-            } else {
+            // Edit always starts from the row's current draft. A cleared field opens an empty draft
+            // instead of reloading the committed formula.
+            if (hasDraft === true)
+                expressionEditorLoader.item.openNodeWithDraft(nodeId, draftText === undefined ? "" : draftText, true)
+            else
                 expressionEditorLoader.item.openNode(nodeId)
-            }
         }
         if (expressionEditorLoader.item) invoke()
         else Qt.callLater(invoke)
     }
     function openExpressionEditorWithDraft(nodeId, draftText) {
-        openExpressionEditor(nodeId, draftText)
+        openExpressionEditor(nodeId, draftText, true)
     }
     function openGuardEditor(nodeId) {
         if (!guardEditorLoader.active) guardEditorLoader.active = true

@@ -166,20 +166,20 @@ public:
     THEME_COLOR_PROP(paramRowBorder)
     THEME_COLOR_PROP(paramRowHoverBg)
     THEME_COLOR_PROP(paramLabelText)
+    // 参数字段文本的唯一来源：名称与取值同色，不再分叉成 label/editor 两套
+    THEME_COLOR_PROP(parameterTextColor)
     THEME_COLOR_PROP(paramEditorBorder)
     THEME_COLOR_PROP(paramEditorFocusBorder)
     THEME_COLOR_PROP(paramEditorBg)
     THEME_COLOR_PROP(paramInputReadOnlyBg)
     THEME_COLOR_PROP(paramActionActiveBg)
     THEME_COLOR_PROP(paramActionHoverBg)
-    THEME_COLOR_PROP(bindingActiveColor)
     THEME_COLOR_PROP(bindingInactiveColor)
     // 输入来源按钮：选中态只表示输入模式，绑定是否有效由来源框单独诊断
     THEME_COLOR_PROP(sourceButtonActiveBackground)
     THEME_COLOR_PROP(sourceButtonActiveBorder)
     THEME_COLOR_PROP(sourceButtonActiveIcon)
     THEME_COLOR_PROP(sourceButtonIdleIcon)
-    THEME_COLOR_PROP(sourceFieldErrorColor)
 
     // 全局通用色彩
     THEME_COLOR_PROP(windowBg)
@@ -251,6 +251,9 @@ public:
     THEME_INT_PROP(paramEditorHeight)
     THEME_INT_PROP(paramEditorFontSize)
     THEME_INT_PROP(paramActionBtnWidth)
+    // 参数行的统一间距与行高
+    THEME_INT_PROP(parameterRowSpacing)
+    THEME_INT_PROP(parameterRowHeight)
     THEME_INT_PROP(paramToggleIconSize)
     THEME_INT_PROP(paramRoiIconSize)
     THEME_INT_PROP(paramActionIconSize)
@@ -286,6 +289,7 @@ public:
     THEME_INT_PROP(radiusLarge)
 
     // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
+    THEME_FONT_PROP(parameterFont)
     THEME_FONT_PROP(bodyFont)
     THEME_FONT_PROP(captionFont)
     THEME_FONT_PROP(titleFont)

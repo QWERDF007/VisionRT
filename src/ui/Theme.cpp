@@ -94,13 +94,13 @@ void Theme::initLightIndustrialPalette()
     paramRowBorder_          = QColor("#eef0f3");
     paramRowHoverBg_         = QColor("#f8fafd");
     paramLabelText_          = QColor("#24292f");
+    parameterTextColor_      = paramLabelText_;
     paramEditorBorder_       = QColor("#d0d7de");
     paramEditorFocusBorder_  = QColor("#1677ff");
     paramEditorBg_           = QColor("#ffffff");
     paramInputReadOnlyBg_    = QColor("#f0f2f5");
     paramActionActiveBg_     = QColor(22, 119, 255, 26);  // rgba(22, 119, 255, 0.1)
     paramActionHoverBg_      = QColor(22, 119, 255, 38);  // rgba(22, 119, 255, 0.15)
-    bindingActiveColor_      = QColor("#1677ff");
     bindingInactiveColor_    = QColor("#8c959f");
 
     // 输入来源按钮（选中态只表示输入模式）
@@ -108,7 +108,6 @@ void Theme::initLightIndustrialPalette()
     sourceButtonActiveBorder_     = QColor("#1677ff");
     sourceButtonActiveIcon_       = QColor("#ffffff");
     sourceButtonIdleIcon_         = QColor("#8c959f");
-    sourceFieldErrorColor_        = QColor("#cf222e");
 
     // 全局通用色彩
     windowBg_      = QColor("#f5f7fa");
@@ -176,9 +175,11 @@ void Theme::initLightIndustrialPalette()
     paramGroupHeaderHeight_   = 28;
     paramGroupHeaderFontSize_ = 12;
     paramLabelFontSize_       = 12;
-    paramEditorHeight_        = 32;
+    parameterRowHeight_       = 32;
+    paramEditorHeight_        = parameterRowHeight_;
     paramEditorFontSize_      = 12;
     paramActionBtnWidth_      = 28;
+    parameterRowSpacing_      = 6;
     paramToggleIconSize_      = 14;
     paramRoiIconSize_         = 16;
     paramActionIconSize_      = 13;
@@ -225,6 +226,9 @@ void Theme::initLightIndustrialPalette()
     titleFont_.setPixelSize(fontSizeMedium_);
     monoFont_    = QFont(QStringLiteral("Consolas"), -1, QFont::Normal);
     monoFont_.setPixelSize(fontSizeBase_);
+    // 参数行的字体：家族与字号只在 Theme 定义，QML 不再各写 Qt.font({...})
+    parameterFont_ = QFont(family, -1, QFont::Normal);
+    parameterFont_.setPixelSize(paramEditorFontSize_);
 
     iconFitWindow_  = 0xe740; // QuiFontIcon.FullScreen
     iconZoomIn_     = 0xe8a3; // QuiFontIcon.ZoomIn

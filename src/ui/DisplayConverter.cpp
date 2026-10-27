@@ -12,7 +12,20 @@ namespace {
 
 QString resolvedOrder(int channels, const QString &requested)
 {
-    if (!requested.isEmpty())
+    // An explicit order only applies to a layout it can describe. A declared BGR output that really
+    // carries a grey or four-channel image therefore falls back to per-image inference instead of
+    // being rejected before display.
+    const auto expectedChannels = [](const QString &order)
+    {
+        if (order == QStringLiteral("Gray"))
+            return 1;
+        if (order == QStringLiteral("BGR") || order == QStringLiteral("RGB"))
+            return 3;
+        if (order == QStringLiteral("BGRA") || order == QStringLiteral("RGBA"))
+            return 4;
+        return 0;
+    };
+    if (expectedChannels(requested) == channels)
         return requested;
     if (channels == 1)
         return QStringLiteral("Gray");
@@ -33,10 +46,24 @@ QImage displayImage(const cv::Mat &image, QImage::Format format)
 }
 
 template<class T>
+double alphaUnit(T value)
+{
+    if constexpr (std::is_same_v<T, cv::float16_t> || std::is_floating_point_v<T>)
+        return std::clamp(static_cast<double>(value), 0.0, 1.0);
+    else if constexpr (std::is_unsigned_v<T>)
+        return static_cast<double>(value) / static_cast<double>(std::numeric_limits<T>::max());
+    else
+        // Higher integer depths use their positive range then clamp; negative alpha is not a
+        // meaningful transparency and must not become partially opaque.
+        return value <= 0 ? 0.0 : static_cast<double>(value) / static_cast<double>(std::numeric_limits<T>::max());
+}
+
+template<class T>
 DisplayFrame normalize(const cv::Mat &source, const QString &order)
 {
     DisplayFrame result;
     const int    channels  = source.channels();
+    const bool   hasAlpha  = channels == 4;
     double       minimum   = std::numeric_limits<double>::infinity();
     double       maximum   = -minimum;
     bool         nonfinite = false;
@@ -47,6 +74,10 @@ DisplayFrame normalize(const cv::Mat &source, const QString &order)
         const std::size_t count = static_cast<std::size_t>(source.cols) * channels;
         for (std::size_t i = 0; i < count; ++i)
         {
+            // Alpha keeps its fixed numeric range; including it in the colour extremes would make a
+            // constant-transparent image fully opaque and tint the colours.
+            if (hasAlpha && i % channels == 3)
+                continue;
             const double value = static_cast<double>(row[i]);
             if (!std::isfinite(value))
             {
@@ -60,15 +91,15 @@ DisplayFrame normalize(const cv::Mat &source, const QString &order)
     result.image = QImage(source.cols, source.rows, QImage::Format_RGBA8888);
     if (result.image.isNull())
         throw std::bad_alloc();
-    const bool   reverse = order == "BGR" || order == "BGRA";
-    const double range   = maximum - minimum;
-    const auto   channel = [&](double value) -> unsigned char
+    const bool        reverse = order == "BGR" || order == "BGRA";
+    const long double range   = static_cast<long double>(maximum) - static_cast<long double>(minimum);
+    const auto        channel = [&](double value) -> unsigned char
     {
-        if (maximum == minimum)
-            return 128;
-        const double fraction = std::isfinite(range) ? (value - minimum) / range
-                                                     : (value / 2 - minimum / 2) / (maximum / 2 - minimum / 2);
-        return static_cast<unsigned char>(std::clamp(std::lround(fraction * 255), 0L, 255L));
+        if (!std::isfinite(value))
+            return 0;
+        const long double fraction
+            = range > 0 ? (static_cast<long double>(value) - static_cast<long double>(minimum)) / range : 0.5L;
+        return static_cast<unsigned char>(std::clamp(std::lround(fraction * 255.0L), 0L, 255L));
     };
     for (int y = 0; y < source.rows; ++y)
     {
@@ -89,13 +120,16 @@ DisplayFrame normalize(const cv::Mat &source, const QString &order)
                 destination[0] = channel(static_cast<double>(pixel[channels == 1 ? 0 : (reverse ? 2 : 0)]));
                 destination[1] = channel(static_cast<double>(pixel[channels == 1 ? 0 : 1]));
                 destination[2] = channel(static_cast<double>(pixel[channels == 1 ? 0 : (reverse ? 0 : 2)]));
-                destination[3] = channels == 4 && maximum != minimum ? channel(static_cast<double>(pixel[3])) : 255;
+                destination[3] = hasAlpha
+                                   ? static_cast<unsigned char>(
+                                         std::clamp(std::lround(alphaUnit(pixel[3]) * 255.0), 0L, 255L))
+                                   : 255;
             }
             destination += 4;
         }
     }
     if (nonfinite)
-        result.warning = QStringLiteral("图像包含 NaN/Inf；非有限像素显示为黑色。");
+        result.warning = QStringLiteral("图像包含 NaN/Inf；非有限像素显示为透明黑色。");
     return result;
 }
 

@@ -228,6 +228,11 @@ def execute(inputs):
     ProjectEditor editor;
     const auto    flow    = editor.project().flows.front().id;
     const auto    reader  = editor.addNode(flow, *registry.find("visionrt.image.read"), {0, 0});
+    // The brightness tool is registered through registerFunction: executing it here proves the
+    // function entry reaches RuntimeEngine, not only a direct unit-test call.
+    const auto *brightnessDef = registry.find("visiontools.image.brightness");
+    std::cerr << "[DEBUG] brightness definition " << (brightnessDef ? "found" : "missing") << std::endl;
+    const auto    brightness = editor.addNode(flow, *brightnessDef, {0, 4});
     const auto    before  = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 10});
     const auto    bridge  = editor.addNode(flow, *registry.find(relay.id), {0, 20});
     const auto    after   = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 30});
@@ -237,7 +242,16 @@ def execute(inputs):
     editor.setLiteral(flow, reader, "path", std::string("images"));
     editor.setLiteral(flow, reader, "count", std::int64_t(2));
     editor.setLiteral(flow, reader, "reload", true);
+    editor.setLiteral(flow, brightness, "gain", 1.0);
+    editor.setLiteral(flow, brightness, "offset", 1.0);
+    editor.setLiteral(flow, brightness, "emit_mask", false);
+    editor.setLiteral(flow, brightness, "rois", DataRef<ROI>(ROI{}));
+    editor.setLiteral(flow, brightness, "alignment",
+                      Array(DataRef<NestedVector<double, 3>>(NestedVector<double, 3>{})));
     editor.bindFreeInput(flow, {reader, "images"}, {before, "images"});
+    // A second consumer keeps the primary reader -> relay -> crop storage chain intact while still
+    // executing the function-registered tool through the real runtime.
+    editor.bindFreeInput(flow, {reader, "images"}, {brightness, "images"});
     editor.setLiteral(flow, before, "rois", DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}, {{2., 1., 2., 3., 4., 0.}}}));
     editor.setLiteral(flow, before, "scores", Array(NestedVector<float, 2>{{0.75F}, {0.5F}}));
     editor.setLiteral(flow, before, "classes", Array(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {2}}));
@@ -264,6 +278,9 @@ def execute(inputs):
         require(runtime.start(candidate, registry, RunMode::Once).code == 0, "Installed pipeline start failed");
         const auto update = finish(runtime);
         for (const auto &node : candidate.flows.front().nodes) snapshot(update, node.id);
+        const auto brightnessSnapshot = snapshot(update, brightness);
+        require(brightnessSnapshot->status.code == 0,
+                "the function-registered brightness tool did not succeed in the installed package");
         const auto  original      = snapshot(update, reader);
         const auto  relayed       = snapshot(update, bridge);
         const auto  filtered      = snapshot(update, after);

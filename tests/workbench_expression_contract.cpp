@@ -4,6 +4,7 @@
 // allocate again.
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
+#include "ui/OutputModel.h"
 #include "ui/Theme.h"
 #include <quickui/Color.h>
 
@@ -110,6 +111,17 @@ try
             "the committed configuration does not match the displayed type");
     require(config.value("nextPortSeq").toULongLong() == 2, "nextPortSeq must advance after committing p1");
 
+    // An explicitly empty draft is the user clearing the field: editing must open empty instead of
+    // reloading the committed formula. Opening without a draft still shows the committed value.
+    require(QMetaObject::invokeMethod(editor.get(), "openNodeWithDraft", Q_ARG(QVariant, nodeId),
+                                      Q_ARG(QVariant, QString()), Q_ARG(QVariant, true)),
+            "cannot open the editor with an explicit empty draft");
+    require(programRows().size() == 1 && programRows().at(0).toMap().value("expression").toString().isEmpty(),
+            "an explicit empty draft reloaded the committed formula");
+    open();
+    require(programRows().at(0).toMap().value("expression").toString() == "[1.5, 2.5]",
+            "opening without a draft must load the committed formula");
+
     // Monotonic identifiers: deleting the highest committed port must not recycle its identifier.
     open();
     add();
@@ -206,10 +218,37 @@ try
     require(app.applyExpressionConfig(intSource, {}, intProgram(QStringLiteral("计数结果"))),
             "dynamic Int program could not be applied");
     settle();
+    app.selectNode(intSource);
+    settle();
+    auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
+    require(outputs != nullptr, "expression output model is null");
+    const auto dynamicRow = [&]()
+    {
+        for (int index = 0; index < outputs->rowCount(); ++index)
+        {
+            const auto item = outputs->get(index);
+            if (item.value("portId").toString() == QStringLiteral("p1"))
+                return item;
+        }
+        return QVariantMap{};
+    };
+    const auto declared = dynamicRow();
+    require(!declared.isEmpty(), "an expression result is missing from the output table");
+    require(declared.value("name").toString() == QStringLiteral("计数结果"),
+            "the output table did not use the materialised port name");
+    require(declared.value("typeDisplay").toString() == QStringLiteral("整数"),
+            "the output table did not use the materialised Chinese type");
+
     app.addNode("visionrt.image.read", 9, 6);
     settle();
     const auto consumer = app.selectedNode();
     require(!consumer.isEmpty(), "downstream reader node is missing");
+    app.selectNode(intSource);
+    settle();
+    require(dynamicRow().value("connectable").toBool(),
+            "a free downstream input must mark the dynamic result as connectable");
+    app.selectNode(consumer);
+    settle();
     require(app.bindInput(app.portContext("count"), intSource, "p1"),
             "dynamic Int output could not be bound to an ordinary input");
     settle();

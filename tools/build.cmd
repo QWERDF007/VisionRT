@@ -74,6 +74,13 @@ if /i "%~1"=="--test" (
     shift
     goto :PARSE_ARGS
 )
+if /i "%~1"=="--group" (
+    set "DO_GROUP=%~2"
+    set "DO_TEST=1"
+    shift
+    shift
+    goto :PARSE_ARGS
+)
 if /i "%~1"=="--config" (
     set "CONFIG=%~2"
     shift
@@ -156,8 +163,24 @@ if errorlevel 1 (
 )
 
 if "%DO_TEST%"=="1" (
+    if defined DO_GROUP (
+        echo [INFO] Building test group %DO_GROUP%...
+        cmake --build "%BUILD_DIR%" --config %CONFIG% --target tests-%DO_GROUP%
+    ) else (
+        echo [INFO] Building all test groups...
+        cmake --build "%BUILD_DIR%" --config %CONFIG% --target tests-all
+    )
+    if errorlevel 1 (
+        echo [ERROR] Test build failed.
+        popd
+        exit /b %errorlevel%
+    )
     echo [INFO] Running tests...
-    ctest --test-dir "%BUILD_DIR%" --output-on-failure
+    if defined DO_GROUP (
+        ctest --test-dir "%BUILD_DIR%" -C %CONFIG% -L "^%DO_GROUP%$" --output-on-failure
+    ) else (
+        ctest --test-dir "%BUILD_DIR%" -C %CONFIG% --output-on-failure
+    )
     if errorlevel 1 (
         echo [ERROR] Tests failed.
         popd
@@ -194,7 +217,8 @@ echo   --config ^<Release^|Debug^>   Specify build configuration (default: Relea
 echo   --debug                     Build Debug configuration
 echo   --release                   Build Release configuration
 echo   --clean                     Clean build directory
-echo   --test                      Run tests (ctest) after build
+echo   --test                      Build every test group and run ctest
+echo   --group ^<name^>              Build and run one group: backend/bridge/ui/package/sdk/installed/gpu/perf
 echo   --package [dir]             Package application using tools\package_app.py
 echo   --build-dir ^<dir^>          Specify CMake build directory (default: build)
 echo   -h, --help                  Show this help message

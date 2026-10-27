@@ -94,6 +94,9 @@ struct NodeSnapshot
     std::uint64_t publication       = 0;
     std::uint64_t executionRevision = 0;
     ToolStatus    status;
+    // True only when the tool itself returned a ToolResult. A framework-stopped node publishes no
+    // status ports, so presentation must not read its diagnostic as tool data.
+    bool          toolResultPublished = false;
     NodeDisposition       disposition = NodeDisposition::Succeeded;
     NodePhase             phase = NodePhase::Execute;
     TypeMap               outputTypes;

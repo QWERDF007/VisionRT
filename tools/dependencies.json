@@ -15,6 +15,7 @@
       "windows_default": "D:/Software/dev/opencv-4.8.0/build/x64/vc16",
       "default": "D:/Software/dev/opencv-4.8.0/build/x64/vc16",
       "destinations": ["build/bin"],
+      "runtime_manifest": "opencv_runtime_{config}.txt",
       "windows": ["*.dll", "bin/*.dll"]
     },
     {
