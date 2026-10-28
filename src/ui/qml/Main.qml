@@ -254,26 +254,27 @@ ApplicationWindow {
     }
     QuiMenu {
         id: fileMenu
+        objectName: "fileMenu"
         QuiMenuItem { action: newAction }
         QuiMenuItem { action: openAction }
         // The recent list is a submenu of the file menu: newest first, at most ten entries, disabled
         // while there is nothing to offer or while the application is closing.
-        QuiMenuItem {
+        QuiMenu {
             id: recentMenu
-            text: "最近打开工程"
+            objectName: "recentMenu"
+            title: "最近打开工程"
             enabled: app.recentProjects.length > 0 && !app.closing
-            // A menu declared inside a menu item becomes its submenu; the property itself is
-            // read-only, so the nesting is the assignment.
-            QuiMenu {
-                Repeater {
-                    model: app.recentProjects
-                    delegate: QuiMenuItem {
-                        text: modelData.text
-                        onTriggered: app.openRecentProject(modelData.path)
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 600
-                        ToolTip.text: modelData.tooltip
-                    }
+            Instantiator {
+                model: app.recentProjects
+                delegate: QuiMenuItem {
+                    text: modelData.tooltip
+                    onTriggered: app.openRecentProject(modelData.path)
+                }
+                onObjectAdded: function(index, object) {
+                    recentMenu.insertItem(index, object)
+                }
+                onObjectRemoved: function(index, object) {
+                    recentMenu.removeItem(object)
                 }
             }
         }

@@ -281,38 +281,113 @@ FocusScope {
                 Rectangle {
                     id: flowDropdown
                     objectName: "flowDropdown"
-                    Layout.preferredWidth: 120; Layout.preferredHeight: 24; radius: 3
-                    color: "#ffffff"; border.color: "#c5ccd5"; border.width: 1
+                    Layout.preferredWidth: 125; Layout.preferredHeight: 24; radius: 3
+                    color: "#ffffff"
+                    border.color: selectFlowPopup.visible ? QuiColor.Highlight : (dropdownMouse.containsMouse ? "#a0a8b4" : "#c5ccd5")
+                    border.width: 1
                     RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 4
                         QuiText {
-                            Layout.fillWidth: true; elide: Text.ElideRight
+                            text: "选择流程:"
+                            font: QuiFont.Caption
+                            color: QuiColor.FontPrimary
+                        }
+                        QuiText {
+                            Layout.fillWidth: true
                             text: {
-                                let idx = 1
+                                let count = 0
                                 for (let i = 0; i < app.flows.length; ++i) {
-                                    if (app.flows[i].id === app.currentFlow) { idx = i + 1; break; }
+                                    if (app.flows[i].selected) count++
                                 }
-                                return "选择流程: " + idx + "/" + (app.flows.length || 1)
+                                return count + "/" + (app.flows.length || 0)
                             }
-                            font: QuiFont.Caption; color: QuiColor.FontPrimary
+                            font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: true })
+                            color: QuiColor.Highlight
                         }
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.ChevronDown; iconSize: Theme.iconSizeTiny; iconColor: Theme.iconSecondary
+                            iconSource: selectFlowPopup.visible ? QuiFontIcon.ChevronUp : QuiFontIcon.ChevronDown
+                            iconSize: Theme.iconSizeTiny
+                            iconColor: selectFlowPopup.visible ? QuiColor.Highlight : Theme.iconSecondary
                         }
                     }
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: selectFlowMenu.popup(flowDropdown, 0, flowDropdown.height + 2)
+                        id: dropdownMouse
+                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
+                        onClicked: {
+                            if (selectFlowPopup.visible) {
+                                selectFlowPopup.close()
+                            } else {
+                                selectFlowPopup.open()
+                            }
+                        }
                     }
-                }
-                QuiMenu {
-                    id: selectFlowMenu
-                    Repeater {
-                        model: app.flows
-                        QuiMenuItem {
-                            required property var modelData
-                            text: modelData.name + (modelData.id === app.currentFlow ? " ✓" : "")
-                            onTriggered: app.selectFlow(modelData.id)
+                    Popup {
+                        id: selectFlowPopup
+                        objectName: "selectFlowPopup"
+                        y: flowDropdown.height + 2
+                        width: Math.max(flowDropdown.width, 130)
+                        implicitHeight: Math.min(flowListView.contentHeight + topPadding + bottomPadding, 220)
+                        padding: 4
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent | Popup.CloseOnPressOutside
+                        background: Rectangle {
+                            radius: 4
+                            color: "#ffffff"
+                            border.color: "#d0d7de"
+                            border.width: 1
+                            QuiShadow {
+                                color: "#20000000"
+                                radius: 5
+                            }
+                        }
+                        contentItem: ListView {
+                            id: flowListView
+                            model: app.flows
+                            clip: true
+                            implicitHeight: contentHeight
+                            spacing: 2
+                            ScrollBar.vertical: QuiScrollBar {}
+                            delegate: Rectangle {
+                                id: flowRow
+                                objectName: "flowToggle_" + modelData.id
+                                width: flowListView.width
+                                height: 26
+                                radius: 3
+                                color: rowMouse.containsMouse ? "#f0f2f5" : "transparent"
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    Rectangle {
+                                        width: 14; height: 14; radius: 3
+                                        color: modelData.selected ? QuiColor.Highlight : "#ffffff"
+                                        border.color: modelData.selected ? QuiColor.Highlight : "#8c959f"
+                                        border.width: 1
+                                        QuiTextIcon {
+                                            anchors.centerIn: parent
+                                            iconSource: QuiFontIcon.CheckMark
+                                            iconSize: 10
+                                            iconColor: "#ffffff"
+                                            visible: modelData.selected
+                                        }
+                                    }
+                                    QuiText {
+                                        Layout.fillWidth: true
+                                        text: modelData.name
+                                        font: QuiFont.Caption
+                                        color: QuiColor.FontPrimary
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                MouseArea {
+                                    id: rowMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    enabled: !app.busy
+                                    onClicked: app.setFlowSelected(modelData.id, !modelData.selected)
+                                }
+                            }
                         }
                     }
                 }
@@ -389,16 +464,11 @@ FocusScope {
                                     id: tabRow
                                     anchors.centerIn: parent; spacing: 6
                                     Rectangle {
+                                        objectName: "flowTabIndicator_" + flowTabItem.modelData.id
                                         width: 7; height: 7; radius: 3.5
                                         color: flowTabItem.modelData.selected ? "#2da44e" : "transparent"
                                         border.color: flowTabItem.modelData.selected ? "#2da44e" : "#8c959f"
                                         border.width: 1
-                                        MouseArea {
-                                            objectName: "flowTabToggle_" + flowTabItem.modelData.id
-                                            anchors.fill: parent; anchors.margins: -4
-                                            enabled: !app.busy
-                                            onClicked: app.setFlowSelected(flowTabItem.modelData.id, !flowTabItem.modelData.selected)
-                                        }
                                     }
                                     QuiText {
                                         text: flowTabItem.modelData.name
