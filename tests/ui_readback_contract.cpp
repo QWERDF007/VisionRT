@@ -79,7 +79,8 @@ def run(inputs):
             time.sleep(0.002)
     image0.fill(17 if calls == 1 else 37)
     image1.fill(18 if calls == 1 else 38)
-    return {'__status_code': 0, '__status_message': '', 'values': [calls] * 100000, 'images': [image0, image1]}
+    return {'status': {'code': 0, 'message': '', 'detail': ''},
+            'outputs': {'values': [calls] * 100000, 'images': [image0, image1]}}
 )py");
     QQuickWindow window;
     window.resize(320, 240);

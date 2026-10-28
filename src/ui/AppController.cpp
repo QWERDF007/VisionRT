@@ -284,7 +284,8 @@ AppController::Impl::~Impl()
     refreshResult.reset();
     for (const auto &tool : registry.definitions())
         if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
-            registry.setPythonImplementation(tool.id, {}, {-3, "Interpreter shutting down"});
+            registry.setPythonImplementation(
+                tool.id, {}, makeStatus(ErrorCode::PythonUnavailable, "Interpreter shutting down"));
     python.reset();
 }
 
@@ -1066,7 +1067,7 @@ void AppController::Impl::requestRefresh(bool rescan)
                     if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
                         result->implementations.push_back({
                             tool.id,
-                            {-3, "Python interpreter unavailable"}
+                            makeStatus(ErrorCode::PythonUnavailable, "Python interpreter unavailable")
                         });
             return ToolStatus{};
         });

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Error.h"
+#include "core/Result.h"
 #include "core/ToolRegistry.h"
 #include "runtime/Snapshot.h"
 
@@ -114,16 +116,18 @@ public:
     RuntimeEngine &operator=(const RuntimeEngine &) = delete;
     std::size_t    workers() const noexcept;
     RuntimeState   state() const;
-    ToolStatus     start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
+    // Every rejection names one catalog code: a caller can tell "busy" from "target missing" from
+    // "this state does not allow it" without reading the message.
+    ErrorInfo      start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
                          std::optional<NodeId> target = {});
     void           requestStop();
     void           setReadbackEnabled(bool enabled);
     bool           acknowledgeReadback(RuntimeReadback readback);
     void           setReadbackCallback(std::function<void(RuntimeReadback)> callback);
-    ToolStatus     requestReset();
+    ErrorInfo      requestReset();
     // Idle only. Releases Python instances/results before invoking background work.
-    ToolStatus     requestRefresh(std::function<ToolStatus()> work);
-    ToolStatus     requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry);
+    ErrorInfo      requestRefresh(std::function<ToolStatus()> work);
+    ErrorInfo      requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry);
     RuntimeUpdate  pollLatest();
     bool           acknowledgeCompletion(RuntimeCompletion completion);
     void           setCompletionCallback(std::function<void(RuntimeCompletion)> callback);

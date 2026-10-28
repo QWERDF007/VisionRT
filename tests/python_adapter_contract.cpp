@@ -1,4 +1,5 @@
 #include "core/DefinitionJson.h"
+#include "core/Error.h"
 #include "result_view.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
@@ -86,16 +87,16 @@ void adaptersAndRefresh(PythonRuntime &runtime)
 from . import helper
 import numpy
 def execute(inputs):
-    return {'__status_code': 0, '__status_message': '', 'value': helper.value}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': helper.value}}
 class Counter:
     def initialize(self, inputs):
         self.count = 0
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
     def execute(self, inputs):
         self.count += 1
-        return {'__status_code': 0, '__status_message': '', 'value': self.count}
+        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': self.count}}
     def release(self):
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 class Broken:
     def initialize(self, inputs):
         raise RuntimeError('initialization detail')
@@ -107,17 +108,17 @@ class BadConstructor(Counter):
     def __init__(self):
         raise RuntimeError('constructor detail')
 def missing(inputs):
-    return {'__status_code': 0, '__status_message': ''}
+    return {'code': 0, 'message': '', 'detail': ''}
 def extra(inputs):
-    return {'__status_code': 0, '__status_message': '', 'value': 1, 'typo': 2}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': 1, 'typo': 2}}
 def wrong(inputs):
-    return {'__status_code': 0, '__status_message': '', 'value': True}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': True}}
 def business(inputs):
-    return {'__status_code': 5, '__status_message': 'expected failure', 'value': 7}
+    return {'status': {'code': 5, 'message': 'expected failure', 'detail': ''}, 'outputs': {'value': 7}}
 def partial(inputs):
-    return {'__status_code': 0, '__status_message': '', 'value': 9, 'other': True}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': 9, 'other': True}}
 def absent(inputs):
-    return {'__status_code': 0, '__status_message': '', 'value': None}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': None}}
 )");
     auto function    = sources.definition("python.function", ToolKind::PythonFunction, "execute");
     auto counter     = sources.definition("python.counter", ToolKind::PythonClass, "Counter");
@@ -178,7 +179,9 @@ def absent(inputs):
     assert(execution.find("Python 执行异常") != std::string::npos);
     assert(execution.find("execution detail") != std::string::npos);
     const auto cleanup = failures->release();
-    assert(cleanup.code == -4 && cleanup.message == "Python 释放异常");
+    // A release that throws is an internal defect. Reporting it as NotFound used to send an
+    // operator looking for a missing tool after what was actually a resource failure.
+    assert(cleanup.code == hostCode(ErrorCode::Internal) && cleanup.message == "Python 释放异常");
     assert(cleanup.detail.find("release detail") != std::string::npos);
     failures.reset();
     for (const auto &definition : {missing, extra, wrong})
@@ -188,9 +191,12 @@ def absent(inputs):
         assert(failed.find("技术详情") == std::string::npos);
         if (definition.id == wrong.id)
             assert(failed.find("Python int") != std::string::npos);
-        else
+        else if (definition.id == extra.id)
             // A key set that does not match the declaration is refused before any value is read.
             assert(failed.find("输出键必须与声明端口") != std::string::npos);
+        else
+            // A status dict is a lifecycle answer: execute owes the two-field envelope.
+            assert(failed.find("execute 必须返回 status 与 outputs") != std::string::npos);
     }
     {
         auto       instance = runtime.factory(business)(services);
@@ -221,7 +227,7 @@ def absent(inputs):
 from . import helper
 def execute(inputs):
     assert not hasattr(helper, 'obsolete')
-    return {'__status_code': 0, '__status_message': '', 'value': helper.value}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': helper.value}}
 )");
     runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     {
@@ -237,7 +243,8 @@ def execute(inputs):
         auto inst = runtime.factory(function)(services);
         assert(inst != nullptr);
         const auto status = inst->initialize({});
-        assert(status.code == -3 && status.detail.find("SyntaxError") != std::string::npos);
+        assert(status.code == hostCode(ErrorCode::PythonUnavailable)
+               && status.detail.find("SyntaxError") != std::string::npos);
         try
         {
             runtime.factory(function)(services);
@@ -245,7 +252,8 @@ def execute(inputs):
         }
         catch (const RegistryError &error)
         {
-            assert(testview::status(error).code == -3 && testview::status(error).detail.find("SyntaxError") != std::string::npos);
+            assert(testview::status(error).code == hostCode(ErrorCode::PythonUnavailable)
+                   && testview::status(error).detail.find("SyntaxError") != std::string::npos);
         }
     }
     {
@@ -261,12 +269,12 @@ void pathInputs(PythonRuntime &runtime)
 class PathProbe:
     def initialize(self, params):
         self.base = params['base_dir']
-        return {'__status_code': 0, '__status_message': 'ok'}
+        return {'code': 0, 'message': 'ok', 'detail': ''}
     def execute(self, inputs):
-        return {'__status_code': 0, '__status_message': 'ok',
-                'resolved': self.base + '|' + inputs['input_path']}
+        return {'status': {'code': 0, 'message': 'ok', 'detail': ''},
+                'outputs': {'resolved': self.base + '|' + inputs['input_path']}}
     def release(self):
-        return {'__status_code': 0, '__status_message': 'ok'}
+        return {'code': 0, 'message': 'ok', 'detail': ''}
 )");
     Sources::write(sources.declarations / "paths.json", R"json({
   "schema_version": 4,

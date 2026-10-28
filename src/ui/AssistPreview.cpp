@@ -284,8 +284,11 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
         }
         validateToolValues(session.helper.inputs, request.inputs);
         auto result = instance_->execute(request.inputs);
-        // The helper is a tool like any other: it owns the whole output set, status keys included.
-        outcome.status = validateToolExecution(session.helper.outputs, result.outputs);
+        // The helper is a tool like any other: its status is published into the same two ports the
+        // node runtime uses, so the preview shows what a real run would.
+        outcome.status = materialiseToolStatus(result.outputs,
+                                              validateToolExecution(session.helper.outputs, result.outputs,
+                                                                    result.status));
         if (!outcome.status)
         {
             outcome.quality = helperMessage(outcome.status.message);
@@ -323,13 +326,13 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
     }
     catch (const std::exception &error)
     {
-        outcome.status  = {-2, error.what()};
+        outcome.status  = makeStatus(ErrorCode::InvalidArgument, error.what());
         outcome.quality = helperMessage(error.what());
         releaseInstance();
     }
     catch (...)
     {
-        outcome.status  = {-1, "辅助工具执行发生未知异常"};
+        outcome.status  = makeStatus(ErrorCode::Internal, "辅助工具执行发生未知异常");
         outcome.quality = QStringLiteral("辅助工具执行发生未知异常");
         releaseInstance();
     }

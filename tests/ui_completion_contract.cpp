@@ -56,14 +56,14 @@ try
     write(package + "python/custom/completion/tool.py", R"py(import numpy as np
 
 def source(inputs):
-    return {'__status_code': 0, '__status_message': '',
-            'values': [9007199254740993] * 1000000,
-            'images': [np.full((80, 120, 3), 17, dtype=np.uint8)]}
+    return {'status': {'code': 0, 'message': '', 'detail': ''},
+            'outputs': {'values': [9007199254740993] * 1000000,
+                        'images': [np.full((80, 120, 3), 17, dtype=np.uint8)]}}
 
 def refreshed(inputs):
-    return {'__status_code': 0, '__status_message': '',
-            'values': 'catalog-ready',
-            'images': [np.full((80, 120, 3), 37, dtype=np.uint8)]}
+    return {'status': {'code': 0, 'message': '', 'detail': ''},
+            'outputs': {'values': 'catalog-ready',
+                        'images': [np.full((80, 120, 3), 37, dtype=np.uint8)]}}
 )py");
     bool           monitor         = false;
     bool           staleAtIdle     = false;

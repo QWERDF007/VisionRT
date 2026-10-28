@@ -53,8 +53,11 @@ void LogModel::append(const QVector<LogRecord> &records)
 {
     if (records.isEmpty())
         return;
-    const auto limit    = static_cast<qsizetype>(capacity_);
-    const auto overflow = std::max<qsizetype>(0, rows_.size() + records.size() - limit);
+    const auto limit = static_cast<qsizetype>(capacity_);
+    // The incoming batch is trimmed first: a batch larger than the window cannot ask the view to
+    // remove rows that never existed, and the model never grows past its capacity even briefly.
+    const auto incoming = records.size() > limit ? records.sliced(records.size() - limit) : records;
+    const auto overflow = std::max<qsizetype>(0, rows_.size() + incoming.size() - limit);
     if (overflow > 0)
     {
         beginRemoveRows({}, 0, static_cast<int>(overflow) - 1);
@@ -62,8 +65,8 @@ void LogModel::append(const QVector<LogRecord> &records)
         endRemoveRows();
     }
     const auto first = rows_.size();
-    beginInsertRows({}, static_cast<int>(first), static_cast<int>(first + records.size()) - 1);
-    for (const auto &record : records)
+    beginInsertRows({}, static_cast<int>(first), static_cast<int>(first + incoming.size()) - 1);
+    for (const auto &record : incoming)
         rows_.push_back(record);
     endInsertRows();
 }

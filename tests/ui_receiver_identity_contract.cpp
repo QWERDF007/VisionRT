@@ -64,7 +64,8 @@ try
           "def run(inputs):\n"
           "    with calls_lock, open(__file__ + '.calls', 'a') as calls:\n"
           "        calls.write(str(inputs['value']) + '\\n')\n"
-          "    return {'__status_code': 0, '__status_message': '', 'value': inputs['value']}\n");
+          "    return {'status': {'code': 0, 'message': '', 'detail': ''}, "
+          "'outputs': {'value': inputs['value']}}\n");
     const auto   tools = std::filesystem::path(root.toStdU16String()) / "tools-package";
     ToolRegistry registry;
     registry.registerPackage(readToolsPackage(tools));

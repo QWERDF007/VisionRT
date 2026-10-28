@@ -86,7 +86,7 @@ class Gate:
 
     def initialize(self, inputs):
         record(f'initialize:{self.serial}')
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 
     def execute(self, inputs):
         record(f'execute:{self.serial}')
@@ -97,11 +97,12 @@ class Gate:
             time.sleep(0.001)
         record(f'return:{self.serial}')
         img = np.zeros((10, 10), dtype=np.uint8)
-        return {'value': 1, 'image': [img], '__status_code': 0, '__status_message': ''}
+        return {'status': {'code': 0, 'message': '', 'detail': ''},
+                'outputs': {'value': 1, 'image': [img]}}
 
     def release(self):
         record(f'release:{self.serial}')
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 )py");
     AppController app(1, root);
     const bool ready = QTest::qWaitFor([&] { return !app.busy(); }, 15000);

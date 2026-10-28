@@ -3,6 +3,7 @@
 #endif
 
 #include "core/ToolPackage.h"
+#include "core/Error.h"
 #include "result_view.h"
 #include "plugins/PluginLoader.h"
 
@@ -96,10 +97,12 @@ try
         const auto result = instance->execute({});
         assert(testview::status(result));
         assert(std::get<std::int64_t>(result.outputs.at("value")) == expected);
-        assert(instance->initialize({}).code == -2);
+        // An instance that is already initialised is in the wrong lifecycle state, not holding a
+        // bad argument: FailedPrecondition is what a caller can act on.
+        assert(instance->initialize({}).code == hostCode(ErrorCode::FailedPrecondition));
         assert(instance->release());
         assert(instance->release());
-        assert(instance->initialize({}).code == -2);
+        assert(instance->initialize({}).code == hostCode(ErrorCode::FailedPrecondition));
         assert(createCalls() == before + 1);
     }
     loader->registerModule("not.registered", path);
@@ -110,7 +113,8 @@ try
     }
     catch (const RegistryError &error)
     {
-        assert(testview::status(error).code == -3 && testview::status(error).message.find("not.registered") != std::string::npos);
+        assert(testview::status(error).code == hostCode(ErrorCode::NotFound)
+               && testview::status(error).message.find("not.registered") != std::string::npos);
         assert(!testview::status(error).detail.empty());
     }
     assert(createCalls() == 2);

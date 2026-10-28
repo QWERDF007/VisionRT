@@ -544,8 +544,7 @@ void outputCellReuseContract()
     write("python/custom/outputs/outputs.py",
           "def run(inputs):\n"
           "    values = {'value_' + str(index): index for index in range(64)}\n"
-          "    values.update(__status_code=0, __status_message='')\n"
-          "    return values\n");
+          "    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': values}\n");
     QJsonObject definition{
         {"schema_version",                                                                              4},
         {       "tool_id",                                                                 "test.outputs"},

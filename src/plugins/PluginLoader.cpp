@@ -62,7 +62,7 @@ Availability PluginLoader::availability(std::string_view toolId) const
     if (entry == index_.end() || entry->second.empty())
         return {
             ToolAvailability::ImplementationUnavailable,
-            {-3, "工具未关联模块：" + std::string(toolId)}
+            makeStatus(ErrorCode::DataInvalid, "工具未关联模块：" + std::string(toolId))
         };
     const auto path = entry->second;
     if (const auto loaded = loadedModules_.find(path); loaded != loadedModules_.end())
@@ -71,7 +71,8 @@ Availability PluginLoader::availability(std::string_view toolId) const
             return {ToolAvailability::Available, {}};
         return {
             ToolAvailability::ImplementationUnavailable,
-            {-3, "指定模块未注册工具工厂：" + std::string(toolId), json::pathText(path).toStdString()}
+            makeStatus(ErrorCode::NotFound, "指定模块未注册工具工厂：" + std::string(toolId),
+                       json::pathText(path).toStdString())
         };
     }
     if (const auto failure = failures_.find(path); failure != failures_.end())
@@ -81,12 +82,12 @@ Availability PluginLoader::availability(std::string_view toolId) const
     if (!std::filesystem::is_regular_file(path, error))
         return {
             ToolAvailability::ImplementationUnavailable,
-            {-3, "模块库文件不可用：" + std::string(toolId),
-                                         json::pathText(path).toStdString() + (error ? ": " + error.message() : "")}
+            makeStatus(ErrorCode::PluginLoadFailed, "模块库文件不可用：" + std::string(toolId),
+                       json::pathText(path).toStdString() + (error ? ": " + error.message() : ""))
         };
     return {
         ToolAvailability::ImplementationNotLoaded,
-        {-3, "模块尚未加载：" + std::string(toolId)}
+        makeStatus(ErrorCode::FailedPrecondition, "模块尚未加载：" + std::string(toolId))
     };
 }
 
@@ -95,7 +96,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
 {
     if (libraryPath.empty())
     {
-        status = {-3, "模块库路径为空"};
+        status = makeStatus(ErrorCode::InvalidArgument, "模块库路径为空");
         return nullptr;
     }
     const auto       key = std::filesystem::absolute(libraryPath).lexically_normal();
@@ -120,7 +121,9 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
         }
         if (pending->second.owner == std::this_thread::get_id())
         {
-            status = {-3, "检测到同路径模块重入加载：" + key.string()};
+            // Loading the same library from its own callback is a re-entrancy problem, not a
+            // missing file: Busy tells the caller to wait instead of repairing the package.
+            status = makeStatus(ErrorCode::Busy, "检测到同路径模块重入加载：" + key.string());
             return nullptr;
         }
         loadedChanged_.wait(lock);
@@ -135,11 +138,11 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     }
     catch (const std::exception &error)
     {
-        local = {-3, "模块加载异常", error.what()};
+        local = makeStatus(ErrorCode::PluginLoadFailed, "模块加载异常", error.what());
     }
     catch (...)
     {
-        local = {-3, "模块加载发生未知异常"};
+        local = makeStatus(ErrorCode::PluginLoadFailed, "模块加载发生未知异常");
     }
 
     lock.lock();
@@ -156,7 +159,7 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
             {
                 if (active->registry.nativeFactories().contains(id))
                 {
-                    local = {-3, "不同模块注册了重复的工具工厂 ID：" + id};
+                    local = makeStatus(ErrorCode::PluginLoadFailed, "不同模块注册了重复的工具工厂 ID：" + id);
                     break;
                 }
             }
@@ -184,7 +187,7 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
 {
     if (!std::filesystem::exists(libraryPath))
     {
-        status = {-3, "模块库文件不存在：" + libraryPath.string()};
+        status = makeStatus(ErrorCode::PluginLoadFailed, "模块库文件不存在：" + libraryPath.string());
         return nullptr;
     }
 
@@ -196,7 +199,8 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     }();
     if (directoryPolicyError != ERROR_SUCCESS)
     {
-        status = {-3, "无法配置运行时 DLL 搜索目录（Win32 错误：" + std::to_string(directoryPolicyError) + "）"};
+        status = makeStatus(ErrorCode::PluginLoadFailed,
+                            "无法配置运行时 DLL 搜索目录（Win32 错误：" + std::to_string(directoryPolicyError) + "）");
         return nullptr;
     }
     const auto absPath = std::filesystem::absolute(libraryPath).lexically_normal();
@@ -204,8 +208,9 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     if (!loaded->directory)
     {
         const DWORD error = GetLastError();
-        status = {-3, "无法注册运行时 DLL 目录 " + libraryPath.parent_path().string() + "（Win32 错误："
-                          + std::to_string(error) + "）"};
+        status = makeStatus(ErrorCode::PluginLoadFailed,
+                            "无法注册运行时 DLL 目录 " + libraryPath.parent_path().string()
+                                + "（Win32 错误：" + std::to_string(error) + "）");
         return nullptr;
     }
     DWORD oldErrorMode = 0;
@@ -217,7 +222,9 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
         SetThreadErrorMode(oldErrorMode, nullptr);
     if (!handle)
     {
-        status = {-3, "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(loadError) + "）"};
+        status = makeStatus(ErrorCode::PluginLoadFailed,
+                            "无法加载动态库 " + libraryPath.string() + "（Win32 错误：" + std::to_string(loadError)
+                                + "）");
         return nullptr;
     }
     loaded->handle = handle;
@@ -225,7 +232,8 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     auto proc = GetProcAddress(handle, "visiontoolsModuleApi");
     if (!proc)
     {
-        status = {-3, "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string()};
+        status = makeStatus(ErrorCode::PluginLoadFailed,
+                            "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string());
         return nullptr;
     }
 
@@ -235,14 +243,16 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     const bool loadedOk = lib->load();
     if (!loadedOk)
     {
-        status = {-3, "无法加载动态库 " + libraryPath.string(), lib->errorString().toStdString()};
+        status = makeStatus(ErrorCode::PluginLoadFailed, "无法加载动态库 " + libraryPath.string(),
+                            lib->errorString().toStdString());
         return nullptr;
     }
 
     auto apiFunc = reinterpret_cast<const ModuleApi *(VT_CALL *)() noexcept>(lib->resolve("visiontoolsModuleApi"));
     if (!apiFunc)
     {
-        status = {-3, "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string()};
+        status = makeStatus(ErrorCode::PluginLoadFailed,
+                            "动态库缺少入口符号 visiontoolsModuleApi：" + libraryPath.string());
         return nullptr;
     }
     loaded->library = lib;
@@ -250,26 +260,27 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     const auto *api = apiFunc();
     if (!api)
     {
-        status = {-3, "visiontoolsModuleApi() 返回空：" + libraryPath.string()};
+        status = makeStatus(ErrorCode::PluginLoadFailed, "visiontoolsModuleApi() 返回空：" + libraryPath.string());
         return nullptr;
     }
 
     if (api->abi_major != MODULE_ABI_MAJOR)
     {
-        status = {-3, "模块 ABI 主版本不匹配（期望 " + std::to_string(MODULE_ABI_MAJOR) + "，实际 "
-                          + std::to_string(api->abi_major) + "）"};
+        status = makeStatus(ErrorCode::PluginLoadFailed,
+                            "模块 ABI 主版本不匹配（期望 " + std::to_string(MODULE_ABI_MAJOR) + "，实际 "
+                                + std::to_string(api->abi_major) + "）");
         return nullptr;
     }
 
     if (api->struct_bytes < sizeof(ModuleApi))
     {
-        status = {-3, "ModuleApi 结构体大小不匹配"};
+        status = makeStatus(ErrorCode::PluginLoadFailed, "ModuleApi 结构体大小不匹配");
         return nullptr;
     }
 
     if (!api->register_tools)
     {
-        status = {-3, "ModuleApi 缺少工具注册函数"};
+        status = makeStatus(ErrorCode::PluginLoadFailed, "ModuleApi 缺少工具注册函数");
         return nullptr;
     }
     status = api->register_tools(loaded->registry);
@@ -309,14 +320,15 @@ DomainToolAdapter::DomainToolAdapter(std::shared_ptr<const LoadedModule> module,
     if (found == module_->registry.nativeFactories().end())
         throw RegistryError(
             ToolAvailability::ImplementationUnavailable,
-            ToolStatus{-3, "指定模块未注册工具工厂：" + toolId_, json::pathText(module_->path).toStdString()});
+            makeStatus(ErrorCode::NotFound, "指定模块未注册工具工厂：" + toolId_,
+                       json::pathText(module_->path).toStdString()));
     factory_ = &found->second;
     ToolStatus createStatus;
     raw_ = factory_->create(&services_, &createStatus);
     if (!raw_ || !createStatus)
     {
         if (createStatus)
-            createStatus = {-3, "模块创建返回空实例：" + toolId_};
+            createStatus = makeStatus(ErrorCode::PluginLoadFailed, "模块创建返回空实例：" + toolId_);
         release();
         throw RegistryError(ToolAvailability::ImplementationUnavailable, std::move(createStatus));
     }
@@ -332,7 +344,7 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     if (!failureStatus_)
         return failureStatus_;
     if (!raw_ || initialized_)
-        return {-2, "工具实例已释放或已初始化：" + toolId_};
+        return makeStatus(ErrorCode::FailedPrecondition, "工具实例已释放或已初始化：" + toolId_);
 
     ToolStatus status;
     try
@@ -341,11 +353,11 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
     }
     catch (const std::exception &error)
     {
-        status = {-1, "工具初始化异常", error.what()};
+        status = makeStatus(ErrorCode::Internal, "工具初始化异常", error.what());
     }
     catch (...)
     {
-        status = {-1, "工具初始化发生未知异常"};
+        status = makeStatus(ErrorCode::Internal, "工具初始化发生未知异常");
     }
 
     if (!status)
@@ -364,7 +376,9 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
     if (!raw_ || !initialized_)
     {
         const auto status
-            = failureStatus_.code != 0 ? failureStatus_ : ToolStatus{-2, "工具实例尚未初始化，不能执行：" + toolId_};
+            = failureStatus_.code != 0
+                  ? failureStatus_
+                  : makeStatus(ErrorCode::FailedPrecondition, "工具实例尚未初始化，不能执行：" + toolId_);
         // A node that cannot be executed has no tool answer; the framework reports it as a
         // diagnostic instead of inventing output values.
         throw ContractError(status.detail.empty() ? status.message : status.message + "：" + status.detail);
@@ -388,11 +402,13 @@ ToolStatus DomainToolAdapter::release()
     }
     catch (const std::exception &error)
     {
-        status = {-4, "工具释放异常", error.what()};
+        // A release that throws is an internal defect: reporting it as NotFound told an operator
+        // to look for a missing tool after a resource failure. The phase stays in the message.
+        status = makeStatus(ErrorCode::Internal, "工具释放异常", error.what());
     }
     catch (...)
     {
-        status = {-4, "工具释放发生未知异常"};
+        status = makeStatus(ErrorCode::Internal, "工具释放发生未知异常");
     }
     factory_->destroy(raw_);
     raw_         = nullptr;

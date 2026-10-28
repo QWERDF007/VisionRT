@@ -20,12 +20,19 @@ include(ConfigPython)
 include(ConfigQuickUI)
 include(ConfigSpdlog)
 
+# 测试开关与 enable_testing() 必须先于任何子目录：Contracts 在自己的目录里注册契约测试，
+# 这里只负责把它们编入 sdk 组。
+include(CTest)
+set(VISIONRT_CONTRACTS_TESTS ${BUILD_TESTING} CACHE BOOL "构建 Contracts 自身的契约测试（归入 sdk 组）")
+set(VISIONRT_CONTRACTS_INSTALL ON CACHE BOOL "Contracts 随宿主安装，供安装态消费者契约使用")
+
 # 独立通用工具 SDK（Git 子模块）
 add_subdirectory(3rdparty/VisionRTContracts)
 
 # 核心通用库
 add_library(visionrt_common
-    src/common/Version.cpp)
+    src/common/Version.cpp
+    src/core/Error.cpp)
 target_include_directories(visionrt_common PUBLIC src)
 target_link_libraries(visionrt_common PUBLIC VisionRT::Contracts)
 configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
@@ -167,8 +174,8 @@ if(VISIONRT_BUILD_APP)
         USES_TERMINAL)
 endif()
 
-# 开发与本地调试动态库拷贝目标
-set(_visionrt_runtime_dlls ${OPENCV_DLLS} ${PYTHON_DLLS})
+# 开发与本地调试动态库拷贝目标：OpenCV 取自本次配置实际链接的导入目标，Python 取自宿主解释器
+set(_visionrt_runtime_dlls ${VISIONRT_OPENCV_RUNTIME_DLLS} ${PYTHON_DLLS})
 if(_visionrt_runtime_dlls)
     add_custom_target(deploy_runtime_dlls ALL
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${_visionrt_runtime_dlls} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
@@ -178,12 +185,12 @@ endif()
 
 # 测试契约与自动化测试用例
 if(BUILD_TESTING)
-    include(CTest)
     include(AddTest)
     visionrt_define_test_groups()
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
     set(VISIONRT_TEST_TOOLS_PACKAGE "${CMAKE_BINARY_DIR}/tools-package" CACHE PATH "Installed tools package used by integration contracts")
+    set(VISIONRT_GPU_FIXTURES "${CMAKE_BINARY_DIR}/gpu-fixtures" CACHE PATH "YOLO fixtures (bus.jpg, yolov8n.wts) for the GPU contract")
 
     visionrt_contract(version_contract visionrt_common)
     visionrt_contract(value_contract visionrt_core)
@@ -514,28 +521,66 @@ if(BUILD_TESTING)
         target_compile_options(examples_contract PRIVATE /UNDEBUG)
     endif()
 
-    # Entries registered outside visionrt_contract follow the same grouping table. Every test keeps
-    # exactly one owning group so `tests-<group>` plus `ctest -L <group>` is a complete workflow.
-    foreach(_test IN ITEMS plugin_contract plugin_abi_contract plugin_late_runtime_contract examples_contract)
-        if(TEST ${_test})
-            set_tests_properties(${_test} PROPERTIES LABELS "backend")
-        endif()
-    endforeach()
-    foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse cancellation)
-        set_tests_properties(workbench_${_scenario}_contract PROPERTIES LABELS "ui" RESOURCE_LOCK visionrt-ui)
-    endforeach()
+    # Entries registered outside visionrt_contract go through the same table: one owning group per
+    # test, the build prerequisites ctest needs, and no property writes for tests that a
+    # configuration does not create (BUILD_APP=OFF has no workbench entries at all).
+    visionrt_group_test(plugin_contract LABELS backend REQUIRES plugin_contract)
+    visionrt_group_test(plugin_abi_contract LABELS backend REQUIRES plugin_contract)
+    if(TEST plugin_late_runtime_contract)
+        visionrt_group_test(plugin_late_runtime_contract LABELS backend REQUIRES plugin_contract)
+    endif()
+    visionrt_group_test(examples_contract LABELS backend REQUIRES examples_contract)
+
+    if(VISIONRT_BUILD_APP)
+        foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse cancellation)
+            visionrt_group_test(workbench_${_scenario}_contract LABELS ui REQUIRES workbench_${_scenario}_contract)
+        endforeach()
+    endif()
     if(TEST libavoid_contract)
-        set_tests_properties(libavoid_contract PROPERTIES LABELS "ui" RESOURCE_LOCK visionrt-ui)
+        visionrt_group_test(libavoid_contract LABELS ui REQUIRES libavoid_contract)
     endif()
     if(TEST performance_contract)
-        set_tests_properties(performance_contract PROPERTIES LABELS "perf")
+        visionrt_group_test(performance_contract LABELS perf REQUIRES performance_contract)
     endif()
-    foreach(_test IN ITEMS validator_cli_contract package_app_contract dependency_manifest_contract
-            build_incremental_contract)
-        if(TEST ${_test})
-            set_tests_properties(${_test} PROPERTIES LABELS "package")
+    # The package group runs the real validator, so the validator and the two fixture modules it
+    # loads are build prerequisites of the group, not of the individual invocation.
+    visionrt_group_test(validator_cli_contract LABELS package
+        REQUIRES visionrt_validate_tool test_registration_valid test_plugin_legacy)
+    visionrt_group_test(package_app_contract LABELS package)
+    visionrt_group_test(dependency_manifest_contract LABELS package)
+    if(TEST build_incremental_contract)
+        visionrt_group_test(build_incremental_contract LABELS package)
+    endif()
+
+    # SDK group: the Contracts subproject registers its own suite (VISIONRT_CONTRACTS_TESTS), labels
+    # it `sdk` and publishes its members; the host only adds the build entry and the group audit
+    # sees the real membership.
+    get_property(_contract_tests GLOBAL PROPERTY VISIONRT_CONTRACTS_REGISTERED_TESTS)
+    if(NOT _contract_tests)
+        # An explicit opt-out is reported, not silently swallowed: the group audit only accepts a
+        # missing group when the configuration said so.
+        list(APPEND VISIONRT_DISABLED_TEST_GROUPS sdk)
+    endif()
+    foreach(_sdk_test IN LISTS _contract_tests)
+        set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_sdk ${_sdk_test})
+        if(TARGET ${_sdk_test})
+            set_target_properties(${_sdk_test} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+            add_dependencies(tests-sdk ${_sdk_test})
         endif()
     endforeach()
+
+    if(TARGET gpu_tools_contract)
+        add_test(NAME gpu_tools_contract COMMAND gpu_tools_contract
+            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/pipeline_gpu_yolo.vrt.json"
+            "${VISIONRT_GPU_FIXTURES}")
+        visionrt_apply_test_environment(gpu_tools_contract)
+        # Without a CUDA device or the external YOLO fixtures the case is reported as not run; it
+        # must never look like a pass. A real device failure still fails the test.
+        set_tests_properties(gpu_tools_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)
+        set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_gpu gpu_tools_contract)
+        add_dependencies(tests-gpu gpu_tools_contract)
+    endif()
+
     foreach(_executable IN ITEMS plugin_contract examples_contract libavoid_contract performance_contract
             gpu_tools_contract)
         if(TARGET ${_executable})
@@ -543,22 +588,8 @@ if(BUILD_TESTING)
             add_dependencies(tests-all ${_executable})
         endif()
     endforeach()
-    foreach(_executable IN ITEMS plugin_contract examples_contract)
-        if(TARGET ${_executable})
-            add_dependencies(tests-backend ${_executable})
-        endif()
-    endforeach()
-    if(TARGET libavoid_contract)
-        add_dependencies(tests-ui libavoid_contract)
-    endif()
-    if(TARGET performance_contract)
-        add_dependencies(tests-perf performance_contract)
-    endif()
-    if(TARGET gpu_tools_contract)
-        # No ctest entry: this executable needs a real CUDA device and is reported as not measured
-        # instead of silently passing on a machine without one.
-        add_dependencies(tests-gpu gpu_tools_contract)
-    endif()
+
+    visionrt_audit_test_groups()
 
 endif()
 

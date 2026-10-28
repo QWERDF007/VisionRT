@@ -53,8 +53,8 @@ void parameterEditorsContract()
   "runtime_files": []
 })json");
     write("python/custom/Test/Parameters/run.py",
-          "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', "
-          "'ratio': inputs['ratio'], 'count': inputs['count']}\n");
+          "def run(inputs):\n    return {'status': {'code': 0, 'message': '', 'detail': ''}, "
+          "'outputs': {'ratio': inputs['ratio'], 'count': inputs['count']}}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
   "schema_version": 4,

@@ -2,21 +2,21 @@
 
 ## 规格入口
 
-- [最新交付：Contracts_dev 完整方案、Specs 与 Tickets](#)：本轮 T36 方案以打包件交付，见 `docs/VisionRT_VisionTools_Contracts_dev_完整方案_Specs_Tickets_20261027.zip`（含 00_dev基线与实施方案、02–05 Specs、06_Tickets、07_前版复核与验证清单、08_设计参考；解压后按条目对照 WORKLOG 执行记录）。
+- [最新交付：三仓审核完整方案、Specs 与 Tickets](#)：当前方案以打包件交付，见 `docs/VisionRT_三仓审核_完整方案_Specs_Tickets_20261028.zip`（00 阅读说明、01 现状与优先级、02 代码证据、03 附件审核、04 目标方案、05 Specs、06 Tickets、07 验证矩阵；逐条执行记录见 WORKLOG）。
 - [任务账本](../WORKLOG.md)：本地工作恢复与验证证据入口，不随代码提交。
 
 ## T36 交付基线（2026-10-27）
 
 | 项 | 版本 / 提交 |
 | --- | --- |
-| Contracts 子模块（VisionRT 与 VisionTools 一致） | `14f6be8`（ABI 5） |
+| Contracts 子模块（VisionRT 与 VisionTools 一致，跟踪 `main`） | `72198d6`（ABI 6） |
 | spdlog 子模块 | `6fa36017`（v1.15.3） |
 | Qt | 6.6.2（msvc2019_64） |
 | OpenCV | 4.8.0（vc16） |
 | Python | 3.12.13（`tools/dependencies.json` 指向 anaconda3/envs/py312） |
 | CUDA | 11.8（推理模块运行依赖） |
 | 编译器 | MSVC 2019（14.29.30133）+ Ninja |
-| 工具包 | VisionTools `dist/visiontools-deploy`（rtx40-build，22 工具）；测试夹具 `build/tools-package`（21 工具精简包） |
+| 工具包 | VisionTools `dist/visiontools-deploy`（rtx40-build，22 工具）；测试夹具 `build/tools-package`（`--profile cpu` 的 21 工具包，无推理依赖） |
 
 未验证项：无（GPU 已于 RTX 4060 / sm89 用真实 yolov8n.wts 完成双阶段端到端验收，见 WORKLOG T36 第四批）。
 
@@ -38,6 +38,49 @@ Release、500 轮的实测（[基准证据](../build/evidence/runtime_benchmark.
 
 - [构建元数据生成器](../cmake/WriteBuildInfo.cmake)：链接完成阶段写 `build_info.json`（宿主）与 `contracts-build-info.json`（Contracts 产物时间）；工具包由 VisionTools 构建结束时写同名文件。关于弹窗按当前机器本地时区显示并带偏移，缺失即“未知”，组件之间不互相顶替。
 - [日志服务](../src/log/LogService.cpp)：整行纯文本 `[时间] [级别] [线程] [来源] 内容`，窗口与文件同一格式器；按本地日期落盘到 `<exe>/logs/visionrt_YYYY-MM-DD.log`，同日重启追加；目录不可写时降级到 stderr 并计入失败。
+- 日志的保证边界：首条错误立即入队、重复只聚合后续次数并保留原等级与时间；Critical 不聚合不延迟；换行在日志层转义成可见序列，按 UTF-8 字符边界截断；关闭时先封生产者入口再排空，默认 Qt handler 与自定义 handler 都还原。契约见 [log_contract](../tests/log_contract.cpp)。
+
+## 错误与状态
+
+工具业务码、宿主错误码与“未执行”是三种不同的东西，各自只有一个来源：
+
+| 概念 | 唯一来源 | 落地位置 |
+| --- | --- | --- |
+| 工具业务码与中文消息 | 各工具的错误域枚举 | VisionTools `src/*/errors/*.h`、[公共错误词汇](../src/common/errors/ToolError.h) |
+| 宿主失败分类（忙/不存在/前置条件/参数/内部） | `visionrt::ErrorCode` | [Error.h](../src/core/Error.h)、[Error.cpp](../src/core/Error.cpp) |
+| 失败返回值 | `ErrorInfo`，需要值时用 `Result<T>` | [Error.h](../src/core/Error.h)、[Result.h](../src/core/Result.h) |
+| `__status_code` / `__status_message` 的写入 | 宿主在工具正常返回后物化 | [ToolValueValidation.cpp](../src/core/ToolValueValidation.cpp)、[NodeRuntime.cpp](../src/runtime/NodeRuntime.cpp) |
+
+约定：工具返回 `ToolResult{outputs, status}`，`outputs` 只含声明里的业务端口；工具写状态端口即契约错误。跳过、阻断、取消与框架失败不伪造工具结果。节点 Tooltip 仍只显示三阶段耗时，错误只经输出参数与既有诊断展示。
+
+### 宿主错误码与产生点
+
+宿主只有 [ErrorCode](../src/core/Error.h) 一张表，所有宿主状态经 `makeStatus(code, message, detail)` 构造；同一条诊断在不同子系统不再各写一份数字。
+
+| 码 | 含义 | 产生点（谁会说这个码） |
+| --- | --- | --- |
+| 0 | 成功 | 各阶段正常返回 |
+| -1 | 内部错误 | 意外异常：插件初始化/释放抛错、Python 实例创建抛错、运行时未预期异常 |
+| -2 | 参数不合法 | 工厂描述符非法、契约解析失败、工具初始化参数不合法 |
+| -3 | 忙 | 同路径模块重入加载（只有这一处是真正的“忙”） |
+| -4 | 不存在 | 工具定义缺失、模块已加载但未注册该工厂、Python 实现/脚本缺失 |
+| -5 | 已取消 | 运行取消 |
+| -6 | 未执行 | 跳过或上游未选中 |
+| -7 | 前置条件不满足 | 实例已释放/已初始化、模块尚未加载、未初始化就执行 |
+| -8 | 读回不匹配 | 读回标识与请求不一致 |
+| -9 | 超时 | 受控等待超时 |
+| -10 | 读写失败 | Python 包索引构建时的文件系统失败 |
+| -11 | 模块加载失败 | 库文件缺失、DLL 目录配置失败、缺入口符号、ABI/结构体不匹配、空实例、重复工厂 ID |
+| -12 | Python 不可用 | 解释器关闭、运行时刷新导致实例跨代、脚本导入/加载失败 |
+| -13 | 数据不符合契约 | 工具未关联模块、Python 入口不是 `.py` 或缺少 symbol、工具输出违反声明 |
+| -14 | 资源不可用 | 宿主绑定未注册、C++ 实现不可用（无插件加载器）、工厂返回空实例 |
+| -15 | 不支持 | 能力未实现 |
+
+消费侧按码分支：`AppController` 与节点诊断显示 `message`，需要区分“找不到 / 状态不对 / 环境不可用”时读 `code`；不再解析消息文本。工具自己报的状态原样透传（`PythonLoadState`、`RegistryError` 携带的就是工具或加载器的原状态），宿主只补自己的框架错误。
+
+仓库里没有第二份码表：新增状态先加枚举与中文默认消息，再在产生点用 `makeStatus`，测试断言用 `hostCode(ErrorCode::...)` 而不是数字。
+
+Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'status': {'code', 'message', 'detail'}, 'outputs': {...}}`，类的 `initialize`/`release` 只返回状态字典。工具不得写 `__status_code` / `__status_message`，这两个端口由宿主在工具成功返回后物化；写了就是契约错误。
 
 ## 界面约束
 
@@ -71,4 +114,22 @@ Release、500 轮的实测（[基准证据](../build/evidence/runtime_benchmark.
 | 展示存储与读取阶段 | [显示转换](../src/ui/DisplayConverter.h)、[输出模型](../src/ui/OutputModel.h)、[读取调度](../src/ui/AppControllerReadback.cpp)、[运行时握手](../src/runtime/RuntimeEngine.h)、[异步文本与目录刷新完成顺序](../tests/ui_completion_contract.cpp)、[静默通知与像素读取契约](../tests/ui_notifications_contract.cpp)、[Windows 原生轮询探针](../tools/verify_ui_notifications.cjs)、[视口析构契约](../tests/viewport_lifetime_contract.cpp)、[执行中缓存帧与全文排队](../tests/ui_readback_contract.cpp)、[显示存储契约](../tests/display_storage_contract.cpp)、[工作台节点存储回收](../tests/ui_storage_contract.cpp)、[跨工程、端口类型与迟到显示隔离](../tests/ui_result_isolation_contract.cpp)、[输出值契约](../tests/output_value_contract.cpp)、[读取阶段契约](../tests/runtime_readback_contract.cpp) |
 | 真实工作台安装夹具与负载基准 | [安装夹具](../tests/WorkbenchFixtures.h)、[工作台交互](../tests/workbench_contract.cpp)、[零复制与负载基准](../tests/performance_contract.cpp)、[进程内存采样](../tests/ProcessMemory.h)、[值桥接分阶段基准](../tests/value_bridge_benchmark.cpp)、[真实画布路由基准](../tests/wire_routing_benchmark.cpp) |
 | 契约验证 | [tests](../tests)、[测试分组与聚合目标](../cmake/AddTest.cmake)、[测试注册](../CMakeLists.txt)、[按组构建与运行](../tools/build.cmd) |
+| 测试分组 | 见下方“测试分组”一节；分组表在 [AddTest.cmake](../cmake/AddTest.cmake) |
 | Windows 增量构建 | [构建入口](../tools/build.cmd)、[代码页与头文件依赖契约](../tests/build_incremental_contract.py) |
+
+## 测试分组
+
+每个测试恰好属于一个组；`tests-<组>` 构建该组需要的一切，`ctest -L <组>` 只运行该组。配置阶段会打印每个组的实际成员，组为空时直接失败（`sdk` 由 Contracts 子工程注册，`bridge`/`ui` 在 `VISIONRT_BUILD_APP=OFF` 下明确报告“不存在”而不是假装通过）。
+
+| 组 | 范围 | 构建入口 |
+| --- | --- | --- |
+| `backend` | 宿主核心、运行时、工具包与 Python 契约 | `tests-backend` |
+| `bridge` | 宿主到 Qt Quick 的桥接、视口、工作台窗口 | `tests-bridge` |
+| `ui` | 真实窗口交互（同一时间只允许一个窗口用例） | `tests-ui` |
+| `sdk` | Contracts 自身契约与隔离安装消费者 | `tests-sdk` |
+| `installed` | 安装态工具包链路 | `tests-installed` |
+| `package` | 校验器、JSON ZIP 部署、依赖清单、增量构建 | `tests-package` |
+| `gpu` | 真实设备推理；缺设备或缺 YOLO fixture 时按 SKIP 返回码 77 报 NOT RUN | `tests-gpu` |
+| `perf` | 基准与性能采样 | `tests-perf` |
+
+日常只构建并运行改动涉及的组；发布前一次全量 `tests-all` 加 `ctest -L installed`。`ctest` 默认把空选择当成功，跨仓验收时加 `--no-tests=error` 或引用上面的分组打印。

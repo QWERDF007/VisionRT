@@ -128,9 +128,7 @@ def execute(inputs):
         names[0] += '中文'
     out = {key: inputs[key] for key in ('images', 'rois', 'scores', 'classes', 'class_names')}
     out['rect'] = [inputs['rois'][0]]
-    out['__status_code'] = 0
-    out['__status_message'] = ''
-    return out
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': out}
 )");
     ToolDefinition generated;
     generated.id          = "test.installed.generated";
@@ -164,10 +162,10 @@ def execute(inputs):
     storage = np.arange(8 * 16, dtype=np.uint8)
     allocated += 1
     weakref.finalize(storage, finalized)
-    return {'images': [storage.reshape(8, 16)[:, 2:12]], '__status_code': 0, '__status_message': ''}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'images': [storage.reshape(8, 16)[:, 2:12]]}}
 
 def counter(inputs):
-    return {'allocated': allocated, 'released': released, '__status_code': 0, '__status_message': ''}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'allocated': allocated, 'released': released}}
 )");
     ToolDefinition h35Combo;
     h35Combo.id          = "test.installed.h35_combo";
@@ -192,7 +190,7 @@ def execute(inputs):
     q.put(42)
     package_dir = Path(__file__).resolve().parent
     res_path = package_dir / "resources" / "h35_weights.bin"
-    return {'val': q.get(), 'res_len': len(res_path.read_bytes()), '__status_code': 0, '__status_message': ''}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'val': q.get(), 'res_len': len(res_path.read_bytes())}}
 )");
     const auto augmented = readToolsPackage(root);
     require(augmented.tools.size() == published.tools.size() + 4 && !augmented.index.tools.contains(relay.id),

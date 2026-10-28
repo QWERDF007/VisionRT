@@ -14,9 +14,12 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <atomic>
 #include <functional>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 using namespace visionrt;
 
@@ -39,6 +42,8 @@ QString rowLine(const LogModel &model, int row)
 {
     return model.data(model.index(row, 0), LogModel::LineRole).toString();
 }
+
+void probeHandler(QtMsgType, const QMessageLogContext &, const QString &) {}
 
 bool anyRow(const LogModel &model, const std::function<bool(const QString &)> &match)
 {
@@ -156,26 +161,53 @@ try
             "mailbox overflow was not reported to the window");
     require(service.droppedRecords() > 0, "discarded records were not counted");
 
-    // 6. Error bursts collapse into one record with a repeat count.
+    // 6. Error bursts: the first occurrence is queued immediately with its own level, and only the
+    //    repeats are counted until the next flush.
     service.setViewActive(true);
-    const auto beforeCoalesce = model.rowCount();
     for (int index = 0; index < 5; ++index)
         LogService::write(LogLevel::Error, QStringLiteral("测试工具"), QStringLiteral("同一个错误"));
     require(QTest::qWaitFor(
                 [&]
                 {
-                    for (int row = beforeCoalesce; row < model.rowCount(); ++row)
-                        if (rowLine(model, row).contains(QStringLiteral("重复 5 次")))
+                    for (int row = 0; row < model.rowCount(); ++row)
+                    {
+                        if (rowLine(model, row).endsWith(QStringLiteral("同一个错误"))
+                            && model.data(model.index(row, 0), LogModel::LevelRole).toString()
+                                   == QStringLiteral("错误"))
                             return true;
+                    }
                     return false;
                 },
-                3000),
-            "repeated errors were not coalesced with their count");
-    int coalescedRows = 0;
-    for (int row = beforeCoalesce; row < model.rowCount(); ++row)
-        if (rowLine(model, row).contains(QStringLiteral("[测试工具] 同一个错误")))
-            ++coalescedRows;
-    require(coalescedRows == 1, "one error burst produced more than one log row");
+                1000),
+            "the first error of a burst was not queued immediately");
+    require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.contains(QStringLiteral("重复 4 次")); }); },
+                            3000),
+            "the repeats of an error burst were not summarised with their count");
+
+    // 6b. Critical never waits for a timer and is never reported under another level.
+    LogService::write(LogLevel::Critical, QStringLiteral("测试工具"), QStringLiteral("致命错误"));
+    require(QTest::qWaitFor(
+                [&] { return anyRow(model, [](const QString &line) { return line.endsWith(QStringLiteral("致命错误")); }); },
+                500),
+            "a critical line waited for the batch timer");
+    for (int row = 0; row < model.rowCount(); ++row)
+        if (rowLine(model, row).endsWith(QStringLiteral("致命错误")))
+            require(model.data(model.index(row, 0), LogModel::LevelRole).toString() == QStringLiteral("致命"),
+                    "a critical line was reported under a different level");
+
+    // 6c. One record is one line: CR/LF and other line breaks are escaped, never written through.
+    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("第一行\r\n第二行\n第三行"));
+    require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.contains(QStringLiteral("第一行")); }); },
+                            2000),
+            "the multi-line record did not reach the window");
+    require(anyRow(model, [](const QString &line) { return line.contains(QStringLiteral("第一行\\r\\n第二行\\n第三行")); }),
+            "line breaks were not escaped into visible sequences");
+    for (int row = 0; row < model.rowCount(); ++row)
+    {
+        const auto line = rowLine(model, row);
+        require(!line.contains(QLatin1Char('\n')) && !line.contains(QLatin1Char('\r')),
+                "a log row contains a raw line break");
+    }
 
     // 7. Long messages are capped identically for the window and the file.
     const auto oversized = QString(200, QLatin1Char('x'));
@@ -223,12 +255,93 @@ try
             "a same-day restart did not append the new line");
     require(service.writeFailures() == 1, "a healthy log file reported additional write failures");
 
+    // 11. The mailbox budget includes the drop summary: asking for one record after a saturation
+    //     returns the summary alone instead of the summary plus a record.
+    service.setViewActive(false);
+    for (int index = 0; index < static_cast<int>(config.uiCapacity) * 2; ++index)
+        LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("预算 %1").arg(index));
+    QTest::qWait(100);
+    const auto single = service.take(1);
+    require(single.size() == 1, "the drop summary ignored the requested record budget");
+    require(single.front().line.contains(QStringLiteral("丢弃")),
+            "the first record of a saturated mailbox is not the drop summary");
+    require(service.take(0).isEmpty(), "a zero budget still returned records");
+    service.take(static_cast<std::size_t>(config.uiCapacity) * 2);
+
+    // 12. A byte cap never splits a UTF-8 character: the kept prefix ends on a character boundary
+    //     and the window never shows a replacement character.
+    service.shutdown();
+    auto narrow            = config;
+    narrow.maxMessageBytes = 7;
+    require(service.start(narrow), "the service refused to restart with a narrow cap");
+    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("中文中文"));
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    for (const auto &record : service.take(64))
+                        if (record.line.contains(QStringLiteral("中文…")))
+                            return true;
+                    return false;
+                },
+                2000),
+            "a multi-byte message was not capped on a character boundary");
+    service.flush();
+    QTest::qWait(100);
+    const auto narrowFile = fileText(datedFile);
+    require(!narrowFile.contains(QChar(0xFFFD)), "the daily file contains a truncated UTF-8 sequence");
+
+    // 13. The window model trims the incoming batch before it removes history: a batch larger than
+    //     the window keeps only the newest rows and never exceeds its capacity.
+    LogModel small;
+    small.setCapacity(1);
+    small.append({LogRecord{QStringLiteral("旧"), QStringLiteral("信息")},
+                  LogRecord{QStringLiteral("新"), QStringLiteral("信息")}});
+    require(small.rowCount() == 1 && small.text(0) == QStringLiteral("新"),
+            "a batch larger than the window did not keep only its newest row");
+    small.setCapacity(2);
+    small.append({LogRecord{QStringLiteral("一"), QStringLiteral("信息")},
+                  LogRecord{QStringLiteral("二"), QStringLiteral("信息")},
+                  LogRecord{QStringLiteral("三"), QStringLiteral("信息")}});
+    require(small.rowCount() == 2 && small.text(0) == QStringLiteral("二") && small.text(1) == QStringLiteral("三"),
+            "the window model exceeded or mis-trimmed its capacity");
+
     service.setViewActive(false);
     service.shutdown();
     require(!service.running(), "shutdown did not stop the service");
     LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("关闭后写入"));
     service.shutdown();
     require(service.writeFailures() == 1, "a healthy log file reported write failures");
+
+    // 15. Shutdown while producers are writing: the barrier must let every in-flight post finish
+    //     before the worker, the sinks and the logger are released.
+    require(service.start(config), "the service refused to start for the concurrency check");
+    std::atomic<bool>        stop{false};
+    std::vector<std::thread> producers;
+    for (int index = 0; index < 4; ++index)
+        producers.emplace_back(
+            [&stop]
+            {
+                while (!stop.load(std::memory_order_relaxed))
+                    LogService::write(LogLevel::Info, QStringLiteral("并发"), QStringLiteral("关闭竞争"));
+            });
+    QTest::qWait(20);
+    service.shutdown();
+    stop.store(true, std::memory_order_relaxed);
+    for (auto &thread : producers)
+        thread.join();
+    require(!service.running(), "shutdown under concurrent producers did not stop the service");
+
+    // 14. Shutdown restores the handler that was installed before the service started. Qt's own
+    //     default handler is a non-null pointer, so both the default and a custom handler are
+    //     compared against the value actually observed instead of against nullptr.
+    const auto baseline = qInstallMessageHandler(probeHandler);
+    require(service.start(config), "the service refused to start for the handler restore check");
+    service.shutdown();
+    require(qInstallMessageHandler(baseline) == probeHandler, "shutdown left the Qt message bridge installed");
+    qInstallMessageHandler(nullptr);
+    require(service.start(config), "the service refused to restart for the default handler check");
+    service.shutdown();
+    require(qInstallMessageHandler(nullptr) == baseline, "shutdown did not restore the default Qt handler");
 
     std::cout << "Log contracts passed: single-line text, daily file in the software directory, append on restart, "
                  "bounded mailbox, batching, drops, coalescing, Qt bridge and honest degradation\n";

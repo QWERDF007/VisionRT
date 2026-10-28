@@ -55,7 +55,7 @@ void pathEditorsContract()
   "runtime_files": []
 })json");
     write("tools-package/python/custom/Test/run.py",
-          "def run(inputs):\n    return {'__status_code': 0, '__status_message': '', 'mode_value': 'directory'}\n");
+          "def run(inputs):\n    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'mode_value': 'directory'}}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
   "schema_version": 4,
@@ -476,7 +476,18 @@ void readImageToolUiContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "reopen did not finish");
     require(app.nodes().size() == 1, "reopened project has no nodes");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
-    require(value("path") == imageDir, "saved directory path did not survive reopen");
+    // A same-drive resource is stored relative to the project, so what has to survive is the
+    // resource the stored value points at, not the spelling that happened to be typed before saving.
+    const auto reopenedPath = value("path");
+    const auto reopenedAbsolute
+        = QFileInfo(reopenedPath).isAbsolute()
+              ? reopenedPath
+              : QDir(QFileInfo(savedProjectPath).absolutePath()).absoluteFilePath(reopenedPath);
+    const auto pathMessage = "saved directory path did not survive reopen: stored=" + reopenedPath.toStdString()
+                             + " resolved=" + QFileInfo(reopenedAbsolute).canonicalFilePath().toStdString()
+                             + " expected=" + QFileInfo(imageDir).canonicalFilePath().toStdString();
+    require(QFileInfo(reopenedAbsolute).canonicalFilePath() == QFileInfo(imageDir).canonicalFilePath(),
+            pathMessage.c_str());
 
     std::cout << "[Evidence ReadImage UI] '读取图像' tool single-button path picker successfully tested for both image file ("
               << imageFile.toStdString() << ") and image directory (" << imageDir.toStdString() << ") with pipeline execution and 6 images verified.\n";

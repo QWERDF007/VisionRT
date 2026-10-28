@@ -59,20 +59,20 @@ try
 class Tool:
     def initialize(self, inputs):
         self.init = int(inputs.get('init_value', 10))
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 
     def execute(self, inputs):
         value = int(inputs.get('value', 1))
         if value < 0:
-            return {'__status_code': 1, '__status_message': '受控发布失败',
-                    'value': None, 'image': None, 'rect': [], 'note': ''}
+            return {'status': {'code': 1, 'message': '受控发布失败', 'detail': ''},
+                    'outputs': {'value': None, 'image': None, 'rect': [], 'note': ''}}
         image = np.full((4, 4), self.init + value, dtype=np.uint8)
-        return {'value': value, 'image': [image],
-                'rect': [[[1.0, 2.0, 3.0, 4.0, 0.0]]], 'note': f'{self.init}:{value}',
-                '__status_code': 0, '__status_message': ''}
+        return {'status': {'code': 0, 'message': '', 'detail': ''},
+                'outputs': {'value': value, 'image': [image],
+                            'rect': [[[1.0, 2.0, 3.0, 4.0, 0.0]]], 'note': f'{self.init}:{value}'}}
 
     def release(self):
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 )py");
     AppController app(1, root);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "publication catalog did not become ready");

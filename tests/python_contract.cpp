@@ -88,7 +88,8 @@ int main(int argc, char **argv)
                     const auto missing = mean->execute({
                         {"images", Missing{}}
                     });
-                    assert(testview::status(missing).code == 1 && isMissing(missing.outputs.at("means")));
+                    // A declared port with no value is a business failure; the tool owns the code.
+                    assert(testview::status(missing).code == 1001 && isMissing(missing.outputs.at("means")));
                     const auto empty = mean->execute({
                         {"images", DataRef<Image>(Image{})}
                     });
@@ -157,7 +158,7 @@ int main(int argc, char **argv)
                         {"images", copyInput},
                         {"mode", std::string("other")}
                     });
-                    assert(testview::status(invalid).code == 1 && isMissing(invalid.outputs.at("images")));
+                    assert(testview::status(invalid).code == 1003 && isMissing(invalid.outputs.at("images")));
                     assert(add->release().code == 0);
                 }
                 {

@@ -7,6 +7,7 @@
 #include <functional>
 #include <array>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -425,16 +426,47 @@ void assistSeedFrame()
     require(oval[0] == cv::Point2d(-10.0, -5.0) && oval[1] == cv::Point2d(10.0, 5.0),
             "non-uniform alignment reported a circle instead of the true ellipse bounds");
 
+    // A shear and a mirror stay inside the supported range: the box follows the mapped shape.
+    const std::array<double, 9> sheared{1, 0.5, 0, 0, 1, 0, 0, 0, 1};
+    const auto                  skewed = transformedRoiBounds(rectangle, sheared);
+    require(skewed[0] == cv::Point2d(20.0, 20.0) && skewed[1] == cv::Point2d(26.0, 24.0),
+            "sheared alignment reported the wrong box");
+    const std::array<double, 9> mirrored{-1, 0, 0, 0, 1, 0, 0, 0, 1};
+    const auto                  flipped = transformedRoiBounds(rectangle, mirrored);
+    require(flipped[0] == cv::Point2d(-14.0, 20.0) && flipped[1] == cv::Point2d(-10.0, 24.0),
+            "mirrored alignment did not report the mirrored box");
+
     // A singular alignment has no image for the seed. The contract must name it, so the assist path
     // can treat it as "not under the cursor" instead of hitting a coordinate that does not exist.
-    const std::array<double, 9> singular{1, 0, 0, 0, 1, 0, 1, 0, 0};
+    const std::array<double, 9> singular{1, 0, 0, 0, 0, 0, 0, 0, 1};
     bool                        diagnosed = false;
     try { transformedRoiBounds(circle, singular); }
     catch (const ContractError &error)
     {
         diagnosed = std::string_view(error.what()).find("singular") != std::string_view::npos;
     }
-    require(diagnosed, "a projective singularity was not diagnosed");
+    require(diagnosed, "a singular affine alignment was not diagnosed");
+
+    // A projective map is outside the supported range: part of the region has no finite image, so
+    // the helper refuses it instead of returning a box that misses the region's real extent.
+    const std::array<double, 9> projective{1, 0, 0, 0, 1, 0, 0.1, 0, 1};
+    bool                        refused = false;
+    try { transformedRoiBounds(rectangle, projective); }
+    catch (const ContractError &error)
+    {
+        refused = std::string_view(error.what()).find("affine") != std::string_view::npos;
+    }
+    require(refused, "a projective alignment was not refused");
+
+    // A non-finite matrix is refused before any geometry runs.
+    const std::array<double, 9> infinite{1, 0, 0, 0, 1, 0, 0, 0, std::numeric_limits<double>::infinity()};
+    bool                        finiteRefused = false;
+    try { transformedRoiBounds(rectangle, infinite); }
+    catch (const ContractError &error)
+    {
+        finiteRefused = std::string_view(error.what()).find("finite") != std::string_view::npos;
+    }
+    require(finiteRefused, "a non-finite alignment matrix was accepted");
     std::cout << "Assist seeds are compared in the current image frame\n";
 }
 

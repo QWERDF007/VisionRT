@@ -9,12 +9,12 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
-#include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace spdlog
 {
@@ -63,6 +63,10 @@ enum class LogLevel
 // daily file sink under <executable>/logs, one bounded UI mailbox and the Qt message bridge.
 // Producers never block on the GUI; the GUI never waits on the worker. The window and the file
 // receive the same line, produced by one formatter.
+//
+// Threading contract: producers take the shared side of `writeMutex` for the whole post, so a
+// shutdown that takes it exclusively knows every in-flight line already reached the queue before
+// the worker, the sinks and the logger are released.
 class LogService final : public QObject
 {
     Q_OBJECT
@@ -75,8 +79,9 @@ public:
     // A directory or file that cannot be written falls back to stderr, is counted in
     // writeFailures() and is reported as one diagnostic line - never silently relocated.
     bool start(const LogConfig &config = {}, const QString &filePath = {});
-    // Stops producers first (restores the previous Qt handler), drains the queue, then releases the
-    // logger and the thread pool. Safe to call when never started.
+    // Stops producers first (restores the previous Qt handler, including the default one), drains
+    // the queue, then releases the logger and the thread pool. Safe to call when never started and
+    // safe to call twice; a later start() restarts a clean service.
     void shutdown();
     bool running() const;
     // Drains the queue into the sinks without blocking the caller on the GUI.
@@ -96,7 +101,8 @@ public:
     void setViewActive(bool active);
     bool viewActive() const;
 
-    // Takes at most `maximum` records from the mailbox. Called on the GUI thread only.
+    // Takes at most `maximum` records from the mailbox, including the drop summary. Called on the
+    // GUI thread only.
     QVector<LogRecord> take(std::size_t maximum);
     std::uint64_t droppedRecords() const;
     std::uint64_t writeFailures() const;
@@ -118,13 +124,23 @@ private:
 
     class BufferedSink;
 
+    struct PendingError;
+
     void drain();
     void scheduleDrain();
     void writeImpl(LogLevel level, std::string_view source, std::string_view message);
-    // Errors that repeat with the same key are collapsed into one record with a count instead of
-    // flooding the window.
-    void writeCoalesced(LogLevel level, std::string_view source, std::string_view message,
-                        const std::chrono::steady_clock::time_point &now);
+    // Errors are the only level that coalesces: the first occurrence is posted immediately and the
+    // repeats are counted until the next flush, so a burst stays one readable row without delaying
+    // the first report.
+    void writeError(std::string_view source, std::string_view message);
+    void flushPending();
+    // `postLocked` and `postPendingLocked` require the caller to hold `writeMutex` (shared or
+    // exclusive); `takePending` also needs it and takes the coalesce mutex itself. That single lock
+    // order - writer lock, then coalesce - is what keeps producers and shutdown deadlock-free.
+    void postLocked(LogLevel level, std::string_view source, std::string_view message,
+                    std::chrono::system_clock::time_point when);
+    void postPendingLocked();
+    std::vector<PendingError> takePending();
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

@@ -70,9 +70,9 @@ public:
 
     ToolResult execute(const Values &) override
     {
+        // The two status ports are the host's to materialise after a successful run; a tool that
+        // writes them is a contract error, so this fixture only reports its own business ports.
         Values outputs;
-        outputs.emplace("__status_code", std::int64_t{0});
-        outputs.emplace("__status_message", std::string{"运行成功"});
         outputs.emplace("valid", false);
         outputs.emplace("quality", std::string{});
         outputs.emplace("preview", DataRef<ROI>(ROI{}));
@@ -100,9 +100,7 @@ ToolDefinition helperDefinition()
     definition.displayName = "释放闩锁辅助";
     definition.version     = "1";
     definition.kind        = ToolKind::Cpp;
-    definition.outputs     = {{"__status_code", "状态码", {Type::Int}},
-                              {"__status_message", "状态消息", {Type::String}},
-                              {"valid", "有效", {Type::Bool}},
+    definition.outputs     = {{"valid", "有效", {Type::Bool}},
                               {"quality", "质量", {Type::String}},
                               {"preview", "预览", {Type::ROI}},
                               {"proposal", "坐标", {Type::ROI}}};

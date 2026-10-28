@@ -3,20 +3,57 @@
 #include "runtime/RuntimeEngine.h"
 #include <core/ToolPackage.h>
 
+#include <QByteArray>
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 using namespace visionrt;
 using namespace std::chrono_literals;
+
+namespace {
+
+// A machine without the CUDA driver (or without a device behind it) cannot run this contract. The
+// probe goes through the driver API at runtime, so the test binary stays free of a CUDA link
+// dependency and the result is an explicit NOT RUN instead of a pass on a filter that never ran.
+int cudaDeviceCount()
+{
+#if defined(_WIN32)
+    const HMODULE driver = LoadLibraryW(L"nvcuda.dll");
+    if (!driver)
+        return 0;
+    using InitFunction    = int (*)(unsigned int);
+    using CountFunction   = int (*)(int *);
+    const auto init       = reinterpret_cast<InitFunction>(GetProcAddress(driver, "cuInit"));
+    const auto count      = reinterpret_cast<CountFunction>(GetProcAddress(driver, "cuDeviceGetCount"));
+    int        devices    = 0;
+    if (!init || !count || init(0) != 0 || count(&devices) != 0)
+        devices = 0;
+    FreeLibrary(driver);
+    return devices;
+#else
+    return 0;
+#endif
+}
+
+} // namespace
 
 int main(int argc, char **argv)
 {
@@ -30,9 +67,34 @@ int main(int argc, char **argv)
         const auto weights = fixtures / "yolov8n.wts";
         const auto image = fixtures / "bus.jpg";
         const auto enginePath = fixtures / "yolov8n.engine";
+        if (cudaDeviceCount() == 0)
+        {
+            std::cout << "[NOT RUN] no CUDA device on this machine\n";
+            return 77;
+        }
         if (!std::filesystem::is_regular_file(image)
             || (buildWeights && !std::filesystem::is_regular_file(weights)))
-            throw std::runtime_error("YOLO fixture requires Ultralytics bus.jpg and exported COCO yolov8n.wts for model build");
+        {
+            std::cout << "[NOT RUN] YOLO fixture is missing: " << fixtures << '\n';
+            return 77;
+        }
+        // A package built from a profile without inference carries no infer module: the contract
+        // has nothing to measure there, and reporting it as a failure would blame the wrong thing.
+        {
+            const auto indexPath = std::filesystem::u8path(argv[1]) / "module_index.json";
+            std::ifstream indexStream(indexPath, std::ios::binary);
+            const auto    indexDocument = QJsonDocument::fromJson(QByteArray::fromStdString(
+                std::string(std::istreambuf_iterator<char>(indexStream), std::istreambuf_iterator<char>())));
+            const auto    modules       = indexDocument.object().value("modules").toArray();
+            const bool    hasInfer = std::any_of(modules.begin(), modules.end(), [](const QJsonValue &module) {
+                return module.toObject().value("id").toString().contains("infer", Qt::CaseInsensitive);
+            });
+            if (!hasInfer)
+            {
+                std::cout << "[NOT RUN] the tools package has no infer module: " << argv[1] << '\n';
+                return 77;
+            }
+        }
         ToolRegistry registry;
         registry.setPluginLoader(std::make_shared<PluginLoader>());
         registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
