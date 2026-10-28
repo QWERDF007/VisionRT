@@ -139,13 +139,33 @@ try
     click(window, tab);
     idle();
     require(app.currentFlow() == target.value("id").toString(), "tab click did not activate its flow");
-    auto *toggle = findItem(canvas, "flowTabToggle_" + target.value("id").toString());
-    require(toggle, "flow toggle is missing");
+
+    auto *dropdown = findItem(canvas, "flowDropdown");
+    require(dropdown, "flow dropdown is missing");
+    click(window, dropdown);
+    idle();
+    auto *popup = canvas->findChild<QObject *>("selectFlowPopup");
+    require(popup && popup->property("visible").toBool(), "select flow popup did not open");
+
+    auto *toggle = canvas->findChild<QQuickItem *>("flowToggle_" + target.value("id").toString());
+    if (!toggle)
+        toggle = findItem(window.contentItem(), "flowToggle_" + target.value("id").toString());
+    require(toggle, "flow toggle item in popup is missing");
     const bool selected = target.value("selected").toBool();
     click(window, toggle);
     idle();
     require(findFlow(target.value("id").toString()).value("selected").toBool() != selected,
             "flow toggle did not change its run selection");
+
+    auto *indicator = findItem(canvas, "flowTabIndicator_" + target.value("id").toString());
+    require(indicator, "flow tab indicator is missing");
+    const bool nowSelected = findFlow(target.value("id").toString()).value("selected").toBool();
+    const auto indicatorColor = indicator->property("color").value<QColor>();
+    require(nowSelected ? (indicatorColor == QColor("#2da44e")) : (indicatorColor == QColor("transparent")),
+            "indicator color did not reflect run selection");
+
+    click(window, dropdown);
+    idle();
     auto *close = findItem(canvas, "flowTabClose_" + target.value("id").toString());
     require(close, "flow close control is missing");
     click(window, close);

@@ -56,6 +56,43 @@ void startupProjectContract()
         require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                 "startup main window did not receive the real project");
 
+        // Verify recent projects submenu is configured directly as a child QuiMenu in fileMenu,
+        // with subMenu correctly bound so the secondary expansion arrow and hover menu operate.
+        auto *fileMenu = window->findChild<QObject *>(QStringLiteral("fileMenu"));
+        auto *recentMenu = window->findChild<QObject *>(QStringLiteral("recentMenu"));
+        require(fileMenu != nullptr, "fileMenu is missing from main window");
+        require(recentMenu != nullptr, "recentMenu is missing from main window");
+        require(recentMenu->property("title").toString() == QStringLiteral("最近打开工程"),
+                "recentMenu title mismatch");
+        require(recentMenu->property("enabled").toBool() == (app.recentProjects().size() > 0),
+                "recentMenu enabled state mismatch with app.recentProjects");
+        QQuickItem *recentItem = nullptr;
+        const int menuCount = fileMenu->property("count").toInt();
+        for (int i = 0; i < menuCount; ++i)
+        {
+            QQuickItem *it = nullptr;
+            QMetaObject::invokeMethod(fileMenu, "itemAt", Qt::DirectConnection,
+                                      Q_RETURN_ARG(QQuickItem *, it), Q_ARG(int, i));
+            if (it && it->property("text").toString() == QStringLiteral("最近打开工程"))
+            {
+                recentItem = it;
+                break;
+            }
+        }
+        require(recentItem != nullptr, "fileMenu did not generate delegate item for recentMenu");
+        require(recentItem->property("subMenu").value<QObject *>() == recentMenu,
+                "recentItem subMenu does not point to recentMenu");
+        if (!app.recentProjects().isEmpty())
+        {
+            QQuickItem *subItem = nullptr;
+            QMetaObject::invokeMethod(recentMenu, "itemAt", Qt::DirectConnection,
+                                      Q_RETURN_ARG(QQuickItem *, subItem), Q_ARG(int, 0));
+            require(subItem != nullptr, "recentMenu did not generate item for recent project");
+            const QString itemText = subItem->property("text").toString();
+            require(!itemText.isEmpty() && (itemText.contains('/') || itemText.contains('\\')),
+                    "recent project item text is not a full path");
+        }
+
         const auto findItem = [](auto &&self, QQuickItem *parent, const QString &name) -> QQuickItem *
         {
             for (auto *child : parent->childItems())
