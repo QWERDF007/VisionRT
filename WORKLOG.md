@@ -30,6 +30,27 @@
 - ...
 -->
 
+### 2026-10-28 — 三仓提交推送与 T39 执行报告
+
+**目标**
+- 把本轮三仓改动落成提交并推送，输出完成项/未完成项及原因的书面报告。
+
+**当前状态**
+- 已完成（提交）：VisionRT `538f734`（70 文件）、VisionTools `8f9fdfc`（64 文件）、Contracts `5147c32`（早已与 `origin/main` 同源）。
+- 已完成（推送）：`origin/dev` 分别在两父仓推进到上述提交；三仓工作区干净，gitlink 一致。
+- 已完成（报告）：[T39_执行报告](docs/T39_执行报告_20261028.md) 按 16 张工单逐条记账——14 张完成、T39-16 部分完成、T39-15 未启动（P3，独立后续目标）。
+- 已完成（补证）：`-L installed` 复跑 2/2 通过，闭合 T39-12 的最后一处验证缺口。
+- 未完成：T39-16 的一次性发布验收（全组干净构建、provenance 汇总、改造前后 A/B、Debug 配置实测）；`build_incremental_contract` 因沙箱拦截 `reg.exe` 无法在本会话给出绿结论。
+
+**验证证据**
+- `cmake --build build`（两仓）→ 0 错误；VisionRT 需手工导出 `INCLUDE`/`LIB`（`vcvars64.bat` 依赖被拦的 `reg.exe`）；
+- `ctest -L installed` → **2/2 通过**（4.9 s）；
+- `ctest -R build_incremental_contract` → Failed，输出为 `vcvars64.bat` 调用 `reg.exe` 被 Program Blacklist 拦截，非参数拆分缺陷；
+- `git push origin dev`（VisionRT）→ `e83b603..538f734`；`git push origin dev`（VisionTools）→ `c268186..8f9fdfc`。
+
+**下一步**
+- 按报告第 5 节顺序：先补 T39-16 的三块证据（不改代码），再开 T39-15 首个切片（纯 std 模型 + no-Qt probe）。
+
 ### 2026-10-28 — T39-08 第三阶段、ui/bridge 组实跑、Contracts 推送
 
 **目标**
