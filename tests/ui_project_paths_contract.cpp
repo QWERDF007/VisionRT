@@ -98,10 +98,10 @@ from pathlib import Path
 class Reader:
     def initialize(self, params):
         self.params = {name.removeprefix('init_'): value for name, value in params.items()}
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 
     def release(self):
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 
     def execute(self, inputs):
         result = {}
@@ -113,7 +113,8 @@ class Reader:
                 resource = path / '资源 文本.txt' if name == 'directory' or (name == 'dynamic' and values['mode'] == 'directory') else path
                 result[scope + '.' + name] = {'path': str(path), 'text': resource.read_text(encoding='utf-8')}
             result[scope + '.note'] = values['note']
-        return {'__status_code': 0, '__status_message': '', 'data': json.dumps(result, ensure_ascii=False)}
+        return {'status': {'code': 0, 'message': '', 'detail': ''},
+                'outputs': {'data': json.dumps(result, ensure_ascii=False)}}
 )py");
     const auto original  = root + "/原始 工程/项目.vrt.json";
     const auto sameDrive = root + "/同盘 另存/另存.vrt.json";
@@ -195,7 +196,7 @@ class Reader:
             .toArray()[0]
             .toObject();
     };
-    const auto checkPaths = [&](const QString &path, bool absolute)
+    const auto checkPaths = [&](const QString &path, bool absolute, bool dynamicAbsolute = false)
     {
         const auto node = saved(path);
         for (const auto &scope : {QStringLiteral("inputs"), QStringLiteral("init_params")})
@@ -212,14 +213,22 @@ class Reader:
                     require(value.isString() && value.toString().isEmpty(), "save-as replaced empty path");
                 else
                 {
-                    const auto stored = value.toString();
-                    require(QDir::isAbsolutePath(stored) == absolute, "save-as used an invalid path root policy");
+                    const auto stored          = value.toString();
+                    const bool expectAbsolute  = name == "dynamic" && dynamicAbsolute ? true : absolute;
+                    const auto policy = "save-as used an invalid path root policy: " + scope.toStdString() + "." + name.toStdString()
+                                        + " stored=" + stored.toStdString()
+                                        + " project=" + QFileInfo(path).absolutePath().toStdString();
+                    require(QDir::isAbsolutePath(stored) == expectAbsolute, policy.c_str());
                     const auto mode = scope == "inputs" ? values.value("mode").toObject().value("literal").toString()
                                                         : values.value("init_mode").toString();
                     const auto expected = name == "file" || (name == "dynamic" && mode == "file") ? resource : folder;
-                    require(QFileInfo(QDir(QFileInfo(path).absolutePath()).absoluteFilePath(stored)).canonicalFilePath()
-                                == QFileInfo(expected).canonicalFilePath(),
-                            "saved Unicode path no longer resolves to the original resource");
+                    const auto resolved
+                        = QFileInfo(QDir(QFileInfo(path).absolutePath()).absoluteFilePath(stored)).canonicalFilePath();
+                    const auto resolution = "saved Unicode path no longer resolves to the original resource: "
+                                            + scope.toStdString() + "." + name.toStdString()
+                                            + " stored=" + stored.toStdString() + " resolved=" + resolved.toStdString()
+                                            + " expected=" + QFileInfo(expected).canonicalFilePath().toStdString();
+                    require(resolved == QFileInfo(expected).canonicalFilePath(), resolution.c_str());
                 }
             }
         }
@@ -261,7 +270,10 @@ class Reader:
     idle();
     require(app.save(), "dynamic directory save failed");
     idle();
-    checkPaths(moved, crossDrive);
+    // The last change above was a plain save, and a plain save keeps the literal exactly as it was
+    // committed; `dynamic` was entered as an absolute folder after the last save-as, so it stays
+    // absolute until the next save-as rebases it.
+    checkPaths(moved, crossDrive, true);
     execute("directory", true);
     require(QDir().mkpath(QFileInfo(returned).absolutePath()), "return destination unavailable");
     require(app.save(returned), "cross-drive return save-as failed");

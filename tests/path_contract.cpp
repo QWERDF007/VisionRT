@@ -8,22 +8,17 @@ int main()
     using namespace visionrt;
     try
     {
-        bool rejected = false;
-        try
-        {
-            (void)PathResolver{}.resolve("images/test.png");
-        }
-        catch (const std::runtime_error &)
-        {
-            rejected = true;
-        }
-        if (!rejected)
+        const auto unnamed = PathResolver{}.tryResolve("images/test.png");
+        if (unnamed || unnamed.issue().kind != PortIssueKind::PathUnresolved)
             throw std::runtime_error("unnamed relative path accepted");
+        if (unnamed.issue().describe().find("images/test.png") == std::string::npos)
+            throw std::runtime_error("the issue must name the path");
         const auto absolute = std::filesystem::path("D:/images/test.png");
-        if (PathResolver{}.resolve("D:/images/test.png") != absolute)
+        const auto direct   = PathResolver{}.tryResolve("D:/images/test.png");
+        if (!direct || direct.value() != absolute)
             throw std::runtime_error("absolute path changed");
-        if (PathResolver{"D:/projects/example"}.resolve("../images/test.png")
-            != std::filesystem::path("D:/projects/images/test.png"))
+        const auto relative = PathResolver{"D:/projects/example"}.tryResolve("../images/test.png");
+        if (!relative || relative.value() != std::filesystem::path("D:/projects/images/test.png"))
             throw std::runtime_error("relative path resolved against wrong directory");
         std::cout << "path contract passed\n";
     }

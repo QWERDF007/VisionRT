@@ -66,15 +66,15 @@ class Counter:
     def initialize(self, parameters):
         bump('init')
         self.count = 0
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 
     def execute(self, inputs):
         self.count += 1
         bump('exec')
-        return {'__status_code': 0, '__status_message': '', 'value': self.count}
+        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': self.count}}
 
     def release(self):
-        return {'__status_code': 0, '__status_message': ''}
+        return {'code': 0, 'message': '', 'detail': ''}
 )py");
     AppController app(2, root);
     const auto    idle = [&]

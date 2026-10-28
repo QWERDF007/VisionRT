@@ -85,8 +85,10 @@ def run(inputs):
         while not (root / 'allow').exists():
             time.sleep(0.002)
     if mode == 'fail':
-        return {'__status_code': 1, '__status_message': '受控失败', 'value': None, 'flag': None}
-    return {'__status_code': 0, '__status_message': '', 'value': 7, 'flag': mode != 'gate_false'}
+        return {'status': {'code': 1, 'message': '受控失败', 'detail': ''},
+                'outputs': {'value': None, 'flag': None}}
+    return {'status': {'code': 0, 'message': '', 'detail': ''},
+            'outputs': {'value': 7, 'flag': mode != 'gate_false'}}
 )py");
     AppController app(2, root);
     const auto    releaseOnExit = qScopeGuard([&] { write(permission, "allow"); });

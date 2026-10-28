@@ -57,8 +57,9 @@ try
         script << "from pathlib import Path\n"
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
                   "def execute(inputs):\n"
-                  "    return {'__status_code':0, '__status_message':'运行成功', 'value':7,\n"
-                  "            'rois':[[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]]}\n";
+                  "    return {'status': {'code': 0, 'message': '运行成功', 'detail': ''},\n"
+                  "            'outputs': {'value': 7,\n"
+                  "                        'rois': [[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]]}}\n";
     }
     const auto definition = parseToolDefinitionJson(R"({
         "schema_version":4,"tool_id":"python.lazy.runtime","display_name":"Lazy runtime","version":"1",

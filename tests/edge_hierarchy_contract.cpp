@@ -29,7 +29,7 @@ void rejects(F &&operation, std::string_view reason = {})
             {
                 std::cerr << "Expected reason: " << reason << ", got: " << error.what() << std::endl;
             }
-            assert(std::string_view(error.what()).find(reason) != std::string_view::npos);
+            assert(std::string_view(error.what()).find(reason) != std::string::npos);
         }
         rejected = true;
     }
@@ -224,12 +224,12 @@ int main()
         // Flow run rejected
         const auto flowStatus = engine.start(loadResult.project, registry, RunMode::Once);
         assert(!flowStatus);
-        assert(std::string_view(flowStatus.message).find("层级约束") != std::string_view::npos);
+        assert(flowStatus.message.find("层级约束") != std::string::npos);
 
         // Single node run for node 2 rejected
         const auto nodeStatus = engine.start(loadResult.project, registry, RunMode::Node, n2);
         assert(!nodeStatus);
-        assert(std::string_view(nodeStatus.message).find("层级约束") != std::string_view::npos);
+        assert(nodeStatus.message.find("层级约束") != std::string::npos);
 
         // 5. Repair: Move node 2 to (5, 4) so that source.y(0) < target.y(4)
         ProjectEditor repairEditor(loadResult.project);

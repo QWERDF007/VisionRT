@@ -302,14 +302,27 @@ void startupProjectContract()
             const auto decodeJson
                 = visionrt::OutputModel::diagnosticText(*outputModel->capture(QStringLiteral("__status_message")));
             const auto decode = QJsonDocument::fromJson(decodeJson.toUtf8()).object();
-            require(decode.value("code").toInt() == 1 && decode.value("node") == "1"
-                        && decode.value("tool_id") == "visionrt.image.read" && decode.value("phase") == "execute"
-                        && QDir::fromNativeSeparators(decode.value("message").toString()).contains(imagePath)
-                        && decode.value("message").toString().contains(QStringLiteral("批次索引 0"))
-                        && !decode.value("message").toString().contains("OpenCV")
-                        && decode.value("detail").toString().contains("validateInputImageSize"),
-                    "native exception lost its raw detail, identity or actual execution phase: "
-                        + decodeJson.toStdString());
+            // The image reader owns its business codes: 101004 is "decode failed" in the tool's own
+            // error domain. The host forwards it unchanged instead of inventing a generic 1.
+            const auto decoded = decode.value("message").toString();
+            const auto flagsOk = decode.value("code").toInt() == 101004 && decode.value("node") == "1"
+                                 && decode.value("tool_id") == "visionrt.image.read"
+                                 && decode.value("phase") == "execute";
+            const auto textOk = QDir::fromNativeSeparators(decoded).contains(imagePath)
+                                && decoded.contains(QStringLiteral("批次索引 0")) && !decoded.contains("OpenCV");
+            const auto detailOk = decode.value("detail").toString().contains("validateInputImageSize");
+            const auto flagText = QStringLiteral("code=%1 node=%2 tool=%3 phase=%4 text=%5 detail=%6")
+                                      .arg(decode.value("code").toInt())
+                                      .arg(decode.value("node").toString())
+                                      .arg(decode.value("tool_id").toString())
+                                      .arg(decode.value("phase").toString())
+                                      .arg(textOk ? 1 : 0)
+                                      .arg(detailOk ? 1 : 0);
+            require(flagsOk && textOk && detailOk,
+                    ("native exception lost its raw detail, identity or actual execution phase: "
+                     + flagText + " " + decodeJson)
+                        .toStdString()
+                        .c_str());
             for (const auto &entry : app.nodes())
                 if (entry.toMap().value("id") == "1")
                 {

@@ -137,17 +137,14 @@ void readImages(ToolRegistry &registry)
                      },
                      services);
     failure(result);
-    assert((testview::status(result).code == 1));
-    // One status message carries the curated reason first and the decoder text after it; the row
-    // shows only the reason and the diagnostic keeps the rest.
-    // The status must outlive the views: a temporary would leave the lines dangling.
+    // The readable reason is the message; the decoder text is a detail the diagnostic keeps apart.
     const auto decodeStatus = testview::status(result);
-    const auto decodeLines  = statusLines(decodeStatus.message);
-    assert((decodeLines.summary.find("图像解码失败") != std::string_view::npos));
-    assert((decodeLines.summary.find("oversized.bmp") != std::string_view::npos));
-    assert((decodeLines.summary.find("批次索引 0") != std::string_view::npos));
-    assert((decodeLines.summary.find("OpenCV") == std::string_view::npos));
-    assert((decodeLines.detail == decoderDetail));
+    assert((decodeStatus.code == 101004));
+    assert((decodeStatus.message.find("图像解码失败") != std::string::npos));
+    assert((decodeStatus.message.find("oversized.bmp") != std::string::npos));
+    assert((decodeStatus.message.find("批次索引 0") != std::string::npos));
+    assert((decodeStatus.message.find("OpenCV") == std::string::npos));
+    assert((decodeStatus.detail == decoderDetail));
     inputs["path"] = std::string("中文目录/a.png");
     success(execute(registry, "visionrt.image.read", inputs, services));
     inputs["path"] = std::string("absent.png");
@@ -165,7 +162,7 @@ void readImages(ToolRegistry &registry)
                      services);
     // 空目录没有任何可用文件，按规范明确失败而不是发布空批次。
     failure(result);
-    assert((testview::status(result).message.find("没有可用图像文件") != std::string::npos));
+    assert((testview::status(result).message.find("没有可用图像") != std::string::npos));
     const auto unicodeFolder = directory.path() + "/unicode_sort";
     assert((QDir().mkpath(unicodeFolder)));
     const auto supplementaryName = QString::fromUtf8("\xF0\x90\x80\x80.png"); // U+10000

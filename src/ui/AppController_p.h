@@ -259,6 +259,7 @@ struct AppController::Impl
     bool                                 applyParameter(const QString &id, bool initialization, PortValue value);
     void                                 report(const QString &text);
     void                                 report(ApplicationDiagnostic diagnostic);
+    void                                 report(const ErrorInfo &error);
     void                                 report(const std::exception &error, const QString &summary);
     void                                 changed(bool structure = false);
     void                                 publishNodesChanged();

@@ -130,19 +130,17 @@ int main()
         assert(ToolStatus{}.message.empty());
 
         const auto success = toolResult({{"value", std::int64_t{3}}}, {0, ""});
-        assert(success.outputs.size() == 3);
-        assert(std::get<std::int64_t>(success.outputs.at("__status_code")) == 0);
-        assert(std::get<std::string>(success.outputs.at("__status_message")).empty());
+        assert(success.outputs.size() == 1);
+        assert(success.status.code == 0 && success.status.message.empty());
         assert(std::get<std::int64_t>(success.outputs.at("value")) == 3);
 
         const auto described = toolResult({}, {2, "输入图像为空"});
-        assert(std::get<std::int64_t>(described.outputs.at("__status_code")) == 2);
-        assert(std::get<std::string>(described.outputs.at("__status_message")) == "输入图像为空");
+        assert(described.status.code == 2 && described.status.message == "输入图像为空");
+        assert(described.outputs.empty());
 
         // A negative code is data, not a framework failure, and it survives untouched.
         const auto negative = toolResult({}, {-7, "  保留原样"});
-        assert(std::get<std::int64_t>(negative.outputs.at("__status_code")) == -7);
-        assert(std::get<std::string>(negative.outputs.at("__status_message")) == "  保留原样");
+        assert(negative.status.code == -7 && negative.status.message == "  保留原样");
         assert(static_cast<bool>(ToolStatus{0, ""}));
         assert(!static_cast<bool>(ToolStatus{-1, ""}));
     }

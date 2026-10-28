@@ -56,20 +56,22 @@ ToolStatus ToolRegistry::add(const ToolFactoryDescriptor &descriptor) noexcept
     try
     {
         if (!descriptor.tool_id || isBlankMessage(descriptor.tool_id))
-            registrationStatus_ = {-3, "工具工厂 ID 不能为空"};
+            registrationStatus_ = makeStatus(ErrorCode::InvalidArgument, "工具工厂 ID 不能为空");
         else if (!descriptor.create || !descriptor.destroy)
-            registrationStatus_ = {-3, "工具工厂函数不完整：" + std::string(descriptor.tool_id)};
+            registrationStatus_
+                = makeStatus(ErrorCode::InvalidArgument, "工具工厂函数不完整：" + std::string(descriptor.tool_id));
         else if (!nativeFactories_.emplace(descriptor.tool_id, NativeFactory{descriptor.create, descriptor.destroy})
                       .second)
-            registrationStatus_ = {-3, "工具工厂 ID 重复：" + std::string(descriptor.tool_id)};
+            registrationStatus_
+                = makeStatus(ErrorCode::InvalidArgument, "工具工厂 ID 重复：" + std::string(descriptor.tool_id));
     }
     catch (const std::exception &error)
     {
-        registrationStatus_ = {-3, "工具工厂注册失败", error.what()};
+        registrationStatus_ = makeStatus(ErrorCode::Internal, "工具工厂注册失败", error.what());
     }
     catch (...)
     {
-        registrationStatus_ = {-3, "工具工厂注册发生未知异常"};
+        registrationStatus_ = makeStatus(ErrorCode::Internal, "工具工厂注册发生未知异常");
     }
     return registrationStatus_;
 }
@@ -205,7 +207,7 @@ Availability ToolRegistry::availability(std::string_view id) const
     if (!definition)
         return {
             ToolAvailability::DefinitionMissing,
-            {-3, "工具定义缺失：" + std::string(id)}
+            makeStatus(ErrorCode::NotFound, "工具定义缺失：" + std::string(id))
         };
     if (definition->kind == ToolKind::Host)
     {
@@ -216,7 +218,7 @@ Availability ToolRegistry::availability(std::string_view id) const
         }
         return {
             ToolAvailability::ImplementationUnavailable,
-            {-3, "宿主绑定未注册：" + bindingName}
+            makeStatus(ErrorCode::ResourceUnavailable, "宿主绑定未注册：" + bindingName)
         };
     }
     if (definition->kind == ToolKind::Cpp)
@@ -227,7 +229,8 @@ Availability ToolRegistry::availability(std::string_view id) const
             return pluginLoader_->availability(definition->id);
         return {
             ToolAvailability::ImplementationUnavailable,
-            {-3, "C++ 实现不可用：" + definition->id, pathText(definition->definitionPath)}
+            makeStatus(ErrorCode::ResourceUnavailable, "C++ 实现不可用：" + definition->id,
+                       pathText(definition->definitionPath))
         };
     }
     const auto implementation = python_.find(id);
@@ -244,7 +247,7 @@ Availability ToolRegistry::availability(std::string_view id) const
     }
     return {
         ToolAvailability::ImplementationUnavailable,
-        {-3, "Python 实现尚未加载：" + std::string(id)}
+        makeStatus(ErrorCode::PythonUnavailable, "Python 实现尚未加载：" + std::string(id))
     };
 }
 
@@ -295,12 +298,14 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     }
     const auto it = python_.find(id);
     if (it == python_.end() || !it->second.factory)
-        throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 实现尚未加载：" + std::string(id));
+        throw RegistryError(ToolAvailability::ImplementationUnavailable,
+                            makeStatus(ErrorCode::PythonUnavailable, "Python 实现尚未加载：" + std::string(id)));
     try
     {
         auto instance = it->second.factory(services);
         if (!instance)
-            throw RegistryError(ToolAvailability::ImplementationUnavailable, "工具工厂返回空实例：" + std::string(id));
+            throw RegistryError(ToolAvailability::ImplementationUnavailable,
+                                makeStatus(ErrorCode::ResourceUnavailable, "工具工厂返回空实例：" + std::string(id)));
         return instance;
     }
     catch (const RegistryError &error)

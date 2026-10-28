@@ -157,7 +157,8 @@ def source(inputs):
         while not (root / 'allow').exists():
             time.sleep(0.002)
     image.fill(17 if calls == 1 else 37)
-    return {'__status_code': 0, '__status_message': '', 'value': calls, 'images': [image]}
+    return {'status': {'code': 0, 'message': '', 'detail': ''},
+            'outputs': {'value': calls, 'images': [image]}}
 )py");
     QQuickWindow window;
     window.resize(320, 240);

@@ -3,6 +3,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
+#include "core/Error.h"
 #include "result_view.h"
 #include "core/DefinitionJson.h"
 #include "plugins/PluginLoader.h"
@@ -10,6 +11,7 @@
 #include <core/ToolPackage.h>
 
 #include <cassert>
+#include <tuple>
 #include <filesystem>
 #include <iostream>
 
@@ -138,10 +140,21 @@ void faultInjection(const std::filesystem::path &modulePath)
     auto                 loader = std::make_shared<PluginLoader>();
     PlatformToolServices services;
 
-    for (const auto &[id, path] : {
-             std::pair{ "test.missing.dll", std::filesystem::path("non_existent_library_12345.dll")},
-             std::pair{"test.unknown.tool",                                              modulePath}
-    })
+    // A missing library is a load failure; a loaded library that does not export the factory is a
+    // different answer. Both used to report the same code, which made "repair the deployment" and
+    // "fix the tool id" look identical to a caller.
+    struct LoadCase
+    {
+        const char           *id;
+        std::filesystem::path path;
+        std::int64_t          expected;
+    };
+    const LoadCase loadCases[] = {
+        {"test.missing.dll", std::filesystem::path("non_existent_library_12345.dll"),
+         hostCode(ErrorCode::PluginLoadFailed)},
+        {"test.unknown.tool", modulePath, hostCode(ErrorCode::NotFound)},
+    };
+    for (const auto &[id, path, expected] : loadCases)
     {
         loader->registerModule(id, path);
         try
@@ -151,7 +164,7 @@ void faultInjection(const std::filesystem::path &modulePath)
         }
         catch (const RegistryError &error)
         {
-            assert(testview::status(error).code == -3 && !testview::status(error).message.empty());
+            assert(testview::status(error).code == expected && !testview::status(error).message.empty());
         }
     }
 
@@ -177,8 +190,8 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
     const auto before = releaseCalls();
 
     for (const auto &[id, code] : {
-             std::pair{"test.plugin.create_null_success", -3},
-             std::pair{"test.plugin.create_nonnull_fail",  5}
+             std::pair{"test.plugin.create_null_success", hostCode(ErrorCode::PluginLoadFailed)},
+             std::pair{"test.plugin.create_nonnull_fail",  std::int64_t{5}}
     })
     {
         loader->registerModule(id, modulePath);
@@ -259,7 +272,8 @@ void nativeOutputRequiredness(const std::filesystem::path &modulePath)
             RuntimeEngine engine(1);
             assert(engine.start(project, registry, RunMode::Once));
             const auto result   = snapshot(finish(engine), 1);
-            const auto expected = code == 0 && required ? -2 : code;
+            // A required port the tool never wrote is bad data from the tool, not a bad argument.
+            const auto expected = code == 0 && required ? -13 : code;
             assert(result->status.code == expected && isMissing(result->outputs.at("value")));
             if (result->toolResultPublished)
                 assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == expected);
@@ -1002,7 +1016,8 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
         assert(entry.value("node") == released.value("id").toString());
         assert(entry.value("tool_id") == "test.plugin.release_fail" && entry.value("phase") == "release");
-        assert(entry.value("code").toInt() == -4 && entry.value("message") == "释放资源失败");
+        // The tool's own release verdict is forwarded unchanged; the host adds no code of its own.
+        assert(entry.value("code").toInt() == 6 && entry.value("message") == "释放资源失败");
         assert(entry.value("detail") == "native release detail");
     }
     assert(!app.diagnostic().contains("native release detail"));
@@ -1014,7 +1029,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(removed.value("tool_id") == "test.plugin.release_fail" && removed.value("phase") == "release");
     assert(removed.value("runtime_phase") == "management");
     assert(!removed.value("generation").toString().isEmpty() && !removed.value("sequence").toString().isEmpty());
-    assert(removed.value("code").toInt() == -4 && removed.value("detail") == "native release detail");
+    assert(removed.value("code").toInt() == 6 && removed.value("detail") == "native release detail");
 }
 #endif
 

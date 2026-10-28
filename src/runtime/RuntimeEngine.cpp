@@ -277,15 +277,15 @@ struct RuntimeEngine::Impl
         }
         catch (const ContractError &error)
         {
-            diagnose(phase, ToolStatus{-2, error.what()});
+            diagnose(phase, makeStatus(ErrorCode::InvalidArgument, error.what()));
         }
         catch (const std::exception &error)
         {
-            diagnose(phase, ToolStatus{-1, exceptionSummary(phase), error.what()});
+            diagnose(phase, makeStatus(ErrorCode::Internal, exceptionSummary(phase), error.what()));
         }
         catch (...)
         {
-            diagnose(phase, ToolStatus{-1, exceptionSummary(phase), "未知异常"});
+            diagnose(phase, makeStatus(ErrorCode::Internal, exceptionSummary(phase), "未知异常"));
         }
         return false;
     }
@@ -659,12 +659,12 @@ RuntimeState RuntimeEngine::state() const
     return impl_->state;
 }
 
-ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
-                                std::optional<NodeId> target)
+ErrorInfo RuntimeEngine::start(const ProjectDefinition &project, const ToolRegistry &registry, RunMode mode,
+                               std::optional<NodeId> target)
 {
     std::lock_guard lock(impl_->control);
     if (impl_->state != RuntimeState::Idle || impl_->shutdown || impl_->readback.has_value())
-        return {1, "运行时忙或读回尚未完成，不能开始执行"};
+        return {ErrorCode::Busy, "运行时忙或读回尚未完成，不能开始执行"};
     try
     {
         auto frozen      = std::make_shared<FrozenRun>();
@@ -715,11 +715,11 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                 throw ContractError("执行流程存在依赖循环：" + flow.id);
         }
         if (mode == RunMode::Node && (!target || !targetFound))
-            return {1, "目标节点不存在：" + (target ? std::to_string(*target) : "未指定")};
+            return {ErrorCode::NotFound, "目标节点不存在：" + (target ? std::to_string(*target) : "未指定")};
         if (frozen->selected.empty() || !nonempty)
-            return {1, "请至少选择一个非空流程"};
+            return {ErrorCode::FailedPrecondition, "请至少选择一个非空流程"};
         if (auto receiverError = validateReceiverPlan(*frozen))
-            return *receiverError;
+            return {ErrorCode::InvalidArgument, receiverError->message, receiverError->detail};
         if (mode == RunMode::Node)
         {
             for (const auto &flow : frozen->project.flows)
@@ -734,13 +734,13 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
                         {
                             const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, input);
                             if (!check)
-                                return {1, "单节点执行失败：" + check.message};
+                                return {ErrorCode::InvalidArgument, check.message};
                         }
                     }
                 }
             }
             if (auto error = upstreamValidityError(*frozen, *target, impl_->generation, impl_->nodes))
-                return {1, *error};
+                return {ErrorCode::InvalidArgument, *error};
         }
         impl_->sessionMode   = mode;
         impl_->state         = mode == RunMode::Node ? RuntimeState::RunningNode
@@ -763,15 +763,15 @@ ToolStatus RuntimeEngine::start(const ProjectDefinition &project, const ToolRegi
     }
     catch (const RegistryError &error)
     {
-        return error.status;
+        return {ErrorCode::FailedPrecondition, error.status.message, error.status.detail};
     }
     catch (const ContractError &error)
     {
-        return {-2, error.what()};
+        return {ErrorCode::InvalidArgument, error.what()};
     }
     catch (const std::exception &error)
     {
-        return {-1, "运行准备异常", error.what()};
+        return {ErrorCode::Internal, "运行准备异常", error.what()};
     }
 }
 
@@ -816,13 +816,13 @@ void RuntimeEngine::requestStop()
     impl_->commandReady.notify_all();
 }
 
-ToolStatus RuntimeEngine::requestReset()
+ErrorInfo RuntimeEngine::requestReset()
 {
     std::unique_lock lock(impl_->control);
     if (impl_->shutdown || impl_->finishing || impl_->management != Impl::Management::None || impl_->completion)
-        return {1, "已有运行时管理操作尚未完成"};
+        return {ErrorCode::Busy, "已有运行时管理操作尚未完成"};
     if (impl_->state == RuntimeState::Refreshing || impl_->state == RuntimeState::Resetting)
-        return {1, "已有运行时管理操作尚未完成"};
+        return {ErrorCode::Busy, "已有运行时管理操作尚未完成"};
     impl_->management    = Impl::Management::Reset;
     impl_->stopRequested = true;
     if (impl_->state == RuntimeState::Idle)
@@ -840,11 +840,11 @@ ToolStatus RuntimeEngine::requestReset()
     return {};
 }
 
-ToolStatus RuntimeEngine::requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry)
+ErrorInfo RuntimeEngine::requestSynchronize(const ProjectDefinition &project, const ToolRegistry &registry)
 {
     std::unique_lock lock(impl_->control);
     if (impl_->shutdown || impl_->finishing || impl_->management != Impl::Management::None || impl_->completion)
-        return {1, "运行时已有管理任务"};
+        return {ErrorCode::Busy, "运行时已有管理任务"};
     const bool       idle    = impl_->state == RuntimeState::Idle;
     bool             changed = !idle;
     std::set<NodeId> identities;
@@ -852,7 +852,7 @@ ToolStatus RuntimeEngine::requestSynchronize(const ProjectDefinition &project, c
         for (const auto &node : flow.nodes)
         {
             if (!identities.insert(node.id).second)
-                return {-2, "节点标识重复：" + std::to_string(node.id)};
+                return {ErrorCode::InvalidArgument, "节点标识重复：" + std::to_string(node.id)};
             if (idle)
             {
                 const auto found = impl_->nodes.find(node.id);
@@ -888,11 +888,11 @@ ToolStatus RuntimeEngine::requestSynchronize(const ProjectDefinition &project, c
     return {};
 }
 
-ToolStatus RuntimeEngine::requestRefresh(std::function<ToolStatus()> work)
+ErrorInfo RuntimeEngine::requestRefresh(std::function<ToolStatus()> work)
 {
     std::lock_guard lock(impl_->control);
     if (impl_->state != RuntimeState::Idle || impl_->shutdown)
-        return {1, "只能在空闲状态刷新工具目录"};
+        return {ErrorCode::FailedPrecondition, "只能在空闲状态刷新工具目录"};
     impl_->management     = Impl::Management::Refresh;
     impl_->managementWork = std::move(work);
     impl_->state          = RuntimeState::Refreshing;

@@ -26,19 +26,11 @@ endif()
 
 find_package(OpenCV CONFIG REQUIRED COMPONENTS core imgproc imgcodecs)
 
-# Runtime libraries are resolved per build configuration: a Debug build must deploy the debug
-# import library's DLL and a Release build the release one. Multi-config generators resolve the
-# manifest per configuration through $<CONFIG> below.
-set(_visionrt_opencv_config "${CMAKE_BUILD_TYPE}")
-if(NOT _visionrt_opencv_config)
-    set(_visionrt_opencv_config "Release")
-endif()
-string(TOUPPER "${_visionrt_opencv_config}" _visionrt_opencv_config)
-if(NOT _visionrt_opencv_config MATCHES "^(DEBUG|RELEASE|RELWITHDEBINFO|MINSIZEREL)$")
-    set(_visionrt_opencv_config "RELEASE")
-endif()
-
-set(OPENCV_DLLS "")
+# The runtime set is taken from the imported targets themselves: `$<TARGET_FILE:...>` resolves to
+# the library the linker consumed for the configuration being built, so a Debug deploy can never
+# copy the Release DLL and a multi-config generator needs no default. The development copy target
+# and any packaging list read the same variable.
+set(VISIONRT_OPENCV_RUNTIME_DLLS "")
 set(_visionrt_opencv_modules "")
 if(TARGET opencv_world)
     set(_visionrt_opencv_modules opencv_world)
@@ -51,8 +43,8 @@ else()
 endif()
 
 if(NOT WIN32)
-    # Nothing to derive: the platform loader resolves shared objects by SONAME and no deployment
-    # step may guess a ".dll" name.
+    # Nothing to deploy: the platform loader resolves shared objects by SONAME and no script may
+    # guess a ".dll" name.
     return()
 endif()
 
@@ -65,43 +57,5 @@ elseif(DEFINED _visionrt_opencv_home AND EXISTS "${_visionrt_opencv_home}/bin")
 endif()
 
 foreach(_visionrt_target IN LISTS _visionrt_opencv_modules)
-    set(_visionrt_implib "")
-    get_target_property(_visionrt_candidate ${_visionrt_target} IMPORTED_IMPLIB_${_visionrt_opencv_config})
-    if(NOT _visionrt_candidate OR _visionrt_candidate MATCHES "-NOTFOUND$")
-        get_target_property(_visionrt_candidate ${_visionrt_target} IMPORTED_LOCATION_${_visionrt_opencv_config})
-    endif()
-    if((NOT _visionrt_candidate OR _visionrt_candidate MATCHES "-NOTFOUND$")
-       AND NOT CMAKE_CONFIGURATION_TYPES)
-        get_target_property(_visionrt_candidate ${_visionrt_target} IMPORTED_IMPLIB)
-        if(NOT _visionrt_candidate OR _visionrt_candidate MATCHES "-NOTFOUND$")
-            get_target_property(_visionrt_candidate ${_visionrt_target} IMPORTED_LOCATION)
-        endif()
-    endif()
-    if(_visionrt_candidate AND NOT _visionrt_candidate MATCHES "-NOTFOUND$")
-        set(_visionrt_implib "${_visionrt_candidate}")
-    endif()
-    if(NOT _visionrt_implib)
-        message(FATAL_ERROR
-            "无法确定 OpenCV 目标 ${_visionrt_target} 的 ${_visionrt_opencv_config} 运行时库；"
-            "拒绝按目录通配或改用其他配置的 DLL")
-    endif()
-    get_filename_component(_visionrt_stem "${_visionrt_implib}" NAME_WE)
-    set(_visionrt_runtime "${VISIONRT_OPENCV_BIN}/${_visionrt_stem}.dll")
-    if(NOT EXISTS "${_visionrt_runtime}")
-        message(FATAL_ERROR "OpenCV ${_visionrt_opencv_config} 运行时库不存在：${_visionrt_runtime}")
-    endif()
-    list(APPEND OPENCV_DLLS "${_visionrt_runtime}")
+    list(APPEND VISIONRT_OPENCV_RUNTIME_DLLS "$<TARGET_FILE:${_visionrt_target}>")
 endforeach()
-list(REMOVE_DUPLICATES OPENCV_DLLS)
-
-# The exact per-configuration runtime set consumed by tools/package_app.py. The packaging script
-# reads this list instead of scanning the SDK folder.
-if(_visionrt_opencv_modules)
-    set(_visionrt_opencv_genex "")
-    foreach(_visionrt_target IN LISTS _visionrt_opencv_modules)
-        list(APPEND _visionrt_opencv_genex "$<TARGET_FILE:${_visionrt_target}>")
-    endforeach()
-    string(JOIN "\n" _visionrt_opencv_manifest ${_visionrt_opencv_genex})
-    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/opencv_runtime_$<CONFIG>.txt"
-         CONTENT "${_visionrt_opencv_manifest}\n")
-endif()

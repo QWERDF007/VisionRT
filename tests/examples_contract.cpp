@@ -825,7 +825,7 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
         std::filesystem::create_directories(toolsPackageDir / "python" / "builtin" / "calc");
         std::ofstream py(toolsPackageDir / "python" / "builtin" / "calc" / "calc.py");
         py << "def execute(inputs):\n"
-           << "    return {'res': int(inputs['val']) + 5, '__status_code': 0, '__status_message': 'ok'}\n";
+           << "    return {'status': {'code': 0, 'message': 'ok', 'detail': ''}, 'outputs': {'res': int(inputs['val']) + 5}}\n";
 
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "calc.json");
         ofs << R"json({

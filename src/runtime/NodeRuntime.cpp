@@ -1,3 +1,4 @@
+#include "core/Error.h"
 #include "core/InputNormalizer.h"
 #include "core/NodeContracts.h"
 #include "core/StatusCodes.h"
@@ -70,15 +71,15 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
     }
     catch (const ContractError &error)
     {
-        status = {-2, error.what()};
+        status = {hostCode(ErrorCode::InvalidArgument), error.what()};
     }
     catch (const std::exception &error)
     {
-        status = {-1, exceptionSummary(NodePhase::Create), error.what()};
+        status = {hostCode(ErrorCode::Internal), exceptionSummary(NodePhase::Create), error.what()};
     }
     catch (...)
     {
-        status = {-1, "工具实例创建发生未知异常"};
+        status = {hostCode(ErrorCode::Internal), "工具实例创建发生未知异常"};
     }
     return {};
 }
@@ -141,16 +142,16 @@ std::shared_ptr<const NodeDiagnostic> NodeRuntime::release() noexcept
     }
     catch (const std::exception &error)
     {
-        status = {-4, exceptionSummary(NodePhase::Release), error.what()};
+        status = {hostCode(ErrorCode::Internal), exceptionSummary(NodePhase::Release), error.what()};
     }
     catch (...)
     {
-        status = {-4, "工具释放发生未知异常"};
+        status = {hostCode(ErrorCode::Internal), "工具释放发生未知异常"};
     }
     instance.reset();
     if (!status)
     {
-        status.code    = -4;
+        // The tool's own release verdict is kept as reported; the host only forwards it.
         auto diagnostic = std::make_shared<const NodeDiagnostic>(
             NodeDiagnostic{id, configuration->toolId, NodePhase::Release, std::move(status)});
         lifecycle.store(diagnostic, std::memory_order_release);
@@ -424,15 +425,15 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 catch (const ContractError &error)
                 {
-                    status = {-2, error.what()};
+                    status = {hostCode(ErrorCode::InvalidArgument), error.what()};
                 }
                 catch (const std::exception &error)
                 {
-                    status = {-1, exceptionSummary(NodePhase::Initialize), error.what()};
+                    status = {hostCode(ErrorCode::Internal), exceptionSummary(NodePhase::Initialize), error.what()};
                 }
                 catch (...)
                 {
-                    status = {-1, "未知的初始化异常"};
+                    status = {hostCode(ErrorCode::Internal), "未知的初始化异常"};
                 }
                 initTimer.stop();
                 windowEnd = Clock::now();
@@ -478,9 +479,9 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             ScopeTimer convertTimer(snapshot->timing.convertMs, &snapshot->timing.validateMeasured);
             if (!frameworkFailure)
             {
-                // The tool owns every declared port, status keys included. A non-zero business code
-                // is legal data and never turns into a framework failure.
-                businessStatus = validateToolExecution(definition->outputs, result.outputs);
+                // The tool owns its declared business ports and its status. A non-zero business
+                // code is legal data and never turns into a framework failure.
+                businessStatus = validateToolExecution(definition->outputs, result.outputs, result.status);
                 for (const auto &output : definition->outputs)
                 {
                     if (output.sameGeometryAsInput.empty())
@@ -506,17 +507,22 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     catch (const ContractError &error)
     {
-        frameworkStatus  = {-2, error.what()};
+        // A contract broken while the tool runs or its answer is published is bad data, not a bad
+        // call: the caller passed nothing invalid, the tool answered outside its declaration. A
+        // contract broken while the inputs are assembled is the caller's argument.
+        const bool dataPhase = phase == NodePhase::Execute || phase == NodePhase::Convert;
+        const auto code      = dataPhase ? ErrorCode::DataInvalid : ErrorCode::InvalidArgument;
+        frameworkStatus  = {hostCode(code), error.what()};
         frameworkFailure = true;
     }
     catch (const std::exception &error)
     {
-        frameworkStatus  = {-1, exceptionSummary(phase), error.what()};
+        frameworkStatus  = {hostCode(ErrorCode::Internal), exceptionSummary(phase), error.what()};
         frameworkFailure = true;
     }
     catch (...)
     {
-        frameworkStatus  = {-1, exceptionSummary(phase), "未知异常"};
+        frameworkStatus  = {hostCode(ErrorCode::Internal), exceptionSummary(phase), "未知异常"};
         frameworkFailure = true;
     }
     snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
@@ -537,7 +543,9 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     else
     {
-        snapshot->status              = std::move(businessStatus);
+        // Only a tool that actually returned a result owns the two status ports. They are the
+        // existing output ports the UI already shows, filled from the one status the tool reported.
+        snapshot->status              = materialiseToolStatus(result.outputs, businessStatus);
         snapshot->toolResultPublished = true;
     }
     if (disposition == NodeDisposition::Running)

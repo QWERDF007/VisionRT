@@ -35,8 +35,8 @@ try
                       "  global next_id\n"
                       "  self.identity = next_id\n"
                       "  next_id += 1\n"
-                      " def initialize(self, params): return {'__status_code':0,'__status_message':''}\n"
-                      " def execute(self, inputs): return {'__status_code':0,'__status_message':'','value':1}\n"
+                      " def initialize(self, params): return {'code': 0, 'message': '', 'detail': ''}\n"
+                      " def execute(self, inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':1}}\n"
                       " def release(self):\n"
                       "  directory = Path(__file__).parent\n"
                       "  first = directory / 'first.flag'\n"
@@ -47,7 +47,7 @@ try
                       "   time.sleep(0.005)\n"
                       "  with (directory / 'released.log').open('a') as stream:\n"
                       "   stream.write(str(self.identity) + '\\n')\n"
-                      "  return {'__status_code':0,'__status_message':''}\n";
+                      "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
         const auto definition = parseToolDefinitionJson(R"({
             "schema_version":4,"tool_id":"audit.concurrent.shutdown","display_name":"Shutdown","version":"1",
@@ -101,14 +101,14 @@ try
             script << "from pathlib import Path\n"
                       "import time\n"
                       "class Tool:\n"
-                      " def initialize(self, params): return {'__status_code':0,'__status_message':''}\n"
-                      " def execute(self, inputs): return {'__status_code':0,'__status_message':'','value':1}\n"
+                      " def initialize(self, params): return {'code': 0, 'message': '', 'detail': ''}\n"
+                      " def execute(self, inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':1}}\n"
                       " def release(self):\n"
                       "  directory = Path(__file__).parent\n"
                       "  (directory / 'entered.flag').write_text('entered')\n"
                       "  time.sleep(0.3)\n"
                       "  (directory / 'finished.flag').write_text('finished')\n"
-                      "  return {'__status_code':0,'__status_message':''}\n";
+                      "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
         const auto definition = parseToolDefinitionJson(R"({
             "schema_version":4,"tool_id":"audit.release.inflight","display_name":"Shutdown","version":"1",
@@ -148,7 +148,7 @@ import numpy as np
 def execute(inputs):
     image = np.full((3,4), 71, dtype=np.uint16)
     weakref.finalize(image, lambda: Path(__file__).with_name('released.txt').write_text('released'))
-    return {'__status_code':0, '__status_message':'', 'images':[image], 'namespace':__name__}
+    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'images':[image], 'namespace':__name__}}
 )";
     }
     const auto definition = parseToolDefinitionJson(R"({

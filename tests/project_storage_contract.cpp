@@ -472,9 +472,12 @@ void saveAsPaths(const QString &directory)
             "directory init parameter did not rebase");
     require(std::get<std::string>(saved.inputs.at("dynamic").literal) == "../旧位置/动态/图像.png",
             "dynamic path input did not rebase");
-    require(std::get<std::string>(saved.inputs.at("text").literal) == "图像/不存在.png"
-                && std::get<std::string>(saved.inputs.at("empty").literal).empty(),
-            "save-as rewrote non-path String or empty path");
+    {
+        const auto &text  = std::get<std::string>(saved.inputs.at("text").literal);
+        const auto &empty = std::get<std::string>(saved.inputs.at("empty").literal);
+        const auto  emsg  = "save-as rewrote non-path String or empty path: text=" + text + " empty=" + empty;
+        require(text == "图像/不存在.png" && empty.empty(), emsg.c_str());
+    }
     require(std::get<std::string>(saved.inputs.at("remote").literal) == "Z:/异盘/资源.png",
             "cross-drive resource lost its absolute path");
     auto reopened = storage.load(project.path);

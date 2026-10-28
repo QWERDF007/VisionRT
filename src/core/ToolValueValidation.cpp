@@ -91,29 +91,37 @@ void validateToolOutput(const PortDefinition &port, const PortValue &value, cons
     validateToolValue(port, value);
 }
 
-ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, const Values &outputs)
+ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, const Values &outputs,
+                                 const ToolStatus &status)
 {
-    if (outputs.size() != ports.size())
-        throw ContractError("输出端口与声明不一致");
+    if (outputs.contains(std::string(kStatusCodePort)) || outputs.contains(std::string(kStatusMessagePort)))
+        throw ContractError("工具不得写入状态端口，状态由宿主物化");
 
-    const auto code = outputs.find(kStatusCodePort);
-    if (code == outputs.end() || !std::holds_alternative<std::int64_t>(code->second))
-        throw ContractError("工具输出缺少整型 __status_code");
-    const auto message = outputs.find(kStatusMessagePort);
-    if (message == outputs.end() || !std::holds_alternative<std::string>(message->second))
-        throw ContractError("工具输出缺少字符串 __status_message");
-
-    ToolStatus status{std::get<std::int64_t>(code->second), std::get<std::string>(message->second)};
-    validateUtf8(status.message);
+    std::size_t business = 0;
     for (const auto &port : ports)
     {
+        if (isStatusPort(port.id))
+            continue;
         const auto found = outputs.find(port.id);
         if (found == outputs.end())
             throw ContractError("缺少输出端口：" + port.id);
-        if (port.id == kStatusCodePort || port.id == kStatusMessagePort)
-            continue;
         validateToolOutput(port, found->second, status);
+        ++business;
     }
+    if (outputs.size() != business)
+        throw ContractError("输出端口与声明不一致");
+
+    validateUtf8(status.message);
+    validateUtf8(status.detail);
+    return status;
+}
+
+ToolStatus materialiseToolStatus(Values &outputs, ToolStatus status)
+{
+    if (status.message.empty() && status.code == 0)
+        status.message = "运行成功";
+    outputs.insert_or_assign(std::string(kStatusCodePort), status.code);
+    outputs.insert_or_assign(std::string(kStatusMessagePort), status.message);
     return status;
 }
 

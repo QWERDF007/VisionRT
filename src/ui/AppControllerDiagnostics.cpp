@@ -26,14 +26,21 @@ void AppController::Impl::report(ApplicationDiagnostic entry)
     emit q->diagnosticChanged();
 }
 
+void AppController::Impl::report(const ErrorInfo &error)
+{
+    // A host failure goes through the same diagnostic entry a tool status uses: one code, one
+    // readable sentence, the technical cause kept apart.
+    report(error.toStatus());
+}
+
 void AppController::Impl::report(const std::exception &error, const QString &summary)
 {
     if (const auto *registryError = dynamic_cast<const RegistryError *>(&error))
         report(registryError->status);
     else if (dynamic_cast<const ContractError *>(&error))
-        report(ToolStatus{-2, error.what()});
+        report(makeStatus(ErrorCode::InvalidArgument, error.what()));
     else
-        report(ToolStatus{-1, summary.toStdString(), error.what()});
+        report(makeStatus(ErrorCode::Internal, summary.toStdString(), error.what()));
 }
 
 void AppController::setLogViewActive(bool active)

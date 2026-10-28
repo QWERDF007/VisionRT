@@ -1,6 +1,5 @@
 #include "ui/Diagnostics.h"
 
-#include "core/StatusCodes.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,14 +15,9 @@ QString statusSummary(const ToolStatus &status)
 
 StatusDisplay statusDisplay(const ToolStatus &status)
 {
-    // A tool answers with one status message. When it puts the curated reason on the first line and
-    // the implementation text after a line break, the row shows the reason and the diagnostic keeps
-    // the rest; nothing is dropped and the contract still has a single message key.
-    const auto    lines = statusLines(status.message);
-    StatusDisplay display{QString::fromStdString(std::string(lines.summary)),
-                          QString::fromStdString(std::string(lines.detail))};
-    if (!status.detail.empty())
-        display.detail = QString::fromStdString(status.detail);
+    // A status already separates the readable reason from the technical cause; nothing is parsed out
+    // of the message any more.
+    StatusDisplay display{QString::fromStdString(status.message), QString::fromStdString(status.detail)};
     if (display.summary.trimmed().isEmpty() && status.code != 0)
         display.summary = QStringLiteral("操作失败（错误码：%1）").arg(status.code);
     return display;

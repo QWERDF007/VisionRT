@@ -212,7 +212,8 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(snapshot(manual, 2)->session != snapshot(first, 2)->session);
     assert(engine.start(project, registry, RunMode::Once));
     auto failed = finish(engine);
-    assert(snapshot(failed, 1)->status.code == -2);
+    // The declared port never arrived: the tool's answer broke its own declaration (DataInvalid).
+    assert(snapshot(failed, 1)->status.code == -13);
     // A framework failure is a diagnostic, not a tool answer: no status port is invented for it.
     assert(!snapshot(failed, 1)->toolResultPublished);
     assert(!snapshot(failed, 1)->outputs.contains("__status_code"));
@@ -283,13 +284,14 @@ void initializationSuppressionRetryAndReset()
     assert(engine.start(project, registry, RunMode::Once));
     auto changed = finish(engine);
     assert(initializations == 3 && executions == 3 && releases == 2);
-    assert(changed.nodes.front().lifecycleDiagnostic->status.code == -4);
+    // The tool's own release verdict is forwarded as reported instead of being replaced.
+    assert(changed.nodes.front().lifecycleDiagnostic->status.code == 9);
     assert(changed.nodes.front().lifecycleDiagnostic->phase == NodePhase::Release);
     const auto generation = changed.generation;
     assert(engine.requestReset());
     auto reset = finish(engine);
     assert(reset.generation == generation + 1 && !snapshot(reset, 1));
-    assert(reset.nodes.front().lifecycleDiagnostic->status.code == -4);
+    assert(reset.nodes.front().lifecycleDiagnostic->status.code == 9);
     assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at("resource")) == 2);
     assert(releases == 3);
 }
@@ -393,18 +395,18 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     const auto    rejectedAt = std::chrono::steady_clock::now();
     const auto    rejected   = engine.start(project, registry, RunMode::Once);
     const auto    rejectedIn = std::chrono::steady_clock::now() - rejectedAt;
-    assert(rejected.code == 1);
+    assert(rejected.code == hostCode(ErrorCode::InvalidArgument));
     assert(rejected.message.find("sender") != std::string::npos);
     assert(rejected.message.find(sender.title()) != std::string::npos);
     assert(rejected.message.find(receiver.title()) != std::string::npos);
     assert(rejectedIn < 1s);
     assert(sourceCalls == 0);
-    assert(engine.start(project, registry, RunMode::Node, receiver.id).code == 1);
+    assert(engine.start(project, registry, RunMode::Node, receiver.id).code == hostCode(ErrorCode::InvalidArgument));
     assert(sourceCalls == 0);
     auto second = receiver;
     second.id   = 3;
     project.flows.push_back({"receiver2", "receiver2", true, {second}});
-    assert(engine.start(project, registry, RunMode::Once).code == 1);
+    assert(engine.start(project, registry, RunMode::Once).code == hostCode(ErrorCode::InvalidArgument));
     assert(sourceCalls == 0);
     project.flows.pop_back();
     project.flows[0].runSelected = true;
@@ -448,7 +450,7 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     };
     const auto cyclicAt = std::chrono::steady_clock::now();
     const auto cycle    = engine.start(cyclic, registry, RunMode::Once);
-    assert(cycle.code == 1);
+    assert(cycle.code == hostCode(ErrorCode::InvalidArgument));
     assert(cycle.message.find("闭环") != std::string::npos);
     assert(cycle.message.find(first.title()) != std::string::npos);
     assert(cycle.message.find(secondNode.title()) != std::string::npos);
@@ -463,8 +465,7 @@ void receiverConsumesFailures()
     install(registry, source,
             [](const Values &)
             {
-                // The contract has one status message, so a tool squeezes its detail into it.
-                return toolResult({{"value", Missing{}}}, {12, "源执行失败\nsource detail"});
+                return toolResult({{"value", Missing{}}}, {12, "源执行失败", "source detail"});
             });
     auto sender   = node(1, source);
     auto consumer = definition("test.cursor");
@@ -482,7 +483,8 @@ void receiverConsumesFailures()
                                  const bool consumed
                                      = failed.disposition == ReceiveDisposition::Missing
                                     && failed.sourceStatus.code == 12
-                                    && failed.sourceStatus.message == "源执行失败\nsource detail"
+                                    && failed.sourceStatus.message == "源执行失败"
+                                    && failed.sourceStatus.detail == "source detail"
                                     && isMissing(failed.value) && next.disposition == ReceiveDisposition::Timeout;
                                  return toolResult({{"value", std::int64_t{consumed ? 1 : 0}}}, {});
                              };
@@ -544,15 +546,15 @@ void executionDiagnostics()
         }
         else if (scenario == 1)
         {
-            assert(result->phase == NodePhase::Convert && result->status.code == -2);
+            // A tool that answers outside its declaration produced bad data, not a bad call.
+            assert(result->phase == NodePhase::Convert && result->status.code == -13);
             assert(!result->status.message.empty() && isMissing(result->outputs.at("value")));
         }
         else if (scenario == 2)
         {
             assert(result->phase == NodePhase::Execute && result->status.code == 7);
-            // A business status carries one message: the tool folds its own detail into it and the
-            // host forwards that exact text.
-            assert(result->status.message == "业务条件未满足\nbusiness detail" && result->status.detail.empty());
+            // A business status keeps its message and detail apart all the way to the diagnostic.
+            assert(result->status.message == "业务条件未满足" && result->status.detail == "business detail");
         }
         else
         {
@@ -1346,9 +1348,9 @@ void managementDiagnosticsPreserveStatus()
         ToolRegistry      registry;
         ProjectDefinition project;
         const auto        empty = engine.start(project, registry, RunMode::Once);
-        assert(empty.code == 1 && empty.message == "请至少选择一个非空流程");
+        assert(empty.code == hostCode(ErrorCode::FailedPrecondition) && empty.message == "请至少选择一个非空流程");
         const auto missing = engine.start(project, registry, RunMode::Node, 99);
-        assert(missing.code == 1 && missing.message == "目标节点不存在：99");
+        assert(missing.code == hostCode(ErrorCode::NotFound) && missing.message == "目标节点不存在：99");
     }
     for (int scenario = 0; scenario < 3; ++scenario)
     {

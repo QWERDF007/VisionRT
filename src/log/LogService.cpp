@@ -18,10 +18,11 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
+#include <deque>
 #include <map>
 #include <memory>
-#include <optional>
+#include <shared_mutex>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,9 @@ namespace
 // business source and the old output repeated it on every line. %v already carries "[source] text",
 // so the line stays self-describing without a second field.
 constexpr const char *kLinePattern = "[%Y/%m/%d %T.%e] [%L] [%t] %v";
+
+// The coalescing map is bounded so a storm of distinct errors cannot grow without limit.
+constexpr std::size_t kPendingLimit = 32;
 
 std::atomic<bool>          gRunning{false};
 std::atomic<std::uint64_t> gWriteFailures{0};
@@ -75,6 +79,42 @@ std::unique_ptr<spdlog::formatter> makeFormatter()
     return std::make_unique<spdlog::pattern_formatter>(kLinePattern, spdlog::pattern_time_type::local);
 }
 
+// One record is one line: the format string cannot stop an embedded newline, so the line-breaking
+// controls are escaped here instead of being written through. The tool's own output text keeps its
+// original characters; only the log line carries the visible escape.
+std::string singleLine(std::string_view text)
+{
+    std::string escaped;
+    escaped.reserve(text.size());
+    for (const char character : text)
+    {
+        switch (character)
+        {
+        case '\r': escaped.append("\\r"); break;
+        case '\n': escaped.append("\\n"); break;
+        case '\v': escaped.append("\\v"); break;
+        case '\f': escaped.append("\\f"); break;
+        case '\0': escaped.append("\\0"); break;
+        default: escaped.push_back(character); break;
+        }
+    }
+    return escaped;
+}
+
+// Caps on a UTF-8 character boundary: a truncated multi-byte sequence would put invalid bytes into
+// the file and into the window, which is exactly the corruption the cap is supposed to avoid.
+std::string capBytes(std::string_view text, std::size_t maximum)
+{
+    if (text.size() <= maximum)
+        return std::string(text);
+    std::size_t keep = maximum;
+    while (keep > 0 && (static_cast<unsigned char>(text[keep]) & 0xC0U) == 0x80U)
+        --keep;
+    std::string capped(text.substr(0, keep));
+    capped.append("…");
+    return capped;
+}
+
 // %v carries the business source in brackets so the formatter owns time, level and thread only.
 std::string buildPayload(std::string_view source, std::string_view message)
 {
@@ -92,7 +132,7 @@ std::string buildPayload(std::string_view source, std::string_view message)
 QString formatLine(spdlog::level::level_enum level, std::string_view source, std::string_view message,
                    spdlog::log_clock::time_point when = spdlog::log_clock::now())
 {
-    const auto payload = buildPayload(source, message);
+    const auto payload = singleLine(buildPayload(source, message));
     spdlog::details::log_msg msg(spdlog::string_view_t("visionrt", 9), level,
                                  spdlog::string_view_t(payload.data(), payload.size()));
     msg.time = when;
@@ -115,11 +155,15 @@ public:
     }
 
     // Called on the GUI thread. Dropped lines are reported once as a synthetic summary record so a
-    // saturated mailbox stays honest about what the window did not receive.
+    // saturated mailbox stays honest about what the window did not receive; the summary is one of
+    // the requested records, never an extra one on top of the budget.
     QVector<LogRecord> take(std::size_t maximum, std::uint64_t &dropped)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         QVector<LogRecord>          result;
+        if (maximum == 0)
+            return result;
+        std::size_t budget = maximum;
         if (dropped_ > 0)
         {
             result.push_back(LogRecord{formatLine(spdlog::level::warn, "日志",
@@ -127,8 +171,9 @@ public:
                                        levelText(spdlog::level::warn)});
             dropped = dropped_;
             dropped_ = 0;
+            --budget;
         }
-        const auto count = std::min<std::size_t>(maximum, records_.size());
+        const auto count = std::min<std::size_t>(budget, records_.size());
         result.reserve(static_cast<int>(count) + result.size());
         for (std::size_t index = 0; index < count; ++index)
         {
@@ -183,31 +228,38 @@ private:
     std::function<void()> onPush_;
 };
 
+// One error burst: the first line is already on its way, everything the burst adds is counted here
+// together with the level and the time of the most recent occurrence.
+struct LogService::PendingError
+{
+    LogLevel                      level = LogLevel::Error;
+    std::string                   source;
+    std::string                   message;
+    std::uint64_t                 repeats = 0;
+    spdlog::log_clock::time_point last;
+};
+
 struct LogService::Impl
 {
-    struct PendingError
-    {
-        std::string                           source;
-        std::string                           message;
-        std::uint64_t                         count = 1;
-        std::chrono::steady_clock::time_point last;
-    };
-
-    LogConfig                                          config;
-    QString                                            path;
-    std::shared_ptr<spdlog::logger>                    logger;
-    std::shared_ptr<BufferedSink>                      uiSink;
-    std::shared_ptr<spdlog::sinks::sink>               fileSink;
-    bool                                               fileReady = false;
-    std::atomic<bool>                                  running{false};
-    std::atomic<bool>                                  viewActive{false};
-    std::atomic<bool>                                  notifyPending{false};
-    QtMessageHandler                                   previousHandler = nullptr;
-    QTimer                                             uiTimer;
-    QTimer                                             flushTimer;
-    std::mutex                                         coalesceMutex;
-    std::map<std::string, PendingError, std::less<>>   pendingErrors;
-    std::uint64_t                                      reportedDropped = 0;
+    LogConfig                       config;
+    QString                         path;
+    std::shared_ptr<spdlog::logger> logger;
+    std::shared_ptr<BufferedSink>   uiSink;
+    std::shared_ptr<spdlog::sinks::sink> fileSink;
+    bool                            fileReady = false;
+    std::atomic<bool>               running{false};
+    std::atomic<bool>               viewActive{false};
+    std::atomic<bool>               notifyPending{false};
+    // Written by start() before the producers are admitted and only read on the Qt thread and in
+    // shutdown(), so the handler pair needs no separate lock.
+    bool                            handlerInstalled = false;
+    QtMessageHandler                previousHandler  = nullptr;
+    QTimer                          uiTimer;
+    QTimer                          flushTimer;
+    std::shared_mutex               writeMutex;
+    std::mutex                      coalesceMutex;
+    std::map<std::string, PendingError, std::less<>> pendingErrors;
+    std::uint64_t                   reportedDropped = 0;
 
     // The default location is the software directory, not a per-user data directory: the log has to
     // sit next to the executable the user actually launched.
@@ -221,6 +273,10 @@ struct LogService::Impl
 LogService::LogService(QObject *parent) : QObject(parent), impl_(std::make_unique<Impl>())
 {
     qRegisterMetaType<QVector<LogRecord>>("QVector<visionrt::LogRecord>");
+    // Connected once for the lifetime of the service: a stop/start cycle changes the intervals and
+    // restarts the timers, but never installs a second connection that would double every batch.
+    connect(&impl_->uiTimer, &QTimer::timeout, this, &LogService::drain);
+    connect(&impl_->flushTimer, &QTimer::timeout, this, &LogService::flushPending);
 }
 
 LogService::~LogService()
@@ -288,40 +344,7 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
     spdlog::set_error_handler(onSpdlogError);
 
     impl_->uiTimer.setInterval(std::max(10, impl_->config.uiBatchIntervalMs));
-    connect(&impl_->uiTimer, &QTimer::timeout, this, &LogService::drain);
     impl_->flushTimer.setInterval(500);
-    connect(&impl_->flushTimer, &QTimer::timeout,
-            [this]
-            {
-                // The async queue itself uses overrun_oldest; its drops are reported once per
-                // interval so saturation is visible without flooding the window.
-                if (auto pool = spdlog::thread_pool())
-                {
-                    const auto overrun = pool->overrun_counter();
-                    if (overrun > 0)
-                    {
-                        pool->reset_overrun_counter();
-                        warn("日志", "异步队列已满，丢弃 " + std::to_string(overrun) + " 条");
-                    }
-                }
-                std::vector<std::pair<std::string, Impl::PendingError>> pending;
-                {
-                    std::lock_guard<std::mutex> lock(impl_->coalesceMutex);
-                    for (auto &[key, entry] : impl_->pendingErrors)
-                        pending.emplace_back(key, std::move(entry));
-                    impl_->pendingErrors.clear();
-                }
-                for (const auto &[key, entry] : pending)
-                {
-                    std::string message = entry.message;
-                    if (entry.count > 1)
-                        message += "（重复 " + std::to_string(entry.count) + " 次）";
-                    if (!impl_->logger)
-                        continue;
-                    const auto payload = buildPayload(entry.source, message);
-                    impl_->logger->log(spdlog::level::err, spdlog::string_view_t(payload.data(), payload.size()));
-                }
-            });
     impl_->flushTimer.start();
 
     // Qt/QML logs are bridged with mapped levels; the original handler is restored at shutdown and
@@ -357,6 +380,7 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
             }
             inside = false;
         });
+    impl_->handlerInstalled = true;
 
     impl_->running.store(true, std::memory_order_release);
     gRunning.store(true, std::memory_order_release);
@@ -375,47 +399,40 @@ void LogService::shutdown()
     impl_->running.store(false, std::memory_order_release);
     gRunning.store(false, std::memory_order_release);
 
-    // Stop producers before the worker: the Qt bridge goes first, then the coalesced summaries are
-    // released and the queue is drained while the sinks still exist.
-    if (impl_->previousHandler)
+    // A handler of nullptr is the default handler, and restoring it is exactly what Qt documents;
+    // the installed flag is therefore separate from the stored pointer.
+    if (impl_->handlerInstalled)
     {
         qInstallMessageHandler(impl_->previousHandler);
-        impl_->previousHandler = nullptr;
+        impl_->handlerInstalled = false;
+        impl_->previousHandler  = nullptr;
     }
     impl_->uiTimer.stop();
     impl_->flushTimer.stop();
     impl_->viewActive.store(false, std::memory_order_release);
 
-    std::vector<std::pair<std::string, Impl::PendingError>> pending;
+    // The exclusive side of the writer lock is the drain barrier: once it is held, every producer
+    // that passed the admission check has already posted, and no new line can be enqueued while the
+    // remaining summaries are written and the pool is joined.
     {
-        std::lock_guard<std::mutex> lock(impl_->coalesceMutex);
-        for (auto &[key, entry] : impl_->pendingErrors)
-            pending.emplace_back(key, std::move(entry));
-        impl_->pendingErrors.clear();
+        std::unique_lock<std::shared_mutex> lock(impl_->writeMutex);
+        postPendingLocked();
+        if (impl_->logger)
+        {
+            impl_->logger->flush();
+            spdlog::drop("visionrt");
+        }
+        spdlog::shutdown();
+        impl_->uiSink.reset();
+        impl_->fileSink.reset();
+        impl_->logger.reset();
     }
-    for (const auto &[key, entry] : pending)
-    {
-        std::string message = entry.message;
-        if (entry.count > 1)
-            message += "（重复 " + std::to_string(entry.count) + " 次）";
-        const auto payload = buildPayload(entry.source, message);
-        impl_->logger->log(spdlog::level::err, spdlog::string_view_t(payload.data(), payload.size()));
-    }
-
-    if (impl_->logger)
-    {
-        impl_->logger->flush();
-        spdlog::drop("visionrt");
-    }
-    spdlog::shutdown();
-    impl_->uiSink.reset();
-    impl_->fileSink.reset();
-    impl_->logger.reset();
     impl_->fileReady = false;
 }
 
 void LogService::flush()
 {
+    std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     if (impl_->logger)
         impl_->logger->flush();
 }
@@ -442,67 +459,108 @@ void LogService::write(LogLevel level, std::string_view source, std::string_view
     instance().writeImpl(level, source, message);
 }
 
-void LogService::writeImpl(LogLevel level, std::string_view source, std::string_view message)
+void LogService::postLocked(LogLevel level, std::string_view source, std::string_view message,
+                            std::chrono::system_clock::time_point when)
 {
-    if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
-        return;
-    // One cap for both sinks: the line the window shows is the line the file contains. The ellipsis
-    // marks the truncation in both of them instead of making the two texts differ.
-    std::string capped;
-    if (message.size() > impl_->config.maxMessageBytes)
-    {
-        capped.assign(message.substr(0, impl_->config.maxMessageBytes));
-        capped += "…";
-        message = capped;
-    }
-    if (level == LogLevel::Error || level == LogLevel::Critical)
-    {
-        writeCoalesced(level, source, message, std::chrono::steady_clock::now());
-        return;
-    }
-    const auto payload = buildPayload(source, message);
-    impl_->logger->log(toSpd(level), spdlog::string_view_t(payload.data(), payload.size()));
+    // One cap for both sinks: the line the window shows is the line the file contains. Escaping
+    // comes first so the cap counts the bytes that are actually written.
+    const auto escape = singleLine(message);
+    const auto capped = capBytes(escape, impl_->config.maxMessageBytes);
+    const auto payload = buildPayload(source, capped);
+    // The recorded time travels with the line: a coalesced summary is stamped when the burst was
+    // last seen, not when the timer happened to drain it.
+    impl_->logger->log(when, spdlog::source_loc{}, toSpd(level),
+                       spdlog::string_view_t(payload.data(), payload.size()));
 }
 
-void LogService::writeCoalesced(LogLevel level, std::string_view source, std::string_view message,
-                                const std::chrono::steady_clock::time_point &now)
+std::vector<LogService::PendingError> LogService::takePending()
 {
-    std::string key(source);
-    key.push_back('\n');
-    key.append(message.data(), message.size());
-    std::vector<std::pair<std::string, Impl::PendingError>> flushed;
+    std::vector<PendingError> pending;
+    std::lock_guard<std::mutex> lock(impl_->coalesceMutex);
+    pending.reserve(impl_->pendingErrors.size());
+    for (auto &[key, entry] : impl_->pendingErrors)
+        pending.push_back(std::move(entry));
+    impl_->pendingErrors.clear();
+    return pending;
+}
+
+void LogService::postPendingLocked()
+{
+    if (!impl_->logger)
+        return;
+    for (const auto &entry : takePending())
     {
-        std::lock_guard<std::mutex> lock(impl_->coalesceMutex);
-        auto                        found = impl_->pendingErrors.find(key);
-        if (found != impl_->pendingErrors.end() && now - found->second.last < std::chrono::seconds(2))
+        if (entry.repeats == 0)
+            continue;
+        // The summary keeps the level it was recorded with and the time of its last occurrence:
+        // a critical never becomes a plain error, and a burst does not look like it happened now.
+        postLocked(entry.level, entry.source,
+                   entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）", entry.last);
+    }
+}
+
+void LogService::writeImpl(LogLevel level, std::string_view source, std::string_view message)
+{
+    if (level == LogLevel::Error)
+    {
+        writeError(source, message);
+        return;
+    }
+    std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
+    if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
+        return;
+    // Critical is never collapsed and never waits for a timer: it is the one level that must reach
+    // the file and the window as soon as it happens.
+    postLocked(level, source, message, spdlog::log_clock::now());
+}
+
+void LogService::writeError(std::string_view source, std::string_view message)
+{
+    std::vector<PendingError> released;
+    bool                      announce = false;
+    std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
+    if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
+        return;
+    const auto now = spdlog::log_clock::now();
+    {
+        std::lock_guard<std::mutex> coalesce(impl_->coalesceMutex);
+        std::string                 key(source);
+        key.push_back('\n');
+        key.append(message.data(), message.size());
+        const auto found = impl_->pendingErrors.find(key);
+        if (found == impl_->pendingErrors.end())
         {
-            ++found->second.count;
-            found->second.last = now;
+            if (impl_->pendingErrors.size() >= kPendingLimit)
+            {
+                released.reserve(impl_->pendingErrors.size());
+                for (auto &entry : impl_->pendingErrors)
+                    released.push_back(std::move(entry.second));
+                impl_->pendingErrors.clear();
+            }
+            impl_->pendingErrors.emplace(key, PendingError{LogLevel::Error, std::string(source),
+                                                           std::string(message), 0, now});
+            announce = true;
         }
         else
         {
-            if (found != impl_->pendingErrors.end())
-            {
-                flushed.emplace_back(found->first, std::move(found->second));
-                impl_->pendingErrors.erase(found);
-            }
-            if (impl_->pendingErrors.size() >= 32)
-            {
-                for (auto &[pendingKey, entry] : impl_->pendingErrors)
-                    flushed.emplace_back(pendingKey, std::move(entry));
-                impl_->pendingErrors.clear();
-            }
-            impl_->pendingErrors.emplace(key, Impl::PendingError{std::string(source), std::string(message), 1, now});
+            ++found->second.repeats;
+            found->second.last = now;
         }
     }
-    for (const auto &[pendingKey, entry] : flushed)
-    {
-        std::string text = entry.message;
-        if (entry.count > 1)
-            text += "（重复 " + std::to_string(entry.count) + " 次）";
-        const auto payload = buildPayload(entry.source, text);
-        impl_->logger->log(toSpd(level), spdlog::string_view_t(payload.data(), payload.size()));
-    }
+    if (announce)
+        postLocked(LogLevel::Error, source, message, now);
+    for (const auto &entry : released)
+        if (entry.repeats > 0)
+            postLocked(entry.level, entry.source,
+                       entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）", entry.last);
+}
+
+void LogService::flushPending()
+{
+    std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
+    if (!impl_->running.load(std::memory_order_acquire))
+        return;
+    postPendingLocked();
 }
 
 void LogService::write(LogLevel level, const QString &source, const QString &message)
@@ -578,8 +636,9 @@ void LogService::drain()
         impl_->uiTimer.stop();
         return;
     }
-    std::uint64_t       dropped = 0;
-    const auto          batch   = impl_->uiSink->take(static_cast<std::size_t>(std::max(1, impl_->config.uiBatchMaximum)), dropped);
+    std::uint64_t dropped = 0;
+    const auto    batch =
+        impl_->uiSink->take(static_cast<std::size_t>(std::max(1, impl_->config.uiBatchMaximum)), dropped);
     impl_->reportedDropped += dropped;
     if (!batch.isEmpty())
         Q_EMIT recordsAvailable(batch);

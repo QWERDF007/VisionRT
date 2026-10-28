@@ -789,7 +789,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         std::ofstream ofs(scriptPath);
         ofs << "def execute(inputs):\n"
             << "    v = inputs.get('in_val', 0)\n"
-            << "    return {'__status_code': 0, '__status_message': '', 'out_val': v + 1}\n";
+            << "    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'out_val': v + 1}}\n";
         ofs.close();
 
         ToolDefinition pyToolDef;
@@ -1033,8 +1033,8 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
             << "    if val == 666:\n"
             << "        raise RuntimeError('simulated python execution failure')\n"
             << "    if val == 777:\n"
-            << "        return {'__status_code': 0, '__status_message': '', 'out': 'wrong_type_string'}\n"
-            << "    return {'__status_code': 0, '__status_message': '', 'out': val * 2}\n";
+            << "        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'out': 'wrong_type_string'}}\n"
+            << "    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'out': val * 2}}\n";
         ofs.close();
     }
 

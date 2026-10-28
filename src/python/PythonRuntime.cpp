@@ -72,9 +72,9 @@ struct RuntimeState
     }
 };
 
-ToolStatus errorStatus(std::int64_t code, const char *summary, const std::string &detail)
+ToolStatus errorStatus(ErrorCode code, const char *summary, const std::string &detail)
 {
-    return {code, summary, detail};
+    return makeStatus(code, summary, detail);
 }
 
 py::dict inputDictionary(const Values &values, const std::vector<PortDefinition> &declarations,
@@ -91,7 +91,10 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
             if (isPathPort(*definition) && std::holds_alternative<std::string>(value)
                 && !std::get<std::string>(value).empty())
             {
-                const auto resolved = services.paths.resolve(std::get<std::string>(value)).u8string();
+                const auto resolution = services.paths.tryResolve(std::get<std::string>(value));
+                if (!resolution)
+                    throw ContractError(resolution.issue().describe());
+                const auto resolved = resolution.value().u8string();
                 result[py::str(id)] = py::str(reinterpret_cast<const char *>(resolved.data()), resolved.size());
                 continue;
             }
@@ -101,15 +104,20 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
     return result;
 }
 
-ToolStatus parseStatus(const py::dict &result, const PythonStorage &storage)
+ToolStatus decodeStatus(const py::dict &status, const PythonStorage &storage)
 {
-    if (!result.contains("__status_code") || !result.contains("__status_message"))
-        throw ContractError("工具返回值必须包含 __status_code 与 __status_message");
-    ToolStatus status;
-    status.code = std::get<std::int64_t>(fromPython({Type::Int}, result["__status_code"], storage, "__status_code"));
-    status.message
-        = std::get<std::string>(fromPython({Type::String}, result["__status_message"], storage, "__status_message"));
-    return status;
+    for (const auto *key : {"code", "message", "detail"})
+        if (!status.contains(key))
+            throw ContractError(std::string("状态缺少字段：") + key);
+    if (status.size() != 3)
+        throw ContractError("状态只能包含 code/message/detail");
+    ToolStatus result;
+    result.code    = std::get<std::int64_t>(fromPython({Type::Int}, status["code"], storage, "status.code"));
+    result.message = std::get<std::string>(fromPython({Type::String}, status["message"], storage, "status.message"));
+    result.detail  = std::get<std::string>(fromPython({Type::String}, status["detail"], storage, "status.detail"));
+    if (!result && isBlankMessage(result.message))
+        throw ContractError("失败状态必须给出可读消息");
+    return result;
 }
 
 py::dict resultDictionary(py::handle result)
@@ -121,11 +129,7 @@ py::dict resultDictionary(py::handle result)
 
 ToolStatus lifecycleStatus(py::handle returned, const PythonStorage &storage)
 {
-    auto result = resultDictionary(returned);
-    auto status = parseStatus(result, storage);
-    if (result.size() != 2)
-        throw ContractError("initialize/release 只能返回两个状态键");
-    return status;
+    return decodeStatus(resultDictionary(returned), storage);
 }
 
 enum class ReleaseState : int
@@ -196,15 +200,15 @@ struct ToolObjects
         }
         catch (const py::error_already_set &error)
         {
-            status = errorStatus(-4, "Python 释放异常", error.what());
+            status = errorStatus(ErrorCode::Internal, "Python 释放异常", error.what());
         }
         catch (const ContractError &error)
         {
-            status = {-4, error.what()};
+            status = makeStatus(ErrorCode::Internal, error.what());
         }
         catch (const std::exception &error)
         {
-            status = errorStatus(-4, "Python 释放异常", error.what());
+            status = errorStatus(ErrorCode::Internal, "Python 释放异常", error.what());
         }
 
         instance = py::none();
@@ -266,10 +270,10 @@ public:
     {
         phase_ = NodePhase::Initialize;
         if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
-            return {-1, "Python 实例跨代或运行时不可用，不能初始化"};
+            return makeStatus(ErrorCode::PythonUnavailable, "Python 实例跨代或运行时不可用，不能初始化");
         py::gil_scoped_acquire gil;
         if (!objects_ || objects_->isReleasingOrReleased())
-            return {-1, "Python 实例已释放，不能初始化"};
+            return makeStatus(ErrorCode::FailedPrecondition, "Python 实例已释放，不能初始化");
         auto loadStatus = ensureLoaded();
         if (!loadStatus)
             return loadStatus;
@@ -282,15 +286,15 @@ public:
         }
         catch (const py::error_already_set &error)
         {
-            return errorStatus(-1, "Python 初始化异常", error.what());
+            return errorStatus(ErrorCode::Internal, "Python 初始化异常", error.what());
         }
         catch (const ContractError &error)
         {
-            return {-2, error.what()};
+            return makeStatus(ErrorCode::InvalidArgument, error.what());
         }
         catch (const std::exception &error)
         {
-            return errorStatus(-1, "Python 初始化异常", error.what());
+            return errorStatus(ErrorCode::Internal, "Python 初始化异常", error.what());
         }
     }
 
@@ -381,19 +385,26 @@ public:
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
             try
             {
-                auto dictionary = resultDictionary(returned);
-                status          = parseStatus(dictionary, state_->storage);
-                if (dictionary.size() != definition_.outputs.size())
-                    throw ContractError("输出键必须与声明端口及两个状态键完全一致");
+                auto envelope = resultDictionary(returned);
+                if (envelope.size() != 2 || !envelope.contains("status") || !envelope.contains("outputs"))
+                    throw ContractError("execute 必须返回 status 与 outputs");
+                if (!py::isinstance<py::dict>(envelope["status"]) || !py::isinstance<py::dict>(envelope["outputs"]))
+                    throw ContractError("status 与 outputs 必须是字典");
+                status = decodeStatus(py::reinterpret_borrow<py::dict>(envelope["status"]), state_->storage);
+                const auto outputsDictionary = py::reinterpret_borrow<py::dict>(envelope["outputs"]);
+                std::size_t businessPorts = 0;
                 for (const auto &output : definition_.outputs)
                 {
+                    if (isStatusPort(output.id))
+                        continue;
+                    ++businessPorts;
                     const auto key = py::str(output.id);
-                    if (!dictionary.contains(key))
-                        throw ContractError("缺少声明的输出键：" + output.id);
+                    if (!outputsDictionary.contains(key))
+                        throw ContractError("输出键必须与声明端口一致，缺少：" + output.id);
                     PortValue value;
                     try
                     {
-                        value = fromPython(output.type, dictionary[key], state_->storage, output.id);
+                        value = fromPython(output.type, outputsDictionary[key], state_->storage, output.id);
                     }
                     catch (const std::exception &error)
                     {
@@ -402,6 +413,8 @@ public:
                     validateToolOutput(output, value, status);
                     outputs.emplace(output.id, std::move(value));
                 }
+                if (outputsDictionary.size() != businessPorts)
+                    throw ContractError("输出键必须与声明端口完全一致：多出或缺少业务端口");
                 outputTimer.stop();
             }
             catch (const py::error_already_set &error)
@@ -449,16 +462,17 @@ private:
         if (loaded_)
             return {};
         if (!objects_ || objects_->isReleasingOrReleased())
-            return {-1, "Python 实例已释放"};
+            return makeStatus(ErrorCode::FailedPrecondition, "Python 实例已释放");
         if (!state_ || !state_->alive || generation_ != state_->generation)
         {
-            ToolStatus err{-3, "Python 实例跨代失效或运行时已关闭：" + definition_.id};
+            ToolStatus err = makeStatus(ErrorCode::PythonUnavailable,
+                                        "Python 实例跨代失效或运行时已关闭：" + definition_.id);
             return err;
         }
         const auto it = state_->implementations.find(definition_.id);
         if (it == state_->implementations.end())
         {
-            ToolStatus err{-3, "Python 实现未注册：" + definition_.id};
+            ToolStatus err = makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + definition_.id);
             if (sharedLoadState_)
                 sharedLoadState_->update(err);
             return err;
@@ -495,7 +509,7 @@ private:
             }
             catch (const py::error_already_set &error)
             {
-                auto err = errorStatus(-3, "Python 加载异常", error.what());
+                auto err = errorStatus(ErrorCode::PythonUnavailable, "Python 加载异常", error.what());
                 impl.loadState->update(err);
                 impl.symbol = py::object{};
                 if (sharedLoadState_)
@@ -504,7 +518,7 @@ private:
             }
             catch (const std::exception &error)
             {
-                auto err = errorStatus(-3, "Python 加载异常", error.what());
+                auto err = errorStatus(ErrorCode::PythonUnavailable, "Python 加载异常", error.what());
                 impl.loadState->update(err);
                 impl.symbol = py::object{};
                 if (sharedLoadState_)
@@ -529,7 +543,7 @@ private:
         {
             objects_->instance = py::none();
             objects_->execute  = py::none();
-            auto err = errorStatus(-1, "Python 实例创建异常", error.what());
+            auto err = errorStatus(ErrorCode::Internal, "Python 实例创建异常", error.what());
             impl.loadState->update(err);
             if (sharedLoadState_)
                 sharedLoadState_->update(err);
@@ -539,7 +553,7 @@ private:
         {
             objects_->instance = py::none();
             objects_->execute  = py::none();
-            auto err = errorStatus(-1, "Python 实例创建异常", error.what());
+            auto err = errorStatus(ErrorCode::Internal, "Python 实例创建异常", error.what());
             impl.loadState->update(err);
             if (sharedLoadState_)
                 sharedLoadState_->update(err);
@@ -708,19 +722,19 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
         {
             const auto script = definition.pythonScript();
             if (!std::filesystem::is_regular_file(script))
-                initStatus = {-3, "Python 脚本缺失", text(script)};
+                initStatus = makeStatus(ErrorCode::NotFound, "Python 脚本缺失", text(script));
             else if (definition.entry.file.extension() != ".py")
-                initStatus = {-3, "Python 入口必须是 .py 文件", text(script)};
+                initStatus = makeStatus(ErrorCode::DataInvalid, "Python 入口必须是 .py 文件", text(script));
             else if (definition.entry.symbol.empty())
-                initStatus = {-3, "Python 入口缺少 symbol", text(script)};
+                initStatus = makeStatus(ErrorCode::DataInvalid, "Python 入口缺少 symbol", text(script));
         }
         catch (const ContractError &error)
         {
-            initStatus = {-2, error.what()};
+            initStatus = makeStatus(ErrorCode::InvalidArgument, error.what());
         }
         catch (const std::exception &error)
         {
-            initStatus = {-2, error.what()};
+            initStatus = makeStatus(ErrorCode::InvalidArgument, error.what());
         }
         implementation.loadState->set(std::move(initStatus), state.generation);
         const auto [entry, inserted] = state.implementations.emplace(definition.id, std::move(implementation));
@@ -744,7 +758,8 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
     if (it != state->implementations.end())
         loadState = it->second.loadState;
     else
-        loadState = std::make_shared<PythonLoadState>(ToolStatus{-3, "Python 实现未注册：" + normalized.id});
+        loadState
+            = std::make_shared<PythonLoadState>(makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + normalized.id));
 
     auto defPtr = std::make_shared<const ToolDefinition>(std::move(normalized));
     auto createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState,
@@ -753,9 +768,11 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
     {
         auto lockedState = weak.lock();
         if (!lockedState || !lockedState->alive)
-            throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 运行时已关闭：" + defPtr->id);
+            throw RegistryError(ToolAvailability::ImplementationUnavailable,
+                                makeStatus(ErrorCode::PythonUnavailable, "Python 运行时已关闭：" + defPtr->id));
         if (lockedState->generation != generation)
-            throw RegistryError(ToolAvailability::ImplementationUnavailable, "Python 运行时已刷新：" + defPtr->id);
+            throw RegistryError(ToolAvailability::ImplementationUnavailable,
+                                makeStatus(ErrorCode::PythonUnavailable, "Python 运行时已刷新：" + defPtr->id));
         if (loadState)
         {
             auto status = loadState->status();

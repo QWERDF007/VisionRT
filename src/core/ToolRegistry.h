@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Error.h"
 #include "core/PythonLoadState.h"
 #include "core/Tool.h"
 #include "visionrt/contracts/Registry.h"
@@ -29,7 +30,7 @@ class RegistryError : public std::runtime_error
 {
 public:
     RegistryError(ToolAvailability reason, std::string message)
-        : RegistryError(reason, ToolStatus{-3, std::move(message)})
+        : RegistryError(reason, makeStatus(codeFor(reason), std::move(message)))
     {
     }
 
@@ -38,6 +39,25 @@ public:
         , reason(reason)
         , status(std::move(status))
     {
+    }
+
+    // The reason already names the failure class, so the message-only constructor derives the code
+    // from it. One number for every "cannot create" made a missing tool indistinguishable from a
+    // busy runtime; a caller has to be able to branch on NotFound without reading the message.
+    static ErrorCode codeFor(ToolAvailability reason) noexcept
+    {
+        switch (reason)
+        {
+        case ToolAvailability::Available:
+            return ErrorCode::Ok;
+        case ToolAvailability::DefinitionMissing:
+            return ErrorCode::NotFound;
+        case ToolAvailability::ImplementationNotLoaded:
+            return ErrorCode::FailedPrecondition;
+        case ToolAvailability::ImplementationUnavailable:
+            return ErrorCode::ResourceUnavailable;
+        }
+        return ErrorCode::Internal;
     }
 
     ToolAvailability reason;

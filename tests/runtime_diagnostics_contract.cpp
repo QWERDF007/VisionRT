@@ -125,7 +125,8 @@ try
         require(event.generation == first.generation && event.sequence == index + 1
                     && event.phase == RuntimePhase::Management && node
                     && node->node == initial.project().flows.front().nodes[index].id
-                    && node->phase == NodePhase::Release && event.status().code == -4
+                    // The tool's own release verdict is reported as-is; the host only forwards it.
+                    && node->phase == NodePhase::Release && event.status().code == 7
                     && event.status().message == (index == 1 ? "工具B释放失败" : "工具A释放失败")
                     && event.status().detail == "original release detail",
                 "release event lost its identity, node, stage, status or detail");
@@ -193,7 +194,7 @@ try
     require(engine.requestSynchronize(empty.project(), registry).code == 0, "post-run node removal rejected");
     const auto afterRun = settle();
     require(afterRun.generation == next.generation && afterRun.diagnostics.size() == 1
-                && afterRun.diagnostics[0].sequence == 3 && afterRun.diagnostics[0].status().code == -4,
+                && afterRun.diagnostics[0].sequence == 3 && afterRun.diagnostics[0].status().code == 7,
             "new execution reused a diagnostic identity in the same generation");
     require(lifetime.created == 106 && lifetime.released == 106 && lifetime.destroyed == 106,
             "post-run diagnostic identity test leaked or double-released a tool");
