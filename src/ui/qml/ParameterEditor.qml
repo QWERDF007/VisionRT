@@ -711,7 +711,11 @@ ColumnLayout {
     }
     QuiFileFolderDialog {
         id: pathPicker
-        title: "选择 " + root.parameter.name
+        title: root.parameter.editor === "directory"
+                   ? "选择文件夹"
+                   : (root.parameter.editor === "file"
+                       ? "选择文件"
+                       : "选择文件或文件夹")
         currentFolder: root.valueText
         dialogMode: root.parameter.editor === "directory"
                         ? QuiFileFolderDialog.DialogMode.Folder
