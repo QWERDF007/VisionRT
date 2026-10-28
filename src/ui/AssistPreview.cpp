@@ -263,6 +263,8 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
     outcome.learn   = request.learn;
     outcome.append  = request.append;
     const auto &session = *sessionPtr;
+    enum class Phase { Setup, Execute };
+    Phase phase = Phase::Setup;
     try
     {
         // A new session (tool change or catalog refresh) owns a new registry snapshot, so the old
@@ -286,11 +288,12 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
         }
         const auto inputs = normalizeInputs(session.helper.inputs, request.inputs);
         validateToolValues(session.helper.inputs, inputs);
+
+        phase = Phase::Execute;
         auto result = instance_->execute(inputs);
         // The helper is a tool like any other: its status is published into the same two ports the
         // node runtime uses, so the preview shows what a real run would.
         outcome.status = validateToolExecution(session.helper.outputs, result.outputs, result.detail);
-
 
         if (!outcome.status)
         {
@@ -327,9 +330,16 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
         outcome.quality = helperMessage(error.status.message);
         releaseInstance();
     }
+    catch (const ContractError &error)
+    {
+        const auto code = phase == Phase::Execute ? ErrorCode::DataInvalid : ErrorCode::InvalidArgument;
+        outcome.status  = makeStatus(code, error.what());
+        outcome.quality = helperMessage(error.what());
+        releaseInstance();
+    }
     catch (const std::exception &error)
     {
-        outcome.status  = makeStatus(ErrorCode::InvalidArgument, error.what());
+        outcome.status  = makeStatus(ErrorCode::Internal, error.what());
         outcome.quality = helperMessage(error.what());
         releaseInstance();
     }

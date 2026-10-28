@@ -7,12 +7,12 @@ import VisionRT.Style 1.0
 QuiSplitView {
     id: root
     orientation: Qt.Horizontal
-    backgroundColor: "#d0d7de"
-    handleColor: "#d0d7de"
+    backgroundColor: Theme.border
+    handleColor: Theme.border
     handle: Rectangle {
         implicitWidth: 1
         implicitHeight: root.height
-        color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+        color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
         containmentMask: Item {
             x: -3; width: 7; height: root.height
         }
@@ -125,7 +125,7 @@ QuiSplitView {
                             QuiText {
                                 anchors.centerIn: parent
                                 text: tabItem.modelData
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.tabFontSize, bold: tabItem.isActive })
+                                font: Qt.font({ family: Theme.bodyFont.family, pixelSize: Theme.tabFontSize, bold: tabItem.isActive })
                                 color: tabItem.isActive ? Theme.tabActiveText : (tabItem.isHovered ? Theme.tabHoverText : Theme.tabText)
                             }
                             MouseArea {
@@ -160,7 +160,7 @@ QuiSplitView {
                             }
                             QuiText {
                                 text: "执行"
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.executeButtonFontSize, bold: true })
+                                font: Qt.font({ family: Theme.bodyFont.family, pixelSize: Theme.executeButtonFontSize, bold: true })
                                 color: Theme.executeButtonText
                             }
                         }

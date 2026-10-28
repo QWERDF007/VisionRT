@@ -1,3 +1,4 @@
+#include <visionrt/contracts/Parameters.h>
 #include "runtime/Receiver.h"
 #include "result_view.h"
 #include "runtime/RuntimeEngine.h"
@@ -1515,6 +1516,60 @@ void businessNegativeIsNotCancellation()
     assert(std::get<std::string>(result->outputs.at("__status_message")) == "业务负数");
 }
 
+
+struct FlawedAuthorOutputs : public OutputParametersBase
+{
+    std::optional<std::int64_t> payload;
+
+    void writeFields(OutputWriter &writer) override
+    {
+        if (payload)
+        {
+            // Defect: writing reserved status port
+            writer.integer(kStatusCodePort, 0);
+            writer.integer("value", *payload);
+        }
+        else
+        {
+            writer.missing("value");
+        }
+    }
+};
+
+void authorContractErrorPassesThroughBusinessBoundary()
+{
+    RuntimeEngine engine(2);
+    ToolRegistry  registry;
+    auto          flawedTool = definition("test.flawed.pack");
+    install(registry, flawedTool,
+            [](const Values &) -> ToolResult
+            {
+                FlawedAuthorOutputs outputs;
+                try
+                {
+                    outputs.payload = 999;
+                }
+                catch (const std::exception &error)
+                {
+                    outputs.payload.reset();
+                    outputs.status = {1005, "业务计算失败", error.what()};
+                }
+                return outputs.pack();
+            });
+
+    auto n = node(1, flawedTool);
+    ProjectDefinition project;
+    project.flows.front().nodes = {n};
+
+    assert(engine.start(project, registry, RunMode::Once));
+    auto outcome = finish(engine);
+    const auto snap = snapshot(outcome, 1);
+    assert(snap->status.code == hostCode(ErrorCode::DataInvalid));
+    assert(!snap->toolResultPublished);
+    assert(!snap->outputs.contains("__status_code"));
+    assert(!snap->outputs.contains("__status_message"));
+}
+
 int main(int argc, char **argv)
 try
 {
@@ -1539,6 +1594,7 @@ try
     std::cout << "18\n"; timingRecordedOnFailure();
     std::cout << "19\n"; crossRoundPythonMetricIsolation();
     std::cout << "20\n"; businessNegativeIsNotCancellation();
+    std::cout << "21\n"; authorContractErrorPassesThroughBusinessBoundary();
     std::cout << "runtime contracts passed\n";
     return 0;
 }

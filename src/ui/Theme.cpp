@@ -8,16 +8,7 @@ static int styleThemeTypeId()
         "VisionRT.Style", 1, 0, "Theme",
         [](QQmlEngine *engine, QJSEngine *) -> QObject *
         {
-            if (engine)
-            {
-                auto *obj = engine->property("_visionrt_theme").value<QObject *>();
-                if (auto *theme = qobject_cast<Theme *>(obj))
-                    return theme;
-            }
-            auto *theme = new Theme(engine);
-            if (engine)
-                engine->setProperty("_visionrt_theme", QVariant::fromValue(static_cast<QObject *>(theme)));
-            return theme;
+            return new Theme(engine);
         });
     return id;
 }
@@ -36,13 +27,8 @@ Theme *themeForEngine(QQmlEngine *engine)
 {
     if (!engine)
         return nullptr;
-    styleThemeTypeId();
-    auto *obj = engine->property("_visionrt_theme").value<QObject *>();
-    if (auto *theme = qobject_cast<Theme *>(obj))
-        return theme;
-    auto *theme = new Theme(engine);
-    engine->setProperty("_visionrt_theme", QVariant::fromValue(static_cast<QObject *>(theme)));
-    return theme;
+    const int typeId = styleThemeTypeId();
+    return engine->singletonInstance<Theme *>(typeId);
 }
 
 Theme::Theme(QObject *parent)
@@ -192,6 +178,9 @@ void Theme::initLightIndustrialPalette()
     // 底部参数面板与执行按钮尺寸
     tabBarHeight_             = 30;
     tabFontSize_              = 12;
+    statusBarHeight_          = 26;
+    segmentButtonWidth_       = 92;
+    segmentButtonHeight_      = 22;
     executeButtonHeight_      = 24;
     executeButtonWidth_       = 68;
     executeButtonIconSize_    = 14;

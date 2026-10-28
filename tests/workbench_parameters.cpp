@@ -118,11 +118,49 @@ void parameterEditorsContract()
     QTest::qWait(50);
 
     require(theme->paramEditorHeight() == 32, "parameter theme height is not the shared 32 pixel contract");
+    require(theme->statusBarHeight() == 26, "statusBarHeight default must be 26");
+    require(theme->segmentButtonWidth() == 92, "segmentButtonWidth default must be 92");
+    require(theme->segmentButtonHeight() == 22, "segmentButtonHeight default must be 22");
+
     auto *input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "Float parameter did not use the public spin editor");
     require(input->height() >= 28, "Float input did not inherit the parameter height");
     require(input->property("font").value<QFont>().pixelSize() == theme->paramEditorFontSize(),
             "Float input did not inherit the shared parameter font");
+
+    // Dynamic propagation: changing paramEditorFontSize synchronizes parameterFont and updates live QML item
+    theme->setparamEditorFontSize(15);
+    require(theme->parameterFont().pixelSize() == 15, "parameterFont pixelSize did not sync with paramEditorFontSize");
+    QTest::qWait(50);
+    require(input->property("font").value<QFont>().pixelSize() == 15,
+            "Float input did not dynamically update when Theme font size changed");
+
+    // Synchronize parameterFont back to paramEditorFontSize
+    QFont customFont = theme->parameterFont();
+    customFont.setPixelSize(14);
+    theme->setparameterFont(customFont);
+    require(theme->paramEditorFontSize() == 14, "paramEditorFontSize did not sync when parameterFont changed");
+    QTest::qWait(50);
+    require(input->property("font").value<QFont>().pixelSize() == 14,
+            "Float input did not dynamically update when parameterFont was assigned");
+
+    // Dynamic propagation: parameterRowHeight and paramEditorHeight sync and update editor
+    theme->setparameterRowHeight(36);
+    require(theme->paramEditorHeight() == 36, "paramEditorHeight did not sync with parameterRowHeight");
+    QTest::qWait(50);
+    require(editor->implicitHeight() == 36, "ParameterEditor implicit height did not dynamically update with Theme row height");
+
+    theme->setparamEditorHeight(32);
+    require(theme->parameterRowHeight() == 32, "parameterRowHeight did not sync with paramEditorHeight");
+    theme->setparamEditorFontSize(12);
+
+    // Verify two engines have independent Theme singleton instances
+    {
+        QQmlEngine engine2;
+        auto *theme2 = themeForEngine(&engine2);
+        require(theme2 != nullptr, "Theme must be available for second engine");
+        require(theme2 != theme, "Each QQmlEngine must own its distinct Theme singleton instance");
+    }
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     const auto value = [&](const QString &id)

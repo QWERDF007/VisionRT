@@ -93,8 +93,8 @@ ApplicationWindow {
         QuiColor.CardBackground = Theme.paramEditorBg
         QuiColor.CardBorder = Theme.paramEditorBorder
         QuiColor.ItemHover = Theme.paramRowHoverBg
-        QuiFont.Body = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12 })
-        QuiFont.Caption = Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
+        QuiFont.Body = Theme.bodyFont
+        QuiFont.Caption = Theme.captionFont
         Qt.callLater(resetLayout)
     }
     Timer {
@@ -308,8 +308,8 @@ ApplicationWindow {
         id: workbench
         anchors.fill: parent
         orientation: Qt.Horizontal
-        backgroundColor: "#d0d7de"
-        handleColor: "#d0d7de"
+        backgroundColor: Theme.border
+        handleColor: Theme.border
         onWidthChanged: {
             if (window.leftExpanded && !leftHost.SplitHandle.pressed && workbench.width > 200) {
                 leftHost.SplitView.preferredWidth = Math.round(workbench.width * window.leftRatio)
@@ -323,7 +323,7 @@ ApplicationWindow {
             implicitHeight: workbench.height
             visible: window.leftExpanded
             enabled: window.leftExpanded
-            color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+            color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
             containmentMask: Item {
                 objectName: "leftHandleMask"
                 x: window.leftExpanded ? -3 : 0
@@ -359,12 +359,12 @@ ApplicationWindow {
                     id: leftSplit
                     anchors.fill: parent
                     orientation: Qt.Vertical
-                    backgroundColor: "#d0d7de"
-                    handleColor: "#d0d7de"
+                    backgroundColor: Theme.border
+                    handleColor: Theme.border
                     handle: Rectangle {
                         implicitHeight: 1
                         implicitWidth: leftSplit.width
-                        color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+                        color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
                         containmentMask: Item {
                             y: -3; height: 7; width: leftSplit.width
                         }
@@ -432,8 +432,8 @@ ApplicationWindow {
                 id: collapsedBar
                 anchors.fill: parent
                 visible: !window.leftExpanded
-                color: "#f6f8fa"
-                border.color: "#d0d7de"; border.width: 1
+                color: Theme.paramGroupHeaderBg
+                border.color: Theme.border; border.width: 1
                 QuiTextIconButton {
                     id: drawerButton
                     objectName: "drawerToggle"
@@ -451,12 +451,12 @@ ApplicationWindow {
             orientation: Qt.Vertical
             SplitView.fillWidth: true
             SplitView.minimumWidth: 380
-            backgroundColor: "#d0d7de"
-            handleColor: "#d0d7de"
+            backgroundColor: Theme.border
+            handleColor: Theme.border
             handle: Rectangle {
                 implicitHeight: 1
                 implicitWidth: rightSplit.width
-                color: SplitHandle.hovered || SplitHandle.pressed ? QuiColor.Highlight : "#d0d7de"
+                color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
                 containmentMask: Item {
                     y: -3; height: 7; width: rightSplit.width
                 }
@@ -488,10 +488,10 @@ ApplicationWindow {
         }
     }
     footer: Rectangle {
-        height: 26; color: "#ffffff"
+        height: Theme.statusBarHeight; color: Theme.surfaceBg
         Rectangle {
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-            height: 1; color: "#d0d7de"
+            height: 1; color: Theme.border
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 10
@@ -506,12 +506,12 @@ ApplicationWindow {
                 QuiTextIcon {
                     iconSource: QuiFontIcon.History
                     iconSize: 13
-                    iconColor: "#57606a"
+                    iconColor: Theme.textSecondary
                 }
                 QuiText {
                     text: app.timingText
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
-                    color: "#57606a"
+                    font: Theme.captionFont
+                    color: Theme.textSecondary
                 }
                 HoverHandler { id: timingHover }
                 ToolTip.visible: timingHover.hovered
@@ -524,8 +524,8 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
             QuiText {
                 text: "说明文档"
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
-                color: docMouse.containsMouse ? QuiColor.Highlight : "#57606a"
+                font: Theme.captionFont
+                color: docMouse.containsMouse ? Theme.highlight : Theme.textSecondary
                 MouseArea { id: docMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: authorHelp.open() }
             }
             Rectangle {
@@ -535,7 +535,7 @@ ApplicationWindow {
                     id: logRow; anchors.centerIn: parent; spacing: 4
                     width: implicitWidth
                     QuiTextIcon { iconSource: QuiFontIcon.Document; iconSize: Theme.iconSizeSmall; iconColor: Theme.textSecondary }
-                    QuiText { text: "日志"; font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall }); color: Theme.textSecondary }
+                    QuiText { text: "日志"; font: Theme.captionFont; color: Theme.textSecondary }
                 }
                 MouseArea {
                     id: logMouse; anchors.fill: parent; hoverEnabled: true

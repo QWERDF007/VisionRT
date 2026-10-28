@@ -71,7 +71,7 @@ Rectangle {
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
-                    Layout.preferredWidth: 92; Layout.preferredHeight: 22
+                    Layout.preferredWidth: Theme.segmentButtonWidth; Layout.preferredHeight: Theme.segmentButtonHeight
                     radius: Theme.radiusSmall; color: Theme.surfaceBg; border.color: Theme.highlight; border.width: 1
                     clip: true
                     Row {

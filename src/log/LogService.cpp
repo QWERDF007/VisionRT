@@ -82,51 +82,144 @@ std::unique_ptr<spdlog::formatter> makeFormatter()
 constexpr std::size_t kMaxSourceBytes = 128;
 
 // Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
-// Truncation appends "…" without producing invalid UTF-8 sequences.
+// When truncated, total bytes including the "…" mark (3 bytes) will not exceed maxBytes.
 std::string boundedSingleLine(std::string_view text, std::size_t maxBytes)
 {
     if (maxBytes == 0)
         return {};
-    std::string escaped;
-    escaped.reserve(std::min(text.size(), maxBytes));
-    bool truncated = false;
+
+    constexpr std::string_view kEllipsis     = "…";
+    constexpr std::size_t     kEllipsisBytes = 3;
+
+    const std::size_t prefixBudget = (maxBytes >= kEllipsisBytes) ? (maxBytes - kEllipsisBytes) : maxBytes;
+    std::string       result;
+    result.reserve(std::min(text.size(), maxBytes));
+    std::string prefix;
+    prefix.reserve(prefixBudget);
+
     std::size_t i = 0;
+    bool        truncated = false;
+
     while (i < text.size())
     {
-        const char c = text[i];
+        const auto       u = static_cast<unsigned char>(text[i]);
         std::string_view seq;
-        switch (c)
+        std::size_t      advance = 1;
+
+        switch (text[i])
         {
-        case '\r': seq = "\\r"; break;
-        case '\n': seq = "\\n"; break;
-        case '\v': seq = "\\v"; break;
-        case '\f': seq = "\\f"; break;
-        case '\0': seq = "\\0"; break;
-        default: {
-            const auto u = static_cast<unsigned char>(c);
-            std::size_t len = 1;
-            if ((u & 0x80U) != 0)
+        case '\r': seq = "\\r"; advance = 1; break;
+        case '\n': seq = "\\n"; advance = 1; break;
+        case '\v': seq = "\\v"; advance = 1; break;
+        case '\f': seq = "\\f"; advance = 1; break;
+        case '\0': seq = "\\0"; advance = 1; break;
+        default:
+            if (u < 0x80)
             {
-                if ((u & 0xE0U) == 0xC0U) len = 2;
-                else if ((u & 0xF0U) == 0xE0U) len = 3;
-                else if ((u & 0xF8U) == 0xF0U) len = 4;
+                seq = text.substr(i, 1);
+                advance = 1;
             }
-            if (i + len > text.size()) len = 1;
-            seq = text.substr(i, len);
+            else if (u >= 0xC2 && u <= 0xDF)
+            {
+                if (i + 1 < text.size() && (static_cast<unsigned char>(text[i + 1]) & 0xC0) == 0x80)
+                {
+                    seq = text.substr(i, 2);
+                    advance = 2;
+                }
+                else
+                {
+                    seq = "?";
+                    advance = 1;
+                }
+            }
+            else if (u >= 0xE0 && u <= 0xEF)
+            {
+                if (i + 2 < text.size())
+                {
+                    const auto c1 = static_cast<unsigned char>(text[i + 1]);
+                    const auto c2 = static_cast<unsigned char>(text[i + 2]);
+                    bool ok = (c2 & 0xC0) == 0x80;
+                    if (u == 0xE0) ok = ok && (c1 >= 0xA0 && c1 <= 0xBF);
+                    else if (u >= 0xE1 && u <= 0xEC) ok = ok && ((c1 & 0xC0) == 0x80);
+                    else if (u == 0xED) ok = ok && (c1 >= 0x80 && c1 <= 0x9F);
+                    else if (u >= 0xEE && u <= 0xEF) ok = ok && ((c1 & 0xC0) == 0x80);
+                    if (ok)
+                    {
+                        seq = text.substr(i, 3);
+                        advance = 3;
+                    }
+                    else
+                    {
+                        seq = "?";
+                        advance = 1;
+                    }
+                }
+                else
+                {
+                    seq = "?";
+                    advance = 1;
+                }
+            }
+            else if (u >= 0xF0 && u <= 0xF4)
+            {
+                if (i + 3 < text.size())
+                {
+                    const auto c1 = static_cast<unsigned char>(text[i + 1]);
+                    const auto c2 = static_cast<unsigned char>(text[i + 2]);
+                    const auto c3 = static_cast<unsigned char>(text[i + 3]);
+                    bool ok = ((c2 & 0xC0) == 0x80) && ((c3 & 0xC0) == 0x80);
+                    if (u == 0xF0) ok = ok && (c1 >= 0x90 && c1 <= 0xBF);
+                    else if (u >= 0xF1 && u <= 0xF3) ok = ok && ((c1 & 0xC0) == 0x80);
+                    else if (u == 0xF4) ok = ok && (c1 >= 0x80 && c1 <= 0x8F);
+                    if (ok)
+                    {
+                        seq = text.substr(i, 4);
+                        advance = 4;
+                    }
+                    else
+                    {
+                        seq = "?";
+                        advance = 1;
+                    }
+                }
+                else
+                {
+                    seq = "?";
+                    advance = 1;
+                }
+            }
+            else
+            {
+                seq = "?";
+                advance = 1;
+            }
             break;
         }
+
+        if (result.size() + seq.size() <= maxBytes)
+        {
+            result.append(seq);
+            if (!truncated && prefix.size() + seq.size() <= prefixBudget)
+                prefix.append(seq);
+            i += advance;
         }
-        if (escaped.size() + seq.size() > maxBytes)
+        else
         {
             truncated = true;
             break;
         }
-        escaped.append(seq);
-        i += (c == '\r' || c == '\n' || c == '\v' || c == '\f' || c == '\0') ? 1 : seq.size();
     }
+
     if (truncated)
-        escaped.append("…");
-    return escaped;
+    {
+        if (maxBytes >= kEllipsisBytes)
+        {
+            prefix.append(kEllipsis);
+            return prefix;
+        }
+        return prefix;
+    }
+    return result;
 }
 
 // %v carries the business source in brackets so the formatter owns time, level and thread only.
@@ -163,8 +256,8 @@ QString formatLine(spdlog::level::level_enum level, std::string_view source, std
 class LogService::BufferedSink final : public spdlog::sinks::base_sink<std::mutex>
 {
 public:
-    BufferedSink(std::size_t capacity, std::size_t maximumBytes, std::function<void()> onPush)
-        : capacity_(std::max<std::size_t>(1, capacity)), maximumBytes_(maximumBytes), onPush_(std::move(onPush))
+    BufferedSink(std::size_t capacity, std::function<void()> onPush)
+        : capacity_(std::max<std::size_t>(1, capacity)), onPush_(std::move(onPush))
     {
     }
 
@@ -233,7 +326,6 @@ protected:
 
 private:
     std::size_t           capacity_;
-    std::size_t           maximumBytes_;
     std::deque<LogRecord> records_;
     std::uint64_t         dropped_ = 0;
     std::function<void()> onPush_;
@@ -311,90 +403,93 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
     if (QCoreApplication::instance() && QThread::currentThread() != QCoreApplication::instance()->thread())
         return false;
 
-    impl_->config = config;
-    impl_->path   = filePath.isEmpty() ? Impl::defaultFile() : filePath;
-    QDir().mkpath(QFileInfo(impl_->path).absolutePath());
-
-    std::vector<spdlog::sink_ptr> sinks;
-    try
     {
-        // The base name keeps the date suffix implicit: spdlog writes today's local date into
-        // `visionrt_YYYY-MM-DD.log` and switches file by itself at local midnight.
-        auto file = std::make_shared<spdlog::sinks::daily_file_sink_mt>(impl_->path.toStdString(), 0, 0, false);
-        file->set_formatter(makeFormatter());
-        impl_->fileSink  = file;
-        impl_->fileReady = true;
-        sinks.push_back(file);
-    }
-    catch (const std::exception &)
-    {
-        // A log file that cannot be opened never blocks startup and never opens a dialog: the
-        // service keeps running on stderr, counts the failure and says so in one diagnostic line.
-        gWriteFailures.fetch_add(1, std::memory_order_relaxed);
-        auto fallback = std::make_shared<spdlog::sinks::stderr_sink_mt>();
-        fallback->set_formatter(makeFormatter());
-        impl_->fileSink  = fallback;
-        impl_->fileReady = false;
-        sinks.push_back(fallback);
-    }
+        std::unique_lock<std::shared_mutex> lock(impl_->writeMutex);
+        impl_->config = config;
+        impl_->path   = filePath.isEmpty() ? Impl::defaultFile() : filePath;
+        QDir().mkpath(QFileInfo(impl_->path).absolutePath());
 
-    impl_->uiSink = std::make_shared<BufferedSink>(impl_->config.uiCapacity,
-                                                   std::max<std::size_t>(256, impl_->config.maxMessageBytes * 2),
-                                                   [this] { scheduleDrain(); });
-    impl_->uiSink->set_formatter(makeFormatter());
-    sinks.push_back(impl_->uiSink);
-
-    spdlog::init_thread_pool(impl_->config.queueCapacity, 1);
-    impl_->logger = std::make_shared<spdlog::async_logger>("visionrt", sinks.begin(), sinks.end(),
-                                                           spdlog::thread_pool(),
-                                                           spdlog::async_overflow_policy::overrun_oldest);
-    impl_->logger->set_level(spdlog::level::trace);
-    impl_->logger->flush_on(spdlog::level::err);
-    spdlog::set_default_logger(impl_->logger);
-    spdlog::flush_every(std::chrono::seconds(std::max(1, impl_->config.flushSeconds)));
-    spdlog::set_error_handler(onSpdlogError);
-
-    impl_->uiTimer.setInterval(std::max(10, impl_->config.uiBatchIntervalMs));
-    impl_->flushTimer.setInterval(500);
-    impl_->flushTimer.start();
-
-    // Qt/QML logs are bridged with mapped levels; the original handler is restored at shutdown and
-    // the bridge never recurses into qDebug.
-    impl_->previousHandler = qInstallMessageHandler(
-        [](QtMsgType type, const QMessageLogContext &context, const QString &message)
+        std::vector<spdlog::sink_ptr> sinks;
+        try
         {
-            thread_local bool inside = false;
-            if (inside)
-            {
-                std::fputs(message.toUtf8().constData(), stderr);
-                std::fputc('\n', stderr);
-                return;
-            }
-            inside = true;
-            LogLevel level = LogLevel::Info;
-            switch (type)
-            {
-            case QtDebugMsg: level = LogLevel::Debug; break;
-            case QtInfoMsg: level = LogLevel::Info; break;
-            case QtWarningMsg: level = LogLevel::Warn; break;
-            case QtCriticalMsg: level = LogLevel::Error; break;
-            case QtFatalMsg: level = LogLevel::Critical; break;
-            }
-            const std::string_view source = context.category ? std::string_view(context.category)
-                                                             : std::string_view("Qt");
-            LogService::instance().write(level, source, message.toStdString());
-            if (type == QtFatalMsg)
-            {
-                std::fputs("VisionRT fatal: ", stderr);
-                std::fputs(message.toUtf8().constData(), stderr);
-                std::fputc('\n', stderr);
-            }
-            inside = false;
-        });
-    impl_->handlerInstalled = true;
+            // The base name keeps the date suffix implicit: spdlog writes today's local date into
+            // `visionrt_YYYY-MM-DD.log` and switches file by itself at local midnight.
+            auto file = std::make_shared<spdlog::sinks::daily_file_sink_mt>(impl_->path.toStdString(), 0, 0, false);
+            file->set_formatter(makeFormatter());
+            impl_->fileSink  = file;
+            impl_->fileReady = true;
+            sinks.push_back(file);
+        }
+        catch (const std::exception &)
+        {
+            // A log file that cannot be opened never blocks startup and never opens a dialog: the
+            // service keeps running on stderr, counts the failure and says so in one diagnostic line.
+            gWriteFailures.fetch_add(1, std::memory_order_relaxed);
+            auto fallback = std::make_shared<spdlog::sinks::stderr_sink_mt>();
+            fallback->set_formatter(makeFormatter());
+            impl_->fileSink  = fallback;
+            impl_->fileReady = false;
+            sinks.push_back(fallback);
+        }
 
-    impl_->running.store(true, std::memory_order_release);
-    gRunning.store(true, std::memory_order_release);
+        impl_->uiSink = std::make_shared<BufferedSink>(impl_->config.uiCapacity,
+                                                       [this] { scheduleDrain(); });
+        impl_->uiSink->set_formatter(makeFormatter());
+        sinks.push_back(impl_->uiSink);
+
+        spdlog::init_thread_pool(impl_->config.queueCapacity, 1);
+        impl_->logger = std::make_shared<spdlog::async_logger>("visionrt", sinks.begin(), sinks.end(),
+                                                               spdlog::thread_pool(),
+                                                               spdlog::async_overflow_policy::overrun_oldest);
+        impl_->logger->set_level(spdlog::level::trace);
+        impl_->logger->flush_on(spdlog::level::err);
+        spdlog::set_default_logger(impl_->logger);
+        spdlog::flush_every(std::chrono::seconds(std::max(1, impl_->config.flushSeconds)));
+        spdlog::set_error_handler(onSpdlogError);
+
+        impl_->uiTimer.setInterval(std::max(10, impl_->config.uiBatchIntervalMs));
+        impl_->flushTimer.setInterval(500);
+        impl_->flushTimer.start();
+
+        // Qt/QML logs are bridged with mapped levels; the original handler is restored at shutdown and
+        // the bridge never recurses into qDebug.
+        impl_->previousHandler = qInstallMessageHandler(
+            [](QtMsgType type, const QMessageLogContext &context, const QString &message)
+            {
+                thread_local bool inside = false;
+                if (inside)
+                {
+                    std::fputs(message.toUtf8().constData(), stderr);
+                    std::fputc('\n', stderr);
+                    return;
+                }
+                inside = true;
+                LogLevel level = LogLevel::Info;
+                switch (type)
+                {
+                case QtDebugMsg: level = LogLevel::Debug; break;
+                case QtInfoMsg: level = LogLevel::Info; break;
+                case QtWarningMsg: level = LogLevel::Warn; break;
+                case QtCriticalMsg: level = LogLevel::Error; break;
+                case QtFatalMsg: level = LogLevel::Critical; break;
+                }
+                const std::string_view source = context.category ? std::string_view(context.category)
+                                                                 : std::string_view("Qt");
+                LogService::instance().write(level, source, message.toStdString());
+                if (type == QtFatalMsg)
+                {
+                    std::fputs("VisionRT fatal: ", stderr);
+                    std::fputs(message.toUtf8().constData(), stderr);
+                    std::fputc('\n', stderr);
+                }
+                inside = false;
+            });
+        impl_->handlerInstalled = true;
+
+        impl_->running.store(true, std::memory_order_release);
+        gRunning.store(true, std::memory_order_release);
+    }
+    // Startup log lines are dispatched outside the exclusive writeMutex to avoid recursive lock acquisition
     if (impl_->fileReady)
         info("日志", ("日志服务已启动：" + impl_->path).toStdString());
     else
@@ -489,17 +584,36 @@ std::vector<LogService::PendingError> LogService::takePending()
     return pending;
 }
 
+void LogService::postPendingSummaryLocked(const PendingError &entry, std::size_t maxBytes)
+{
+    const std::string suffix = "（重复 " + std::to_string(entry.repeats) + " 次）";
+    std::string summary;
+    if (maxBytes > suffix.size())
+    {
+        const auto bounded = boundedSingleLine(entry.message, maxBytes - suffix.size());
+        summary = bounded + suffix;
+    }
+    else
+    {
+        const std::string shortSuffix = "×" + std::to_string(entry.repeats);
+        if (maxBytes > shortSuffix.size())
+            summary = boundedSingleLine(entry.message, maxBytes - shortSuffix.size()) + shortSuffix;
+        else
+            summary = boundedSingleLine(shortSuffix, maxBytes);
+    }
+    postLocked(entry.level, entry.source, summary, entry.last);
+}
+
 void LogService::postPendingLocked()
 {
     if (!impl_->logger)
         return;
+    const auto maxBytes = impl_->config.maxMessageBytes;
     for (const auto &entry : takePending())
     {
         if (entry.repeats == 0)
             continue;
-        postLocked(entry.level, entry.source,
-                   boundedSingleLine(entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）",
-                                     impl_->config.maxMessageBytes), entry.last);
+        postPendingSummaryLocked(entry, maxBytes);
     }
 }
 
@@ -510,25 +624,36 @@ void LogService::writeImpl(LogLevel level, std::string_view source, std::string_
         writeError(source, message);
         return;
     }
-    const auto boundedSource = boundedSingleLine(source, kMaxSourceBytes);
-    const auto boundedMessage = boundedSingleLine(message, impl_->config.maxMessageBytes);
 
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
         return;
+
+    const auto maxBytes       = impl_->config.maxMessageBytes;
+    const auto boundedSource  = boundedSingleLine(source, kMaxSourceBytes);
+    const auto boundedMessage = boundedSingleLine(message, maxBytes);
     postLocked(level, boundedSource, boundedMessage, spdlog::log_clock::now());
 }
 
 void LogService::writeError(std::string_view source, std::string_view message)
 {
-    const auto boundedSource = boundedSingleLine(source, kMaxSourceBytes);
-    const auto boundedMessage = boundedSingleLine(message, impl_->config.maxMessageBytes);
-
-    std::vector<PendingError> released;
-    bool                      announce = false;
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
         return;
+
+    const auto maxBytes       = impl_->config.maxMessageBytes;
+    const auto boundedSource  = boundedSingleLine(source, kMaxSourceBytes);
+    const auto boundedMessage = boundedSingleLine(message, maxBytes);
+
+    // Oversized messages do not participate in duplicate coalescing
+    if (message.size() >= maxBytes)
+    {
+        postLocked(LogLevel::Error, boundedSource, boundedMessage, spdlog::log_clock::now());
+        return;
+    }
+
+    std::vector<PendingError> released;
+    bool                      announce = false;
     const auto now = spdlog::log_clock::now();
     {
         std::lock_guard<std::mutex> coalesce(impl_->coalesceMutex);
@@ -559,9 +684,7 @@ void LogService::writeError(std::string_view source, std::string_view message)
         postLocked(LogLevel::Error, boundedSource, boundedMessage, now);
     for (const auto &entry : released)
         if (entry.repeats > 0)
-            postLocked(entry.level, entry.source,
-                       boundedSingleLine(entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）",
-                                         impl_->config.maxMessageBytes), entry.last);
+            postPendingSummaryLocked(entry, maxBytes);
 }
 
 void LogService::flushPending()

@@ -164,7 +164,7 @@ try
 
     controller.addNode(QStringLiteral("visionrt.image.read"), 0, 0);
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
-            "available tool was not added");
+            ("available tool was not added: " + controller.diagnostic().toStdString()).c_str());
 
     controller.filterTools(QStringLiteral("ROI几何"));
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
