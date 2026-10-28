@@ -91,7 +91,7 @@ class Gate:
                 raise RuntimeError('Cancellation fixture gate deadline exceeded')
             time.sleep(0.001)
         record('return:' + str(self.calls))
-        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': self.calls}}
+        return {'outputs': {'value': self.calls, '__status_code': 0, '__status_message': ''}, 'detail': ''}
     def release(self):
         record('release')
         return {'code': 0, 'message': '', 'detail': ''}
@@ -100,7 +100,7 @@ class Gate:
 
 def tail(inputs):
     record('tail')
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': inputs['value']}}
+    return {'outputs': {'value': inputs['value'], '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )");
     ToolRegistry definitions;
     definitions.registerPackage(readToolsPackage(std::filesystem::path(root.toStdU16String()) / "tools-package"));

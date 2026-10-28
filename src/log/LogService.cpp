@@ -79,40 +79,54 @@ std::unique_ptr<spdlog::formatter> makeFormatter()
     return std::make_unique<spdlog::pattern_formatter>(kLinePattern, spdlog::pattern_time_type::local);
 }
 
-// One record is one line: the format string cannot stop an embedded newline, so the line-breaking
-// controls are escaped here instead of being written through. The tool's own output text keeps its
-// original characters; only the log line carries the visible escape.
-std::string singleLine(std::string_view text)
-{
-    std::string escaped;
-    escaped.reserve(text.size());
-    for (const char character : text)
-    {
-        switch (character)
-        {
-        case '\r': escaped.append("\\r"); break;
-        case '\n': escaped.append("\\n"); break;
-        case '\v': escaped.append("\\v"); break;
-        case '\f': escaped.append("\\f"); break;
-        case '\0': escaped.append("\\0"); break;
-        default: escaped.push_back(character); break;
-        }
-    }
-    return escaped;
-}
+constexpr std::size_t kMaxSourceBytes = 128;
 
-// Caps on a UTF-8 character boundary: a truncated multi-byte sequence would put invalid bytes into
-// the file and into the window, which is exactly the corruption the cap is supposed to avoid.
-std::string capBytes(std::string_view text, std::size_t maximum)
+// Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
+// Truncation appends "…" without producing invalid UTF-8 sequences.
+std::string boundedSingleLine(std::string_view text, std::size_t maxBytes)
 {
-    if (text.size() <= maximum)
-        return std::string(text);
-    std::size_t keep = maximum;
-    while (keep > 0 && (static_cast<unsigned char>(text[keep]) & 0xC0U) == 0x80U)
-        --keep;
-    std::string capped(text.substr(0, keep));
-    capped.append("…");
-    return capped;
+    if (maxBytes == 0)
+        return {};
+    std::string escaped;
+    escaped.reserve(std::min(text.size(), maxBytes));
+    bool truncated = false;
+    std::size_t i = 0;
+    while (i < text.size())
+    {
+        const char c = text[i];
+        std::string_view seq;
+        switch (c)
+        {
+        case '\r': seq = "\\r"; break;
+        case '\n': seq = "\\n"; break;
+        case '\v': seq = "\\v"; break;
+        case '\f': seq = "\\f"; break;
+        case '\0': seq = "\\0"; break;
+        default: {
+            const auto u = static_cast<unsigned char>(c);
+            std::size_t len = 1;
+            if ((u & 0x80U) != 0)
+            {
+                if ((u & 0xE0U) == 0xC0U) len = 2;
+                else if ((u & 0xF0U) == 0xE0U) len = 3;
+                else if ((u & 0xF8U) == 0xF0U) len = 4;
+            }
+            if (i + len > text.size()) len = 1;
+            seq = text.substr(i, len);
+            break;
+        }
+        }
+        if (escaped.size() + seq.size() > maxBytes)
+        {
+            truncated = true;
+            break;
+        }
+        escaped.append(seq);
+        i += (c == '\r' || c == '\n' || c == '\v' || c == '\f' || c == '\0') ? 1 : seq.size();
+    }
+    if (truncated)
+        escaped.append("…");
+    return escaped;
 }
 
 // %v carries the business source in brackets so the formatter owns time, level and thread only.
@@ -132,7 +146,7 @@ std::string buildPayload(std::string_view source, std::string_view message)
 QString formatLine(spdlog::level::level_enum level, std::string_view source, std::string_view message,
                    spdlog::log_clock::time_point when = spdlog::log_clock::now())
 {
-    const auto payload = singleLine(buildPayload(source, message));
+    const auto payload = buildPayload(source, message);
     spdlog::details::log_msg msg(spdlog::string_view_t("visionrt", 9), level,
                                  spdlog::string_view_t(payload.data(), payload.size()));
     msg.time = when;
@@ -202,10 +216,7 @@ protected:
 
         LogRecord record;
         record.level = levelText(msg.level);
-        const auto size = std::min<std::size_t>(static_cast<std::size_t>(line.size()), maximumBytes_);
-        record.line     = line.left(static_cast<int>(size));
-        if (size < static_cast<std::size_t>(line.size()))
-            record.line += QStringLiteral("…");
+        record.line  = std::move(line);
         while (records_.size() >= capacity_)
         {
             records_.pop_front();
@@ -462,13 +473,7 @@ void LogService::write(LogLevel level, std::string_view source, std::string_view
 void LogService::postLocked(LogLevel level, std::string_view source, std::string_view message,
                             std::chrono::system_clock::time_point when)
 {
-    // One cap for both sinks: the line the window shows is the line the file contains. Escaping
-    // comes first so the cap counts the bytes that are actually written.
-    const auto escape = singleLine(message);
-    const auto capped = capBytes(escape, impl_->config.maxMessageBytes);
-    const auto payload = buildPayload(source, capped);
-    // The recorded time travels with the line: a coalesced summary is stamped when the burst was
-    // last seen, not when the timer happened to drain it.
+    const auto payload = buildPayload(source, message);
     impl_->logger->log(when, spdlog::source_loc{}, toSpd(level),
                        spdlog::string_view_t(payload.data(), payload.size()));
 }
@@ -492,10 +497,9 @@ void LogService::postPendingLocked()
     {
         if (entry.repeats == 0)
             continue;
-        // The summary keeps the level it was recorded with and the time of its last occurrence:
-        // a critical never becomes a plain error, and a burst does not look like it happened now.
         postLocked(entry.level, entry.source,
-                   entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）", entry.last);
+                   boundedSingleLine(entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）",
+                                     impl_->config.maxMessageBytes), entry.last);
     }
 }
 
@@ -506,16 +510,20 @@ void LogService::writeImpl(LogLevel level, std::string_view source, std::string_
         writeError(source, message);
         return;
     }
+    const auto boundedSource = boundedSingleLine(source, kMaxSourceBytes);
+    const auto boundedMessage = boundedSingleLine(message, impl_->config.maxMessageBytes);
+
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
         return;
-    // Critical is never collapsed and never waits for a timer: it is the one level that must reach
-    // the file and the window as soon as it happens.
-    postLocked(level, source, message, spdlog::log_clock::now());
+    postLocked(level, boundedSource, boundedMessage, spdlog::log_clock::now());
 }
 
 void LogService::writeError(std::string_view source, std::string_view message)
 {
+    const auto boundedSource = boundedSingleLine(source, kMaxSourceBytes);
+    const auto boundedMessage = boundedSingleLine(message, impl_->config.maxMessageBytes);
+
     std::vector<PendingError> released;
     bool                      announce = false;
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
@@ -524,9 +532,9 @@ void LogService::writeError(std::string_view source, std::string_view message)
     const auto now = spdlog::log_clock::now();
     {
         std::lock_guard<std::mutex> coalesce(impl_->coalesceMutex);
-        std::string                 key(source);
+        std::string                 key = boundedSource;
         key.push_back('\n');
-        key.append(message.data(), message.size());
+        key.append(boundedMessage);
         const auto found = impl_->pendingErrors.find(key);
         if (found == impl_->pendingErrors.end())
         {
@@ -537,8 +545,8 @@ void LogService::writeError(std::string_view source, std::string_view message)
                     released.push_back(std::move(entry.second));
                 impl_->pendingErrors.clear();
             }
-            impl_->pendingErrors.emplace(key, PendingError{LogLevel::Error, std::string(source),
-                                                           std::string(message), 0, now});
+            impl_->pendingErrors.emplace(key, PendingError{LogLevel::Error, boundedSource,
+                                                           boundedMessage, 0, now});
             announce = true;
         }
         else
@@ -548,11 +556,12 @@ void LogService::writeError(std::string_view source, std::string_view message)
         }
     }
     if (announce)
-        postLocked(LogLevel::Error, source, message, now);
+        postLocked(LogLevel::Error, boundedSource, boundedMessage, now);
     for (const auto &entry : released)
         if (entry.repeats > 0)
             postLocked(entry.level, entry.source,
-                       entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）", entry.last);
+                       boundedSingleLine(entry.message + "（重复 " + std::to_string(entry.repeats) + " 次）",
+                                         impl_->config.maxMessageBytes), entry.last);
 }
 
 void LogService::flushPending()

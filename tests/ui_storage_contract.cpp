@@ -75,12 +75,13 @@ def source(inputs):
                 raise RuntimeError('storage gate timed out')
             time.sleep(0.001)
         Path(gate + '.returned').write_text(str(token))
-    return {'status': {'code': 0, 'message': '', 'detail': ''},
-            'outputs': {'images': [pixels], 'token': token}}
+    return {'outputs': {'images': [pixels], 'token': token, '__status_code': 0, '__status_message': ''},
+            'detail': ''}
 def probe(inputs):
     live = [token for token, reference in references.items() if reference() is not None]
-    return {'status': {'code': 0, 'message': '', 'detail': ''},
-            'outputs': {'allocated': allocated, 'released': len(released), 'live': live}}
+    return {'outputs': {'allocated': allocated, 'released': len(released), 'live': live,
+                        '__status_code': 0, '__status_message': ''},
+            'detail': ''}
 )py");
     ImageViewport viewport;
     viewport.setSize({480, 320});

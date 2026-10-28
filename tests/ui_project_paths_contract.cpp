@@ -113,8 +113,8 @@ class Reader:
                 resource = path / '资源 文本.txt' if name == 'directory' or (name == 'dynamic' and values['mode'] == 'directory') else path
                 result[scope + '.' + name] = {'path': str(path), 'text': resource.read_text(encoding='utf-8')}
             result[scope + '.note'] = values['note']
-        return {'status': {'code': 0, 'message': '', 'detail': ''},
-                'outputs': {'data': json.dumps(result, ensure_ascii=False)}}
+        return {'outputs': {'data': json.dumps(result, ensure_ascii=False), '__status_code': 0, '__status_message': ''}, 'detail': ''}
+
 )py");
     const auto original  = root + "/原始 工程/项目.vrt.json";
     const auto sameDrive = root + "/同盘 另存/另存.vrt.json";

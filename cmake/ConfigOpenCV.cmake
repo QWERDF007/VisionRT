@@ -59,3 +59,9 @@ endif()
 foreach(_visionrt_target IN LISTS _visionrt_opencv_modules)
     list(APPEND VISIONRT_OPENCV_RUNTIME_DLLS "$<TARGET_FILE:${_visionrt_target}>")
 endforeach()
+
+if(_visionrt_opencv_modules)
+    string(JOIN "\n" _visionrt_opencv_manifest ${VISIONRT_OPENCV_RUNTIME_DLLS})
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/opencv_runtime_$<CONFIG>.txt"
+         CONTENT "${_visionrt_opencv_manifest}\n")
+endif()

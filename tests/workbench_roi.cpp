@@ -58,10 +58,11 @@ void roiParameterContract()
 })json");
     write("python/custom/roi/source.py",
           "import numpy as np\ndef run(inputs):\n"
-          "    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'images': [np.zeros((96, 128, 3), dtype=np.uint8), "
+          "    return {'outputs': {'images': [np.zeros((96, 128, 3), dtype=np.uint8), "
           "np.ones((24, 32, 3), dtype=np.uint8)], "
           "'rect': [[np.array([2, 1.25, 2.5, 3.75, 4.5, 17.5], dtype=np.float64).tolist()]], "
-          "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float64).tolist()]]}}\n");
+          "'rois': [[np.array([2, 40, 40, 10, 10, 0], dtype=np.float64).tolist()]], "
+          "'__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools/custom/roi/source.json",
           R"json({
   "schema_version": 4,
@@ -80,13 +81,14 @@ void roiParameterContract()
 })json");
     write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
-          "    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'count': len(inputs['rois'][0]), "
+          "    return {'outputs': {'count': len(inputs['rois'][0]), "
           "'images': inputs['images'], 'regions': [[np.array([2, 60, 75, 15, 10, 0], dtype=np.float64).tolist()], []], "
           "'unrelated_images': inputs['images'][:1], 'unavailable_images': [], "
           "'cropped_images': [image[5:, 10:] for image in inputs['images']], "
           "'crop_regions': [[np.array([2, 25, 20, 10, 10, 0], dtype=np.float64).tolist()], []], "
           "'origins': np.array([[10, 5] for image in inputs['images']], dtype=np.float64).tolist(), "
-          "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float64).tolist()]]}}\n");
+          "'unrelated_regions': [[np.array([2, 30, 75, 15, 10, 0], dtype=np.float64).tolist()]], "
+          "'__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools/custom/roi/editor.json",
           R"json({
   "schema_version": 4,
@@ -147,7 +149,7 @@ void roiParameterContract()
     };
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
-    quickui::QuiColor::getInstance()->setPrimary(Theme::instance()->surfaceBg());
+    quickui::QuiColor::getInstance()->setPrimary(themeForEngine(&engine)->surfaceBg());
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQmlComponent component(&engine);

@@ -87,14 +87,14 @@ void adaptersAndRefresh(PythonRuntime &runtime)
 from . import helper
 import numpy
 def execute(inputs):
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': helper.value}}
+    return {'outputs': {'value': helper.value, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 class Counter:
     def initialize(self, inputs):
         self.count = 0
         return {'code': 0, 'message': '', 'detail': ''}
     def execute(self, inputs):
         self.count += 1
-        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': self.count}}
+        return {'outputs': {'value': self.count, '__status_code': 0, '__status_message': ''}, 'detail': ''}
     def release(self):
         return {'code': 0, 'message': '', 'detail': ''}
 class Broken:
@@ -110,15 +110,15 @@ class BadConstructor(Counter):
 def missing(inputs):
     return {'code': 0, 'message': '', 'detail': ''}
 def extra(inputs):
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': 1, 'typo': 2}}
+    return {'outputs': {'value': 1, 'typo': 2, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 def wrong(inputs):
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': True}}
+    return {'outputs': {'value': True, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 def business(inputs):
-    return {'status': {'code': 5, 'message': 'expected failure', 'detail': ''}, 'outputs': {'value': 7}}
+    return {'outputs': {'value': 7, '__status_code': 5, '__status_message': 'expected failure'}, 'detail': ''}
 def partial(inputs):
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': 9, 'other': True}}
+    return {'outputs': {'value': 9, 'other': True, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 def absent(inputs):
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': None}}
+    return {'outputs': {'value': None, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )");
     auto function    = sources.definition("python.function", ToolKind::PythonFunction, "execute");
     auto counter     = sources.definition("python.counter", ToolKind::PythonClass, "Counter");
@@ -196,7 +196,7 @@ def absent(inputs):
             assert(failed.find("输出键必须与声明端口") != std::string::npos);
         else
             // A status dict is a lifecycle answer: execute owes the two-field envelope.
-            assert(failed.find("execute 必须返回 status 与 outputs") != std::string::npos);
+            assert(failed.find("execute 必须返回 outputs 与 detail") != std::string::npos);
     }
     {
         auto       instance = runtime.factory(business)(services);
@@ -227,7 +227,7 @@ def absent(inputs):
 from . import helper
 def execute(inputs):
     assert not hasattr(helper, 'obsolete')
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': helper.value}}
+    return {'outputs': {'value': helper.value, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )");
     runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     {
@@ -271,8 +271,8 @@ class PathProbe:
         self.base = params['base_dir']
         return {'code': 0, 'message': 'ok', 'detail': ''}
     def execute(self, inputs):
-        return {'status': {'code': 0, 'message': 'ok', 'detail': ''},
-                'outputs': {'resolved': self.base + '|' + inputs['input_path']}}
+        return {'outputs': {'resolved': self.base + '|' + inputs['input_path'], '__status_code': 0, '__status_message': 'ok'},
+                'detail': ''}
     def release(self):
         return {'code': 0, 'message': 'ok', 'detail': ''}
 )");

@@ -115,8 +115,7 @@ ToolStatus decodeStatus(const py::dict &status, const PythonStorage &storage)
     result.code    = std::get<std::int64_t>(fromPython({Type::Int}, status["code"], storage, "status.code"));
     result.message = std::get<std::string>(fromPython({Type::String}, status["message"], storage, "status.message"));
     result.detail  = std::get<std::string>(fromPython({Type::String}, status["detail"], storage, "status.detail"));
-    if (!result && isBlankMessage(result.message))
-        throw ContractError("失败状态必须给出可读消息");
+
     return result;
 }
 
@@ -379,25 +378,21 @@ public:
 
         phase_                          = NodePhase::Convert;
         metrics_.pythonOutputMeasured   = true;
-        Values     outputs;
-        ToolStatus status;
+        Values      outputs;
+        std::string detail;
         {
             ScopeTimer outputTimer(metrics_.pythonOutputMs);
             try
             {
                 auto envelope = resultDictionary(returned);
-                if (envelope.size() != 2 || !envelope.contains("status") || !envelope.contains("outputs"))
-                    throw ContractError("execute 必须返回 status 与 outputs");
-                if (!py::isinstance<py::dict>(envelope["status"]) || !py::isinstance<py::dict>(envelope["outputs"]))
-                    throw ContractError("status 与 outputs 必须是字典");
-                status = decodeStatus(py::reinterpret_borrow<py::dict>(envelope["status"]), state_->storage);
+                if (envelope.size() != 2 || !envelope.contains("outputs") || !envelope.contains("detail"))
+                    throw ContractError("execute 必须返回 outputs 与 detail");
+                if (!py::isinstance<py::dict>(envelope["outputs"]) || !py::isinstance<py::str>(envelope["detail"]))
+                    throw ContractError("outputs 必须是字典且 detail 必须是字符串");
                 const auto outputsDictionary = py::reinterpret_borrow<py::dict>(envelope["outputs"]);
-                std::size_t businessPorts = 0;
+                detail = envelope["detail"].cast<std::string>();
                 for (const auto &output : definition_.outputs)
                 {
-                    if (isStatusPort(output.id))
-                        continue;
-                    ++businessPorts;
                     const auto key = py::str(output.id);
                     if (!outputsDictionary.contains(key))
                         throw ContractError("输出键必须与声明端口一致，缺少：" + output.id);
@@ -410,10 +405,9 @@ public:
                     {
                         throw ContractError("输出端口 " + output.id + "：" + error.what());
                     }
-                    validateToolOutput(output, value, status);
                     outputs.emplace(output.id, std::move(value));
                 }
-                if (outputsDictionary.size() != businessPorts)
+                if (outputsDictionary.size() != definition_.outputs.size())
                     throw ContractError("输出键必须与声明端口完全一致：多出或缺少业务端口");
                 outputTimer.stop();
             }
@@ -431,7 +425,7 @@ public:
             }
         }
         phase_ = NodePhase::Execute;
-        return toolResult(std::move(outputs), std::move(status));
+        return ToolResult{std::move(outputs), std::move(detail)};
     }
 
     ToolStatus releaseWithGil() noexcept

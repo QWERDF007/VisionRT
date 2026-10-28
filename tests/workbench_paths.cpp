@@ -55,7 +55,7 @@ void pathEditorsContract()
   "runtime_files": []
 })json");
     write("tools-package/python/custom/Test/run.py",
-          "def run(inputs):\n    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'mode_value': 'directory'}}\n");
+          "def run(inputs):\n    return {'outputs': {'mode_value': 'directory', '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
   "schema_version": 4,
@@ -413,8 +413,11 @@ void readImageToolUiContract()
             "Escape did not cancel the path picker");
     require(value("path").isEmpty() && !app.dirty(), "cancelled picker changed parameter or marked project dirty");
 
-    // 3. Test File selection: F:/Projects/InferRT/assets/pics/bus.jpg
-    const QString imageFile = QStringLiteral("F:/Projects/InferRT/assets/pics/bus.jpg");
+    // 3. Test File selection: bus.jpg
+    QString imageDir = QStringLiteral("D:/Project/InferRT/assets/pics");
+    if (!QDir(imageDir).exists())
+        imageDir = QStringLiteral("F:/Projects/InferRT/assets/pics");
+    const QString imageFile = imageDir + QStringLiteral("/bus.jpg");
     require(QFile::exists(imageFile), "InferRT test asset bus.jpg is missing");
     click(chooseBtn);
     require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),
@@ -436,8 +439,7 @@ void readImageToolUiContract()
     }
     require(!app.imageOutputs().isEmpty(), "image read produced no image outputs for bus.jpg");
 
-    // 4. Test Directory selection: F:/Projects/InferRT/assets/pics
-    const QString imageDir = QStringLiteral("F:/Projects/InferRT/assets/pics");
+    // 4. Test Directory selection
     require(QDir(imageDir).exists(), "InferRT test asset dir pics is missing");
     click(chooseBtn);
     require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),

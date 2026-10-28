@@ -64,12 +64,14 @@ class Tool:
     def execute(self, inputs):
         value = int(inputs.get('value', 1))
         if value < 0:
-            return {'status': {'code': 1, 'message': '受控发布失败', 'detail': ''},
-                    'outputs': {'value': None, 'image': None, 'rect': [], 'note': ''}}
+            return {'outputs': {'value': None, 'image': None, 'rect': [], 'note': '',
+                                '__status_code': 1, '__status_message': '受控发布失败'},
+                    'detail': ''}
         image = np.full((4, 4), self.init + value, dtype=np.uint8)
-        return {'status': {'code': 0, 'message': '', 'detail': ''},
-                'outputs': {'value': value, 'image': [image],
-                            'rect': [[[1.0, 2.0, 3.0, 4.0, 0.0]]], 'note': f'{self.init}:{value}'}}
+        return {'outputs': {'value': value, 'image': [image],
+                            'rect': [[[1.0, 2.0, 3.0, 4.0, 0.0]]], 'note': f'{self.init}:{value}',
+                            '__status_code': 0, '__status_message': ''},
+                'detail': ''}
 
     def release(self):
         return {'code': 0, 'message': '', 'detail': ''}

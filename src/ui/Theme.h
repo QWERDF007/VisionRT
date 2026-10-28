@@ -90,7 +90,8 @@ private:                                                                  \
 
 // Registers the single VisionRT.Style module singleton used by the application
 // and by every test that loads workbench QML. Idempotent.
-void registerStyleModule();
+class Theme;
+Theme *themeForEngine(QQmlEngine *engine);
 
 class Theme : public QObject
 {
@@ -100,7 +101,7 @@ class Theme : public QObject
 
 public:
     explicit Theme(QObject *parent = nullptr);
-    static Theme *instance();
+
 
     // 顶部菜单栏与工具栏按钮色彩
     THEME_COLOR_PROP(menuBarBg)
@@ -310,6 +311,9 @@ public:
 private:
     void initLightIndustrialPalette();
 };
+
+void registerStyleModule();
+Theme *themeForEngine(QQmlEngine *engine);
 
 #undef THEME_COLOR_PROP
 #undef THEME_INT_PROP
