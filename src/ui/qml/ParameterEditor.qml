@@ -200,6 +200,25 @@ ColumnLayout {
                 border.color: controlFrame.frameBorderColor
                 z: 10
             }
+
+            QuiFileFolderDialog {
+                id: pathPicker
+                title: root.parameter.editor === "directory"
+                           ? "选择文件夹"
+                           : (root.parameter.editor === "file"
+                               ? "选择文件"
+                               : "选择文件或文件夹")
+                currentFolder: root.valueText
+                dialogMode: root.parameter.editor === "directory"
+                                ? QuiFileFolderDialog.DialogMode.Folder
+                                : (root.parameter.editor === "file"
+                                    ? QuiFileFolderDialog.DialogMode.File
+                                    : QuiFileFolderDialog.DialogMode.FileOrFolder)
+                onAccepted: (path) => {
+                    if (root.editable)
+                        app.setParameterPath(root.parameter.id, root.parameter.init, path)
+                }
+            }
         }
 
     }
@@ -707,24 +726,6 @@ ColumnLayout {
                 function onValueTextChanged() { field.sync(false) }
                 function onParameterKeyChanged() { field.sync(true) }
             }
-        }
-    }
-    QuiFileFolderDialog {
-        id: pathPicker
-        title: root.parameter.editor === "directory"
-                   ? "选择文件夹"
-                   : (root.parameter.editor === "file"
-                       ? "选择文件"
-                       : "选择文件或文件夹")
-        currentFolder: root.valueText
-        dialogMode: root.parameter.editor === "directory"
-                        ? QuiFileFolderDialog.DialogMode.Folder
-                        : (root.parameter.editor === "file"
-                            ? QuiFileFolderDialog.DialogMode.File
-                            : QuiFileFolderDialog.DialogMode.FileOrFolder)
-        onAccepted: (path) => {
-            if (root.editable)
-                app.setParameterPath(root.parameter.id, root.parameter.init, path)
         }
     }
 }
