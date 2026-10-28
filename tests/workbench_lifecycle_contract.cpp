@@ -97,8 +97,8 @@ class Gate:
             time.sleep(0.001)
         record(f'return:{self.serial}')
         img = np.zeros((10, 10), dtype=np.uint8)
-        return {'status': {'code': 0, 'message': '', 'detail': ''},
-                'outputs': {'value': 1, 'image': [img]}}
+        return {'outputs': {'value': 1, 'image': [img], '__status_code': 0, '__status_message': ''}, 'detail': ''}
+
 
     def release(self):
         record(f'release:{self.serial}')

@@ -71,7 +71,7 @@ class Counter:
     def execute(self, inputs):
         self.count += 1
         bump('exec')
-        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': self.count}}
+        return {'outputs': {'value': self.count, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 
     def release(self):
         return {'code': 0, 'message': '', 'detail': ''}

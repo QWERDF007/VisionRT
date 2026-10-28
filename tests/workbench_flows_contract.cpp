@@ -184,6 +184,8 @@ try
     auto *confirm = dialogButton(dialog, "确认");
     require(confirm, "flow delete dialog has no confirm button");
     click(window, confirm);
+    require(QTest::qWaitFor([&] { return !dialog->property("visible").toBool(); }, 2000),
+            "confirm did not close the confirmation dialog");
     idle();
     require(findFlow(target.value("id").toString()).isEmpty(), "confirm did not delete the target flow");
     require(!app.currentFlow().isEmpty() && !findFlow(app.currentFlow()).isEmpty(), "deleted flow left no active flow");

@@ -57,10 +57,11 @@ try
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"
           "def source(inputs):\n"
           " global epoch\n epoch += 1\n pixels[:40] = epoch\n time.sleep(0.12)\n pixels[40:] = epoch\n"
-          " return {'status':{'code':0,'message':'','detail':''}, 'outputs':{'images':[pixels, pixels[:40,:60]], "
-          "'epoch':epoch, 'values':[[9007199254740993],[],[4,5]], 'regions':[[[3.,20.,20.,5.]],[]]}}\n"
+          " return {'outputs':{'images':[pixels, pixels[:40,:60]], "
+          "'epoch':epoch, 'values':[[9007199254740993],[],[4,5]], 'regions':[[[3.,20.,20.,5.]],[]], "
+          "'__status_code':0, '__status_message':''}, 'detail':''}\n"
           "def edit(inputs):\n"
-          " return {'status':{'code':0,'message':'','detail':''}, 'outputs':{'images':inputs['images']}}\n");
+          " return {'outputs':{'images':inputs['images'], '__status_code':0, '__status_message':''}, 'detail':''}\n");
     AppController app(2, directory.path());
     const auto    idle = [&]
     {

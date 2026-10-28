@@ -87,8 +87,7 @@ void sharedPackages(PythonRuntime &runtime, const std::filesystem::path &root)
     const auto  source  = root / "python/custom/math";
     const auto  builtin = root / "python/builtin/math";
     const char *tool
-        = "from .helper import next_value\ndef execute(inputs): return {'status':{'code':0,'message':'','detail':''}, 'outputs':{"
-          "'value':next_value()}}\n";
+        = "from .helper import next_value\ndef execute(inputs): return {'outputs':{'value':next_value(),'__status_code':0,'__status_message':''}, 'detail':''}\n";
     write(source / "helper.py", "count=0\ndef next_value():\n global count\n count+=1\n return count\n");
     write(source / "first.py", tool);
     write(source / "second.py", tool);
@@ -113,7 +112,7 @@ class Counter:
         return {'code': 0, 'message': '', 'detail': ''}
     def execute(self, inputs):
         self.count += 1
-        return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':self.count}}
+        return {'outputs': {'value':self.count, '__status_code': 0, '__status_message': ''}, 'detail': ''}
     def release(self):
         return {'code': 0, 'message': '', 'detail': ''}
 )");
@@ -135,7 +134,7 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
     assert(runtime.refresh(std::span(&definition, 1))[0].status.code == 0);
     const auto old = runtime.factory(definition);
     unavailable(old, ErrorCode::PythonUnavailable);
-    const char *fixed = "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':13}}\n";
+    const char *fixed = "def execute(inputs): return {'outputs': {'value':13, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n";
     write(source, fixed);
     unavailable(old, ErrorCode::PythonUnavailable);
     runtime.refresh(std::span(&definition, 1));
@@ -145,7 +144,7 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
         assert(execute(*instance) == 13);
     }
     const auto timestamp = std::filesystem::last_write_time(source);
-    write(source, "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':14}}\n");
+    write(source, "def execute(inputs): return {'outputs': {'value':14, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     std::filesystem::last_write_time(source, timestamp);
     runtime.refresh(std::span(&definition, 1));
     {
@@ -173,8 +172,7 @@ void nativeHelper(PythonRuntime &runtime, const std::filesystem::path &root)
                                    std::filesystem::copy_options::overwrite_existing);
     }
     write(package / "native.py",
-          "from . import _queue\ndef execute(inputs): return {'status':{'code':0,'message':'','detail':''}, 'outputs':{"
-          "'value':int(_queue.SimpleQueue().empty())}}\n");
+          "from . import _queue\ndef execute(inputs): return {'outputs':{'value':int(_queue.SimpleQueue().empty()),'__status_code':0,'__status_message':''}, 'detail':''}\n");
     runtime.refresh(std::span(&definition, 1));
     auto instance = runtime.factory(definition)({});
     assert(execute(*instance) == 1);
@@ -200,8 +198,7 @@ void packageBoundaries(PythonRuntime &runtime, const std::filesystem::path &root
     std::filesystem::create_directory_symlink(external, link);
 #endif
     write(package / "escape.py",
-          "from .linked.helper import value\ndef execute(inputs): return {'status':{'code':0,'message':'','detail':''}, 'outputs':{"
-          "'value':value}}\n");
+          "from .linked.helper import value\ndef execute(inputs): return {'outputs':{'value':value,'__status_code':0,'__status_message':''}, 'detail':''}\n");
     const auto escaped = definitionFor(root, "python.escape", "escape.py");
     runtime.refresh(std::span(&escaped, 1));
     unavailable(runtime.factory(escaped), ErrorCode::PythonUnavailable);
@@ -210,7 +207,7 @@ void packageBoundaries(PythonRuntime &runtime, const std::filesystem::path &root
     assert(std::filesystem::exists(external / "helper.py"));
 
     write(package / "__init__.py",
-          "value=81\ndef execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':value}}\n");
+          "value=81\ndef execute(inputs): return {'outputs': {'value':value, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     const auto entry = definitionFor(root, "python.package_entry", "__init__.py");
     runtime.refresh(std::span(&entry, 1));
     {
@@ -219,8 +216,7 @@ void packageBoundaries(PythonRuntime &runtime, const std::filesystem::path &root
     }
     const auto named = definitionFor(root, "python.unicode_entry", std::filesystem::path(u8"模块.py"));
     write(package / named.entry.file,
-          "from . import value\ndef execute(inputs): return {'status':{'code':0,'message':'','detail':''}, 'outputs':{"
-          "'value':value+1}}\n");
+          "from . import value\ndef execute(inputs): return {'outputs':{'value':value+1,'__status_code':0,'__status_message':''}, 'detail':''}\n");
     runtime.refresh(std::span(&named, 1));
     {
         auto instance = runtime.factory(named)({});
@@ -240,10 +236,10 @@ void coldConcurrentRollback(PythonRuntime &runtime, const std::filesystem::path 
           "TOKEN = builtins.visionrt_cold_root_count\n");
     write(package / "good.py",
           "from . import TOKEN\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':TOKEN}}\n");
+          "def execute(inputs): return {'outputs': {'value':TOKEN, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "sibling.py",
           "from . import TOKEN\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':TOKEN}}\n");
+          "def execute(inputs): return {'outputs': {'value':TOKEN, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "broken.py",
           "from pathlib import Path\n"
           "import time\n"
@@ -300,10 +296,10 @@ void sharedHelperRollback(PythonRuntime &runtime, const std::filesystem::path &r
           "VALUE = builtins.visionrt_helper_count\n");
     write(package / "good.py",
           "from . import helper\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':helper.VALUE}}\n");
+          "def execute(inputs): return {'outputs': {'value':helper.VALUE, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "sibling.py",
           "from . import helper\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':helper.VALUE}}\n");
+          "def execute(inputs): return {'outputs': {'value':helper.VALUE, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "broken.py",
           "from . import helper\n"
           "from pathlib import Path\n"
@@ -361,10 +357,10 @@ void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::pat
           "VALUE = builtins.visionrt_cn_helper_count\n");
     write(package / "good.py",
           "from .helper import VALUE\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':VALUE}}\n");
+          "def execute(inputs): return {'outputs': {'value':VALUE, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "sibling.py",
           "from .helper import VALUE\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':VALUE}}\n");
+          "def execute(inputs): return {'outputs': {'value':VALUE, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "broken.py",
           "from . import helper\n"
           "from pathlib import Path\n"
@@ -380,7 +376,7 @@ void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::pat
     write(package / "numpy_warm.py",
           "import numpy as np\n"
           "FRAME = np.arange(4).reshape(2, 2)\n"
-          "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':int(FRAME.sum())}}\n");
+          "def execute(inputs): return {'outputs': {'value':int(FRAME.sum()), '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write(package / "numpy_broken.py",
           "from . import helper\n"
           "raise RuntimeError('controlled original failure')\n");
@@ -466,7 +462,7 @@ try
         std::ofstream script(code / "tool.py");
         script << "from pathlib import Path\n"
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
-                  "def execute(inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':23}}\n";
+                  "def execute(inputs): return {'outputs': {'value':23, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n";
     }
     const auto    definition = parseToolDefinitionJson(R"({
         "schema_version":4, "tool_id":"python.lazy", "display_name":"Lazy", "version":"1",

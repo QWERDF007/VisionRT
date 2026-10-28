@@ -481,7 +481,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             {
                 // The tool owns its declared business ports and its status. A non-zero business
                 // code is legal data and never turns into a framework failure.
-                businessStatus = validateToolExecution(definition->outputs, result.outputs, result.status);
+                businessStatus = validateToolExecution(definition->outputs, result.outputs, result.detail);
                 for (const auto &output : definition->outputs)
                 {
                     if (output.sameGeometryAsInput.empty())
@@ -545,7 +545,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     {
         // Only a tool that actually returned a result owns the two status ports. They are the
         // existing output ports the UI already shows, filled from the one status the tool reported.
-        snapshot->status              = materialiseToolStatus(result.outputs, businessStatus);
+        snapshot->status              = std::move(businessStatus);
         snapshot->toolResultPublished = true;
     }
     if (disposition == NodeDisposition::Running)

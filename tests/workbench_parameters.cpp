@@ -53,8 +53,7 @@ void parameterEditorsContract()
   "runtime_files": []
 })json");
     write("python/custom/Test/Parameters/run.py",
-          "def run(inputs):\n    return {'status': {'code': 0, 'message': '', 'detail': ''}, "
-          "'outputs': {'ratio': inputs['ratio'], 'count': inputs['count']}}\n");
+          "def run(inputs):\n    return {'outputs': {'ratio': inputs['ratio'], 'count': inputs['count'], '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
   "schema_version": 4,
@@ -96,6 +95,8 @@ void parameterEditorsContract()
     require(!app.setParameter("ratio", false, ".nan"), "YAML numeric syntax must not be accepted");
     require(!app.setParameter("weights", false, "{shape: [2], data: [0, 1]}"), "YAML arrays must not be accepted");
     QQmlEngine engine;
+    auto *theme = themeForEngine(&engine);
+    require(theme != nullptr, "Theme must be available for engine");
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQmlComponent component(&engine);
@@ -116,11 +117,11 @@ void parameterEditorsContract()
     require(QTest::qWaitForWindowExposed(&window), "parameter window was not exposed");
     QTest::qWait(50);
 
-    require(Theme::instance()->paramEditorHeight() == 32, "parameter theme height is not the shared 32 pixel contract");
+    require(theme->paramEditorHeight() == 32, "parameter theme height is not the shared 32 pixel contract");
     auto *input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "Float parameter did not use the public spin editor");
     require(input->height() >= 28, "Float input did not inherit the parameter height");
-    require(input->property("font").value<QFont>().pixelSize() == Theme::instance()->paramEditorFontSize(),
+    require(input->property("font").value<QFont>().pixelSize() == theme->paramEditorFontSize(),
             "Float input did not inherit the shared parameter font");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
@@ -399,8 +400,8 @@ void parameterEditorsContract()
         require(row != nullptr, "parameter panel did not render a dropdown row");
         auto *combo = comboBox(row);
         require(combo != nullptr, "Bool/enum parameter did not use a dropdown");
-        require(combo->height() == Theme::instance()->paramEditorHeight(), "dropdown height differs from numeric field");
-        require(combo->property("font").value<QFont>().pixelSize() == Theme::instance()->paramEditorFontSize(),
+        require(combo->height() == theme->paramEditorHeight(), "dropdown height differs from numeric field");
+        require(combo->property("font").value<QFont>().pixelSize() == theme->paramEditorFontSize(),
                 "dropdown font differs from numeric field");
         auto *label = findItem(findItem, row, "parameterLabel");
         auto *pathLabel = findItem(findItem, pathRow, "parameterLabel");
@@ -540,8 +541,8 @@ void parameterEditorsContract()
     require(groupSection != nullptr, "parameter group is missing from the visual tree");
     require(groupSection->property("expand").toBool(), "parameter group is unexpectedly collapsed before header interaction");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                      groupSection->mapToScene(QPointF(groupSection->width() / 2, Theme::instance()->paramGroupHeaderHeight() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return groupSection->height() <= Theme::instance()->paramGroupHeaderHeight() + 1; }, 1000),
+                      groupSection->mapToScene(QPointF(groupSection->width() / 2, theme->paramGroupHeaderHeight() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return groupSection->height() <= theme->paramGroupHeaderHeight() + 1; }, 1000),
             "parameter group header did not collapse its content");
     require(!groupSection->property("expand").toBool(), "parameter group remained expanded after its header was clicked");
     panel->setProperty("currentTab", 1);
@@ -551,8 +552,8 @@ void parameterEditorsContract()
     groupSection = parameterGroup();
     require(groupSection != nullptr && !groupSection->property("expand").toBool(), "tab navigation lost the collapsed group state");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                      groupSection->mapToScene(QPointF(groupSection->width() / 2, Theme::instance()->paramGroupHeaderHeight() / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return groupSection->height() > Theme::instance()->paramGroupHeaderHeight() + 1; }, 1000),
+                      groupSection->mapToScene(QPointF(groupSection->width() / 2, theme->paramGroupHeaderHeight() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return groupSection->height() > theme->paramGroupHeaderHeight() + 1; }, 1000),
             "collapsed parameter group could not expand again");
     require(app.parameters() == groupedParameters && parameterChanges.count() == groupChanges,
             "group collapse or tab navigation changed parameter values");

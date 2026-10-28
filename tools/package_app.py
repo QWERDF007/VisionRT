@@ -420,6 +420,12 @@ def copy_dependencies(
             # vendor directory instead would deploy debug or unused DLLs.
             manifest = build_dir / manifest_name.replace("{config}", config)
             if not manifest.is_file():
+                for alt_config in (config.capitalize(), config.upper(), config.lower()):
+                    candidate = build_dir / manifest_name.replace("{config}", alt_config)
+                    if candidate.is_file():
+                        manifest = candidate
+                        break
+            if not manifest.is_file():
                 missing_dependencies.append(f"{dep_name} (manifest: {manifest})")
                 continue
             exact = [Path(line.strip()) for line in manifest.read_text(encoding="utf-8").splitlines()

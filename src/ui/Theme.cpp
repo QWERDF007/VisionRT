@@ -2,23 +2,47 @@
 
 namespace visionrt {
 
+static int styleThemeTypeId()
+{
+    static const int id = qmlRegisterSingletonType<Theme>(
+        "VisionRT.Style", 1, 0, "Theme",
+        [](QQmlEngine *engine, QJSEngine *) -> QObject *
+        {
+            if (engine)
+            {
+                auto *obj = engine->property("_visionrt_theme").value<QObject *>();
+                if (auto *theme = qobject_cast<Theme *>(obj))
+                    return theme;
+            }
+            auto *theme = new Theme(engine);
+            if (engine)
+                engine->setProperty("_visionrt_theme", QVariant::fromValue(static_cast<QObject *>(theme)));
+            return theme;
+        });
+    return id;
+}
+
 void registerStyleModule()
 {
     static const bool registered = []
     {
-        // One Theme per QML engine, created and owned by that engine. Defaults live only in
-        // initLightIndustrialPalette(), so every instance starts from the same source.
-        qmlRegisterSingletonType<Theme>("VisionRT.Style", 1, 0, "Theme",
-                                        [](QQmlEngine *, QJSEngine *) -> QObject * { return new Theme; });
+        styleThemeTypeId();
         return true;
     }();
     Q_UNUSED(registered);
 }
 
-Theme *Theme::instance()
+Theme *themeForEngine(QQmlEngine *engine)
 {
-    static Theme themeInstance;
-    return &themeInstance;
+    if (!engine)
+        return nullptr;
+    styleThemeTypeId();
+    auto *obj = engine->property("_visionrt_theme").value<QObject *>();
+    if (auto *theme = qobject_cast<Theme *>(obj))
+        return theme;
+    auto *theme = new Theme(engine);
+    engine->setProperty("_visionrt_theme", QVariant::fromValue(static_cast<QObject *>(theme)));
+    return theme;
 }
 
 Theme::Theme(QObject *parent)

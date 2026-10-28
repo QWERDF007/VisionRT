@@ -6,6 +6,7 @@
 #include "core/InputNormalizer.h"
 #include "core/ToolDefinition.h"
 #include "core/ToolValueValidation.h"
+#include "result_view.h"
 
 #include <visionrt/contracts/Tool.h>
 
@@ -130,17 +131,19 @@ int main()
         assert(ToolStatus{}.message.empty());
 
         const auto success = toolResult({{"value", std::int64_t{3}}}, {0, ""});
-        assert(success.outputs.size() == 1);
-        assert(success.status.code == 0 && success.status.message.empty());
+        assert(testview::businessCount(success) == 1);
+        assert(testview::code(success) == 0 && testview::message(success).empty());
         assert(std::get<std::int64_t>(success.outputs.at("value")) == 3);
+        assert(success.outputs.contains(std::string(kStatusCodePort)));
+        assert(success.outputs.contains(std::string(kStatusMessagePort)));
 
         const auto described = toolResult({}, {2, "输入图像为空"});
-        assert(described.status.code == 2 && described.status.message == "输入图像为空");
-        assert(described.outputs.empty());
+        assert(testview::code(described) == 2 && testview::message(described) == "输入图像为空");
+        assert(testview::businessCount(described) == 0);
 
         // A negative code is data, not a framework failure, and it survives untouched.
         const auto negative = toolResult({}, {-7, "  保留原样"});
-        assert(negative.status.code == -7 && negative.status.message == "  保留原样");
+        assert(testview::code(negative) == -7 && testview::message(negative) == "  保留原样");
         assert(static_cast<bool>(ToolStatus{0, ""}));
         assert(!static_cast<bool>(ToolStatus{-1, ""}));
     }

@@ -85,10 +85,10 @@ def run(inputs):
         while not (root / 'allow').exists():
             time.sleep(0.002)
     if mode == 'fail':
-        return {'status': {'code': 1, 'message': '受控失败', 'detail': ''},
-                'outputs': {'value': None, 'flag': None}}
-    return {'status': {'code': 0, 'message': '', 'detail': ''},
-            'outputs': {'value': 7, 'flag': mode != 'gate_false'}}
+        return {'outputs': {'value': None, 'flag': None, '__status_code': 1, '__status_message': '受控失败'},
+                'detail': ''}
+    return {'outputs': {'value': 7, 'flag': mode != 'gate_false', '__status_code': 0, '__status_message': ''},
+            'detail': ''}
 )py");
     AppController app(2, root);
     const auto    releaseOnExit = qScopeGuard([&] { write(permission, "allow"); });
@@ -149,7 +149,7 @@ def run(inputs):
     require(sourceItem, "status source delegate is missing");
     require(QTest::qWaitFor([&] { return sourceItem->property("nodeState").toString() == "running"; }, 2000),
             "status source delegate did not reach running state");
-    const auto *theme = Theme::instance();
+    const auto *theme = themeForEngine(&engine);
     requireColor(sourceItem, "statusDotColor", theme->nodeStateGreen(), "running status dot is not green");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGreen(), "running header is not green");
     requireColor(sourceItem, "headerText", theme->nodeHeaderTextGreen(), "running header text is not green");

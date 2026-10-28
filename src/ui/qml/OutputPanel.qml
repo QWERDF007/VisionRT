@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import quickui
+import VisionRT.Style 1.0
 
 Rectangle {
     id: root
@@ -56,32 +57,32 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.paramGroupHeaderBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: "#d0d7de"
+                height: 1; color: Theme.paramGroupHeaderBorder
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
                     text: "输出参数"
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
-                    color: "#24292f"
+                    font: Theme.bodyFont
+                    color: Theme.paramGroupHeaderText
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
                     Layout.preferredWidth: 92; Layout.preferredHeight: 22
-                    radius: 3; color: "#ffffff"; border.color: QuiColor.Highlight; border.width: 1
+                    radius: Theme.radiusSmall; color: Theme.surfaceBg; border.color: Theme.highlight; border.width: 1
                     clip: true
                     Row {
                         anchors.fill: parent
                         Rectangle {
                             width: parent.width / 2; height: parent.height
-                            color: !root.relations ? QuiColor.Highlight : "transparent"
+                            color: !root.relations ? Theme.highlight : "transparent"
                             QuiText {
                                 anchors.centerIn: parent; text: "数据"
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: !root.relations })
-                                color: !root.relations ? "#ffffff" : QuiColor.Highlight
+                                font: Theme.captionFont
+                                color: !root.relations ? Theme.surfaceBg : Theme.highlight
                             }
                             MouseArea {
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -90,11 +91,11 @@ Rectangle {
                         }
                         Rectangle {
                             width: parent.width / 2; height: parent.height
-                            color: root.relations ? QuiColor.Highlight : "transparent"
+                            color: root.relations ? Theme.highlight : "transparent"
                             QuiText {
                                 anchors.centerIn: parent; text: "关系"
-                                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: root.relations })
-                                color: root.relations ? "#ffffff" : QuiColor.Highlight
+                                font: Theme.captionFont
+                                color: root.relations ? Theme.surfaceBg : Theme.highlight
                             }
                             MouseArea {
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -138,9 +139,9 @@ Rectangle {
                 return column === 0 ? col0 : column === 2 ? Math.max(180, table.width - col0 - 2) : 0
             }
             resizableRows: false; resizableColumns: false
-            rowHeight: 28; headerHeight: 28; showGridLines: true
-            rowColor: "#ffffff"; zebraColor: "#f8f9fa"
-            selectedColor: "#dceefa"; selectedBorderColor: QuiColor.Highlight; hoverColor: "#eaf4fc"
+            rowHeight: Theme.parameterRowHeight; headerHeight: Theme.parameterRowHeight; showGridLines: true
+            rowColor: Theme.surfaceBg; zebraColor: Theme.paramPanelBg
+            selectedColor: Theme.paramRowHoverBg; selectedBorderColor: Theme.highlight; hoverColor: Theme.paramRowHoverBg
         }
     }
     onRelationsChanged: table.forceLayout()
@@ -152,10 +153,10 @@ Rectangle {
             QuiText {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
-                font: QuiFont.Body
+                font: Theme.parameterFont
                 // Only a port with a legal, still free downstream input looks actionable. An existing
                 // connection keeps its reference count but never stands in for a new target.
-                color: cell.options.column === 0 && cell.options.connectable ? QuiColor.Highlight : QuiColor.FontPrimary
+                color: cell.options.column === 0 && cell.options.connectable ? Theme.highlight : Theme.parameterTextColor
                 text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system && root.relations ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
             }
             MouseArea {

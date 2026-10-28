@@ -374,7 +374,7 @@ void nodeDiagnosticsContract()
     require(QDir().mkpath(QFileInfo(pyFile).absolutePath()), "cannot create Python fixture directory");
     if (pyFile.open(QIODevice::WriteOnly))
     {
-        pyFile.write("def run(inputs):\n    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value': 42}}\n");
+        pyFile.write("def run(inputs):\n    return {'outputs': {'value': 42, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
         pyFile.close();
     }
     QFile failPyFile(directory.path() + "/tools-package/python/custom/test_category/test_diag/test_diag_fail.py");
@@ -1151,7 +1151,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         pyScriptA.write(
             "def run(inputs):\n"
-            "    return {'status': {'code': 0, 'message': 'ok', 'detail': ''}, 'outputs': {'result': 111, 'image': []}}\n");
+            "    return {'outputs': {'result': 111, 'image': [], '__status_code': 0, '__status_message': 'ok'}, 'detail': ''}\n");
         pyScriptA.close();
     }
     QFile root3JsonA(dirPath + "/tools-package/tools/custom/user/py/user_node_a.json");

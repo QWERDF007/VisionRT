@@ -36,7 +36,7 @@ try
                       "  self.identity = next_id\n"
                       "  next_id += 1\n"
                       " def initialize(self, params): return {'code': 0, 'message': '', 'detail': ''}\n"
-                      " def execute(self, inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':1}}\n"
+                      " def execute(self, inputs): return {'outputs': {'value':1, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n"
                       " def release(self):\n"
                       "  directory = Path(__file__).parent\n"
                       "  first = directory / 'first.flag'\n"
@@ -102,7 +102,7 @@ try
                       "import time\n"
                       "class Tool:\n"
                       " def initialize(self, params): return {'code': 0, 'message': '', 'detail': ''}\n"
-                      " def execute(self, inputs): return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'value':1}}\n"
+                      " def execute(self, inputs): return {'outputs': {'value':1, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n"
                       " def release(self):\n"
                       "  directory = Path(__file__).parent\n"
                       "  (directory / 'entered.flag').write_text('entered')\n"
@@ -148,7 +148,7 @@ import numpy as np
 def execute(inputs):
     image = np.full((3,4), 71, dtype=np.uint16)
     weakref.finalize(image, lambda: Path(__file__).with_name('released.txt').write_text('released'))
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'images':[image], 'namespace':__name__}}
+    return {'outputs': {'images':[image], 'namespace':__name__, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )";
     }
     const auto definition = parseToolDefinitionJson(R"({

@@ -1,6 +1,7 @@
 #include "ui/AssistPreview.h"
 
 #include "core/ToolRegistry.h"
+#include "core/InputNormalizer.h"
 #include "core/ToolValueValidation.h"
 
 #include <QMetaObject>
@@ -44,6 +45,7 @@ void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, Tool
                               std::filesystem::path directory)
 {
     Q_ASSERT(QThread::currentThread() == thread());
+    normalizeToolDefinition(helper);
     hover_.stop();
     hoverRequest_.reset();
     pending_.reset();
@@ -282,13 +284,14 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             }
             instanceSession_ = sessionPtr;
         }
-        validateToolValues(session.helper.inputs, request.inputs);
-        auto result = instance_->execute(request.inputs);
+        const auto inputs = normalizeInputs(session.helper.inputs, request.inputs);
+        validateToolValues(session.helper.inputs, inputs);
+        auto result = instance_->execute(inputs);
         // The helper is a tool like any other: its status is published into the same two ports the
         // node runtime uses, so the preview shows what a real run would.
-        outcome.status = materialiseToolStatus(result.outputs,
-                                              validateToolExecution(session.helper.outputs, result.outputs,
-                                                                    result.status));
+        outcome.status = validateToolExecution(session.helper.outputs, result.outputs, result.detail);
+
+
         if (!outcome.status)
         {
             outcome.quality = helperMessage(outcome.status.message);

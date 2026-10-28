@@ -83,10 +83,10 @@ def source(inputs):
     first = np.full((120, 160, 3), (0, 0, level), dtype=np.uint8)
     second = np.full((120, 160, 3), (0, level, 0), dtype=np.uint8)
     weakref.finalize(first, retired, inputs['marker'])
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'images': [first, second]}}
+    return {'outputs': {'images': [first, second], '__status_code': 0, '__status_message': ''}, 'detail': ''}
 
 def scalar(inputs):
-    return {'status': {'code': 0, 'message': '', 'detail': ''}, 'outputs': {'images': 84}}
+    return {'outputs': {'images': 84, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )py");
     ToolRegistry definitions;
     definitions.registerPackage(readToolsPackage(std::filesystem::path(package.toStdU16String())));

@@ -92,36 +92,38 @@ void validateToolOutput(const PortDefinition &port, const PortValue &value, cons
 }
 
 ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, const Values &outputs,
-                                 const ToolStatus &status)
+                                 const std::string &detail)
 {
-    if (outputs.contains(std::string(kStatusCodePort)) || outputs.contains(std::string(kStatusMessagePort)))
-        throw ContractError("工具不得写入状态端口，状态由宿主物化");
+    const auto codeIt = outputs.find(std::string(kStatusCodePort));
+    if (codeIt == outputs.end())
+        throw ContractError("缺少状态码端口：" + std::string(kStatusCodePort));
+    const auto messageIt = outputs.find(std::string(kStatusMessagePort));
+    if (messageIt == outputs.end())
+        throw ContractError("缺少状态消息端口：" + std::string(kStatusMessagePort));
 
-    std::size_t business = 0;
+    if (!std::holds_alternative<std::int64_t>(codeIt->second))
+        throw ContractError("状态码端口类型必须为整数");
+    if (!std::holds_alternative<std::string>(messageIt->second))
+        throw ContractError("状态消息端口类型必须为字符串");
+
+    const auto code = std::get<std::int64_t>(codeIt->second);
+    const auto &message = std::get<std::string>(messageIt->second);
+
+    validateUtf8(message);
+    validateUtf8(detail);
+
+    ToolStatus status{code, message, detail};
+
     for (const auto &port : ports)
     {
-        if (isStatusPort(port.id))
-            continue;
         const auto found = outputs.find(port.id);
         if (found == outputs.end())
             throw ContractError("缺少输出端口：" + port.id);
         validateToolOutput(port, found->second, status);
-        ++business;
     }
-    if (outputs.size() != business)
+    if (outputs.size() != ports.size())
         throw ContractError("输出端口与声明不一致");
 
-    validateUtf8(status.message);
-    validateUtf8(status.detail);
-    return status;
-}
-
-ToolStatus materialiseToolStatus(Values &outputs, ToolStatus status)
-{
-    if (status.message.empty() && status.code == 0)
-        status.message = "运行成功";
-    outputs.insert_or_assign(std::string(kStatusCodePort), status.code);
-    outputs.insert_or_assign(std::string(kStatusMessagePort), status.message);
     return status;
 }
 
