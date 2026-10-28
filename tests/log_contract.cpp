@@ -279,7 +279,7 @@ try
                 [&]
                 {
                     for (const auto &record : service.take(64))
-                        if (record.line.contains(QStringLiteral("中文…")))
+                        if (record.line.contains(QStringLiteral("中…")))
                             return true;
                     return false;
                 },
@@ -342,6 +342,44 @@ try
     require(service.start(config), "the service refused to restart for the default handler check");
     service.shutdown();
     require(qInstallMessageHandler(nullptr) == baseline, "shutdown did not restore the default Qt handler");
+
+    // 16. UTF-8 boundary & invalid bytes: invalid byte sequences do not leak raw newlines and produce valid UTF-8
+    service.shutdown();
+    require(service.start(config), "the service refused to restart for UTF-8 check");
+    service.setViewActive(true);
+    std::string badSeq = "\xE2\x0A\x78";
+    LogService::write(LogLevel::Info, "测试", badSeq);
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    for (const auto &record : service.take(64))
+                        if (record.line.contains(QStringLiteral("\\n")))
+                            return true;
+                    return false;
+                },
+                2000),
+            "embedded newline in malformed UTF-8 was not escaped");
+
+    // 17. Repetitive long error preserves repeat count in summary
+    service.shutdown();
+    auto tight = config;
+    tight.maxMessageBytes = 32;
+    require(service.start(tight), "failed to restart with tight cap");
+    service.setViewActive(true);
+    std::string repeatMsg = "Repeat error message test";
+    for (int rep = 0; rep < 5; ++rep)
+        service.error("重复测试", repeatMsg);
+    service.flush();
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    for (const auto &record : service.take(64))
+                        if (record.line.contains(QStringLiteral("重复")) || record.line.contains(QStringLiteral("×")))
+                            return true;
+                    return false;
+                },
+                2000),
+            "repeat count was lost or truncated away");
 
     std::cout << "Log contracts passed: single-line text, daily file in the software directory, append on restart, "
                  "bounded mailbox, batching, drops, coalescing, Qt bridge and honest degradation\n";

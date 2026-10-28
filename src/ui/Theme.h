@@ -249,12 +249,98 @@ public:
     THEME_INT_PROP(paramGroupHeaderHeight)
     THEME_INT_PROP(paramGroupHeaderFontSize)
     THEME_INT_PROP(paramLabelFontSize)
-    THEME_INT_PROP(paramEditorHeight)
-    THEME_INT_PROP(paramEditorFontSize)
     THEME_INT_PROP(paramActionBtnWidth)
-    // 参数行的统一间距与行高
+    // 状态栏与分段按钮尺寸
+    THEME_INT_PROP(statusBarHeight)
+    THEME_INT_PROP(segmentButtonWidth)
+    THEME_INT_PROP(segmentButtonHeight)
+
+public:
+    // 参数行与编辑框高度（单一真相源同步联动）
+    Q_PROPERTY(int parameterRowHeight READ parameterRowHeight WRITE setparameterRowHeight NOTIFY parameterRowHeightChanged)
+    int parameterRowHeight() const
+    {
+        return parameterRowHeight_;
+    }
+    void setparameterRowHeight(int value)
+    {
+        if (parameterRowHeight_ != value)
+        {
+            parameterRowHeight_ = value;
+            if (paramEditorHeight_ != value)
+            {
+                paramEditorHeight_ = value;
+                Q_EMIT paramEditorHeightChanged();
+            }
+            Q_EMIT parameterRowHeightChanged();
+        }
+    }
+    Q_SIGNAL void parameterRowHeightChanged();
+
+    Q_PROPERTY(int paramEditorHeight READ paramEditorHeight WRITE setparamEditorHeight NOTIFY paramEditorHeightChanged)
+    int paramEditorHeight() const
+    {
+        return paramEditorHeight_;
+    }
+    void setparamEditorHeight(int value)
+    {
+        if (paramEditorHeight_ != value)
+        {
+            paramEditorHeight_ = value;
+            if (parameterRowHeight_ != value)
+            {
+                parameterRowHeight_ = value;
+                Q_EMIT parameterRowHeightChanged();
+            }
+            Q_EMIT paramEditorHeightChanged();
+        }
+    }
+    Q_SIGNAL void paramEditorHeightChanged();
+
+    // 参数字体与字号（单一真相源同步联动：以 parameterFont 为权威）
+    Q_PROPERTY(QFont parameterFont READ parameterFont WRITE setparameterFont NOTIFY parameterFontChanged)
+    QFont parameterFont() const
+    {
+        return parameterFont_;
+    }
+    void setparameterFont(const QFont &font)
+    {
+        if (parameterFont_ != font)
+        {
+            parameterFont_ = font;
+            const int size = font.pixelSize() > 0 ? font.pixelSize() : font.pointSize();
+            if (size > 0 && paramEditorFontSize_ != size)
+            {
+                paramEditorFontSize_ = size;
+                Q_EMIT paramEditorFontSizeChanged();
+            }
+            Q_EMIT parameterFontChanged();
+        }
+    }
+    Q_SIGNAL void parameterFontChanged();
+
+    Q_PROPERTY(int paramEditorFontSize READ paramEditorFontSize WRITE setparamEditorFontSize NOTIFY paramEditorFontSizeChanged)
+    int paramEditorFontSize() const
+    {
+        return paramEditorFontSize_;
+    }
+    void setparamEditorFontSize(int value)
+    {
+        if (paramEditorFontSize_ != value)
+        {
+            paramEditorFontSize_ = value;
+            if (parameterFont_.pixelSize() != value)
+            {
+                parameterFont_.setPixelSize(value);
+                Q_EMIT parameterFontChanged();
+            }
+            Q_EMIT paramEditorFontSizeChanged();
+        }
+    }
+    Q_SIGNAL void paramEditorFontSizeChanged();
+
+    // 参数行的统一间距
     THEME_INT_PROP(parameterRowSpacing)
-    THEME_INT_PROP(parameterRowHeight)
     THEME_INT_PROP(paramToggleIconSize)
     THEME_INT_PROP(paramRoiIconSize)
     THEME_INT_PROP(paramActionIconSize)
@@ -290,7 +376,6 @@ public:
     THEME_INT_PROP(radiusLarge)
 
     // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
-    THEME_FONT_PROP(parameterFont)
     THEME_FONT_PROP(bodyFont)
     THEME_FONT_PROP(captionFont)
     THEME_FONT_PROP(titleFont)
@@ -310,6 +395,11 @@ public:
 
 private:
     void initLightIndustrialPalette();
+
+    int parameterRowHeight_{32};
+    int paramEditorHeight_{32};
+    int paramEditorFontSize_{12};
+    QFont parameterFont_;
 };
 
 void registerStyleModule();

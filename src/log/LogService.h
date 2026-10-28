@@ -140,6 +140,7 @@ private:
     void postLocked(LogLevel level, std::string_view source, std::string_view message,
                     std::chrono::system_clock::time_point when);
     void postPendingLocked();
+    void postPendingSummaryLocked(const PendingError &entry, std::size_t maxBytes);
     std::vector<PendingError> takePending();
 
     struct Impl;
