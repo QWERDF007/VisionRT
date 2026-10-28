@@ -17,22 +17,20 @@ int LogModel::rowCount(const QModelIndex &parent) const
 
 QVariant LogModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || static_cast<std::size_t>(index.row()) >= rows_.size())
+    if (!index.isValid() || index.row() < 0 || index.row() >= rows_.size())
         return {};
     const auto &record = rows_.at(index.row());
     switch (role)
     {
-    case TimeRole: return record.time;
+    case LineRole: return record.line;
     case LevelRole: return record.level;
-    case SourceRole: return record.source;
-    case MessageRole: return record.message;
     default: return {};
     }
 }
 
 QHash<int, QByteArray> LogModel::roleNames() const
 {
-    return {{TimeRole, "time"}, {LevelRole, "level"}, {SourceRole, "source"}, {MessageRole, "message"}};
+    return {{LineRole, "line"}, {LevelRole, "level"}};
 }
 
 void LogModel::clear()
@@ -46,24 +44,21 @@ void LogModel::clear()
 
 QString LogModel::text(int row) const
 {
-    if (row < 0 || static_cast<std::size_t>(row) >= rows_.size())
+    if (row < 0 || row >= rows_.size())
         return {};
-    const auto &record = rows_.at(row);
-    return record.time + QLatin1Char(' ') + record.level + QLatin1Char(' ') + record.source
-           + QStringLiteral("：") + record.message;
+    return rows_.at(row).line;
 }
 
 void LogModel::append(const QVector<LogRecord> &records)
 {
     if (records.isEmpty())
         return;
-    std::size_t overflow = 0;
-    if (rows_.size() + records.size() > capacity_)
-        overflow = rows_.size() + records.size() - capacity_;
+    const auto limit    = static_cast<qsizetype>(capacity_);
+    const auto overflow = std::max<qsizetype>(0, rows_.size() + records.size() - limit);
     if (overflow > 0)
     {
         beginRemoveRows({}, 0, static_cast<int>(overflow) - 1);
-        rows_.remove(0, static_cast<int>(overflow));
+        rows_.remove(0, overflow);
         endRemoveRows();
     }
     const auto first = rows_.size();
@@ -76,11 +71,11 @@ void LogModel::append(const QVector<LogRecord> &records)
 void LogModel::setCapacity(std::size_t capacity)
 {
     capacity_ = std::max<std::size_t>(1, capacity);
-    if (rows_.size() > capacity_)
+    const auto overflow = rows_.size() - static_cast<qsizetype>(capacity_);
+    if (overflow > 0)
     {
-        const auto overflow = rows_.size() - capacity_;
         beginRemoveRows({}, 0, static_cast<int>(overflow) - 1);
-        rows_.remove(0, static_cast<int>(overflow));
+        rows_.remove(0, overflow);
         endRemoveRows();
     }
 }

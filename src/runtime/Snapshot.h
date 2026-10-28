@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <stop_token>
@@ -102,6 +103,11 @@ struct NodeSnapshot
     TypeMap               outputTypes;
     Values        outputs;
     Timing        timing;
+    // The measured execution window on the steady clock, in nanoseconds. The runtime derives a
+    // flow's span from these instead of running a second timer, so a single-node flow reports
+    // exactly the node's own total.
+    std::int64_t  startedNs = 0;
+    std::int64_t  endedNs   = 0;
     Values        roiInputs;
     std::vector<InputUse> inputUses;
 };

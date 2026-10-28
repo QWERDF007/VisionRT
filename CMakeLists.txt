@@ -138,6 +138,28 @@ if(VISIONRT_BUILD_APP)
     endforeach()
     qt_add_qml_module(VisionRT URI VisionRT VERSION 1.0 DEPENDENCIES quickui QML_FILES ${visionrt_qml})
 
+    # 构建元数据必须来自“构建完成”而不是“配置开始”，所以两份组件信息都在链接结束后生成：
+    # VisionRT 用当前时刻（刚刚完成链接），Contracts 用它自己产物的最后修改时间，未重新链接的
+    # 静态库因此保留上一次真实构建时刻。关于弹窗只读取这两个文件，不读编译期配置时间。
+    add_custom_command(TARGET VisionRT POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+            -DCOMPONENT=VisionRT
+            -DVERSION=${PROJECT_VERSION}${PROJECT_VERSION_SUFFIX}
+            -DCOMMIT=${REPO_COMMIT}
+            -DBRANCH=${REPO_BRANCH}
+            -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/build_info.json
+            -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
+        COMMAND ${CMAKE_COMMAND}
+            -DCOMPONENT=VisionRTContracts
+            -DVERSION=${VISIONRT_CONTRACTS_VERSION}
+            -DCOMMIT=${VISIONRT_CONTRACTS_COMMIT}
+            -DBRANCH=${VISIONRT_CONTRACTS_BRANCH}
+            -DSOURCE_FILE=$<TARGET_FILE:VisionRTContracts>
+            -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/contracts-build-info.json
+            -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
+        COMMENT "记录 VisionRT 与 VisionRTContracts 的构建完成时刻"
+        VERBATIM)
+
     configure_file(cmake/Deploy.cmake.in "${CMAKE_BINARY_DIR}/Deploy.cmake" @ONLY)
     add_custom_target(deploy
         COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_BINARY_DIR}/Deploy.cmake"

@@ -9,8 +9,9 @@
 namespace visionrt
 {
 
-// Bounded log window model. Records arrive in batches from the service; the model only inserts and
-// trims, so a burst never rebuilds the list and the visible scroll position survives.
+// Bounded log window model. Every row is one finished line - the same text the file received - so
+// the model neither re-composes nor re-columns a record. Records arrive in batches and the model
+// only inserts and trims, so a burst never rebuilds the list and the scroll position survives.
 class LogModel final : public QAbstractListModel
 {
     Q_OBJECT
@@ -18,10 +19,8 @@ class LogModel final : public QAbstractListModel
 public:
     enum Role
     {
-        TimeRole = Qt::UserRole + 1,
-        LevelRole,
-        SourceRole,
-        MessageRole
+        LineRole = Qt::UserRole + 1,
+        LevelRole
     };
 
     explicit LogModel(QObject *parent = nullptr);

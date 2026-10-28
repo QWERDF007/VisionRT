@@ -254,27 +254,39 @@ void durationTextContract()
     require(durationText(0.0199) == QStringLiteral("0.020 ms"), "millisecond rounding is wrong");
     require(durationText(1.2) == QStringLiteral("1.200 ms"), "three-decimal format is not fixed");
     require(durationText(1234.567) == QStringLiteral("1234.567 ms"), "three-decimal rounding is wrong");
+
+    // A node that never ran has nothing to show: no dash, no fabricated zero.
     const auto absent = nodeTimingText(nullptr, false);
-    require(absent.total == QStringLiteral("—") && absent.toolCall == QStringLiteral("—")
-                && absent.preprocess == QStringLiteral("—") && absent.postprocess == QStringLiteral("—"),
+    require(absent.total.isEmpty() && absent.toolCall.isEmpty() && absent.preprocess.isEmpty()
+                && absent.postprocess.isEmpty(),
             "absent execution snapshot fabricated a measurement");
+    require(timingPhasesOf(absent).isEmpty(), "an absent snapshot produced hover rows");
+
     NodeSnapshot snapshot;
-    snapshot.timing.totalMs = 1234.567;
+    snapshot.timing.totalMs          = 1234.567;
     snapshot.timing.adapterExecuteMs = 1.1;
-    snapshot.timing.prepareMs = 27;
-    snapshot.timing.initMs = 31;
-    snapshot.timing.validateMs = 43;
-    const auto uncalled = nodeTimingText(&snapshot, false);
-    require(uncalled.total == QStringLiteral("1234.567 ms") && uncalled.toolCall == QStringLiteral("—"),
-            "uncalled tool used an unmeasured adapter duration");
-    require(uncalled.preprocess == QStringLiteral("—") && uncalled.postprocess == QStringLiteral("—"),
-            "framework stages were relabeled as algorithm stages");
-    require(uncalled.prepare == QStringLiteral("—") && uncalled.init == QStringLiteral("—")
-                && uncalled.validate == QStringLiteral("—"),
-            "unmeasured stages must display —");
-    snapshot.timing.toolCallMeasured = true;
+    snapshot.timing.prepareMs        = 27;
+    snapshot.timing.initMs           = 31;
+    snapshot.timing.validateMs       = 43;
+    // A gated node publishes a terminal snapshot without entering a stage; it must stay blank even
+    // though the snapshot carries array-initialised numbers.
+    const auto gated = nodeTimingText(&snapshot, false);
+    require(gated.total.isEmpty() && timingPhasesOf(gated).isEmpty(),
+            "a node that never entered a stage displayed a measurement");
+
     snapshot.timing.prepareMeasured = true;
-    snapshot.timing.initMeasured = true;
+    const auto uncalled             = nodeTimingText(&snapshot, false);
+    require(uncalled.total == QStringLiteral("1234.567 ms") && uncalled.toolCall.isEmpty(),
+            "uncalled tool used an unmeasured adapter duration");
+    require(uncalled.preprocess == QStringLiteral("27.000 ms") && uncalled.postprocess.isEmpty(),
+            "framework stages were relabeled as algorithm stages");
+    require(uncalled.prepare == QStringLiteral("27.000 ms") && uncalled.init.isEmpty()
+                && uncalled.validate.isEmpty(),
+            "unmeasured stages must stay blank");
+    require(timingPhasesOf(uncalled).size() == 1, "an uncalled tool produced operator hover rows");
+
+    snapshot.timing.toolCallMeasured = true;
+    snapshot.timing.initMeasured     = true;
     snapshot.timing.validateMeasured = true;
     const auto called = nodeTimingText(&snapshot, false);
     require(called.total == QStringLiteral("1234.567 ms") && called.toolCall == QStringLiteral("1.100 ms"),
@@ -282,37 +294,42 @@ void durationTextContract()
     require(called.prepare == QStringLiteral("27.000 ms") && called.init == QStringLiteral("31.000 ms")
                 && called.validate == QStringLiteral("43.000 ms"),
             "measured framework stages did not display real values");
-    // The tooltip has exactly three rows: preparation and post-processing aggregate the measured
+    // The hover card has exactly three rows: preparation and post-processing aggregate the measured
     // phases; the operator row is the tool call itself.
     require(called.preprocess == QStringLiteral("58.000 ms") && called.postprocess == QStringLiteral("43.000 ms"),
             "tooltip phases did not aggregate the measured preparation/post-processing");
-    const std::pair<double, QString> measurements[] = {
+    const auto phases = timingPhasesOf(called);
+    require(phases.size() == 3 && phases.at(0).label == QStringLiteral("预处理")
+                && phases.at(1).label == QStringLiteral("算子时间") && phases.at(2).label == QStringLiteral("后处理"),
+            "hover rows lost their labels or order");
+
+    const std::pair<double, std::optional<QString>> measurements[] = {
         {0.0, QStringLiteral("0.000 ms")}, {0.0009, QStringLiteral("0.000 ms")},
         {0.001, QStringLiteral("0.001 ms")}, {0.0199, QStringLiteral("0.020 ms")},
-        {1.2, QStringLiteral("1.200 ms")}, {-1.0, QStringLiteral("—")},
-        {std::numeric_limits<double>::quiet_NaN(), QStringLiteral("—")},
-        {std::numeric_limits<double>::infinity(), QStringLiteral("—")}
+        {1.2, QStringLiteral("1.200 ms")}, {-1.0, std::nullopt},
+        {std::numeric_limits<double>::quiet_NaN(), std::nullopt},
+        {std::numeric_limits<double>::infinity(), std::nullopt}
     };
-    snapshot.timing.prepareMeasured = false;
-    snapshot.timing.initMeasured    = false;
+    snapshot.timing.initMeasured     = false;
     snapshot.timing.validateMeasured = false;
     for (const auto &[value, expected] : measurements)
     {
-        snapshot.timing.totalMs = value;
+        snapshot.timing.totalMs          = value;
         snapshot.timing.adapterExecuteMs = value;
-        const auto measured = nodeTimingText(&snapshot, false);
-        require(measured.total == expected && measured.toolCall == expected,
-                "controlled snapshot lost its measured zero, small value or invalid metric semantics");
-        require(measured.preprocess == QStringLiteral("—") && measured.postprocess == QStringLiteral("—"),
+        const auto measured              = nodeTimingText(&snapshot, false);
+        require(measured.total == expected.value_or(QString()), "node total lost its measurement semantics");
+        require(measured.toolCall == expected.value_or(QString()),
+                "operator time lost its measured zero, small value or invalid metric semantics");
+        require(measured.preprocess == QStringLiteral("27.000 ms") && measured.postprocess.isEmpty(),
                 "unmeasured phases must stay unavailable instead of fabricating a zero");
     }
+
     // A Python operator reports the real function call as its own time: the GIL wait and input
     // mapping are preparation, the output conversion is post-processing, and the whole bridge is
     // exactly their sum, so no stage is counted twice.
     snapshot.timing.prepareMs            = 0;
     snapshot.timing.initMs               = 0;
-    snapshot.timing.prepareMeasured      = false;
-    snapshot.timing.initMeasured         = false;
+    snapshot.timing.prepareMeasured      = true;
     snapshot.timing.validateMeasured     = true;
     snapshot.timing.validateMs           = 1.0;
     snapshot.timing.pythonBridge         = true;
@@ -332,19 +349,21 @@ void durationTextContract()
     require(pythonCall.postprocess == QStringLiteral("4.000 ms"),
             "output conversion belongs to post-processing and must be counted once");
     snapshot.timing.pythonCallMeasured = false;
-    require(nodeTimingText(&snapshot, false).toolCall == QStringLiteral("—"),
+    require(nodeTimingText(&snapshot, false).toolCall.isEmpty(),
             "a bridge that never reached the function call must not claim operator time");
 
+    // A running node shows no timing at all: the previous round's numbers describe work that is no
+    // longer running, and the state is carried by colour and the status dot.
     const NodeSnapshot *previousSnapshots[] = {nullptr, &snapshot};
     for (const auto *previous : previousSnapshots)
     {
         const auto running = nodeTimingText(previous, true);
-        require(running.total == QStringLiteral("运行中") && running.toolCall == QStringLiteral("运行中")
-                    && running.preprocess == QStringLiteral("—") && running.postprocess == QStringLiteral("—"),
+        require(running.total.isEmpty() && running.toolCall.isEmpty() && running.preprocess.isEmpty()
+                    && running.postprocess.isEmpty() && timingPhasesOf(running).isEmpty(),
                 "running node reused an earlier snapshot measurement");
     }
     std::cout << "[Evidence T-03] Duration text formatting covers missing, zero, tiny, regular and non-finite values.\n";
-    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, uncalled, measured and running values without relabeling framework stages.\n";
+    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, gated, uncalled, measured and running values, and the hover rows only contain measured stages.\n";
 }
 
 void nodeDiagnosticsContract()
@@ -528,13 +547,20 @@ void nodeDiagnosticsContract()
     require(map0.contains("implUnavailable"), "node missing implUnavailable");
     require(map0.value("implUnavailable").toBool() == false, "available node marked implUnavailable");
     require(!map0.contains("timingDetail"), "obsolete timingDetail source must be removed");
-    require(map0.value("timingText").toString() == QStringLiteral("—"), "unrun node total must stay unavailable");
-    require(map0.value("timingOperatorText").toString() == QStringLiteral("—"),
-            "unrun node operator time must stay unavailable");
-    require(map0.value("timingPreprocessText").toString() == QStringLiteral("—"),
-            "unmeasured preprocess time must be unavailable");
-    require(map0.value("timingPostprocessText").toString() == QStringLiteral("—"),
-            "unmeasured postprocess time must be unavailable");
+    // A node that never ran shows no time at all and offers no hover rows; the state badge owns the
+    // meaning, so no dash and no fabricated zero may appear.
+    const auto phaseValue = [](const QVariantMap &node, const QString &label) -> QString
+    {
+        for (const auto &item : node.value("timingPhases").toList())
+        {
+            const auto phase = item.toMap();
+            if (phase.value("label").toString() == label)
+                return phase.value("value").toString();
+        }
+        return {};
+    };
+    require(map0.value("timingText").toString().isEmpty(), "unrun node total must stay empty");
+    require(map0.value("timingPhases").toList().isEmpty(), "unrun node must not offer hover rows");
 
     const auto map1 = nodes.at(1).toMap();
     require(map1.value("defMissing").toBool() == false, "unfulfilled node marked defMissing");
@@ -546,24 +572,42 @@ void nodeDiagnosticsContract()
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+    // 单流程工程：底部的“流程”和“全流程”必须是同一个执行区间，否则说明两处各自计时。
+    {
+        const auto timingRow = app.timingText();
+        const auto flowAt    = timingRow.indexOf(QStringLiteral("："));
+        const auto totalAt   = timingRow.indexOf(QStringLiteral("全流程："));
+        const auto elapsedAt = timingRow.indexOf(QStringLiteral("已运行："));
+        require(flowAt >= 0 && totalAt > flowAt && elapsedAt > totalAt,
+                "timing text lost one of its three values: " + timingRow.toStdString());
+        const auto number = [&](int from, int to)
+        {
+            return timingRow.mid(from, to - from).split(QLatin1Char(' ')).value(0).toDouble();
+        };
+        const double flowMs = number(flowAt + 1, timingRow.indexOf(QStringLiteral(" ms")));
+        const double roundMs = number(totalAt + 4, timingRow.indexOf(QStringLiteral(" ms"), totalAt));
+        require(std::abs(flowMs - roundMs) <= 0.002,
+                "a single-flow run reported different flow and total times: " + timingRow.toStdString());
+    }
+
     const auto executedNodes = app.nodes();
     require(!executedNodes.isEmpty(), "executed node empty");
     const auto executedMap = executedNodes.first().toMap();
     require(executedMap.value("state").toString() == "succeeded", "executed node is not succeeded");
     require(executedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "executed node total timing is not measured");
-    require(executedMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
+    require(phaseValue(executedMap, QStringLiteral("算子时间")).endsWith(QStringLiteral(" ms")),
             "executed node operator timing is not measured");
     // The executed node measured its preparation and result validation, so the two aggregate
-    // rows must show real values instead of the unavailable placeholder.
-    require(executedMap.value("timingPreprocessText").toString().endsWith(QStringLiteral(" ms")),
+    // rows must show real values instead of an empty row.
+    require(phaseValue(executedMap, QStringLiteral("预处理")).endsWith(QStringLiteral(" ms")),
             "executed node lost its measured preprocess timing");
-    require(executedMap.value("timingPostprocessText").toString().endsWith(QStringLiteral(" ms")),
+    require(phaseValue(executedMap, QStringLiteral("后处理")).endsWith(QStringLiteral(" ms")),
             "executed node lost its measured postprocess timing");
 
     const auto unavailableMap = executedNodes.at(1).toMap();
     require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
-    require(unavailableMap.value("timingOperatorText").toString() == QStringLiteral("—"),
+    require(phaseValue(unavailableMap, QStringLiteral("算子时间")).isEmpty(),
             "implementation without a tool call must not report operator time");
 
     const auto failedMap = executedNodes.at(2).toMap();
@@ -581,7 +625,7 @@ void nodeDiagnosticsContract()
             "parameter change discarded the last successful display state");
     require(staleMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous total timing");
-    require(staleMap.value("timingOperatorText").toString().endsWith(QStringLiteral(" ms")),
+    require(phaseValue(staleMap, QStringLiteral("算子时间")).endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous operator timing");
     require(staleMap.value("statusCode").toLongLong() == 0, "stale snapshot still exposes an old status");
 

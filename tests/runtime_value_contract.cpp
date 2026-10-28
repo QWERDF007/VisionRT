@@ -417,6 +417,24 @@ void assistSeedFrame()
     const auto                ring = transformedRoiBounds(circle, scaled);
     require(ring[0] == cv::Point2d(-10.0, -10.0) && ring[1] == cv::Point2d(10.0, 10.0),
             "circle bounds ignored the alignment scale");
+
+    // A non-uniform alignment turns the seed into an ellipse: the hit area must follow the axis
+    // that was actually scaled instead of reporting a circle of the larger radius.
+    const std::array<double, 9> stretched{2, 0, 0, 0, 1, 0, 0, 0, 1};
+    const auto                  oval = transformedRoiBounds(circle, stretched);
+    require(oval[0] == cv::Point2d(-10.0, -5.0) && oval[1] == cv::Point2d(10.0, 5.0),
+            "non-uniform alignment reported a circle instead of the true ellipse bounds");
+
+    // A singular alignment has no image for the seed. The contract must name it, so the assist path
+    // can treat it as "not under the cursor" instead of hitting a coordinate that does not exist.
+    const std::array<double, 9> singular{1, 0, 0, 0, 1, 0, 1, 0, 0};
+    bool                        diagnosed = false;
+    try { transformedRoiBounds(circle, singular); }
+    catch (const ContractError &error)
+    {
+        diagnosed = std::string_view(error.what()).find("singular") != std::string_view::npos;
+    }
+    require(diagnosed, "a projective singularity was not diagnosed");
     std::cout << "Assist seeds are compared in the current image frame\n";
 }
 

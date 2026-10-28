@@ -495,8 +495,12 @@ ApplicationWindow {
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 10
 
-            // Flow run time matching Screenshot 2026-10-16 004644.png
+            // 底部时间条：三个数值是同一时钟下的嵌套区间，不是三次独立测量。
+            //   流程：当前流程内所有已执行节点 [开始, 结束] 的并集；
+            //   全流程：本轮所有流程窗口的并集（单流程时与“流程”同一个区间）；
+            //   已运行：本次会话从启动到结束的总时长，包含准备、执行与收尾读回。
             RowLayout {
+                id: timingRow
                 spacing: 5
                 QuiTextIcon {
                     iconSource: QuiFontIcon.History
@@ -508,6 +512,12 @@ ApplicationWindow {
                     font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11 })
                     color: "#57606a"
                 }
+                HoverHandler { id: timingHover }
+                ToolTip.visible: timingHover.hovered
+                ToolTip.delay: 400
+                ToolTip.text: "流程：当前流程内各节点执行区间的并集\n"
+                            + "全流程：本轮所有流程执行区间的并集\n"
+                            + "已运行：本次会话从启动到结束的总时长（含准备与读回）"
             }
 
             Item { Layout.fillWidth: true }

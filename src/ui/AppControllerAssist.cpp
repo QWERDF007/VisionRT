@@ -3,8 +3,10 @@
 
 #include "core/InputNormalizer.h"
 #include "core/ToolValueValidation.h"
+#include "log/LogService.h"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 namespace visionrt {
@@ -28,7 +30,21 @@ bool nearCursor(std::span<const double> record, const std::array<double, 9> &ref
 {
     if (record.size() < 3)
         return false;
-    const auto bounds = transformedRoiBounds(record, referenceToImage);
+    std::array<cv::Point2d, 2> bounds{};
+    try
+    {
+        bounds = transformedRoiBounds(record, referenceToImage);
+    }
+    catch (const ContractError &error)
+    {
+        // A singular or non-finite alignment has no image for the seed, so "not under the cursor"
+        // is the only honest answer. Report it once: a project whose alignment collapses would
+        // otherwise look like point-and-click silently ignoring the click.
+        static std::atomic_bool reported{false};
+        if (!reported.exchange(true))
+            LogService::write(LogLevel::Warn, "智能点选", std::string("对齐矩阵不可用：") + error.what());
+        return false;
+    }
     return cursor.x() >= bounds[0].x - margin && cursor.x() <= bounds[1].x + margin
         && cursor.y() >= bounds[0].y - margin && cursor.y() <= bounds[1].y + margin;
 }

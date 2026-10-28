@@ -7,6 +7,7 @@
 #include <quickui/Color.h>
 
 #include <QClipboard>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -376,6 +377,75 @@ void aboutDialogContract()
         require(missingAbout.contains(QStringLiteral("VisionTools\n状态          构建信息不可用")), "missing build_info did not show '状态          构建信息不可用'");
     }
 
+    // 4b. Build metadata: each component prints its own build instant in the current local time
+    //     zone with an explicit offset, and never shows a fixed UTC label or another component's
+    //     time.
+    {
+        QTemporaryDir metadataDir;
+        QDir          root(metadataDir.path());
+        root.mkpath("tools-package");
+        const auto writeFile = [&](const QString &path, const QByteArray &content)
+        {
+            QFile file(root.filePath(path));
+            require(file.open(QIODevice::WriteOnly), "cannot create the build metadata fixture");
+            file.write(content);
+        };
+        writeFile(QStringLiteral("module_index.json"),
+                  "{\"schema_version\":1,\"tools\":[],\"modules\":[],\"runtime_files\":[]}");
+        writeFile(QStringLiteral("tools-package/module_index.json"),
+                  "{\"schema_version\":1,\"tools\":[],\"modules\":[],\"runtime_files\":[]}");
+        constexpr qint64 hostEpoch      = 1793116738;
+        constexpr qint64 contractsEpoch = 1793071356;
+        constexpr qint64 toolsEpoch     = 1793082712;
+        writeFile(QStringLiteral("build_info.json"),
+                  QStringLiteral("{\"schema_version\":1,\"component\":\"VisionRT\",\"version\":\"9.9.9\","
+                                 "\"commit\":\"1111111111111111111111111111111111111111\","
+                                 "\"branch\":\"dev\",\"built_at_epoch\":%1}")
+                      .arg(hostEpoch)
+                      .toUtf8());
+        writeFile(QStringLiteral("contracts-build-info.json"),
+                  QStringLiteral("{\"schema_version\":1,\"component\":\"VisionRTContracts\","
+                                 "\"version\":\"8.8.8\","
+                                 "\"commit\":\"2222222222222222222222222222222222222222\","
+                                 "\"branch\":\"main\",\"built_at_epoch\":%1}")
+                      .arg(contractsEpoch)
+                      .toUtf8());
+        writeFile(QStringLiteral("tools-package/build_info.json"),
+                  QStringLiteral("{\"schema_version\":1,\"component\":\"VisionTools\",\"version\":\"7.7.7\","
+                                 "\"commit\":\"3333333333333333333333333333333333333333\","
+                                 "\"branch\":\"dev\",\"built_at_epoch\":%1}")
+                      .arg(toolsEpoch)
+                      .toUtf8());
+
+        // The display rule is "local time of this machine plus its offset"; the test reproduces it
+        // independently instead of calling the production formatter.
+        const auto localText = [](qint64 epoch)
+        {
+            const auto time      = QDateTime::fromSecsSinceEpoch(epoch).toLocalTime();
+            const auto offset    = time.offsetFromUtc();
+            const auto magnitude = offset < 0 ? -offset : offset;
+            return time.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) + QLatin1Char(' ')
+                 + (offset < 0 ? QLatin1Char('-') : QLatin1Char('+'))
+                 + QStringLiteral("%1:%2")
+                       .arg(magnitude / 3600, 2, 10, QLatin1Char('0'))
+                       .arg((magnitude % 3600) / 60, 2, 10, QLatin1Char('0'));
+        };
+
+        visionrt::AppController metadataApp(1, metadataDir.path());
+        require(QTest::qWaitFor([&] { return !metadataApp.busy(); }, 5000), "metadataApp did not settle");
+        const QString metadataAbout = metadataApp.aboutText();
+        require(metadataAbout.contains(QStringLiteral("构建时间      ") + localText(hostEpoch)),
+                "VisionRT build time is not shown in the local time zone");
+        require(metadataAbout.contains(QStringLiteral("构建时间      ") + localText(contractsEpoch)),
+                "VisionRTContracts build time is not shown in the local time zone");
+        require(metadataAbout.contains(QStringLiteral("构建时间      ") + localText(toolsEpoch)),
+                "VisionTools build time is not shown in the local time zone");
+        require(!metadataAbout.contains(QStringLiteral("UTC")), "the About text still claims a fixed UTC time");
+        require(localText(hostEpoch) != localText(contractsEpoch)
+                    && localText(contractsEpoch) != localText(toolsEpoch),
+                "distinct build instants collapsed into one value");
+    }
+
     // 5. QML AboutVisionRTDialog UI verification
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
@@ -415,6 +485,17 @@ void aboutDialogContract()
     require(textArea->property("text").toString() == about, "aboutTextArea text does not match app.aboutText");
     require(textArea->property("readOnly").toBool(), "aboutTextArea is not readOnly");
     require(textArea->property("selectByMouse").toBool(), "aboutTextArea does not have selectByMouse");
+
+    // The layered body must be visible evidence, not only a property change. The popup fades in,
+    // so the capture waits for the first frame that actually shows it.
+    QTest::qWait(200);
+    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/about_dialog.png")),
+            "cannot capture the About dialog");
+    auto *textFrame = dialog->findChild<QObject *>("aboutTextFrame");
+    require(textFrame != nullptr, "aboutTextFrame is missing in dialog");
+    require(textFrame->property("width").toReal() > 0 && textFrame->property("height").toReal() > 0,
+            "the About text frame has no size");
+    require(textFrame->property("border").value<QObject *>() != nullptr, "the About text frame has no border");
 
     // Verify context menu exists
     auto *aboutMenu = dialog->findChild<QObject *>("aboutMenu");

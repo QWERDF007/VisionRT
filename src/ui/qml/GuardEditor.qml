@@ -68,6 +68,8 @@ Dialog {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            boundsMovement: Flickable.StopAtBounds
             model: root.candidates
             delegate: ItemDelegate {
                 id: itemDelegate

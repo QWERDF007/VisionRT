@@ -49,10 +49,15 @@ struct AppController::Impl
     // never delay the first project open.
     QVector<RecentProjectEntry> recentProjects;
     void requireAvailableTool(std::string_view toolId) const;
+    // 读取随包发布的宿主与 Contracts 构建元数据；工具包的元数据在 loadToolsPackage 中读取。
+    void loadComponentBuildInfo();
     AppController                         *q;
     std::filesystem::path                  applicationDirectory;
     std::filesystem::path                  toolsPackageRoot;
     bool                                   toolsPackageInstalled{false};
+    // 三个组件的构建元数据分别来自各自的构建产物元数据文件，缺失即为未知，绝不互相顶替。
+    std::optional<ComponentBuildInfo>      hostBuildInfo;
+    std::optional<ComponentBuildInfo>      contractsBuildInfo;
     std::optional<ComponentBuildInfo>      toolsPackageBuildInfo;
     std::shared_ptr<PluginLoader>          pluginLoader;
     ToolRegistry                           registry;

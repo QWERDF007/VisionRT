@@ -39,11 +39,8 @@ std::string GetFullVersionString()
 
 ComponentBuildInfo GetContractsVersion()
 {
-    return ComponentBuildInfo{
-        VISIONRT_CONTRACTS_VERSION,
-        VISIONRT_CONTRACTS_COMMIT,
-        VISIONRT_CONTRACTS_BUILD_TIME
-    };
+    // 版本与提交来自 Contracts 自己的仓库；构建时刻不在这里，见构建完成阶段生成的组件元数据。
+    return ComponentBuildInfo{VISIONRT_CONTRACTS_VERSION, VISIONRT_CONTRACTS_COMMIT, 0};
 }
 
 VersionInfo GetVersion()
@@ -61,7 +58,6 @@ VersionInfo GetVersion()
     info.full_string          = GetFullVersionString();
     info.contracts_version    = VISIONRT_CONTRACTS_VERSION;
     info.contracts_commit     = VISIONRT_CONTRACTS_COMMIT;
-    info.contracts_build_time = VISIONRT_CONTRACTS_BUILD_TIME;
     return info;
 }
 

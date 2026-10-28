@@ -5,46 +5,83 @@
 
 namespace visionrt {
 
+namespace {
+// A stage prints only when its own flag says the code actually entered it. `0.000 ms` is a valid
+// measurement and must survive; an unentered stage prints nothing at all.
+QString stageText(bool measured, double milliseconds)
+{
+    if (!measured)
+        return {};
+    const auto text = durationText(milliseconds);
+    // An invalid measurement is not printed as a placeholder either: the card and the hover card
+    // only ever show numbers the runtime actually measured.
+    return text == QStringLiteral("—") ? QString() : text;
+}
+
+// The node ran when it entered its prepare phase. A gated node publishes a terminal snapshot
+// without entering any stage, and a node that never ran has no snapshot at all - neither may look
+// like a measurement.
+bool enteredExecution(const NodeSnapshot *snapshot)
+{
+    return snapshot && snapshot->timing.prepareMeasured;
+}
+} // namespace
+
 NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 {
-    if (running)
-        return {QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("—"), QStringLiteral("—"),
-                QStringLiteral("运行中"), QStringLiteral("运行中"), QStringLiteral("运行中")};
-    // A node that never ran has no measurement to show; the disposition badge (and nothing else)
-    // carries the state, so the timing fields stay empty instead of inventing a zero.
-    if (!snapshot)
-        return {QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"),
-                QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—")};
+    // While the node is running the state lives in the header colour and the status dot. Reusing
+    // the previous round's numbers would describe work that is no longer running.
+    if (running || !enteredExecution(snapshot))
+        return {};
+    if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked
+        || snapshot->disposition == NodeDisposition::Canceled)
+        return {};
 
-    // A gated node never entered the algorithm, so it must not look like a zero-millisecond
-    // success. The gate decision itself is reported through the disposition badge instead.
-    if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
-        return {QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—"),
-                QStringLiteral("—"), QStringLiteral("—"), QStringLiteral("—")};
+    const auto &t  = snapshot->timing;
+    const auto  op = t.pythonBridge ? t.pythonCallMs : t.adapterExecuteMs;
+    const bool  opMeasured = t.pythonBridge ? t.pythonCallMeasured : t.toolCallMeasured;
 
-    const auto &t = snapshot->timing;
-    QString totalStr = durationText(t.totalMs);
+    NodeTimingText text;
+    text.total = stageText(true, t.totalMs);
     // Operator time is the tool's own work: the execute boundary for a native operator, the real
     // function call for a Python one, where the bridge cost belongs to the neighbouring stages.
-    QString toolCallStr = !t.toolCallMeasured || (t.pythonBridge && !t.pythonCallMeasured)
-                            ? QStringLiteral("—")
-                            : durationText(t.pythonBridge ? t.pythonCallMs : t.adapterExecuteMs);
-    QString prepareStr = t.prepareMeasured ? durationText(t.prepareMs) : QStringLiteral("—");
-    QString initStr = t.initMeasured ? durationText(t.initMs) : QStringLiteral("—");
-    QString validateStr = t.validateMeasured ? durationText(t.validateMs) : QStringLiteral("—");
-
-    // Tooltip phases. Bridging is counted once: the GIL wait and input mapping are input
-    // preparation, the output copy belongs to post-processing, and the function call is the
-    // operator time. Each stage keeps its own measured flag, so an unentered stage stays "—" and a
-    // real zero is still a zero.
+    text.toolCall = stageText(opMeasured, op);
+    // Hover-card phases. Bridging is counted once: the GIL wait and input mapping are preparation,
+    // the output copy belongs to post-processing, and the function call is the operator time. Only
+    // stages that were actually measured contribute, so a stale field can never leak into a sum.
     const bool preprocessMeasured  = t.prepareMeasured || t.initMeasured || t.pythonInputMeasured;
     const bool postprocessMeasured = t.validateMeasured || t.pythonOutputMeasured;
-    const auto preprocessMs        = t.prepareMs + t.initMs + t.waitGilMs + t.pythonInputMs;
-    const auto postprocessMs       = t.validateMs + t.pythonOutputMs;
-    QString    preprocessStr  = preprocessMeasured ? durationText(preprocessMs) : QStringLiteral("—");
-    QString    postprocessStr = postprocessMeasured ? durationText(postprocessMs) : QStringLiteral("—");
+    double     preprocessMs        = 0.0;
+    double     postprocessMs       = 0.0;
+    if (t.prepareMeasured)
+        preprocessMs += t.prepareMs;
+    if (t.initMeasured)
+        preprocessMs += t.initMs;
+    if (t.pythonInputMeasured)
+        preprocessMs += t.waitGilMs + t.pythonInputMs;
+    if (t.validateMeasured)
+        postprocessMs += t.validateMs;
+    if (t.pythonOutputMeasured)
+        postprocessMs += t.pythonOutputMs;
+    text.preprocess  = stageText(preprocessMeasured, preprocessMs);
+    text.postprocess = stageText(postprocessMeasured, postprocessMs);
+    text.prepare     = stageText(t.prepareMeasured, t.prepareMs);
+    text.init        = stageText(t.initMeasured, t.initMs);
+    text.validate    = stageText(t.validateMeasured, t.validateMs);
+    return text;
+}
 
-    return {totalStr, toolCallStr, preprocessStr, postprocessStr, prepareStr, initStr, validateStr};
+QVector<NodeTimingPhase> timingPhasesOf(const NodeTimingText &text)
+{
+    QVector<NodeTimingPhase> phases;
+    phases.reserve(3);
+    if (!text.preprocess.isEmpty())
+        phases.push_back({QStringLiteral("预处理"), text.preprocess});
+    if (!text.toolCall.isEmpty())
+        phases.push_back({QStringLiteral("算子时间"), text.toolCall});
+    if (!text.postprocess.isEmpty())
+        phases.push_back({QStringLiteral("后处理"), text.postprocess});
+    return phases;
 }
 
 QString durationText(std::optional<double> milliseconds)

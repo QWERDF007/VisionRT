@@ -235,7 +235,8 @@ def run(inputs):
     auto gatedRow = stateOf(gated);
     require(gatedRow.value("state").toString() == "skipped", "false branch must be reported as skipped");
     require(gatedRow.value("disposition").toString() == "skipped", "skipped disposition is missing");
-    require(gatedRow.value("timingText").toString() == QStringLiteral("—"),
+    require(gatedRow.value("timingText").toString().isEmpty()
+                && gatedRow.value("timingPhases").toList().isEmpty(),
             "a skipped node must not report algorithm time");
     require(!gatedRow.value("executed").toBool(), "a skipped node must not be marked as executed");
     auto *gatedItem = findItem(canvas, "flowNode_" + gated);
@@ -258,7 +259,8 @@ def run(inputs):
     gatedRow = stateOf(gated);
     require(gatedRow.value("state").toString() == "blocked", "failed upstream must block the guarded node");
     require(gatedRow.value("disposition").toString() == "blocked", "blocked disposition is missing");
-    require(gatedRow.value("timingText").toString() == QStringLiteral("—"),
+    require(gatedRow.value("timingText").toString().isEmpty()
+                && gatedRow.value("timingPhases").toList().isEmpty(),
             "a blocked node must not report algorithm time");
     require(gatedRow.value("statusMessage").toString().contains(QStringLiteral("未执行")),
             "blocked reason must stay separate from tool errors");

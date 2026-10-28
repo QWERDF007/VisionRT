@@ -232,7 +232,13 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
     if quickui_dll:
         copy_file(quickui_dll, install_dir / "quickui.dll")
 
-    # 2. PDB debug symbols if requested
+    # 2. 构建完成阶段生成的组件元数据：关于弹窗只从 exe 同目录读取它们
+    for name in ("build_info.json", "contracts-build-info.json"):
+        build_info = bin_dir / name
+        if build_info.is_file():
+            copy_file(build_info, install_dir / name)
+
+    # 3. PDB debug symbols if requested
     if include_pdb and bin_dir.is_dir():
         for pdb in bin_dir.glob("*.pdb"):
             copy_file(pdb, install_dir / pdb.name)

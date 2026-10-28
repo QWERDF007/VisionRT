@@ -351,6 +351,8 @@ FocusScope {
                 }
                 Flickable {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    boundsMovement: Flickable.StopAtBounds
                     contentWidth: flowTabs.width; contentHeight: height
                     Row {
                         id: flowTabs; height: parent.height; spacing: 4
@@ -611,11 +613,7 @@ FocusScope {
                         color: Theme.textPrimary
                     }
                     Repeater {
-                        model: [
-                            { label: "预处理", value: root.hoverNode ? root.hoverNode.timingPreprocessText : "" },
-                            { label: "算子时间", value: root.hoverNode ? root.hoverNode.timingOperatorText : "" },
-                            { label: "后处理", value: root.hoverNode ? root.hoverNode.timingPostprocessText : "" }
-                        ]
+                        model: root.hoverNode ? root.hoverNode.timingPhases : []
                         RowLayout {
                             required property var modelData
                             Layout.fillWidth: true
@@ -657,6 +655,8 @@ FocusScope {
         color: QuiColor.Primary; border.color: QuiColor.Border; radius: 4
         ListView {
             id: searchList; anchors.fill: parent; anchors.margins: 4; clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            boundsMovement: Flickable.StopAtBounds
             model: app.searchResults; currentIndex: root.searchIndex
             section.property: "flowName"; section.criteria: ViewSection.FullString
             section.delegate: QuiText { required property string section; text: section; height: 26; font: QuiFont.Caption; color: QuiColor.FontCaption }

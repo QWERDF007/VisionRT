@@ -48,6 +48,8 @@ Rectangle {
                         id: thumbnails
                         visible: app.imageCount > 0
                         anchors.fill: parent; anchors.margins: 4; clip: true; spacing: 6
+                        boundsBehavior: Flickable.StopAtBounds
+                        boundsMovement: Flickable.StopAtBounds
                         model: app.imageCount
                         currentIndex: app.imageIndex
                         ScrollBar.vertical: QuiScrollBar {}

@@ -108,6 +108,7 @@ Rectangle {
         QuiTableView {
             id: table; objectName: "outputTable"
             Layout.fillWidth: true; Layout.fillHeight: true
+            boundsBehavior: Flickable.StopAtBounds
             externalModel: app.outputModel
             externalCellDelegate: outputCell
             externalCellOptionsProvider: function(row, column, data) {
