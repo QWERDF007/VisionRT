@@ -198,6 +198,25 @@ RuntimeUpdate waitCompletion(RuntimeEngine &engine, std::chrono::milliseconds ti
     throw std::runtime_error("Runtime completion timeout");
 }
 
+// Same contract as waitCompletion, but without the 1 ms sleep: on Windows a 1 ms sleep rounds up to
+// the ~15.6 ms timer quantum, which would make the harness - not the runtime - the dominant term in
+// the reported latency. Spinning keeps the measurement bounded by pollLatest() instead.
+RuntimeUpdate waitCompletionBusy(RuntimeEngine &engine, std::chrono::milliseconds timeout = 10000ms)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        auto update = engine.pollLatest();
+        if (update.completion)
+        {
+            engine.acknowledgeCompletion(*update.completion);
+            return update;
+        }
+        std::this_thread::yield();
+    }
+    throw std::runtime_error("Runtime completion timeout");
+}
+
 // -------------------------------------------------------------
 // 1. 200 节点微基准拓扑执行与纯引擎延迟分位数 (HS2-05 / A15)
 // -------------------------------------------------------------
@@ -829,7 +848,19 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     std::size_t         memAtSteady      = 0;
     std::size_t         peakWorkingSetKB = initialProbe.workingSetKB;
     std::vector<double> roundLatencies;
+    // 三层计时分别采样：宿主看到的整轮墙钟、引擎从节点窗口派生的流程区间、以及最慢节点的总计。
+    // 三者相减就是本轮真实的调度间隙与提交/读回开销，而不是靠猜。
+    std::vector<double> engineRoundLatencies;
+    std::vector<double> slowestNodeLatencies;
+    std::vector<double> schedulerGaps;
+    std::vector<double> setupLatencies;
+    std::vector<double> waitLatencies;
     roundLatencies.reserve(maxRounds);
+    engineRoundLatencies.reserve(maxRounds);
+    slowestNodeLatencies.reserve(maxRounds);
+    schedulerGaps.reserve(maxRounds);
+    setupLatencies.reserve(maxRounds);
+    waitLatencies.reserve(maxRounds);
 
     const auto startTime    = std::chrono::steady_clock::now();
     int        actualRounds = 0;
@@ -838,11 +869,26 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     {
         auto t0 = std::chrono::high_resolution_clock::now();
         require(engine->start(project, registry, RunMode::Once).code == 0, "round start failed");
-        waitCompletion(*engine);
-        auto   t1 = std::chrono::high_resolution_clock::now();
-        double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        auto tStart = std::chrono::high_resolution_clock::now();
+        auto update = waitCompletionBusy(*engine);
+        auto t1     = std::chrono::high_resolution_clock::now();
+        double ms   = std::chrono::duration<double, std::milli>(t1 - t0).count();
         roundLatencies.push_back(ms);
+        setupLatencies.push_back(std::chrono::duration<double, std::milli>(tStart - t0).count());
+        waitLatencies.push_back(std::chrono::duration<double, std::milli>(t1 - tStart).count());
         actualRounds = r + 1;
+        if (update.roundMilliseconds)
+        {
+            // Only snapshots published by this round can describe this round; an earlier one would
+            // silently widen the gap the benchmark is supposed to explain.
+            double slowest = 0.0;
+            for (const auto &node : update.nodes)
+                if (node.snapshot && node.snapshot->round == update.round)
+                    slowest = std::max(slowest, node.snapshot->timing.totalMs);
+            engineRoundLatencies.push_back(*update.roundMilliseconds);
+            slowestNodeLatencies.push_back(slowest);
+            schedulerGaps.push_back(std::max(0.0, *update.roundMilliseconds - slowest));
+        }
 
         auto currentProbe = getWorkingSetMemory();
         if (currentProbe.supported)
@@ -882,15 +928,65 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     }
 
     auto   probeBeforeReset = getWorkingSetMemory();
-    double p50              = calculatePercentile(roundLatencies, 50.0);
-    double p95              = calculatePercentile(roundLatencies, 95.0);
+    // 分位数必须来自未排序的样本：每次计算都先复制，避免 95 分位读到已经被 50 分位排好序的数组。
+    const auto percentileOf = [](const std::vector<double> &samples, double percentile)
+    {
+        std::vector<double> copy = samples;
+        return calculatePercentile(copy, percentile);
+    };
+    double p50 = percentileOf(roundLatencies, 50.0);
+    double p95 = percentileOf(roundLatencies, 95.0);
+    double p99 = percentileOf(roundLatencies, 99.0);
 
     engine->requestStop();
     require(engine->requestReset().code == 0, "requestReset failed");
     auto probeAfterReset = getWorkingSetMemory();
     auto vramAfterReset  = queryGpuVram();
 
-    std::cout << "  -> Loop " << actualRounds << " rounds: p50=" << p50 << " ms, p95=" << p95 << " ms\n";
+    std::cout << "  -> Loop " << actualRounds << " rounds: wall p50=" << p50 << " ms, p95=" << p95
+              << " ms, p99=" << p99 << " ms\n";
+    std::cout << "  -> Engine round p50=" << percentileOf(engineRoundLatencies, 50.0)
+              << " ms, p95=" << percentileOf(engineRoundLatencies, 95.0)
+              << " ms, p99=" << percentileOf(engineRoundLatencies, 99.0) << " ms; slowest node p99="
+              << percentileOf(slowestNodeLatencies, 99.0) << " ms; scheduler gap p99="
+              << percentileOf(schedulerGaps, 99.0) << " ms\n";
+    std::cout << "  -> Host split: session setup p50=" << percentileOf(setupLatencies, 50.0)
+              << " ms, p99=" << percentileOf(setupLatencies, 99.0) << " ms; completion wait p50="
+              << percentileOf(waitLatencies, 50.0) << " ms, p99=" << percentileOf(waitLatencies, 99.0)
+              << " ms\n";
+
+    // 基准证据要能回答“差额从哪来”，否则只是三组互不相干的数字。
+    {
+        std::ofstream benchmark(evidenceDir / "runtime_benchmark.json");
+        require(benchmark.is_open(), "Cannot open runtime_benchmark.json");
+        benchmark.precision(6);
+        benchmark << std::fixed;
+        const auto block = [&](const char *name, const std::vector<double> &samples)
+        {
+            benchmark << "\"" << name << "\": {\"p50\": " << percentileOf(samples, 50.0)
+                      << ", \"p95\": " << percentileOf(samples, 95.0) << ", \"p99\": "
+                      << percentileOf(samples, 99.0) << ", \"max\": "
+                      << (samples.empty() ? 0.0 : *std::max_element(samples.begin(), samples.end()))
+                      << "}";
+        };
+        benchmark << "{\n  \"rounds\": " << actualRounds << ",\n  \"samples\": "
+                  << roundLatencies.size() << ",\n  ";
+        block("wall_ms", roundLatencies);
+        benchmark << ",\n  ";
+        block("engine_round_ms", engineRoundLatencies);
+        benchmark << ",\n  ";
+        block("slowest_node_ms", slowestNodeLatencies);
+        benchmark << ",\n  ";
+        block("scheduler_gap_ms", schedulerGaps);
+        benchmark << ",\n  ";
+        block("session_setup_ms", setupLatencies);
+        benchmark << ",\n  ";
+        block("completion_wait_ms", waitLatencies);
+        benchmark << "\n}\n";
+        require(!benchmark.bad(), "Error writing runtime_benchmark.json");
+        std::cout << "  -> Percentiles persisted to " << (evidenceDir / "runtime_benchmark.json").string()
+                  << " [PASS]\n";
+    }
     std::cout << "  -> Memory curve: Initial=" << initialProbe.report << ", Steady=" << memAtSteady
               << " KB, Peak=" << peakWorkingSetKB << " KB, AfterReset=" << probeAfterReset.report
               << ", VRAM=" << vramAfterReset.report << "\n";
@@ -1291,6 +1387,11 @@ int main(int argc, char **argv)
         {
             maxSeconds = std::stoi(arg.substr(11));
             maxRounds  = 1000000;
+        }
+        else if (arg.rfind("--rounds=", 0) == 0)
+        {
+            maxRounds  = std::max(1, std::stoi(arg.substr(9)));
+            maxSeconds = 0;
         }
         else if (arg == "--evidence-dir" && i + 1 < argc)
         {

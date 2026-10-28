@@ -4,15 +4,15 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
-#include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
 
 #include <spdlog/async.h>
 #include <spdlog/details/log_msg.h>
 #include <spdlog/logger.h>
+#include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/base_sink.h>
-#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/daily_file_sink.h>
 #include <spdlog/sinks/stdout_sinks.h>
 #include <spdlog/spdlog.h>
 
@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -28,12 +29,12 @@ namespace visionrt
 {
 namespace
 {
-// The producer and the UI sink share one payload encoding: source, separator, message. A unit
-// separator can never appear in a source name, so no escaping is needed and the file formatter can
-// rebuild the same four fields without a second queue.
-constexpr char kFieldSeparator = '\x1f';
+// One pattern for the file and the window. It deliberately has no %n: the logger name is not a
+// business source and the old output repeated it on every line. %v already carries "[source] text",
+// so the line stays self-describing without a second field.
+constexpr const char *kLinePattern = "[%Y/%m/%d %T.%e] [%L] [%t] %v";
 
-std::atomic<bool>     gRunning{false};
+std::atomic<bool>          gRunning{false};
 std::atomic<std::uint64_t> gWriteFailures{0};
 
 void onSpdlogError(const std::string &)
@@ -69,63 +70,40 @@ QString levelText(spdlog::level::level_enum level)
     }
 }
 
-QString recordTime(const spdlog::log_clock::time_point &time)
+std::unique_ptr<spdlog::formatter> makeFormatter()
 {
-    const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch());
-    return QDateTime::fromMSecsSinceEpoch(millis.count()).toString(QStringLiteral("HH:mm:ss.zzz"));
+    return std::make_unique<spdlog::pattern_formatter>(kLinePattern, spdlog::pattern_time_type::local);
 }
 
-void splitPayload(std::string_view payload, std::string_view &source, std::string_view &message)
+// %v carries the business source in brackets so the formatter owns time, level and thread only.
+std::string buildPayload(std::string_view source, std::string_view message)
 {
-    const auto separator = payload.find(kFieldSeparator);
-    if (separator == std::string_view::npos)
-    {
-        source  = "日志";
-        message = payload;
-        return;
-    }
-    source  = payload.substr(0, separator);
-    message = payload.substr(separator + 1);
+    std::string payload;
+    payload.reserve(source.size() + message.size() + 3);
+    payload.push_back('[');
+    payload.append(source.data(), source.size());
+    payload.append("] ");
+    payload.append(message.data(), message.size());
+    return payload;
 }
 
-// The file needs the same four fields as the window, so it formats the shared payload itself
-// instead of keeping a second, differently ordered copy of every line.
-class VisionFormatter final : public spdlog::formatter
+// Formats one line outside the sink path (drop summaries). The sinks format through their own
+// formatter, so both paths share kLinePattern and cannot drift apart.
+QString formatLine(spdlog::level::level_enum level, std::string_view source, std::string_view message,
+                   spdlog::log_clock::time_point when = spdlog::log_clock::now())
 {
-public:
-    void format(const spdlog::details::log_msg &msg, spdlog::memory_buf_t &destination) override
-    {
-        std::string_view source;
-        std::string_view message;
-        splitPayload(std::string_view(msg.payload.data(), msg.payload.size()), source, message);
-
-        const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(msg.time.time_since_epoch());
-        const auto seconds = static_cast<std::time_t>(millis.count() / 1000);
-        const auto remainder = static_cast<int>(millis.count() % 1000);
-        std::tm    local{};
-#ifdef _WIN32
-        localtime_s(&local, &seconds);
-#else
-        localtime_r(&seconds, &local);
-#endif
-        char stamp[32];
-        std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &local);
-        char milliseconds[8];
-        std::snprintf(milliseconds, sizeof(milliseconds), ".%03d [", remainder);
-        const auto level = spdlog::level::to_string_view(msg.level);
-
-        destination.append(stamp, stamp + std::strlen(stamp));
-        destination.append(milliseconds, milliseconds + std::strlen(milliseconds));
-        destination.append(level.data(), level.data() + std::min<std::size_t>(level.size(), 7));
-        destination.append("] [", "] [" + 3);
-        destination.append(source.data(), source.data() + source.size());
-        destination.append("] ", "] " + 2);
-        destination.append(message.data(), message.data() + message.size());
-        destination.push_back('\n');
-    }
-
-    std::unique_ptr<spdlog::formatter> clone() const override { return std::make_unique<VisionFormatter>(*this); }
-};
+    const auto payload = buildPayload(source, message);
+    spdlog::details::log_msg msg(spdlog::string_view_t("visionrt", 9), level,
+                                 spdlog::string_view_t(payload.data(), payload.size()));
+    msg.time = when;
+    spdlog::memory_buf_t formatted;
+    auto                 formatter = makeFormatter();
+    formatter->format(msg, formatted);
+    auto line = QString::fromUtf8(formatted.data(), static_cast<int>(formatted.size()));
+    while (line.endsWith(QLatin1Char('\n')) || line.endsWith(QLatin1Char('\r')))
+        line.chop(1);
+    return line;
+}
 } // namespace
 
 class LogService::BufferedSink final : public spdlog::sinks::base_sink<std::mutex>
@@ -144,9 +122,9 @@ public:
         QVector<LogRecord>          result;
         if (dropped_ > 0)
         {
-            result.push_back(LogRecord{QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")),
-                                       QStringLiteral("警告"), QStringLiteral("日志"),
-                                       QStringLiteral("队列已满，丢弃 %1 条较早日志").arg(dropped_)});
+            result.push_back(LogRecord{formatLine(spdlog::level::warn, "日志",
+                                                  "队列已满，丢弃 " + std::to_string(dropped_) + " 条较早日志"),
+                                       levelText(spdlog::level::warn)});
             dropped = dropped_;
             dropped_ = 0;
         }
@@ -169,17 +147,20 @@ public:
 protected:
     void sink_it_(const spdlog::details::log_msg &msg) override
     {
-        std::string_view source;
-        std::string_view message;
-        splitPayload(std::string_view(msg.payload.data(), msg.payload.size()), source, message);
+        // The window receives the formatter output itself, so a line can never be rendered
+        // differently from the file. Only the trailing newline is dropped for the list row.
+        spdlog::memory_buf_t formatted;
+        base_sink<std::mutex>::formatter_->format(msg, formatted);
+        auto line = QString::fromUtf8(formatted.data(), static_cast<int>(formatted.size()));
+        while (line.endsWith(QLatin1Char('\n')) || line.endsWith(QLatin1Char('\r')))
+            line.chop(1);
+
         LogRecord record;
-        record.time    = recordTime(msg.time);
-        record.level   = levelText(msg.level);
-        record.source  = QString::fromUtf8(source.data(), static_cast<int>(source.size()));
-        const auto size = std::min<std::size_t>(message.size(), maximumBytes_);
-        record.message = QString::fromUtf8(message.data(), static_cast<int>(size));
-        if (size < message.size())
-            record.message += QStringLiteral("…");
+        record.level = levelText(msg.level);
+        const auto size = std::min<std::size_t>(static_cast<std::size_t>(line.size()), maximumBytes_);
+        record.line     = line.left(static_cast<int>(size));
+        if (size < static_cast<std::size_t>(line.size()))
+            record.line += QStringLiteral("…");
         while (records_.size() >= capacity_)
         {
             records_.pop_front();
@@ -206,8 +187,9 @@ struct LogService::Impl
 {
     struct PendingError
     {
-        LogRecord                    first;
-        std::uint64_t                count = 1;
+        std::string                           source;
+        std::string                           message;
+        std::uint64_t                         count = 1;
         std::chrono::steady_clock::time_point last;
     };
 
@@ -216,16 +198,24 @@ struct LogService::Impl
     std::shared_ptr<spdlog::logger>                    logger;
     std::shared_ptr<BufferedSink>                      uiSink;
     std::shared_ptr<spdlog::sinks::sink>               fileSink;
+    bool                                               fileReady = false;
     std::atomic<bool>                                  running{false};
     std::atomic<bool>                                  viewActive{false};
     std::atomic<bool>                                  notifyPending{false};
-    std::atomic<std::uint64_t>                         fileFailures{0};
     QtMessageHandler                                   previousHandler = nullptr;
     QTimer                                             uiTimer;
     QTimer                                             flushTimer;
     std::mutex                                         coalesceMutex;
     std::map<std::string, PendingError, std::less<>>   pendingErrors;
     std::uint64_t                                      reportedDropped = 0;
+
+    // The default location is the software directory, not a per-user data directory: the log has to
+    // sit next to the executable the user actually launched.
+    static QString defaultFile()
+    {
+        const auto directory = QCoreApplication::applicationDirPath();
+        return (directory.isEmpty() ? QDir::currentPath() : directory) + QStringLiteral("/logs/visionrt.log");
+    }
 };
 
 LogService::LogService(QObject *parent) : QObject(parent), impl_(std::make_unique<Impl>())
@@ -255,41 +245,36 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
         return false;
 
     impl_->config = config;
-    impl_->path   = filePath;
-    if (impl_->path.isEmpty())
-    {
-        const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-                               + QStringLiteral("/logs");
-        QDir().mkpath(directory);
-        impl_->path = directory + QStringLiteral("/visionrt.log");
-    }
-    else
-    {
-        QDir().mkpath(QFileInfo(impl_->path).absolutePath());
-    }
+    impl_->path   = filePath.isEmpty() ? Impl::defaultFile() : filePath;
+    QDir().mkpath(QFileInfo(impl_->path).absolutePath());
 
     std::vector<spdlog::sink_ptr> sinks;
     try
     {
-        auto file = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            impl_->path.toStdString(), impl_->config.fileBytes, impl_->config.fileCount);
-        file->set_formatter(std::make_unique<VisionFormatter>());
-        impl_->fileSink = file;
+        // The base name keeps the date suffix implicit: spdlog writes today's local date into
+        // `visionrt_YYYY-MM-DD.log` and switches file by itself at local midnight.
+        auto file = std::make_shared<spdlog::sinks::daily_file_sink_mt>(impl_->path.toStdString(), 0, 0, false);
+        file->set_formatter(makeFormatter());
+        impl_->fileSink  = file;
+        impl_->fileReady = true;
         sinks.push_back(file);
     }
     catch (const std::exception &)
     {
         // A log file that cannot be opened never blocks startup and never opens a dialog: the
-        // service keeps running on stderr and counts the failure.
+        // service keeps running on stderr, counts the failure and says so in one diagnostic line.
         gWriteFailures.fetch_add(1, std::memory_order_relaxed);
         auto fallback = std::make_shared<spdlog::sinks::stderr_sink_mt>();
-        fallback->set_formatter(std::make_unique<VisionFormatter>());
-        impl_->fileSink = fallback;
+        fallback->set_formatter(makeFormatter());
+        impl_->fileSink  = fallback;
+        impl_->fileReady = false;
         sinks.push_back(fallback);
     }
 
-    impl_->uiSink = std::make_shared<BufferedSink>(impl_->config.uiCapacity, impl_->config.maxMessageBytes,
+    impl_->uiSink = std::make_shared<BufferedSink>(impl_->config.uiCapacity,
+                                                   std::max<std::size_t>(256, impl_->config.maxMessageBytes * 2),
                                                    [this] { scheduleDrain(); });
+    impl_->uiSink->set_formatter(makeFormatter());
     sinks.push_back(impl_->uiSink);
 
     spdlog::init_thread_pool(impl_->config.queueCapacity, 1);
@@ -316,9 +301,7 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
                     if (overrun > 0)
                     {
                         pool->reset_overrun_counter();
-                        std::string summary = std::string("日志") + kFieldSeparator
-                                              + "异步队列已满，丢弃 " + std::to_string(overrun) + " 条";
-                        impl_->logger->log(spdlog::level::warn, summary);
+                        warn("日志", "异步队列已满，丢弃 " + std::to_string(overrun) + " 条");
                     }
                 }
                 std::vector<std::pair<std::string, Impl::PendingError>> pending;
@@ -330,16 +313,13 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
                 }
                 for (const auto &[key, entry] : pending)
                 {
-                    std::string message = entry.first.message.toStdString();
+                    std::string message = entry.message;
                     if (entry.count > 1)
-                        message += "（重复 " + std::to_string(entry.count) + " 次，最近 "
-                                   + entry.first.time.toStdString() + "）";
-                    std::string payload;
-                    payload.reserve(entry.first.source.size() + message.size() + 1);
-                    payload += entry.first.source.toStdString();
-                    payload += kFieldSeparator;
-                    payload += message;
-                    impl_->logger->log(spdlog::level::err, payload);
+                        message += "（重复 " + std::to_string(entry.count) + " 次）";
+                    if (!impl_->logger)
+                        continue;
+                    const auto payload = buildPayload(entry.source, message);
+                    impl_->logger->log(spdlog::level::err, spdlog::string_view_t(payload.data(), payload.size()));
                 }
             });
     impl_->flushTimer.start();
@@ -380,7 +360,10 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
 
     impl_->running.store(true, std::memory_order_release);
     gRunning.store(true, std::memory_order_release);
-    info("日志", ("日志服务已启动：" + impl_->path).toStdString());
+    if (impl_->fileReady)
+        info("日志", ("日志服务已启动：" + impl_->path).toStdString());
+    else
+        warn("日志", ("日志目录不可写，日志仅输出到标准错误：" + QFileInfo(impl_->path).absolutePath()).toStdString());
     return true;
 }
 
@@ -412,13 +395,11 @@ void LogService::shutdown()
     }
     for (const auto &[key, entry] : pending)
     {
-        std::string message = entry.first.message.toStdString();
+        std::string message = entry.message;
         if (entry.count > 1)
             message += "（重复 " + std::to_string(entry.count) + " 次）";
-        std::string payload = entry.first.source.toStdString();
-        payload += kFieldSeparator;
-        payload += message;
-        impl_->logger->log(spdlog::level::err, payload);
+        const auto payload = buildPayload(entry.source, message);
+        impl_->logger->log(spdlog::level::err, spdlog::string_view_t(payload.data(), payload.size()));
     }
 
     if (impl_->logger)
@@ -430,6 +411,7 @@ void LogService::shutdown()
     impl_->uiSink.reset();
     impl_->fileSink.reset();
     impl_->logger.reset();
+    impl_->fileReady = false;
 }
 
 void LogService::flush()
@@ -443,6 +425,16 @@ bool LogService::running() const
     return impl_ && impl_->running.load(std::memory_order_acquire);
 }
 
+bool LogService::fileSinkReady() const
+{
+    return impl_ && impl_->fileReady;
+}
+
+QString LogService::baseFilePath() const
+{
+    return impl_ ? impl_->path : QString();
+}
+
 void LogService::write(LogLevel level, std::string_view source, std::string_view message)
 {
     if (!gRunning.load(std::memory_order_acquire))
@@ -454,29 +446,29 @@ void LogService::writeImpl(LogLevel level, std::string_view source, std::string_
 {
     if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
         return;
-    // The window truncates for display and marks the line as shortened; the file keeps the full
-    // text. Only an unreasonable producer payload is capped before it reaches either sink.
-    const auto hardLimit = impl_->config.maxMessageBytes * 8;
-    if (message.size() > hardLimit)
-        message = message.substr(0, hardLimit);
+    // One cap for both sinks: the line the window shows is the line the file contains. The ellipsis
+    // marks the truncation in both of them instead of making the two texts differ.
+    std::string capped;
+    if (message.size() > impl_->config.maxMessageBytes)
+    {
+        capped.assign(message.substr(0, impl_->config.maxMessageBytes));
+        capped += "…";
+        message = capped;
+    }
     if (level == LogLevel::Error || level == LogLevel::Critical)
     {
         writeCoalesced(level, source, message, std::chrono::steady_clock::now());
         return;
     }
-    std::string payload;
-    payload.reserve(source.size() + message.size() + 2);
-    payload.append(source.data(), source.size());
-    payload.push_back(kFieldSeparator);
-    payload.append(message.data(), message.size());
-    impl_->logger->log(toSpd(level), payload);
+    const auto payload = buildPayload(source, message);
+    impl_->logger->log(toSpd(level), spdlog::string_view_t(payload.data(), payload.size()));
 }
 
 void LogService::writeCoalesced(LogLevel level, std::string_view source, std::string_view message,
                                 const std::chrono::steady_clock::time_point &now)
 {
     std::string key(source);
-    key.push_back(kFieldSeparator);
+    key.push_back('\n');
     key.append(message.data(), message.size());
     std::vector<std::pair<std::string, Impl::PendingError>> flushed;
     {
@@ -500,23 +492,16 @@ void LogService::writeCoalesced(LogLevel level, std::string_view source, std::st
                     flushed.emplace_back(pendingKey, std::move(entry));
                 impl_->pendingErrors.clear();
             }
-            LogRecord first;
-            first.time   = recordTime(spdlog::log_clock::now());
-            first.level  = levelText(toSpd(level));
-            first.source = QString::fromUtf8(source.data(), static_cast<int>(source.size()));
-            first.message = QString::fromUtf8(message.data(), static_cast<int>(message.size()));
-            impl_->pendingErrors.emplace(key, Impl::PendingError{std::move(first), 1, now});
+            impl_->pendingErrors.emplace(key, Impl::PendingError{std::string(source), std::string(message), 1, now});
         }
     }
     for (const auto &[pendingKey, entry] : flushed)
     {
-        std::string text = entry.first.message.toStdString();
+        std::string text = entry.message;
         if (entry.count > 1)
-            text += "（重复 " + std::to_string(entry.count) + " 次，最近 " + entry.first.time.toStdString() + "）";
-        std::string payload = entry.first.source.toStdString();
-        payload.push_back(kFieldSeparator);
-        payload += text;
-        impl_->logger->log(spdlog::level::err, payload);
+            text += "（重复 " + std::to_string(entry.count) + " 次）";
+        const auto payload = buildPayload(entry.source, text);
+        impl_->logger->log(toSpd(level), spdlog::string_view_t(payload.data(), payload.size()));
     }
 }
 

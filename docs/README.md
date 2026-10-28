@@ -20,6 +20,25 @@
 
 未验证项：无（GPU 已于 RTX 4060 / sm89 用真实 yolov8n.wts 完成双阶段端到端验收，见 WORKLOG T36 第四批）。
 
+## 计时口径
+
+所有耗时来自同一个 steady_clock，是嵌套区间而不是三次独立测量。实现入口：[节点执行窗口](../src/runtime/NodeRuntime.cpp)、[流程/全流程派生](../src/runtime/RuntimeEngine.cpp)、[显示规则](../src/ui/DurationText.cpp)。
+
+| 显示 | 区间 | 语义 |
+| --- | --- | --- |
+| 预处理 / 算子时间 / 后处理 | 节点内实际进入的阶段 | 只显示测到的阶段；`0.000 ms` 是有效值，“未测量”不显示 |
+| 节点总计 | 输入准备开始 → 最后一个阶段结束 | 各阶段之和不超过总计，差额仅是阶段之间的调度帧 |
+| 流程 | 该流程内已执行节点窗口的并集 | 单节点流程时与节点总计相同 |
+| 全流程 | 本轮所有流程窗口的并集 | 单流程时与流程相同；多流程差额来自并发错峰 |
+| 已运行 | 会话启动 → 结束 | 含准备、执行与收尾读回，因此永不小于全流程 |
+
+Release、500 轮的实测（[基准证据](../build/evidence/runtime_benchmark.json)，`performance_contract --rounds=500`）给出同一模型的数值：引擎流程 p50 1.00 ms、最慢节点 p50 0.46 ms、节点间调度间隙 p50 0.53 ms、会话建立 p50 0.03 ms。多节点流程里约一半时间是节点之间的调度帧而不是算子本身——这正说明三层时间应当不同，而单节点单流程时必然相同。基准 harness 自身用忙轮询而不是 `sleep_for(1ms)`，否则 Windows 的 15.6 ms 定时器精度会被误当成运行时开销。
+
+构建元数据与日志：
+
+- [构建元数据生成器](../cmake/WriteBuildInfo.cmake)：链接完成阶段写 `build_info.json`（宿主）与 `contracts-build-info.json`（Contracts 产物时间）；工具包由 VisionTools 构建结束时写同名文件。关于弹窗按当前机器本地时区显示并带偏移，缺失即“未知”，组件之间不互相顶替。
+- [日志服务](../src/log/LogService.cpp)：整行纯文本 `[时间] [级别] [线程] [来源] 内容`，窗口与文件同一格式器；按本地日期落盘到 `<exe>/logs/visionrt_YYYY-MM-DD.log`，同日重启追加；目录不可写时降级到 stderr 并计入失败。
+
 ## 界面约束
 
 重构沿用用户确认的三张 VisionRT V3 截图作为外观基准，保持既有布局、配色、间距、边框、图标、控件与节点外观；不另建样式体系，不将结构重构变成视觉改版。
@@ -45,7 +64,7 @@
 | Python 值桥接与生命周期 | [PythonInterop](../src/python/PythonInterop.h)、[图像存储桥接](../src/python/PythonImages.cpp)、[Python 对象保活](../src/python/PythonStorage.h)、[值契约](../tests/python_value_contract.cpp)、[解释器关闭契约](../tests/python_shutdown_contract.cpp) |
 | 执行状态、阶段与独立生命周期诊断 | [快照与诊断模型](../src/runtime/Snapshot.h)、[最终发布](../src/runtime/NodeRuntime.cpp)、[界面上下文与 JSON](../src/ui/Diagnostics.h)、[输出预览与捕获](../src/ui/OutputModel.h)、[真实模块及工作台契约](../tests/plugin_contract.cpp) |
 | 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[真实释放诊断与队列溢出](../tests/runtime_diagnostics_contract.cpp)、[热路径无 JSON 重读与实例重建](../tests/runtime_hotpath_contract.cpp)、[运行期 Python 延迟创建](../tests/runtime_python_lazy_contract.cpp)、[真实停止与关窗事件](../tests/workbench_cancellation.cpp)、[真实停止/复位/关窗交错](../tests/workbench_lifecycle_contract.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |
-| 应用日志与诊断 | [日志服务](../src/log/LogService.h)、[有界日志模型](../src/log/LogModel.h)、[日志窗口](../src/ui/qml/LogDialog.qml)、[控制器诊断入口](../src/ui/AppControllerDiagnostics.cpp)、[日志队列/桥接/轮转契约](../tests/log_contract.cpp)、[真实窗口契约](../tests/workbench_startup.cpp) |
+| 应用日志与诊断 | [日志服务](../src/log/LogService.h)、[有界日志模型](../src/log/LogModel.h)、[日志窗口](../src/ui/qml/LogDialog.qml)、[控制器诊断入口](../src/ui/AppControllerDiagnostics.cpp)、[日志行/每日文件/降级契约](../tests/log_contract.cpp)、[真实窗口契约](../tests/workbench_startup.cpp) |
 | 节点元数据与画布路由 | [节点读回](../src/ui/AppController.cpp)、[读回与原生值契约](../tests/ui_value_contract.cpp)、[路由器](../src/ui/WireRouter.h)、[画布](../src/ui/qml/FlowCanvas.qml)、[路由契约](../tests/wire_router_contract.cpp)、[真实窗口契约](../tests/workbench_canvas.cpp)、[同轨迹分阶段基准](../tests/wire_routing_benchmark.cpp) |
 | 工作台结构与样式 | [主窗口](../src/ui/qml/Main.qml)、[流程页签与画布](../src/ui/qml/FlowCanvas.qml)、[工具库](../src/ui/qml/ToolLibrary.qml)、[主题](../src/ui/Theme.h)、[ui](../src/ui)、[真实流程新增/切换/关闭](../tests/workbench_flows_contract.cpp)、[真实复制粘贴与内部连线](../tests/workbench_clipboard_contract.cpp)、[真实运行/成功/失败/取消状态与颜色](../tests/workbench_status_contract.cpp)、[真实工具树搜索/折叠/展开](../tests/workbench_tooltree_contract.cpp)、[真实改参与发布原子替换](../tests/workbench_publication_contract.cpp)、[真实窄窗与100/150/200%DPI布局](../tests/workbench_layout_contract.cpp)、[不可用工具添加拒绝](../tests/workbench_unavailable_tool_contract.cpp) |
 | ROI 编辑与拒绝诊断 | [编辑入口](../src/ui/AppControllerRoi.cpp)、[图像视口](../src/ui/ImageViewport.h)、[绘制交互契约](../tests/viewport_contract.cpp)、[原生值工作台契约](../tests/ui_value_contract.cpp)、[真实窗口契约](../tests/workbench_roi.cpp) |

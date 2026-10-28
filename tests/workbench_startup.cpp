@@ -217,8 +217,6 @@ void startupProjectContract()
             logConfig.uiCapacity        = 100;
             logConfig.uiBatchIntervalMs = 20;
             logConfig.uiBatchMaximum    = 50;
-            logConfig.fileBytes         = 64 * 1024;
-            logConfig.fileCount         = 2;
             auto &logService             = visionrt::LogService::instance();
             struct LogStop
             {

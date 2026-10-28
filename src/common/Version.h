@@ -2,15 +2,18 @@
 
 #include <visionrt/common/VersionDef.h>
 
+#include <cstdint>
 #include <string>
 
 namespace visionrt {
 
+// 一个组件的构建元数据。built_at_epoch 是构建完成时刻（秒，UTC 纪元），0 表示未知；它由构建
+// 完成阶段写入的 build_info.json 提供，运行期再按本地时区显示。
 struct ComponentBuildInfo
 {
     std::string version;
     std::string commit;
-    std::string build_time;
+    std::int64_t built_at_epoch = 0;
 };
 
 struct VersionInfo
@@ -27,7 +30,6 @@ struct VersionInfo
     std::string full_string;
     std::string contracts_version;
     std::string contracts_commit;
-    std::string contracts_build_time;
 };
 
 // 获取结构化版本信息

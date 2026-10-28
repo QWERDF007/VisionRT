@@ -12,6 +12,7 @@
 
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
@@ -131,6 +132,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     registry.setPluginLoader(pluginLoader);
     registerReceiveTools(registry);
     registerSelectTools(registry);
+    loadComponentBuildInfo();
     loadToolsPackage();
     // Interpreter lifetime encloses the worker pool and all Python instances.
     try
@@ -1122,6 +1124,51 @@ void AppController::Impl::refreshFinished()
     emit q->catalogChanged();
 }
 
+namespace {
+// 组件构建元数据由构建完成阶段生成。缺失、损坏或没有时间戳都视为“未知”，绝不回退到别的组件
+// 时间——三个组件各自记录自己的构建完成时刻。
+std::optional<ComponentBuildInfo> readBuildInfo(const std::filesystem::path &path)
+{
+    QFile infoFile(workbench::pathText(path));
+    if (!infoFile.open(QIODevice::ReadOnly))
+        return std::nullopt;
+    QJsonParseError parseError;
+    const auto      doc = QJsonDocument::fromJson(infoFile.readAll(), &parseError);
+    if (parseError.error || !doc.isObject())
+        return std::nullopt;
+    const auto         obj = doc.object();
+    ComponentBuildInfo info;
+    info.version = obj.value(QStringLiteral("version")).toString().toStdString();
+    info.commit  = obj.value(QStringLiteral("commit")).toString().toStdString();
+    info.built_at_epoch = static_cast<std::int64_t>(obj.value(QStringLiteral("built_at_epoch")).toDouble(0));
+    if (info.version.empty() && info.commit.empty() && info.built_at_epoch == 0)
+        return std::nullopt;
+    return info;
+}
+
+// 构建时刻按“当前机器的本地时区”显示并带上偏移：同一个包换到别的时区打开时，看到的是同一个
+// 瞬间的当地写法，而不是某个固定时区的字符串。
+QString builtAtText(const std::optional<ComponentBuildInfo> &info)
+{
+    if (!info || info->built_at_epoch <= 0)
+        return QStringLiteral("未知");
+    const auto time     = QDateTime::fromSecsSinceEpoch(info->built_at_epoch).toLocalTime();
+    const auto offset   = time.offsetFromUtc();
+    const auto sign     = offset < 0 ? QLatin1Char('-') : QLatin1Char('+');
+    const auto magnitude = offset < 0 ? -offset : offset;
+    return time.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) + QLatin1Char(' ') + sign
+         + QStringLiteral("%1:%2")
+               .arg(magnitude / 3600, 2, 10, QLatin1Char('0'))
+               .arg((magnitude % 3600) / 60, 2, 10, QLatin1Char('0'));
+}
+} // namespace
+
+void AppController::Impl::loadComponentBuildInfo()
+{
+    hostBuildInfo      = readBuildInfo(applicationDirectory / "build_info.json");
+    contractsBuildInfo = readBuildInfo(applicationDirectory / "contracts-build-info.json");
+}
+
 // Reads the installed package and replaces the registered tool set; an absent or failing package yields an empty registered tool set.
 void AppController::Impl::loadToolsPackage()
 {
@@ -1139,22 +1186,7 @@ void AppController::Impl::loadToolsPackage()
     toolsPackageInstalled = true;
     toolsPackageBuildInfo.reset();
 
-    const auto buildInfoPath = candidate / "build_info.json";
-    QFile infoFile(workbench::pathText(buildInfoPath));
-    if (infoFile.open(QIODevice::ReadOnly))
-    {
-        QJsonParseError parseError;
-        const auto doc = QJsonDocument::fromJson(infoFile.readAll(), &parseError);
-        if (!parseError.error && doc.isObject())
-        {
-            const auto obj = doc.object();
-            ComponentBuildInfo info;
-            info.version = obj.value(QStringLiteral("version")).toString().toStdString();
-            info.commit = obj.value(QStringLiteral("commit")).toString().toStdString();
-            info.build_time = obj.value(QStringLiteral("build_time_utc")).toString().toStdString();
-            toolsPackageBuildInfo = std::move(info);
-        }
-    }
+    toolsPackageBuildInfo = readBuildInfo(candidate / "build_info.json");
 
     try
     {
@@ -1270,14 +1302,14 @@ QString AppController::aboutText() const
 
     QStringList lines;
 
-    // VisionRT
+    // 三个组件遵循同一条规则：版本与 Commit 来自各自编译期输入，构建时间来自构建完成阶段写入
+    // 的组件元数据，缺失即“未知”。任何组件都不会借用别的组件的时间。
     lines << QStringLiteral("VisionRT");
     lines << QStringLiteral("版本          %1").arg(sanitize(GetVersionString()));
     lines << QStringLiteral("Commit        %1").arg(sanitize(GetCommitHashString()));
-    lines << QStringLiteral("构建时间      %1").arg(sanitize(GetBuildTimeString()));
+    lines << QStringLiteral("构建时间      %1").arg(builtAtText(impl_->hostBuildInfo));
     lines << QString();
 
-    // VisionTools
     lines << QStringLiteral("VisionTools");
     if (!impl_->toolsPackageInstalled)
     {
@@ -1291,16 +1323,15 @@ QString AppController::aboutText() const
     {
         lines << QStringLiteral("版本          %1").arg(sanitize(impl_->toolsPackageBuildInfo->version));
         lines << QStringLiteral("Commit        %1").arg(sanitize(impl_->toolsPackageBuildInfo->commit));
-        lines << QStringLiteral("构建时间      %1").arg(sanitize(impl_->toolsPackageBuildInfo->build_time));
+        lines << QStringLiteral("构建时间      %1").arg(builtAtText(impl_->toolsPackageBuildInfo));
     }
     lines << QString();
 
-    // VisionRTContracts
     const auto contracts = GetContractsVersion();
     lines << QStringLiteral("VisionRTContracts");
     lines << QStringLiteral("版本          %1").arg(sanitize(contracts.version));
     lines << QStringLiteral("Commit        %1").arg(sanitize(contracts.commit));
-    lines << QStringLiteral("构建时间      %1").arg(sanitize(contracts.build_time));
+    lines << QStringLiteral("构建时间      %1").arg(builtAtText(impl_->contractsBuildInfo));
     lines << QString();
 
     // Environment
@@ -1404,6 +1435,9 @@ QVariantList AppController::nodes() const
                 statusDetail = statusDisplay(snapshot->status).detail;
             }
             const auto timing = nodeTimingText(snapshot.get(), running);
+            QVariantList phases;
+            for (const auto &phase : timingPhasesOf(timing))
+                phases.push_back(QVariantMap{{"label", phase.label}, {"value", phase.value}});
             if (impl_->instanceErrors.contains(node.id))
             {
                 state         = "failed";
@@ -1448,12 +1482,7 @@ QVariantList AppController::nodes() const
                                               || disposition == NodeDisposition::Canceled},
                 {                "stale",                   stale},
                 {           "timingText",             timing.total},
-                {   "timingOperatorText",          timing.toolCall},
-                {    "timingPrepareText",          timing.prepare},
-                {       "timingInitText",             timing.init},
-                {   "timingValidateText",         timing.validate},
-                { "timingPreprocessText",        timing.preprocess},
-                {"timingPostprocessText",       timing.postprocess},
+                {         "timingPhases",                  phases},
                 {              "missing",                  missing},
                 {           "defMissing",               defMissing},
                 {      "implUnavailable",          implUnavailable},

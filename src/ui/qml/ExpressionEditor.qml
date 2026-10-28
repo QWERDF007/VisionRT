@@ -206,7 +206,7 @@ Dialog {
                 : "变量端口由稳定标识区分；结果公式按顺序求值，隐藏结果只供后续公式使用，不输出端口。"
         }
 
-        ScrollView {
+        BoundedScrollView {
             id: scroller
             objectName: "expressionScroller"
             Layout.fillWidth: true

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <deque>
+#include <limits>
 #include <set>
 #include <thread>
 
@@ -47,6 +48,11 @@ bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
 double milliseconds(Clock::duration duration)
 {
     return std::chrono::duration<double, std::milli>(duration).count();
+}
+
+double nanosecondsToMilliseconds(std::int64_t nanoseconds)
+{
+    return static_cast<double>(nanoseconds) / 1e6;
 }
 
 const char *exceptionSummary(RuntimePhase phase)
@@ -435,21 +441,14 @@ struct RuntimeEngine::Impl
                     RoundContext{frozen, generation, session, ++round, activeStop});
             }
 
-            struct CompletionClock
-            {
-                Clock::time_point start, end;
-            };
-
             struct Submission
             {
-                std::shared_ptr<CompiledFlow>    plan;
-                std::shared_ptr<CompletionClock> clock;
-                tf::Future<void>                 future;
+                std::shared_ptr<CompiledFlow> plan;
+                tf::Future<void>              future;
             };
 
             std::vector<Submission> submitted;
             submitted.reserve(selected.size());
-            const auto roundStart = Clock::now();
 
             for (const auto &plan : selected)
             {
@@ -457,36 +456,60 @@ struct RuntimeEngine::Impl
                              [&]
                              {
                                  plan->activeRound = context;
-                                 auto clock        = std::make_shared<CompletionClock>();
-                                 clock->start      = Clock::now();
-                                 auto future       = executor.run(plan->graph, [clock] { clock->end = Clock::now(); });
-                                 submitted.push_back({plan, std::move(clock), std::move(future)});
+                                 submitted.push_back({plan, executor.run(plan->graph)});
                              }))
                 {
                     infrastructureError = true;
                     break;
                 }
             }
-            std::vector<FlowTiming> timings;
-            timings.reserve(submitted.size());
             for (auto &submission : submitted)
-            {
                 if (!attempt(RuntimePhase::Completion, [&] { submission.future.get(); }))
                     infrastructureError = true;
-                if (submission.clock->end != Clock::time_point{})
+            for (const auto &plan : selected) plan->activeRound.reset();
+
+            // 流程与全流程都从节点自己发布的执行窗口推导，不再另起一套计时：
+            //   流程 = 该流程内所有已执行节点的 [startedNs, endedNs] 并集；
+            //   全流程 = 本轮所有流程窗口的并集。
+            // 因此单节点单流程时，节点总计、流程、全流程是同一个区间，数值必然相等；多节点/多流程
+            // 的差额只来自节点之间真实的调度间隙与并发错峰。
+            std::vector<FlowTiming> timings;
+            timings.reserve(submitted.size());
+            auto roundFirst = std::numeric_limits<std::int64_t>::max();
+            auto roundLast  = std::numeric_limits<std::int64_t>::min();
+            for (const auto &submission : submitted)
+            {
+                auto first = std::numeric_limits<std::int64_t>::max();
+                auto last  = std::numeric_limits<std::int64_t>::min();
+                for (auto id : submission.plan->nodes)
                 {
-                    timings.push_back(
-                        {submission.plan->id, milliseconds(submission.clock->end - submission.clock->start)});
+                    const auto snapshot = nodes.at(id)->slot.latest();
+                    if (!snapshot || snapshot->generation != context->generation
+                        || snapshot->session != context->session || snapshot->round != context->round
+                        || snapshot->startedNs == 0 || snapshot->endedNs < snapshot->startedNs)
+                        continue;
+                    first = std::min(first, snapshot->startedNs);
+                    last  = std::max(last, snapshot->endedNs);
+                }
+                if (first <= last)
+                {
+                    timings.push_back({submission.plan->id, nanosecondsToMilliseconds(last - first)});
+                    roundFirst = std::min(roundFirst, first);
+                    roundLast  = std::max(roundLast, last);
+                }
+                else
+                {
+                    // 整条流程本轮没有节点真正执行：报 0 而不是沿用上一轮的旧值。
+                    timings.push_back({submission.plan->id, 0.0});
                 }
             }
-            for (const auto &plan : selected) plan->activeRound.reset();
-            const auto roundEnd = Clock::now();
-            const double calculatedRoundMs = milliseconds(roundEnd - roundStart);
             {
                 std::unique_lock lock(control);
                 flowTiming = std::move(timings);
-                roundMilliseconds = calculatedRoundMs;
-                sessionElapsedMs = milliseconds(roundEnd - sessionStartTime);
+                roundMilliseconds = roundFirst <= roundLast
+                                      ? std::optional<double>(nanosecondsToMilliseconds(roundLast - roundFirst))
+                                      : std::nullopt;
+                sessionElapsedMs = milliseconds(Clock::now() - sessionStartTime);
                 for (auto &[id, runtime] : nodes) runtime->active.store(false, std::memory_order_release);
                 std::function<void(RuntimeReadback)> notifyReadback;
                 std::optional<RuntimeReadback>       currentReadback;

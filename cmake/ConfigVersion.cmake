@@ -87,7 +87,11 @@ function(configure_version target LIBPREFIX incpath VERSION_FULL)
             set(CONTRACTS_BRANCH "${_c_branch}")
         endif()
     endif()
-    set(CONTRACTS_BUILD_TIME "${BUILD_TIME}")
+    # Contracts 的构建时刻只能来自它自己的产物，任何复用宿主时间的写法都是伪造；因此这里不再
+    # 往版本头文件里写 Contracts 的构建时间，改由构建完成阶段生成的组件元数据提供。
+    set(${LIBPREFIX}_CONTRACTS_VERSION "${CONTRACTS_VERSION}" CACHE INTERNAL "${TARGET} contracts version")
+    set(${LIBPREFIX}_CONTRACTS_COMMIT "${CONTRACTS_COMMIT}" CACHE INTERNAL "${TARGET} contracts commit")
+    set(${LIBPREFIX}_CONTRACTS_BRANCH "${CONTRACTS_BRANCH}" CACHE INTERNAL "${TARGET} contracts branch")
 
     # 由模板生成版本头文件
     configure_file(${config_version_script_path}/VersionDef.h.in

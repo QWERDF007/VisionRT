@@ -433,11 +433,26 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(!content.contains(QStringLiteral("宿主准备")) && !content.contains(QStringLiteral("初始化"))
                 && !content.contains(QStringLiteral("结果校验")),
             "hover card still shows host framework stages");
-    require(content.contains(first.value("timingPreprocessText").toString()),
+    // The hover rows come from the same structured phase list the node card uses, so every rendered
+    // value must be one of the measured phases and nothing else.
+    const auto phaseValue = [](const QVariantMap &node, const QString &label) -> QString
+    {
+        for (const auto &entry : node.value("timingPhases").toList())
+        {
+            const auto phase = entry.toMap();
+            if (phase.value("label").toString() == label)
+                return phase.value("value").toString();
+        }
+        return {};
+    };
+    const auto preprocessText  = phaseValue(first, QStringLiteral("预处理"));
+    const auto operatorText    = phaseValue(first, QStringLiteral("算子时间"));
+    const auto postprocessText = phaseValue(first, QStringLiteral("后处理"));
+    require(!preprocessText.isEmpty() && content.contains(preprocessText),
             "hover card preprocess time does not match the structured node data");
-    require(content.contains(first.value("timingOperatorText").toString()),
+    require(!operatorText.isEmpty() && content.contains(operatorText),
             "hover card operator time does not match the structured node data");
-    require(content.contains(first.value("timingPostprocessText").toString()),
+    require(!postprocessText.isEmpty() && content.contains(postprocessText),
             "hover card postprocess time does not match the structured node data");
 
     int renderedTexts = 0;
@@ -466,11 +481,15 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
 
     require(ensureActive(), "execution hover test window did not stay active");
     app.toggleLoop();
+    // While the node runs, both the card and the hover card must be free of timing text: the state
+    // is carried by the header colour and the status dot, and no earlier round may be reused.
     const bool runningVisible = QTest::qWaitFor([&]
     {
-        return nodeMap(id).value("state").toString() == QStringLiteral("running")
-            && nodeMap(id).value("timingText").toString() == QStringLiteral("运行中")
-            && texts().contains(QStringLiteral("运行中"));
+        const auto runningMap = nodeMap(id);
+        return runningMap.value("state").toString() == QStringLiteral("running")
+            && runningMap.value("timingText").toString().isEmpty()
+            && runningMap.value("timingPhases").toList().isEmpty()
+            && !texts().contains(QStringLiteral("运行中")) && !texts().contains(QStringLiteral("—"));
     }, 3000);
     app.toggleLoop();
     for (int attempt = 0; app.busy() && attempt < 100; ++attempt)
@@ -490,7 +509,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         require(hoverCardAt(nodeCenter(refreshed)),
                 "hover card did not return after the execution refresh" + hoverState());
     }
-    require(texts().contains(nodeMap(id).value("timingOperatorText").toString()),
+    require(texts().contains(phaseValue(nodeMap(id), QStringLiteral("算子时间"))),
             "visible hover card did not follow the current execution snapshot");
     require(!texts().contains(QStringLiteral("运行中")), "completed hover card retained the running measurement state");
     item = nodeItem(id);
@@ -671,7 +690,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     {
         return canvas->property("hoverCardVisible").toBool()
             && nodeMap(remainingId).value("state").toString() == QStringLiteral("idle")
-            && nodeMap(remainingId).value("timingText").toString() == QStringLiteral("—");
+            && nodeMap(remainingId).value("timingText").toString().isEmpty();
     }, 1000), "visible hover card fabricated an execution result before the first run");
     app.runNode();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "long-name rendering fixture did not execute");

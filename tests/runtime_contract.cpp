@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <functional>
 #include <iostream>
@@ -170,6 +171,11 @@ void branchesOverlapAndJoin()
     assert(std::get<std::int64_t>(snapshot(result, 3)->outputs.at("value")) == 21);
     assert(snapshot(result, 1)->round == snapshot(result, 3)->round);
     assert(result.flows.size() == 1 && result.flows.front().milliseconds > 0);
+    // 单流程时“全流程”就是该流程的执行区间；每个节点的总计都落在它内部。
+    assert(result.roundMilliseconds.has_value());
+    assert(std::abs(*result.roundMilliseconds - result.flows.front().milliseconds) < 1e-3);
+    for (auto id : {1, 2, 3})
+        assert(snapshot(result, id)->timing.totalMs <= result.flows.front().milliseconds + 1e-3);
 }
 
 void failureReplacesOldValueAndManualUsesCache()
@@ -672,6 +678,20 @@ void executionMetricsAndTimingSeparation()
     assert(snap->timing.pythonOutputMs == 0.8);
     // Python sub-items must not be duplicated into totalMs
     assert(snap->timing.totalMs >= snap->timing.adapterExecuteMs);
+
+    // 工具、流程、全流程是同一时钟下的嵌套区间：单节点单流程时三者必须落在同一个区间上，
+    // 差额只允许来自纳秒到毫秒的表示精度。
+    assert(snap->startedNs > 0 && snap->endedNs > snap->startedNs);
+    assert(completed.flows.size() == 1);
+    assert(completed.roundMilliseconds.has_value());
+    assert(std::abs(snap->timing.totalMs - completed.flows.front().milliseconds) < 1e-3);
+    assert(std::abs(completed.flows.front().milliseconds - *completed.roundMilliseconds) < 1e-3);
+    // 节点总计覆盖从输入准备到最后一个阶段结束；各阶段之和不能大于它，差额只能是阶段之间的
+    // 调度帧，不应达到毫秒级。
+    const auto phases = snap->timing.prepareMs + snap->timing.initMs + snap->timing.executeMs
+                      + snap->timing.validateMs;
+    assert(snap->timing.totalMs + 1e-3 >= phases);
+    assert(snap->timing.totalMs - phases < 0.5);
 }
 
 void timingRecordedOnFailure()

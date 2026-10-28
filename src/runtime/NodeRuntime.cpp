@@ -223,8 +223,16 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         }
     };
 
-    const auto started          = Clock::now();
-    auto       snapshot         = std::make_shared<NodeSnapshot>();
+    // One contiguous window per node execution: it starts when input preparation starts and ends
+    // when the last measured stage ends. Framework work outside it (snapshot assembly, publishing)
+    // belongs to the scheduler and shows up in the flow and session numbers instead, so the node
+    // card, the hover card and the flow timing cannot disagree about the same node.
+    Clock::time_point windowStart;
+    Clock::time_point windowEnd;
+    // Only a completed last stage closes the window; an exception closes it where it escaped, so the
+    // stages that did run are never dropped and the cleanup after a failure is never counted.
+    bool              windowClosed = false;
+    auto              snapshot     = std::make_shared<NodeSnapshot>();
     snapshot->node              = id;
     snapshot->generation        = context->generation;
     snapshot->session           = context->session;
@@ -320,7 +328,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 snapshot->outputs.emplace(port.id, Missing{});
         snapshot->outputs.emplace(std::string(kStatusCodePort), kNotExecutedStatus);
         snapshot->outputs.emplace(std::string(kStatusMessagePort), snapshot->status.message);
-        snapshot->timing.totalMs = milliseconds(Clock::now() - started);
+        // A gated node never entered a stage, so it has no execution window at all.
+        snapshot->timing.totalMs = 0.0;
         slot.publish(std::move(snapshot));
     };
 
@@ -333,6 +342,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     {
         Values inputs;
         {
+            windowStart = Clock::now();
             ScopeTimer prepareTimer(snapshot->timing.prepareMs, &snapshot->timing.prepareMeasured);
             for (const auto &port : definition->inputs)
             {
@@ -373,6 +383,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             }
             inputs = normalizeInputs(definition->inputs, std::move(inputs));
             prepareTimer.stop();
+            windowEnd = Clock::now();
         }
         if (disposition != NodeDisposition::Running)
         {
@@ -424,6 +435,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     status = {-1, "未知的初始化异常"};
                 }
                 initTimer.stop();
+                windowEnd = Clock::now();
             }
             if (!status)
             {
@@ -445,6 +457,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 ScopeTimer execTimer(snapshot->timing.executeMs);
                 result = instance->execute(inputs);
                 execTimer.stop();
+                windowEnd = Clock::now();
             }
             snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
             applyPythonMetrics();
@@ -480,6 +493,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
             }
             convertTimer.stop();
+            windowEnd    = Clock::now();
+            windowClosed = true;
             phase = invocationPhase;
         }
         snapshot->timing.validateMs = snapshot->timing.convertMs;
@@ -540,7 +555,14 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     snapshot->disposition = disposition;
     snapshot->phase   = phase;
     snapshot->outputs = std::move(result.outputs);
-    snapshot->timing.totalMs = milliseconds(Clock::now() - started);
+    if (windowStart != Clock::time_point{})
+    {
+        if (!windowClosed)
+            windowEnd = Clock::now();
+        snapshot->timing.totalMs = milliseconds(windowEnd - windowStart);
+        snapshot->startedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(windowStart.time_since_epoch()).count();
+        snapshot->endedNs   = std::chrono::duration_cast<std::chrono::nanoseconds>(windowEnd.time_since_epoch()).count();
+    }
     slot.publish(std::move(snapshot));
 }
 } // namespace visionrt::runtime_detail

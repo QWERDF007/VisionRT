@@ -178,7 +178,9 @@ QuiSplitView {
                     id: scroller
                     anchors.fill: parent; visible: app.selectedNode.length > 0
                     contentWidth: width; contentHeight: groupColumn.height
-                    clip: true; boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    boundsMovement: Flickable.StopAtBounds
                     ScrollBar.vertical: QuiScrollBar {}
                     Column {
                         id: groupColumn; width: scroller.width; spacing: 4
