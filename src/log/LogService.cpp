@@ -549,6 +549,17 @@ void LogService::shutdown()
     // remaining summaries are written and the pool is joined.
     {
         std::unique_lock<std::shared_mutex> lock(impl_->writeMutex);
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+        {
+            std::function<void()> hook;
+            {
+                std::lock_guard<std::mutex> hLock(gHooksMutex);
+                hook = gTestHooks.onInsideShutdownLock;
+            }
+            if (hook)
+                hook();
+        }
+#endif
         postPendingLocked();
         if (impl_->logger)
         {

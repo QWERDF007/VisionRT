@@ -23,6 +23,34 @@
 #include <thread>
 #include <vector>
 
+// Thread-local allocation probe to observe heap allocations in isolation
+static thread_local bool        g_trackAllocations = false;
+static thread_local std::size_t g_allocatedCount   = 0;
+static thread_local std::size_t g_allocatedBytes   = 0;
+
+void* operator new(std::size_t size)
+{
+    if (g_trackAllocations)
+    {
+        ++g_allocatedCount;
+        g_allocatedBytes += size;
+    }
+    void* ptr = std::malloc(size);
+    if (!ptr)
+        throw std::bad_alloc();
+    return ptr;
+}
+
+void operator delete(void* ptr) noexcept
+{
+    std::free(ptr);
+}
+
+void operator delete(void* ptr, std::size_t) noexcept
+{
+    std::free(ptr);
+}
+
 using namespace visionrt;
 
 namespace {
@@ -419,16 +447,38 @@ try
         const auto rLargeCut = boundedSingleLine(large, 100);
         require(rLargeCut.text.size() == 100 && rLargeCut.truncated, "output sizing: large string with 100 cap must truncate to 100 bytes");
 
-        // Allocation observation: reserve uses min(text.size(), maxBytes)
+        // Return string capacity check: capacity retains bounded buffer size
         // 1. Short text (3 bytes) with large cap (4096): capacity must stay small, not allocating 4096 bytes
         const auto rAllocShort = boundedSingleLine("abc", 4096);
-        require(rAllocShort.text == "abc" && !rAllocShort.truncated, "allocation observation: short text content check");
-        require(rAllocShort.text.capacity() < 4096, "allocation observation: short input with large cap must not pre-allocate 4096 bytes");
+        require(rAllocShort.text == "abc" && !rAllocShort.truncated, "return string capacity check: short text content check");
+        require(rAllocShort.text.capacity() < 4096, "return string capacity check: short input with large cap must not pre-allocate 4096 bytes");
 
         // 2. Long text (4096 bytes) with small cap (100): capacity must stay small, not allocating 4096 bytes
         const auto rAllocLongCut = boundedSingleLine(large, 100);
-        require(rAllocLongCut.text.size() == 100 && rAllocLongCut.truncated, "allocation observation: long input with small cap content check");
-        require(rAllocLongCut.text.capacity() < 4096, "allocation observation: long input with small cap must not allocate full text size");
+        require(rAllocLongCut.text.size() == 100 && rAllocLongCut.truncated, "return string capacity check: long input with small cap content check");
+        require(rAllocLongCut.text.capacity() < 4096, "return string capacity check: long input with small cap must not allocate full text size");
+
+        // Isolated allocation probe: measure exact heap allocations during call
+        // 1. Short text (3 bytes) with large cap (4096):
+        // Input is 3 bytes, fits into SSO buffer or min(3, 4096) bytes.
+        // Must NOT heap-allocate 4096 bytes (MSVC/STL environment).
+        g_allocatedCount = 0;
+        g_allocatedBytes = 0;
+        g_trackAllocations = true;
+        const auto probeShort = boundedSingleLine("abc", 4096);
+        g_trackAllocations = false;
+        require(probeShort.text == "abc" && !probeShort.truncated, "allocation probe: short text content check");
+        require(g_allocatedBytes < 4096, "allocation probe: short input with large cap must not heap-allocate 4096 bytes");
+
+        // 2. Long text (4096 bytes) with small cap (100):
+        // Output is bounded to 100 bytes. Must NOT allocate 4096 bytes.
+        g_allocatedCount = 0;
+        g_allocatedBytes = 0;
+        g_trackAllocations = true;
+        const auto probeLongCut = boundedSingleLine(large, 100);
+        g_trackAllocations = false;
+        require(probeLongCut.text.size() == 100 && probeLongCut.truncated, "allocation probe: long input with small cap content check");
+        require(g_allocatedBytes < 4096, "allocation probe: long input with small cap must not allocate full text size on heap");
     }
 
     // 16. UTF-8 boundary & invalid bytes: invalid byte sequences do not leak raw newlines and produce valid UTF-8
@@ -479,27 +529,80 @@ try
                 ++critFileCount;
         require(critFileCount == 5, "critical records missing from disk file");
 
-        // 17b. Escape expansion A/B & Message anti-collision (64-byte cap)
-        // Part 1: Escape expansion
+        // 17b. Escape expansion A/B & Message anti-collision (16-byte and 64-byte caps via writeError)
+        // Part 1: Escape expansion boundedSingleLine baseline
         const auto resEsc8 = boundedSingleLine("\n\n\n\n\n", 8);
         require(resEsc8.truncated && resEsc8.text == "\\n\\n…", "escape expansion with cap 8 must truncate to \\n\\n…");
         const auto resEsc16 = boundedSingleLine("\n\n\n\n\n", 16);
         require(!resEsc16.truncated && resEsc16.text == "\\n\\n\\n\\n\\n", "escape expansion with cap 16 must fit without truncation");
 
-        // Part 2: Message anti-collision at 64 budget
-        // When maxMessageBytes is 64, two messages sharing a 61-byte prefix will both truncate to prefix + "…" (64 bytes).
-        // Because boundedMessage.truncated is true, the service MUST NOT coalesce them into repeat summaries.
+        // Part 2: Escape expansion anti-collision via writeError under 16-byte budget
+        // Messages A and B exceed 16 bytes after escaping and truncate to identical prefix + "…".
+        // Service must deliver both distinct initial records without coalescing into repeat summaries.
+        service.shutdown();
+        QTemporaryDir esc16Dir;
+        const QString esc16Log = esc16Dir.filePath("visionrt.log");
+        auto cap16 = config;
+        cap16.maxMessageBytes = 16;
+        require(service.start(cap16, esc16Log), "restart for cap 16 escape collision check failed");
+        service.setViewActive(true);
+        std::string escA16 = std::string(8, '\n') + "AAAA";
+        std::string escB16 = std::string(8, '\n') + "BBBB";
+        service.error("esc16-collision-probe", escA16);
+        service.error("esc16-collision-probe", escB16);
+        service.flush();
+        flushPendingForTesting();
+        int esc16Count = 0;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                        {
+                            if (record.line.contains(QStringLiteral("esc16-collision-probe")))
+                            {
+                                require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
+                                        "cap 16 truncated escaped messages collided into repeat summary in UI");
+                                ++esc16Count;
+                            }
+                        }
+                        return esc16Count == 2;
+                    },
+                    2000),
+                "cap 16 escaped messages failed to deliver both distinct initial records to UI");
+        service.flush();
+        service.shutdown();
+        const QString esc16Today = QDir(esc16Dir.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        const QString esc16Content = fileText(esc16Today);
+        int esc16FileCount = 0;
+        for (const auto &line : esc16Content.split('\n'))
+            if (line.contains("esc16-collision-probe"))
+                ++esc16FileCount;
+        require(esc16FileCount == 2, "cap 16 escaped messages must produce 2 distinct lines on disk");
+
+        // Part 3: Message anti-collision at 64 budget (both ASCII and escaped newlines)
+        // At 64 budget, minCountBudget (22) threshold is exceeded.
+        // Therefore, omitting the message truncation guard would erroneously coalesce these!
+        QTemporaryDir cap64Dir;
+        const QString cap64Log = cap64Dir.filePath("visionrt.log");
         auto cap64 = config;
         cap64.maxMessageBytes = 64;
-        require(service.start(cap64), "restart for message collision check failed");
+        require(service.start(cap64, cap64Log), "restart for message collision check failed");
         service.setViewActive(true);
         std::string msgA = std::string(61, 'M') + "111111111";
         std::string msgB = std::string(61, 'M') + "222222222";
         service.error("msg-collision-probe", msgA);
         service.error("msg-collision-probe", msgB);
+
+        // Escaped message collision at 64 budget
+        std::string escA64 = std::string(30, '\n') + "111111111";
+        std::string escB64 = std::string(30, '\n') + "222222222";
+        service.error("esc64-collision-probe", escA64);
+        service.error("esc64-collision-probe", escB64);
+
         service.flush();
         flushPendingForTesting();
         int msgCollisionCount = 0;
+        int esc64CollisionCount = 0;
         require(QTest::qWaitFor(
                     [&]
                     {
@@ -511,11 +614,30 @@ try
                                         "truncated long messages collided into a repeat summary");
                                 ++msgCollisionCount;
                             }
+                            if (record.line.contains(QStringLiteral("esc64-collision-probe")))
+                            {
+                                require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
+                                        "truncated escaped messages at 64 budget collided into a repeat summary");
+                                ++esc64CollisionCount;
+                            }
                         }
-                        return msgCollisionCount == 2;
+                        return msgCollisionCount == 2 && esc64CollisionCount == 2;
                     },
                     2000),
                 "truncated messages failed to deliver both distinct initial records");
+        service.flush();
+        service.shutdown();
+        const QString cap64Today = QDir(cap64Dir.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        const QString cap64Content = fileText(cap64Today);
+        int cap64AsciiFileCount = 0;
+        int cap64EscFileCount = 0;
+        for (const auto &line : cap64Content.split('\n'))
+        {
+            if (line.contains("msg-collision-probe")) ++cap64AsciiFileCount;
+            if (line.contains("esc64-collision-probe")) ++cap64EscFileCount;
+        }
+        require(cap64AsciiFileCount == 2, "64 budget ASCII collision messages must produce 2 lines on disk");
+        require(cap64EscFileCount == 2, "64 budget escaped collision messages must produce 2 lines on disk");
 
         // 17c. Truncated source anti-collision: two long sources sharing prefix but differing in tail
         service.shutdown();
@@ -700,198 +822,336 @@ try
 #if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
     struct ThreadScopeGuard {
         std::vector<std::thread*> threads;
-        ~ThreadScopeGuard() {
-            setLogTestHooks({});
-            for (auto *t : threads) {
-                if (t && t->joinable())
-                    t->join();
+        std::vector<std::function<void()>> unblockActions;
+        ~ThreadScopeGuard() noexcept {
+            for (auto &action : unblockActions) {
+                try {
+                    if (action) action();
+                } catch (...) {}
             }
+            for (auto *t : threads) {
+                if (t && t->joinable()) {
+                    try {
+                        t->join();
+                    } catch (...) {}
+                }
+            }
+            setLogTestHooks({});
         }
     };
 
     auto runConcurrencyScenario = [&](LogLevel level, const char *levelName) {
         const std::string tag = std::string(levelName);
 
-        // --- Scenario A: In-lock writer paused; shutdown barrier waits; release writer; shutdown finishes and drains
+        // --- Scenario A: In-lock writer paused; shutdown barrier waits; coordination thread unblocks writer; shutdown finishes and drains
         {
             service.shutdown();
             QTemporaryDir dirA;
+            dirA.setAutoRemove(false);
             const QString logPathA = dirA.filePath("visionrt.log");
             require(service.start(config, logPathA), "restart for Scenario A failed");
             service.setViewActive(true);
 
             std::promise<void> writerInLockPromise;
-            auto writerInLockFuture = writerInLockPromise.get_future();
+            auto writerInLockFuture = writerInLockPromise.get_future().share();
             std::promise<void> allowWriterFinishPromise;
-            std::shared_future<void> allowWriterFinishFuture = allowWriterFinishPromise.get_future().share();
-            std::promise<void> shutdownWaitingPromise;
-            auto shutdownWaitingFuture = shutdownWaitingPromise.get_future();
+            auto allowWriterFinishFuture = allowWriterFinishPromise.get_future().share();
+            std::promise<void> shutdownBeforeLockPromise;
+            auto shutdownBeforeLockFuture = shutdownBeforeLockPromise.get_future().share();
 
-            std::atomic<bool> writerFinished{false};
-            std::atomic<bool> shutdownFinished{false};
-            std::atomic<bool> orderCorrect{false};
+            std::atomic<bool> unblockTriggeredA{false};
+            auto triggerUnblockA = [&]() {
+                if (!unblockTriggeredA.exchange(true)) {
+                    try { allowWriterFinishPromise.set_value(); } catch (...) {}
+                }
+            };
+
+            std::mutex eventMutex;
+            std::vector<std::string> events;
+            auto recordEvent = [&](std::string ev) {
+                std::lock_guard<std::mutex> lk(eventMutex);
+                events.push_back(std::move(ev));
+            };
 
             setLogTestHooks({
                 nullptr, // onBeforeWriteLock
                 [&](std::string_view source) {
                     if (source == "scenario-a-writer-" + tag) {
-                        writerInLockPromise.set_value();
+                        recordEvent("writer_inside_lock");
+                        try { writerInLockPromise.set_value(); } catch (...) {}
                         const auto st = allowWriterFinishFuture.wait_for(std::chrono::seconds(5));
                         require(st == std::future_status::ready, "writer wait_for allowWriterFinish timed out");
+                        recordEvent("writer_done_in_lock");
                     }
                 },
                 [&]() {
                     // onBeforeShutdownLock
-                    shutdownWaitingPromise.set_value();
+                    recordEvent("shutdown_before_lock");
+                    try { shutdownBeforeLockPromise.set_value(); } catch (...) {}
+                },
+                [&]() {
+                    // onInsideShutdownLock (drain barrier entered)
+                    recordEvent("shutdown_inside_lock");
                 }
             });
 
+            std::exception_ptr writerExA = nullptr;
             std::thread writerThread([&] {
-                const std::string src = "scenario-a-writer-" + tag;
-                const std::string msg = "in-lock payload " + tag;
-                if (level == LogLevel::Error)
-                    service.error(src, msg);
-                else
-                    service.info(src, msg);
-                writerFinished.store(true, std::memory_order_release);
+                try {
+                    const std::string src = "scenario-a-writer-" + tag;
+                    const std::string msg = "in-lock payload " + tag;
+                    if (level == LogLevel::Error)
+                        service.error(src, msg);
+                    else
+                        service.info(src, msg);
+                } catch (...) {
+                    writerExA = std::current_exception();
+                }
             });
 
-            std::thread shutdownThread;
+            std::exception_ptr coordExA = nullptr;
+            std::thread coordThread([&] {
+                try {
+                    const auto st = shutdownBeforeLockFuture.wait_for(std::chrono::seconds(5));
+                    require(st == std::future_status::ready, "coord thread: shutdown failed to reach onBeforeShutdownLock");
+                    recordEvent("coord_releasing_writer");
+                    triggerUnblockA();
+                } catch (...) {
+                    coordExA = std::current_exception();
+                    triggerUnblockA();
+                }
+            });
+
             ThreadScopeGuard guard;
             guard.threads.push_back(&writerThread);
-            guard.threads.push_back(&shutdownThread);
+            guard.threads.push_back(&coordThread);
+            guard.unblockActions.push_back(triggerUnblockA);
 
-            // 1. Wait for writer to reach in-lock hook
+            // 1. Wait until writer is confirmed inside write lock
             require(writerInLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
                     "Scenario A writer failed to reach insideLock hook");
 
-            // 2. Launch shutdown in separate thread
-            shutdownThread = std::thread([&] {
-                service.shutdown();
-                shutdownFinished.store(true, std::memory_order_release);
-                if (writerFinished.load(std::memory_order_acquire))
-                    orderCorrect.store(true, std::memory_order_release);
-            });
+            // 2. Shut down directly from the main thread (QObject owner thread -> 0 Qt timer warnings)
+            service.shutdown();
 
-            // 3. Wait for shutdown to reach drain barrier (onBeforeShutdownLock)
-            require(shutdownWaitingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
-                    "Scenario A shutdown failed to reach onBeforeShutdownLock hook");
-
-            // Verify shutdown is truly blocked waiting for the writer holding the shared lock:
-            // If the lock barrier was missing, shutdown would finish immediately while writer is still paused.
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            require(!shutdownFinished.load(std::memory_order_acquire),
-                    "Scenario A: shutdown completed prematurely without waiting for writer lock barrier!");
-
-            // 4. Signal writer to finish
-            allowWriterFinishPromise.set_value();
-
-            // 5. Join both threads
+            // 3. Join threads
+            if (coordThread.joinable())
+                coordThread.join();
             if (writerThread.joinable())
                 writerThread.join();
-            if (shutdownThread.joinable())
-                shutdownThread.join();
             setLogTestHooks({});
 
-            require(orderCorrect.load(std::memory_order_acquire),
-                    "Scenario A: writer must finish before shutdown finishes");
+            if (writerExA) std::rethrow_exception(writerExA);
+            if (coordExA) std::rethrow_exception(coordExA);
 
-            // 6. Verify target line exists in disk file
+            // 4. Verify deterministic ordering without sleep:
+            // "writer_inside_lock" < "shutdown_before_lock" < "coord_releasing_writer" < "writer_done_in_lock" < "shutdown_inside_lock"
+            {
+                std::lock_guard<std::mutex> lk(eventMutex);
+                auto posOf = [&](const std::string &name) -> int {
+                    for (int i = 0; i < static_cast<int>(events.size()); ++i)
+                        if (events[i] == name) return i;
+                    return -1;
+                };
+                const int pWriterIn = posOf("writer_inside_lock");
+                const int pShutBefore = posOf("shutdown_before_lock");
+                const int pCoordRel = posOf("coord_releasing_writer");
+                const int pWriterDone = posOf("writer_done_in_lock");
+                const int pShutInside = posOf("shutdown_inside_lock");
+
+                require(pWriterIn >= 0 && pShutBefore >= 0 && pCoordRel >= 0 && pWriterDone >= 0 && pShutInside >= 0,
+                        "Scenario A: one or more critical synchronization events did not occur");
+                require(pWriterIn < pShutBefore, "Scenario A: writer must enter lock before shutdown attempts lock");
+                require(pShutBefore < pCoordRel, "Scenario A: shutdown must reach lock point before coord releases writer");
+                require(pWriterDone < pShutInside, "Scenario A: writer must release shared lock before shutdown drain enters exclusive lock!");
+            }
+
+            // 5. Verify target line exists in disk file
             const QString todayFileA = QDir(dirA.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
-            const QString contentA = fileText(todayFileA);
+            QFile fileA(todayFileA);
+            require(fileA.open(QIODevice::ReadOnly), "Scenario A: log file must exist and be readable");
+            const QString contentA = QString::fromUtf8(fileA.readAll());
             require(contentA.contains(QString::fromStdString("scenario-a-writer-" + tag))
                         && contentA.contains(QString::fromStdString("in-lock payload " + tag)),
                     "Scenario A: writer record lost during shutdown drain");
+            QDir(dirA.path()).removeRecursively();
         }
 
         // --- Scenario B: Before-lock writer paused; shutdown finishes; release writer; writer sees closed service and drops
-        QString todayFileB;
         {
             service.shutdown();
             QTemporaryDir dirB;
             dirB.setAutoRemove(false);
             const QString logPathB = dirB.filePath("visionrt.log");
-            todayFileB = QDir(dirB.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+            const QString todayFileB = QDir(dirB.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
             require(service.start(config, logPathB), "restart for Scenario B failed");
             service.setViewActive(true);
 
             std::promise<void> writerBeforeLockPromise;
-            auto writerBeforeLockFuture = writerBeforeLockPromise.get_future();
+            auto writerBeforeLockFuture = writerBeforeLockPromise.get_future().share();
             std::promise<void> allowWriterProceedPromise;
-            std::shared_future<void> allowWriterProceedFuture = allowWriterProceedPromise.get_future().share();
+            auto allowWriterProceedFuture = allowWriterProceedPromise.get_future().share();
+
+            std::atomic<bool> unblockB{false};
+            auto triggerUnblockB = [&]() {
+                if (!unblockB.exchange(true)) {
+                    try { allowWriterProceedPromise.set_value(); } catch (...) {}
+                }
+            };
 
             setLogTestHooks({
                 [&](std::string_view source) {
                     if (source == "scenario-b-writer-" + tag) {
-                        writerBeforeLockPromise.set_value();
+                        try { writerBeforeLockPromise.set_value(); } catch (...) {}
                         const auto st = allowWriterProceedFuture.wait_for(std::chrono::seconds(5));
                         require(st == std::future_status::ready, "writer wait_for allowWriterProceed timed out");
                     }
                 },
                 nullptr, // onInsideWriteLock
-                nullptr  // onBeforeShutdownLock
+                nullptr, // onBeforeShutdownLock
+                nullptr  // onInsideShutdownLock
             });
 
+            std::exception_ptr writerExB = nullptr;
             std::thread writerThread([&] {
-                const std::string src = "scenario-b-writer-" + tag;
-                const std::string msg = "late payload " + tag;
-                if (level == LogLevel::Error)
-                    service.error(src, msg);
-                else
-                    service.info(src, msg);
+                try {
+                    const std::string src = "scenario-b-writer-" + tag;
+                    const std::string msg = "late payload " + tag;
+                    if (level == LogLevel::Error)
+                        service.error(src, msg);
+                    else
+                        service.info(src, msg);
+                } catch (...) {
+                    writerExB = std::current_exception();
+                }
             });
 
             ThreadScopeGuard guard;
             guard.threads.push_back(&writerThread);
+            guard.unblockActions.push_back(triggerUnblockB);
 
             // 1. Wait for writer to reach before-lock hook
             require(writerBeforeLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
                     "Scenario B writer failed to reach beforeLock hook");
 
-            // 2. Shut down service
+            // 2. Shut down service on main thread
             service.shutdown();
             require(!service.running(), "service must be stopped after shutdown");
 
             // 3. Release writer
-            allowWriterProceedPromise.set_value();
+            triggerUnblockB();
 
             // 4. Join writer
             if (writerThread.joinable())
                 writerThread.join();
             setLogTestHooks({});
 
-            // 5. Verify target line was NOT written to the old session's file
-            const QString contentB = fileText(todayFileB);
+            if (writerExB) std::rethrow_exception(writerExB);
+
+            // 5. Verify old file exists, is openable and readable, and does NOT contain the target line
+            QFile fileB(todayFileB);
+            require(fileB.open(QIODevice::ReadOnly), "Scenario B: old session file must exist and be readable");
+            const QString contentB = QString::fromUtf8(fileB.readAll());
             require(!contentB.contains(QString::fromStdString("scenario-b-writer-" + tag)),
                     "Scenario B: late writer erroneously appended to old session log file");
             QDir(dirB.path()).removeRecursively();
         }
 
-        // --- Scenario C: Cross-restart session acceptance
+        // --- Scenario C: Cross-restart writer suspended before lock; session restarts to new file; release writer; record arrives in new session
         {
             service.shutdown();
-            QTemporaryDir dirC;
-            const QString logPathC = dirC.filePath("visionrt.log");
-            require(service.start(config, logPathC), "restart for Scenario C failed");
+            QTemporaryDir dirC1;
+            dirC1.setAutoRemove(false);
+            const QString logPathC1 = dirC1.filePath("visionrt.log");
+            const QString todayFileC1 = QDir(dirC1.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+            require(service.start(config, logPathC1), "start for Scenario C old session failed");
             service.setViewActive(true);
 
-            const std::string srcC = "scenario-c-writer-" + tag;
-            const std::string msgC = "restart payload " + tag;
-            if (level == LogLevel::Error)
-                service.error(srcC, msgC);
-            else
-                service.info(srcC, msgC);
+            std::promise<void> writerWaitingPromise;
+            auto writerWaitingFuture = writerWaitingPromise.get_future().share();
+            std::promise<void> allowWriterResumePromise;
+            auto allowWriterResumeFuture = allowWriterResumePromise.get_future().share();
 
+            std::atomic<bool> unblockC{false};
+            auto triggerUnblockC = [&]() {
+                if (!unblockC.exchange(true)) {
+                    try { allowWriterResumePromise.set_value(); } catch (...) {}
+                }
+            };
+
+            setLogTestHooks({
+                [&](std::string_view source) {
+                    if (source == "scenario-c-writer-" + tag) {
+                        try { writerWaitingPromise.set_value(); } catch (...) {}
+                        const auto st = allowWriterResumeFuture.wait_for(std::chrono::seconds(5));
+                        require(st == std::future_status::ready, "Scenario C writer wait_for resume timed out");
+                    }
+                },
+                nullptr, // onInsideWriteLock
+                nullptr, // onBeforeShutdownLock
+                nullptr  // onInsideShutdownLock
+            });
+
+            std::exception_ptr writerExC = nullptr;
+            std::thread writerThread([&] {
+                try {
+                    const std::string srcC = "scenario-c-writer-" + tag;
+                    const std::string msgC = "restart payload " + tag;
+                    if (level == LogLevel::Error)
+                        service.error(srcC, msgC);
+                    else
+                        service.info(srcC, msgC);
+                } catch (...) {
+                    writerExC = std::current_exception();
+                }
+            });
+
+            ThreadScopeGuard guard;
+            guard.threads.push_back(&writerThread);
+            guard.unblockActions.push_back(triggerUnblockC);
+
+            // 1. Wait for writer to pass admission and reach before-lock hook in old session
+            require(writerWaitingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                    "Scenario C: writer failed to reach beforeLock hook in old session");
+
+            // 2. Main thread completes shutdown of Session 1
+            service.shutdown();
+            require(!service.running(), "service must be stopped after Session 1 shutdown");
+
+            // 3. Main thread starts Session 2 pointing to a new, independent log file
+            QTemporaryDir dirC2;
+            dirC2.setAutoRemove(false);
+            const QString logPathC2 = dirC2.filePath("visionrt.log");
+            const QString todayFileC2 = QDir(dirC2.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+            require(service.start(config, logPathC2), "start for Scenario C new session failed");
+            service.setViewActive(true);
+
+            // Clear test hooks so writer doesn't hit hook again upon resume
+            setLogTestHooks({});
+
+            // 4. Release writer! Writer resumes, takes write lock on Session 2, and posts
+            triggerUnblockC();
+
+            if (writerThread.joinable())
+                writerThread.join();
+
+            if (writerExC) std::rethrow_exception(writerExC);
+
+            // 5. Drain new session
             service.flush();
             flushPendingForTesting();
 
-            bool cFoundInUI = false;
+            const std::string srcC = "scenario-c-writer-" + tag;
+            const std::string msgC = "restart payload " + tag;
+
+            // UI check in new session: exactly one record
+            int cUiCount = 0;
             require(QTest::qWaitFor(
                         [&] {
                             for (const auto &rec : service.take(64))
                                 if (rec.line.contains(QString::fromStdString(srcC)) && rec.line.contains(QString::fromStdString(msgC)))
-                                    cFoundInUI = true;
-                            return cFoundInUI;
+                                    ++cUiCount;
+                            return cUiCount == 1;
                         },
                         2000),
                     "Scenario C: restarted session failed to receive record in UI");
@@ -899,10 +1159,27 @@ try
             service.flush();
             service.shutdown();
 
-            const QString todayFileC = QDir(dirC.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
-            const QString contentC = fileText(todayFileC);
-            require(contentC.contains(QString::fromStdString(srcC)) && contentC.contains(QString::fromStdString(msgC)),
-                    "Scenario C: restarted session record missing from new disk file");
+            // 6. Disk file checks:
+            // Old file must NOT contain the target record
+            QFile fileC1(todayFileC1);
+            require(fileC1.open(QIODevice::ReadOnly), "Scenario C: old session file must exist and be readable");
+            const QString contentC1 = QString::fromUtf8(fileC1.readAll());
+            require(!contentC1.contains(QString::fromStdString(srcC)),
+                    "Scenario C: old session file erroneously received late record");
+
+            // New file MUST contain exactly one instance of the target record
+            QFile fileC2(todayFileC2);
+            require(fileC2.open(QIODevice::ReadOnly), "Scenario C: new session file must exist and be readable");
+            const QString contentC2 = QString::fromUtf8(fileC2.readAll());
+            int cFileCount = 0;
+            for (const auto &line : contentC2.split('\n')) {
+                if (line.contains(QString::fromStdString(srcC)) && line.contains(QString::fromStdString(msgC)))
+                    ++cFileCount;
+            }
+            require(cFileCount == 1, "Scenario C: new session file must contain exactly one target record");
+
+            QDir(dirC1.path()).removeRecursively();
+            QDir(dirC2.path()).removeRecursively();
         }
     };
 

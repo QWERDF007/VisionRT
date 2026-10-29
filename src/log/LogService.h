@@ -56,6 +56,7 @@ struct LogTestHooks {
     std::function<void(std::string_view source)> onBeforeWriteLock;
     std::function<void(std::string_view source)> onInsideWriteLock;
     std::function<void()> onBeforeShutdownLock;
+    std::function<void()> onInsideShutdownLock;
 };
 void setLogTestHooks(LogTestHooks hooks);
 void flushPendingForTesting();

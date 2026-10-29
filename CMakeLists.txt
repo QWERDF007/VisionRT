@@ -156,6 +156,7 @@ if(VISIONRT_BUILD_APP)
             -DCOMMIT=${REPO_COMMIT}
             -DBRANCH=${REPO_BRANCH}
             -DREPO_DIR=${CMAKE_SOURCE_DIR}
+            -DSOURCE_FILE=$<TARGET_FILE:VisionRT>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/build_info.json
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMAND ${CMAKE_COMMAND}
