@@ -343,6 +343,24 @@ try
     service.shutdown();
     require(qInstallMessageHandler(nullptr) == baseline, "shutdown did not restore the default Qt handler");
 
+    // 15. Single-line bounded UTF-8 text truncation: prefix token bounds and true prefix guarantee
+    {
+        const auto r1 = boundedSingleLine("中abc", 4);
+        require(r1.text == "…" && r1.truncated, "中abc with cap 4 must truncate to …");
+
+        const auto r2 = boundedSingleLine("中文abc", 7);
+        require(r2.text == "中…" && r2.truncated, "中文abc with cap 7 must truncate to 中…");
+
+        const auto r3 = boundedSingleLine("中文", 6);
+        require(r3.text == "中文" && !r3.truncated, "中文 with cap 6 must not truncate");
+
+        const auto r4 = boundedSingleLine("\xE2\x0A\x78", 16);
+        require(r4.text == "?\\nx" && !r4.truncated, "embedded newline in malformed UTF-8 must escape without leaking raw newline");
+
+        const auto r5 = boundedSingleLine("abc", 4096);
+        require(r5.text == "abc" && !r5.truncated, "short text within cap must not truncate");
+    }
+
     // 16. UTF-8 boundary & invalid bytes: invalid byte sequences do not leak raw newlines and produce valid UTF-8
     service.shutdown();
     require(service.start(config), "the service refused to restart for UTF-8 check");
@@ -360,26 +378,74 @@ try
                 2000),
             "embedded newline in malformed UTF-8 was not escaped");
 
-    // 17. Repetitive long error preserves repeat count in summary
+    // 17. Repetitive long error preserves repeat count in summary with unbiased probe source
     service.shutdown();
     auto tight = config;
     tight.maxMessageBytes = 32;
     require(service.start(tight), "failed to restart with tight cap");
     service.setViewActive(true);
+    std::string probeSource = "summary-probe";
     std::string repeatMsg = "Repeat error message test";
-    for (int rep = 0; rep < 5; ++rep)
-        service.error("重复测试", repeatMsg);
+
+    // 17a. Negative witness: feed exactly 1 record -> must NOT contain repeat count indicators
+    service.error(probeSource, repeatMsg);
+    service.flush();
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    const auto records = service.take(64);
+                    for (const auto &record : records)
+                    {
+                        if (record.line.contains(QStringLiteral("summary-probe")))
+                        {
+                            require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
+                                    "first record unexpectedly contains repeat indicator");
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                2000),
+            "first error record was not posted");
+
+    // 17b. Now repeat 4 more times (total 5 occurrences): summary must report repeat count
+    for (int rep = 0; rep < 4; ++rep)
+        service.error(probeSource, repeatMsg);
     service.flush();
     require(QTest::qWaitFor(
                 [&]
                 {
                     for (const auto &record : service.take(64))
-                        if (record.line.contains(QStringLiteral("重复")) || record.line.contains(QStringLiteral("×")))
+                        if (record.line.contains(QStringLiteral("（重复 4 次）")) || record.line.contains(QStringLiteral("×4")))
                             return true;
                     return false;
                 },
                 2000),
             "repeat count was lost or truncated away");
+
+    // 18. Controlled late writer and restart barrier: concurrent writer does not deadlock during restart
+    {
+        std::atomic<bool> workerArrived{false};
+        std::atomic<bool> allowPost{false};
+        std::atomic<bool> workerFinished{false};
+
+        std::thread lateWriter([&] {
+            workerArrived.store(true, std::memory_order_release);
+            while (!allowPost.load(std::memory_order_acquire))
+                std::this_thread::yield();
+            LogService::write(LogLevel::Info, std::string_view("late-writer"), std::string_view("in-flight record"));
+            workerFinished.store(true, std::memory_order_release);
+        });
+
+        while (!workerArrived.load(std::memory_order_acquire))
+            std::this_thread::yield();
+
+        service.shutdown();
+        require(service.start(config), "service failed to restart during concurrent late writer check");
+        allowPost.store(true, std::memory_order_release);
+        lateWriter.join();
+        require(workerFinished.load(std::memory_order_acquire), "late writer did not finish cleanly");
+    }
 
     std::cout << "Log contracts passed: single-line text, daily file in the software directory, append on restart, "
                  "bounded mailbox, batching, drops, coalescing, Qt bridge and honest degradation\n";

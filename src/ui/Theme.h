@@ -256,7 +256,7 @@ public:
     THEME_INT_PROP(segmentButtonHeight)
 
 public:
-    // 参数行与编辑框高度（单一真相源同步联动）
+    // 行高一个事实：两个属性读取同一个值，setter 转发同一入口
     Q_PROPERTY(int parameterRowHeight READ parameterRowHeight WRITE setparameterRowHeight NOTIFY parameterRowHeightChanged)
     int parameterRowHeight() const
     {
@@ -264,15 +264,11 @@ public:
     }
     void setparameterRowHeight(int value)
     {
-        if (parameterRowHeight_ != value)
+        if (value > 0 && parameterRowHeight_ != value)
         {
             parameterRowHeight_ = value;
-            if (paramEditorHeight_ != value)
-            {
-                paramEditorHeight_ = value;
-                Q_EMIT paramEditorHeightChanged();
-            }
             Q_EMIT parameterRowHeightChanged();
+            Q_EMIT paramEditorHeightChanged();
         }
     }
     Q_SIGNAL void parameterRowHeightChanged();
@@ -280,24 +276,15 @@ public:
     Q_PROPERTY(int paramEditorHeight READ paramEditorHeight WRITE setparamEditorHeight NOTIFY paramEditorHeightChanged)
     int paramEditorHeight() const
     {
-        return paramEditorHeight_;
+        return parameterRowHeight_;
     }
     void setparamEditorHeight(int value)
     {
-        if (paramEditorHeight_ != value)
-        {
-            paramEditorHeight_ = value;
-            if (parameterRowHeight_ != value)
-            {
-                parameterRowHeight_ = value;
-                Q_EMIT parameterRowHeightChanged();
-            }
-            Q_EMIT paramEditorHeightChanged();
-        }
+        setparameterRowHeight(value);
     }
     Q_SIGNAL void paramEditorHeightChanged();
 
-    // 参数字体与字号（单一真相源同步联动：以 parameterFont 为权威）
+    // 参数字体（单一真相源：以 parameterFont QFont 为唯一状态）
     Q_PROPERTY(QFont parameterFont READ parameterFont WRITE setparameterFont NOTIFY parameterFontChanged)
     QFont parameterFont() const
     {
@@ -308,36 +295,15 @@ public:
         if (parameterFont_ != font)
         {
             parameterFont_ = font;
-            const int size = font.pixelSize() > 0 ? font.pixelSize() : font.pointSize();
-            if (size > 0 && paramEditorFontSize_ != size)
-            {
-                paramEditorFontSize_ = size;
-                Q_EMIT paramEditorFontSizeChanged();
-            }
             Q_EMIT parameterFontChanged();
         }
     }
     Q_SIGNAL void parameterFontChanged();
 
-    Q_PROPERTY(int paramEditorFontSize READ paramEditorFontSize WRITE setparamEditorFontSize NOTIFY paramEditorFontSizeChanged)
-    int paramEditorFontSize() const
-    {
-        return paramEditorFontSize_;
-    }
-    void setparamEditorFontSize(int value)
-    {
-        if (paramEditorFontSize_ != value)
-        {
-            paramEditorFontSize_ = value;
-            if (parameterFont_.pixelSize() != value)
-            {
-                parameterFont_.setPixelSize(value);
-                Q_EMIT parameterFontChanged();
-            }
-            Q_EMIT paramEditorFontSizeChanged();
-        }
-    }
-    Q_SIGNAL void paramEditorFontSizeChanged();
+    THEME_COLOR_PROP(logButtonHoverColor)
+    THEME_INT_PROP(parameterLabelWidth)
+    THEME_INT_PROP(timingIconSize)
+    THEME_INT_PROP(executeButtonPlayIconSize)
 
     // 参数行的统一间距
     THEME_INT_PROP(parameterRowSpacing)
@@ -397,8 +363,6 @@ private:
     void initLightIndustrialPalette();
 
     int parameterRowHeight_{32};
-    int paramEditorHeight_{32};
-    int paramEditorFontSize_{12};
     QFont parameterFont_;
 };
 

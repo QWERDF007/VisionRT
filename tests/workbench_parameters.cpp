@@ -117,42 +117,50 @@ void parameterEditorsContract()
     require(QTest::qWaitForWindowExposed(&window), "parameter window was not exposed");
     QTest::qWait(50);
 
-    require(theme->paramEditorHeight() == 32, "parameter theme height is not the shared 32 pixel contract");
+    require(theme->parameterRowHeight() == 32 && theme->paramEditorHeight() == 32,
+            "parameter theme height is not the shared 32 pixel contract");
     require(theme->statusBarHeight() == 26, "statusBarHeight default must be 26");
     require(theme->segmentButtonWidth() == 92, "segmentButtonWidth default must be 92");
     require(theme->segmentButtonHeight() == 22, "segmentButtonHeight default must be 22");
+    require(theme->parameterLabelWidth() == 96, "parameterLabelWidth default must be 96");
+    require(theme->logButtonHoverColor() == QColor("#eaf2fd"), "logButtonHoverColor default must be #eaf2fd");
+    require(theme->timingIconSize() == 13, "timingIconSize default must be 13");
+    require(theme->executeButtonPlayIconSize() == 8, "executeButtonPlayIconSize default must be 8");
 
     auto *input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "Float parameter did not use the public spin editor");
     require(input->height() >= 28, "Float input did not inherit the parameter height");
-    require(input->property("font").value<QFont>().pixelSize() == theme->paramEditorFontSize(),
+    require(input->property("font").value<QFont>() == theme->parameterFont(),
             "Float input did not inherit the shared parameter font");
 
-    // Dynamic propagation: changing paramEditorFontSize synchronizes parameterFont and updates live QML item
-    theme->setparamEditorFontSize(15);
-    require(theme->parameterFont().pixelSize() == 15, "parameterFont pixelSize did not sync with paramEditorFontSize");
+    // Dynamic propagation: QFont with point size preserves Qt point mode
+    QFont ptFont = theme->parameterFont();
+    ptFont.setPointSizeF(12.5);
+    theme->setparameterFont(ptFont);
     QTest::qWait(50);
-    require(input->property("font").value<QFont>().pixelSize() == 15,
-            "Float input did not dynamically update when Theme font size changed");
+    require(std::abs(input->property("font").value<QFont>().pointSizeF() - 12.5) < 0.01,
+            "Float input did not dynamically update when parameterFont was assigned point size");
 
-    // Synchronize parameterFont back to paramEditorFontSize
-    QFont customFont = theme->parameterFont();
-    customFont.setPixelSize(14);
-    theme->setparameterFont(customFont);
-    require(theme->paramEditorFontSize() == 14, "paramEditorFontSize did not sync when parameterFont changed");
+    // Dynamic propagation: QFont with pixel size preserves Qt pixel mode
+    QFont pxFont = theme->parameterFont();
+    pxFont.setPixelSize(14);
+    theme->setparameterFont(pxFont);
     QTest::qWait(50);
     require(input->property("font").value<QFont>().pixelSize() == 14,
-            "Float input did not dynamically update when parameterFont was assigned");
+            "Float input did not dynamically update when parameterFont was assigned pixel size");
 
-    // Dynamic propagation: parameterRowHeight and paramEditorHeight sync and update editor
+    // Dynamic propagation: parameterRowHeight and paramEditorHeight share one backing field and update editor
     theme->setparameterRowHeight(36);
-    require(theme->paramEditorHeight() == 36, "paramEditorHeight did not sync with parameterRowHeight");
+    require(theme->paramEditorHeight() == 36, "paramEditorHeight must mirror parameterRowHeight");
     QTest::qWait(50);
     require(editor->implicitHeight() == 36, "ParameterEditor implicit height did not dynamically update with Theme row height");
 
     theme->setparamEditorHeight(32);
-    require(theme->parameterRowHeight() == 32, "parameterRowHeight did not sync with paramEditorHeight");
-    theme->setparamEditorFontSize(12);
+    require(theme->parameterRowHeight() == 32, "parameterRowHeight must mirror paramEditorHeight");
+
+    // Reset font to default
+    pxFont.setPixelSize(12);
+    theme->setparameterFont(pxFont);
 
     // Verify two engines have independent Theme singleton instances
     {
@@ -439,7 +447,7 @@ void parameterEditorsContract()
         auto *combo = comboBox(row);
         require(combo != nullptr, "Bool/enum parameter did not use a dropdown");
         require(combo->height() == theme->paramEditorHeight(), "dropdown height differs from numeric field");
-        require(combo->property("font").value<QFont>().pixelSize() == theme->paramEditorFontSize(),
+        require(combo->property("font").value<QFont>() == theme->parameterFont(),
                 "dropdown font differs from numeric field");
         auto *label = findItem(findItem, row, "parameterLabel");
         auto *pathLabel = findItem(findItem, pathRow, "parameterLabel");

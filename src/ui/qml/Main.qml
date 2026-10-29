@@ -505,7 +505,7 @@ ApplicationWindow {
                 spacing: 5
                 QuiTextIcon {
                     iconSource: QuiFontIcon.History
-                    iconSize: 13
+                    iconSize: Theme.timingIconSize
                     iconColor: Theme.textSecondary
                 }
                 QuiText {
@@ -530,7 +530,7 @@ ApplicationWindow {
             }
             Rectangle {
                 Layout.preferredHeight: 20; Layout.preferredWidth: logRow.width + 12; radius: 3
-                color: logMouse.containsMouse ? "#eaf2fd" : "transparent"
+                color: logMouse.containsMouse ? Theme.logButtonHoverColor : "transparent"
                 RowLayout {
                     id: logRow; anchors.centerIn: parent; spacing: 4
                     width: implicitWidth

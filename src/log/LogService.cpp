@@ -81,25 +81,26 @@ std::unique_ptr<spdlog::formatter> makeFormatter()
 
 constexpr std::size_t kMaxSourceBytes = 128;
 
+} // namespace
+
 // Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
 // When truncated, total bytes including the "…" mark (3 bytes) will not exceed maxBytes.
-std::string boundedSingleLine(std::string_view text, std::size_t maxBytes)
+BoundedText boundedSingleLine(std::string_view text, std::size_t maxBytes)
 {
     if (maxBytes == 0)
-        return {};
+        return {"", !text.empty()};
 
     constexpr std::string_view kEllipsis     = "…";
     constexpr std::size_t     kEllipsisBytes = 3;
 
-    const std::size_t prefixBudget = (maxBytes >= kEllipsisBytes) ? (maxBytes - kEllipsisBytes) : maxBytes;
-    std::string       result;
-    result.reserve(std::min(text.size(), maxBytes));
-    std::string prefix;
-    prefix.reserve(prefixBudget);
+    std::string out;
+    out.reserve(std::min(text.size(), maxBytes));
+
+    const std::string_view mark         = (maxBytes >= kEllipsisBytes) ? kEllipsis : "";
+    const std::size_t      prefixBudget = maxBytes - mark.size();
+    std::size_t            markerCut    = 0;
 
     std::size_t i = 0;
-    bool        truncated = false;
-
     while (i < text.size())
     {
         const auto       u = static_cast<unsigned char>(text[i]);
@@ -196,31 +197,23 @@ std::string boundedSingleLine(std::string_view text, std::size_t maxBytes)
             break;
         }
 
-        if (result.size() + seq.size() <= maxBytes)
+        if (seq.size() > maxBytes - out.size())
         {
-            result.append(seq);
-            if (!truncated && prefix.size() + seq.size() <= prefixBudget)
-                prefix.append(seq);
-            i += advance;
+            out.resize(markerCut);
+            out.append(mark);
+            return {std::move(out), true};
         }
-        else
-        {
-            truncated = true;
-            break;
-        }
+
+        out.append(seq);
+        if (out.size() <= prefixBudget)
+            markerCut = out.size();
+        i += advance;
     }
 
-    if (truncated)
-    {
-        if (maxBytes >= kEllipsisBytes)
-        {
-            prefix.append(kEllipsis);
-            return prefix;
-        }
-        return prefix;
-    }
-    return result;
+    return {std::move(out), false};
 }
+
+namespace {
 
 // %v carries the business source in brackets so the formatter owns time, level and thread only.
 std::string buildPayload(std::string_view source, std::string_view message)
@@ -340,6 +333,10 @@ struct LogService::PendingError
     std::string                   message;
     std::uint64_t                 repeats = 0;
     spdlog::log_clock::time_point last;
+
+    PendingError() = default;
+    PendingError(LogLevel lvl, std::string src, std::string msg, std::uint64_t reps, spdlog::log_clock::time_point lst)
+        : level(lvl), source(std::move(src)), message(std::move(msg)), repeats(reps), last(lst) {}
 };
 
 struct LogService::Impl
@@ -591,15 +588,15 @@ void LogService::postPendingSummaryLocked(const PendingError &entry, std::size_t
     if (maxBytes > suffix.size())
     {
         const auto bounded = boundedSingleLine(entry.message, maxBytes - suffix.size());
-        summary = bounded + suffix;
+        summary = bounded.text + suffix;
     }
     else
     {
         const std::string shortSuffix = "×" + std::to_string(entry.repeats);
         if (maxBytes > shortSuffix.size())
-            summary = boundedSingleLine(entry.message, maxBytes - shortSuffix.size()) + shortSuffix;
+            summary = boundedSingleLine(entry.message, maxBytes - shortSuffix.size()).text + shortSuffix;
         else
-            summary = boundedSingleLine(shortSuffix, maxBytes);
+            summary = boundedSingleLine(shortSuffix, maxBytes).text;
     }
     postLocked(entry.level, entry.source, summary, entry.last);
 }
@@ -632,7 +629,7 @@ void LogService::writeImpl(LogLevel level, std::string_view source, std::string_
     const auto maxBytes       = impl_->config.maxMessageBytes;
     const auto boundedSource  = boundedSingleLine(source, kMaxSourceBytes);
     const auto boundedMessage = boundedSingleLine(message, maxBytes);
-    postLocked(level, boundedSource, boundedMessage, spdlog::log_clock::now());
+    postLocked(level, boundedSource.text, boundedMessage.text, spdlog::log_clock::now());
 }
 
 void LogService::writeError(std::string_view source, std::string_view message)
@@ -645,10 +642,12 @@ void LogService::writeError(std::string_view source, std::string_view message)
     const auto boundedSource  = boundedSingleLine(source, kMaxSourceBytes);
     const auto boundedMessage = boundedSingleLine(message, maxBytes);
 
-    // Oversized messages do not participate in duplicate coalescing
-    if (message.size() >= maxBytes)
+    // Minimum budget required to display repeat count without losing digits:
+    // "×" (2 bytes in UTF-8) + 20 (max decimal digits of uint64) = 22 bytes.
+    constexpr std::size_t minCountBudget = 22;
+    if (boundedSource.truncated || boundedMessage.truncated || maxBytes < minCountBudget)
     {
-        postLocked(LogLevel::Error, boundedSource, boundedMessage, spdlog::log_clock::now());
+        postLocked(LogLevel::Error, boundedSource.text, boundedMessage.text, spdlog::log_clock::now());
         return;
     }
 
@@ -657,9 +656,9 @@ void LogService::writeError(std::string_view source, std::string_view message)
     const auto now = spdlog::log_clock::now();
     {
         std::lock_guard<std::mutex> coalesce(impl_->coalesceMutex);
-        std::string                 key = boundedSource;
+        std::string                 key = boundedSource.text;
         key.push_back('\n');
-        key.append(boundedMessage);
+        key.append(boundedMessage.text);
         const auto found = impl_->pendingErrors.find(key);
         if (found == impl_->pendingErrors.end())
         {
@@ -670,8 +669,8 @@ void LogService::writeError(std::string_view source, std::string_view message)
                     released.push_back(std::move(entry.second));
                 impl_->pendingErrors.clear();
             }
-            impl_->pendingErrors.emplace(key, PendingError{LogLevel::Error, boundedSource,
-                                                           boundedMessage, 0, now});
+            impl_->pendingErrors.emplace(key, PendingError{LogLevel::Error, boundedSource.text,
+                                                           boundedMessage.text, 0, now});
             announce = true;
         }
         else
@@ -680,8 +679,10 @@ void LogService::writeError(std::string_view source, std::string_view message)
             found->second.last = now;
         }
     }
+
     if (announce)
-        postLocked(LogLevel::Error, boundedSource, boundedMessage, now);
+        postLocked(LogLevel::Error, boundedSource.text, boundedMessage.text, now);
+
     for (const auto &entry : released)
         if (entry.repeats > 0)
             postPendingSummaryLocked(entry, maxBytes);

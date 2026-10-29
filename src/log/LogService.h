@@ -36,6 +36,17 @@ struct LogRecord
     QString level;
 };
 
+// Result of text bounding: text within budget, and whether truncation occurred.
+struct BoundedText
+{
+    std::string text;
+    bool        truncated = false;
+};
+
+// Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
+// When truncated, total bytes including the "…" mark (3 bytes) will not exceed maxBytes.
+BoundedText boundedSingleLine(std::string_view text, std::size_t maxBytes);
+
 // Every bound of the log path lives here: the async queue, the UI mailbox, the batch window and
 // the per-message cap. There is deliberately no size rotation - the file sink rotates per local
 // day, so byte/count limits would be a second, conflicting policy.
