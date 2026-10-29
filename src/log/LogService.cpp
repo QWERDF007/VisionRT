@@ -94,6 +94,11 @@ void setLogTestHooks(LogTestHooks hooks)
     std::lock_guard<std::mutex> lock(gHooksMutex);
     gTestHooks = std::move(hooks);
 }
+
+void flushPendingForTesting()
+{
+    LogService::instance().flushPending();
+}
 #endif
 
 // Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
@@ -526,6 +531,18 @@ void LogService::shutdown()
     impl_->uiTimer.stop();
     impl_->flushTimer.stop();
     impl_->viewActive.store(false, std::memory_order_release);
+
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    {
+        std::function<void()> hook;
+        {
+            std::lock_guard<std::mutex> hLock(gHooksMutex);
+            hook = gTestHooks.onBeforeShutdownLock;
+        }
+        if (hook)
+            hook();
+    }
+#endif
 
     // The exclusive side of the writer lock is the drain barrier: once it is held, every producer
     // that passed the admission check has already posted, and no new line can be enqueued while the

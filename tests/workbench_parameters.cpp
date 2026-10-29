@@ -156,20 +156,42 @@ void parameterEditorsContract()
     require(theme->paramEditorHeight() == 36, "paramEditorHeight must mirror parameterRowHeight");
     QTest::qWait(50);
     require(editor->implicitHeight() == 36, "ParameterEditor implicit height did not dynamically update with Theme row height");
+    require(input->isVisible() && input->height() > 0 && input->width() > 0,
+            "input item must remain visible with positive dimensions after row height update");
 
     theme->setparamEditorHeight(32);
     require(theme->parameterRowHeight() == 32, "parameterRowHeight must mirror paramEditorHeight");
+
+    // Fixed row height semantic: changing parameterFont unit must NOT alter the fixed parameterRowHeight
+    QFont ptCheck;
+    ptCheck.setPointSizeF(14.0);
+    theme->setparameterFont(ptCheck);
+    require(theme->parameterRowHeight() == 32, "fixed parameterRowHeight must not change when parameterFont unit changes");
 
     // Reset font to default
     pxFont.setPixelSize(12);
     theme->setparameterFont(pxFont);
 
-    // Verify two engines have independent Theme singleton instances
+    // Verify two engines have independent Theme singleton instances and mutate state without cross-pollution
     {
         QQmlEngine engine2;
         auto *theme2 = themeForEngine(&engine2);
         require(theme2 != nullptr, "Theme must be available for second engine");
         require(theme2 != theme, "Each QQmlEngine must own its distinct Theme singleton instance");
+
+        // Mutate engine 2 properties
+        theme2->setparameterRowHeight(48);
+        theme2->setparameterLabelWidth(150);
+        theme2->setlogButtonHoverColor(QColor("#123456"));
+        QFont customF;
+        customF.setPixelSize(20);
+        theme2->setparameterFont(customF);
+
+        // Verify engine 1 Theme is completely unpolluted
+        require(theme->parameterRowHeight() == 32, "engine 1 parameterRowHeight must remain 32");
+        require(theme->parameterLabelWidth() != 150, "engine 1 parameterLabelWidth must not be mutated by engine 2");
+        require(theme->logButtonHoverColor() != QColor("#123456"), "engine 1 logButtonHoverColor must not be mutated by engine 2");
+        require(theme->parameterFont().pixelSize() != 20, "engine 1 parameterFont must not be mutated by engine 2");
     }
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);

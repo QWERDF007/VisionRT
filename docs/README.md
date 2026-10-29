@@ -5,11 +5,13 @@
 - [最新交付：三仓审核完整方案、Specs 与 Tickets](#)：当前方案以打包件交付，见 `docs/VisionRT_三仓审核_完整方案_Specs_Tickets_20261028.zip`（00 阅读说明、01 现状与优先级、02 代码证据、03 附件审核、04 目标方案、05 Specs、06 Tickets、07 验证矩阵；逐条执行记录见 WORKLOG）。
 - [任务账本](../WORKLOG.md)：本地工作恢复与验证证据入口，不随代码提交。
 
-## T36 交付基线（2026-10-27）
+## 当前交付基线
+
+> 历史基线说明：原 T36（ABI 6，`72198d6`）已作为历史基线归档，当前已全线升级为 ABI 7 契约信封。
 
 | 项 | 版本 / 提交 |
 | --- | --- |
-| Contracts 子模块（VisionRT 与 VisionTools 一致，跟踪 `main`） | `72198d6`（ABI 6） |
+| Contracts 子模块（VisionRT 与 VisionTools 一致，跟踪 `main`） | 见 `3rdparty/VisionRTContracts` gitlink 及 `build_info.json`（当前 ABI 7 契约信封） |
 | spdlog 子模块 | `6fa36017`（v1.15.3） |
 | Qt | 6.6.2（msvc2019_64） |
 | OpenCV | 4.8.0（vc16） |
@@ -48,39 +50,20 @@ Release、500 轮的实测（[基准证据](../build/evidence/runtime_benchmark.
 | --- | --- | --- |
 | 工具业务码与中文消息 | 各工具的错误域枚举 | VisionTools `src/*/errors/*.h`、[公共错误词汇](../src/common/errors/ToolError.h) |
 | 宿主失败分类（忙/不存在/前置条件/参数/内部） | `visionrt::ErrorCode` | [Error.h](../src/core/Error.h)、[Error.cpp](../src/core/Error.cpp) |
-| 失败返回值 | `ErrorInfo`，需要值时用 `Result<T>` | [Error.h](../src/core/Error.h)、[Result.h](../src/core/Result.h) |
-| `__status_code` / `__status_message` 的写入 | 宿主在工具正常返回后物化 | [ToolValueValidation.cpp](../src/core/ToolValueValidation.cpp)、[NodeRuntime.cpp](../src/runtime/NodeRuntime.cpp) |
+| 失败返回值与错误信息 | `ErrorInfo`、`ErrorCode` 与 `ToolStatus` | [Error.h](../src/core/Error.h)、[Tool.h](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h) |
+| `__status_code` / `__status_message` 的写入 | SDK `toolResult` / `result()` 统一打包入 `outputs` | [Tool.h](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[Parameters.h](../3rdparty/VisionRTContracts/include/visionrt/contracts/Parameters.h)、[NodeRuntime.cpp](../src/runtime/NodeRuntime.cpp) |
 
-约定：工具返回 `ToolResult{outputs, status}`，`outputs` 只含声明里的业务端口；工具写状态端口即契约错误。跳过、阻断、取消与框架失败不伪造工具结果。节点 Tooltip 仍只显示三阶段耗时，错误只经输出参数与既有诊断展示。
+约定：工具返回 `ToolResult{outputs, detail}`（由 SDK `toolResult(outputs, status)` 构造），`outputs` 包含声明的业务端口及打包后的 `__status_code` 与 `__status_message`；`detail` 承载技术诊断。直接在业务中手动篡改状态端口属于保留违规。跳过、阻断、取消与框架失败不伪造工具结果。节点 Tooltip 仍只显示三阶段耗时，错误只经输出参数与既有诊断展示。
 
 ### 宿主错误码与产生点
 
-宿主只有 [ErrorCode](../src/core/Error.h) 一张表，所有宿主状态经 `makeStatus(code, message, detail)` 构造；同一条诊断在不同子系统不再各写一份数字。
-
-| 码 | 含义 | 产生点（谁会说这个码） |
-| --- | --- | --- |
-| 0 | 成功 | 各阶段正常返回 |
-| -1 | 内部错误 | 意外异常：插件初始化/释放抛错、Python 实例创建抛错、运行时未预期异常 |
-| -2 | 参数不合法 | 工厂描述符非法、契约解析失败、工具初始化参数不合法 |
-| -3 | 忙 | 同路径模块重入加载（只有这一处是真正的“忙”） |
-| -4 | 不存在 | 工具定义缺失、模块已加载但未注册该工厂、Python 实现/脚本缺失 |
-| -5 | 已取消 | 运行取消 |
-| -6 | 未执行 | 跳过或上游未选中 |
-| -7 | 前置条件不满足 | 实例已释放/已初始化、模块尚未加载、未初始化就执行 |
-| -8 | 读回不匹配 | 读回标识与请求不一致 |
-| -9 | 超时 | 受控等待超时 |
-| -10 | 读写失败 | Python 包索引构建时的文件系统失败 |
-| -11 | 模块加载失败 | 库文件缺失、DLL 目录配置失败、缺入口符号、ABI/结构体不匹配、空实例、重复工厂 ID |
-| -12 | Python 不可用 | 解释器关闭、运行时刷新导致实例跨代、脚本导入/加载失败 |
-| -13 | 数据不符合契约 | 工具未关联模块、Python 入口不是 `.py` 或缺少 symbol、工具输出违反声明 |
-| -14 | 资源不可用 | 宿主绑定未注册、C++ 实现不可用（无插件加载器）、工厂返回空实例 |
-| -15 | 不支持 | 能力未实现 |
+宿主错误码与产生点唯一归属 [Error.h](../src/core/Error.h) 与 [Error.cpp](../src/core/Error.cpp)，仓库不维护第二份静态重复码表；所有宿主状态经 `makeStatus(code, message, detail)` 构造。
 
 消费侧按码分支：`AppController` 与节点诊断显示 `message`，需要区分“找不到 / 状态不对 / 环境不可用”时读 `code`；不再解析消息文本。工具自己报的状态原样透传（`PythonLoadState`、`RegistryError` 携带的就是工具或加载器的原状态），宿主只补自己的框架错误。
 
 仓库里没有第二份码表：新增状态先加枚举与中文默认消息，再在产生点用 `makeStatus`，测试断言用 `hostCode(ErrorCode::...)` 而不是数字。
 
-Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'status': {'code', 'message', 'detail'}, 'outputs': {...}}`，类的 `initialize`/`release` 只返回状态字典。工具不得写 `__status_code` / `__status_message`，这两个端口由宿主在工具成功返回后物化；写了就是契约错误。
+Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs': {...}, 'detail': '...'}`（由 SDK `result(outputs, status)` 统一封装打包，`outputs` 包含业务端口及 `__status_code` 与 `__status_message`），类的 `initialize`/`release` 只返回状态字典。工具避免不经 SDK 直接篡改状态端口。
 
 ## 界面约束
 
@@ -119,7 +102,7 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'status'
 
 ## 测试分组
 
-每个测试恰好属于一个组；`tests-<组>` 构建该组需要的一切，`ctest -L <组>` 只运行该组。配置阶段会打印每个组的实际成员，组为空时直接失败（`sdk` 由 Contracts 子工程注册，`bridge`/`ui` 在 `VISIONRT_BUILD_APP=OFF` 下明确报告“不存在”而不是假装通过）。
+测试在 `AddTest.cmake` 中可被赋予多个组标签（例如 `ui` 与 `bridge` 存在交集）；全量注册测试项清单以 CTest 实际注册为唯一真相源（可通过 `ctest -N` 动态列出），`tests-<组>` 构建该组标签覆盖的目标，`ctest -L <组>` 只运行携带该标签的测试项。配置阶段会打印每个组的实际成员，组为空时直接失败（`sdk` 由 Contracts 子工程注册，`bridge`/`ui` 在 `VISIONRT_BUILD_APP=OFF` 下明确报告“不存在”而不是假装通过）。
 
 | 组 | 范围 | 构建入口 |
 | --- | --- | --- |
