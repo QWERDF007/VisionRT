@@ -38,11 +38,12 @@ target_link_libraries(visionrt_common PUBLIC VisionRT::Contracts)
 configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 
 # 日志服务：异步 spdlog、轮转文件、有界 UI 信箱与 Qt 消息桥
-add_library(visionrt_log
+set(VISIONRT_LOG_SOURCES
     src/log/LogService.cpp
     src/log/LogService.h
     src/log/LogModel.cpp
     src/log/LogModel.h)
+add_library(visionrt_log ${VISIONRT_LOG_SOURCES})
 target_link_libraries(visionrt_log PUBLIC visionrt_common Qt6::Core spdlog::spdlog)
 target_include_directories(visionrt_log PUBLIC src)
 
@@ -154,6 +155,7 @@ if(VISIONRT_BUILD_APP)
             -DVERSION=${PROJECT_VERSION}${PROJECT_VERSION_SUFFIX}
             -DCOMMIT=${REPO_COMMIT}
             -DBRANCH=${REPO_BRANCH}
+            -DREPO_DIR=${CMAKE_SOURCE_DIR}
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/build_info.json
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMAND ${CMAKE_COMMAND}
@@ -161,6 +163,7 @@ if(VISIONRT_BUILD_APP)
             -DVERSION=${VISIONRT_CONTRACTS_VERSION}
             -DCOMMIT=${VISIONRT_CONTRACTS_COMMIT}
             -DBRANCH=${VISIONRT_CONTRACTS_BRANCH}
+            -DREPO_DIR=${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts
             -DSOURCE_FILE=$<TARGET_FILE:VisionRTContracts>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/contracts-build-info.json
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
@@ -224,17 +227,14 @@ if(BUILD_TESTING)
             "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/build_incremental_contract.py")
     endif()
     visionrt_contract(value_json_contract visionrt_core)
-    add_library(visionrt_log_testing
-        src/log/LogService.cpp
-        src/log/LogService.h
-        src/log/LogModel.cpp
-        src/log/LogModel.h)
+    add_library(visionrt_log_testing ${VISIONRT_LOG_SOURCES})
     target_link_libraries(visionrt_log_testing PUBLIC visionrt_common Qt6::Core spdlog::spdlog)
     target_include_directories(visionrt_log_testing PUBLIC src)
     target_compile_definitions(visionrt_log_testing PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
     visionrt_contract(log_contract visionrt_log_testing LABELS backend perf)
     target_compile_definitions(log_contract PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
     target_link_libraries(log_contract PRIVATE Qt6::Test)
+    set_tests_properties(log_contract PROPERTIES TIMEOUT 60)
     visionrt_contract(display_storage_contract visionrt_presentation)
     visionrt_contract(output_value_contract visionrt_presentation)
     visionrt_contract(python_value_contract visionrt_python_values)

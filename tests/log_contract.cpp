@@ -17,6 +17,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -387,6 +388,9 @@ try
             {2, "\v", "\\v", false},
             {2, "\f", "\\f", false},
             {2, std::string_view("\0", 1), "\\0", false},
+            // TAB & 0x1F control byte preservation
+            {16, "a\tb", "a\tb", false},
+            {16, "a\x1F" "b", "a\x1F" "b", false},
             // Malformed UTF-8 & newline leak prevention
             {16, "\xE2\x0A\x78", "?\\nx", false},
             // Capacity larger than message
@@ -408,12 +412,23 @@ try
                         .constData());
         }
 
-        // Allocation observation: short string within cap vs 4096-byte string
+        // Output sizing check: large string exact boundary and truncation
         std::string large(4096, 'x');
         const auto rLarge = boundedSingleLine(large, 4096);
-        require(rLarge.text.size() == 4096 && !rLarge.truncated, "4096 byte string must bound accurately");
+        require(rLarge.text.size() == 4096 && !rLarge.truncated, "output sizing: 4096 byte string must bound accurately");
         const auto rLargeCut = boundedSingleLine(large, 100);
-        require(rLargeCut.text.size() == 100 && rLargeCut.truncated, "large string with 100 cap must truncate to 100 bytes");
+        require(rLargeCut.text.size() == 100 && rLargeCut.truncated, "output sizing: large string with 100 cap must truncate to 100 bytes");
+
+        // Allocation observation: reserve uses min(text.size(), maxBytes)
+        // 1. Short text (3 bytes) with large cap (4096): capacity must stay small, not allocating 4096 bytes
+        const auto rAllocShort = boundedSingleLine("abc", 4096);
+        require(rAllocShort.text == "abc" && !rAllocShort.truncated, "allocation observation: short text content check");
+        require(rAllocShort.text.capacity() < 4096, "allocation observation: short input with large cap must not pre-allocate 4096 bytes");
+
+        // 2. Long text (4096 bytes) with small cap (100): capacity must stay small, not allocating 4096 bytes
+        const auto rAllocLongCut = boundedSingleLine(large, 100);
+        require(rAllocLongCut.text.size() == 100 && rAllocLongCut.truncated, "allocation observation: long input with small cap content check");
+        require(rAllocLongCut.text.capacity() < 4096, "allocation observation: long input with small cap must not allocate full text size");
     }
 
     // 16. UTF-8 boundary & invalid bytes: invalid byte sequences do not leak raw newlines and produce valid UTF-8
@@ -433,11 +448,13 @@ try
                 2000),
             "embedded newline in malformed UTF-8 was not escaped");
 
-    // 17. Error coalescing matrix: Critical bypass, escape expansion, anti-collision, budget threshold, and summary repeat
+    // 17. Error coalescing matrix: Critical bypass, escape expansion, message & source anti-collision, budget threshold, and summary repeat
     {
-        // 17a. Critical logs never coalesce or delay
+        // 17a. Critical logs never coalesce or delay, and arrive at both UI and daily log file
         service.shutdown();
-        require(service.start(config), "restart for critical check failed");
+        QTemporaryDir critDir;
+        const QString critLog = critDir.filePath("visionrt.log");
+        require(service.start(config, critLog), "restart for critical check failed");
         service.setViewActive(true);
         for (int i = 0; i < 5; ++i)
             LogService::write(LogLevel::Critical, std::string_view("critical-probe"), std::string_view("panic payload"));
@@ -451,13 +468,54 @@ try
                         return critCount == 5;
                     },
                     2000),
-                "critical records were coalesced or delayed");
+                "critical records were coalesced or delayed in UI");
+        service.flush();
+        service.shutdown();
+        const QString critTodayFile = QDir(critDir.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        const QString critContent = fileText(critTodayFile);
+        int critFileCount = 0;
+        for (const auto &line : critContent.split('\n'))
+            if (line.contains("critical-probe") && line.contains("panic payload"))
+                ++critFileCount;
+        require(critFileCount == 5, "critical records missing from disk file");
 
-        // 17b. Escape expansion A/B: budget 8 vs 16 with raw 5 newlines expanding to 10 bytes "\\n\\n\\n\\n\\n"
+        // 17b. Escape expansion A/B & Message anti-collision (64-byte cap)
+        // Part 1: Escape expansion
         const auto resEsc8 = boundedSingleLine("\n\n\n\n\n", 8);
         require(resEsc8.truncated && resEsc8.text == "\\n\\n…", "escape expansion with cap 8 must truncate to \\n\\n…");
         const auto resEsc16 = boundedSingleLine("\n\n\n\n\n", 16);
         require(!resEsc16.truncated && resEsc16.text == "\\n\\n\\n\\n\\n", "escape expansion with cap 16 must fit without truncation");
+
+        // Part 2: Message anti-collision at 64 budget
+        // When maxMessageBytes is 64, two messages sharing a 61-byte prefix will both truncate to prefix + "…" (64 bytes).
+        // Because boundedMessage.truncated is true, the service MUST NOT coalesce them into repeat summaries.
+        auto cap64 = config;
+        cap64.maxMessageBytes = 64;
+        require(service.start(cap64), "restart for message collision check failed");
+        service.setViewActive(true);
+        std::string msgA = std::string(61, 'M') + "111111111";
+        std::string msgB = std::string(61, 'M') + "222222222";
+        service.error("msg-collision-probe", msgA);
+        service.error("msg-collision-probe", msgB);
+        service.flush();
+        flushPendingForTesting();
+        int msgCollisionCount = 0;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                        {
+                            if (record.line.contains(QStringLiteral("msg-collision-probe")))
+                            {
+                                require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
+                                        "truncated long messages collided into a repeat summary");
+                                ++msgCollisionCount;
+                            }
+                        }
+                        return msgCollisionCount == 2;
+                    },
+                    2000),
+                "truncated messages failed to deliver both distinct initial records");
 
         // 17c. Truncated source anti-collision: two long sources sharing prefix but differing in tail
         service.shutdown();
@@ -468,6 +526,7 @@ try
         service.error(longA, "collision payload");
         service.error(longB, "collision payload");
         service.flush();
+        flushPendingForTesting();
         int collisionCount = 0;
         require(QTest::qWaitFor(
                     [&]
@@ -508,31 +567,52 @@ try
                     2000),
                 "cap 21 erroneously coalesced errors");
 
-        // Budget 22 reaches minCountBudget (22), so repeats coalesce
+        // Budget 22 reaches minCountBudget (22), so repeats coalesce: 1 initial + 1 summary (exact repeat count 2)
         service.shutdown();
+        QTemporaryDir cap22Dir;
+        const QString cap22Log = cap22Dir.filePath("visionrt.log");
         auto cap22 = config;
         cap22.maxMessageBytes = 22;
-        require(service.start(cap22), "restart for cap 22 failed");
+        require(service.start(cap22, cap22Log), "restart for cap 22 failed");
         service.setViewActive(true);
         for (int i = 0; i < 3; ++i)
-            service.error("cap22-probe", "threshold payload");
+            service.error("cap22-probe", "1234567890");
         service.flush();
-        service.flushPending();
-        bool cap22Summary = false;
+        flushPendingForTesting();
+        int cap22Initial = 0;
+        int cap22Summary = 0;
         require(QTest::qWaitFor(
                     [&]
                     {
                         for (const auto &record : service.take(64))
-                            if (record.line.contains(QStringLiteral("cap22-probe")) && (record.line.contains(QStringLiteral("重复")) || record.line.contains(QStringLiteral("×"))))
-                                cap22Summary = true;
-                        return cap22Summary;
+                        {
+                            if (record.line.contains(QStringLiteral("cap22-probe")))
+                            {
+                                if (record.line.contains(QStringLiteral("（重复 2 次）")) || record.line.contains(QStringLiteral("×2")))
+                                    ++cap22Summary;
+                                else
+                                    ++cap22Initial;
+                            }
+                        }
+                        return cap22Initial == 1 && cap22Summary == 1;
                     },
                     2000),
-                "cap 22 failed to coalesce and emit repeat count summary");
+                "cap 22 failed to coalesce into exact 1 initial + 1 summary (repeats=2)");
+        service.flush();
+        service.shutdown();
+        const QString cap22Today = QDir(cap22Dir.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        const QString cap22FileContent = fileText(cap22Today);
+        int cap22FileLineCount = 0;
+        for (const auto &line : cap22FileContent.split('\n'))
+            if (line.contains("cap22-probe"))
+                ++cap22FileLineCount;
+        require(cap22FileLineCount == 2, "cap 22 disk file must contain exactly 2 lines (initial + summary)");
 
         // 17e. Negative witness: exactly 1 error across full refresh window produces NO summary indicators
         service.shutdown();
-        require(service.start(config), "restart for negative witness failed");
+        QTemporaryDir negDir;
+        const QString negLog = negDir.filePath("visionrt.log");
+        require(service.start(config, negLog), "restart for negative witness failed");
         service.setViewActive(true);
         service.error("single-refresh-probe", "single event payload");
         service.flush();
@@ -554,7 +634,7 @@ try
                     2000),
                 "expected initial error record for single error event");
 
-        service.flushPending();
+        flushPendingForTesting();
         QTest::qWait(600); // Wait beyond 500ms flush timer
         for (const auto &rec : service.take(64))
         {
@@ -565,163 +645,269 @@ try
                         "unexpected repeat summary produced for single error event");
             }
         }
-        require(probeCount == 1, "unexpected extra record appeared across refresh window");
-
-        // 17f. 5 occurrences: first is immediate, next 4 produce repeat count 4 summary
+        require(probeCount == 1, "unexpected extra record appeared across refresh window in UI");
+        service.flush();
         service.shutdown();
-        require(service.start(config), "restart for repeat summary failed");
+        const QString negToday = QDir(negDir.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        const QString negFileContent = fileText(negToday);
+        int negFileLineCount = 0;
+        for (const auto &line : negFileContent.split('\n'))
+            if (line.contains("single-refresh-probe"))
+                ++negFileLineCount;
+        require(negFileLineCount == 1, "single error event must produce exactly 1 line on disk");
+
+        // 17f. 5 occurrences: first is immediate, next 4 produce repeat count 4 summary (UI and file consistent)
+        service.shutdown();
+        QTemporaryDir repDir;
+        const QString repLog = repDir.filePath("visionrt.log");
+        require(service.start(config, repLog), "restart for repeat summary failed");
         service.setViewActive(true);
         for (int i = 0; i < 5; ++i)
             service.error("rep-probe", "repeat event payload");
         service.flush();
-        service.flushPending();
-        bool foundSummary = false;
+        flushPendingForTesting();
+        int repInitial = 0;
+        int repSummary = 0;
         require(QTest::qWaitFor(
                     [&]
                     {
                         for (const auto &record : service.take(64))
-                            if (record.line.contains(QStringLiteral("rep-probe"))
-                                && (record.line.contains(QStringLiteral("（重复 4 次）")) || record.line.contains(QStringLiteral("×4"))))
-                                foundSummary = true;
-                        return foundSummary;
+                        {
+                            if (record.line.contains(QStringLiteral("rep-probe")))
+                            {
+                                if (record.line.contains(QStringLiteral("（重复 4 次）")) || record.line.contains(QStringLiteral("×4")))
+                                    ++repSummary;
+                                else
+                                    ++repInitial;
+                            }
+                        }
+                        return repInitial == 1 && repSummary == 1;
                     },
                     2000),
-                "5 identical errors did not produce repeat count 4 summary");
-    }
-
-    // 18. Controlled life-cycle concurrency & lock interleaving (Scenarios A & B)
-#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
-    // Scenario A: In-lock writer paused; shutdown waits; release writer; shutdown finishes and records drained
-    {
-        service.shutdown();
-        require(service.start(config, directory.filePath("visionrt.log")), "restart for Scenario A failed");
-        service.setViewActive(true);
-
-        std::atomic<bool> writerInsideLock{false};
-        std::atomic<bool> allowWriterFinish{false};
-        std::atomic<bool> shutdownStarted{false};
-        std::atomic<bool> shutdownCompleted{false};
-        std::atomic<bool> drainPremature{false};
-        std::condition_variable cvWriter;
-        std::mutex mtxWriter;
-
-        setLogTestHooks({
-            nullptr, // onBeforeWriteLock
-            [&](std::string_view source) {
-                if (source == "scenario-a-writer") {
-                    writerInsideLock.store(true, std::memory_order_release);
-                    std::unique_lock<std::mutex> lk(mtxWriter);
-                    cvWriter.wait_for(lk, std::chrono::seconds(5), [&] {
-                        return allowWriterFinish.load(std::memory_order_acquire);
-                    });
-                }
-            }
-        });
-
-        std::thread writerThread([&] {
-            LogService::write(LogLevel::Info, std::string_view("scenario-a-writer"), std::string_view("in-lock payload"));
-        });
-
-        const auto startWait = std::chrono::steady_clock::now();
-        while (!writerInsideLock.load(std::memory_order_acquire))
-        {
-            if (std::chrono::steady_clock::now() - startWait > std::chrono::seconds(3))
-                break;
-            std::this_thread::yield();
-        }
-        require(writerInsideLock.load(std::memory_order_acquire), "Scenario A writer failed to reach insideLock hook");
-
-        std::thread coordinatorThread([&] {
-            while (!shutdownStarted.load(std::memory_order_acquire))
-                std::this_thread::yield();
-            std::this_thread::sleep_for(std::chrono::milliseconds(80));
-            if (shutdownCompleted.load(std::memory_order_acquire))
-                drainPremature.store(true, std::memory_order_release);
-            {
-                std::lock_guard<std::mutex> lk(mtxWriter);
-                allowWriterFinish.store(true, std::memory_order_release);
-            }
-            cvWriter.notify_all();
-        });
-
-        shutdownStarted.store(true, std::memory_order_release);
-        service.shutdown();
-        shutdownCompleted.store(true, std::memory_order_release);
-
-        writerThread.join();
-        coordinatorThread.join();
-        setLogTestHooks({});
-
-        require(!drainPremature.load(std::memory_order_acquire),
-                "service shutdown completed prematurely while writer held shared write lock");
-
-        // Verify the record was successfully drained to the daily log file before shutdown closed it
-        const QString todayFile = QDir(directory.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
-        QFile file(todayFile);
-        require(file.open(QIODevice::ReadOnly | QIODevice::Text), "failed to open daily log file to verify Scenario A payload");
-        const QString fileContent = QString::fromUtf8(file.readAll());
-        require(fileContent.contains(QStringLiteral("scenario-a-writer")) && fileContent.contains(QStringLiteral("in-lock payload")),
-                "in-lock writer record was lost during shutdown drain");
-    }
-
-    // Scenario B: Before-lock writer paused; shutdown finishes; release writer; writer sees closed service and safely aborts
-    {
-        require(service.start(config, directory.filePath("visionrt.log")), "restart for Scenario B failed");
-        service.setViewActive(true);
-
-        std::atomic<bool> writerBeforeLock{false};
-        std::atomic<bool> allowWriterProceed{false};
-        std::condition_variable cvBefore;
-        std::mutex mtxBefore;
-
-        setLogTestHooks({
-            [&](std::string_view source) {
-                if (source == "scenario-b-writer") {
-                    writerBeforeLock.store(true, std::memory_order_release);
-                    std::unique_lock<std::mutex> lk(mtxBefore);
-                    cvBefore.wait_for(lk, std::chrono::seconds(5), [&] {
-                        return allowWriterProceed.load(std::memory_order_acquire);
-                    });
-                }
-            },
-            nullptr // onInsideWriteLock
-        });
-
-        std::thread writerThread([&] {
-            LogService::write(LogLevel::Info, std::string_view("scenario-b-writer"), std::string_view("late payload"));
-        });
-
-        const auto startWait = std::chrono::steady_clock::now();
-        while (!writerBeforeLock.load(std::memory_order_acquire))
-        {
-            if (std::chrono::steady_clock::now() - startWait > std::chrono::seconds(3))
-                break;
-            std::this_thread::yield();
-        }
-        require(writerBeforeLock.load(std::memory_order_acquire), "Scenario B writer failed to reach beforeLock hook");
-
-        service.shutdown();
-        require(!service.running(), "service must be stopped after shutdown");
-
-        {
-            std::lock_guard<std::mutex> lk(mtxBefore);
-            allowWriterProceed.store(true, std::memory_order_release);
-        }
-        cvBefore.notify_all();
-
-        writerThread.join();
-        setLogTestHooks({});
-
-        require(service.start(config, directory.filePath("visionrt.log")), "restart after Scenario B failed");
-        service.setViewActive(true);
+                "5 identical errors did not produce exact 1 initial + 1 summary (repeats=4) in UI");
         service.flush();
-        const auto recordsAfter = service.take(64);
-        for (const auto &rec : recordsAfter)
-        {
-            require(!rec.line.contains(QStringLiteral("scenario-b-writer")),
-                    "late writer in closed session incorrectly posted to restarted session");
-        }
+        service.shutdown();
+        const QString repToday = QDir(repDir.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        const QString repFileContent = fileText(repToday);
+        int repFileLineCount = 0;
+        for (const auto &line : repFileContent.split('\n'))
+            if (line.contains("rep-probe"))
+                ++repFileLineCount;
+        require(repFileLineCount == 2, "5 identical errors must produce exactly 2 lines on disk (initial + summary)");
     }
+
+    // 18. Controlled life-cycle concurrency & lock interleaving (Scenarios A, B, C for Info and Error)
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    struct ThreadScopeGuard {
+        std::vector<std::thread*> threads;
+        ~ThreadScopeGuard() {
+            setLogTestHooks({});
+            for (auto *t : threads) {
+                if (t && t->joinable())
+                    t->join();
+            }
+        }
+    };
+
+    auto runConcurrencyScenario = [&](LogLevel level, const char *levelName) {
+        const std::string tag = std::string(levelName);
+
+        // --- Scenario A: In-lock writer paused; shutdown barrier waits; release writer; shutdown finishes and drains
+        {
+            service.shutdown();
+            QTemporaryDir dirA;
+            const QString logPathA = dirA.filePath("visionrt.log");
+            require(service.start(config, logPathA), "restart for Scenario A failed");
+            service.setViewActive(true);
+
+            std::promise<void> writerInLockPromise;
+            auto writerInLockFuture = writerInLockPromise.get_future();
+            std::promise<void> allowWriterFinishPromise;
+            std::shared_future<void> allowWriterFinishFuture = allowWriterFinishPromise.get_future().share();
+            std::promise<void> shutdownWaitingPromise;
+            auto shutdownWaitingFuture = shutdownWaitingPromise.get_future();
+
+            std::atomic<bool> writerFinished{false};
+            std::atomic<bool> shutdownFinished{false};
+            std::atomic<bool> orderCorrect{false};
+
+            setLogTestHooks({
+                nullptr, // onBeforeWriteLock
+                [&](std::string_view source) {
+                    if (source == "scenario-a-writer-" + tag) {
+                        writerInLockPromise.set_value();
+                        const auto st = allowWriterFinishFuture.wait_for(std::chrono::seconds(5));
+                        require(st == std::future_status::ready, "writer wait_for allowWriterFinish timed out");
+                    }
+                },
+                [&]() {
+                    // onBeforeShutdownLock
+                    shutdownWaitingPromise.set_value();
+                }
+            });
+
+            std::thread writerThread([&] {
+                const std::string src = "scenario-a-writer-" + tag;
+                const std::string msg = "in-lock payload " + tag;
+                if (level == LogLevel::Error)
+                    service.error(src, msg);
+                else
+                    service.info(src, msg);
+                writerFinished.store(true, std::memory_order_release);
+            });
+
+            std::thread shutdownThread;
+            ThreadScopeGuard guard;
+            guard.threads.push_back(&writerThread);
+            guard.threads.push_back(&shutdownThread);
+
+            // 1. Wait for writer to reach in-lock hook
+            require(writerInLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                    "Scenario A writer failed to reach insideLock hook");
+
+            // 2. Launch shutdown in separate thread
+            shutdownThread = std::thread([&] {
+                service.shutdown();
+                shutdownFinished.store(true, std::memory_order_release);
+                if (writerFinished.load(std::memory_order_acquire))
+                    orderCorrect.store(true, std::memory_order_release);
+            });
+
+            // 3. Wait for shutdown to reach drain barrier (onBeforeShutdownLock)
+            require(shutdownWaitingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                    "Scenario A shutdown failed to reach onBeforeShutdownLock hook");
+
+            // Verify shutdown is truly blocked waiting for the writer holding the shared lock:
+            // If the lock barrier was missing, shutdown would finish immediately while writer is still paused.
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            require(!shutdownFinished.load(std::memory_order_acquire),
+                    "Scenario A: shutdown completed prematurely without waiting for writer lock barrier!");
+
+            // 4. Signal writer to finish
+            allowWriterFinishPromise.set_value();
+
+            // 5. Join both threads
+            if (writerThread.joinable())
+                writerThread.join();
+            if (shutdownThread.joinable())
+                shutdownThread.join();
+            setLogTestHooks({});
+
+            require(orderCorrect.load(std::memory_order_acquire),
+                    "Scenario A: writer must finish before shutdown finishes");
+
+            // 6. Verify target line exists in disk file
+            const QString todayFileA = QDir(dirA.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+            const QString contentA = fileText(todayFileA);
+            require(contentA.contains(QString::fromStdString("scenario-a-writer-" + tag))
+                        && contentA.contains(QString::fromStdString("in-lock payload " + tag)),
+                    "Scenario A: writer record lost during shutdown drain");
+        }
+
+        // --- Scenario B: Before-lock writer paused; shutdown finishes; release writer; writer sees closed service and drops
+        QString todayFileB;
+        {
+            service.shutdown();
+            QTemporaryDir dirB;
+            dirB.setAutoRemove(false);
+            const QString logPathB = dirB.filePath("visionrt.log");
+            todayFileB = QDir(dirB.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+            require(service.start(config, logPathB), "restart for Scenario B failed");
+            service.setViewActive(true);
+
+            std::promise<void> writerBeforeLockPromise;
+            auto writerBeforeLockFuture = writerBeforeLockPromise.get_future();
+            std::promise<void> allowWriterProceedPromise;
+            std::shared_future<void> allowWriterProceedFuture = allowWriterProceedPromise.get_future().share();
+
+            setLogTestHooks({
+                [&](std::string_view source) {
+                    if (source == "scenario-b-writer-" + tag) {
+                        writerBeforeLockPromise.set_value();
+                        const auto st = allowWriterProceedFuture.wait_for(std::chrono::seconds(5));
+                        require(st == std::future_status::ready, "writer wait_for allowWriterProceed timed out");
+                    }
+                },
+                nullptr, // onInsideWriteLock
+                nullptr  // onBeforeShutdownLock
+            });
+
+            std::thread writerThread([&] {
+                const std::string src = "scenario-b-writer-" + tag;
+                const std::string msg = "late payload " + tag;
+                if (level == LogLevel::Error)
+                    service.error(src, msg);
+                else
+                    service.info(src, msg);
+            });
+
+            ThreadScopeGuard guard;
+            guard.threads.push_back(&writerThread);
+
+            // 1. Wait for writer to reach before-lock hook
+            require(writerBeforeLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                    "Scenario B writer failed to reach beforeLock hook");
+
+            // 2. Shut down service
+            service.shutdown();
+            require(!service.running(), "service must be stopped after shutdown");
+
+            // 3. Release writer
+            allowWriterProceedPromise.set_value();
+
+            // 4. Join writer
+            if (writerThread.joinable())
+                writerThread.join();
+            setLogTestHooks({});
+
+            // 5. Verify target line was NOT written to the old session's file
+            const QString contentB = fileText(todayFileB);
+            require(!contentB.contains(QString::fromStdString("scenario-b-writer-" + tag)),
+                    "Scenario B: late writer erroneously appended to old session log file");
+            QDir(dirB.path()).removeRecursively();
+        }
+
+        // --- Scenario C: Cross-restart session acceptance
+        {
+            service.shutdown();
+            QTemporaryDir dirC;
+            const QString logPathC = dirC.filePath("visionrt.log");
+            require(service.start(config, logPathC), "restart for Scenario C failed");
+            service.setViewActive(true);
+
+            const std::string srcC = "scenario-c-writer-" + tag;
+            const std::string msgC = "restart payload " + tag;
+            if (level == LogLevel::Error)
+                service.error(srcC, msgC);
+            else
+                service.info(srcC, msgC);
+
+            service.flush();
+            flushPendingForTesting();
+
+            bool cFoundInUI = false;
+            require(QTest::qWaitFor(
+                        [&] {
+                            for (const auto &rec : service.take(64))
+                                if (rec.line.contains(QString::fromStdString(srcC)) && rec.line.contains(QString::fromStdString(msgC)))
+                                    cFoundInUI = true;
+                            return cFoundInUI;
+                        },
+                        2000),
+                    "Scenario C: restarted session failed to receive record in UI");
+
+            service.flush();
+            service.shutdown();
+
+            const QString todayFileC = QDir(dirC.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+            const QString contentC = fileText(todayFileC);
+            require(contentC.contains(QString::fromStdString(srcC)) && contentC.contains(QString::fromStdString(msgC)),
+                    "Scenario C: restarted session record missing from new disk file");
+        }
+    };
+
+    runConcurrencyScenario(LogLevel::Info, "info");
+    runConcurrencyScenario(LogLevel::Error, "error");
 #endif
     
     std::cout << "Log contracts passed: single-line text, daily file in the software directory, append on restart, "

@@ -55,8 +55,10 @@ BoundedText boundedSingleLine(std::string_view text, std::size_t maxBytes);
 struct LogTestHooks {
     std::function<void(std::string_view source)> onBeforeWriteLock;
     std::function<void(std::string_view source)> onInsideWriteLock;
+    std::function<void()> onBeforeShutdownLock;
 };
 void setLogTestHooks(LogTestHooks hooks);
+void flushPendingForTesting();
 #endif
 
 // Every bound of the log path lives here: the async queue, the UI mailbox, the batch window and
@@ -109,7 +111,6 @@ public:
     bool running() const;
     // Drains the queue into the sinks without blocking the caller on the GUI.
     void flush();
-    void flushPending();
 
     // Thread-safe, bounded producer entry. The source is rendered into the line as `[source]`, so
     // the text keeps the business origin while the formatter owns time, level and thread.
@@ -152,6 +153,10 @@ private:
 
     void drain();
     void scheduleDrain();
+    void flushPending();
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    friend void flushPendingForTesting();
+#endif
     void writeImpl(LogLevel level, std::string_view source, std::string_view message);
     // Errors are the only level that coalesces: the first occurrence is posted immediately and the
     // repeats are counted until the next flush, so a burst stays one readable row without delaying
