@@ -2,10 +2,12 @@
 // The worker is blocked inside IToolInstance::release() by a latch instead of a sleep, so the test
 // observes the exact window in which the GUI must keep busy() true: no drain or close may proceed
 // until the worker acknowledges the release it actually performed.
+#include "core/Error.h"
 #include "core/ToolRegistry.h"
 #include "ui/AssistPreview.h"
 
 #include <QGuiApplication>
+#include <QSignalSpy>
 #include <QTest>
 #include <QTimer>
 
@@ -59,6 +61,28 @@ struct ReleaseGate
 };
 
 ReleaseGate gate;
+
+class ExecuteContractErrorTool final : public IToolInstance
+{
+public:
+    ToolStatus initialize(const Values &) override { return {}; }
+    ToolResult execute(const Values &) override
+    {
+        throw ContractError("辅助执行输出违反契约");
+    }
+    ToolStatus release() override { return {}; }
+};
+
+class UnexpectedThrowingTool final : public IToolInstance
+{
+public:
+    ToolStatus initialize(const Values &) override { return {}; }
+    ToolResult execute(const Values &) override
+    {
+        throw std::runtime_error("辅助工具未捕获标准异常");
+    }
+    ToolStatus release() override { return {}; }
+};
 
 class LatchedReleaseTool final : public IToolInstance
 {
@@ -178,8 +202,77 @@ try
     preview.finalizeShutdown();
     heartbeat.stop();
 
+    // T42-03: Verify Assist error classification contract:
+    // 1. Execute phase ContractError -> ErrorCode::DataInvalid (-13)
+    {
+        ToolDefinition execDef = helperDefinition();
+        execDef.id = "test.assist.exec_error";
+        registry->registerCpp(execDef, [](const ToolServices &) { return std::make_unique<ExecuteContractErrorTool>(); });
+        registry->addDefinition(execDef);
+
+        AssistPreview execPreview;
+        execPreview.configure(registry, execDef, {});
+        QSignalSpy outcomeSpy(&execPreview, &AssistPreview::outcomeReady);
+
+        AssistRequest req;
+        req.learn = true;
+        require(execPreview.request(req), "request was rejected");
+        require(QTest::qWaitFor([&] { return !outcomeSpy.isEmpty(); }, 2000), "outcome was not received");
+        const auto outcome = outcomeSpy.takeFirst().at(0).value<AssistOutcome>();
+        require(outcome.status.code == static_cast<int>(ErrorCode::DataInvalid),
+                "Execute phase ContractError must map to ErrorCode::DataInvalid (-13)");
+        execPreview.beginShutdown();
+        execPreview.finalizeShutdown();
+    }
+
+    // 2. Setup phase ContractError -> ErrorCode::InvalidArgument (-2)
+    {
+        ToolDefinition setupDef = helperDefinition();
+        setupDef.id = "test.assist.setup_error";
+        setupDef.inputs = {{"count", "数量", {Type::Int}}};
+        registry->registerCpp(setupDef, [](const ToolServices &) { return std::make_unique<LatchedReleaseTool>(); });
+        registry->addDefinition(setupDef);
+
+        AssistPreview setupPreview;
+        setupPreview.configure(registry, setupDef, {});
+        QSignalSpy outcomeSpy(&setupPreview, &AssistPreview::outcomeReady);
+
+        AssistRequest req;
+        req.learn = true;
+        req.inputs.emplace("count", std::string("not-a-number"));
+        require(setupPreview.request(req), "request was rejected");
+        require(QTest::qWaitFor([&] { return !outcomeSpy.isEmpty(); }, 2000), "outcome was not received");
+        const auto outcome = outcomeSpy.takeFirst().at(0).value<AssistOutcome>();
+        require(outcome.status.code == static_cast<int>(ErrorCode::InvalidArgument),
+                "Setup phase ContractError must map to ErrorCode::InvalidArgument (-2)");
+        setupPreview.beginShutdown();
+        setupPreview.finalizeShutdown();
+    }
+
+    // 3. Unknown std::exception -> ErrorCode::Internal (-1)
+    {
+        ToolDefinition throwDef = helperDefinition();
+        throwDef.id = "test.assist.throw_error";
+        registry->registerCpp(throwDef, [](const ToolServices &) { return std::make_unique<UnexpectedThrowingTool>(); });
+        registry->addDefinition(throwDef);
+
+        AssistPreview throwPreview;
+        throwPreview.configure(registry, throwDef, {});
+        QSignalSpy outcomeSpy(&throwPreview, &AssistPreview::outcomeReady);
+
+        AssistRequest req;
+        req.learn = true;
+        require(throwPreview.request(req), "request was rejected");
+        require(QTest::qWaitFor([&] { return !outcomeSpy.isEmpty(); }, 2000), "outcome was not received");
+        const auto outcome = outcomeSpy.takeFirst().at(0).value<AssistOutcome>();
+        require(outcome.status.code == static_cast<int>(ErrorCode::Internal),
+                "Unknown std::exception must map to ErrorCode::Internal (-1)");
+        throwPreview.beginShutdown();
+        throwPreview.finalizeShutdown();
+    }
+
     std::cout << "ASSIST_RELEASE_PASS releases=" << gate.releases.load() << " heartbeats=" << heartbeats
-              << std::endl;
+              << " error_branches=3/3" << std::endl;
     return 0;
 }
 catch (const std::exception &error)

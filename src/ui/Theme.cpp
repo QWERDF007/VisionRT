@@ -189,9 +189,11 @@ void Theme::initLightIndustrialPalette()
     paramGroupHeaderFontSize_ = 12;
     paramLabelFontSize_       = 12;
     parameterRowHeight_       = 32;
-    paramEditorHeight_        = parameterRowHeight_;
-    paramEditorFontSize_      = 12;
     paramActionBtnWidth_      = 28;
+    logButtonHoverColor_       = QColor("#eaf2fd");
+    parameterLabelWidth_       = 96;
+    timingIconSize_            = 13;
+    executeButtonPlayIconSize_ = 8;
     parameterRowSpacing_      = 6;
     paramToggleIconSize_      = 14;
     paramRoiIconSize_         = 16;
@@ -241,7 +243,7 @@ void Theme::initLightIndustrialPalette()
     monoFont_.setPixelSize(fontSizeBase_);
     // 参数行的字体：家族与字号只在 Theme 定义，QML 不再各写 Qt.font({...})
     parameterFont_ = QFont(family, -1, QFont::Normal);
-    parameterFont_.setPixelSize(paramEditorFontSize_);
+    parameterFont_.setPixelSize(fontSizeBase_);
 
     iconFitWindow_  = 0xe740; // QuiFontIcon.FullScreen
     iconZoomIn_     = 0xe8a3; // QuiFontIcon.ZoomIn

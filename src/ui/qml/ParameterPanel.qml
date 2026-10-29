@@ -154,7 +154,7 @@ QuiSplitView {
                                     anchors.centerIn: parent
                                     anchors.horizontalCenterOffset: 0.8
                                     iconSource: QuiFontIcon.Play
-                                    iconSize: 8
+                                    iconSize: Theme.executeButtonPlayIconSize
                                     iconColor: Theme.executeButtonIcon
                                 }
                             }

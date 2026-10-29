@@ -29,7 +29,7 @@ ColumnLayout {
     readonly property real maximumValue: parameter.maximum === undefined || parameter.maximum === "" ? Infinity : Number(parameter.maximum)
     readonly property real numberStep: parameter.step === undefined || parameter.step === "" ? 1 : Number(parameter.step)
     readonly property int decimalPlaces: parameter.decimals === undefined || parameter.decimals < 0 ? 6 : parameter.decimals
-    readonly property int labelWidth: 96
+    readonly property int labelWidth: Theme.parameterLabelWidth
     readonly property int actionWidth: Theme.paramActionBtnWidth
     readonly property font editorFont: Theme.parameterFont
     spacing: Theme.parameterRowSpacing
