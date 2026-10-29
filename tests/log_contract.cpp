@@ -15,6 +15,7 @@
 #include <QTest>
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <iostream>
 #include <stdexcept>
@@ -343,22 +344,76 @@ try
     service.shutdown();
     require(qInstallMessageHandler(nullptr) == baseline, "shutdown did not restore the default Qt handler");
 
-    // 15. Single-line bounded UTF-8 text truncation: prefix token bounds and true prefix guarantee
+    // 15. Single-line bounded UTF-8 text truncation: table-driven matrix
     {
-        const auto r1 = boundedSingleLine("中abc", 4);
-        require(r1.text == "…" && r1.truncated, "中abc with cap 4 must truncate to …");
+        struct MatrixCase {
+            std::size_t cap;
+            std::string_view text;
+            std::string_view expected;
+            bool truncated;
+        };
 
-        const auto r2 = boundedSingleLine("中文abc", 7);
-        require(r2.text == "中…" && r2.truncated, "中文abc with cap 7 must truncate to 中…");
+        const MatrixCase cases[] = {
+            {0, "", "", false},
+            {0, "a", "", true},
+            {1, "a", "a", false},
+            {1, "ab", "a", true},
+            {1, "中文", "", true},
+            {2, "ab", "ab", false},
+            {2, "abc", "ab", true},
+            {2, "中文", "", true},
+            {3, "abc", "abc", false},
+            {3, "abcd", "…", true},
+            {3, "中文", "…", true},
+            {4, "中abc", "…", true},
+            {5, "中abc", "…", true},
+            {6, "中abcd", "中…", true},
+            {6, "中abc", "中abc", false},
+            {7, "中文abc", "中…", true},
+            {6, "中文", "中文", false},
+            {7, "中文", "中文", false},
+            // 4-byte UTF-8 (Emoji 😀 = \xF0\x9F\x98\x80)
+            {3, "\xF0\x9F\x98\x80", "…", true},
+            {4, "\xF0\x9F\x98\x80", "\xF0\x9F\x98\x80", false},
+            {5, "\xF0\x9F\x98\x80" "ab", "…", true},
+            {5, "\xF0\x9F\x98\x80" "a", "\xF0\x9F\x98\x80" "a", false},
+            {7, "\xF0\x9F\x98\x80" "abcd", "\xF0\x9F\x98\x80…", true},
+            {7, "\xF0\x9F\x98\x80" "abc", "\xF0\x9F\x98\x80" "abc", false},
+            {8, "\xF0\x9F\x98\x80" "abcde", "\xF0\x9F\x98\x80" "a…", true},
+            // Escape sequences
+            {2, "\n", "\\n", false},
+            {3, "\r\n", "…", true},
+            {4, "\r\n", "\\r\\n", false},
+            {2, "\v", "\\v", false},
+            {2, "\f", "\\f", false},
+            {2, std::string_view("\0", 1), "\\0", false},
+            // Malformed UTF-8 & newline leak prevention
+            {16, "\xE2\x0A\x78", "?\\nx", false},
+            // Capacity larger than message
+            {4096, "abc", "abc", false},
+        };
 
-        const auto r3 = boundedSingleLine("中文", 6);
-        require(r3.text == "中文" && !r3.truncated, "中文 with cap 6 must not truncate");
+        for (std::size_t idx = 0; idx < sizeof(cases) / sizeof(cases[0]); ++idx)
+        {
+            const auto &c = cases[idx];
+            const auto res = boundedSingleLine(c.text, c.cap);
+            require(res.text == c.expected && res.truncated == c.truncated,
+                    QString("boundedSingleLine case %1 failed: cap=%2 text='%3' got='%4' (trunc=%5)")
+                        .arg(idx)
+                        .arg(c.cap)
+                        .arg(QString::fromUtf8(c.text.data(), static_cast<int>(c.text.size())))
+                        .arg(QString::fromUtf8(res.text.data(), static_cast<int>(res.text.size())))
+                        .arg(res.truncated)
+                        .toUtf8()
+                        .constData());
+        }
 
-        const auto r4 = boundedSingleLine("\xE2\x0A\x78", 16);
-        require(r4.text == "?\\nx" && !r4.truncated, "embedded newline in malformed UTF-8 must escape without leaking raw newline");
-
-        const auto r5 = boundedSingleLine("abc", 4096);
-        require(r5.text == "abc" && !r5.truncated, "short text within cap must not truncate");
+        // Allocation observation: short string within cap vs 4096-byte string
+        std::string large(4096, 'x');
+        const auto rLarge = boundedSingleLine(large, 4096);
+        require(rLarge.text.size() == 4096 && !rLarge.truncated, "4096 byte string must bound accurately");
+        const auto rLargeCut = boundedSingleLine(large, 100);
+        require(rLargeCut.text.size() == 100 && rLargeCut.truncated, "large string with 100 cap must truncate to 100 bytes");
     }
 
     // 16. UTF-8 boundary & invalid bytes: invalid byte sequences do not leak raw newlines and produce valid UTF-8
@@ -366,7 +421,7 @@ try
     require(service.start(config), "the service refused to restart for UTF-8 check");
     service.setViewActive(true);
     std::string badSeq = "\xE2\x0A\x78";
-    LogService::write(LogLevel::Info, "测试", badSeq);
+    LogService::write(LogLevel::Info, std::string_view("测试"), std::string_view(badSeq));
     require(QTest::qWaitFor(
                 [&]
                 {
@@ -378,75 +433,297 @@ try
                 2000),
             "embedded newline in malformed UTF-8 was not escaped");
 
-    // 17. Repetitive long error preserves repeat count in summary with unbiased probe source
-    service.shutdown();
-    auto tight = config;
-    tight.maxMessageBytes = 32;
-    require(service.start(tight), "failed to restart with tight cap");
-    service.setViewActive(true);
-    std::string probeSource = "summary-probe";
-    std::string repeatMsg = "Repeat error message test";
-
-    // 17a. Negative witness: feed exactly 1 record -> must NOT contain repeat count indicators
-    service.error(probeSource, repeatMsg);
-    service.flush();
-    require(QTest::qWaitFor(
-                [&]
-                {
-                    const auto records = service.take(64);
-                    for (const auto &record : records)
-                    {
-                        if (record.line.contains(QStringLiteral("summary-probe")))
-                        {
-                            require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
-                                    "first record unexpectedly contains repeat indicator");
-                            return true;
-                        }
-                    }
-                    return false;
-                },
-                2000),
-            "first error record was not posted");
-
-    // 17b. Now repeat 4 more times (total 5 occurrences): summary must report repeat count
-    for (int rep = 0; rep < 4; ++rep)
-        service.error(probeSource, repeatMsg);
-    service.flush();
-    require(QTest::qWaitFor(
-                [&]
-                {
-                    for (const auto &record : service.take(64))
-                        if (record.line.contains(QStringLiteral("（重复 4 次）")) || record.line.contains(QStringLiteral("×4")))
-                            return true;
-                    return false;
-                },
-                2000),
-            "repeat count was lost or truncated away");
-
-    // 18. Controlled late writer and restart barrier: concurrent writer does not deadlock during restart
+    // 17. Error coalescing matrix: Critical bypass, escape expansion, anti-collision, budget threshold, and summary repeat
     {
-        std::atomic<bool> workerArrived{false};
-        std::atomic<bool> allowPost{false};
-        std::atomic<bool> workerFinished{false};
-
-        std::thread lateWriter([&] {
-            workerArrived.store(true, std::memory_order_release);
-            while (!allowPost.load(std::memory_order_acquire))
-                std::this_thread::yield();
-            LogService::write(LogLevel::Info, std::string_view("late-writer"), std::string_view("in-flight record"));
-            workerFinished.store(true, std::memory_order_release);
-        });
-
-        while (!workerArrived.load(std::memory_order_acquire))
-            std::this_thread::yield();
-
+        // 17a. Critical logs never coalesce or delay
         service.shutdown();
-        require(service.start(config), "service failed to restart during concurrent late writer check");
-        allowPost.store(true, std::memory_order_release);
-        lateWriter.join();
-        require(workerFinished.load(std::memory_order_acquire), "late writer did not finish cleanly");
+        require(service.start(config), "restart for critical check failed");
+        service.setViewActive(true);
+        for (int i = 0; i < 5; ++i)
+            LogService::write(LogLevel::Critical, std::string_view("critical-probe"), std::string_view("panic payload"));
+        int critCount = 0;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                            if (record.line.contains(QStringLiteral("critical-probe")) && record.line.contains(QStringLiteral("panic payload")))
+                                ++critCount;
+                        return critCount == 5;
+                    },
+                    2000),
+                "critical records were coalesced or delayed");
+
+        // 17b. Escape expansion A/B: budget 8 vs 16 with raw 5 newlines expanding to 10 bytes "\\n\\n\\n\\n\\n"
+        const auto resEsc8 = boundedSingleLine("\n\n\n\n\n", 8);
+        require(resEsc8.truncated && resEsc8.text == "\\n\\n…", "escape expansion with cap 8 must truncate to \\n\\n…");
+        const auto resEsc16 = boundedSingleLine("\n\n\n\n\n", 16);
+        require(!resEsc16.truncated && resEsc16.text == "\\n\\n\\n\\n\\n", "escape expansion with cap 16 must fit without truncation");
+
+        // 17c. Truncated source anti-collision: two long sources sharing prefix but differing in tail
+        service.shutdown();
+        require(service.start(config), "restart for collision check failed");
+        service.setViewActive(true);
+        std::string longA = std::string(130, 'X') + "AAA";
+        std::string longB = std::string(130, 'X') + "BBB";
+        service.error(longA, "collision payload");
+        service.error(longB, "collision payload");
+        service.flush();
+        int collisionCount = 0;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                        {
+                            if (record.line.contains(QStringLiteral("collision payload")))
+                            {
+                                require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
+                                        "truncated long sources collided into a repeat summary");
+                                ++collisionCount;
+                            }
+                        }
+                        return collisionCount == 2;
+                    },
+                    2000),
+                "truncated long sources failed to deliver both distinct records");
+
+        // 17d. Budget threshold 21 vs 22:
+        // Budget 21 is under minCountBudget (22), so errors post directly without coalescing
+        service.shutdown();
+        auto cap21 = config;
+        cap21.maxMessageBytes = 21;
+        require(service.start(cap21), "restart for cap 21 failed");
+        service.setViewActive(true);
+        for (int i = 0; i < 3; ++i)
+            service.error("cap21-probe", "threshold payload");
+        service.flush();
+        int cap21Count = 0;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                            if (record.line.contains(QStringLiteral("cap21-probe")))
+                                ++cap21Count;
+                        return cap21Count == 3;
+                    },
+                    2000),
+                "cap 21 erroneously coalesced errors");
+
+        // Budget 22 reaches minCountBudget (22), so repeats coalesce
+        service.shutdown();
+        auto cap22 = config;
+        cap22.maxMessageBytes = 22;
+        require(service.start(cap22), "restart for cap 22 failed");
+        service.setViewActive(true);
+        for (int i = 0; i < 3; ++i)
+            service.error("cap22-probe", "threshold payload");
+        service.flush();
+        service.flushPending();
+        bool cap22Summary = false;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                            if (record.line.contains(QStringLiteral("cap22-probe")) && (record.line.contains(QStringLiteral("重复")) || record.line.contains(QStringLiteral("×"))))
+                                cap22Summary = true;
+                        return cap22Summary;
+                    },
+                    2000),
+                "cap 22 failed to coalesce and emit repeat count summary");
+
+        // 17e. Negative witness: exactly 1 error across full refresh window produces NO summary indicators
+        service.shutdown();
+        require(service.start(config), "restart for negative witness failed");
+        service.setViewActive(true);
+        service.error("single-refresh-probe", "single event payload");
+        service.flush();
+        int probeCount = 0;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &rec : service.take(64))
+                        {
+                            if (rec.line.contains(QStringLiteral("single-refresh-probe")))
+                            {
+                                ++probeCount;
+                                require(!rec.line.contains(QStringLiteral("重复")) && !rec.line.contains(QStringLiteral("×")),
+                                        "single error event produced an unexpected repeat summary indicator");
+                            }
+                        }
+                        return probeCount == 1;
+                    },
+                    2000),
+                "expected initial error record for single error event");
+
+        service.flushPending();
+        QTest::qWait(600); // Wait beyond 500ms flush timer
+        for (const auto &rec : service.take(64))
+        {
+            if (rec.line.contains(QStringLiteral("single-refresh-probe")))
+            {
+                ++probeCount;
+                require(!rec.line.contains(QStringLiteral("重复")) && !rec.line.contains(QStringLiteral("×")),
+                        "unexpected repeat summary produced for single error event");
+            }
+        }
+        require(probeCount == 1, "unexpected extra record appeared across refresh window");
+
+        // 17f. 5 occurrences: first is immediate, next 4 produce repeat count 4 summary
+        service.shutdown();
+        require(service.start(config), "restart for repeat summary failed");
+        service.setViewActive(true);
+        for (int i = 0; i < 5; ++i)
+            service.error("rep-probe", "repeat event payload");
+        service.flush();
+        service.flushPending();
+        bool foundSummary = false;
+        require(QTest::qWaitFor(
+                    [&]
+                    {
+                        for (const auto &record : service.take(64))
+                            if (record.line.contains(QStringLiteral("rep-probe"))
+                                && (record.line.contains(QStringLiteral("（重复 4 次）")) || record.line.contains(QStringLiteral("×4"))))
+                                foundSummary = true;
+                        return foundSummary;
+                    },
+                    2000),
+                "5 identical errors did not produce repeat count 4 summary");
     }
 
+    // 18. Controlled life-cycle concurrency & lock interleaving (Scenarios A & B)
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    // Scenario A: In-lock writer paused; shutdown waits; release writer; shutdown finishes and records drained
+    {
+        service.shutdown();
+        require(service.start(config, directory.filePath("visionrt.log")), "restart for Scenario A failed");
+        service.setViewActive(true);
+
+        std::atomic<bool> writerInsideLock{false};
+        std::atomic<bool> allowWriterFinish{false};
+        std::atomic<bool> shutdownStarted{false};
+        std::atomic<bool> shutdownCompleted{false};
+        std::atomic<bool> drainPremature{false};
+        std::condition_variable cvWriter;
+        std::mutex mtxWriter;
+
+        setLogTestHooks({
+            nullptr, // onBeforeWriteLock
+            [&](std::string_view source) {
+                if (source == "scenario-a-writer") {
+                    writerInsideLock.store(true, std::memory_order_release);
+                    std::unique_lock<std::mutex> lk(mtxWriter);
+                    cvWriter.wait_for(lk, std::chrono::seconds(5), [&] {
+                        return allowWriterFinish.load(std::memory_order_acquire);
+                    });
+                }
+            }
+        });
+
+        std::thread writerThread([&] {
+            LogService::write(LogLevel::Info, std::string_view("scenario-a-writer"), std::string_view("in-lock payload"));
+        });
+
+        const auto startWait = std::chrono::steady_clock::now();
+        while (!writerInsideLock.load(std::memory_order_acquire))
+        {
+            if (std::chrono::steady_clock::now() - startWait > std::chrono::seconds(3))
+                break;
+            std::this_thread::yield();
+        }
+        require(writerInsideLock.load(std::memory_order_acquire), "Scenario A writer failed to reach insideLock hook");
+
+        std::thread coordinatorThread([&] {
+            while (!shutdownStarted.load(std::memory_order_acquire))
+                std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::milliseconds(80));
+            if (shutdownCompleted.load(std::memory_order_acquire))
+                drainPremature.store(true, std::memory_order_release);
+            {
+                std::lock_guard<std::mutex> lk(mtxWriter);
+                allowWriterFinish.store(true, std::memory_order_release);
+            }
+            cvWriter.notify_all();
+        });
+
+        shutdownStarted.store(true, std::memory_order_release);
+        service.shutdown();
+        shutdownCompleted.store(true, std::memory_order_release);
+
+        writerThread.join();
+        coordinatorThread.join();
+        setLogTestHooks({});
+
+        require(!drainPremature.load(std::memory_order_acquire),
+                "service shutdown completed prematurely while writer held shared write lock");
+
+        // Verify the record was successfully drained to the daily log file before shutdown closed it
+        const QString todayFile = QDir(directory.path()).filePath(QString("visionrt_%1.log").arg(QDate::currentDate().toString("yyyy-MM-dd")));
+        QFile file(todayFile);
+        require(file.open(QIODevice::ReadOnly | QIODevice::Text), "failed to open daily log file to verify Scenario A payload");
+        const QString fileContent = QString::fromUtf8(file.readAll());
+        require(fileContent.contains(QStringLiteral("scenario-a-writer")) && fileContent.contains(QStringLiteral("in-lock payload")),
+                "in-lock writer record was lost during shutdown drain");
+    }
+
+    // Scenario B: Before-lock writer paused; shutdown finishes; release writer; writer sees closed service and safely aborts
+    {
+        require(service.start(config, directory.filePath("visionrt.log")), "restart for Scenario B failed");
+        service.setViewActive(true);
+
+        std::atomic<bool> writerBeforeLock{false};
+        std::atomic<bool> allowWriterProceed{false};
+        std::condition_variable cvBefore;
+        std::mutex mtxBefore;
+
+        setLogTestHooks({
+            [&](std::string_view source) {
+                if (source == "scenario-b-writer") {
+                    writerBeforeLock.store(true, std::memory_order_release);
+                    std::unique_lock<std::mutex> lk(mtxBefore);
+                    cvBefore.wait_for(lk, std::chrono::seconds(5), [&] {
+                        return allowWriterProceed.load(std::memory_order_acquire);
+                    });
+                }
+            },
+            nullptr // onInsideWriteLock
+        });
+
+        std::thread writerThread([&] {
+            LogService::write(LogLevel::Info, std::string_view("scenario-b-writer"), std::string_view("late payload"));
+        });
+
+        const auto startWait = std::chrono::steady_clock::now();
+        while (!writerBeforeLock.load(std::memory_order_acquire))
+        {
+            if (std::chrono::steady_clock::now() - startWait > std::chrono::seconds(3))
+                break;
+            std::this_thread::yield();
+        }
+        require(writerBeforeLock.load(std::memory_order_acquire), "Scenario B writer failed to reach beforeLock hook");
+
+        service.shutdown();
+        require(!service.running(), "service must be stopped after shutdown");
+
+        {
+            std::lock_guard<std::mutex> lk(mtxBefore);
+            allowWriterProceed.store(true, std::memory_order_release);
+        }
+        cvBefore.notify_all();
+
+        writerThread.join();
+        setLogTestHooks({});
+
+        require(service.start(config, directory.filePath("visionrt.log")), "restart after Scenario B failed");
+        service.setViewActive(true);
+        service.flush();
+        const auto recordsAfter = service.take(64);
+        for (const auto &rec : recordsAfter)
+        {
+            require(!rec.line.contains(QStringLiteral("scenario-b-writer")),
+                    "late writer in closed session incorrectly posted to restarted session");
+        }
+    }
+#endif
+    
     std::cout << "Log contracts passed: single-line text, daily file in the software directory, append on restart, "
                  "bounded mailbox, batching, drops, coalescing, Qt bridge and honest degradation\n";
     return 0;

@@ -16,6 +16,10 @@
 #include <string_view>
 #include <vector>
 
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+#include <functional>
+#endif
+
 namespace spdlog
 {
 class logger;
@@ -46,6 +50,14 @@ struct BoundedText
 // Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
 // When truncated, total bytes including the "…" mark (3 bytes) will not exceed maxBytes.
 BoundedText boundedSingleLine(std::string_view text, std::size_t maxBytes);
+
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+struct LogTestHooks {
+    std::function<void(std::string_view source)> onBeforeWriteLock;
+    std::function<void(std::string_view source)> onInsideWriteLock;
+};
+void setLogTestHooks(LogTestHooks hooks);
+#endif
 
 // Every bound of the log path lives here: the async queue, the UI mailbox, the batch window and
 // the per-message cap. There is deliberately no size rotation - the file sink rotates per local
@@ -97,6 +109,7 @@ public:
     bool running() const;
     // Drains the queue into the sinks without blocking the caller on the GUI.
     void flush();
+    void flushPending();
 
     // Thread-safe, bounded producer entry. The source is rendered into the line as `[source]`, so
     // the text keeps the business origin while the formatter owns time, level and thread.
@@ -144,7 +157,6 @@ private:
     // repeats are counted until the next flush, so a burst stays one readable row without delaying
     // the first report.
     void writeError(std::string_view source, std::string_view message);
-    void flushPending();
     // `postLocked` and `postPendingLocked` require the caller to hold `writeMutex` (shared or
     // exclusive); `takePending` also needs it and takes the coalesce mutex itself. That single lock
     // order - writer lock, then coalesce - is what keeps producers and shutdown deadlock-free.

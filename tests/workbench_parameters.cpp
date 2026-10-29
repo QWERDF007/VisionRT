@@ -133,21 +133,23 @@ void parameterEditorsContract()
     require(input->property("font").value<QFont>() == theme->parameterFont(),
             "Float input did not inherit the shared parameter font");
 
-    // Dynamic propagation: QFont with point size preserves Qt point mode
+    // Dynamic propagation: same numeric size (14) toggled between pointSizeF and pixelSize
+    // verifies QFont unit semantics and dynamic propagation to real consumer item:
     QFont ptFont = theme->parameterFont();
-    ptFont.setPointSizeF(12.5);
+    ptFont.setPointSizeF(14.0);
     theme->setparameterFont(ptFont);
     QTest::qWait(50);
-    require(std::abs(input->property("font").value<QFont>().pointSizeF() - 12.5) < 0.01,
-            "Float input did not dynamically update when parameterFont was assigned point size");
+    const QFont actualPt = input->property("font").value<QFont>();
+    require(std::abs(actualPt.pointSizeF() - 14.0) < 0.01 && actualPt.pixelSize() == -1,
+            "Float input did not preserve point unit mode when assigned pointSizeF(14)");
 
-    // Dynamic propagation: QFont with pixel size preserves Qt pixel mode
     QFont pxFont = theme->parameterFont();
     pxFont.setPixelSize(14);
     theme->setparameterFont(pxFont);
     QTest::qWait(50);
-    require(input->property("font").value<QFont>().pixelSize() == 14,
-            "Float input did not dynamically update when parameterFont was assigned pixel size");
+    const QFont actualPx = input->property("font").value<QFont>();
+    require(actualPx.pixelSize() == 14 && actualPx.pointSizeF() < 0,
+            "Float input did not preserve pixel unit mode when assigned pixelSize(14)");
 
     // Dynamic propagation: parameterRowHeight and paramEditorHeight share one backing field and update editor
     theme->setparameterRowHeight(36);

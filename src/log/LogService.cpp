@@ -83,6 +83,19 @@ constexpr std::size_t kMaxSourceBytes = 128;
 
 } // namespace
 
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+namespace {
+std::mutex gHooksMutex;
+visionrt::LogTestHooks gTestHooks;
+} // namespace
+
+void setLogTestHooks(LogTestHooks hooks)
+{
+    std::lock_guard<std::mutex> lock(gHooksMutex);
+    gTestHooks = std::move(hooks);
+}
+#endif
+
 // Escapes control characters and bounds text within maxBytes on a UTF-8 character boundary.
 // When truncated, total bytes including the "…" mark (3 bytes) will not exceed maxBytes.
 BoundedText boundedSingleLine(std::string_view text, std::size_t maxBytes)
@@ -622,9 +635,33 @@ void LogService::writeImpl(LogLevel level, std::string_view source, std::string_
         return;
     }
 
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    {
+        std::function<void(std::string_view)> hook;
+        {
+            std::lock_guard<std::mutex> hLock(gHooksMutex);
+            hook = gTestHooks.onBeforeWriteLock;
+        }
+        if (hook)
+            hook(source);
+    }
+#endif
+
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
         return;
+
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    {
+        std::function<void(std::string_view)> hook;
+        {
+            std::lock_guard<std::mutex> hLock(gHooksMutex);
+            hook = gTestHooks.onInsideWriteLock;
+        }
+        if (hook)
+            hook(source);
+    }
+#endif
 
     const auto maxBytes       = impl_->config.maxMessageBytes;
     const auto boundedSource  = boundedSingleLine(source, kMaxSourceBytes);
@@ -634,9 +671,33 @@ void LogService::writeImpl(LogLevel level, std::string_view source, std::string_
 
 void LogService::writeError(std::string_view source, std::string_view message)
 {
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    {
+        std::function<void(std::string_view)> hook;
+        {
+            std::lock_guard<std::mutex> hLock(gHooksMutex);
+            hook = gTestHooks.onBeforeWriteLock;
+        }
+        if (hook)
+            hook(source);
+    }
+#endif
+
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     if (!impl_->running.load(std::memory_order_acquire) || !impl_->logger)
         return;
+
+#if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
+    {
+        std::function<void(std::string_view)> hook;
+        {
+            std::lock_guard<std::mutex> hLock(gHooksMutex);
+            hook = gTestHooks.onInsideWriteLock;
+        }
+        if (hook)
+            hook(source);
+    }
+#endif
 
     const auto maxBytes       = impl_->config.maxMessageBytes;
     const auto boundedSource  = boundedSingleLine(source, kMaxSourceBytes);

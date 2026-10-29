@@ -224,7 +224,16 @@ if(BUILD_TESTING)
             "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/build_incremental_contract.py")
     endif()
     visionrt_contract(value_json_contract visionrt_core)
-    visionrt_contract(log_contract visionrt_log LABELS backend perf)
+    add_library(visionrt_log_testing
+        src/log/LogService.cpp
+        src/log/LogService.h
+        src/log/LogModel.cpp
+        src/log/LogModel.h)
+    target_link_libraries(visionrt_log_testing PUBLIC visionrt_common Qt6::Core spdlog::spdlog)
+    target_include_directories(visionrt_log_testing PUBLIC src)
+    target_compile_definitions(visionrt_log_testing PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
+    visionrt_contract(log_contract visionrt_log_testing LABELS backend perf)
+    target_compile_definitions(log_contract PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
     target_link_libraries(log_contract PRIVATE Qt6::Test)
     visionrt_contract(display_storage_contract visionrt_presentation)
     visionrt_contract(output_value_contract visionrt_presentation)
