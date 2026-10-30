@@ -63,6 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tools-index", default=None, help="Optional external module_index.json to assert byte-by-byte consistency with package.")
     parser.add_argument("--validator", default=None, help="Explicit path to visionrt_validate_tool executable.")
     parser.add_argument("--deploy-tools-only", action="store_true", help="Deploy or replace tools package in existing installation without full repackaging.")
+    parser.add_argument("--allow-dirty", action="store_true", help="Allow dirty or unknown build metadata in release package.")
     return parser.parse_args()
 
 
@@ -213,7 +214,52 @@ def write_windows_marker(
     )
 
 
-def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) -> None:
+def verify_build_metadata(
+    meta_path: Path,
+    expected_component: str | None = None,
+    allow_dirty: bool = False,
+) -> dict:
+    """Validate build metadata JSON format, schema, commit validity and dirty status."""
+    if not meta_path.is_file():
+        raise RuntimeError(f"package verification failed: missing build metadata {meta_path}")
+    try:
+        data = load_json_file(meta_path)
+    except Exception as exc:
+        raise RuntimeError(f"package verification failed: corrupted build metadata {meta_path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"package verification failed: invalid build metadata root in {meta_path}")
+
+    epoch = data.get("built_at_epoch")
+    if not isinstance(epoch, int) or isinstance(epoch, bool) or epoch <= 0:
+        raise RuntimeError(f"package verification failed: invalid built_at_epoch in {meta_path}")
+
+    commit = data.get("commit")
+    dirty = data.get("dirty")
+
+    if expected_component and data.get("component") != expected_component:
+        raise RuntimeError(
+            f"package verification failed: component mismatch in {meta_path} "
+            f"(expected '{expected_component}', got '{data.get('component')}')"
+        )
+
+    if not allow_dirty:
+        if not commit or commit == "unknown":
+            raise RuntimeError(
+                f"package verification failed: {meta_path.name} commit is unknown; release packaging rejected"
+            )
+        if dirty is not False:
+            raise RuntimeError(
+                f"package verification failed: {meta_path.name} is dirty ({dirty}); release packaging rejected"
+            )
+    return data
+
+
+def copy_project_runtime(
+    build_dir: Path,
+    install_dir: Path,
+    include_pdb: bool,
+    allow_dirty: bool = False,
+) -> None:
     """Copy project DLLs, plugins, and QML resources."""
     bin_dir = build_dir / "bin"
     if not bin_dir.is_dir():
@@ -233,10 +279,14 @@ def copy_project_runtime(build_dir: Path, install_dir: Path, include_pdb: bool) 
         copy_file(quickui_dll, install_dir / "quickui.dll")
 
     # 2. 构建完成阶段生成的组件元数据：关于弹窗只从 exe 同目录读取它们
-    for name in ("build_info.json", "contracts-build-info.json"):
+    for name, comp in (("build_info.json", "VisionRT"), ("contracts-build-info.json", "VisionRTContracts")):
         build_info = bin_dir / name
         if build_info.is_file():
+            verify_build_metadata(build_info, expected_component=comp, allow_dirty=allow_dirty)
             copy_file(build_info, install_dir / name)
+        else:
+            if not allow_dirty:
+                raise RuntimeError(f"package verification failed: missing required build metadata {build_info}")
 
     # 3. PDB debug symbols if requested
     if include_pdb and bin_dir.is_dir():
@@ -248,7 +298,8 @@ def deploy_tools_package(
     install_dir: Path,
     package_zip: Path,
     validator: Path | None = None,
-    external_index: Path | None = None
+    external_index: Path | None = None,
+    allow_dirty: bool = False,
 ) -> None:
     """Deploy external tools package ZIP into install_dir/tools-package (D-05 / D-06)."""
     import zipfile
@@ -291,7 +342,10 @@ def deploy_tools_package(
             if ext_path.read_bytes() != pkg_index.read_bytes():
                 raise RuntimeError("external tools index does not match package internal module_index.json byte-by-byte")
 
-        # 3. Validate extracted package using host JSON validator (D-06)
+        # 3. Validate build metadata and tools package using host JSON validator (D-06)
+        tools_build_info = tmp_dir / "build_info.json"
+        if tools_build_info.is_file():
+            verify_build_metadata(tools_build_info, expected_component="VisionTools", allow_dirty=allow_dirty)
         verify_tools_package(tmp_dir, validator)
 
         # 4. Atomic installation: if validation succeeded, cleanly replace target_pkg
@@ -694,13 +748,23 @@ def verify_tools_package(tools_pkg: Path, validator: Path | None = None) -> None
         raise RuntimeError(f"Host tools package validation failed via validator:\n{err}")
 
 
-def verify_package(install_dir: Path, require_qt: bool, validator: Path | None = None) -> None:
+def verify_package(
+    install_dir: Path,
+    require_qt: bool,
+    validator: Path | None = None,
+    allow_dirty: bool = False,
+) -> None:
     """Verify package completeness strictly according to RS-06 and RT-04."""
     required_files = [
         install_dir / f"{PROJECT_NAME}.exe",
         install_dir / MARKER_FILE,
         install_dir / "quickui.dll",
     ]
+    if not allow_dirty:
+        required_files.extend([
+            install_dir / "build_info.json",
+            install_dir / "contracts-build-info.json",
+        ])
 
     # Verify Python DLL (python3*.dll must exist)
     python_dlls = list(install_dir.glob("python3*.dll"))
@@ -736,12 +800,27 @@ def verify_package(install_dir: Path, require_qt: bool, validator: Path | None =
     if linked_paths:
         problems.append("package contains links: " + ", ".join(linked_paths))
 
+    # Verify build metadata
+    for name, comp in (("build_info.json", "VisionRT"), ("contracts-build-info.json", "VisionRTContracts")):
+        meta_file = install_dir / name
+        if meta_file.is_file():
+            try:
+                verify_build_metadata(meta_file, expected_component=comp, allow_dirty=allow_dirty)
+            except RuntimeError as exc:
+                problems.append(str(exc))
+
     if problems:
         raise RuntimeError("package verification failed: " + "; ".join(problems))
 
     # Verify tools package if merged
     tools_pkg_dir = install_dir / "tools-package"
     if tools_pkg_dir.is_dir():
+        tools_build_info = tools_pkg_dir / "build_info.json"
+        if tools_build_info.is_file():
+            try:
+                verify_build_metadata(tools_build_info, expected_component="VisionTools", allow_dirty=allow_dirty)
+            except RuntimeError as exc:
+                raise RuntimeError(f"package verification failed: {exc}") from exc
         verify_tools_package(tools_pkg_dir, validator)
         print("tools package verification passed successfully")
 
@@ -779,7 +858,8 @@ def main() -> int:
             install_dir,
             resolve_project_path(args.tools_package),
             validator=validator_path,
-            external_index=ext_index
+            external_index=ext_index,
+            allow_dirty=args.allow_dirty,
         )
         print(f"tools package successfully deployed into {install_dir / 'tools-package'}")
         return 0
@@ -799,7 +879,7 @@ def main() -> int:
 
     packaged_exe = install_dir / source_exe.name
     copy_file(source_exe, packaged_exe)
-    copy_project_runtime(build_dir, install_dir, args.include_pdb)
+    copy_project_runtime(build_dir, install_dir, args.include_pdb, allow_dirty=args.allow_dirty)
     copy_python_runtime(build_dir, install_dir)
 
     if args.tools_package:
@@ -808,7 +888,8 @@ def main() -> int:
             install_dir,
             resolve_project_path(args.tools_package),
             validator=validator_path,
-            external_index=ext_index
+            external_index=ext_index,
+            allow_dirty=args.allow_dirty,
         )
 
     if args.skip_dependencies:
@@ -834,14 +915,14 @@ def main() -> int:
         write_qt_conf(install_dir)
         write_windows_marker(install_dir, build_dir, arch, version, args.skip_dependencies)
         if not args.skip_verify:
-            verify_package(install_dir, not args.skip_windeployqt, validator=validator_path)
+            verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
         print(f"\npackage complete: {install_dir}")
         print(f"double-click to run: {packaged_exe}")
     else:
         write_qt_conf(install_dir)
         write_package_marker(install_dir, build_dir, version)
         if not args.skip_verify:
-            verify_package(install_dir, not args.skip_windeployqt, validator=validator_path)
+            verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
         print(f"\npackage complete: {install_dir}")
 
     return 0

@@ -14,6 +14,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -467,6 +468,18 @@ try
         g_trackAllocations = true;
         const auto probeShort = boundedSingleLine("abc", 4096);
         g_trackAllocations = false;
+        std::cout << "[Allocation Probe] Short input (cap=4096): " << g_allocatedCount << " allocs, "
+                  << g_allocatedBytes << " bytes"
+#if defined(_MSC_VER)
+                  << " [MSVC " << _MSC_VER << "]"
+#elif defined(__clang__)
+                  << " [Clang " << __clang_major__ << "." << __clang_minor__ << "]"
+#elif defined(__GNUC__)
+                  << " [GCC " << __GNUC__ << "." << __GNUC_MINOR__ << "]"
+#else
+                  << " [Compiler unknown]"
+#endif
+                  << " (limited to thread-local operator new/std::string)\n";
         require(probeShort.text == "abc" && !probeShort.truncated, "allocation probe: short text content check");
         require(g_allocatedBytes < 4096, "allocation probe: short input with large cap must not heap-allocate 4096 bytes");
 
@@ -477,6 +490,8 @@ try
         g_trackAllocations = true;
         const auto probeLongCut = boundedSingleLine(large, 100);
         g_trackAllocations = false;
+        std::cout << "[Allocation Probe] Long input (cap=100): " << g_allocatedCount << " allocs, "
+                  << g_allocatedBytes << " bytes (limited to thread-local operator new/std::string)\n";
         require(probeLongCut.text.size() == 100 && probeLongCut.truncated, "allocation probe: long input with small cap content check");
         require(g_allocatedBytes < 4096, "allocation probe: long input with small cap must not allocate full text size on heap");
     }
@@ -821,12 +836,13 @@ try
     // 18. Controlled life-cycle concurrency & lock interleaving (Scenarios A, B, C for Info and Error)
 #if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
     struct ThreadScopeGuard {
-        std::vector<std::thread*> threads;
-        std::vector<std::function<void()>> unblockActions;
+        std::thread *threads[2]{nullptr, nullptr};
+        std::function<void()> unblockAction{};
+
         ~ThreadScopeGuard() noexcept {
-            for (auto &action : unblockActions) {
+            if (unblockAction) {
                 try {
-                    if (action) action();
+                    unblockAction();
                 } catch (...) {}
             }
             for (auto *t : threads) {
@@ -923,9 +939,9 @@ try
             });
 
             ThreadScopeGuard guard;
-            guard.threads.push_back(&writerThread);
-            guard.threads.push_back(&coordThread);
-            guard.unblockActions.push_back(triggerUnblockA);
+            guard.threads[0] = &writerThread;
+            guard.threads[1] = &coordThread;
+            guard.unblockAction = triggerUnblockA;
 
             // 1. Wait until writer is confirmed inside write lock
             require(writerInLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
@@ -1027,8 +1043,8 @@ try
             });
 
             ThreadScopeGuard guard;
-            guard.threads.push_back(&writerThread);
-            guard.unblockActions.push_back(triggerUnblockB);
+            guard.threads[0] = &writerThread;
+            guard.unblockAction = triggerUnblockB;
 
             // 1. Wait for writer to reach before-lock hook
             require(writerBeforeLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
@@ -1107,8 +1123,8 @@ try
             });
 
             ThreadScopeGuard guard;
-            guard.threads.push_back(&writerThread);
-            guard.unblockActions.push_back(triggerUnblockC);
+            guard.threads[0] = &writerThread;
+            guard.unblockAction = triggerUnblockC;
 
             // 1. Wait for writer to pass admission and reach before-lock hook in old session
             require(writerWaitingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
