@@ -25,6 +25,7 @@ include(ConfigSpdlog)
 include(CTest)
 set(VISIONRT_CONTRACTS_TESTS ${BUILD_TESTING} CACHE BOOL "构建 Contracts 自身的契约测试（归入 sdk 组）")
 set(VISIONRT_CONTRACTS_INSTALL ON CACHE BOOL "Contracts 随宿主安装，供安装态消费者契约使用")
+option(VISIONRT_RELEASE_BUILD "显式发布候选构建模式（要求干净工作区与明确 Git 提交）" OFF)
 
 # 独立通用工具 SDK（Git 子模块）
 add_subdirectory(3rdparty/VisionRTContracts)
@@ -158,6 +159,7 @@ if(VISIONRT_BUILD_APP)
             -DREPO_DIR=${CMAKE_SOURCE_DIR}
             -DSOURCE_FILE=$<TARGET_FILE:VisionRT>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/build_info.json
+            -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMAND ${CMAKE_COMMAND}
             -DCOMPONENT=VisionRTContracts
@@ -167,6 +169,7 @@ if(VISIONRT_BUILD_APP)
             -DREPO_DIR=${CMAKE_SOURCE_DIR}/3rdparty/VisionRTContracts
             -DSOURCE_FILE=$<TARGET_FILE:VisionRTContracts>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/contracts-build-info.json
+            -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMENT "记录 VisionRT 与 VisionRTContracts 的构建完成时刻"
         VERBATIM)

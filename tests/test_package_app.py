@@ -50,6 +50,16 @@ class ToolsDeploymentContract(unittest.TestCase):
     def write_source(self) -> None:
         (self.source / "module_index.json").write_text(json.dumps(self.index), encoding="utf-8")
         (self.source / "tools/builtin/test.json").write_text(json.dumps(self.definition), encoding="utf-8")
+        if not (self.source / "build_info.json").is_file():
+            (self.source / "build_info.json").write_text(json.dumps({
+                "schema_version": 1,
+                "component": "VisionTools",
+                "version": "0.1.0",
+                "commit": "testcommit0123456789abcdef0123456789abcdef",
+                "branch": "dev",
+                "dirty": False,
+                "built_at_epoch": 1793148779,
+            }), encoding="utf-8")
 
     def archive(self) -> Path:
         archive = self.root / "tools.zip"
@@ -257,6 +267,9 @@ class BuildMetadataIntegrationContract(unittest.TestCase):
         self.binary_file = self.root / "bin/app.exe"
         self.binary_file.parent.mkdir(parents=True)
         self.binary_file.write_bytes(b"MZ dummy executable")
+        self.validator = Path(os.environ.get(
+            "VISIONTOOLS_VALIDATOR", str(package_app.REPO_ROOT / "build/bin" /
+                ("visionrt_validate_tool.exe" if os.name == "nt" else "visionrt_validate_tool"))))
 
         # Initialize clean git repository
         self._run_git(["init", "-b", "main"], cwd=self.repo_dir)
@@ -533,6 +546,399 @@ class BuildMetadataIntegrationContract(unittest.TestCase):
             encoding="utf-8",
         )
         package_app.verify_package(install_dir, require_qt=False, allow_dirty=False)
+
+    def test_10_matrix_missing_install_dir_rejected(self) -> None:
+        """Matrix Case 10: Non-existent installation directory is rejected (F47-01)."""
+        non_existent = self.root / "non_existent_install_dir"
+        with self.assertRaisesRegex(RuntimeError, "installation directory does not exist"):
+            package_app.verify_package(non_existent, require_qt=False)
+
+    def test_11_matrix_missing_metadata_rejected_in_release(self) -> None:
+        """Matrix Case 11: Missing component metadata in release package is rejected (F47-01 / S47-01)."""
+        install_dir = self.root / "meta_reject_install"
+        install_dir.mkdir()
+        (install_dir / "VisionRT.exe").touch()
+        (install_dir / package_app.MARKER_FILE).touch()
+        (install_dir / "quickui.dll").touch()
+        (install_dir / "python312.dll").touch()
+        (install_dir / "python/Lib/site-packages/numpy").mkdir(parents=True)
+        (install_dir / "python/DLLs").mkdir()
+
+        # Missing host build_info.json
+        (install_dir / "contracts-build-info.json").write_text(
+            '{"schema_version": 1, "component": "VisionRTContracts", "version": "1.0", "commit": "abc", "dirty": false, "built_at_epoch": 100}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "missing files:.*build_info\\.json"):
+            package_app.verify_package(install_dir, require_qt=False, allow_dirty=False)
+
+        # Allow-dirty permits missing metadata in dev mode
+        package_app.verify_package(install_dir, require_qt=False, allow_dirty=True)
+
+        # Missing contracts-build-info.json
+        (install_dir / "build_info.json").write_text(
+            '{"schema_version": 1, "component": "VisionRT", "version": "1.0", "commit": "abc", "dirty": false, "built_at_epoch": 100}\n',
+            encoding="utf-8",
+        )
+        (install_dir / "contracts-build-info.json").unlink()
+        with self.assertRaisesRegex(RuntimeError, "missing files:.*contracts-build-info\\.json"):
+            package_app.verify_package(install_dir, require_qt=False, allow_dirty=False)
+
+        # Add contracts metadata, add tools-package without build_info.json
+        (install_dir / "contracts-build-info.json").write_text(
+            '{"schema_version": 1, "component": "VisionRTContracts", "version": "1.0", "commit": "abc", "dirty": false, "built_at_epoch": 100}\n',
+            encoding="utf-8",
+        )
+        tools_dir = install_dir / "tools-package"
+        tools_dir.mkdir()
+        (tools_dir / "module_index.json").write_text('{"schema_version": 1, "variant": "portable-release", "modules": [], "tools": [], "runtime_files": []}\n', encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "required tools build_info\\.json missing"):
+            package_app.verify_package(install_dir, require_qt=False, allow_dirty=False)
+
+        # Once valid tools build_info.json is present, it passes
+        (tools_dir / "build_info.json").write_text(
+            '{"schema_version": 1, "component": "VisionTools", "version": "1.0", "commit": "abc", "dirty": false, "built_at_epoch": 100}\n',
+            encoding="utf-8",
+        )
+        package_app.verify_package(install_dir, require_qt=False, allow_dirty=False)
+
+    def test_12_matrix_deploy_tools_missing_build_info_rejected_atomically(self) -> None:
+        """Matrix Case 12: deploy_tools_package rejects missing build_info and preserves existing tools (S47-01)."""
+        install_dir = self.root / "deploy_atomic_install"
+        install_dir.mkdir()
+        tools_dir = install_dir / "tools-package"
+        tools_dir.mkdir()
+        original_canary = tools_dir / "canary.txt"
+        original_canary.write_text("original_tools_intact\n", encoding="utf-8")
+
+        # Create zip without build_info.json
+        bad_zip = self.root / "bad_tools.zip"
+        with zipfile.ZipFile(bad_zip, "w") as zf:
+            zf.writestr("module_index.json", '{"schema_version": 1, "variant": "portable-release", "modules": [], "tools": [], "runtime_files": []}\n')
+            zf.writestr("new_file.txt", "new_content\n")
+
+        with self.assertRaisesRegex(RuntimeError, "missing required build_info\\.json"):
+            package_app.deploy_tools_package(install_dir, bad_zip, validator=self.validator, allow_dirty=False)
+
+        # Existing tools directory must be completely preserved
+        self.assertTrue(original_canary.is_file())
+        self.assertEqual(original_canary.read_text(encoding="utf-8"), "original_tools_intact\n")
+        self.assertFalse((tools_dir / "new_file.txt").exists())
+
+        # allow_dirty=True allows deployment
+        package_app.deploy_tools_package(install_dir, bad_zip, validator=self.validator, allow_dirty=True)
+        self.assertTrue((tools_dir / "new_file.txt").is_file())
+
+    def test_13_matrix_git_status_unicode_and_rename_to_whitelisted_doc(self) -> None:
+        """Matrix Case 13: Stable NUL-delimited status parser handles unicode, semicolons, and renames (S47-02)."""
+        if package_app.check_git_workspace is None:
+            self.skipTest("check_git_workspace not available")
+
+        # 1. Unicode and semicolon in untracked production file -> dirty=True
+        (self.repo_dir / "src/中文;测试 1.h").write_text("#pragma once\n", encoding="utf-8")
+        _, _, dirty_unicode = package_app.check_git_workspace(self.repo_dir, self._find_git())
+        self.assertIs(dirty_unicode, True)
+        (self.repo_dir / "src/中文;测试 1.h").unlink()
+
+        # 2. Renaming production source to whitelisted doc must NOT fool the dirty check
+        (self.repo_dir / "docs").mkdir(parents=True, exist_ok=True)
+        self._run_git(["mv", "src/main.cpp", "docs/R47_renamed.md"], cwd=self.repo_dir)
+        _, _, dirty_rename = package_app.check_git_workspace(self.repo_dir, self._find_git())
+        self.assertIs(dirty_rename, True)
+
+        # Restore
+        self._run_git(["reset", "--hard", "HEAD"], cwd=self.repo_dir)
+        _, _, dirty_clean = package_app.check_git_workspace(self.repo_dir, self._find_git())
+        self.assertIs(dirty_clean, False)
+
+
+class RealBuildMetadataIntegrationContract(unittest.TestCase):
+    """Real CMake build, executable compilation, and build metadata integration contract (T47-03 / S47-03)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        vcvars = r"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+        if Path(vcvars).is_file():
+            out = subprocess.check_output(f'"{vcvars}" && set', shell=True, text=True)
+            cls.env = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+        else:
+            cls.env = os.environ.copy()
+
+        # Ensure Windows SDK lib and include paths are present in cls.env
+        sdk_root = Path(r"C:\Program Files (x86)\Windows Kits\10")
+        if sdk_root.is_dir():
+            for ver in ("10.0.19041.0", "10.0.17763.0", "10.0.22621.0"):
+                um_lib = sdk_root / f"Lib/{ver}/um/x64"
+                ucrt_lib = sdk_root / f"Lib/{ver}/ucrt/x64"
+                if um_lib.is_dir() and ucrt_lib.is_dir():
+                    cur_lib = cls.env.get("LIB", "")
+                    if str(um_lib) not in cur_lib:
+                        cls.env["LIB"] = f"{um_lib};{ucrt_lib};{cur_lib}".rstrip(";")
+                    break
+            for ver in ("10.0.19041.0", "10.0.17763.0", "10.0.22621.0"):
+                ucrt_inc = sdk_root / f"Include/{ver}/ucrt"
+                um_inc = sdk_root / f"Include/{ver}/um"
+                shared_inc = sdk_root / f"Include/{ver}/shared"
+                if ucrt_inc.is_dir():
+                    cur_inc = cls.env.get("INCLUDE", "")
+                    if str(ucrt_inc) not in cur_inc:
+                        cls.env["INCLUDE"] = f"{ucrt_inc};{um_inc};{shared_inc};{cur_inc}".rstrip(";")
+                    break
+
+        cls.ninja = r"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
+        if Path(cls.ninja).is_file() and str(Path(cls.ninja).parent) not in cls.env.get("PATH", ""):
+            cls.env["PATH"] = str(Path(cls.ninja).parent) + ";" + cls.env.get("PATH", "")
+
+        for win_kits in (
+            r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64",
+            r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x64",
+            r"C:\Program Files (x86)\Windows Kits\10\bin\x64",
+        ):
+            if Path(win_kits).is_dir() and win_kits not in cls.env.get("PATH", ""):
+                cls.env["PATH"] = win_kits + ";" + cls.env.get("PATH", "")
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(prefix="vrt-real-cmake-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.repo_dir = self.root / "repo"
+        self.repo_dir.mkdir()
+        self.build_dir = self.repo_dir / "build"
+
+        # Git init
+        self._git(["init", "-b", "main"])
+        self._git(["config", "user.name", "TestUser"])
+        self._git(["config", "user.email", "test@example.com"])
+
+        # Initial source and CMakeLists.txt
+        (self.repo_dir / ".gitignore").write_text("/build/\n", encoding="utf-8")
+        (self.repo_dir / "src").mkdir()
+        (self.repo_dir / "src/main.cpp").write_text(
+            '#include <iostream>\n'
+            '#ifdef USE_EXTRA_HEADER\n'
+            '#include "extra.h"\n'
+            '#endif\n'
+            'int main() {\n'
+            '    std::cout << "real_mini_app_v1" << std::endl;\n'
+            '    return 0;\n'
+            '}\n',
+            encoding="utf-8",
+        )
+
+        write_info_script = (package_app.REPO_ROOT / "cmake/WriteBuildInfo.cmake").as_posix()
+        git_cmd = Path(BuildMetadataIntegrationContract._find_git()).as_posix()
+
+        (self.repo_dir / "CMakeLists.txt").write_text(
+            'cmake_minimum_required(VERSION 3.20)\n'
+            'project(MiniApp LANGUAGES CXX)\n'
+            'set(CMAKE_CXX_STANDARD 17)\n'
+            'option(MINI_RELEASE_BUILD "Release build gating" OFF)\n'
+            'add_executable(mini_app src/main.cpp)\n'
+            'target_include_directories(mini_app PRIVATE src)\n'
+            'add_custom_target(write_build_info ALL\n'
+            '    COMMAND "${CMAKE_COMMAND}"\n'
+            '        -DCOMPONENT=MiniApp\n'
+            '        -DVERSION=1.0.0\n'
+            '        -DREPO_DIR=${CMAKE_CURRENT_SOURCE_DIR}\n'
+            '        -DSOURCE_FILE=$<TARGET_FILE:mini_app>\n'
+            '        -DOUTPUT=$<TARGET_FILE_DIR:mini_app>/build_info.json\n'
+            '        -DRELEASE_BUILD=${MINI_RELEASE_BUILD}\n'
+            f'        -DGIT_EXECUTABLE={git_cmd}\n'
+            f'        -P {write_info_script}\n'
+            '    COMMENT "Writing build info for mini_app"\n'
+            '    VERBATIM\n'
+            ')\n'
+            'add_dependencies(write_build_info mini_app)\n',
+            encoding="utf-8",
+        )
+
+        self._git(["add", ".gitignore", "src/main.cpp", "CMakeLists.txt"])
+        self._git(["commit", "-m", "initial clean project"])
+
+    def _git(self, args: list[str]) -> subprocess.CompletedProcess:
+        git_cmd = BuildMetadataIntegrationContract._find_git()
+        res = subprocess.run([git_cmd] + args, cwd=self.repo_dir, capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, f"git command failed: {' '.join(args)}\n{res.stderr}")
+        return res
+
+    def _configure(self, release_build: bool = False) -> subprocess.CompletedProcess:
+        cmake_cmd = BuildMetadataIntegrationContract._find_cmake()
+        cmd = [
+            cmake_cmd,
+            "-B", "build",
+            "-S", ".",
+            "-G", "Ninja",
+            f"-DCMAKE_MAKE_PROGRAM={self.ninja}",
+            f"-DMINI_RELEASE_BUILD={'ON' if release_build else 'OFF'}",
+        ]
+        rc_candidate = Path(r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\rc.exe")
+        if rc_candidate.is_file():
+            cmd.append(f"-DCMAKE_RC_COMPILER={rc_candidate.as_posix()}")
+        mt_candidate = Path(r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\mt.exe")
+        if mt_candidate.is_file():
+            cmd.append(f"-DCMAKE_MT={mt_candidate.as_posix()}")
+        res = subprocess.run(cmd, cwd=self.repo_dir, env=self.env, capture_output=True, text=True)
+        return res
+
+    def _build(self) -> subprocess.CompletedProcess:
+        cmake_cmd = BuildMetadataIntegrationContract._find_cmake()
+        cmd = [cmake_cmd, "--build", "build"]
+        res = subprocess.run(cmd, cwd=self.repo_dir, env=self.env, capture_output=True, text=True)
+        return res
+
+    def test_01_real_clean_initial_build(self) -> None:
+        """S47-03 Case 1: Initial real compilation produces working binary and matching build metadata."""
+        res_cfg = self._configure(release_build=True)
+        self.assertEqual(res_cfg.returncode, 0, res_cfg.stderr)
+
+        res_bld = self._build()
+        self.assertEqual(res_bld.returncode, 0, res_bld.stderr)
+
+        exe = self.build_dir / "mini_app.exe"
+        self.assertTrue(exe.is_file(), "Compiled executable must exist")
+
+        # Run real executable
+        run_res = subprocess.run([str(exe)], capture_output=True, text=True)
+        self.assertEqual(run_res.returncode, 0)
+        self.assertIn("real_mini_app_v1", run_res.stdout)
+
+        # Check build_info.json
+        info_json = self.build_dir / "build_info.json"
+        self.assertTrue(info_json.is_file())
+        meta = json.loads(info_json.read_text(encoding="utf-8"))
+
+        head = subprocess.check_output([BuildMetadataIntegrationContract._find_git(), "rev-parse", "HEAD"], cwd=self.repo_dir, text=True).strip()
+        self.assertEqual(meta["commit"], head)
+        self.assertEqual(meta["branch"], "main")
+        self.assertIs(meta["dirty"], False)
+        # Artifact mtime epoch matches
+        exe_epoch = int(exe.stat().st_mtime)
+        self.assertEqual(meta["built_at_epoch"], exe_epoch)
+
+    def test_02_real_rebuild_without_changes(self) -> None:
+        """S47-03 Case 2: Rebuilding without changes does not relink binary and preserves epoch."""
+        self.assertEqual(self._configure().returncode, 0)
+        self.assertEqual(self._build().returncode, 0)
+
+        info_json = self.build_dir / "build_info.json"
+        meta1 = json.loads(info_json.read_text(encoding="utf-8"))
+        exe1_mtime = (self.build_dir / "mini_app.exe").stat().st_mtime
+
+        # Second build without changes: binary is not relinked
+        res2 = self._build()
+        self.assertEqual(res2.returncode, 0)
+
+        exe2_mtime = (self.build_dir / "mini_app.exe").stat().st_mtime
+        self.assertEqual(exe1_mtime, exe2_mtime)
+
+        meta2 = json.loads(info_json.read_text(encoding="utf-8"))
+        self.assertEqual(meta1["built_at_epoch"], meta2["built_at_epoch"])
+        self.assertIs(meta2["dirty"], False)
+
+    def test_03_real_document_commit(self) -> None:
+        """S47-03 Case 3: Review doc commit updates candidate commit hash while binary is reused."""
+        self.assertEqual(self._configure().returncode, 0)
+        self.assertEqual(self._build().returncode, 0)
+        exe1_mtime = (self.build_dir / "mini_app.exe").stat().st_mtime
+
+        docs_dir = self.repo_dir / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "R47_report.md").write_text("# Report\n", encoding="utf-8")
+        self._git(["add", "docs/R47_report.md"])
+        self._git(["commit", "-m", "docs: update review doc"])
+        new_head = subprocess.check_output([BuildMetadataIntegrationContract._find_git(), "rev-parse", "HEAD"], cwd=self.repo_dir, text=True).strip()
+
+        # Build again: binary is untouched, build_info reflects new commit
+        self.assertEqual(self._build().returncode, 0)
+        exe2_mtime = (self.build_dir / "mini_app.exe").stat().st_mtime
+        self.assertEqual(exe1_mtime, exe2_mtime)
+
+        meta = json.loads((self.build_dir / "build_info.json").read_text(encoding="utf-8"))
+        self.assertEqual(meta["commit"], new_head)
+        self.assertIs(meta["dirty"], False)
+
+    def test_04_real_production_source_change(self) -> None:
+        """S47-03 Case 4: Production source modification causes recompilation, dirty=true, and release failure."""
+        self.assertEqual(self._configure(release_build=False).returncode, 0)
+        self.assertEqual(self._build().returncode, 0)
+
+        # Modify source
+        (self.repo_dir / "src/main.cpp").write_text(
+            '#include <iostream>\n'
+            'int main() {\n'
+            '    std::cout << "real_mini_app_v2_modified" << std::endl;\n'
+            '    return 0;\n'
+            '}\n',
+            encoding="utf-8",
+        )
+
+        # Normal build succeeds with dirty=true
+        res_bld = self._build()
+        self.assertEqual(res_bld.returncode, 0)
+        meta = json.loads((self.build_dir / "build_info.json").read_text(encoding="utf-8"))
+        self.assertIs(meta["dirty"], True)
+
+        # Re-run binary to verify actual compilation happened
+        run_res = subprocess.run([str(self.build_dir / "mini_app.exe")], capture_output=True, text=True)
+        self.assertIn("real_mini_app_v2_modified", run_res.stdout)
+
+        # Re-configure for release build: build must fail due to dirty workspace
+        self.assertEqual(self._configure(release_build=True).returncode, 0)
+        res_rel = self._build()
+        self.assertNotEqual(res_rel.returncode, 0)
+        self.assertIn("发布模式禁止脏工作区候选", res_rel.stdout + res_rel.stderr)
+
+    def test_05_real_untracked_included_header(self) -> None:
+        """S47-03 Case 5: Untracked header included in compilation causes dirty=true and release failure."""
+        self.assertEqual(self._configure(release_build=True).returncode, 0)
+
+        # Create untracked header and include it
+        (self.repo_dir / "src/extra.h").write_text("#pragma once\n", encoding="utf-8")
+        (self.repo_dir / "src/main.cpp").write_text('#include "extra.h"\nint main() { return 0; }\n', encoding="utf-8")
+
+        res_bld = self._build()
+        self.assertNotEqual(res_bld.returncode, 0)
+        self.assertIn("发布模式禁止脏工作区候选", res_bld.stdout + res_bld.stderr)
+
+    def test_06_real_git_failure(self) -> None:
+        """S47-03 Case 6: Git query failure sets commit/branch/dirty to unknown and fails release build."""
+        self.assertEqual(self._configure(release_build=False).returncode, 0)
+
+        # Force a rebuild by touching source, and hide .git
+        (self.repo_dir / "src/main.cpp").write_text("// no git\nint main() { return 0; }\n", encoding="utf-8")
+        (self.repo_dir / ".git").rename(self.repo_dir / ".git_hidden")
+
+        res_bld = self._build()
+        self.assertEqual(res_bld.returncode, 0)
+        meta = json.loads((self.build_dir / "build_info.json").read_text(encoding="utf-8"))
+        self.assertEqual(meta["commit"], "unknown")
+        self.assertEqual(meta["branch"], "unknown")
+        self.assertEqual(meta["dirty"], "unknown")
+
+        # In release mode, it must fail
+        self.assertEqual(self._configure(release_build=True).returncode, 0)
+        (self.repo_dir / "src/main.cpp").write_text("// release no git\nint main() { return 1; }\n", encoding="utf-8")
+        res_rel = self._build()
+        self.assertNotEqual(res_rel.returncode, 0)
+        self.assertIn("发布模式禁止未知候选", res_rel.stdout + res_rel.stderr)
+
+    def test_07_real_candidate_change_during_build(self) -> None:
+        """S47-03 Case 7: Candidate change during build is detected by release verification."""
+        self.assertEqual(self._configure(release_build=False).returncode, 0)
+        self.assertEqual(self._build().returncode, 0)
+
+        fixed_commit = subprocess.check_output([BuildMetadataIntegrationContract._find_git(), "rev-parse", "HEAD"], cwd=self.repo_dir, text=True).strip()
+
+        # Mutate git commit and touch source to trigger rebuild
+        (self.repo_dir / "src/mutation.txt").write_text("mutation\n", encoding="utf-8")
+        (self.repo_dir / "src/main.cpp").write_text("// mutated\nint main() { return 0; }\n", encoding="utf-8")
+        self._git(["add", "src/mutation.txt", "src/main.cpp"])
+        self._git(["commit", "-m", "unexpected commit during build"])
+
+        # Subsequent build records the new state
+        self.assertEqual(self._build().returncode, 0)
+        meta = json.loads((self.build_dir / "build_info.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(meta["commit"], fixed_commit)
 
 
 if __name__ == "__main__":
