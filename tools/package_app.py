@@ -40,6 +40,14 @@ from dependency_utils import (
     warn,
 )
 
+if str(REPO_ROOT / "cmake") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "cmake"))
+try:
+    from check_git_workspace import check_git_workspace, is_whitelisted
+except ImportError:
+    check_git_workspace = None
+    is_whitelisted = None
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Package VisionRT release runtime.")
@@ -342,11 +350,16 @@ def deploy_tools_package(
             if ext_path.read_bytes() != pkg_index.read_bytes():
                 raise RuntimeError("external tools index does not match package internal module_index.json byte-by-byte")
 
-        # 3. Validate build metadata and tools package using host JSON validator (D-06)
-        tools_build_info = tmp_dir / "build_info.json"
-        if tools_build_info.is_file():
-            verify_build_metadata(tools_build_info, expected_component="VisionTools", allow_dirty=allow_dirty)
+        # 3. Validate tools package using host JSON validator (D-06)
         verify_tools_package(tmp_dir, validator)
+
+        # 4. Validate build metadata in release mode (S47-01)
+        tools_build_info = tmp_dir / "build_info.json"
+        if not tools_build_info.is_file():
+            if not allow_dirty:
+                raise RuntimeError(f"package verification failed: tools package missing required build_info.json in {package_zip}")
+        else:
+            verify_build_metadata(tools_build_info, expected_component="VisionTools", allow_dirty=allow_dirty)
 
         # 4. Atomic installation: if validation succeeded, cleanly replace target_pkg
         stage_dir = install_dir / f".tools-package-staging-{os.getpid()}"
@@ -755,6 +768,9 @@ def verify_package(
     allow_dirty: bool = False,
 ) -> None:
     """Verify package completeness strictly according to RS-06 and RT-04."""
+    if not install_dir.is_dir():
+        raise RuntimeError(f"package verification failed: installation directory does not exist: {install_dir}")
+
     required_files = [
         install_dir / f"{PROJECT_NAME}.exe",
         install_dir / MARKER_FILE,
@@ -816,13 +832,17 @@ def verify_package(
     tools_pkg_dir = install_dir / "tools-package"
     if tools_pkg_dir.is_dir():
         tools_build_info = tools_pkg_dir / "build_info.json"
-        if tools_build_info.is_file():
+        if not tools_build_info.is_file():
+            if not allow_dirty:
+                raise RuntimeError(f"package verification failed: required tools build_info.json missing in {tools_pkg_dir}")
+        else:
             try:
                 verify_build_metadata(tools_build_info, expected_component="VisionTools", allow_dirty=allow_dirty)
             except RuntimeError as exc:
                 raise RuntimeError(f"package verification failed: {exc}") from exc
-        verify_tools_package(tools_pkg_dir, validator)
-        print("tools package verification passed successfully")
+        if validator is not None:
+            verify_tools_package(tools_pkg_dir, validator)
+            print("tools package verification passed successfully")
 
     count = sum(1 for p in install_dir.rglob("*") if p.is_file())
     print(f"package verification complete: {count} files")

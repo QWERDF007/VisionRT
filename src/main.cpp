@@ -42,6 +42,7 @@ int main(int argc, char *argv[])
     parser.addOption({"screenshot-delay", "Delay before screenshot in ms (default 1000)", "ms"});
     parser.addOption({"demo-menu", "Open tools menu on startup for verification"});
     parser.addOption({"demo-select", "Select first category on startup for verification"});
+    parser.addOption({"run-once", "Execute pipeline once on startup"});
     parser.process(application);
     std::size_t workers = std::max(2u, std::thread::hardware_concurrency());
     if (parser.isSet("workers"))
@@ -71,19 +72,26 @@ int main(int argc, char *argv[])
         {
             const QString projectPath = parser.value("project");
             const QString selectNode  = parser.value("select-node");
-            const auto openProject = [&controller, &startupConnection, projectPath, selectNode]()
+            const bool    runOnce     = parser.isSet("run-once");
+            const auto openProject = [&controller, &startupConnection, projectPath, selectNode, runOnce]()
             {
                 if (controller.busy())
                     return;
                 QObject::disconnect(startupConnection);
                 QObject::connect(&controller, &visionrt::AppController::projectReplaced, &controller,
-                                 [&controller, selectNode]()
+                                 [&controller, selectNode, runOnce]()
                                  {
                                      const auto nodes = controller.nodes();
                                      if (!selectNode.isEmpty())
                                          controller.selectNode(selectNode);
                                      else if (!nodes.isEmpty())
                                          controller.selectNode(nodes.first().toMap().value("id").toString());
+                                     if (runOnce)
+                                     {
+                                         QTimer::singleShot(200, &controller, [&controller]() {
+                                             controller.runOnce();
+                                         });
+                                     }
                                  }, Qt::SingleShotConnection);
                 controller.requestOpen(projectPath);
                 controller.resolveUnsaved("discard");
