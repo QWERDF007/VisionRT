@@ -4,7 +4,7 @@
 
 #include "core/ToolRegistry.h"
 #include "core/Error.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "core/DefinitionJson.h"
 #include "plugins/PluginLoader.h"
 
@@ -1055,17 +1055,6 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     app.runOnce();
     waitForIdle();
     assert(app.nodes().first().toMap().value("state") == "succeeded");
-    QString diagnosticJson;
-    QObject::connect(&app, &AppController::outputTextReady, &app, [&](const QString &text) { diagnosticJson = text; });
-    app.requestOutputText(app.portContext("__status_message", true), false, true);
-    for (int attempt = 0; attempt < 100 && diagnosticJson.isEmpty(); ++attempt)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(5ms);
-    }
-    const auto exported = QJsonDocument::fromJson(diagnosticJson.toUtf8()).object();
-    assert(exported.value("code").toInt() == 0 && exported.value("message") == "ok");
-    assert(exported.value("phase") == "execute" && exported.value("tool_id") == "test.plugin.release_fail");
     assert(QDir(temp.path()).mkpath("moved"));
     assert(app.save(temp.filePath("moved/lifecycle.vrt.json")));
     waitForIdle();
@@ -1074,16 +1063,6 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(released.value("statusMessage").toString().isEmpty());
     assert(released.value("lifecycleMessage").toString().contains("释放资源失败"));
     assert(released.value("lifecycleDetail") == "native release detail");
-    diagnosticJson.clear();
-    app.requestOutputText(app.portContext("__status_message", true), false, true);
-    for (int attempt = 0; attempt < 100 && diagnosticJson.isEmpty(); ++attempt)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(5ms);
-    }
-    const auto lifecycleExport = QJsonDocument::fromJson(diagnosticJson.toUtf8()).object();
-    assert(lifecycleExport.value("code").toInt() == 0 && lifecycleExport.value("message") == "ok");
-    assert(lifecycleExport.value("lifecycle").toObject().value("detail") == "native release detail");
     const auto reported = app.diagnostics().size();
     for (int attempt = 0; attempt < 10; ++attempt)
     {

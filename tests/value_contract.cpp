@@ -2,7 +2,7 @@
 #    undef NDEBUG
 #endif
 
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 
 #include <visionrt/contracts/Value.h>
 

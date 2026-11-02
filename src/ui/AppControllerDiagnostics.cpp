@@ -81,8 +81,4 @@ QString AppController::diagnosticsJson() const
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Indented));
 }
 
-void AppController::copyDiagnostics() const
-{
-    QGuiApplication::clipboard()->setText(diagnosticsJson());
-}
 }

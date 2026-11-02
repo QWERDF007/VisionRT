@@ -1,4 +1,4 @@
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "ui/OutputModel.h"
 
 #include <QCoreApplication>

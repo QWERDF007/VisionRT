@@ -135,6 +135,7 @@ private:
     struct PythonImplementation
     {
         ToolFactory                      factory;
+        PythonFactoryResolver            resolve;
         std::shared_ptr<PythonLoadState> loadState;
     };
 

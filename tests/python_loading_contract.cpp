@@ -1,5 +1,5 @@
 #include "core/DefinitionJson.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "core/Error.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"

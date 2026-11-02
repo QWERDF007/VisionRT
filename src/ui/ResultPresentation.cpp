@@ -691,7 +691,7 @@ void ResultPresentation::updateReadback()
         // identity still matches, exactly as the direct entry would.
         const auto current = host_.portContext(intent.context.value("port").toString());
         if (intent.context == textTarget(current))
-            requestText(current, intent.copy, intent.diagnostic);
+            requestText(current);
     }
     const bool textQueued = !readRequests_.empty();
     if (readback_ && runtime_ && !textTask_.valid() && !textQueued && !converter_.isBusy()
@@ -702,7 +702,7 @@ void ResultPresentation::updateReadback()
     }
 }
 
-void ResultPresentation::requestText(const QVariantMap &context, bool copy, bool diagnostic)
+void ResultPresentation::requestText(const QVariantMap &context)
 {
     if (host_.closing() || draining_)
         return;
@@ -712,10 +712,10 @@ void ResultPresentation::requestText(const QVariantMap &context, bool copy, bool
     {
         const auto target = textTarget(context);
         const bool alreadyQueued
-            = std::any_of(readRequests_.begin(), readRequests_.end(), [&](const auto &item)
-                          { return item.context == target && item.copy == copy && item.diagnostic == diagnostic; });
+            = std::any_of(readRequests_.begin(), readRequests_.end(),
+                          [&](const auto &item) { return item.context == target; });
         if (!alreadyQueued)
-            readRequests_.push_back(TextRequest{target, copy, diagnostic});
+            readRequests_.push_back(TextRequest{target});
         return;
     }
     if (textTask_.valid())
@@ -726,8 +726,6 @@ void ResultPresentation::requestText(const QVariantMap &context, bool copy, bool
     auto captured = outputs_.capture(context.value("port").toString());
     if (!captured)
         return;
-    if (diagnostic && !captured->diagnostic && !captured->lifecycle)
-        return;
     // Copy always runs; a large value is formatted on the bounded worker rather than gated behind a
     // second confirmation dialog, and it is never truncated into something that looks complete.
     const auto generation = generation_;
@@ -737,14 +735,14 @@ void ResultPresentation::requestText(const QVariantMap &context, bool copy, bool
     ++textPending_;
     textTask_ = std::async(
         std::launch::async,
-        [captured = std::move(*captured), copy, generation, context, diagnostic, mailbox, this]
+        [captured = std::move(*captured), generation, context, mailbox, this]
         {
             try
             {
-                auto text = diagnostic ? OutputModel::diagnosticText(captured) : OutputModel::fullText(captured);
+                auto text = OutputModel::fullText(captured);
                 {
                     std::lock_guard lock(mailbox->mutex);
-                    mailbox->value = TextResult{std::move(text), copy, generation, context};
+                    mailbox->value = TextResult{std::move(text), generation, context};
                     mailbox->done  = true;
                 }
             }
@@ -809,8 +807,9 @@ void ResultPresentation::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox
 
     if (result && host_.contextCurrent(result->context))
     {
-        if (result->copy)
-            QGuiApplication::clipboard()->setText(result->text);
+        // The only product intent for the full output is "copy this value"; the same text is also
+        // delivered so the caller can show that the read finished.
+        QGuiApplication::clipboard()->setText(result->text);
         host_.deliverText(result->text);
     }
     if (!draining_)

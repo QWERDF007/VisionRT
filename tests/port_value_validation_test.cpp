@@ -6,7 +6,7 @@
 #include "core/InputNormalizer.h"
 #include "core/ToolDefinition.h"
 #include "core/ToolValueValidation.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 
 #include <visionrt/contracts/Tool.h>
 

@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 # Test groups used by the aggregate build targets and the ctest label filter. Every contract test
 # carries at least one label so a change can be verified without building the whole matrix.
-set(VISIONRT_TEST_GROUPS backend bridge ui package sdk installed gpu perf)
+set(VISIONRT_TEST_GROUPS backend bridge ui package integration sdk installed gpu perf)
 # Groups whose members only exist with the desktop application.
 set(VISIONRT_APP_TEST_GROUPS bridge ui)
 
@@ -55,14 +55,29 @@ endfunction()
 # runs what was built. The label defaults to the owning library so no test can be unlabelled.
 # `LABELS` is a multi-value keyword and must be the last argument list; positional test arguments
 # come before it.
+# `NO_TEST` builds the executable without a CTest entry: a runner whose scenarios are registered
+# one by one stays a build prerequisite instead of duplicating every scenario in a second run.
 function(visionrt_contract name library)
-    cmake_parse_arguments(ARG "" "" "LABELS" ${ARGN})
-    add_executable(${name} EXCLUDE_FROM_ALL tests/${name}.cpp)
+    # `SOURCES` decouples the source file name from the target and CTest entry: a scenario runner
+    # keeps one stable target name while its implementation file can be named for its responsibility.
+    cmake_parse_arguments(ARG "NO_TEST" "" "LABELS;SOURCES" ${ARGN})
+    if(ARG_SOURCES)
+        set(_sources ${ARG_SOURCES})
+    else()
+        set(_sources tests/${name}.cpp)
+    endif()
+    add_executable(${name} EXCLUDE_FROM_ALL ${_sources})
     target_link_libraries(${name} PRIVATE ${library})
     if(MSVC)
         target_compile_options(${name} PRIVATE /UNDEBUG)
     else()
         target_compile_options(${name} PRIVATE -UNDEBUG)
+    endif()
+    if(ARG_NO_TEST)
+        if(TARGET tests-all)
+            add_dependencies(tests-all ${name})
+        endif()
+        return()
     endif()
     add_test(NAME ${name} COMMAND ${name} ${ARG_UNPARSED_ARGUMENTS})
     visionrt_apply_test_environment(${name})
@@ -103,6 +118,13 @@ function(visionrt_group_test name)
     if(NOT TEST ${name})
         message(FATAL_ERROR "visionrt_group_test(${name}) 指向未注册的测试")
     endif()
+    # A typo in REQUIRES used to add no dependency at all and still configure green; the group then
+    # failed only when ctest hit a missing executable. Fail at configure time instead.
+    foreach(executable IN LISTS ARG_REQUIRES)
+        if(NOT TARGET ${executable})
+            message(FATAL_ERROR "visionrt_group_test(${name}) 的 REQUIRES 指向不存在的目标：${executable}")
+        endif()
+    endforeach()
     set_tests_properties(${name} PROPERTIES LABELS "${ARG_LABELS}")
     if("ui" IN_LIST ARG_LABELS)
         set_tests_properties(${name} PROPERTIES RESOURCE_LOCK visionrt-ui)
@@ -110,7 +132,7 @@ function(visionrt_group_test name)
     foreach(label IN LISTS ARG_LABELS)
         set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_${label} ${name})
         foreach(executable IN LISTS ARG_REQUIRES)
-            if(TARGET tests-${label} AND TARGET ${executable})
+            if(TARGET tests-${label})
                 add_dependencies(tests-${label} ${executable})
             endif()
         endforeach()

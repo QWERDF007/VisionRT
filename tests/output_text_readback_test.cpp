@@ -139,7 +139,7 @@ def run(inputs):
     QTest::qWait(100);
     require(presented.count() == shown, "active execution presented a new frame");
     frame(17);
-    app.requestOutputText(valuesContext, false, false);
+    app.requestOutputText(valuesContext);
     QTest::qWait(300);
     require(text.isEmpty(), "full text was generated during active execution");
     require(app.busy(), "active execution ended before the display read stage");
@@ -163,7 +163,7 @@ def run(inputs):
             });
         text.clear();
         const auto currentContext = app.portContext("values", true);
-        app.requestOutputText(currentContext, false, false);
+        app.requestOutputText(currentContext);
         // Immediately invoke management to initiate an outer drainReaders while textTask is active
         app.resetRuntime();
         require(QTest::qWaitFor([&] { return nestedCount == 1; }, 5000),

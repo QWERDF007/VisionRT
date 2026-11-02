@@ -1867,12 +1867,19 @@ int main(int argc, char **argv)
             || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"
             || std::string(argv[1]) == "--canvas-child" || std::string(argv[1]) == "--startup-child"
             || std::string(argv[1]) == "--catalog-child" || std::string(argv[1]) == "--cancellation-child"
-            || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"))
+            || std::string(argv[1]) == "--popups-child" || std::string(argv[1]) == "--output-reuse-child"
+            || std::string(argv[1]) == "--core-child"))
     {
         QGuiApplication qt(argc, argv);
         try
         {
-            if (std::string(argv[1]) == "--roi-child")
+            if (std::string(argv[1]) == "--core-child")
+            {
+                coreContracts();
+                require(AppController::staticMetaObject.indexOfMethod("saveToolMetadata(QVariantMap)") < 0,
+                        "installed tool metadata must not expose a second authoring entry");
+            }
+            else if (std::string(argv[1]) == "--roi-child")
                 roiParameterContract();
             else if (std::string(argv[1]) == "--output-child")
                 outputContract();

@@ -165,7 +165,7 @@ try
         QTemporaryDir critDir;
         require(critDir.isValid(), "critical fixture directory is invalid");
         session.start(critDir.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         for (int i = 0; i < 5; ++i)
             LogService::write(LogLevel::Critical, std::string_view("critical-probe"), std::string_view("panic payload"));
         int critCount = 0;
@@ -199,7 +199,7 @@ try
         auto          cap16             = testConfig();
         cap16.maxMessageBytes           = 16;
         session.restart(cap16, esc16Dir.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         const std::string escA16 = std::string(8, '\n') + "AAAA";
         const std::string escB16 = std::string(8, '\n') + "BBBB";
         session.service().error("esc16-collision-probe", escA16);
@@ -236,7 +236,7 @@ try
         auto          cap64   = testConfig();
         cap64.maxMessageBytes = 64;
         session.restart(cap64, cap64Dir.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         const std::string msgA = std::string(61, 'M') + "111111111";
         const std::string msgB = std::string(61, 'M') + "222222222";
         session.service().error("msg-collision-probe", msgA);
@@ -288,7 +288,7 @@ try
         // 9d. Truncated source anti-collision: two long sources sharing a prefix but differing in
         //     the tail stay distinct.
         session.restart(testConfig(), directory.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         const std::string longA = std::string(130, 'X') + "AAA";
         const std::string longB = std::string(130, 'X') + "BBB";
         session.service().error(longA, "collision payload");
@@ -318,7 +318,7 @@ try
         auto cap21             = testConfig();
         cap21.maxMessageBytes  = 21;
         session.restart(cap21, directory.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         for (int i = 0; i < 3; ++i)
             session.service().error("cap21-probe", "threshold payload");
         session.service().flush();
@@ -339,7 +339,7 @@ try
         auto          cap22            = testConfig();
         cap22.maxMessageBytes          = 22;
         session.restart(cap22, cap22Dir.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         for (int i = 0; i < 3; ++i)
             session.service().error("cap22-probe", "1234567890");
         session.service().flush();
@@ -376,7 +376,7 @@ try
         session.stop();
         QTemporaryDir negativeDir;
         session.restart(testConfig(), negativeDir.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         session.service().error("single-refresh-probe", "single event payload");
         session.service().flush();
         int probeCount = 0;
@@ -419,7 +419,7 @@ try
         // 9g. Five occurrences: first immediate, next four summarised as repeat 4.
         QTemporaryDir repeatDir;
         session.restart(testConfig(), repeatDir.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(true);
+        session.service().setViewActive(false);
         for (int i = 0; i < 5; ++i)
             session.service().error("rep-probe", "repeat event payload");
         session.service().flush();

@@ -175,11 +175,16 @@ void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory facto
     if (!definition || (definition->kind != ToolKind::PythonFunction && definition->kind != ToolKind::PythonClass))
         throw ContractError("注册 Python 实现需要已加载的 Python 工具声明：" + toolId);
     std::shared_ptr<PythonLoadState> loadState;
+    PythonFactoryResolver            resolve;
     if (const auto *pyFunctor = factory.target<PythonFactoryFunctor>())
+    {
         loadState = pyFunctor->loadState;
+        resolve   = pyFunctor->resolve;
+    }
     if (!loadState)
         loadState = std::make_shared<PythonLoadState>(std::move(status));
-    python_.insert_or_assign(std::move(toolId), PythonImplementation{std::move(factory), std::move(loadState)});
+    python_.insert_or_assign(std::move(toolId),
+                             PythonImplementation{std::move(factory), std::move(resolve), std::move(loadState)});
 }
 
 std::shared_ptr<PythonLoadState> ToolRegistry::pythonLoadState(std::string_view id) const
@@ -302,7 +307,10 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
                             makeStatus(ErrorCode::PythonUnavailable, "Python 实现尚未加载：" + std::string(id)));
     try
     {
-        auto instance = it->second.factory(services);
+        // A node contract adds ports the packaged declaration cannot state, so the instance is
+        // built from the contract being created rather than from the registered declaration.
+        auto instance = it->second.resolve ? it->second.resolve(definition)(services)
+                                           : it->second.factory(services);
         if (!instance)
             throw RegistryError(ToolAvailability::ImplementationUnavailable,
                                 makeStatus(ErrorCode::ResourceUnavailable, "工具工厂返回空实例：" + std::string(id)));

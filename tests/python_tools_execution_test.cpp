@@ -1,5 +1,6 @@
 #include "core/ToolPackage.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
+#include "core/NodeContracts.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
 #include "runtime/Snapshot.h"
@@ -105,6 +106,52 @@ int main(int argc, char **argv)
                                 {2, 3},
                                 {4, 5}
                     }));
+                }
+                {
+                    // A numeric host Array reaches Python as an ndarray. The packaged declaration
+                    // cannot state variable ports, so the node contract materialises them and the
+                    // production bridge converts the Array on the way in.
+                    const auto *declaration = registry.find("visiontools.logic.expression");
+                    assert(declaration && declaration->nodeModel == NodeModel::Expression);
+                    NodeDefinition node;
+                    node.id               = 1;
+                    node.toolId           = declaration->nameEn;
+                    node.toolNameSnapshot = declaration->nameZh;
+                    node.expression       = ExpressionConfig{};
+                    node.expression->variables.push_back(
+                        {"p1", "数值", "values", {Type::Array, DType::Float64, 1}, false});
+                    node.expression->program.push_back(
+                        {"p2", "平均", "average", "mean(values)", {Type::Float}, true});
+                    auto expression = registry.create(nodeContract(node, *declaration), {});
+                    assert(expression->initialize(nodeParameters(node, *declaration)).code == 0);
+                    const auto result = expression->execute({
+                        {"p1", Array::fromNested(NestedVector<double, 1>{2.0, 4.0})}
+                    });
+                    assert(testview::status(result).code == 0);
+                    assert(std::get<double>(result.outputs.at("p2")) == 3.0);
+                    assert(expression->release().code == 0);
+                }
+                {
+                    const auto *declaration = registry.find("visiontools.logic.branch");
+                    assert(declaration && declaration->nodeModel == NodeModel::Condition);
+                    NodeDefinition node;
+                    node.id               = 2;
+                    node.toolId           = declaration->nameEn;
+                    node.toolNameSnapshot = declaration->nameZh;
+                    node.expression       = ExpressionConfig{};
+                    node.expression->variables.push_back(
+                        {"p1", "数值", "values", {Type::Array, DType::Float64, 1}, false});
+                    node.expression->program.push_back(
+                        {"p2", "成立", "ok", "mean(values) > 2", {Type::Bool}, false});
+                    auto branch = registry.create(nodeContract(node, *declaration), {});
+                    assert(branch->initialize(nodeParameters(node, *declaration)).code == 0);
+                    const auto result = branch->execute({
+                        {"p1", Array::fromNested(NestedVector<double, 1>{2.0, 4.0})}
+                    });
+                    assert(testview::status(result).code == 0);
+                    assert(std::get<bool>(result.outputs.at("on_true")));
+                    assert(!std::get<bool>(result.outputs.at("on_false")));
+                    assert(branch->release().code == 0);
                 }
                 {
                     auto roi = registry.create("custom.python.roi", {});

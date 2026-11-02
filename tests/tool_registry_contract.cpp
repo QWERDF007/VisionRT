@@ -1,5 +1,5 @@
 #include "core/ToolPackage.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 

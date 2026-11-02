@@ -286,10 +286,10 @@ void popupSessionsContract()
                 && app.wires() == reopenedWires,
             "an obsolete project context disconnected the reopened project's matching input");
     QSignalSpy projectText(&app, &visionrt::AppController::outputTextReady);
-    app.requestOutputText(previousProject, true, false);
+    app.requestOutputText(previousProject);
     QTest::qWait(60);
     require(projectText.isEmpty(), "obsolete output context reads a new project's value");
-    app.requestOutputText(app.portContext(QStringLiteral("__status_message"), true), true, false);
+    app.requestOutputText(app.portContext(QStringLiteral("__status_message"), true));
     app.selectNode(QStringLiteral("3"));
     QTest::qWait(150);
     require(projectText.isEmpty(), "late output copy completes on a different selected node");

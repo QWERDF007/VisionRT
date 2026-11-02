@@ -201,7 +201,7 @@ Rectangle {
             if (root.isEmptyContext(pending) || !app.portContextCurrent(pending)) return
             // Copy stays a bounded background task with a readback acknowledgement; the GUI thread
             // never serialises the value and never truncates it into something that looks complete.
-            app.requestOutputText(pending, true, false)
+            app.requestOutputText(pending)
         }
         QuiMenuItem {
             objectName: "outputCopyAction"

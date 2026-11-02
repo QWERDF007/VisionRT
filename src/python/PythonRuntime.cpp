@@ -751,26 +751,20 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
     return statuses;
 }
 
-ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
+namespace {
+// A tool instance always works on the normalised contract, so the output key set it demands from
+// the Python function matches what the host will validate. The definition is a parameter, not a
+// capture, because an expression or condition node adds ports its packaged declaration cannot state.
+PythonFactoryFunctor pythonToolFactory(const std::shared_ptr<RuntimeState> &state,
+                                       const ToolDefinition &definition,
+                                       const std::shared_ptr<PythonLoadState> &loadState)
 {
-    py::gil_scoped_acquire gil;
-    auto state = impl_->state;
-    // A tool instance always works on the normalised contract, so the output key set it demands
-    // from the Python function matches what the host will validate.
     ToolDefinition normalized = definition;
     normalizeToolDefinition(normalized);
-    std::shared_ptr<PythonLoadState> loadState;
-    const auto it = state->implementations.find(normalized.nameEn);
-    if (it != state->implementations.end())
-        loadState = it->second.loadState;
-    else
-        loadState
-            = std::make_shared<PythonLoadState>(makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + normalized.nameEn));
-
-    auto defPtr = std::make_shared<const ToolDefinition>(std::move(normalized));
-    auto createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState,
-                       generation = state->generation](
-                          const PlatformToolServices &services) -> std::unique_ptr<IToolInstance>
+    auto       defPtr     = std::make_shared<const ToolDefinition>(std::move(normalized));
+    const auto generation = state->generation;
+    auto       createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState, generation](
+                            const PlatformToolServices &services) -> std::unique_ptr<IToolInstance>
     {
         auto lockedState = weak.lock();
         if (!lockedState || !lockedState->alive)
@@ -787,8 +781,30 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
         }
         return std::make_unique<PythonTool>(std::move(lockedState), defPtr, services, loadState);
     };
+    return PythonFactoryFunctor{loadState, std::move(createFunc), {}};
+}
+} // namespace
 
-    return ToolFactory(PythonFactoryFunctor{std::move(loadState), std::move(createFunc)});
+ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
+{
+    py::gil_scoped_acquire gil;
+    auto state = impl_->state;
+    std::shared_ptr<PythonLoadState> loadState;
+    const auto it = state->implementations.find(definition.nameEn);
+    if (it != state->implementations.end())
+        loadState = it->second.loadState;
+    else
+        loadState = std::make_shared<PythonLoadState>(
+            makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + definition.nameEn));
+
+    auto functor = pythonToolFactory(state, definition, loadState);
+    // The registry rebuilds the factory for the exact contract it creates; this factory stays bound
+    // to the declaration it was asked for.
+    functor.resolve = [state, loadState](const ToolDefinition &requested)
+    {
+        return ToolFactory(pythonToolFactory(state, requested, loadState));
+    };
+    return ToolFactory(std::move(functor));
 }
 
 bool PythonRuntime::isCloseReady() const noexcept

@@ -1,5 +1,5 @@
 #include "core/ValueJson.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
