@@ -73,8 +73,8 @@ try
     })
     {
         ToolDefinition definition;
-        definition.id          = id;
-        definition.displayName = id;
+        definition.nameEn          = id;
+        definition.nameZh = id;
         registry.addDefinition(definition);
         registry.registerCpp(definition, [&, message](const ToolServices &)
                              { return std::make_unique<ReleaseFailure>(lifetime, message); });

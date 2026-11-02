@@ -99,8 +99,8 @@ void nativeGraphSharing(std::size_t batchSize)
         {"regions", DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
     };
     ToolDefinition source;
-    source.id          = "test.shared.source";
-    source.displayName = "共享数据源";
+    source.nameEn          = "test.shared.source";
+    source.nameZh = "共享数据源";
     source.version     = "1";
     source.kind        = ToolKind::Cpp;
     source.outputs     = {
@@ -109,8 +109,8 @@ void nativeGraphSharing(std::size_t batchSize)
         {"regions", "区域",                    {Type::ROI}}
     };
     auto mutator        = source;
-    mutator.id          = "test.shared.mutator";
-    mutator.displayName = "原地修改";
+    mutator.nameEn          = "test.shared.mutator";
+    mutator.nameZh = "原地修改";
     mutator.inputs      = source.outputs;
     ToolRegistry registry;
     registry.addDefinition(source);
@@ -148,13 +148,13 @@ void nativeGraphSharing(std::size_t batchSize)
                 });
         });
     ProjectEditor editor;
-    const auto    producer = editor.addNode("flow_1", *registry.find(source.id), {});
-    const auto    consumer = editor.addNode("flow_1", *registry.find(mutator.id), {0, 1});
+    const auto    producer = editor.addNode("flow_1", *registry.find(source.nameEn), {});
+    const auto    consumer = editor.addNode("flow_1", *registry.find(mutator.nameEn), {0, 1});
     for (const auto &port : mutator.inputs)
-        editor.setBinding("flow_1", consumer, port.id,
+        editor.setBinding("flow_1", consumer, port.nameEn,
                           {
                               BindingMode::Upstream, Missing{},
-                               SourcePort{producer, port.id}
+                               SourcePort{producer, port.nameEn}
         });
     RuntimeEngine engine(2);
     require(engine.start(editor.project(), registry, RunMode::Once).code == 0, "shared graph rejected");
@@ -190,8 +190,8 @@ void explicitToolStoragePolicies()
     cv::Mat        storage(5, 8, CV_16UC1, cv::Scalar(7));
     DataRef<Image> images(Image{storage(cv::Rect(2, 1, 4, 3))});
     ToolDefinition source;
-    source.id          = "test.policy.source";
-    source.displayName = "存储策略数据源";
+    source.nameEn          = "test.policy.source";
+    source.nameZh = "存储策略数据源";
     source.version     = "1";
     source.outputs     = {
         {"images", "图像", {Type::Image}}
@@ -204,12 +204,12 @@ void explicitToolStoragePolicies()
                                                                { return toolResult({{"images", images}}, {}); });
                          });
     ProjectEditor       editor;
-    const auto          producer = editor.addNode("flow_1", *registry.find(source.id), {});
+    const auto          producer = editor.addNode("flow_1", *registry.find(source.nameEn), {});
     std::vector<NodeId> branches;
     for (const auto &policy : {std::string("inplace"), std::string("clone"), std::string("fresh")})
     {
         auto definition   = source;
-        definition.id     = "test.policy." + policy;
+        definition.nameEn     = "test.policy." + policy;
         definition.inputs = source.outputs;
         registry.addDefinition(definition);
         registry.registerCpp(
@@ -235,7 +235,7 @@ void explicitToolStoragePolicies()
                         return toolResult({{"images", DataRef<Image>(Image{std::move(output)})}}, {});
                     });
             });
-        const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
+        const auto node = editor.addNode("flow_1", *registry.find(definition.nameEn), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
         editor.setBinding("flow_1", node, "images",
                           {
                               BindingMode::Upstream, Missing{},
@@ -285,8 +285,8 @@ void toolCoordinatedBranches()
     cv::Mat        storage(5, 8, CV_16UC1, cv::Scalar(7));
     DataRef<Image> images(Image{storage(cv::Rect(2, 1, 4, 3))});
     ToolDefinition source;
-    source.id          = "test.coordinated.source";
-    source.displayName = "工具共同协调";
+    source.nameEn          = "test.coordinated.source";
+    source.nameZh = "工具共同协调";
     source.version     = "1";
     source.outputs     = {
         {"images", "图像", {Type::Image}}
@@ -299,12 +299,12 @@ void toolCoordinatedBranches()
                                                                { return toolResult({{"images", images}}, {}); });
                          });
     ProjectEditor       editor;
-    const auto          producer = editor.addNode("flow_1", *registry.find(source.id), {});
+    const auto          producer = editor.addNode("flow_1", *registry.find(source.nameEn), {});
     std::vector<NodeId> branches;
     for (const auto &policy : {std::string("writer_a"), std::string("writer_b"), std::string("independent")})
     {
         auto definition   = source;
-        definition.id     = "test.coordinated." + policy;
+        definition.nameEn     = "test.coordinated." + policy;
         definition.inputs = source.outputs;
         registry.addDefinition(definition);
         registry.registerCpp(
@@ -340,7 +340,7 @@ void toolCoordinatedBranches()
                         return toolResult(businessOutputs(inputs), {});
                     });
             });
-        const auto node = editor.addNode("flow_1", *registry.find(definition.id), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
+        const auto node = editor.addNode("flow_1", *registry.find(definition.nameEn), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
         editor.setBinding("flow_1", node, "images",
                           {
                               BindingMode::Upstream, Missing{},

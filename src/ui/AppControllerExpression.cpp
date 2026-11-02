@@ -96,7 +96,7 @@ QString AppController::executionGuardText() const
                 port = nullptr;
             }
         if (port)
-            portName = workbench::q(port->name);
+            portName = workbench::q(port->nameZh);
     }
     return (source ? workbench::q(source->title()) : QString::number(guardSource.node)) + "-" + portName;
 }
@@ -132,7 +132,7 @@ QVariantMap AppController::expressionConfig(const QString &nodeId) const
     const auto *tool = impl_->currentTool();
     if (!node || !tool || !tool->derivesPorts())
         return {};
-    if (node->toolId != tool->id)
+    if (node->toolId != tool->nameEn)
         return {};
     const ExpressionConfig config = node->expression.value_or(ExpressionConfig{});
     QVariantList           variables;
@@ -288,11 +288,11 @@ QVariantList AppController::guardCandidates(const QString &nodeId) const
                         continue;
                     const bool selected = target->executionGuard && target->executionGuard->source
                                        && target->executionGuard->source->node == node.id
-                                       && target->executionGuard->source->port == port.id;
+                                       && target->executionGuard->source->port == port.nameEn;
                     result.push_back(QVariantMap{{"node", QString::number(node.id)},
                                                  {"title", workbench::q(node.title())},
-                                                 {"port", workbench::q(port.id)},
-                                                 {"portName", workbench::q(port.name)},
+                                                 {"port", workbench::q(port.nameEn)},
+                                                 {"portName", workbench::q(port.nameZh)},
                                                  {"selected", selected}});
                 }
             }

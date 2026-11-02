@@ -242,7 +242,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     const auto &frozen          = *context->frozen;
     const auto &config          = *frozen.nodes.at(id);
     const auto *definition      = &frozen.contracts.at(id);
-    snapshot->toolId            = definition->id;
+    snapshot->toolId            = definition->nameEn;
     snapshot->outputTypes       = resolvedOutputTypes(*definition);
     snapshot->executionRevision = config.executionRevision;
     // Python tools report their own inner stages; copying them in one place keeps a stage from being
@@ -325,8 +325,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         snapshot->toolResultPublished = false;
         snapshot->phase               = NodePhase::Prepare;
         for (const auto &port : definition->outputs)
-            if (port.id != kStatusCodePort && port.id != kStatusMessagePort)
-                snapshot->outputs.emplace(port.id, Missing{});
+            if (port.nameEn != kStatusCodePort && port.nameEn != kStatusMessagePort)
+                snapshot->outputs.emplace(port.nameEn, Missing{});
         snapshot->outputs.emplace(std::string(kStatusCodePort), kNotExecutedStatus);
         snapshot->outputs.emplace(std::string(kStatusMessagePort), snapshot->status.message);
         // A gated node never entered a stage, so it has no execution window at all.
@@ -347,8 +347,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             ScopeTimer prepareTimer(snapshot->timing.prepareMs, &snapshot->timing.prepareMeasured);
             for (const auto &port : definition->inputs)
             {
-                PortValue  value   = port.defaultValue;
-                const auto binding = config.inputs.find(port.id);
+                // Every node owns its default: a shared array default would let one node's edit
+                // change another node's value.
+                PortValue  value   = portDefault(port);
+                const auto binding = config.inputs.find(port.nameEn);
                 if (binding != config.inputs.end())
                 {
                     const auto &input = binding->second;
@@ -360,7 +362,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     {
                         const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
                         snapshot->inputUses.push_back(
-                            {port.id, input.source->node, input.source->port, upstream ? upstream->publication : 0});
+                            {port.nameEn, input.source->node, input.source->port, upstream ? upstream->publication : 0});
                         if (frozen.mode != RunMode::Node
                             && (!upstream || upstream->generation != context->generation
                                 || upstream->session != context->session || upstream->round != context->round))
@@ -380,7 +382,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                         }
                     }
                 }
-                inputs.emplace(port.id, std::move(value));
+                inputs.emplace(port.nameEn, std::move(value));
             }
             inputs = normalizeInputs(definition->inputs, std::move(inputs));
             prepareTimer.stop();
@@ -484,12 +486,12 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 businessStatus = validateToolExecution(definition->outputs, result.outputs, result.detail);
                 for (const auto &output : definition->outputs)
                 {
-                    if (output.sameGeometryAsInput.empty())
+                    if (!output.sameGeometryAs)
                         continue;
                     for (const auto &input : definition->inputs)
                     {
-                        if (input.type.type == Type::ROI && input.imageInput == output.sameGeometryAsInput)
-                            snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
+                        if (input.type.type == Type::ROI && input.image && *input.image == *output.sameGeometryAs)
+                            snapshot->roiInputs.emplace(input.nameEn, inputs.at(input.nameEn));
                     }
                 }
             }
@@ -538,8 +540,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         snapshot->roiInputs.clear();
         snapshot->status = std::move(frameworkStatus);
         for (const auto &port : definition->outputs)
-            if (port.id != kStatusCodePort && port.id != kStatusMessagePort)
-                result.outputs.emplace(port.id, Missing{});
+            if (port.nameEn != kStatusCodePort && port.nameEn != kStatusMessagePort)
+                result.outputs.emplace(port.nameEn, Missing{});
     }
     else
     {

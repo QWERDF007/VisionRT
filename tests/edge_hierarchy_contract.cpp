@@ -39,8 +39,8 @@ void rejects(F &&operation, std::string_view reason = {})
 ToolDefinition makeTool(std::string id)
 {
     ToolDefinition tool;
-    tool.id          = std::move(id);
-    tool.displayName = "测试工具";
+    tool.nameEn          = std::move(id);
+    tool.nameZh = "测试工具";
     tool.kind        = ToolKind::Cpp;
     tool.inputs      = {
         {"in_val", "输入", {Type::Int}, std::int64_t{0}}

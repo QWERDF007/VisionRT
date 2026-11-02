@@ -129,7 +129,7 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
                 { "node",            QString::number(source.node)},
                 {"title",                      q(parent->title())},
                 { "port",                          q(source.port)},
-                { "name",   port ? q(port->name) : q(source.port)},
+                { "name",   port ? q(port->nameZh) : q(source.port)},
                 { "type", displayTypeName(parent->signatures.outputs.at(source.port))}
             });
         }
@@ -232,8 +232,8 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
 
         nodeInputsMap[candidate.node].push_back(QVariantMap{
             {"port", q(candidate.port)},
-            {"name", portDef ? q(portDef->name) : q(candidate.port)},
-            {"title", portDef ? q(portDef->name) : q(candidate.port)},
+            {"name", portDef ? q(portDef->nameZh) : q(candidate.port)},
+            {"title", portDef ? q(portDef->nameZh) : q(candidate.port)},
             {"type", displayTypeName(inputType)},
             {"typeText", displayTypeName(inputType)},
             {"connected", candidate.connected},

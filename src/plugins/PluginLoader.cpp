@@ -36,11 +36,11 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
         if (tool.moduleLibrary.empty())
             continue;
         const auto path     = std::filesystem::absolute(tool.moduleLibrary).lexically_normal();
-        const auto inserted = index.emplace(tool.definition.id, path);
+        const auto inserted = index.emplace(tool.definition.nameEn, path);
         // Two modules claiming one factory name would make the second tool silently
         // load the wrong library, so the combination is rejected instead (D-04).
         if (!inserted.second && inserted.first->second != path)
-            throw ContractError("tool_id '" + tool.definition.id + "' is provided by two different modules: "
+            throw ContractError("name_en '" + tool.definition.nameEn + "' is provided by two different modules: "
                                 + inserted.first->second.string() + " and " + tool.moduleLibrary.string());
     }
     std::lock_guard lock(mutex_);

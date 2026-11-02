@@ -228,9 +228,9 @@ void test200NodesExecution()
     ToolRegistry  registry;
 
     ToolDefinition addDef;
-    addDef.id           = "perf.add";
+    addDef.nameEn           = "perf.add";
 
-    addDef.displayName  = "Add One";
+    addDef.nameZh  = "Add One";
     addDef.version      = "1.0";
     addDef.kind         = ToolKind::Cpp;
     addDef.inputs.push_back({"in", "in", {Type::Int}});
@@ -274,8 +274,8 @@ void test200NodesExecution()
         NodeDefinition n;
         n.id               = i;
         n.position         = {0, i};
-        n.toolId           = addDef.id;
-        n.toolNameSnapshot = addDef.displayName;
+        n.toolId           = addDef.nameEn;
+        n.toolNameSnapshot = addDef.nameZh;
         n.signatures.inputs.emplace("in", TypeSpec{Type::Int});
         n.signatures.outputs.emplace("out", TypeSpec{Type::Int});
         n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
@@ -366,9 +366,9 @@ void test10x4KZeroCopyAndPythonPassthrough()
     ToolRegistry  registry;
 
     ToolDefinition srcDef;
-    srcDef.id           = "perf.source10x4k";
+    srcDef.nameEn           = "perf.source10x4k";
 
-    srcDef.displayName  = "10x4K Source";
+    srcDef.nameZh  = "10x4K Source";
     srcDef.version      = "1.0";
     srcDef.kind         = ToolKind::Cpp;
     srcDef.outputs.push_back({"batch", "batch", {Type::Image}});
@@ -405,9 +405,9 @@ void test10x4KZeroCopyAndPythonPassthrough()
     registry.addDefinition(srcDef);
 
     ToolDefinition consDef;
-    consDef.id           = "perf.consumer";
+    consDef.nameEn           = "perf.consumer";
 
-    consDef.displayName  = "Batch Consumer";
+    consDef.nameZh  = "Batch Consumer";
     consDef.version      = "1.0";
     consDef.kind         = ToolKind::Cpp;
     consDef.inputs.push_back({"batch", "batch", {Type::Image}});
@@ -481,8 +481,8 @@ void test10x4KZeroCopyAndPythonPassthrough()
     NodeDefinition srcNode;
     srcNode.id               = 1;
     srcNode.position         = {0, 0};
-    srcNode.toolId           = srcDef.id;
-    srcNode.toolNameSnapshot = srcDef.displayName;
+    srcNode.toolId           = srcDef.nameEn;
+    srcNode.toolNameSnapshot = srcDef.nameZh;
     srcNode.signatures.outputs.emplace("batch", TypeSpec{Type::Image});
     srcNode.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     srcNode.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
@@ -493,8 +493,8 @@ void test10x4KZeroCopyAndPythonPassthrough()
         NodeDefinition cNode;
         cNode.id               = i;
         cNode.position         = {i, 1};
-        cNode.toolId           = consDef.id;
-        cNode.toolNameSnapshot = consDef.displayName;
+        cNode.toolId           = consDef.nameEn;
+        cNode.toolNameSnapshot = consDef.nameZh;
         cNode.signatures.inputs.emplace("batch", TypeSpec{Type::Image});
         cNode.signatures.outputs.emplace("matched", TypeSpec{Type::Int});
         cNode.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
@@ -665,9 +665,9 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     ToolRegistry registry;
 
     ToolDefinition genDef;
-    genDef.id           = "perf.generator";
+    genDef.nameEn           = "perf.generator";
 
-    genDef.displayName  = "Generator";
+    genDef.nameZh  = "Generator";
     genDef.version      = "1.0";
     genDef.kind         = ToolKind::Cpp;
     genDef.outputs.push_back({"val", "val", {Type::Int}});
@@ -702,9 +702,9 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     registry.addDefinition(genDef);
 
     ToolDefinition procDef;
-    procDef.id           = "perf.processor";
+    procDef.nameEn           = "perf.processor";
 
-    procDef.displayName  = "Processor";
+    procDef.nameZh  = "Processor";
     procDef.version      = "1.0";
     procDef.kind         = ToolKind::Cpp;
     procDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
@@ -752,7 +752,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     NodeDefinition n1;
     n1.id     = 1;
     n1.position = {0, 0};
-    n1.toolId = genDef.id;
+    n1.toolId = genDef.nameEn;
     n1.signatures.outputs.emplace("val", TypeSpec{Type::Int});
     n1.signatures.outputs.emplace("image", TypeSpec{Type::Image});
     n1.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
@@ -762,7 +762,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     NodeDefinition n2;
     n2.id     = 2;
     n2.position = {0, 1};
-    n2.toolId = procDef.id;
+    n2.toolId = procDef.nameEn;
     n2.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
     n2.signatures.inputs.emplace("in_image", TypeSpec{Type::Image});
     n2.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
@@ -793,8 +793,8 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         ofs.close();
 
         ToolDefinition pyToolDef;
-        pyToolDef.id             = "perf.py_loop";
-        pyToolDef.displayName    = "Loop Python Tool";
+        pyToolDef.nameEn             = "perf.py_loop";
+        pyToolDef.nameZh    = "Loop Python Tool";
         pyToolDef.version        = "1.0.0";
         pyToolDef.kind           = ToolKind::PythonFunction;
         pyToolDef.source.roots.python = packageRoot;
@@ -808,13 +808,13 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         if (st[0].status.code == 0)
         {
             registry.addDefinition(pyToolDef);
-            registry.setPythonImplementation(pyToolDef.id, pyRuntime->factory(pyToolDef));
+            registry.setPythonImplementation(pyToolDef.nameEn, pyRuntime->factory(pyToolDef));
 
             NodeDefinition n3;
             n3.id               = 3;
             n3.position         = {0, 2};
-            n3.toolId           = pyToolDef.id;
-            n3.toolNameSnapshot = pyToolDef.displayName;
+            n3.toolId           = pyToolDef.nameEn;
+            n3.toolNameSnapshot = pyToolDef.nameZh;
             n3.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
             n3.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
             n3.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
@@ -1039,8 +1039,8 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     }
 
     ToolDefinition pyDef;
-    pyDef.id             = "perf.py_timing";
-    pyDef.displayName    = "Python Timing Test Tool";
+    pyDef.nameEn             = "perf.py_timing";
+    pyDef.nameZh    = "Python Timing Test Tool";
     pyDef.version        = "1.0.0";
     pyDef.kind           = ToolKind::PythonFunction;
     pyDef.source.roots.python = tempPath;
@@ -1054,7 +1054,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
 
     ToolRegistry registry;
     registry.addDefinition(pyDef);
-    registry.setPythonImplementation(pyDef.id, pyRuntime.factory(pyDef));
+    registry.setPythonImplementation(pyDef.nameEn, pyRuntime.factory(pyDef));
 
     ProjectDefinition project;
     FlowDefinition    flow;
@@ -1064,8 +1064,8 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
 
     NodeDefinition n;
     n.id               = 1;
-    n.toolId           = pyDef.id;
-    n.toolNameSnapshot = pyDef.displayName;
+    n.toolId           = pyDef.nameEn;
+    n.toolNameSnapshot = pyDef.nameZh;
     n.signatures.inputs.emplace("val", TypeSpec{Type::Int});
     n.signatures.outputs.emplace("out", TypeSpec{Type::Int});
     n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
@@ -1328,13 +1328,12 @@ void testWorkbenchBrowsingLatency()
     for (int i = 0; i < kToolCount; ++i)
     {
         ToolDefinition d;
-        d.id           = "perf.tool." + std::to_string(i);
-        d.displayName  = "Performance Tool " + std::to_string(i);
+        d.nameEn           = "perf.tool." + std::to_string(i);
+        d.nameZh  = "Performance Tool " + std::to_string(i);
         d.version      = "1.0.0";
         d.kind         = ToolKind::Cpp;
 
-        d.category     = "Category_" + std::to_string(i % 10);
-        d.subcategory  = "Subcategory_" + std::to_string(i % 5);
+        d.categories   = {"Category_" + std::to_string(i % 10), "Subcategory_" + std::to_string(i % 5)};
         registry.addDefinition(d);
     }
 

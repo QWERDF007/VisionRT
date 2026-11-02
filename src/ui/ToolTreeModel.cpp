@@ -17,9 +17,14 @@ void ToolTreeModel::setRegistry(const ToolRegistry &registry)
         // in the ordinary tool menu.
         if (tool.visibility == ToolVisibility::Assist)
             continue;
-        const auto availability = registry.availability(tool.id);
-        definitions_.push_back({QString::fromStdString(tool.category), QString::fromStdString(tool.subcategory),
-                                QString::fromStdString(tool.displayName), QString::fromStdString(tool.id),
+        const auto availability = registry.availability(tool.nameEn);
+        const auto category     = tool.categories.empty() ? QString{} : QString::fromStdString(tool.categories.front());
+        QString    subcategory;
+        for (std::size_t level = 1; level < tool.categories.size(); ++level)
+            subcategory += (subcategory.isEmpty() ? QString{} : QStringLiteral("/"))
+                           + QString::fromStdString(tool.categories[level]);
+        definitions_.push_back({category, subcategory,
+                                QString::fromStdString(tool.nameZh), QString::fromStdString(tool.nameEn),
                                 QString::fromStdString(tool.version),
                                 QString::fromStdString(availability.status.message),
                                 availability.state == ToolAvailability::Available});

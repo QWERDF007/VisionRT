@@ -33,17 +33,13 @@ int main(int argc, char **argv)
                 std::filesystem::create_directories(externalDeclarations);
                 {
                     std::ofstream declaration(externalDeclarations / "external.json");
-                    declaration << R"({
-                        "schema_version":4,"tool_id":"test.external.roots","display_name":"外部根工具","version":"1",
-                        "kind":"python_function","entry":{"package":"external","file":"tool.py","symbol":"execute"},
-                        "init_params":[],"inputs":[],"outputs":[]
-                    })";
+                    declaration << R"({"schema_version":5,"name_en":"test.external.roots","name_zh":"外部根工具","version":"1","implementation":{"kind":"python_function","package":"external","file":"tool.py","symbol":"execute"}})";
                 }
                 const auto overridden = readToolsPackage(
                     root, ToolRoots{externalDeclarations,
                                     std::filesystem::path(external.path().toStdWString()) / "code"});
                 assert(std::any_of(overridden.tools.begin(), overridden.tools.end(),
-                                   [](const auto &tool) { return tool.definition.id == "test.external.roots"; }));
+                                   [](const auto &tool) { return tool.definition.nameEn == "test.external.roots"; }));
                 ToolRegistry registry;
                 for (const auto &tool : package.tools)
                     if (tool.definition.kind == ToolKind::PythonFunction
@@ -88,8 +84,9 @@ int main(int argc, char **argv)
                     const auto missing = mean->execute({
                         {"images", Missing{}}
                     });
-                    // A declared port with no value is a business failure; the tool owns the code.
-                    assert(testview::status(missing).code == 1001 && isMissing(missing.outputs.at("means")));
+                    // A declared port with no value is a business failure; the tool omits the value it
+                    // never produced and the host materialises the declared default afterwards.
+                    assert(testview::status(missing).code == 1001 && !missing.outputs.contains("means"));
                     const auto empty = mean->execute({
                         {"images", DataRef<Image>(Image{})}
                     });
@@ -158,7 +155,7 @@ int main(int argc, char **argv)
                         {"images", copyInput},
                         {"mode", std::string("other")}
                     });
-                    assert(testview::status(invalid).code == 1003 && isMissing(invalid.outputs.at("images")));
+                    assert(testview::status(invalid).code == 1003 && !invalid.outputs.contains("images"));
                     assert(add->release().code == 0);
                 }
                 {

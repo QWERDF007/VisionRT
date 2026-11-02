@@ -31,8 +31,8 @@ void rejects(F &&operation, std::string_view reason = {})
 ToolDefinition integerTool()
 {
     ToolDefinition tool;
-    tool.id          = "test.integer";
-    tool.displayName = "整数";
+    tool.nameEn          = "test.integer";
+    tool.nameZh = "整数";
     tool.kind        = ToolKind::Cpp;
     tool.inputs      = {
         { "first", "输入一", {Type::Int}, std::int64_t{10}},
@@ -492,28 +492,51 @@ void bindingEffectiveSourceDraftsAndOccupiedContract()
 void receiverOutputFollowsItsSource()
 {
     const auto    receiver = parseToolDefinitionJson(R"json({
-  "schema_version": 4,
-  "tool_id": "visionrt.flow.receive",
-  "display_name": "跨流程接收",
+  "schema_version": 5,
+  "name_en": "visionrt.flow.receive",
+  "name_zh": "跨流程接收",
   "version": "1.0.0",
-  "kind": "host",
-  "entry": {"binding": "visionrt.receiver"},
-  "init_params": [
-    {"id": "source_flow_id", "name": "源流程", "type": "String", "default": ""},
-    {"id": "source_node_seq", "name": "源节点", "type": "String", "default": ""},
-    {"id": "source_port_id", "name": "源端口", "type": "String", "default": ""}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "value", "name": "数据", "type_from": {"flow": "source_flow_id", "node": "source_node_seq", "port": "source_port_id"}}
-  ]
+  "implementation": {
+    "kind": "host",
+    "binding": "visionrt.receiver"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "source_flow_id",
+        "name_zh": "源流程",
+        "type": "string"
+      },
+      {
+        "name_en": "source_node_seq",
+        "name_zh": "源节点",
+        "type": "string"
+      },
+      {
+        "name_en": "source_port_id",
+        "name_zh": "源端口",
+        "type": "string"
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "数据",
+        "type_from": {
+          "flow": "init.source_flow_id",
+          "node": "init.source_node_seq",
+          "port": "init.source_port_id"
+        }
+      }
+    ]
+  }
 })json",
                                                      {}, {ToolOrigin::Builtin, {}});
     ProjectEditor editor;
     const auto sourceFlow = editor.addFlow("source");
     const auto sender = editor.addNode(sourceFlow, integerTool(), {});
     auto arrays = integerTool();
-    arrays.id = "test.arrays";
+    arrays.nameEn = "test.arrays";
     arrays.outputs.front().type = {Type::Array, DType::Float32, 2};
     const auto arraySender = editor.addNode(sourceFlow, arrays, {1, 0});
     const auto receive = editor.addNode("flow_1", receiver, {});

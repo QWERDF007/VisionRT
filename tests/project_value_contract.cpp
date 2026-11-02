@@ -36,8 +36,8 @@ std::int64_t &numberAt(const PortValue &value, std::size_t index)
 ToolDefinition configuredTool()
 {
     ToolDefinition tool;
-    tool.id          = "test.project_values";
-    tool.displayName = "配置值";
+    tool.nameEn          = "test.project_values";
+    tool.nameZh = "配置值";
     tool.version     = "1";
     tool.kind        = ToolKind::Cpp;
     tool.inputs.push_back({
@@ -144,9 +144,9 @@ void reconciledDefaultsAreIndependent()
     const auto  restored                                 = ProjectStorage(registry).reconcile(missing);
     const auto &nodes                                    = restored.project.flows.front().nodes;
     numberAt(nodes[0].inputs.at("numbers").literal, 0) = 94;
-    const auto *registered = registry.find(tool.id);
+    const auto *registered = registry.find(tool.nameEn);
     const auto  declared   = std::find_if(registered->inputs.begin(), registered->inputs.end(),
-                                          [](const auto &port) { return port.id == "numbers"; });
+                                          [](const auto &port) { return port.nameEn == "numbers"; });
     require(declared != registered->inputs.end() && numberAt(declared->defaultValue, 0) == 2,
             "reconciliation changed registry defaults");
     require(numberAt(nodes[1].inputs.at("numbers").literal, 0) == 2, "reconciled nodes share Array defaults");
@@ -217,8 +217,8 @@ void allValuesSurviveRealProjectFiles()
     QTemporaryDir directory;
     require(directory.isValid(), "temporary project directory unavailable");
     ToolDefinition tool;
-    tool.id          = "test.project_matrix";
-    tool.displayName = "工程类型矩阵";
+    tool.nameEn          = "test.project_matrix";
+    tool.nameZh = "工程类型矩阵";
     tool.version     = "1";
     tool.kind        = ToolKind::Cpp;
     require(Array::supportedTypes().size() == 28, "incomplete Array signature matrix");
@@ -237,12 +237,13 @@ void allValuesSurviveRealProjectFiles()
         )
     });
     tool.inputs.push_back({"images", "图像", {Type::Image}, DataRef<Image>(Image{})});
-    tool.inputs.push_back({"missing", "空值", {Type::Int}, Missing{}});
-    tool.inputs.back().required = false;
+    // A declaration without an explicit value is normalised to the type default before a node
+    // ever stores it, so the saved project states 0 rather than a null placeholder.
+    tool.inputs.push_back({"empty_value", "空值", {Type::Int}, Missing{}});
     ToolRegistry registry;
     registry.addDefinition(tool);
     ProjectEditor editor;
-    editor.addNode("flow_1", *registry.find(tool.id), {});
+    editor.addNode("flow_1", *registry.find(tool.nameEn), {});
     auto           project  = editor.project();
     const auto     filename = directory.filePath("完整 工程.vrt.json");
     ProjectStorage storage(registry);
@@ -259,19 +260,19 @@ void allValuesSurviveRealProjectFiles()
             "saved Array must state its own shape or ragged offsets");
     require(literals["regions"].toObject()["literal"].toArray().size() == 3, "saved ROI groups lost");
     require(literals["images"].toObject()["literal"].toArray().isEmpty(), "empty Image value lost");
-    require(literals["missing"].toObject()["literal"].isNull(), "Missing not saved as null");
+    require(literals["empty_value"].toObject()["literal"].toInt() == 0, "type default not saved");
     const auto  reopened = storage.load(project.path);
     const auto &restored = reopened.project.flows.front().nodes.front();
-    for (const auto &port : tool.inputs)
+    for (const auto &port : registry.find(tool.nameEn)->inputs)
     {
-        require(restored.signatures.inputs.at(port.id) == port.type, "project type signature changed");
-        require(equalValues(restored.inputs.at(port.id).literal, port.defaultValue), "project nested literal changed");
+        require(restored.signatures.inputs.at(port.nameEn) == port.type, "project type signature changed");
+        require(equalValues(restored.inputs.at(port.nameEn).literal, port.defaultValue), "project nested literal changed");
     }
     const auto selected = std::find_if(tool.inputs.begin(), tool.inputs.end(), [](const auto &port)
                                        { return port.type == TypeSpec{Type::Array, DType::Int64, 2}; });
     require(selected != tool.inputs.end(), "Int64 rank2 fixture missing");
-    numberAt(restored.inputs.at(selected->id).literal, 0) = 77;
-    require(numberAt(project.flows.front().nodes.front().inputs.at(selected->id).literal, 0)
+    numberAt(restored.inputs.at(selected->nameEn).literal, 0) = 77;
+    require(numberAt(project.flows.front().nodes.front().inputs.at(selected->nameEn).literal, 0)
                 == std::numeric_limits<std::int64_t>::min(),
             "reopened project shares source containers");
 }

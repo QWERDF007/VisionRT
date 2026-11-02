@@ -56,8 +56,8 @@ try
         return result;
     };
     ToolDefinition gate;
-    gate.id          = "test.lifecycle.gate";
-    gate.displayName = "Lifecycle gate";
+    gate.nameEn          = "test.lifecycle.gate";
+    gate.nameZh = "Lifecycle gate";
     gate.kind        = ToolKind::PythonClass;
     gate.entry       = {"lifecycle", "tool.py", "Gate"};
     gate.outputs     = {

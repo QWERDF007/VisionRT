@@ -33,14 +33,14 @@ bool samePorts(const std::vector<PortDefinition> &a, const std::vector<PortDefin
     if (a.size() != b.size())
         return false;
     for (std::size_t i = 0; i < a.size(); ++i)
-        if (a[i].id != b[i].id || a[i].type != b[i].type)
+        if (a[i].nameEn != b[i].nameEn || a[i].type != b[i].type)
             return false;
     return true;
 }
 
 bool sameContract(const ToolDefinition &a, const ToolDefinition &b)
 {
-    return a.id == b.id && a.version == b.version && a.kind == b.kind && a.hostBinding == b.hostBinding
+    return a.nameEn == b.nameEn && a.version == b.version && a.kind == b.kind && a.hostBinding == b.hostBinding
         && a.entry == b.entry && a.source == b.source && samePorts(a.inputs, b.inputs)
         && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
 }
@@ -127,7 +127,7 @@ std::optional<std::string> upstreamValidityError(
             return "上游节点 " + node.title() + " 的输出值不符合当前声明：" + error.what();
         }
         std::map<std::string, const PortDefinition *, std::less<>> inputs;
-        for (const auto &port : contract.inputs) inputs.emplace(port.id, &port);
+        for (const auto &port : contract.inputs) inputs.emplace(port.nameEn, &port);
         for (const auto &use : snapshot->inputUses)
         {
             const auto binding = node.inputs.find(use.inputPort);

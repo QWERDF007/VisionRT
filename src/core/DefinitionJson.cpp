@@ -8,191 +8,220 @@
 
 namespace visionrt {
 namespace {
-std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJsonObject &root,
-                                  const QString &direction)
+
+PortRef reference(const QJsonValue &value, const QString &context)
 {
-    const auto                  items  = json::array(root.value(direction), direction);
-    const bool                  output = direction == "outputs";
+    try
+    {
+        return parsePortRef(json::text(value, context));
+    }
+    catch (const std::exception &error)
+    {
+        throw ContractError((context + "：" + error.what()).toStdString());
+    }
+}
+
+std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJsonObject &root, PortStage stage)
+{
+    const auto direction = QString::fromLatin1(stage == PortStage::Init    ? "init"
+                                               : stage == PortStage::Inputs ? "inputs"
+                                                                            : "outputs");
+    const bool output = stage == PortStage::Outputs;
+    if (!root.contains(direction))
+        return {};
+    const auto   items = json::array(root.value(direction), direction);
     std::vector<PortDefinition> result;
     result.reserve(items.size());
     for (qsizetype index = 0; index < items.size(); ++index)
     {
+        const auto path    = QStringList{"ports", direction, QString::number(index)};
         const auto context = direction + "[" + QString::number(index) + "]";
         const auto item    = json::object(items[index], context);
-        if (output)
-            json::fields(item,
-                         {"id", "name", "type", "dtype", "rank", "required", "type_from", "image_port", "display"},
-                         context);
-        else
-            json::fields(item,
-                         {"id", "name", "type", "dtype", "rank", "required", "default", "editor", "tab", "group", "min",
-                          "max", "step", "decimals", "options", "options_provider", "image_input", "path_mode_from",
-                          "alignment_input"},
-                         context);
+        json::fields(item,
+                     {"name_en", "name_zh", "type", "type_from", "default", "constraints", "ui", "relations",
+                      "display"},
+                     context);
         PortDefinition port;
-        port.id = json::text(item.value("id"), context + ".id");
-        if (port.id.starts_with("__"))
-            throw ContractError((context + ".id 不能声明宿主系统端口").toStdString());
-        port.name = json::text(item.value("name"), context + ".name");
-        if (item.contains("required"))
+        port.nameEn = json::text(item.value("name_en"), context + ".name_en");
+        port.nameZh = json::text(item.value("name_zh"), context + ".name_zh");
+        const auto decode = [&](const QString &field, const QStringList &suffix = QStringList{})
         {
-            if (!item.value("required").isBool())
-                throw ContractError((context + ".required 必须是布尔值").toStdString());
-            port.required = item.value("required").toBool();
-        }
+            QStringList location = path;
+            location.append(field);
+            location.append(suffix);
+            try
+            {
+                return document.decode(location, port.type);
+            }
+            catch (const ContractError &error)
+            {
+                throw ContractError((field + "：").toStdString() + error.what());
+            }
+        };
         try
         {
             if (item.contains("type_from"))
             {
-                for (const auto name : {"type", "dtype", "rank", "image_port", "display"})
+                for (const auto name : {"type", "default", "constraints", "ui", "relations", "display"})
                     if (item.contains(name))
                         throw ContractError("type_from 不能同时声明 " + std::string(name));
-                const auto reference = json::object(item.value("type_from"), context + ".type_from");
-                json::fields(reference, {"flow", "node", "port"}, context + ".type_from");
-                port.typeFrom = PortTypeReference{json::text(reference.value("flow"), context + ".type_from.flow"),
-                                                  json::text(reference.value("node"), context + ".type_from.node"),
-                                                  json::text(reference.value("port"), context + ".type_from.port")};
+                const auto block = json::object(item.value("type_from"), context + ".type_from");
+                json::fields(block, {"flow", "node", "port"}, context + ".type_from");
+                port.typeFrom = PortTypeReference{
+                    reference(block.value("flow"), context + ".type_from.flow"),
+                    reference(block.value("node"), context + ".type_from.node"),
+                    reference(block.value("port"), context + ".type_from.port")};
             }
             else
             {
-                QJsonObject type;
-                for (const auto field : {"type", "dtype", "rank"})
-                    if (item.contains(field))
-                        type.insert(field, item.value(field));
-                port.type = ValueJson::decodeType(type);
+                port.type = parseTypeToken(json::text(item.value("type"), context + ".type"));
             }
-            const auto decode = [&](const QString &field, const QStringList &suffix = QStringList{})
-            {
-                QStringList path{direction, QString::number(index), field};
-                path.append(suffix);
-                try
-                {
-                    return document.decode(path, port.type);
-                }
-                catch (const ContractError &error)
-                {
-                    throw ContractError((field + "：").toStdString() + error.what());
-                }
-            };
             if (item.contains("default"))
                 port.defaultValue = decode("default");
-            if (item.contains("min"))
-                port.minimum = decode("min");
-            if (item.contains("max"))
-                port.maximum = decode("max");
-            if (item.contains("step"))
-                port.step = decode("step");
-            if (item.contains("decimals"))
+            if (item.contains("constraints"))
             {
-                const auto value = document.decode({direction, QString::number(index), "decimals"}, {Type::Int});
-                if (!std::holds_alternative<std::int64_t>(value) || std::get<std::int64_t>(value) < 0
-                    || std::get<std::int64_t>(value) > std::numeric_limits<int>::max())
-                    throw ContractError("decimals 必须是非负 int 范围整数");
-                port.decimals = static_cast<int>(std::get<std::int64_t>(value));
+                const auto block = json::object(item.value("constraints"), context + ".constraints");
+                json::fields(block, {"min", "max", "options"}, context + ".constraints");
+                if (block.contains("min"))
+                    port.minimum = decode("constraints", {"min"});
+                if (block.contains("max"))
+                    port.maximum = decode("constraints", {"max"});
+                if (block.contains("options"))
+                {
+                    const auto options = json::array(block.value("options"), context + ".constraints.options");
+                    for (qsizetype option = 0; option < options.size(); ++option)
+                        port.options.push_back(decode("constraints", {"options", QString::number(option)}));
+                }
             }
-            if (item.contains("options"))
+            if (item.contains("ui"))
             {
-                const auto options = json::array(item.value("options"), context + ".options");
-                for (qsizetype option = 0; option < options.size(); ++option)
-                    port.options.push_back(decode("options", {QString::number(option)}));
+                const auto block = json::object(item.value("ui"), context + ".ui");
+                json::fields(block, {"editor", "tab", "group", "step", "decimals", "options_provider"},
+                             context + ".ui");
+                for (const auto &[key, target] :
+                     std::initializer_list<std::pair<const char *, std::string *>>{
+                         {          "editor",          &port.editor},
+                         {             "tab",             &port.tab},
+                         {           "group",           &port.group},
+                         {"options_provider", &port.optionsProvider}
+                })
+                    if (block.contains(key))
+                        *target = json::text(block.value(key), context + ".ui." + key, false);
+                if (block.contains("step"))
+                    port.step = decode("ui", {"step"});
+                if (block.contains("decimals"))
+                {
+                    const auto value = document.decode(QStringList(path) << "ui" << "decimals", {Type::Int});
+                    if (!std::holds_alternative<std::int64_t>(value) || std::get<std::int64_t>(value) < 0
+                        || std::get<std::int64_t>(value) > std::numeric_limits<int>::max())
+                        throw ContractError("decimals 必须是非负 int 范围整数");
+                    port.decimals = static_cast<int>(std::get<std::int64_t>(value));
+                }
             }
-            for (const auto &[key, target] : std::initializer_list<std::pair<const char *, std::string *>>{
-                     {          "editor",          &port.editor},
-                     {             "tab",             &port.tab},
-                     {           "group",           &port.group},
-                     {"options_provider", &port.optionsProvider},
-                     {     "image_input",      &port.imageInput},
-                     { "alignment_input",  &port.alignmentInput},
-                     {      "image_port",       &port.imagePort},
-                     {  "path_mode_from",    &port.pathModeFrom}
-            })
-                if (item.contains(key))
-                    *target = json::text(item.value(key), context + "." + key, false);
+            if (item.contains("relations"))
+            {
+                const auto block = json::object(item.value("relations"), context + ".relations");
+                json::fields(block, {"image", "alignment", "path_mode", "same_geometry_as"}, context + ".relations");
+                if (block.contains("image"))
+                    port.image = reference(block.value("image"), context + ".relations.image");
+                if (block.contains("alignment"))
+                    port.alignment = reference(block.value("alignment"), context + ".relations.alignment");
+                if (block.contains("path_mode"))
+                    port.pathModeFrom = reference(block.value("path_mode"), context + ".relations.path_mode");
+                if (block.contains("same_geometry_as"))
+                    port.sameGeometryAs
+                        = reference(block.value("same_geometry_as"), context + ".relations.same_geometry_as");
+            }
             if (item.contains("display"))
             {
-                const auto display = json::object(item.value("display"), context + ".display");
-                json::fields(display, {"color_order", "same_geometry_as_input"}, context + ".display");
-                if (display.contains("color_order"))
-                    port.colorOrder = json::text(display.value("color_order"), context + ".display.color_order");
-                if (display.contains("same_geometry_as_input"))
-                    port.sameGeometryAsInput = json::text(display.value("same_geometry_as_input"),
-                                                          context + ".display.same_geometry_as_input");
+                const auto block = json::object(item.value("display"), context + ".display");
+                json::fields(block, {"color_order"}, context + ".display");
+                if (block.contains("color_order"))
+                    port.colorOrder = json::text(block.value("color_order"), context + ".display.color_order");
+            }
+            if (output)
+            {
+                if (item.contains("default"))
+                    throw ContractError("default 不属于输出端口");
+                if (item.contains("constraints"))
+                    throw ContractError("constraints 不属于输出端口");
+                if (item.contains("ui"))
+                    throw ContractError("ui 不属于输出端口");
             }
         }
         catch (const std::exception &error)
         {
-            throw ContractError(context.toStdString() + "（" + port.id + "）：" + error.what());
+            throw ContractError(context.toStdString() + "（" + port.nameEn + "）：" + error.what());
         }
         result.push_back(std::move(port));
     }
     return result;
 }
 
-QJsonArray encodePorts(const std::vector<PortDefinition> &ports, bool output)
+QJsonArray encodePorts(const std::vector<PortDefinition> &ports)
 {
     QJsonArray result;
     for (const auto &port : ports)
     {
-        if (isHostOwnedPort(port.id))
+        if (isHostOwnedPort(port.nameEn))
             continue;
         QJsonObject item{
-            {      "id",   QString::fromStdString(port.id)},
-            {    "name", QString::fromStdString(port.name)},
-            {"required",                     port.required}
+            {"name_en", QString::fromStdString(port.nameEn)},
+            {"name_zh", QString::fromStdString(port.nameZh)}
         };
         if (port.typeFrom)
             item.insert("type_from", QJsonObject{
-                                         {"flow", QString::fromStdString(port.typeFrom->flowParameter)},
-                                         {"node", QString::fromStdString(port.typeFrom->nodeParameter)},
-                                         {"port", QString::fromStdString(port.typeFrom->portParameter)}
+                                         {"flow", QString::fromStdString(formatPortRef(port.typeFrom->flowParameter))},
+                                         {"node", QString::fromStdString(formatPortRef(port.typeFrom->nodeParameter))},
+                                         {"port", QString::fromStdString(formatPortRef(port.typeFrom->portParameter))}
             });
         else
+            item.insert("type", QString::fromStdString(typeToken(port.type)));
+        if (!isMissing(port.defaultValue)
+            && (port.typeFrom || !equalValues(port.defaultValue, defaultValue(port.type))))
+            item.insert("default", ValueJson::encode(port.defaultValue, port.type));
+        QJsonObject constraints;
+        if (port.minimum)
+            constraints.insert("min", ValueJson::encode(*port.minimum, port.type));
+        if (port.maximum)
+            constraints.insert("max", ValueJson::encode(*port.maximum, port.type));
+        if (!port.options.empty())
         {
-            const auto type = ValueJson::encodeType(port.type);
-            for (auto field = type.begin(); field != type.end(); ++field) item.insert(field.key(), field.value());
+            QJsonArray options;
+            for (const auto &value : port.options) options.append(ValueJson::encode(value, port.type));
+            constraints.insert("options", options);
         }
-        if (!output)
-        {
-            if (!isMissing(port.defaultValue))
-                item.insert("default", ValueJson::encode(port.defaultValue, port.type));
-            if (port.minimum)
-                item.insert("min", ValueJson::encode(*port.minimum, port.type));
-            if (port.maximum)
-                item.insert("max", ValueJson::encode(*port.maximum, port.type));
-            if (port.step)
-                item.insert("step", ValueJson::encode(*port.step, port.type));
-            if (port.decimals)
-                item.insert("decimals", *port.decimals);
-            for (const auto &[key, value] : std::initializer_list<std::pair<const char *, std::string>>{
-                     {          "editor",          port.editor},
-                     {             "tab",             port.tab},
-                     {           "group",           port.group},
-                     {"options_provider", port.optionsProvider},
-                     {     "image_input",      port.imageInput},
-                     {  "path_mode_from",    port.pathModeFrom},
-                     { "alignment_input",  port.alignmentInput}
-            })
-                if (!value.empty())
-                    item.insert(key, QString::fromStdString(value));
-            if (!port.options.empty())
-            {
-                QJsonArray options;
-                for (const auto &value : port.options) options.append(ValueJson::encode(value, port.type));
-                item.insert("options", options);
-            }
-        }
-        else
-        {
-            if (!port.imagePort.empty())
-                item.insert("image_port", QString::fromStdString(port.imagePort));
-            QJsonObject display;
-            if (!port.colorOrder.empty())
-                display.insert("color_order", QString::fromStdString(port.colorOrder));
-            if (!port.sameGeometryAsInput.empty())
-                display.insert("same_geometry_as_input", QString::fromStdString(port.sameGeometryAsInput));
-            if (!display.isEmpty())
-                item.insert("display", display);
-        }
+        if (!constraints.isEmpty())
+            item.insert("constraints", constraints);
+        QJsonObject ui;
+        for (const auto &[key, value] : std::initializer_list<std::pair<const char *, std::string>>{
+                 {          "editor",          port.editor},
+                 {           "group",           port.group},
+                 {"options_provider", port.optionsProvider}
+        })
+            if (!value.empty())
+                ui.insert(key, QString::fromStdString(value));
+        if (port.tab != "基本输入" && !port.tab.empty())
+            ui.insert("tab", QString::fromStdString(port.tab));
+        if (port.step)
+            ui.insert("step", ValueJson::encode(*port.step, port.type));
+        if (port.decimals)
+            ui.insert("decimals", *port.decimals);
+        if (!ui.isEmpty())
+            item.insert("ui", ui);
+        QJsonObject relations;
+        for (const auto &[key, value] : std::initializer_list<std::pair<const char *, const std::optional<PortRef> *>>{
+                 {         "image",          &port.image},
+                 {     "alignment",      &port.alignment},
+                 {     "path_mode", &port.pathModeFrom},
+                 {"same_geometry_as", &port.sameGeometryAs}
+        })
+            if (*value)
+                relations.insert(key, QString::fromStdString(formatPortRef(**value)));
+        if (!relations.isEmpty())
+            item.insert("relations", relations);
+        if (!port.colorOrder.empty())
+            item.insert("display", QJsonObject{{"color_order", QString::fromStdString(port.colorOrder)}});
         result.append(item);
     }
     return result;
@@ -208,54 +237,83 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             throw ContractError("工具声明必须是 JSON 对象");
         const auto root = document.json().object();
         json::fields(root,
-                     {"schema_version", "tool_id", "display_name", "version", "kind", "entry", "category",
-                      "subcategory", "resources", "init_params", "inputs", "outputs", "node_model", "visibility",
-                      "interaction"},
+                     {"schema_version", "name_en", "name_zh", "version", "implementation", "ui", "ports",
+                      "node_model", "interaction"},
                      "工具声明");
-        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{4}}))
-            throw ContractError("schema_version 必须是整数 4");
+        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{5}}))
+            throw ContractError("schema_version 必须是整数 5");
         ToolDefinition definition;
-        definition.id          = json::text(root.value("tool_id"), "tool_id");
-        definition.displayName = json::text(root.value("display_name"), "display_name");
-        definition.version     = json::text(root.value("version"), "version");
-        definition.source      = std::move(source);
+        definition.nameEn  = json::text(root.value("name_en"), "name_en");
+        definition.nameZh  = json::text(root.value("name_zh"), "name_zh");
+        definition.version = json::text(root.value("version"), "version");
+        definition.source  = std::move(source);
         if (!path.empty())
             definition.definitionPath = std::filesystem::absolute(path).lexically_normal();
-        if (root.contains("category"))
-            definition.category = json::text(root.value("category"), "category", false);
-        if (root.contains("subcategory"))
-            definition.subcategory = json::text(root.value("subcategory"), "subcategory", false);
-        const auto kind = json::text(root.value("kind"), "kind");
+
+        const auto implementation = json::object(root.value("implementation"), "implementation");
+        json::fields(implementation, {"kind", "binding", "package", "file", "symbol", "resources"},
+                     "implementation");
+        const auto kind = json::text(implementation.value("kind"), "implementation.kind");
         if (kind == "cpp")
         {
             definition.kind = ToolKind::Cpp;
-            if (root.contains("entry"))
-                throw ContractError("cpp 按 tool_id 注册，不接受 entry");
+        }
+        else if (kind == "host")
+        {
+            definition.kind = ToolKind::Host;
+            definition.hostBinding = json::text(implementation.value("binding"), "implementation.binding");
+        }
+        else if (kind == "python_function" || kind == "python_class")
+        {
+            definition.kind = kind == "python_function" ? ToolKind::PythonFunction : ToolKind::PythonClass;
+            definition.entry.package = json::relativePath(
+                json::text(implementation.value("package"), "implementation.package"), "implementation.package");
+            definition.entry.file = json::relativePath(
+                json::text(implementation.value("file"), "implementation.file"), "implementation.file");
+            definition.entry.symbol = json::text(implementation.value("symbol"), "implementation.symbol");
         }
         else
+            throw ContractError("未知 implementation.kind：" + kind);
+        const auto allowedField = [&](const char *field)
         {
-            const auto entry = json::object(root.value("entry"), "entry");
             if (kind == "host")
+                return std::string_view(field) == "binding";
+            if (kind == "python_function" || kind == "python_class")
+                return std::string_view(field) == "package" || std::string_view(field) == "file"
+                       || std::string_view(field) == "symbol";
+            return false;
+        };
+        for (const auto *field : {"binding", "package", "file", "symbol"})
+            if (implementation.contains(field) && !allowedField(field))
+                throw ContractError("implementation." + std::string(field) + " 不属于 " + kind);
+        if (implementation.contains("resources"))
+            for (const auto &value : json::array(implementation.value("resources"), "implementation.resources"))
+                definition.resources.push_back(
+                    json::relativePath(json::text(value, "implementation.resources"), "implementation.resources"));
+
+        if (root.contains("ui"))
+        {
+            const auto ui = json::object(root.value("ui"), "ui");
+            json::fields(ui, {"category", "visibility"}, "ui");
+            if (ui.contains("category"))
             {
-                definition.kind = ToolKind::Host;
-                json::fields(entry, {"binding"}, "entry");
-                definition.hostBinding = json::text(entry.value("binding"), "entry.binding");
+                const auto category = json::array(ui.value("category"), "ui.category");
+                if (category.isEmpty())
+                    throw ContractError("ui.category 不能是空数组");
+                for (const auto &value : category)
+                    definition.categories.push_back(json::text(value, "ui.category"));
             }
-            else if (kind == "python_function" || kind == "python_class")
+            if (ui.contains("visibility"))
             {
-                definition.kind = kind == "python_function" ? ToolKind::PythonFunction : ToolKind::PythonClass;
-                json::fields(entry, {"package", "file", "symbol"}, "entry");
-                definition.entry.package
-                    = json::relativePath(json::text(entry.value("package"), "entry.package"), "entry.package");
-                definition.entry.file = json::relativePath(json::text(entry.value("file"), "entry.file"), "entry.file");
-                definition.entry.symbol = json::text(entry.value("symbol"), "entry.symbol");
+                const auto visibility = json::text(ui.value("visibility"), "ui.visibility");
+                if (visibility == "normal")
+                    definition.visibility = ToolVisibility::Normal;
+                else if (visibility == "assist")
+                    definition.visibility = ToolVisibility::Assist;
+                else
+                    throw ContractError("未知 ui.visibility：" + visibility);
             }
-            else
-                throw ContractError("未知工具 kind：" + kind);
         }
-        if (root.contains("resources"))
-            for (const auto &value : json::array(root.value("resources"), "resources"))
-                definition.resources.push_back(json::relativePath(json::text(value, "resources"), "resources"));
         if (root.contains("node_model"))
         {
             const auto model = json::text(root.value("node_model"), "node_model");
@@ -270,31 +328,21 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             else
                 throw ContractError("未知 node_model：" + model);
         }
-        if (root.contains("visibility"))
-        {
-            const auto visibility = json::text(root.value("visibility"), "visibility");
-            if (visibility == "normal")
-                definition.visibility = ToolVisibility::Normal;
-            else if (visibility == "assist")
-                definition.visibility = ToolVisibility::Assist;
-            else
-                throw ContractError("未知 visibility：" + visibility);
-        }
         if (root.contains("interaction"))
         {
             const auto item = json::object(root.value("interaction"), "interaction");
-            json::fields(item, {"helper_tool_id", "input_map", "proposal_map", "roi_kinds"}, "interaction");
+            json::fields(item, {"helper", "inputs", "proposals", "roi_kinds"}, "interaction");
             InteractionMapping mapping;
-            mapping.helperToolId = json::text(item.value("helper_tool_id"), "interaction.helper_tool_id");
-            for (const auto *field : {"input_map", "proposal_map"})
+            mapping.helperNameEn = json::text(item.value("helper"), "interaction.helper");
+            for (const auto *field : {"inputs", "proposals"})
             {
                 if (!item.contains(field))
                     continue;
                 const auto values = json::object(item.value(field), QString{"interaction."} + field);
-                auto      &target = std::string_view(field) == "input_map" ? mapping.inputMap : mapping.proposalMap;
+                auto      &target = std::string_view(field) == "inputs" ? mapping.inputs : mapping.proposals;
                 for (auto entry = values.begin(); entry != values.end(); ++entry)
                     target.emplace(entry.key().toUtf8().toStdString(),
-                                   json::text(entry.value(), QString{"interaction."} + field + "." + entry.key()));
+                                   reference(entry.value(), QString{"interaction."} + field + "." + entry.key()));
             }
             if (item.contains("roi_kinds"))
             {
@@ -319,13 +367,18 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             }
             definition.interaction = std::move(mapping);
         }
-        definition.initParams = ports(document, root, "init_params");
-        definition.inputs     = ports(document, root, "inputs");
-        definition.outputs    = ports(document, root, "outputs");
+        if (root.contains("ports"))
+        {
+            const auto container = json::object(root.value("ports"), "ports");
+            json::fields(container, {"init", "inputs", "outputs"}, "ports");
+            definition.initParams = ports(document, container, PortStage::Init);
+            definition.inputs     = ports(document, container, PortStage::Inputs);
+            definition.outputs    = ports(document, container, PortStage::Outputs);
+        }
         for (const auto *list : {&definition.initParams, &definition.inputs, &definition.outputs})
             for (const auto &port : *list)
-                if (isHostOwnedPort(port.id))
-                    throw ContractError("工具声明不得定义宿主公共端口：" + port.id);
+                if (isHostOwnedPort(port.nameEn))
+                    throw ContractError("工具声明不得定义宿主公共端口：" + port.nameEn);
         normalizeToolDefinition(definition);
         validateToolDefinition(definition);
         return definition;
@@ -348,44 +401,56 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
     auto definition = source;
     normalizeToolDefinition(definition);
     validateToolDefinition(definition);
-    QJsonObject root{
-        {"schema_version", definition.schemaVersion},
-        {"tool_id", QString::fromStdString(definition.id)},
-        {"display_name", QString::fromStdString(definition.displayName)},
-        {"version", QString::fromStdString(definition.version)},
-        {"category", QString::fromStdString(definition.category)},
-        {"subcategory", QString::fromStdString(definition.subcategory)},
-        {"init_params", encodePorts(definition.initParams, false)},
-        {"inputs", encodePorts(definition.inputs, false)},
-        {"outputs", encodePorts(definition.outputs, true)}
-    };
+    QJsonObject implementation{{"kind", "cpp"}};
     switch (definition.kind)
     {
     case ToolKind::Cpp:
-        root.insert("kind", "cpp");
         break;
     case ToolKind::Host:
-        root.insert("kind", "host");
-        root.insert("entry", QJsonObject{
-                                 {"binding", QString::fromStdString(definition.hostBinding)}
-        });
+        implementation.insert("kind", "host");
+        implementation.insert("binding", QString::fromStdString(definition.hostBinding));
         break;
     case ToolKind::PythonFunction:
     case ToolKind::PythonClass:
-        root.insert("kind", definition.kind == ToolKind::PythonFunction ? "python_function" : "python_class");
-        root.insert("entry", QJsonObject{
-                                 {"package",        json::pathText(definition.entry.package)},
-                                 {   "file",           json::pathText(definition.entry.file)},
-                                 { "symbol", QString::fromStdString(definition.entry.symbol)}
-        });
+        implementation.insert("kind", definition.kind == ToolKind::PythonFunction ? "python_function" : "python_class");
+        implementation.insert("package", json::pathText(definition.entry.package));
+        implementation.insert("file", json::pathText(definition.entry.file));
+        implementation.insert("symbol", QString::fromStdString(definition.entry.symbol));
         break;
     }
     if (!definition.resources.empty())
     {
         QJsonArray resources;
         for (const auto &path : definition.resources) resources.append(json::pathText(path));
-        root.insert("resources", resources);
+        implementation.insert("resources", resources);
     }
+    QJsonObject root{
+        {"schema_version", definition.schemaVersion},
+        {"name_en", QString::fromStdString(definition.nameEn)},
+        {"name_zh", QString::fromStdString(definition.nameZh)},
+        {"version", QString::fromStdString(definition.version)},
+        {"implementation", implementation}
+    };
+    QJsonObject ui;
+    if (!definition.categories.empty())
+    {
+        QJsonArray category;
+        for (const auto &name : definition.categories) category.append(QString::fromStdString(name));
+        ui.insert("category", category);
+    }
+    if (definition.visibility != ToolVisibility::Normal)
+        ui.insert("visibility", "assist");
+    if (!ui.isEmpty())
+        root.insert("ui", ui);
+    QJsonObject ports;
+    if (auto init = encodePorts(definition.initParams); !init.isEmpty())
+        ports.insert("init", init);
+    if (auto inputs = encodePorts(definition.inputs); !inputs.isEmpty())
+        ports.insert("inputs", inputs);
+    if (auto outputs = encodePorts(definition.outputs); !outputs.isEmpty())
+        ports.insert("outputs", outputs);
+    if (!ports.isEmpty())
+        root.insert("ports", ports);
     if (definition.nodeModel != NodeModel::Fixed)
     {
         const char *model = "fixed";
@@ -405,22 +470,20 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
         }
         root.insert("node_model", model);
     }
-    if (definition.visibility != ToolVisibility::Normal)
-        root.insert("visibility", "assist");
     if (definition.interaction)
     {
         QJsonObject interaction;
-        interaction.insert("helper_tool_id", QString::fromStdString(definition.interaction->helperToolId));
-        QJsonObject inputMap;
-        for (const auto &[helper, port] : definition.interaction->inputMap)
-            inputMap.insert(QString::fromStdString(helper), QString::fromStdString(port));
-        if (!inputMap.isEmpty())
-            interaction.insert("input_map", inputMap);
-        QJsonObject proposalMap;
-        for (const auto &[helper, port] : definition.interaction->proposalMap)
-            proposalMap.insert(QString::fromStdString(helper), QString::fromStdString(port));
-        if (!proposalMap.isEmpty())
-            interaction.insert("proposal_map", proposalMap);
+        interaction.insert("helper", QString::fromStdString(definition.interaction->helperNameEn));
+        QJsonObject inputs;
+        for (const auto &[helper, port] : definition.interaction->inputs)
+            inputs.insert(QString::fromStdString(helper), QString::fromStdString(formatPortRef(port)));
+        if (!inputs.isEmpty())
+            interaction.insert("inputs", inputs);
+        QJsonObject proposals;
+        for (const auto &[helper, port] : definition.interaction->proposals)
+            proposals.insert(QString::fromStdString(helper), QString::fromStdString(formatPortRef(port)));
+        if (!proposals.isEmpty())
+            interaction.insert("proposals", proposals);
         if (!definition.interaction->roiKinds.empty())
         {
             QJsonArray kinds;

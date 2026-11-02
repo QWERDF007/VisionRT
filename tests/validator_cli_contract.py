@@ -37,21 +37,23 @@ def main():
             return result
 
         tool = {
-            "schema_version": 4, "tool_id": "test.cli", "display_name": "校验工具",
-            "version": "1", "kind": "cpp", "init_params": [],
-            "inputs": [{"id": "count", "name": "数量", "type": "Int", "default": 9007199254740993}],
-            "outputs": [{"id": "value", "name": "值", "type": "Int"}]
+            "schema_version": 5, "name_en": "test.cli", "name_zh": "校验工具",
+            "version": "1", "implementation": {"kind": "cpp"},
+            "ports": {
+                "inputs": [{"name_en": "count", "name_zh": "数量", "type": "int", "default": 9007199254740993}],
+                "outputs": [{"name_en": "value", "name_zh": "值", "type": "int"}],
+            },
         }
         path = write("tools/builtin/工具.json", tool)
         run(path)
         normalized = json.loads(run("--emit-normalized-json", path).stdout)
-        assert normalized["inputs"][0]["default"] == 9007199254740993
-        assert len(normalized["outputs"]) == 1 and "entry" not in normalized
+        assert normalized["ports"]["inputs"][0]["default"] == 9007199254740993
+        assert len(normalized["ports"]["outputs"]) == 1 and "entry" not in normalized["implementation"]
         bad = copy.deepcopy(tool)
-        bad["inputs"][0]["required"] = "false"
+        bad["ports"]["inputs"][0]["required"] = "false"
         run(write("invalid.json", bad), valid=False)
         bad = copy.deepcopy(tool)
-        bad["outputs"][0]["id"] = "__status_code"
+        bad["ports"]["outputs"][0]["name_en"] = "__status_code"
         run(write("invalid.json", bad), valid=False)
         run(write("legacy.yaml", tool), valid=False)
 
@@ -70,22 +72,22 @@ def main():
         run("--load", "--package", str(root), valid=False)
         shutil.copyfile(args.module, root / "module.dll")
         native_tool = copy.deepcopy(tool)
-        native_tool["tool_id"] = "test.registration.first"
+        native_tool["name_en"] = "test.registration.first"
         native_index = copy.deepcopy(index)
-        native_index["tools"][0]["tool_id"] = native_tool["tool_id"]
+        native_index["tools"][0]["tool_id"] = native_tool["name_en"]
         write("tools/builtin/工具.json", native_tool)
         write("module_index.json", native_index)
         loaded = run("--package", str(root), "--load")
         assert "Native factory available: test.registration.first" in loaded.stdout
-        native_tool["tool_id"] = "test.missing.factory"
-        native_index["tools"][0]["tool_id"] = native_tool["tool_id"]
+        native_tool["name_en"] = "test.missing.factory"
+        native_index["tools"][0]["tool_id"] = native_tool["name_en"]
         write("tools/builtin/工具.json", native_tool)
         write("module_index.json", native_index)
         run("--package", str(root))
         missing = run("--package", str(root), "--load", valid=False)
         assert "test.missing.factory" in missing.stderr
-        native_tool["tool_id"] = "test.registration.first"
-        native_index["tools"][0]["tool_id"] = native_tool["tool_id"]
+        native_tool["name_en"] = "test.registration.first"
+        native_index["tools"][0]["tool_id"] = native_tool["name_en"]
         write("tools/builtin/工具.json", native_tool)
         write("module_index.json", native_index)
         shutil.copyfile(args.bad_module, root / "module.dll")

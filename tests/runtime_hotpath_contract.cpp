@@ -44,8 +44,8 @@ try
     const auto script  = package + "python/custom/hotpath/tool.py";
     const auto json    = package + "tools/custom/hotpath/source.json";
     ToolDefinition definition;
-    definition.id          = "test.hotpath";
-    definition.displayName = "热路径";
+    definition.nameEn          = "test.hotpath";
+    definition.nameZh = "热路径";
     definition.kind        = ToolKind::PythonClass;
     definition.entry       = {"hotpath", "tool.py", "Counter"};
     definition.outputs     = {

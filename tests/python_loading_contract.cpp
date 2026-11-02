@@ -34,17 +34,13 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
                              ToolOrigin origin = ToolOrigin::Custom, std::string package = "math")
 {
     const auto folder = origin == ToolOrigin::Builtin ? "builtin" : "custom";
-    auto       result = parseToolDefinitionJson(R"({
-        "schema_version":4,"tool_id":"python.fixture","display_name":"Fixture","version":"1",
-        "kind":"python_function","entry":{"package":"math","file":"tool.py","symbol":"execute"},
-        "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
-    })",
+    auto       result = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"python.fixture","name_zh":"Fixture","version":"1","implementation":{"kind":"python_function","package":"math","file":"tool.py","symbol":"execute"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"}]}})",
                                                 root / "tools" / folder / "tool.json",
                                                 {
                                               origin,
                                               {root / "tools" / folder, root / "python" / folder}
     });
-    result.id            = std::move(id);
+    result.nameEn            = std::move(id);
     result.entry.package = std::move(package);
     result.entry.file    = std::move(file);
     return result;
@@ -464,11 +460,7 @@ try
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
                   "def execute(inputs): return {'outputs': {'value':23, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n";
     }
-    const auto    definition = parseToolDefinitionJson(R"({
-        "schema_version":4, "tool_id":"python.lazy", "display_name":"Lazy", "version":"1",
-        "kind":"python_function", "entry":{"package":"math", "file":"tool.py", "symbol":"execute"},
-        "init_params":[], "inputs":[], "outputs":[{"id":"value","name":"Value","type":"Int"}]
-    })",
+    const auto    definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"python.lazy","name_zh":"Lazy","version":"1","implementation":{"kind":"python_function","package":"math","file":"tool.py","symbol":"execute"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"}]}})",
                                                        root / "tools/custom/math/tool.json",
                                                        {
                                                         ToolOrigin::Custom,

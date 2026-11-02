@@ -42,8 +42,8 @@ try
                 "completion fixture write failed");
     };
     ToolDefinition definition;
-    definition.id          = "test.completion";
-    definition.displayName = "完成顺序";
+    definition.nameEn          = "test.completion";
+    definition.nameZh = "完成顺序";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"completion", "tool.py", "source"};
     definition.outputs     = {

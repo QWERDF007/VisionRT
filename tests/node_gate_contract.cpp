@@ -30,9 +30,8 @@ void require(bool condition, const std::string &message)
 ToolDefinition expressionTool()
 {
     ToolDefinition tool;
-    tool.schemaVersion  = 4;
-    tool.id             = "test.logic.expression";
-    tool.displayName    = "表达式";
+    tool.nameEn             = "test.logic.expression";
+    tool.nameZh    = "表达式";
     tool.kind           = ToolKind::PythonClass;
     tool.nodeModel      = NodeModel::Expression;
     tool.entry          = PythonEntry{"logic", "expression/tool.py", "ExpressionTool"};
@@ -46,12 +45,12 @@ ToolDefinition expressionTool()
 ToolDefinition conditionTool()
 {
     auto tool        = expressionTool();
-    tool.id          = "test.logic.branch";
-    tool.displayName = "条件分支";
+    tool.nameEn          = "test.logic.branch";
+    tool.nameZh = "条件分支";
     tool.nodeModel   = NodeModel::Condition;
     PortDefinition mode;
-    mode.id           = "condition_mode";
-    mode.name         = "条件来源";
+    mode.nameEn           = "condition_mode";
+    mode.nameZh         = "条件来源";
     mode.type         = {Type::String};
     mode.defaultValue = std::string{"formula"};
     mode.options      = {std::string{"formula"}, std::string{"upstream"}};
@@ -68,9 +67,8 @@ ToolDefinition conditionTool()
 ToolDefinition selectTool()
 {
     ToolDefinition tool;
-    tool.schemaVersion = 4;
-    tool.id            = "visionrt.control.select";
-    tool.displayName   = "分支合流";
+    tool.nameEn            = "visionrt.control.select";
+    tool.nameZh   = "分支合流";
     tool.kind          = ToolKind::Host;
     tool.nodeModel     = NodeModel::Select;
     tool.hostBinding   = "visionrt.select";
@@ -112,9 +110,8 @@ void install(ToolRegistry &registry, const ToolDefinition &tool, std::function<T
 ToolDefinition intTool(std::string id, std::vector<std::string> inputs = {})
 {
     ToolDefinition tool;
-    tool.schemaVersion = 4;
-    tool.id            = std::move(id);
-    tool.displayName   = tool.id;
+    tool.nameEn            = std::move(id);
+    tool.nameZh   = tool.nameEn;
     tool.version       = "1";
     tool.kind          = ToolKind::Cpp;
     for (auto &input : inputs) tool.inputs.push_back({input, input, {Type::Int}});
@@ -125,9 +122,8 @@ ToolDefinition intTool(std::string id, std::vector<std::string> inputs = {})
 ToolDefinition boolTool()
 {
     ToolDefinition tool;
-    tool.schemaVersion = 4;
-    tool.id            = "test.logic.flag";
-    tool.displayName   = "布尔来源";
+    tool.nameEn            = "test.logic.flag";
+    tool.nameZh   = "布尔来源";
     tool.version       = "1";
     tool.kind          = ToolKind::Cpp;
     tool.outputs       = {{"value", "条件", {Type::Bool}}};
@@ -139,16 +135,16 @@ NodeDefinition node(NodeId id, const ToolDefinition &tool, int y)
     NodeDefinition n;
     n.id               = id;
     n.position         = {0, y};
-    n.toolId           = tool.id;
-    n.toolNameSnapshot = tool.displayName;
+    n.toolId           = tool.nameEn;
+    n.toolNameSnapshot = tool.nameZh;
     if (tool.nodeModel == NodeModel::Expression || tool.nodeModel == NodeModel::Condition)
         n.expression = ExpressionConfig{};
     if (tool.nodeModel == NodeModel::Select)
         n.selectType = TypeSpec{Type::Int};
     const auto contract = tool.derivesPorts() ? nodeContract(n, tool) : tool;
-    for (const auto &port : contract.initParams) n.signatures.initParams.emplace(port.id, port.type);
-    for (const auto &port : contract.inputs) n.signatures.inputs.emplace(port.id, port.type);
-    for (const auto &port : contract.outputs) n.signatures.outputs.emplace(port.id, port.type);
+    for (const auto &port : contract.initParams) n.signatures.initParams.emplace(port.nameEn, port.type);
+    for (const auto &port : contract.inputs) n.signatures.inputs.emplace(port.nameEn, port.type);
+    for (const auto &port : contract.outputs) n.signatures.outputs.emplace(port.nameEn, port.type);
     return n;
 }
 
@@ -215,11 +211,11 @@ void materialisationAndTransactions()
     const auto config = sampleExpression();
     require(editor.setExpressionConfig("flow_1", id, config, expression), "expression transaction did not commit");
     auto contract = nodeContract(editor.project().flows.front().nodes.front(), expression);
-    require(contract.inputs.size() == 1 && contract.inputs.front().id == "p1"
-                && contract.inputs.front().name == "半径列表",
+    require(contract.inputs.size() == 1 && contract.inputs.front().nameEn == "p1"
+                && contract.inputs.front().nameZh == "半径列表",
             "variable port was not materialised");
-    require(contract.outputs.size() == 3 && contract.outputs[0].id == "__status_code"
-                && contract.outputs[1].id == "__status_message" && contract.outputs[2].id == "p2",
+    require(contract.outputs.size() == 3 && contract.outputs[0].nameEn == "__status_code"
+                && contract.outputs[1].nameEn == "__status_message" && contract.outputs[2].nameEn == "p2",
             "only exposed results become business outputs");
 
     // Deleting a bound output and changing a bound input type are rejected as one
@@ -310,10 +306,10 @@ void materialisationAndTransactions()
     require(editor.setExpressionConfig("flow_1", conditionId, validCondition, condition),
             "a single hidden Bool condition must commit");
     const auto conditionContract = nodeContract(editor.project().flows.front().nodes.at(2), condition);
-    require(conditionContract.outputs.size() == 6 && conditionContract.outputs[2].id == "on_true"
+    require(conditionContract.outputs.size() == 6 && conditionContract.outputs[2].nameEn == "on_true"
                 && conditionContract.outputs[3].type == TypeSpec{Type::Bool}
-                && conditionContract.outputs[4].id == "on_true_status"
-                && conditionContract.outputs[5].id == "on_false_status",
+                && conditionContract.outputs[4].nameEn == "on_true_status"
+                && conditionContract.outputs[5].nameEn == "on_false_status",
             "condition outputs are fixed regardless of the formula list");
 }
 

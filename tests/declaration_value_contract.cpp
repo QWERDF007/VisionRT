@@ -8,6 +8,7 @@
 
 #include <visionrt/contracts/Value.h>
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
@@ -48,100 +49,105 @@ try
     rejects([&] { (void)ValueJson::parse("[[[2, 0, 0, 0, 4, 0]]]", roiType); });
     rejects([&] { validateValue(roiType, Array::empty(DType::Float64, 3)); });
 
-    // Schema validation tests
-    ToolDefinition valid;
-    valid.schemaVersion = 4;
-    valid.id            = "valid.tool";
-    valid.displayName   = "Valid Tool";
-    valid.version       = "1.0.0";
-    valid.kind          = ToolKind::Cpp;
+    // Schema validation: one token per type, name_en/name_zh identity, qualified relations.
+    const auto makePort = [](std::string nameEn, TypeSpec type)
+    {
+        PortDefinition port;
+        port.nameEn       = std::move(nameEn);
+        port.nameZh       = port.nameEn;
+        port.type         = type;
+        port.defaultValue = defaultValue(type);
+        return port;
+    };
 
-    valid.inputs.push_back({"in_img", "Input Image", {Type::Image}});
-    valid.inputs.push_back({"threshold",
-                            "Threshold",
-                            {Type::Int},
-                            std::int64_t{5},
-                            "number",
-                            "基本输入",
-                            "",
-                            std::int64_t{0},
-                            std::int64_t{10},
-                            std::int64_t{1},
-                            0});
-    valid.outputs.push_back({"out_img",
-                             "Output Image",
-                             {Type::Image},
-                             Missing{},
-                             "",
-                             "",
-                             "",
-                             std::nullopt,
-                             std::nullopt,
-                             std::nullopt,
-                             std::nullopt,
-                             {},
-                             "",
-                             "",
-                             "",
-                             "BGR",
-                             "in_img"});
+    ToolDefinition valid;
+    valid.nameEn  = "valid.tool";
+    valid.nameZh  = "Valid Tool";
+    valid.version = "1.0.0";
+    valid.kind    = ToolKind::Cpp;
+
+    valid.inputs.push_back(makePort("in_img", {Type::Image}));
+    auto threshold         = makePort("threshold", {Type::Int});
+    threshold.defaultValue = std::int64_t{5};
+    threshold.editor       = "number";
+    threshold.minimum      = std::int64_t{0};
+    threshold.maximum      = std::int64_t{10};
+    threshold.step         = std::int64_t{1};
+    threshold.decimals     = 0;
+    valid.inputs.push_back(threshold);
+
+    auto imageOut         = makePort("out_img", {Type::Image});
+    imageOut.colorOrder   = "BGR";
+    imageOut.sameGeometryAs = PortRef{PortStage::Inputs, "in_img"};
+    valid.outputs.push_back(imageOut);
     validateToolDefinition(valid);
 
     {
         auto           geometryTool = valid;
-        PortDefinition input{"rect", "Rectangle", {Type::ROI}};
-        input.editor     = "rect";
-        input.imageInput = "in_img";
-        geometryTool.inputs.push_back(input);
-        PortDefinition output{"rect", "Rectangle", {Type::ROI}};
-        output.imagePort = "out_img";
-        geometryTool.outputs.push_back(output);
+        auto           rectInput    = makePort("rect", {Type::ROI});
+        rectInput.editor            = "rect";
+        rectInput.image             = PortRef{PortStage::Inputs, "in_img"};
+        geometryTool.inputs.push_back(rectInput);
+        auto rectOutput  = makePort("rect", {Type::ROI});
+        rectOutput.image = PortRef{PortStage::Outputs, "out_img"};
+        geometryTool.outputs.push_back(rectOutput);
         validateToolDefinition(geometryTool);
-        geometryTool.inputs.back().imageInput = "threshold";
+        geometryTool.inputs.back().image = PortRef{PortStage::Inputs, "threshold"};
         rejects([&] { validateToolDefinition(geometryTool); });
     }
 
-    // Negative tests
+    // An authored status port is replaced by the canonical host-owned one, never trusted as is.
+    {
+        auto authored = valid;
+        authored.outputs.push_back(makePort("__status_code", {Type::String}));
+        normalizeToolDefinition(authored);
+        const auto &status = *std::find_if(authored.outputs.begin(), authored.outputs.end(),
+                                           [](const auto &port) { return port.nameEn == "__status_code"; });
+        assert(status.type == TypeSpec{Type::Int});
+        assert(isMissing(status.defaultValue));
+    }
     // 1. bad schemaVersion
     {
         auto bad          = valid;
-        bad.schemaVersion = 1;
+        bad.schemaVersion = 4;
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 2. empty tool id
+    // 2. empty tool name
     {
-        auto bad = valid;
-        bad.id   = "";
+        auto bad   = valid;
+        bad.nameEn = "";
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 3. invalid tool id
+    // 3. invalid tool name
     {
-        auto bad = valid;
-        bad.id   = "bad id with space";
+        auto bad   = valid;
+        bad.nameEn = "bad id with space";
         rejects([&] { validateToolDefinition(bad); });
     }
+    // 4. host tool without a binding
     {
         auto bad = valid;
         bad.kind = ToolKind::Host;
         rejects([&] { validateToolDefinition(bad); });
     }
+    // 5. function tool cannot carry init parameters
     {
-        auto bad = valid;
-        bad.kind = ToolKind::PythonFunction;
+        auto bad  = valid;
+        bad.kind  = ToolKind::PythonFunction;
         bad.entry = PythonEntry{"fixture", "tool.py", "execute"};
-        bad.initParams.push_back({"param1", "Param 1", {Type::Int}});
+        bad.initParams.push_back(makePort("param1", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 6. duplicate port id
+    // 6. duplicate port name
     {
         auto bad = valid;
-        bad.inputs.push_back({"in_img", "Duplicate", {Type::Int}});
+        bad.inputs.push_back(makePort("in_img", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
     // 7. reserved port prefix __
     {
         auto bad = valid;
-        bad.inputs.push_back({"__custom", "Reserved", {Type::Int}});
+        bad.inputs.push_back(makePort("__custom", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
     // 8. min > max
@@ -181,50 +187,68 @@ try
         bad.outputs[0].colorOrder = "INVALID_COLOR";
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 13. image_input reference mismatch
+    // 13. relations.image must reference an existing Image port
+    {
+        auto bad         = valid;
+        auto rois        = makePort("rois", {Type::ROI});
+        bad.inputs.push_back(rois);
+        bad.inputs.back().image = PortRef{PortStage::Inputs, "non_existent_img"};
+        rejects([&] { validateToolDefinition(bad); });
+    }
+    // 14. init and inputs stay distinct namespaces
     {
         auto bad = valid;
-        bad.inputs.push_back({"rois",
-                              "ROIs",
-                              {Type::ROI},
-                              Missing{},
-                              "",
-                              "",
-                              "",
-                              std::nullopt,
-                              std::nullopt,
-                              std::nullopt,
-                              std::nullopt,
-                              {},
-                              "",
-                              "non_existent_img"});
+        bad.initParams.push_back(makePort("threshold", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
 
     const auto pathEditor = parseToolDefinitionJson(
         R"json({
-  "schema_version": 4,
-  "tool_id": "test.path",
-  "display_name": "Path",
+  "schema_version": 5,
+  "name_en": "test.path",
+  "name_zh": "Path",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "mode", "name": "Mode", "type": "String", "default": "file", "options": ["file", "directory"]},
-    {"id": "path", "name": "Path", "type": "String", "editor": "path", "path_mode_from": "mode"}
-  ],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "mode",
+        "name_zh": "Mode",
+        "type": "string",
+        "default": "file",
+        "constraints": {
+          "options": [
+            "file",
+            "directory"
+          ]
+        }
+      },
+      {
+        "name_en": "path",
+        "name_zh": "Path",
+        "type": "string",
+        "ui": {
+          "editor": "path"
+        },
+        "relations": {
+          "path_mode": "inputs.mode"
+        }
+      }
+    ]
+  }
 })json");
     // The effective contract prepends the host-owned upstream_status input.
     assert(pathEditor.inputs[2].editor == "path");
-    assert(pathEditor.inputs[2].pathModeFrom == "mode");
+    assert((pathEditor.inputs[2].pathModeFrom == PortRef{PortStage::Inputs, "mode"}));
     {
         auto invalid                   = pathEditor;
-        invalid.inputs[2].pathModeFrom = "missing";
+        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, "missing"};
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[2].pathModeFrom = "path";
+        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, "path"};
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[2].pathModeFrom = "mode";
+        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, "mode"};
         invalid.inputs[2].editor       = "file";
         rejects([&] { validateToolDefinition(invalid); });
         invalid                        = pathEditor;
@@ -233,14 +257,16 @@ try
         invalid.inputs[1].options.clear();
         rejects([&] { validateToolDefinition(invalid); });
         invalid = pathEditor;
-        invalid.inputs[2].pathModeFrom.clear();
+        invalid.inputs[2].pathModeFrom.reset();
         validateToolDefinition(invalid);
     }
     {
         auto initialization       = pathEditor;
-        initialization.kind       = ToolKind::Cpp;
         initialization.initParams = std::move(initialization.inputs);
         initialization.inputs.clear();
+        for (auto &port : initialization.initParams)
+            if (port.pathModeFrom)
+                port.pathModeFrom->stage = PortStage::Init;
         validateToolDefinition(initialization);
     }
 

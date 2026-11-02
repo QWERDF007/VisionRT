@@ -73,14 +73,14 @@ NormalizedInput normalizeInput(const PortDefinition &port, PortValue value)
     NormalizedInput result;
     if (isMissing(value))
     {
+        // Every value-carrying port already holds its explicit or type default; only a host status
+        // port stays empty, and an empty status is a normal state rather than an author error.
         if (!isMissing(port.defaultValue))
         {
-            result.value      = port.defaultValue;
+            result.value      = portDefault(port);
             result.adjustment = "使用默认值";
             return result;
         }
-        if (port.required)
-            throw ContractError("端口 " + port.id + " 缺少必填值");
         result.value = Missing{};
         return result;
     }
@@ -92,13 +92,13 @@ NormalizedInput normalizeInput(const PortDefinition &port, PortValue value)
     catch (const ContractError &error)
     {
         const auto actual = typeOf(value);
-        throw ContractError("端口 " + port.id + " 的值类型不匹配（期望 " + typeName(port.type.type) + "，实际 "
+        throw ContractError("端口 " + port.nameEn + " 的值类型不匹配（期望 " + typeName(port.type.type) + "，实际 "
                             + (actual ? std::string(typeName(actual->type)) : std::string("缺失")) + "）："
                             + error.what());
     }
 
     if (port.type.type == Type::Float && !std::isfinite(std::get<double>(value)))
-        throw ContractError("端口 " + port.id + " 的值必须为有限数值");
+        throw ContractError("端口 " + port.nameEn + " 的值必须为有限数值");
 
     clampNumeric(port, value, result.adjustment);
 
@@ -106,11 +106,11 @@ NormalizedInput normalizeInput(const PortDefinition &port, PortValue value)
     {
         if (!isMissing(port.defaultValue) && inOptions(port.options, port.defaultValue))
         {
-            result.value = port.defaultValue;
+            result.value = portDefault(port);
             result.adjustment += std::string(result.adjustment.empty() ? "" : "；") + "不在允许选项内，回退默认值";
             return result;
         }
-        throw ContractError("端口 " + port.id + " 的值不在允许的选项内");
+        throw ContractError("端口 " + port.nameEn + " 的值不在允许的选项内");
     }
 
     result.value = std::move(value);
@@ -122,11 +122,11 @@ Values normalizeInputs(const std::vector<PortDefinition> &ports, Values values, 
     Values normalized;
     for (const auto &port : ports)
     {
-        const auto found = values.find(port.id);
+        const auto found = values.find(port.nameEn);
         auto       result = normalizeInput(port, found == values.end() ? PortValue{Missing{}} : found->second);
         if (!result.adjustment.empty() && adjustments)
-            adjustments->push_back(port.name.empty() ? port.id : port.name + "：" + result.adjustment);
-        normalized.emplace(port.id, std::move(result.value));
+            adjustments->push_back(port.nameZh.empty() ? port.nameEn : port.nameZh + "：" + result.adjustment);
+        normalized.emplace(port.nameEn, std::move(result.value));
     }
     return normalized;
 }

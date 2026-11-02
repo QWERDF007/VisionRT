@@ -41,16 +41,8 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.storage.source","definition":"tools/custom/storage/source.json"},
         {"tool_id":"test.storage.probe","definition":"tools/custom/storage/probe.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/storage/source.json", R"({"schema_version":4,"tool_id":"test.storage.source",
-        "display_name":"大图存储","version":"1","kind":"python_function",
-        "entry":{"package":"storage","file":"tool.py","symbol":"source"},"init_params":[],"inputs":[{"id":"gate","name":"执行闸门","type":"String","default":""}],"outputs":[
-        {"id":"images","name":"图像","type":"Image","display":{"color_order":"BGR"}},
-        {"id":"token","name":"对象编号","type":"Int"}]})");
-    write("tools/custom/storage/probe.json", R"({"schema_version":4,"tool_id":"test.storage.probe",
-        "display_name":"存储计数","version":"1","kind":"python_function",
-        "entry":{"package":"storage","file":"tool.py","symbol":"probe"},"init_params":[],"inputs":[],"outputs":[
-        {"id":"allocated","name":"分配","type":"Int"},{"id":"released","name":"释放","type":"Int"},
-        {"id":"live","name":"存活","type":"Array","dtype":"int64","rank":1}]})");
+    write("tools/custom/storage/source.json", R"({"schema_version":5,"name_en":"test.storage.source","name_zh":"大图存储","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"source"},"ports":{"inputs":[{"name_en":"gate","name_zh":"执行闸门","type":"string"}],"outputs":[{"name_en":"images","name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"name_en":"token","name_zh":"对象编号","type":"int"}]}})");
+    write("tools/custom/storage/probe.json", R"({"schema_version":5,"name_en":"test.storage.probe","name_zh":"存储计数","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"probe"},"ports":{"outputs":[{"name_en":"allocated","name_zh":"分配","type":"int"},{"name_en":"released","name_zh":"释放","type":"int"},{"name_en":"live","name_zh":"存活","type":"vec_int"}]}})");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref
 import time

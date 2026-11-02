@@ -50,10 +50,10 @@ void AppController::attachViewport(QObject *object)
                              {
                                  if (port.type.type == Type::ROI)
                                  {
-                                     const auto found = node->inputs.find(port.id);
+                                     const auto found = node->inputs.find(port.nameEn);
                                      if (found != node->inputs.end() && found->second.mode == BindingMode::Literal)
                                      {
-                                         editRoi(workbench::q(port.id), true);
+                                         editRoi(workbench::q(port.nameEn), true);
                                          break;
                                      }
                                  }

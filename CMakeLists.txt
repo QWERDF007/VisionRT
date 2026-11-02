@@ -113,6 +113,8 @@ if(VISIONRT_BUILD_APP)
         src/ui/WireRouter.h
         src/ui/AppController.cpp
         src/ui/AppControllerAssist.cpp
+        src/ui/AboutReport.cpp
+        src/ui/AboutReport.h
         src/ui/UiPreferences.cpp
         src/ui/UiPreferences.h
         src/ui/RecentProjects.cpp
@@ -320,6 +322,8 @@ if(BUILD_TESTING)
         target_link_libraries(ui_notifications_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_notifications_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+        visionrt_contract(node_model_contract visionrt_ui)
+        target_link_libraries(node_model_contract PRIVATE Qt6::Test)
         visionrt_contract(ui_project_paths_contract visionrt_ui)
         target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_project_paths_contract PRIVATE

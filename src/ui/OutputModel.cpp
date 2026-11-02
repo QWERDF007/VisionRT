@@ -387,17 +387,17 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     if (definition)
         for (const auto &port : definition->outputs)
         {
-            if (port.id != "__status_code" && port.id != "__status_message")
+            if (port.nameEn != "__status_code" && port.nameEn != "__status_message")
             {
                 if (!port.typeFrom)
-                    add(port.id, port.name, port.type, false);
-                else if (nodeOutputs && nodeOutputs->contains(port.id))
-                    add(port.id, port.name, nodeOutputs->at(port.id), false);
+                    add(port.nameEn, port.nameZh, port.type, false);
+                else if (nodeOutputs && nodeOutputs->contains(port.nameEn))
+                    add(port.nameEn, port.nameZh, nodeOutputs->at(port.nameEn), false);
                 else
                 {
                     Row row;
-                    row.id = q(port.id);
-                    row.name = q(port.name);
+                    row.id = q(port.nameEn);
+                    row.name = q(port.nameZh);
                     row.type = QStringLiteral("未绑定");
                     row.tooltip = QStringLiteral("请选择源流程、源节点和输出端口");
                     row.resolved = false;

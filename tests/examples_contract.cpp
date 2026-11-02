@@ -342,7 +342,7 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
 
     const auto *def = registry.find("visiontools.preprocess.adaptive_binary");
     assert((def != nullptr));
-    assert((def->id == "visiontools.preprocess.adaptive_binary"));
+    assert((def->nameEn == "visiontools.preprocess.adaptive_binary"));
     assert((def->kind == ToolKind::Cpp));
     assert((registry.availability("visiontools.preprocess.adaptive_binary").state == ToolAvailability::Available));
 
@@ -563,13 +563,14 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     volatile std::uint8_t pxVal = *pxPtr;
     assert((pxVal == *pxPtr));
 
-    // Success-then-failure isolation: 2nd run with invalid path outputs Missing, not stale value
+    // Success-then-failure isolation: the 2nd run with an invalid path publishes the declared empty
+    // batch instead of the previous run's images, and its own status explains the failure.
     project1.flows[0].nodes[0].inputs["path"] = {BindingMode::Literal, std::string{"nonexistent_images_dir"}, {}};
     assert((engine1.start(project1, registry, RunMode::Once).code == 0));
     auto u1_fail       = finish(engine1);
     auto s1_fail_node1 = snapshot(u1_fail, 1);
     assert((s1_fail_node1 && s1_fail_node1->status.code != 0));
-    assert((isMissing(s1_fail_node1->outputs.at("images"))));
+    assert((std::get<DataRef<Image>>(s1_fail_node1->outputs.at("images")).get().empty()));
 }
 
 void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
@@ -631,7 +632,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     auto s2 = snapshot(update, 2);
     assert((s2));
     assert((!s2->status));
-    assert((isMissing(s2->outputs.at("images"))));
+    assert((std::get<DataRef<Image>>(s2->outputs.at("images")).get().empty()));
 
     // Node 3: yolo fails because nonexistent model weights
     if (inferenceIncluded)
@@ -673,40 +674,40 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     // Register plugin counter tool
     ToolDefinition counterDef;
-    counterDef.id           = "test.plugin.counter";
-    counterDef.displayName  = "Plugin Counter";
+    counterDef.nameEn           = "test.plugin.counter";
+    counterDef.nameZh  = "Plugin Counter";
     counterDef.version      = "1.0.0";
     counterDef.kind         = ToolKind::Cpp;
 
     PortDefinition initParam;
-    initParam.id           = "initial";
-    initParam.name         = "Initial";
+    initParam.nameEn           = "initial";
+    initParam.nameZh         = "Initial";
     initParam.type         = {Type::Int};
     initParam.defaultValue = std::int64_t{10};
     counterDef.initParams.push_back(initParam);
     PortDefinition outCount;
-    outCount.id   = "count";
-    outCount.name = "Count";
+    outCount.nameEn   = "count";
+    outCount.nameZh = "Count";
     outCount.type = {Type::Int};
     counterDef.outputs.push_back(outCount);
     registry.addDefinition(counterDef);
 
     // Register plugin function tool
     ToolDefinition funcDef;
-    funcDef.id           = "test.plugin.function";
-    funcDef.displayName  = "Plugin Function";
+    funcDef.nameEn           = "test.plugin.function";
+    funcDef.nameZh  = "Plugin Function";
     funcDef.version      = "1.0.0";
     funcDef.kind         = ToolKind::Cpp;
 
     PortDefinition inX;
-    inX.id           = "x";
-    inX.name         = "X";
+    inX.nameEn           = "x";
+    inX.nameZh         = "X";
     inX.type         = {Type::Int};
     inX.defaultValue = std::int64_t{25};
     funcDef.inputs.push_back(inX);
     PortDefinition outY;
-    outY.id   = "y";
-    outY.name = "Y";
+    outY.nameEn   = "y";
+    outY.nameZh = "Y";
     outY.type = {Type::Int};
     funcDef.outputs.push_back(outY);
     registry.addDefinition(funcDef);
@@ -807,18 +808,30 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "func.json");
         ofs << R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.function",
-  "display_name": "Plugin Function",
+  "schema_version": 5,
+  "name_en": "test.plugin.function",
+  "name_zh": "Plugin Function",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "x", "name": "X", "type": "Int", "default": 10}
-  ],
-  "outputs": [
-    {"id": "y", "name": "Y", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "x",
+        "name_zh": "X",
+        "type": "int",
+        "default": 10
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "y",
+        "name_zh": "Y",
+        "type": "int"
+      }
+    ]
+  }
 })json";
     }
 
@@ -831,19 +844,32 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
 
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "calc.json");
         ofs << R"json({
-  "schema_version": 4,
-  "tool_id": "custom.py_math",
-  "display_name": "Python Calc",
+  "schema_version": 5,
+  "name_en": "custom.py_math",
+  "name_zh": "Python Calc",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "calc", "file": "calc.py", "symbol": "execute"},
-  "init_params": [],
-  "inputs": [
-    {"id": "val", "name": "Val", "type": "Int"}
-  ],
-  "outputs": [
-    {"id": "res", "name": "Res", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "calc",
+    "file": "calc.py",
+    "symbol": "execute"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "val",
+        "name_zh": "Val",
+        "type": "int"
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "res",
+        "name_zh": "Res",
+        "type": "int"
+      }
+    ]
+  }
 })json";
     }
 
@@ -851,24 +877,56 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 4,
-  "tool_id": "platform.test_recv",
-  "display_name": "Test Receiver",
+  "schema_version": 5,
+  "name_en": "platform.test_recv",
+  "name_zh": "Test Receiver",
   "version": "1.0.0",
-  "kind": "host",
-  "init_params": [
-    {"id": "source_flow_id", "name": "Source Flow", "type": "String", "default": ""},
-    {"id": "source_node_seq", "name": "Source Node", "type": "String", "default": ""},
-    {"id": "source_port_id", "name": "Source Port", "type": "String", "default": ""},
-    {"id": "timeout_ms", "name": "Timeout", "type": "Int", "default": 1000}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "value", "name": "Value", "type": "Int"},
-    {"id": "source_status_code", "name": "Source Status Code", "type": "Int"},
-    {"id": "source_status_message", "name": "Source Status Message", "type": "String"}
-  ],
-  "entry": {"binding": "visionrt.receiver"}
+  "implementation": {
+    "kind": "host",
+    "binding": "visionrt.receiver"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "source_flow_id",
+        "name_zh": "Source Flow",
+        "type": "string"
+      },
+      {
+        "name_en": "source_node_seq",
+        "name_zh": "Source Node",
+        "type": "string"
+      },
+      {
+        "name_en": "source_port_id",
+        "name_zh": "Source Port",
+        "type": "string"
+      },
+      {
+        "name_en": "timeout_ms",
+        "name_zh": "Timeout",
+        "type": "int",
+        "default": 1000
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "Value",
+        "type": "int"
+      },
+      {
+        "name_en": "source_status_code",
+        "name_zh": "Source Status Code",
+        "type": "int"
+      },
+      {
+        "name_en": "source_status_message",
+        "name_zh": "Source Status Message",
+        "type": "string"
+      }
+    ]
+  }
 })json";
     }
 
@@ -1094,42 +1152,85 @@ void testOfflinePackageReplacementAndProtection(const std::filesystem::path & /*
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "counter.json");
         ofs << R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.counter",
-  "display_name": "Plugin Counter",
+  "schema_version": 5,
+  "name_en": "test.plugin.counter",
+  "name_zh": "Plugin Counter",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [
-    {"id": "initial", "name": "Initial", "type": "Int", "default": 0}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "count", "name": "Count", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "initial",
+        "name_zh": "Initial",
+        "type": "int"
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "count",
+        "name_zh": "Count",
+        "type": "int"
+      }
+    ]
+  }
 })json";
     }
     // Write platform receiver declaration
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 4,
-  "tool_id": "platform.test_recv",
-  "display_name": "Test Receiver",
+  "schema_version": 5,
+  "name_en": "platform.test_recv",
+  "name_zh": "Test Receiver",
   "version": "1.0.0",
-  "kind": "host",
-  "init_params": [
-    {"id": "source_flow_id", "name": "Source Flow", "type": "String", "default": ""},
-    {"id": "source_node_seq", "name": "Source Node", "type": "String", "default": ""},
-    {"id": "source_port_id", "name": "Source Port", "type": "String", "default": ""},
-    {"id": "timeout_ms", "name": "Timeout", "type": "Int", "default": 1000}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "value", "name": "Value", "type": "Int"},
-    {"id": "source_status_code", "name": "Source Status Code", "type": "Int"},
-    {"id": "source_status_message", "name": "Source Status Message", "type": "String"}
-  ],
-  "entry": {"binding": "visionrt.receiver"}
+  "implementation": {
+    "kind": "host",
+    "binding": "visionrt.receiver"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "source_flow_id",
+        "name_zh": "Source Flow",
+        "type": "string"
+      },
+      {
+        "name_en": "source_node_seq",
+        "name_zh": "Source Node",
+        "type": "string"
+      },
+      {
+        "name_en": "source_port_id",
+        "name_zh": "Source Port",
+        "type": "string"
+      },
+      {
+        "name_en": "timeout_ms",
+        "name_zh": "Timeout",
+        "type": "int",
+        "default": 1000
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "Value",
+        "type": "int"
+      },
+      {
+        "name_en": "source_status_code",
+        "name_zh": "Source Status Code",
+        "type": "int"
+      },
+      {
+        "name_en": "source_status_message",
+        "name_zh": "Source Status Message",
+        "type": "string"
+      }
+    ]
+  }
 })json";
     }
     // Write module_index.json for Package 2

@@ -52,12 +52,7 @@ try
         require(file.open(QIODevice::WriteOnly) && file.write(content) == content.size(),
                 "cannot write identity fixture");
     };
-    write("tools/custom/identity/source.json", R"json({
-        "schema_version":4,"tool_id":"test.identity.source","display_name":"来源","version":"1.0",
-        "kind":"python_function","entry":{"package":"identity","file":"source.py","symbol":"run"},
-        "init_params":[],"inputs":[{"id":"value","name":"值","type":"Int","default":0}],
-        "outputs":[{"id":"value","name":"值","type":"Int"}]
-    })json");
+    write("tools/custom/identity/source.json", R"({"schema_version":5,"name_en":"test.identity.source","name_zh":"来源","version":"1.0","implementation":{"kind":"python_function","package":"identity","file":"source.py","symbol":"run"},"ports":{"inputs":[{"name_en":"value","name_zh":"值","type":"int"}],"outputs":[{"name_en":"value","name_zh":"值","type":"int"}]}})");
     write("python/custom/identity/source.py",
           "import threading\n"
           "calls_lock = threading.Lock()\n"

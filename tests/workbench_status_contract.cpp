@@ -61,8 +61,8 @@ try
     const auto script     = package + "python/custom/status/tool.py";
     const auto permission = QFileInfo(script).absolutePath() + "/allow";
     ToolDefinition definition;
-    definition.id          = "test.status";
-    definition.displayName = "状态工具";
+    definition.nameEn          = "test.status";
+    definition.nameZh = "状态工具";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"status", "tool.py", "run"};
     definition.inputs      = {

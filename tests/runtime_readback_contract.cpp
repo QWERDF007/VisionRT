@@ -82,15 +82,15 @@ try
     std::atomic<int> calls = 0;
     ToolRegistry     registry;
     ToolDefinition   definition;
-    definition.id          = "test.readback";
-    definition.displayName = "读取阶段";
+    definition.nameEn          = "test.readback";
+    definition.nameZh = "读取阶段";
     definition.outputs     = {
         {"value", "值", {Type::Array, DType::Int64, 1}}
     };
     registry.addDefinition(definition);
     registry.registerCpp(definition, [&](const ToolServices &) { return std::make_unique<Counter>(calls); });
     ProjectEditor editor;
-    const auto    node = editor.addNode("flow_1", *registry.find(definition.id), {});
+    const auto    node = editor.addNode("flow_1", *registry.find(definition.nameEn), {});
     RuntimeEngine engine(2);
     engine.setReadbackEnabled(true);
     require(bool(engine.start(editor.project(), registry, RunMode::Loop)), "readback loop did not start");

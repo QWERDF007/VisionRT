@@ -5,6 +5,7 @@
 #include "runtime/Receiver.h"
 #include "runtime/SelectTool.h"
 #include "ui/AppController_p.h"
+#include "ui/AboutReport.h"
 #include "ui/DurationText.h"
 #include "ui/Diagnostics.h"
 
@@ -52,7 +53,7 @@ NodeId nodeId(const QString &text)
 const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id)
 {
     for (const auto &value : ports)
-        if (value.id == id)
+        if (value.nameEn == id)
             return &value;
     return nullptr;
 }
@@ -255,7 +256,7 @@ AppController::Impl::~Impl()
     for (const auto &tool : registry.definitions())
         if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
             registry.setPythonImplementation(
-                tool.id, {}, makeStatus(ErrorCode::PythonUnavailable, "Interpreter shutting down"));
+                tool.nameEn, {}, makeStatus(ErrorCode::PythonUnavailable, "Interpreter shutting down"));
     python.reset();
 }
 
@@ -989,16 +990,16 @@ void AppController::Impl::requestRefresh(bool rescan)
                     if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
                     {
                         const auto status = std::find_if(result->implementations.begin(), result->implementations.end(),
-                                                               [&](const auto &item) { return item.toolId == tool.id; });
+                                                               [&](const auto &item) { return item.toolId == tool.nameEn; });
                         if (status != result->implementations.end() && status->status)
-                            result->factories.emplace_back(tool.id, pythonRuntime->factory(tool));
+                            result->factories.emplace_back(tool.nameEn, pythonRuntime->factory(tool));
                     }
             }
             else
                 for (const auto &tool : definitions)
                     if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
                         result->implementations.push_back({
-                            tool.id,
+                            tool.nameEn,
                             makeStatus(ErrorCode::PythonUnavailable, "Python interpreter unavailable")
                         });
             return ToolStatus{};
@@ -1023,7 +1024,7 @@ void AppController::Impl::refreshFinished()
     for (const auto &definition : registry.definitions())
         if (definition.kind == ToolKind::Cpp)
         {
-            const auto availability = registry.availability(definition.id);
+            const auto availability = registry.availability(definition.nameEn);
             if (availability.state != ToolAvailability::Available)
                 report(availability.status);
         }
@@ -1079,21 +1080,6 @@ std::optional<ComponentBuildInfo> readBuildInfo(const std::filesystem::path &pat
     return info;
 }
 
-// 构建时刻按“当前机器的本地时区”显示并带上偏移：同一个包换到别的时区打开时，看到的是同一个
-// 瞬间的当地写法，而不是某个固定时区的字符串。
-QString builtAtText(const std::optional<ComponentBuildInfo> &info)
-{
-    if (!info || info->built_at_epoch <= 0)
-        return QStringLiteral("未知");
-    const auto time     = QDateTime::fromSecsSinceEpoch(info->built_at_epoch).toLocalTime();
-    const auto offset   = time.offsetFromUtc();
-    const auto sign     = offset < 0 ? QLatin1Char('-') : QLatin1Char('+');
-    const auto magnitude = offset < 0 ? -offset : offset;
-    return time.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) + QLatin1Char(' ') + sign
-         + QStringLiteral("%1:%2")
-               .arg(magnitude / 3600, 2, 10, QLatin1Char('0'))
-               .arg((magnitude % 3600) / 60, 2, 10, QLatin1Char('0'));
-}
 } // namespace
 
 void AppController::Impl::loadComponentBuildInfo()
@@ -1233,59 +1219,14 @@ bool AppController::canPaste() const
 
 QString AppController::aboutText() const
 {
-    auto sanitize = [](const std::string &str) -> QString {
-        const QString s = QString::fromStdString(str).trimmed();
-        if (s.isEmpty() || s.compare(QStringLiteral("unknown"), Qt::CaseInsensitive) == 0 || s.contains(QStringLiteral("NOTFOUND")))
-        {
-            return QStringLiteral("未知");
-        }
-        return s;
-    };
-
-    QStringList lines;
-
-    // 三个组件遵循同一条规则：版本与 Commit 来自各自编译期输入，构建时间来自构建完成阶段写入
-    // 的组件元数据，缺失即“未知”。任何组件都不会借用别的组件的时间。
-    lines << QStringLiteral("VisionRT");
-    lines << QStringLiteral("版本          %1").arg(sanitize(GetVersionString()));
-    lines << QStringLiteral("Commit        %1").arg(sanitize(GetCommitHashString()));
-    lines << QStringLiteral("构建时间      %1").arg(builtAtText(impl_->hostBuildInfo));
-    lines << QString();
-
-    lines << QStringLiteral("VisionTools");
-    if (!impl_->toolsPackageInstalled)
-    {
-        lines << QStringLiteral("状态          未安装");
-    }
-    else if (!impl_->toolsPackageBuildInfo.has_value())
-    {
-        lines << QStringLiteral("状态          构建信息不可用");
-    }
-    else
-    {
-        lines << QStringLiteral("版本          %1").arg(sanitize(impl_->toolsPackageBuildInfo->version));
-        lines << QStringLiteral("Commit        %1").arg(sanitize(impl_->toolsPackageBuildInfo->commit));
-        lines << QStringLiteral("构建时间      %1").arg(builtAtText(impl_->toolsPackageBuildInfo));
-    }
-    lines << QString();
-
-    const auto contracts = GetContractsVersion();
-    lines << QStringLiteral("VisionRTContracts");
-    lines << QStringLiteral("版本          %1").arg(sanitize(contracts.version));
-    lines << QStringLiteral("Commit        %1").arg(sanitize(contracts.commit));
-    lines << QStringLiteral("构建时间      %1").arg(builtAtText(impl_->contractsBuildInfo));
-    lines << QString();
-
-    // Environment
-    lines << QStringLiteral("运行环境");
-    lines << QStringLiteral("Qt            %1").arg(QString::fromLatin1(qVersion()));
-    lines << QStringLiteral("Python        %1").arg(impl_->python ? QStringLiteral("解释器可用") : QStringLiteral("不可用"));
-    lines << QString();
-
-    // Copyright
-    lines << QStringLiteral("Copyright © VisionRT contributors");
-
-    return lines.join(QLatin1Char('\n'));
+    AboutReport report;
+    report.host            = impl_->hostBuildInfo;
+    report.toolsInstalled  = impl_->toolsPackageInstalled;
+    report.tools           = impl_->toolsPackageBuildInfo;
+    report.contracts       = GetContractsVersion();
+    report.contractsBuild  = impl_->contractsBuildInfo;
+    report.pythonAvailable = static_cast<bool>(impl_->python);
+    return aboutReportText(report);
 }
 
 void AppController::copyAboutText() const
@@ -1443,7 +1384,7 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     // A snapshot produced by an older configuration is still shown, but it must not claim to
     // describe the current parameters.
     row.stale             = snapshot && snapshot->executionRevision != node.executionRevision;
-    row.category          = def ? workbench::q(def->category) : QString();
+    row.category          = def ? workbench::q(categoryPath(*def)) : QString();
     const auto avail      = registry.availability(node.toolId);
     row.defMissing        = avail.state == ToolAvailability::DefinitionMissing;
     row.implUnavailable   = !row.defMissing

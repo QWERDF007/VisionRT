@@ -49,11 +49,7 @@ try
                       "   stream.write(str(self.identity) + '\\n')\n"
                       "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
-        const auto definition = parseToolDefinitionJson(R"({
-            "schema_version":4,"tool_id":"audit.concurrent.shutdown","display_name":"Shutdown","version":"1",
-            "kind":"python_class","entry":{"package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},
-            "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
-        })", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
+        const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"audit.concurrent.shutdown","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>();
         runtime->refresh(std::span(&definition, 1));
@@ -110,11 +106,7 @@ try
                       "  (directory / 'finished.flag').write_text('finished')\n"
                       "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
-        const auto definition = parseToolDefinitionJson(R"({
-            "schema_version":4,"tool_id":"audit.release.inflight","display_name":"Shutdown","version":"1",
-            "kind":"python_class","entry":{"package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},
-            "init_params":[],"inputs":[],"outputs":[{"id":"value","name":"Value","type":"Int"}]
-        })", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
+        const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"audit.release.inflight","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>();
         runtime->refresh(std::span(&definition, 1));
@@ -151,13 +143,7 @@ def execute(inputs):
     return {'outputs': {'images':[image], 'namespace':__name__, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )";
     }
-    const auto definition = parseToolDefinitionJson(R"({
-        "schema_version":4,"tool_id":"python.memory","display_name":"Memory","version":"1",
-        "kind":"python_function","entry":{"package":"memory","file":"tool.py","symbol":"execute"},
-        "init_params":[],"inputs":[],"outputs":[
-            {"id":"images","name":"Images","type":"Image"},
-            {"id":"namespace","name":"Namespace","type":"String"}]
-    })",
+    const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"python.memory","name_zh":"Memory","version":"1","implementation":{"kind":"python_function","package":"memory","file":"tool.py","symbol":"execute"},"ports":{"outputs":[{"name_en":"images","name_zh":"Images","type":"image"},{"name_en":"namespace","name_zh":"Namespace","type":"string"}]}})",
                                                     root / "tools/custom/memory.json",
                                                     {
                                                         ToolOrigin::Custom,

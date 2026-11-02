@@ -69,8 +69,8 @@ try
     };
 
     ToolDefinition gate;
-    gate.id          = "test.interaction.gate";
-    gate.displayName = "交互门控工具";
+    gate.nameEn          = "test.interaction.gate";
+    gate.nameZh = "交互门控工具";
     gate.kind        = ToolKind::PythonFunction;
     gate.entry       = {"interaction", "tool.py", "run"};
     gate.outputs     = {

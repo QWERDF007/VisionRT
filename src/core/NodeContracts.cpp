@@ -27,8 +27,8 @@ TypeMap resolvedOutputTypes(const ToolDefinition &contract)
     for (const auto &port : contract.outputs)
     {
         if (port.typeFrom)
-            throw ContractError("输出类型尚未解析：" + port.id);
-        result.insert_or_assign(port.id, port.type);
+            throw ContractError("输出类型尚未解析：" + port.nameEn);
+        result.insert_or_assign(port.nameEn, port.type);
     }
     return result;
 }
@@ -47,13 +47,13 @@ void setOutputDeclarations(NodeDefinition &node, const ToolDefinition &definitio
     {
         if (port.typeFrom)
         {
-            node.outputTypeSources.emplace(port.id, *port.typeFrom);
-            const auto previous = node.signatures.outputs.find(port.id);
+            node.outputTypeSources.emplace(port.nameEn, *port.typeFrom);
+            const auto previous = node.signatures.outputs.find(port.nameEn);
             if (previous != node.signatures.outputs.end())
-                outputs.emplace(port.id, previous->second);
+                outputs.emplace(port.nameEn, previous->second);
         }
         else
-            outputs.insert_or_assign(port.id, port.type);
+            outputs.insert_or_assign(port.nameEn, port.type);
     }
     node.signatures.outputs = std::move(outputs);
 }
@@ -102,9 +102,9 @@ void resolveOutputTypes(ProjectDefinition &project)
             const auto *text  = value == node.initParams.end() ? nullptr : std::get_if<std::string>(&value->second);
             return text ? *text : std::string{};
         };
-        const auto flowId     = parameter(reference->second.flowParameter);
-        const auto nodeSeq    = parameter(reference->second.nodeParameter);
-        const auto sourcePort = parameter(reference->second.portParameter);
+        const auto flowId     = parameter(reference->second.flowParameter.port);
+        const auto nodeSeq    = parameter(reference->second.nodeParameter.port);
+        const auto sourcePort = parameter(reference->second.portParameter.port);
         std::optional<TypeSpec> type;
         if (flowId.empty() || nodeSeq.empty() || sourcePort.empty())
             fail(node.retiredInitParams.isEmpty()
@@ -189,13 +189,15 @@ void resolveOutputTypes(ProjectDefinition &project)
 }
 
 namespace {
-PortDefinition materializedPort(std::string id, std::string name, TypeSpec type, bool required)
+// Ports derived from a node model stay bound to the node's own configuration: an unbound input
+// keeps Missing, and the tool's status says what an absent value means. Only a declaration carries
+// a type default.
+PortDefinition materializedPort(std::string nameEn, std::string nameZh, TypeSpec type)
 {
     PortDefinition port;
-    port.id         = std::move(id);
-    port.name       = std::move(name);
-    port.type       = std::move(type);
-    port.required   = required;
+    port.nameEn       = std::move(nameEn);
+    port.nameZh       = std::move(nameZh);
+    port.type         = std::move(type);
     port.defaultValue = Missing{};
     return port;
 }
@@ -223,7 +225,7 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
     {
         std::vector<PortDefinition> system;
         for (const auto &port : definition.outputs)
-            if (port.id == "__status_code" || port.id == "__status_message")
+            if (port.nameEn == "__status_code" || port.nameEn == "__status_message")
                 system.push_back(port);
         switch (definition.nodeModel)
         {
@@ -236,13 +238,13 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
                 throw ContractError("节点缺少表达式配置：" + node.title());
             contract.inputs.clear();
             if (definition.nodeModel == NodeModel::Condition && conditionUsesUpstream(node))
-                contract.inputs.push_back(materializedPort("condition", "条件", {Type::Bool}, true));
+                contract.inputs.push_back(materializedPort("condition", "条件", {Type::Bool}));
             else
             {
                 contract.inputs.reserve(node.expression->variables.size());
                 for (const auto &variable : node.expression->variables)
                     contract.inputs.push_back(
-                        materializedPort(variable.portId, variable.name, variable.type, !variable.allowMissing));
+                        materializedPort(variable.portId, variable.name, variable.type));
             }
             if (definition.nodeModel == NodeModel::Expression)
             {
@@ -250,7 +252,7 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
                 for (const auto &result : node.expression->program)
                     if (result.exposed)
                         contract.outputs.push_back(
-                            materializedPort(result.portId, result.name, result.type, true));
+                            materializedPort(result.portId, result.name, result.type));
             }
             break;
         }
@@ -258,11 +260,11 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
         {
             if (!node.selectType)
                 throw ContractError("合流节点尚未选择类型：" + node.title());
-            contract.inputs = {materializedPort("selector", "选择条件", {Type::Bool}, true),
-                               materializedPort("if_true", "成立值", *node.selectType, false),
-                               materializedPort("if_false", "否则值", *node.selectType, false)};
+            contract.inputs = {materializedPort("selector", "选择条件", {Type::Bool}),
+                               materializedPort("if_true", "成立值", *node.selectType),
+                               materializedPort("if_false", "否则值", *node.selectType)};
             contract.outputs = std::move(system);
-            contract.outputs.push_back(materializedPort("value", "所选值", *node.selectType, true));
+            contract.outputs.push_back(materializedPort("value", "所选值", *node.selectType));
             break;
         }
         }
@@ -271,11 +273,11 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
     for (auto &port : contract.outputs)
         if (port.typeFrom)
         {
-            const auto type = node.signatures.outputs.find(port.id);
+            const auto type = node.signatures.outputs.find(port.nameEn);
             if (type == node.signatures.outputs.end())
             {
-                const auto error = node.outputTypeErrors.find(port.id);
-                throw ContractError("输出类型无法解析：" + node.title() + "." + port.id + "："
+                const auto error = node.outputTypeErrors.find(port.nameEn);
+                throw ContractError("输出类型无法解析：" + node.title() + "." + port.nameEn + "："
                                     + (error == node.outputTypeErrors.end() ? "未配置类型来源" : error->second));
             }
             port.type = type->second;
@@ -307,8 +309,8 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
     }
     for (const auto &port : definition.initParams)
     {
-        const auto found = node.initParams.find(port.id);
-        parameters.emplace(port.id,
+        const auto found = node.initParams.find(port.nameEn);
+        parameters.emplace(port.nameEn,
                            copyProjectLiteral(found == node.initParams.end() ? port.defaultValue : found->second));
     }
     return parameters;

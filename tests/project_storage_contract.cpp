@@ -100,20 +100,20 @@ QJsonObject savedProject(const QJsonArray &nodes, const QString &nextNode = "8",
 ToolDefinition scalarTool()
 {
     ToolDefinition tool;
-    tool.id           = "unavailable";
-    tool.displayName  = "原始名称";
+    tool.nameEn           = "unavailable";
+    tool.nameZh  = "原始名称";
     tool.kind         = ToolKind::Cpp;
 
     PortDefinition value;
-    value.id           = "value";
-    value.name         = "值";
+    value.nameEn       = "value";
+    value.nameZh       = "值";
     value.type         = {Type::Int};
     value.defaultValue = std::int64_t{4};
     tool.inputs.push_back(value);
     tool.outputs.push_back(value);
     PortDefinition restored;
-    restored.id   = "unknown";
-    restored.name = "恢复";
+    restored.nameEn = "unknown";
+    restored.nameZh = "恢复";
     restored.type = {Type::String};
     tool.initParams.push_back(restored);
     return tool;
@@ -365,8 +365,13 @@ void typedArraysAndRanges(const QString &directory)
     registry.addDefinition(tool);
     const auto file = directory + "/array.vrt.json";
     put(file, QJsonDocument(savedProject({node})).toJson());
-    const auto changed = ProjectStorage(registry).load(path(file));
-    require(isMissing(changed.project.flows[0].nodes[0].inputs.at("value").literal) && changed.project.dirty,
+    const auto        changed = ProjectStorage(registry).load(path(file));
+    const auto &retyped = changed.project.flows[0].nodes[0].inputs.at("value").literal;
+    // A dtype change replaces the stored value with the declaration's own empty array instead of
+    // reinterpreting float32 bytes as int64.
+    require(std::holds_alternative<Array>(retyped)
+                && std::get<Array>(retyped).type() == TypeSpec{Type::Array, DType::Int64, 2}
+                && std::get<Array>(retyped).elementCount() == 0 && changed.project.dirty,
             "float32 empty array reinterpreted as int64");
     tool.inputs[0].type.dtype = DType::Float32;
     ToolRegistry oldRegistry;
@@ -412,27 +417,27 @@ void saveAsPaths(const QString &directory)
     for (const auto &id : {"path", "text", "empty", "remote", "absolute"})
     {
         PortDefinition port;
-        port.id     = id;
-        port.name   = id;
+        port.nameEn     = id;
+        port.nameZh   = id;
         port.type   = {Type::String};
         port.editor = std::string(id) == "text" ? "text" : "file";
         tool.inputs.push_back(port);
     }
     PortDefinition mode;
-    mode.id     = "mode";
-    mode.name   = "模式";
+    mode.nameEn     = "mode";
+    mode.nameZh   = "模式";
     mode.type   = {Type::String};
     mode.editor = "text";
     tool.inputs.push_back(mode);
     PortDefinition dynamic;
-    dynamic.id           = "dynamic";
-    dynamic.name         = "动态路径";
+    dynamic.nameEn       = "dynamic";
+    dynamic.nameZh       = "动态路径";
     dynamic.type         = {Type::String};
     dynamic.editor       = "path";
-    dynamic.pathModeFrom = "mode";
+    dynamic.pathModeFrom = PortRef{PortStage::Inputs, "mode"};
     tool.inputs.push_back(dynamic);
     PortDefinition folder = tool.inputs[0];
-    folder.id             = "folder";
+    folder.nameEn         = "folder";
     folder.editor         = "directory";
     tool.initParams.push_back(folder);
     registry.addDefinition(tool);
@@ -440,8 +445,8 @@ void saveAsPaths(const QString &directory)
     ProjectDefinition project;
     NodeDefinition    node;
     node.id                         = 0;
-    node.toolId                     = tool.id;
-    node.toolNameSnapshot           = tool.displayName;
+    node.toolId                     = tool.nameEn;
+    node.toolNameSnapshot           = tool.nameZh;
     node.inputs["path"]             = {BindingMode::Upstream, std::string("图像/不存在.png"), std::nullopt};
     node.inputs["text"].literal     = std::string("图像/不存在.png");
     node.inputs["empty"].literal    = std::string("");
@@ -452,8 +457,8 @@ void saveAsPaths(const QString &directory)
     const auto newDirectory         = directory + "/新位置";
     const auto absolutePath         = utf8Path(path(oldDirectory) / std::filesystem::path(u8"绝对.png"));
     node.inputs["absolute"].literal = std::string(absolutePath);
-    for (const auto &port : tool.inputs) node.signatures.inputs.emplace(port.id, port.type);
-    node.signatures.initParams.emplace(folder.id, folder.type);
+    for (const auto &port : tool.inputs) node.signatures.inputs.emplace(port.nameEn, port.type);
+    node.signatures.initParams.emplace(folder.nameEn, folder.type);
     project.flows[0].nodes.push_back(node);
     project.nextNodeId = 1;
     require(QDir().mkpath(oldDirectory) && QDir().mkpath(newDirectory), "cannot create save-as directories");
@@ -504,16 +509,7 @@ void saveAsPaths(const QString &directory)
 
 void retiredInitialization(const QString &directory)
 {
-    const auto tool = parseToolDefinitionJson(R"json({
-        "schema_version":4,"tool_id":"unavailable","display_name":"接收器","version":"1.0",
-        "kind":"host","entry":{"binding":"visionrt.receiver"},
-        "init_params":[
-            {"id":"source_flow_id","name":"流程","type":"String","default":""},
-            {"id":"source_node_seq","name":"节点","type":"String","default":""},
-            {"id":"source_port_id","name":"端口","type":"String","default":"value"}],
-        "inputs":[],"outputs":[{"id":"value","name":"值","type_from":{
-            "flow":"source_flow_id","node":"source_node_seq","port":"source_port_id"}}]
-    })json");
+    const auto tool = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"unavailable","name_zh":"接收器","version":"1.0","implementation":{"kind":"host","binding":"visionrt.receiver"},"ports":{"init":[{"name_en":"source_flow_id","name_zh":"流程","type":"string"},{"name_en":"source_node_seq","name_zh":"节点","type":"string"},{"name_en":"source_port_id","name_zh":"端口","type":"string","default":"value"}],"outputs":[{"name_en":"value","name_zh":"值","type_from":{"flow":"init.source_flow_id","node":"init.source_node_seq","port":"init.source_port_id"}}]}})");
     auto       raw  = savedNode("9007199254740993", "");
     raw.insert("init_params", QJsonDocument::fromJson(R"json({
         "source_flow_name":"旧流程","source_node_name":"同名节点","source_port_id":"value",
@@ -594,11 +590,13 @@ void retiredInitialization(const QString &directory)
     require(movedNode["init_params"] == saved["init_params"] && movedNode["type_snapshot"] == saved["type_snapshot"],
             "Save As rewrote opaque initialization values or types");
     auto previous             = tool;
-    previous.initParams[0].id = "source_flow_name";
-    previous.initParams[1].id = "source_node_name";
+    previous.initParams[0].nameEn = "source_flow_name";
+    previous.initParams[1].nameEn = "source_node_name";
     for (auto &port : previous.outputs)
-        if (port.id == "value")
-            port.typeFrom = PortTypeReference{"source_flow_name", "source_node_name", "source_port_id"};
+        if (port.nameEn == "value")
+            port.typeFrom = PortTypeReference{{PortStage::Init, "source_flow_name"},
+                                              {PortStage::Init, "source_node_name"},
+                                              {PortStage::Init, "source_port_id"}};
     ToolRegistry restoredRegistry;
     restoredRegistry.addDefinition(previous);
     const auto restored = ProjectStorage(restoredRegistry).load(path(output));
@@ -648,14 +646,14 @@ void dormantLiteralSources(const QString &directory)
     // T-B04: Dormant source on Literal binding mode must not block execution or produce false diagnostics
     ToolRegistry registry;
     ToolDefinition defA;
-    defA.id = "test.producer";
-    defA.displayName = "生产者";
+    defA.nameEn = "test.producer";
+    defA.nameZh = "生产者";
     defA.outputs = {{"out", "输出", {Type::Int}}};
     registry.addDefinition(defA);
 
     ToolDefinition defB;
-    defB.id = "test.consumer";
-    defB.displayName = "消费者";
+    defB.nameEn = "test.consumer";
+    defB.nameZh = "消费者";
     defB.inputs = {{"in", "输入", {Type::Int}}};
     registry.addDefinition(defB);
 

@@ -56,30 +56,127 @@ void parameterEditorsContract()
           "def run(inputs):\n    return {'outputs': {'ratio': inputs['ratio'], 'count': inputs['count'], '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 4,
-  "tool_id": "test.parameters",
-  "display_name": "参数测试",
+  "schema_version": 5,
+  "name_en": "test.parameters",
+  "name_zh": "参数测试",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "Test/Parameters", "file": "run.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [
-    {"id": "ratio", "name": "比例", "type": "Float", "default": 0.15, "min": 0, "max": 1, "step": 0.05, "decimals": 2},
-    {"id": "count", "name": "整数", "type": "Int", "default": 9007199254740993},
-    {"id": "path", "name": "路径", "type": "String", "default": "原始路径", "editor": "file"},
-    {"id": "enabled", "name": "启用", "type": "Bool", "default": true},
-    {"id": "mode", "name": "色彩", "type": "String", "default": "bgr", "options": ["bgr", "gray"]},
-    {"id": "labels", "name": "标签列表", "type": "Array", "dtype": "string", "rank": 1, "default": ["a", "b"]},
-    {"id": "note", "name": "备注", "type": "String", "default": "中文备注"},
-    {"id": "directory", "name": "数据目录", "type": "String", "default": "F:/tmp", "editor": "directory"},
-    {"id": "weights", "name": "数值数组", "type": "Array", "dtype": "float64", "rank": 1, "default": [0, 1]},
-    {"id": "images", "name": "图像", "type": "Image", "default": [], "required": false},
-    {"id": "rois", "name": "区域", "type": "ROI", "default": [], "image_input": "images"}
-  ],
-  "outputs": [
-    {"id": "ratio", "name": "比例", "type": "Float"},
-    {"id": "count", "name": "整数", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "Test/Parameters",
+    "file": "run.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "ratio",
+        "name_zh": "比例",
+        "type": "float",
+        "default": 0.15,
+        "constraints": {
+          "min": 0,
+          "max": 1
+        },
+        "ui": {
+          "step": 0.05,
+          "decimals": 2
+        }
+      },
+      {
+        "name_en": "count",
+        "name_zh": "整数",
+        "type": "int",
+        "default": 9007199254740993
+      },
+      {
+        "name_en": "path",
+        "name_zh": "路径",
+        "type": "string",
+        "default": "原始路径",
+        "ui": {
+          "editor": "file"
+        }
+      },
+      {
+        "name_en": "enabled",
+        "name_zh": "启用",
+        "type": "bool",
+        "default": true
+      },
+      {
+        "name_en": "mode",
+        "name_zh": "色彩",
+        "type": "string",
+        "default": "bgr",
+        "constraints": {
+          "options": [
+            "bgr",
+            "gray"
+          ]
+        }
+      },
+      {
+        "name_en": "labels",
+        "name_zh": "标签列表",
+        "type": "vec_string",
+        "default": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "name_en": "note",
+        "name_zh": "备注",
+        "type": "string",
+        "default": "中文备注"
+      },
+      {
+        "name_en": "directory",
+        "name_zh": "数据目录",
+        "type": "string",
+        "default": "F:/tmp",
+        "ui": {
+          "editor": "directory"
+        }
+      },
+      {
+        "name_en": "weights",
+        "name_zh": "数值数组",
+        "type": "vec_float",
+        "default": [
+          0,
+          1
+        ]
+      },
+      {
+        "name_en": "images",
+        "name_zh": "图像",
+        "type": "image",
+        "default": []
+      },
+      {
+        "name_en": "rois",
+        "name_zh": "区域",
+        "type": "roi",
+        "default": [],
+        "relations": {
+          "image": "inputs.images"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "ratio",
+        "name_zh": "比例",
+        "type": "float"
+      },
+      {
+        "name_en": "count",
+        "name_zh": "整数",
+        "type": "int"
+      }
+    ]
+  }
 })json");
 
     AppController app(1, directory.path());

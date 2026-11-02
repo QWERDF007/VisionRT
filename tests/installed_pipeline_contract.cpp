@@ -93,8 +93,8 @@ try
     require(!published.index.tools.contains("test.installed.relay"), "Fixture unexpectedly indexed");
 
     ToolDefinition relay;
-    relay.id          = "test.installed.relay";
-    relay.displayName = "Installed writable relay";
+    relay.nameEn          = "test.installed.relay";
+    relay.nameZh = "Installed writable relay";
     relay.kind        = ToolKind::PythonFunction;
     relay.entry       = {"examples/image_sizes", "tool.py", "execute"};
     relay.inputs      = {
@@ -136,8 +136,8 @@ def execute(inputs):
     return {'outputs': out, 'detail': ''}
 )");
     ToolDefinition generated;
-    generated.id          = "test.installed.generated";
-    generated.displayName = "Python-owned padded image";
+    generated.nameEn          = "test.installed.generated";
+    generated.nameZh = "Python-owned padded image";
     generated.kind        = ToolKind::PythonFunction;
     generated.entry       = {"examples/ownership", "tool.py", "execute"};
     generated.outputs     = {
@@ -145,7 +145,7 @@ def execute(inputs):
     };
     write(root / "tools/custom/generated.json", emitNormalizedToolJson(generated));
     auto counter         = generated;
-    counter.id           = "test.installed.ownership_counter";
+    counter.nameEn           = "test.installed.ownership_counter";
     counter.entry.symbol = "counter";
     counter.outputs      = {
         {"allocated", "Allocated", {Type::Int}},
@@ -173,8 +173,8 @@ def counter(inputs):
     return {'outputs': {'allocated': allocated, 'released': released, '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )");
     ToolDefinition h35Combo;
-    h35Combo.id          = "test.installed.h35_combo";
-    h35Combo.displayName = "H35 native helper and declared resource";
+    h35Combo.nameEn          = "test.installed.h35_combo";
+    h35Combo.nameZh = "H35 native helper and declared resource";
     h35Combo.kind        = ToolKind::PythonFunction;
     h35Combo.entry       = {"examples/h35_combo", "tool.py", "execute"};
     h35Combo.resources   = {std::filesystem::path("resources/h35_weights.bin")};
@@ -198,7 +198,7 @@ def execute(inputs):
     return {'outputs': {'val': q.get(), 'res_len': len(res_path.read_bytes()), '__status_code': 0, '__status_message': ''}, 'detail': ''}
 )");
     const auto augmented = readToolsPackage(root);
-    require(augmented.tools.size() == published.tools.size() + 4 && !augmented.index.tools.contains(relay.id),
+    require(augmented.tools.size() == published.tools.size() + 4 && !augmented.index.tools.contains(relay.nameEn),
             "Custom discovery required an index rebuild");
     validateToolsPackage(root);
 
@@ -237,11 +237,11 @@ def execute(inputs):
     std::cerr << "[DEBUG] brightness definition " << (brightnessDef ? "found" : "missing") << std::endl;
     const auto    brightness = editor.addNode(flow, *brightnessDef, {0, 4});
     const auto    before  = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 10});
-    const auto    bridge  = editor.addNode(flow, *registry.find(relay.id), {0, 20});
+    const auto    bridge  = editor.addNode(flow, *registry.find(relay.nameEn), {0, 20});
     const auto    after   = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 30});
     const auto    crop    = editor.addNode(flow, *registry.find("visionrt.image.crop"), {0, 40});
     const auto    builtin = editor.addNode(flow, *registry.find("visiontools.python.image_sizes"), {10, 15});
-    const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.id), {0, 50});
+    const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.nameEn), {0, 50});
     editor.setLiteral(flow, reader, "path", std::string("images"));
     editor.setLiteral(flow, reader, "count", std::int64_t(2));
     editor.setLiteral(flow, reader, "reload", true);
@@ -262,8 +262,8 @@ def execute(inputs):
         editor.setMode(flow, before, port, BindingMode::Literal);
     for (const auto &port : relay.inputs)
     {
-        editor.bindFreeInput(flow, {before, port.id}, {bridge, port.id});
-        editor.bindFreeInput(flow, {bridge, port.id}, {after, port.id});
+        editor.bindFreeInput(flow, {before, port.nameEn}, {bridge, port.nameEn});
+        editor.bindFreeInput(flow, {bridge, port.nameEn}, {after, port.nameEn});
     }
     editor.bindFreeInput(flow, {bridge, "images"}, {crop, "images"});
     editor.bindFreeInput(flow, {bridge, "rect"}, {crop, "rect"});
@@ -322,7 +322,7 @@ def execute(inputs):
         require(std::get<std::int64_t>(h35Snap->outputs.at("res_len")) == static_cast<std::int64_t>(h35Payload.size()),
                 "H35 declared resource size mismatch");
     }
-    auto probe = python.factory(*registry.find(counter.id))(PlatformToolServices{});
+    auto probe = python.factory(*registry.find(counter.nameEn))(PlatformToolServices{});
     require(probe->initialize({}).code == 0, "Ownership probe initialization failed");
     const auto released = [&]
     {
@@ -335,7 +335,7 @@ def execute(inputs):
     {
         ProjectEditor ownership;
         const auto    ownershipFlow = ownership.project().flows.front().id;
-        const auto    parent        = ownership.addNode(ownershipFlow, *registry.find(generated.id), {0, 0});
+        const auto    parent        = ownership.addNode(ownershipFlow, *registry.find(generated.nameEn), {0, 0});
         const auto    child         = ownership.addNode(ownershipFlow, *registry.find("visionrt.image.crop"), {0, 2});
         ownership.bindFreeInput(ownershipFlow, {parent, "images"}, {child, "images"});
         ownership.setLiteral(ownershipFlow, child, "rect", DataRef<ROI>(ROI{{{2., 1., 2., 4., 3., 0.}}}));

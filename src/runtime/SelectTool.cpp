@@ -62,9 +62,9 @@ void registerSelectTools(ToolRegistry &registry)
                                  {
                                      const auto output
                                          = std::find_if(definition.outputs.begin(), definition.outputs.end(),
-                                                        [](const auto &port) { return port.id == "value"; });
+                                                        [](const auto &port) { return port.nameEn == "value"; });
                                      if (output == definition.outputs.end())
-                                         throw ContractError("合流工具缺少 value 输出端口：" + definition.id);
+                                         throw ContractError("合流工具缺少 value 输出端口：" + definition.nameEn);
                                      return std::make_unique<SelectTool>(output->type);
                                  });
 }

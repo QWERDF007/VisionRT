@@ -36,8 +36,8 @@ try
     };
     const auto package = root + "/tools-package/";
     ToolDefinition definition;
-    definition.id          = "test.publication";
-    definition.displayName = "发布工具";
+    definition.nameEn          = "test.publication";
+    definition.nameZh = "发布工具";
     definition.kind        = ToolKind::PythonClass;
     definition.entry       = {"publication", "tool.py", "Tool"};
     definition.initParams  = {

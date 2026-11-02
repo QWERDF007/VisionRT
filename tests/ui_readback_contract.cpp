@@ -47,8 +47,8 @@ try
         require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "readback fixture write failed");
     };
     ToolDefinition definition;
-    definition.id          = "test.readback";
-    definition.displayName = "读取阶段";
+    definition.nameEn          = "test.readback";
+    definition.nameZh = "读取阶段";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"readback", "tool.py", "run"};
     definition.outputs     = {

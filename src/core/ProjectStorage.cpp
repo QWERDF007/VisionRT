@@ -82,7 +82,7 @@ TypeMap decodeTypes(const QJsonValue &node, std::string_view context)
 TypeMap types(const std::vector<PortDefinition> &ports)
 {
     TypeMap result;
-    for (const auto &port : ports) result.emplace(port.id, port.type);
+    for (const auto &port : ports) result.emplace(port.nameEn, port.type);
     return result;
 }
 
@@ -107,13 +107,13 @@ void rangeWarning(ProjectLoadResult &result, const FlowDefinition &flow, const N
         if (!equalValues(normalized.value, value))
         {
             value = std::move(normalized.value);
-            diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.id,
+            diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.nameEn,
                      "保存的值不符合当前约束，已按声明收敛：" + normalized.adjustment, true);
         }
     }
     catch (const ContractError &error)
     {
-        diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.id,
+        diagnose(result, ProjectStorageCode::RangeWarning, flow, node, port.nameEn,
                  "保存的值不符合当前约束，已保留原值：" + std::string(error.what()));
     }
 }
@@ -175,32 +175,32 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     Values parameters;
     for (const auto &port : definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams)
     {
-        const auto old       = node.initParams.find(port.id);
-        const auto signature = node.signatures.initParams.find(port.id);
+        const auto old       = node.initParams.find(port.nameEn);
+        const auto signature = node.signatures.initParams.find(port.nameEn);
         const bool retain    = old != node.initParams.end() && signature != node.signatures.initParams.end()
                          && compatible(signature->second, port.type);
         auto value = retain ? old->second : defaultValue(port);
         if (!retain)
-            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + port.id,
+            diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + port.nameEn,
                      "缺失或类型不兼容的初始化参数已替换为声明默认值", true);
         rangeWarning(result, flow, node, port, value);
-        parameters.emplace(port.id, std::move(value));
+        parameters.emplace(port.nameEn, std::move(value));
     }
     std::map<std::string, InputBinding, std::less<>> inputs;
     for (const auto &port : contract.inputs)
     {
-        const auto old       = node.inputs.find(port.id);
-        const auto signature = node.signatures.inputs.find(port.id);
+        const auto old       = node.inputs.find(port.nameEn);
+        const auto signature = node.signatures.inputs.find(port.nameEn);
         const bool retain    = old != node.inputs.end() && signature != node.signatures.inputs.end()
                          && compatible(signature->second, port.type);
         InputBinding binding;
         if (retain)
         {
             binding = old->second;
-            if (!raw.value("inputs").toObject().value(QString::fromStdString(port.id)).toObject().contains("literal"))
+            if (!raw.value("inputs").toObject().value(QString::fromStdString(port.nameEn)).toObject().contains("literal"))
             {
                 binding.literal = defaultValue(port);
-                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
+                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.nameEn,
                          "未配置的字面量草稿已填入声明默认值", true);
             }
         }
@@ -209,13 +209,13 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             binding.literal = defaultValue(port);
             if (old != node.inputs.end())
                 binding.mode = old->second.mode;
-            if (!isHostOwnedPort(port.id))
-                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.id,
+            if (!isHostOwnedPort(port.nameEn))
+                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + port.nameEn,
                          "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
         }
         if (binding.mode == BindingMode::Literal || !binding.source)
             rangeWarning(result, flow, node, port, binding.literal);
-        inputs.emplace(port.id, std::move(binding));
+        inputs.emplace(port.nameEn, std::move(binding));
     }
     for (const auto &[id, binding] : node.inputs)
     {
@@ -226,9 +226,9 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     node.initParams = std::move(parameters);
     node.inputs     = std::move(inputs);
     node.signatures = {std::move(initTypes), std::move(inputTypes), std::move(outputTypes)};
-    if (node.toolNameSnapshot != definition.displayName)
+    if (node.toolNameSnapshot != definition.nameZh)
     {
-        node.toolNameSnapshot = definition.displayName;
+        node.toolNameSnapshot = definition.nameZh;
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "tool_name_snapshot", "工具显示名称快照已更新",
                  true);
     }
@@ -845,13 +845,13 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
                                            "未识别的初始化参数已保留原文，另存后请核对其中的相对路径"});
                 for (const auto &port : definition->initParams)
                 {
-                    const auto value = node.initParams.find(port.id);
+                    const auto value = node.initParams.find(port.nameEn);
                     if (value != node.initParams.end())
                         rewritePath(value->second, port, oldDirectory, target.parent_path());
                 }
                 for (const auto &port : definition->inputs)
                 {
-                    const auto value = node.inputs.find(port.id);
+                    const auto value = node.inputs.find(port.nameEn);
                     if (value != node.inputs.end())
                     rewritePath(value->second.literal, port, oldDirectory, target.parent_path());
                 }

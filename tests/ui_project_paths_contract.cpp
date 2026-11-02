@@ -54,38 +54,37 @@ try
         return file.readAll();
     };
     ToolDefinition definition;
-    definition.id          = "test.project_paths";
-    definition.displayName = "工程路径实读";
+    definition.nameEn          = "test.project_paths";
+    definition.nameZh = "工程路径实读";
     definition.kind        = ToolKind::PythonClass;
     definition.entry       = {"project_paths", "tool.py", "Reader"};
     for (const auto &id : {"file", "directory", "dynamic", "mode", "empty", "missing", "note"})
     {
         PortDefinition port;
-        port.id       = id;
-        port.name     = id;
+        port.nameEn       = id;
+        port.nameZh     = id;
         port.type     = {Type::String};
-        port.required = port.id != "missing";
         port.editor   = std::string(id) == "directory" ? "directory" : "file";
-        if (port.id == "dynamic")
+        if (port.nameEn == "dynamic")
         {
             port.editor       = "path";
-            port.pathModeFrom = "mode";
+            port.pathModeFrom = PortRef{PortStage::Inputs, "mode"};
         }
-        if (port.id == "mode" || port.id == "note")
+        if (port.nameEn == "mode" || port.nameEn == "note")
         {
             port.editor       = "text";
-            port.defaultValue = std::string(port.id == "mode" ? "file" : "original");
+            port.defaultValue = std::string(port.nameEn == "mode" ? "file" : "original");
         }
-        if (port.id == "empty")
+        if (port.nameEn == "empty")
             port.defaultValue = std::string{};
         definition.inputs.push_back(port);
     }
     definition.initParams = definition.inputs;
     for (auto &port : definition.initParams)
     {
-        port.id = "init_" + port.id;
-        if (!port.pathModeFrom.empty())
-            port.pathModeFrom = "init_" + port.pathModeFrom;
+        port.nameEn = "init_" + port.nameEn;
+        if (port.pathModeFrom)
+            port.pathModeFrom = PortRef{PortStage::Init, "init_" + port.pathModeFrom->port};
     }
     definition.outputs = {
         {"data", "实读内容", {Type::String}}
