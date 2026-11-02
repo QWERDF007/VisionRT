@@ -1,4 +1,5 @@
 #include "python/PythonInterop.h"
+#include "result_view.h"
 
 #include <pybind11/embed.h>
 #include <pybind11/numpy.h>
@@ -62,20 +63,36 @@ void nativeLists(const PythonStorage &storage)
         const auto source = py::eval(expression);
         const auto value  = fromPython(type, source, storage);
         assert(std::get<Array>(value).type() == type);
-        auto converted = toPython(value);
-        assert(PyList_CheckExact(converted.ptr()));
-        assert(converted.equal(source));
+        // A rectangular numeric Array crosses back as one numpy view; a ragged or string Array has
+        // no rectangular numpy form and keeps its nested lists.
+        const bool numpyForm = std::get<Array>(value).layout() == ArrayLayout::Dense && type.dtype != DType::String;
+        auto       converted = toPython(value);
+        if (numpyForm)
+        {
+            assert(py::isinstance<py::array>(converted));
+            const auto numpy = py::module_::import("numpy");
+            assert(numpy.attr("array_equal")(converted, numpy.attr("array")(source)).cast<bool>());
+        }
+        else
+        {
+            assert(PyList_CheckExact(converted.ptr()));
+            assert(converted.equal(source));
+        }
         const auto empty = fromPython(type, py::list(), storage);
-        assert(std::get<Array>(empty).type() == type && toPython(empty).cast<py::list>().empty());
+        assert(std::get<Array>(empty).type() == type);
+        if (numpyForm)
+            assert(py::isinstance<py::array>(toPython(empty)) && py::len(toPython(empty)) == 0);
+        else
+            assert(toPython(empty).cast<py::list>().empty());
     }
     auto source                      = py::eval("[[1.0, 2.0], [], [3.0]]");
     auto value                       = fromPython({Type::Array, DType::Float64, 2}, source, storage);
     auto converted                   = toPython(value).cast<py::list>();
     converted[0].cast<py::list>()[0] = 99.0;
-    assert((std::get<Array>(value).get<NestedVector<double, 2>>()[0][0] == 1.0));
+    assert((nestedOf<NestedVector<double, 2>>(std::get<Array>(value))[0][0] == 1.0));
     assert(source.cast<py::list>()[0].cast<py::list>()[0].cast<double>() == 1.0);
     const auto returned = fromPython({Type::Array, DType::Float64, 2}, converted, storage);
-    assert((std::get<Array>(returned).get<NestedVector<double, 2>>()[0][0] == 99.0));
+    assert((nestedOf<NestedVector<double, 2>>(std::get<Array>(returned))[0][0] == 99.0));
 
     const auto roi      = py::eval(R"([[
         [0.0, 1.25, 2.5], [1.0, 0.0, 0.0, 1.0, 2.0], [2.0, 1.0, 2.0, 3.0, 4.0, 0.0],
@@ -95,7 +112,16 @@ void nativeLists(const PythonStorage &storage)
     rejected({Type::Array, DType::Bool, 1}, py::eval("[0]"), storage, "port[0]");
     rejected({Type::Array, DType::Float64, 2}, py::eval("[[None]]"), storage, "port[0][0]");
     rejected(bytes, py::eval("(1, 2)"), storage, "port");
-    rejected(bytes, py::eval("__import__('numpy').array([1], dtype='uint8')"), storage, "port");
+    // A numpy array is the accepted rectangular form, so the same dtype/shape check applies to it
+    // instead of a "list only" rejection.
+    {
+        const auto numpyValue
+            = fromPython(bytes, py::eval("__import__('numpy').array([1], dtype='uint8')"), storage);
+        assert(std::get<Array>(numpyValue).elementCount() == 1);
+        rejected(bytes, py::eval("__import__('numpy').array([1], dtype='int64')"), storage, "dtype");
+        rejected({Type::Array, DType::UInt8, 2}, py::eval("__import__('numpy').array([1], dtype='uint8')"),
+                 storage, "rank");
+    }
     rejected({Type::Array, DType::Float64, 1}, py::eval("[__import__('numpy').float64(0.5)]"), storage, "port[0]");
     rejected({Type::ROI}, py::eval("[[[0.0, 1.0]]]"), storage, "port[0][0]");
     rejected({Type::Array, DType::String, 1}, py::eval("['\\ud800']"), storage, "port[0]");

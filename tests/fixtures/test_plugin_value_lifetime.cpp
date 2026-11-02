@@ -31,7 +31,7 @@ public:
         payload->marker = marker_;
         cv::Mat image(2, 3, CV_8UC1, payload->pixels.data(), 4);
         return toolResult({{"image", DataRef<Image>(Image{image}, {payload})},
-             {"array", Array(NestedVector<std::int64_t, 2>{{17}, {}}, {payload})},
+             {"array", Array::fromNested(NestedVector<std::int64_t, 2>{{17}, {}}).retainedBy(payload)},
              {"roi", DataRef<ROI>(ROI{{{2, 16777217.125, 0, 3, 2, 0}}}, {payload})}}, {});
     }
 

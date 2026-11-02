@@ -68,3 +68,7 @@ std::string executionFailure(Instance &instance, visionrt::Values inputs = {})
 }
 
 } // namespace testview
+
+// Reading several outputs of one run is the common case in these tests, so the readable nested form
+// of an Array stays visible unqualified next to the fixture code instead of repeated on every line.
+using visionrt::nestedOf;

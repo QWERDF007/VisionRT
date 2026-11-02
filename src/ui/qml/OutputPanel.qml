@@ -39,7 +39,7 @@ Rectangle {
         copyMenu.popup(root, position.x, position.y)
     }
     function copyEnabled() {
-        return !app.busy && !isEmptyContext(selectedContext) && selectedContext.available !== false
+        return app.workspaceEnabled && !isEmptyContext(selectedContext) && selectedContext.available !== false
                 && app.portContextCurrent(selectedContext)
     }
     function isEmptyContext(context) {
@@ -51,7 +51,7 @@ Rectangle {
         copyMenu.close(); nameMenu.close()
     }
     function validateMenu() {
-        if (app.busy || isEmptyContext(selectedContext) || !app.portContextCurrent(selectedContext))
+        if (!app.workspaceEnabled || isEmptyContext(selectedContext) || !app.portContextCurrent(selectedContext))
             invalidateMenu()
     }
     ColumnLayout {
@@ -266,7 +266,7 @@ Rectangle {
                         required property var modelData
                         text: modelData.connected ? ("✓ " + (modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
                             : ((modelData.title || modelData.name) + " (" + (modelData.typeText || modelData.type) + ")")
-                        enabled: !app.busy
+                        enabled: app.workspaceEnabled
                         onTriggered: {
                             if (modelData.connected) {
                                 app.unbindOutputFrom(root.selectedContext, toolSubMenu.targetNode, modelData.port)

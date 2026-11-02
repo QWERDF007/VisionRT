@@ -49,8 +49,10 @@ int main(int argc, char **argv)
         }
         else if (std::string_view(port) == "array")
         {
-            std::get<Array>(value).get<NestedVector<std::int64_t, 2>>()[0][0] = 9007199254740993LL;
-            assert((std::get<Array>(alias).get<NestedVector<std::int64_t, 2>>()[0][0] == 9007199254740993LL));
+            // The Array keeps one flat buffer per storage: edits go through the element span, and a
+            // copy shares that buffer instead of deep-copying the nested tree.
+            std::get<Array>(value).elements<std::int64_t>()[0] = 9007199254740993LL;
+            assert((std::get<Array>(alias).elements<std::int64_t>()[0] == 9007199254740993LL));
         }
         else
         {

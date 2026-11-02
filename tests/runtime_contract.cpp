@@ -1012,6 +1012,47 @@ void hostBindingReceiverContract()
 }
 } // namespace
 
+// Two-element outer level of the declared signature: the shape a readable container resize
+// produced, now built from the same nested form a declaration uses.
+template<class Scalar>
+Array twoOuterOfRank(int rank)
+{
+    switch (rank)
+    {
+    case 1:
+        return Array::fromNested(NestedVector<Scalar, 1>(2));
+    case 2:
+        return Array::fromNested(NestedVector<Scalar, 2>(2));
+    case 3:
+        return Array::fromNested(NestedVector<Scalar, 3>(2));
+    case 4:
+        return Array::fromNested(NestedVector<Scalar, 4>(2));
+    }
+    throw std::runtime_error("不支持的数组 rank");
+}
+
+Array twoOuterArray(const TypeSpec &type)
+{
+    switch (*type.dtype)
+    {
+    case DType::UInt8:
+        return twoOuterOfRank<std::uint8_t>(type.rank);
+    case DType::Int32:
+        return twoOuterOfRank<std::int32_t>(type.rank);
+    case DType::Int64:
+        return twoOuterOfRank<std::int64_t>(type.rank);
+    case DType::Float32:
+        return twoOuterOfRank<float>(type.rank);
+    case DType::Float64:
+        return twoOuterOfRank<double>(type.rank);
+    case DType::Bool:
+        return twoOuterOfRank<bool>(type.rank);
+    case DType::String:
+        return twoOuterOfRank<std::string>(type.rank);
+    }
+    throw std::runtime_error("未知数组 dtype");
+}
+
 void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
 {
     std::vector<std::pair<TypeSpec, PortValue>> cases{
@@ -1021,18 +1062,13 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         {{Type::String}, std::string("跨流程数据")},
         {{Type::Image}, DataRef<Image>(Image{cv::Mat::ones(2, 3, CV_8UC1)})},
         {{Type::ROI}, DataRef<ROI>(ROI{{{3., 2., 3., 1.}}})},
-        {{Type::Array, DType::String, 1}, Array(NestedVector<std::string, 1>{"中文", "text"})},
-        {{Type::Array, DType::String, 2}, Array(NestedVector<std::string, 2>{{"中文", "text"}, {}})},
-        {{Type::Array, DType::Int64, 2}, Array(NestedVector<std::int64_t, 2>{{9007199254740993LL, -17}, {}})},
-        {{Type::Array, DType::Float64, 1}, Array(NestedVector<double, 1>{1.5, 2.5})},
-        {{Type::Array, DType::Float32, 2}, Array(NestedVector<float, 2>{{0.25f, 0.75f}, {}})}
+        {{Type::Array, DType::String, 1}, Array::fromNested(NestedVector<std::string, 1>{"中文", "text"})},
+        {{Type::Array, DType::String, 2}, Array::fromNested(NestedVector<std::string, 2>{{"中文", "text"}, {}})},
+        {{Type::Array, DType::Int64, 2}, Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL, -17}, {}})},
+        {{Type::Array, DType::Float64, 1}, Array::fromNested(NestedVector<double, 1>{1.5, 2.5})},
+        {{Type::Array, DType::Float32, 2}, Array::fromNested(NestedVector<float, 2>{{0.25f, 0.75f}, {}})}
     };
-    for (const auto &type : Array::supportedTypes())
-    {
-        auto value = Array::empty(*type.dtype, type.rank);
-        value.visit([](const auto &data) { data.get().resize(2); });
-        cases.emplace_back(type, std::move(value));
-    }
+    for (const auto &type : Array::supportedTypes()) cases.emplace_back(type, twoOuterArray(type));
     RuntimeEngine engine(2);
     for (const auto &[type, value] : cases)
     {

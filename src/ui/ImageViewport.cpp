@@ -41,35 +41,62 @@ QPointF rotated(QPointF point, double degrees)
     return {point.x() * c - point.y() * s, point.x() * s + point.y() * c};
 }
 
-QPointF rectangleCenter(const ROI::value_type::value_type &roi)
+QPointF fromCv(cv::Point2d point)
 {
-    const auto &data = roi;
-    return {data[1] + data[3] / 2.0, data[2] + data[4] / 2.0};
+    return {point.x, point.y};
 }
 
-std::vector<QPointF> contour(const ROI::value_type::value_type &roi)
+std::vector<QPointF> contourOf(const RegionView &region)
 {
     std::vector<QPointF> points;
-    const auto          &data = roi;
-    if (roiKind(roi) == RoiKind::Rectangle)
+    switch (region.kind())
     {
-        for (const auto &point : rectangleCorners(roi)) points.emplace_back(point.x, point.y);
-    }
-    else if (roiKind(roi) == RoiKind::Circle)
+    case RoiKind::Rectangle:
+        for (const auto &corner : region.rectangle().corners()) points.push_back(fromCv(corner));
+        break;
+    case RoiKind::Circle:
     {
+        const auto   circle = region.circle();
+        const QPointF center = fromCv(circle.center());
         points.reserve(96);
         for (int i = 0; i < 96; ++i)
         {
             const double angle = 2 * pi * i / 96;
-            points.emplace_back(data[1] + data[3] * std::cos(angle), data[2] + data[3] * std::sin(angle));
+            points.push_back(center + QPointF(circle.radius() * std::cos(angle), circle.radius() * std::sin(angle)));
         }
+        break;
     }
-    else
+    case RoiKind::Point:
+        points.push_back(fromCv(region.point()));
+        break;
+    case RoiKind::Segment:
     {
-        points.reserve((data.size() - 1) / 2);
-        for (std::size_t i = 1; i < data.size(); i += 2) points.emplace_back(data[i], data[i + 1]);
+        const auto segment = region.segment();
+        points.push_back(fromCv(segment.start()));
+        points.push_back(fromCv(segment.end()));
+        break;
+    }
+    case RoiKind::Polygon:
+    {
+        const auto polygon = region.polygon();
+        points.reserve(polygon.size());
+        for (std::size_t index = 0; index < polygon.size(); ++index) points.push_back(fromCv(polygon.point(index)));
+        break;
+    }
+    case RoiKind::PointSet:
+    {
+        const auto set = region.pointSet();
+        points.reserve(set.size());
+        for (std::size_t index = 0; index < set.size(); ++index) points.push_back(fromCv(set.point(index)));
+        break;
+    }
     }
     return points;
+}
+
+std::vector<QPointF> contour(const EncodedRegion &roi)
+{
+    return contourOf(RegionView(roi));
 }
 
 double segmentDistance(QPointF point, QPointF a, QPointF b)
@@ -171,10 +198,12 @@ struct Lines
             segment(points.back(), points.front());
     }
 
-    void roi(const ROI::value_type::value_type &roi)
+    void roi(const EncodedRegion &roi)
     {
-        const auto points = contour(roi);
-        if (roiKind(roi) == RoiKind::Point || roiKind(roi) == RoiKind::PointSet)
+        const auto region = RegionView(roi);
+        const auto points = contourOf(region);
+        const auto kind   = region.kind();
+        if (kind == RoiKind::Point || kind == RoiKind::PointSet)
         {
             for (const auto &point : points)
             {
@@ -183,7 +212,7 @@ struct Lines
             }
         }
         else
-            path(points, roiKind(roi) != RoiKind::Segment);
+            path(points, kind != RoiKind::Segment);
     }
 
     QSGNode *node(QQuickWindow *window, QColor color)
@@ -344,7 +373,7 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
     emit imagePresented(frame.requestId);
 }
 
-void ImageViewport::setOverlays(ROI::value_type inputs, ROI::value_type outputs)
+void ImageViewport::setOverlays(RegionGroup inputs, RegionGroup outputs)
 {
     inputs_  = std::move(inputs);
     outputs_ = std::move(outputs);
@@ -482,7 +511,7 @@ bool ImageViewport::event(QEvent *event)
     return QQuickItem::event(event);
 }
 
-void ImageViewport::beginRoiEdit(RoiEditTarget target, ROI::value_type targetRois, bool readOnly, bool singleRectangle)
+void ImageViewport::beginRoiEdit(RoiEditTarget target, RegionGroup targetRois, bool readOnly, bool singleRectangle)
 {
     if (target_ && *target_ == target && editable_ == targetRois && singleRectangle_ == singleRectangle)
     {
@@ -628,39 +657,50 @@ void ImageViewport::clearGesture()
     overlaysUpdated();
 }
 
-std::vector<QPointF> ImageViewport::handles(const ROI::value_type::value_type &roi) const
+namespace {
+std::vector<QPointF> controlPoints(const RegionView &region, double scale)
 {
-    const auto &data = roi;
-    if (roiKind(roi) == RoiKind::Circle)
+    if (region.kind() == RoiKind::Circle)
     {
-        const QPointF center(data[1], data[2]);
-        return {center + QPointF(data[3], 0), center + QPointF(0, data[3]), center - QPointF(data[3], 0),
-                center - QPointF(0, data[3])};
+        const auto    circle = region.circle();
+        const QPointF center = fromCv(circle.center());
+        const double  radius = circle.radius();
+        return {center + QPointF(radius, 0), center + QPointF(0, radius), center - QPointF(radius, 0),
+                center - QPointF(0, radius)};
     }
-    auto points = contour(roi);
-    if (roiKind(roi) == RoiKind::Rectangle)
+    auto points = contourOf(region);
+    if (region.kind() == RoiKind::Rectangle)
     {
-        points.push_back(rectangleCenter(roi) + rotated({0, -data[4] / 2.0 - 24 / scale_}, data[5]));
+        const auto rectangle = region.rectangle();
+        points.push_back(fromCv(rectangle.center())
+                         + rotated({0, -rectangle.height() / 2.0 - 24 / scale}, rectangle.angle()));
     }
     return points;
 }
+} // namespace
+
+std::vector<QPointF> ImageViewport::handles(const EncodedRegion &roi) const
+{
+    return controlPoints(RegionView(roi), scale_);
+}
 
 namespace {
-int hitRoiInList(const ROI::value_type &rois, QPointF point, double scale)
+int hitRoiInList(const RegionGroup &rois, QPointF point, double scale)
 {
     const double tolerance = 8 / scale;
     for (int i = static_cast<int>(rois.size()) - 1; i >= 0; --i)
     {
-        const auto &roi = rois[i];
-        if (roiKind(roi) == RoiKind::Circle)
+        const auto region = RegionView(rois[i]);
+        if (region.kind() == RoiKind::Circle)
         {
-            const auto &data = roi;
-            if (length(point - QPointF(data[1], data[2])) <= data[3] + tolerance)
+            const auto    circle = region.circle();
+            const QPointF center = fromCv(circle.center());
+            if (length(point - center) <= circle.radius() + tolerance)
                 return i;
             continue;
         }
-        const auto points = contour(roi);
-        if (roiKind(roi) == RoiKind::Point || roiKind(roi) == RoiKind::PointSet)
+        const auto points = contourOf(region);
+        if (region.kind() == RoiKind::Point || region.kind() == RoiKind::PointSet)
         {
             for (const auto &candidate : points)
                 if (length(point - candidate) <= tolerance)
@@ -671,7 +711,7 @@ int hitRoiInList(const ROI::value_type &rois, QPointF point, double scale)
             for (std::size_t j = 1; j < points.size(); ++j)
                 if (segmentDistance(point, points[j - 1], points[j]) <= tolerance)
                     return i;
-            if (roiKind(roi) != RoiKind::Segment)
+            if (region.kind() != RoiKind::Segment)
             {
                 if (segmentDistance(point, points.back(), points.front()) <= tolerance)
                     return i;
@@ -796,75 +836,61 @@ void ImageViewport::changeDraft(QPointF point)
             const auto delta = point - anchor_;
             draft_.reset();
             if (drawShape_ == 1 && length(delta) > epsilon)
-                draft_ = ROI::value_type::value_type{1., anchor_.x(), anchor_.y(), point.x(), point.y()};
+                draft_ = makeSegment({anchor_.x(), anchor_.y()}, {point.x(), point.y()});
             else if (drawShape_ == 2 && std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
-                draft_ = ROI::value_type::value_type{2.,
-                                                     std::min(anchor_.x(), point.x()),
-                                                     std::min(anchor_.y(), point.y()),
-                                                     std::abs(delta.x()),
-                                                     std::abs(delta.y()),
-                                                     0.};
+                draft_ = makeRectangle(std::min(anchor_.x(), point.x()), std::min(anchor_.y(), point.y()),
+                                       std::abs(delta.x()), std::abs(delta.y()));
             else if (drawShape_ == 3 && length(delta) > epsilon)
-                draft_ = ROI::value_type::value_type{3., anchor_.x(), anchor_.y(), length(delta)};
+                draft_ = makeCircle({anchor_.x(), anchor_.y()}, length(delta));
         }
         else if (original_ && gesture_ == Gesture::Move)
         {
-            const auto        delta = point - anchor_;
-            auto              data  = *original_;
-            const std::size_t end
-                = (roiKind(data) == RoiKind::Rectangle || roiKind(data) == RoiKind::Circle) ? 3 : data.size();
-            for (std::size_t index = 1; index < end; index += 2)
-            {
-                data[index] += delta.x();
-                data[index + 1] += delta.y();
-            }
-            draft_ = std::move(data);
+            auto draft = *original_;
+            RegionEditor(draft).translate({point.x() - anchor_.x(), point.y() - anchor_.y()});
+            draft_ = std::move(draft);
         }
         else if (original_ && gesture_ == Gesture::Handle)
         {
             draft_.reset();
-            const auto &data = *original_;
-            if (roiKind(data) == RoiKind::Rectangle)
+            const auto region = RegionView(*original_);
+            if (region.kind() == RoiKind::Rectangle)
             {
-                const auto center = rectangleCenter(data);
+                const auto rectangle = region.rectangle();
+                const auto center    = fromCv(rectangle.center());
                 if (handle_ == 4)
                 {
                     const auto delta = point - center;
                     if (length(delta) > epsilon)
-                        draft_ = ROI::value_type::value_type{
-                            2., data[1], data[2], data[3], data[4], std::atan2(delta.y(), delta.x()) * 180 / pi + 90};
+                        draft_ = makeRectangle(rectangle.left(), rectangle.top(), rectangle.width(),
+                                               rectangle.height(),
+                                               std::atan2(delta.y(), delta.x()) * 180 / pi + 90);
                 }
                 else
                 {
-                    const auto corners   = contour(data);
-                    const auto opposite  = corners[(handle_ + 2) % 4];
-                    const auto delta     = rotated(point - opposite, -data[5]);
+                    const auto corners  = contourOf(region);
+                    const auto opposite = corners[(handle_ + 2) % 4];
+                    const auto delta    = rotated(point - opposite, -rectangle.angle());
                     const auto newCenter = (point + opposite) / 2;
                     if (std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
-                        draft_ = ROI::value_type::value_type{2.,
-                                                             newCenter.x() - std::abs(delta.x()) / 2,
-                                                             newCenter.y() - std::abs(delta.y()) / 2,
-                                                             std::abs(delta.x()),
-                                                             std::abs(delta.y()),
-                                                             data[5]};
+                        draft_ = makeRectangle(newCenter.x() - std::abs(delta.x()) / 2,
+                                               newCenter.y() - std::abs(delta.y()) / 2, std::abs(delta.x()),
+                                               std::abs(delta.y()), rectangle.angle());
                 }
             }
-            else if (roiKind(data) == RoiKind::Circle)
+            else if (region.kind() == RoiKind::Circle)
             {
-                const double radius = length(point - QPointF(data[1], data[2]));
+                const auto   circle = region.circle();
+                const double radius = length(point - fromCv(circle.center()));
                 if (radius > epsilon)
-                    draft_ = ROI::value_type::value_type{3., data[1], data[2], radius};
+                    draft_ = makeCircle(circle.center(), radius);
             }
             else
             {
-                auto updated             = data;
-                updated[1 + handle_ * 2] = point.x();
-                updated[2 + handle_ * 2] = point.y();
-                draft_                   = std::move(updated);
+                auto draft = *original_;
+                RegionEditor(draft).setVertex(static_cast<std::size_t>(handle_), {point.x(), point.y()});
+                draft_ = std::move(draft);
             }
         }
-        if (draft_)
-            validateRoi(*draft_);
         draftChanged_ = draft_.has_value() && (!original_ || *original_ != *draft_);
     }
     catch (const ContractError &)
@@ -963,30 +989,26 @@ void ImageViewport::mouseUngrabEvent()
         cancelDraft();
 }
 
-std::optional<ROI::value_type::value_type> ImageViewport::completedDraft() const
+std::optional<EncodedRegion> ImageViewport::completedDraft() const
 {
     if (gesture_ != Gesture::Vertices)
         return draft_;
     auto count = vertices_.size();
     if (drawShape_ == 4 && count > 1 && length(vertices_.front() - vertices_.back()) * scale_ <= 4)
         --count;
-    if ((drawShape_ == 4 && count >= 3) || (drawShape_ == 5 && count > 0))
+    std::vector<cv::Point2d> points;
+    points.reserve(count);
+    for (std::size_t index = 0; index < count; ++index)
+        points.push_back({vertices_[index].x(), vertices_[index].y()});
+    try
     {
-        ROI::value_type::value_type record{static_cast<double>(drawShape_)};
-        record.reserve(1 + count * 2);
-        for (std::size_t index = 0; index < count; ++index)
-        {
-            record.push_back(vertices_[index].x());
-            record.push_back(vertices_[index].y());
-        }
-        try
-        {
-            validateRoi(record);
-            return record;
-        }
-        catch (const ContractError &)
-        {
-        }
+        if (drawShape_ == 4)
+            return makePolygon(points);
+        if (drawShape_ == 5)
+            return makePointSet(points);
+    }
+    catch (const ContractError &)
+    {
     }
     return {};
 }
@@ -1167,9 +1189,10 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         if (editing() && !readOnly_ && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
         {
             const auto &roi      = draft_ ? *draft_ : editable_[selected_];
-            const auto  controls = handles(roi);
+            const auto  region   = RegionView(roi);
+            const auto  controls = controlPoints(region, scale_);
             for (const auto &point : controls) edit.square(point, roiHandleSize_ / scale_);
-            if (roiKind(roi) == RoiKind::Rectangle)
+            if (region.kind() == RoiKind::Rectangle)
                 edit.segment((controls[0] + controls[1]) / 2, controls[4]);
         }
         if (auto *geometry = input.node(window(), inputRoiColor_))

@@ -19,6 +19,10 @@ class BuildIncrementalContract(unittest.TestCase):
         ninja = os.environ.get("CMAKE_MAKE_PROGRAM") or shutil.which("ninja")
         self.assertIsNotNone(cmake, "CMake executable is required")
         self.assertIsNotNone(ninja, "Ninja executable is required")
+        # The outer project resolved the compiler once; the probe must use that same toolchain
+        # instead of letting the nested configure guess a different one.
+        compiler = os.environ.get("CMAKE_CXX_COMPILER", "")
+        build_type = os.environ.get("CMAKE_BUILD_TYPE", "")
         startup = subprocess.STARTUPINFO()
         startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startup.wShowWindow = subprocess.SW_HIDE
@@ -28,6 +32,11 @@ class BuildIncrementalContract(unittest.TestCase):
             source = root / "source"
             build = root / "build"
             source.mkdir()
+            configure = [cmake, "-S", source, "-B", build, "-G", "Ninja", f"-DCMAKE_MAKE_PROGRAM={ninja}"]
+            if compiler:
+                configure.append(f"-DCMAKE_CXX_COMPILER={compiler}")
+            if build_type:
+                configure.append(f"-DCMAKE_BUILD_TYPE={build_type}")
             (source / "CMakeLists.txt").write_text(
                 "cmake_minimum_required(VERSION 3.25)\n"
                 "project(Incremental LANGUAGES CXX)\n"
@@ -45,8 +54,7 @@ class BuildIncrementalContract(unittest.TestCase):
                 encoding="utf-8")
 
             for code_page, arguments in (
-                (65001, [cmake, "-S", source, "-B", build, "-G", "Ninja",
-                         f"-DCMAKE_MAKE_PROGRAM={ninja}"]),
+                (65001, configure),
                 (936, [cmake, "--build", build]),
                 (65001, [cmake, "--build", build]),
                 (936, [cmake, "--build", build]),

@@ -11,13 +11,16 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
         return {};
     try
     {
+        // One membership index for the whole batch; the previous per-entry scan was O(n*m).
+        std::set<NodeId> existing;
+        for (const auto &node : flow->nodes)
+            existing.insert(node.id);
         std::vector<NodeBounds> nodes;
         for (const auto &entry : geometry)
         {
             const auto value = entry.toMap();
             const auto id = workbench::nodeId(value.value("id").toString());
-            if (std::none_of(flow->nodes.begin(), flow->nodes.end(),
-                             [id](const auto &node) { return node.id == id; }))
+            if (!existing.contains(id))
                 throw ContractError("连线几何节点不属于当前流程 " + flow->id + "：" + std::to_string(id));
             nodes.push_back({id, value.value("rectangle").toRectF()});
         }

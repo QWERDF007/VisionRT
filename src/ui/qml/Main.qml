@@ -105,17 +105,21 @@ ApplicationWindow {
     onClosing: function(event) {
         if (!closingApproved) { event.accepted = false; app.requestClose() }
     }
-    Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; enabled: !app.closing; onTriggered: app.requestNew() }
-    Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; enabled: !app.closing; onTriggered: openFile.open() }
-    Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(false) }
-    Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; enabled: !app.busy && !app.closing; onTriggered: window.saveProject(true) }
-    Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: !app.busy && !app.closing; onTriggered: app.runOnce() }
+    Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; enabled: app.workspaceEnabled; onTriggered: app.requestNew() }
+    Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; enabled: app.workspaceEnabled; onTriggered: openFile.open() }
+    Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; enabled: app.workspaceEnabled; onTriggered: window.saveProject(false) }
+    Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; enabled: app.workspaceEnabled; onTriggered: window.saveProject(true) }
+    Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: app.workspaceEnabled; onTriggered: app.runOnce() }
     Action {
         id: loopAction
-        text: app.runState === "Stopping" ? "等待本轮结束" : app.runState === "RunningLoop" ? "停止循环" : "循环"
+        text: app.runState === "Stopping" ? "等待本轮结束"
+            : app.runState === "RunningLoop" ? "停止循环"
+            : app.stopEnabled ? "停止运行" : "循环"
         shortcut: "F6"
-        enabled: (!app.busy || app.runState === "RunningLoop") && !app.closing
-        onTriggered: app.toggleLoop()
+        // Stopping keeps the entry disabled: the request is already submitted. Idle offers a new
+        // loop; every running mode offers the same stop.
+        enabled: app.workspaceEnabled || app.stopEnabled
+        onTriggered: app.stopEnabled ? app.stop() : app.toggleLoop()
     }
     Shortcut { sequence: "Ctrl+F"; onActivated: window.focusSearch() }
 
@@ -141,6 +145,7 @@ ApplicationWindow {
                 pressedColor: Theme.menuButtonPressedBg
                 textColor: fileMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: fileMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                enabled: app.workspaceEnabled
                 onClicked: {
                     if (fileMenu.visible) fileMenu.dismiss()
                     else fileMenu.popup(fileBtn, 0, fileBtn.height)
@@ -155,6 +160,7 @@ ApplicationWindow {
                 pressedColor: Theme.menuButtonPressedBg
                 textColor: settingsMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: settingsMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                enabled: app.workspaceEnabled
                 onClicked: {
                     if (settingsMenu.visible) settingsMenu.dismiss()
                     else settingsMenu.popup(settingsBtn, 0, settingsBtn.height)
@@ -169,6 +175,7 @@ ApplicationWindow {
                 pressedColor: Theme.menuButtonPressedBg
                 textColor: toolsMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: toolsMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                enabled: app.workspaceEnabled
                 onClicked: {
                     if (toolsMenu.visible) toolsMenu.dismiss()
                     else toolsMenu.popup(toolsBtn, 0, toolsBtn.height)
@@ -223,11 +230,11 @@ ApplicationWindow {
                 ToolTip.visible: hovered; ToolTip.text: "单次执行 (F5)"
             }
             QuiTextIconButton {
-                action: loopAction; iconSource: app.runState === "RunningLoop" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
+                action: loopAction; iconSource: app.stopEnabled || app.runState === "Stopping" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
                 implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
                 normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.runButtonPressedBg
-                iconColor: app.runState === "RunningLoop" ? Theme.loopRunningIcon : Theme.runButtonIcon
+                iconColor: app.stopEnabled || app.runState === "Stopping" ? Theme.loopRunningIcon : Theme.runButtonIcon
                 ToolTip.visible: hovered; ToolTip.text: loopAction.text
             }
 
@@ -246,7 +253,7 @@ ApplicationWindow {
                 display: AbstractButton.TextBesideIcon
                 normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
                 textColor: Theme.menuButtonText; iconColor: Theme.menuButtonIcon
-                implicitHeight: Theme.menuButtonHeight; enabled: !app.busy && !app.closing
+                implicitHeight: Theme.menuButtonHeight; enabled: app.workspaceEnabled
                 focusPolicy: Qt.TabFocus
                 onClicked: resetDialog.open()
             }
@@ -289,7 +296,7 @@ ApplicationWindow {
     }
     QuiMenu {
         id: toolsMenu
-        QuiMenuItem { text: "刷新 Python 工具"; enabled: !app.busy && !app.closing; onTriggered: app.refreshPython() }
+        QuiMenuItem { text: "刷新 Python 工具"; enabled: app.workspaceEnabled; onTriggered: app.refreshPython() }
     }
     QuiMenu {
         id: helpMenu
@@ -301,7 +308,7 @@ ApplicationWindow {
         QuiMenuItem { action: runAction }
         QuiMenuItem { action: loopAction }
         MenuSeparator {}
-        QuiMenuItem { text: "运行时复位"; enabled: !app.busy && !app.closing; onTriggered: resetDialog.open() }
+        QuiMenuItem { text: "运行时复位"; enabled: app.workspaceEnabled; onTriggered: resetDialog.open() }
     }
 
     QuiSplitView {

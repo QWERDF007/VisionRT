@@ -1,8 +1,10 @@
 #include "ui/AppController.h"
+#include "ui/NodeListModel.h"
 #include "WorkbenchFixtures.h"
 #include "ui/Theme.h"
 #include <quickui/Color.h>
 
+#include <QAbstractItemModelTester>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -83,10 +85,26 @@ void flowCanvasContract()
         return true;
     };
     require(QTest::qWaitFor(allVisible, 1000), "opening the real example leaves nodes outside the visible canvas or unreadable");
+
+    // The canvas consumes the node model, so the model protocol is verified here instead of in a
+    // separate harness. Qt's tester checks the row/role notification protocol.
+    auto *nodeModel = qobject_cast<QAbstractListModel *>(app.nodeListModel());
+    require(nodeModel != nullptr, "node list model is missing");
+    QAbstractItemModelTester modelTester(nodeModel, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    require(nodeModel->rowCount() == static_cast<int>(app.nodes().size()),
+            "node model row count disagrees with the nodes view");
+    require(nodeModel->data(nodeModel->index(0), visionrt::NodeListModel::NodeIdRole).toString()
+                == app.nodes().first().toMap().value("id").toString(),
+            "node model does not expose the node id as its first role");
+    QSignalSpy rowChanged(nodeModel, &QAbstractItemModel::dataChanged);
     QVariantList ids;
     for (const auto &value : app.nodes())
         ids.push_back(value.toMap().value("id"));
     require(app.moveNodes({QStringLiteral("2")}, -2, 0), "cannot place routing obstacle between bound nodes");
+    require(!rowChanged.isEmpty(), "moving a node did not report a model change");
+    const auto movedRoles = rowChanged.last().at(2).value<QList<int>>();
+    require(movedRoles.contains(visionrt::NodeListModel::PosXRole) || movedRoles.contains(visionrt::NodeListModel::PosYRole),
+            "moving a node did not report the position roles");
     QTest::qWait(50);
     QQuickItem *bypass = nullptr;
     QList<QQuickItem *> pending{surface};
@@ -571,8 +589,23 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     QTest::qWait(100);
     require(!canvas->property("hoverCardVisible").toBool(), "hover card survived deleting the node");
 
-    const auto remaining    = app.nodes().first().toMap();
-    const auto remainingId  = remaining.value("id").toString();
+    // The DPI block edits the counter's step input, so the remaining fixture is that node rather
+    // than whichever row happens to sort first in the canvas.
+    const auto counterNodeId = [&]
+    {
+        for (const auto &row : app.nodes())
+            if (row.toMap().value("toolId").toString() == QStringLiteral("test.plugin.counter"))
+                return row.toMap().value("id").toString();
+        return QString();
+    };
+    auto remainingId = counterNodeId();
+    if (remainingId.isEmpty())
+    {
+        app.addNode("test.plugin.counter", 0, 0);
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "count fixture node was not created");
+        remainingId = counterNodeId();
+    }
+    require(!remainingId.isEmpty(), "hover revision fixture has no counter node");
     const auto flow         = app.currentFlow();
     QMetaObject::invokeMethod(canvas, "centerNode", Q_ARG(QVariant, remainingId));
     QTest::qWait(50);
@@ -682,10 +715,13 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         require(window->grabWindow().save(screenshot), "failed to save zoom matrix evidence");
     }
 
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "hover revision fixture did not become idle");
     app.renameNode(remainingId, longName);
     app.selectNode(remainingId);
+    require(app.selectedNode() == remainingId, "hover revision fixture node was not selected");
     hoverNode(nodeItem(remainingId));
-    require(app.setParameter("step", false, "100"), "hover revision fixture parameter could not be edited");
+    require(app.setParameter("step", false, "100"),
+            "hover revision fixture parameter could not be edited: " + app.diagnostic().toStdString());
     require(QTest::qWaitFor([&]
     {
         return canvas->property("hoverCardVisible").toBool()

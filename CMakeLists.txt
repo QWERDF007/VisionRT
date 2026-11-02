@@ -121,6 +121,13 @@ if(VISIONRT_BUILD_APP)
         src/ui/AppControllerDisplay.cpp
         src/ui/AppControllerReadback.cpp
         src/ui/AppControllerRoi.cpp
+        src/ui/NodeListModel.cpp
+        src/ui/NodeListModel.h
+        src/ui/ResultPresentation.cpp
+        src/ui/RoiEditSession.cpp
+        src/ui/RoiEditSession.h
+        src/ui/ProjectOperations.cpp
+        src/ui/ProjectOperations.h
         src/ui/AppControllerMetadata.cpp
         src/ui/AppControllerExpression.cpp
         src/ui/AppControllerParameters.cpp
@@ -215,6 +222,10 @@ if(BUILD_TESTING)
     visionrt_apply_test_environment(validator_cli_contract)
     add_test(NAME package_app_contract COMMAND "${CMAKE_COMMAND}" -E env
         "VISIONTOOLS_VALIDATOR=$<TARGET_FILE:visionrt_validate_tool>"
+        "CMAKE_COMMAND=${CMAKE_COMMAND}"
+        "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+        "CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "VISIONRT_BUILD_ENTRY=${CMAKE_SOURCE_DIR}/tools/build.cmd"
         "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_package_app.py")
     visionrt_apply_test_environment(package_app_contract)
     add_test(NAME dependency_manifest_contract COMMAND "${CMAKE_COMMAND}" -E env
@@ -222,12 +233,11 @@ if(BUILD_TESTING)
         "${CMAKE_SOURCE_DIR}/tests/dependency_manifest_contract.py")
     visionrt_apply_test_environment(dependency_manifest_contract)
     if(WIN32)
-        # The nested configure needs the real ninja on PATH (build.cmd probes it) plus the MSVC
-        # environment the outer build already resolved.
-        get_filename_component(VISIONRT_NINJA_DIR "${CMAKE_MAKE_PROGRAM}" DIRECTORY)
+        # The nested configure and build reuse the toolchain this project already resolved; the
+        # MSVC environment itself comes from build.cmd, so no second discovery chain is needed here.
         add_test(NAME build_incremental_contract COMMAND "${CMAKE_COMMAND}" -E env
             "CMAKE_COMMAND=${CMAKE_COMMAND}" "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
-            "PATH=${VISIONRT_NINJA_DIR}\;$ENV{PATH}"
+            "CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}" "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
             "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/build_incremental_contract.py")
     endif()
     visionrt_contract(value_json_contract visionrt_core)
@@ -235,11 +245,19 @@ if(BUILD_TESTING)
     target_link_libraries(visionrt_log_testing PUBLIC visionrt_common Qt6::Core spdlog::spdlog)
     target_include_directories(visionrt_log_testing PUBLIC src)
     target_compile_definitions(visionrt_log_testing PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
-    visionrt_contract(log_contract visionrt_log_testing LABELS backend perf)
-    target_compile_definitions(log_contract PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
-    target_link_libraries(log_contract PRIVATE Qt6::Test)
-    set_tests_properties(log_contract PROPERTIES TIMEOUT 60)
+    # The log contract is split by responsibility: text/allocation, aggregation and lifecycle.
+    # All three share the production logging library and the same test hooks.
+    foreach(log_test log_text_contract log_aggregation_contract log_lifecycle_contract)
+        visionrt_contract(${log_test} visionrt_log_testing LABELS backend perf)
+        target_compile_definitions(${log_test} PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
+        target_link_libraries(${log_test} PRIVATE Qt6::Test)
+        set_tests_properties(${log_test} PROPERTIES TIMEOUT 60)
+    endforeach()
     visionrt_contract(display_storage_contract visionrt_presentation)
+    visionrt_contract(display_conversion_benchmark visionrt_presentation
+        --output "${CMAKE_BINARY_DIR}/evidence/display-conversion-smoke.csv" LABELS perf)
+    visionrt_contract(roi_view_benchmark VisionRT::Contracts
+        --output "${CMAKE_BINARY_DIR}/evidence/roi-view-smoke.csv" LABELS perf)
     visionrt_contract(output_value_contract visionrt_presentation)
     visionrt_contract(python_value_contract visionrt_python_values)
     visionrt_contract(value_bridge_benchmark visionrt_presentation --output "${CMAKE_BINARY_DIR}/evidence/value_bridge-smoke.csv")
@@ -352,6 +370,14 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        visionrt_contract(workbench_interaction_contract visionrt_ui)
+        target_link_libraries(workbench_interaction_contract PRIVATE Qt6::Test)
+        target_compile_definitions(workbench_interaction_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        set_tests_properties(workbench_interaction_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        set_property(TEST workbench_interaction_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
         visionrt_contract(workbench_assist_release_contract visionrt_ui)
         target_link_libraries(workbench_assist_release_contract PRIVATE Qt6::Test)
         visionrt_contract(workbench_assist_contract visionrt_ui)

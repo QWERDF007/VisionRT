@@ -153,17 +153,23 @@ def run(inputs):
     requireColor(sourceItem, "statusDotColor", theme->nodeStateGreen(), "running status dot is not green");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGreen(), "running header is not green");
     requireColor(sourceItem, "headerText", theme->nodeHeaderTextGreen(), "running header text is not green");
+    // A run owns the workspace: the selection cannot move while it is active, so the running node
+    // keeps its own selection and its status colours.
     app.selectNode(neighbour);
-    require(QTest::qWaitFor([&] { return !sourceItem->property("selected").toBool(); }, 2000),
-            "selection independence failed for the running node");
-    requireColor(sourceItem, "statusDotColor", theme->nodeStateGreen(), "selection changed the running color");
-    auto *neighbourItem = findItem(canvas, "flowNode_" + neighbour);
-    require(neighbourItem && neighbourItem->property("selected").toBool(), "neighbour node was not selected");
+    require(app.selectedNode() == source, "selection changed while a run owned the workspace");
+    require(sourceItem->property("selected").toBool(), "running node lost its selection");
+    requireColor(sourceItem, "statusDotColor", theme->nodeStateGreen(), "running colour depends on selection");
     write(permission, "allow");
     idle();
     require(stateOf(source).value("state").toString() == "succeeded", "status source did not succeed");
     requireColor(sourceItem, "statusDotColor", theme->nodeStateGray(), "succeeded status dot is not neutral");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGray(), "succeeded header is not neutral");
+    // Status rendering is independent of selection: selecting the neighbour after the run leaves the
+    // finished source neutral.
+    app.selectNode(neighbour);
+    auto *neighbourItem = findItem(canvas, "flowNode_" + neighbour);
+    require(neighbourItem && neighbourItem->property("selected").toBool(), "neighbour node was not selected");
+    requireColor(sourceItem, "statusDotColor", theme->nodeStateGray(), "selection changed the finished colour");
     require(!stateOf(source).value("timingText").toString().isEmpty()
                 && stateOf(source).value("timingText").toString() != QStringLiteral("运行中"),
             "succeeded node has no timing");

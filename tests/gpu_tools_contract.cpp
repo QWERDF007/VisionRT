@@ -1,5 +1,6 @@
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
+#include "result_view.h"
 #include "runtime/RuntimeEngine.h"
 #include <core/ToolPackage.h>
 
@@ -180,13 +181,13 @@ int main(int argc, char **argv)
             const auto &names   = std::get<Array>(outputs.at("class_names"));
             if (regions.size() != 1 || regions[0].size() != reference.size()
                 || scores.type() != TypeSpec{Type::Array, DType::Float32, 2}
-                || scores.get<NestedVector<float, 2>>().size() != 1
-                || classes.get<NestedVector<std::int64_t, 2>>().size() != 1
-                || names.get<NestedVector<std::string, 2>>().size() != 1)
+                || nestedOf<NestedVector<float, 2>>(scores).size() != 1
+                || nestedOf<NestedVector<std::int64_t, 2>>(classes).size() != 1
+                || nestedOf<NestedVector<std::string, 2>>(names).size() != 1)
                 throw std::runtime_error("YOLO detection batch/shape differs from the independent PyTorch reference");
-            const auto actualScores  = scores.get<NestedVector<float, 2>>()[0];
-            const auto actualClasses = classes.get<NestedVector<std::int64_t, 2>>()[0];
-            const auto actualNames   = names.get<NestedVector<std::string, 2>>()[0];
+            const auto actualScores  = nestedOf<NestedVector<float, 2>>(scores)[0];
+            const auto actualClasses = nestedOf<NestedVector<std::int64_t, 2>>(classes)[0];
+            const auto actualNames   = nestedOf<NestedVector<std::string, 2>>(names)[0];
             if (actualScores.size() != reference.size() || actualClasses.size() != reference.size()
                 || actualNames.size() != reference.size())
                 throw std::runtime_error("YOLO fields do not share the same ragged detection count");

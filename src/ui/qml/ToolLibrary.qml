@@ -75,7 +75,7 @@ Rectangle {
                     iconSource: QuiFontIcon.Refresh
                     implicitWidth: 24; implicitHeight: 24
                     text: "刷新 Python 工具"
-                    enabled: !app.busy; onClicked: app.refreshPython()
+                    enabled: app.workspaceEnabled; onClicked: app.refreshPython()
                 }
                 QuiTextIconButton {
                     objectName: "toolLibraryToggle"

@@ -2,6 +2,8 @@
 #    undef NDEBUG
 #endif
 
+#include "result_view.h"
+
 #include <visionrt/contracts/Value.h>
 
 #include <cassert>
@@ -38,20 +40,20 @@ int main()
     rejects([] { validateTypeSpec({Type::Array, DType::String, 0}); });
     rejects([] { validateTypeSpec({Type::Array, DType::Bool, 5}); });
     validateValue(scoresType, Missing{});
-    const Array scores(NestedVector<float, 2>{
+    const Array scores = Array::fromNested(NestedVector<float, 2>{
         {},
         {0.8F, 0.95F, 0.7F}
     });
     validateValue(scoresType, scores);
-    assert((scores.get<NestedVector<float, 2>>().size() == 2));
-    assert((scores.get<NestedVector<float, 2>>()[0].empty()));
-    assert((scores.get<NestedVector<float, 2>>()[1][1] == 0.95F));
-    const Array names(NestedVector<std::string, 2>{
+    assert((nestedOf<NestedVector<float, 2>>(scores).size() == 2));
+    assert((nestedOf<NestedVector<float, 2>>(scores)[0].empty()));
+    assert((nestedOf<NestedVector<float, 2>>(scores)[1][1] == 0.95F));
+    const Array names = Array::fromNested(NestedVector<std::string, 2>{
         {},
         {"one", "two", "one"}
     });
-    assert((names.get<NestedVector<std::string, 2>>()[0].empty()));
-    assert((names.get<NestedVector<std::string, 2>>()[1][1] == "two"));
+    assert((nestedOf<NestedVector<std::string, 2>>(names)[0].empty()));
+    assert((nestedOf<NestedVector<std::string, 2>>(names)[1][1] == "two"));
     for (const auto &type : Array::supportedTypes())
     {
         const auto empty = Array::empty(*type.dtype, type.rank);
@@ -63,11 +65,11 @@ int main()
     validateValue({Type::Image}, DataRef<Image>(Image{}));
     rejects([&] { validateValue({Type::Int}, true); });
     rejects([&] { validateValue({Type::Array, DType::Float64, 2}, scores); });
-    rejects([&] { (void)scores.get<NestedVector<double, 2>>(); });
-    const auto scoreAlias                          = scores;
-    scoreAlias.get<NestedVector<float, 2>>()[1][1] = 0.5F;
-    assert((scores.get<NestedVector<float, 2>>()[1][1] == 0.5F));
-    assert((equalValues(scores, Array(NestedVector<float, 2>{
+    rejects([&] { scores.elements<double>(); });
+    const auto scoreAlias            = scores;
+    scoreAlias.elements<float>()[1] = 0.5F;
+    assert((scores.elements<float>()[1] == 0.5F));
+    assert((equalValues(scores, Array::fromNested(NestedVector<float, 2>{
                                     {},
                                     {0.8F, 0.5F, 0.7F}
     }))));

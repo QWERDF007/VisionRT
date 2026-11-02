@@ -22,9 +22,10 @@
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 5;
-// Format 4 projects are migrated in memory: execution conditions move to the
-// explicit mode object and fixed-tool guards are reported instead of executed.
+constexpr int projectFormatVersion = 6;
+// Older projects stay readable through their own version-gated migration: format 4 moves execution
+// conditions to the explicit mode object, format 5 states Array values as nested lists. Writing
+// always produces format 6, where an Array value carries its own shape or ragged offsets.
 constexpr int minimumProjectFormatVersion = 4;
 
 QString qtPath(const std::filesystem::path &path)
@@ -310,7 +311,8 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
     if (version < minimumProjectFormatVersion || version > projectFormatVersion)
         invalid("format_version 不受支持，要求 " + std::to_string(minimumProjectFormatVersion) + "–"
                 + std::to_string(projectFormatVersion) + "，实际 " + std::to_string(version));
-    const bool legacyFormat = version < projectFormatVersion;
+    // Format 4 states a guard source as flat node_seq/port_id; later formats nest it under source.
+    const bool legacyGuard = version < 5;
     const auto metadata = map(root.value("project"), "project");
     if (!root.value("flows").isArray())
         invalid("flows 必须是数组");
@@ -450,7 +452,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                     if (!item.value("allow_missing").isBool())
                         invalid("variable.allow_missing 必须是布尔值");
                     variable.allowMissing = item.value("allow_missing").toBool();
-                    variable.type = ValueJson::decodeType(object(item.value("type"), "variable.type"));
+                    variable.type = ValueJson::decodeType(object(item.value("type"), "type"));
                     expression.variables.push_back(std::move(variable));
                 }
                 const auto program = config.value("program").toArray();
@@ -465,7 +467,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                     if (!item.value("exposed").isBool())
                         invalid("result.exposed 必须是布尔值");
                     result.exposed = item.value("exposed").toBool();
-                    result.type    = ValueJson::decodeType(object(item.value("type"), "result.type"));
+                    result.type    = ValueJson::decodeType(object(item.value("type"), "type"));
                     expression.program.push_back(std::move(result));
                 }
                 node.expression = std::move(expression);
@@ -486,7 +488,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 if (source.isObject())
                     parsed.source = SourcePort{sequence(source.toObject().value("node_seq"), "guard.source.node_seq"),
                                                text(source.toObject().value("port_id"), "guard.source.port_id", true)};
-                else if (legacyFormat && guard.contains("node_seq"))
+                else if (legacyGuard && guard.contains("node_seq"))
                     parsed.source = SourcePort{sequence(guard.value("node_seq"), "guard.node_seq"),
                                                text(guard.value("port_id"), "guard.port_id", true)};
                 node.executionGuard = std::move(parsed);
@@ -614,7 +616,8 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                     const auto signature = node.signatures.initParams.find(id);
                     if (signature == node.signatures.initParams.end())
                         invalid("无法保存缺少 type_snapshot 的初始化参数：" + id);
-                    parameters.insert(QString::fromStdString(id), ValueJson::encode(value, signature->second));
+                    parameters.insert(QString::fromStdString(id),
+                                  ValueJson::encode(value, signature->second, ValueJson::Purpose::Stored));
                 }
                 raw.remove("expression_config");
                 raw.remove("execution_guard");
@@ -672,7 +675,8 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                     const auto signature = node.signatures.inputs.find(id);
                     if (signature == node.signatures.inputs.end())
                         invalid("无法保存缺少 type_snapshot 的输入：" + id);
-                    saved.insert("literal", ValueJson::encode(binding.literal, signature->second));
+                    saved.insert("literal",
+                         ValueJson::encode(binding.literal, signature->second, ValueJson::Purpose::Stored));
                 }
                 if (binding.mode == BindingMode::Upstream && binding.source)
                     saved.insert("source", QJsonObject{

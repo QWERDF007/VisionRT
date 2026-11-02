@@ -1,4 +1,5 @@
 #include "core/ProjectEditor.h"
+#include "result_view.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <algorithm>
@@ -94,7 +95,7 @@ void nativeGraphSharing(std::size_t batchSize)
         initialImages.push_back(parent(cv::Rect(1, static_cast<int>(batch) * 4 + 1, 3, 2)));
     Values values{
         {"images", DataRef<Image>(std::move(initialImages))},
-        {"numbers", Array(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
+        {"numbers", Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
         {"regions", DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
     };
     ToolDefinition source;
@@ -125,7 +126,7 @@ void nativeGraphSharing(std::size_t batchSize)
                 [&](const Values &inputs)
                 {
                     auto &images  = std::get<DataRef<Image>>(inputs.at("images")).get();
-                    auto &numbers = std::get<Array>(inputs.at("numbers")).get<NestedVector<std::int64_t, 2>>();
+                    auto  numbers = std::get<Array>(inputs.at("numbers"));
                     auto &regions = std::get<DataRef<ROI>>(inputs.at("regions")).get();
                     require(&images == &std::get<DataRef<Image>>(values.at("images")).get(),
                             "runtime copied Image collection");
@@ -133,14 +134,13 @@ void nativeGraphSharing(std::size_t batchSize)
                         require(images[batch].data == parent.ptr(static_cast<int>(batch) * 4 + 1) + 1
                                     && images[batch].step[0] == parent.step[0],
                                 "runtime copied padded pixels");
-                    require(&numbers == &std::get<Array>(values.at("numbers")).get<NestedVector<std::int64_t, 2>>(),
-                            "runtime copied Array container");
+                    require(numbers.data() == std::get<Array>(values.at("numbers")).data(),
+                            "runtime copied Array buffer");
                     require(&regions == &std::get<DataRef<ROI>>(values.at("regions")).get(),
                             "runtime copied ROI container");
                     ++images[0].at<std::uint8_t>(0, 0);
                     images.push_back(cv::Mat::ones(1, 1, CV_8UC1));
-                    numbers[0].push_back(42);
-                    numbers.emplace_back();
+                    numbers.elements<std::int64_t>()[0] = 42;
                     regions.push_back({
                         {0., 1., 2.}
                     });
@@ -164,8 +164,9 @@ void nativeGraphSharing(std::size_t batchSize)
     require(parent.at<std::uint8_t>(1, 1) == 8, "tool mutation did not reach producer storage");
     require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == batchSize + 1,
             "source publication froze mutable Image collection");
-    require(std::get<Array>(oldSource->outputs.at("numbers")).get<NestedVector<std::int64_t, 2>>().size() == 3,
-            "source publication froze mutable Array");
+    require(std::get<Array>(oldSource->outputs.at("numbers")).offsets().at(0).size() == 3
+                && std::get<Array>(oldSource->outputs.at("numbers")).elements<std::int64_t>()[0] == 42,
+            "source publication did not share the mutated Array elements");
     require(firstResult->inputUses.size() == 3, "input provenance lost");
     require(std::all_of(firstResult->inputUses.begin(), firstResult->inputUses.end(), [&](const auto &input)
                         { return input.sourceNode == producer && input.sourcePublication == oldSource->publication; }),

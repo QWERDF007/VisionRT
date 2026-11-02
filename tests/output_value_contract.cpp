@@ -1,3 +1,4 @@
+#include "result_view.h"
 #include "ui/OutputModel.h"
 
 #include <QCoreApplication>
@@ -29,7 +30,7 @@ Vector nestedSample()
 template<class Element, int Rank>
 void arrayPreviews()
 {
-    PortValue      value = Array(nestedSample<NestedVector<Element, Rank>>());
+    PortValue      value = Array::fromNested(nestedSample<NestedVector<Element, Rank>>());
     const auto     type  = *typeOf(value);
     ToolDefinition definition;
     definition.outputs = {
@@ -73,7 +74,7 @@ try
     snapshot->status      = {0, "运行成功"};
     snapshot->publication = 19;
     snapshot->outputs     = {
-        {"values", Array(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}, {4, 5}})},
+        {"values", Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}, {4, 5}})},
         {"regions", DataRef<ROI>(ROI{{{3., 1., 2., 3.}}, {}})},
         {"empty", Missing{}},
         {"text", std::string("中文\n\"图像\"")}
@@ -97,11 +98,12 @@ try
     require(model.get(2)["preview"].toString().contains("9007199254740993"), "Array preview lost integer precision");
     require(model.get(2)["count"].toULongLong() == 2, "output relation count changed");
     const auto frozen = model.get(2)["preview"].toString();
-    std::get<Array>(snapshot->outputs.at("values")).get<NestedVector<std::int64_t, 2>>()[0][0] = 71;
+    std::get<Array>(snapshot->outputs.at("values")).elements<std::int64_t>()[0] = 71;
     require(model.get(2)["preview"].toString() == frozen, "cached display text borrowed mutable output storage");
     model.setResult(&definition, snapshot, {});
     require(model.get(2)["preview"].toString().contains("71"), "next safe display update did not read current values");
-    std::get<Array>(snapshot->outputs.at("values")).get<NestedVector<std::int64_t, 2>>().assign(10000, {1, 2, 3});
+    // Growing the structure replaces the value: published storage is never resized in place.
+    snapshot->outputs["values"] = Array::fromNested(NestedVector<std::int64_t, 2>(10000, {1, 2, 3}));
     model.setResult(&definition, snapshot, {});
     require(model.get(2)["preview"].toString().size() <= 256 && model.get(2)["tooltip"].toString().size() <= 4096,
             "output preview expanded the complete Array");

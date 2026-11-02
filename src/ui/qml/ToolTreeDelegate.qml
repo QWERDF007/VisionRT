@@ -125,7 +125,7 @@ Item {
         z: 1000
         width: 160; height: 32; visible: pointer.drag.active
         property string toolId: root.toolId
-        Drag.active: pointer.drag.active && root.leaf && root.available && !app.busy
+        Drag.active: pointer.drag.active && root.leaf && root.available && app.workspaceEnabled
         Drag.keys: ["visionrt/tool"]
         Drag.source: dragPayload
         Drag.hotSpot.x: 12; Drag.hotSpot.y: 16
@@ -150,7 +150,7 @@ Item {
         hoverEnabled: false
         acceptedButtons: Qt.LeftButton
         preventStealing: root.leaf
-        drag.target: root.leaf && root.available && !app.busy ? dragPayload : null
+        drag.target: root.leaf && root.available && app.workspaceEnabled ? dragPayload : null
         drag.threshold: Qt.styleHints.startDragDistance
         onPressed: function(mouse) {
             let p = root.mapToItem(dragPayload.parent, mouse.x - 12, mouse.y - 16)

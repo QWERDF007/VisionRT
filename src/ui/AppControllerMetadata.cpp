@@ -276,19 +276,26 @@ QVariantList AppController::parameters() const
         if (rectangleEditor && regions && regions->get().size() == 1 && regions->get()[0].size() == 1)
         {
             const auto &record = regions->get()[0][0];
-            if (roiKind(record) == RoiKind::Rectangle)
+            try
             {
+                const auto rectangle = RegionView(record).rectangle();
                 hasRect = true;
                 rectMap = QVariantMap{
                     {  "type",         2},
-                    {     "x", record[1]},
-                    {     "y", record[2]},
-                    { "width", record[3]},
-                    {"height", record[4]},
-                    { "angle", record[5]}
+                    {     "x", rectangle.left()},
+                    {     "y", rectangle.top()},
+                    { "width", rectangle.width()},
+                    {"height", rectangle.height()},
+                    { "angle", rectangle.angle()}
                 };
-                rectDisplayText = QString::asprintf("[2, %.6g, %.6g, %.6g, %.6g, %.6g]", record[1], record[2],
-                                                    record[3], record[4], record[5]);
+                rectDisplayText = QString::asprintf("[2, %.6g, %.6g, %.6g, %.6g, %.6g]", rectangle.left(),
+                                                    rectangle.top(), rectangle.width(), rectangle.height(),
+                                                    rectangle.angle());
+            }
+            catch (const ContractError &)
+            {
+                // A non-rectangle in a rect editor is reported by the parameter text below, which
+                // still shows the raw value; the map only exists for editable rectangles.
             }
         }
         std::size_t roiCount = 0;

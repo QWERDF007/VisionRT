@@ -6,17 +6,23 @@
 
 namespace visionrt {
 namespace {
-template<class Vector>
+// The document keeps every number literal as text. Integer dtypes must still be parsed from that
+// text, so a value beyond int64 is rejected even when QJsonDocument would have rounded it.
 void validateIntegerLiterals(const QJsonValue &json)
 {
-    using Element = typename Vector::value_type;
-    if constexpr (std::is_integral_v<Element> && !std::is_same_v<Element, bool>)
+    if (json.isArray())
     {
-        for (const auto value : json.toArray()) (void)parseInt64(value.toString().toStdString());
+        for (const auto value : json.toArray()) validateIntegerLiterals(value);
     }
-    else if constexpr (!std::is_arithmetic_v<Element> && !std::is_same_v<Element, std::string>)
+    else if (json.isObject())
     {
-        for (const auto value : json.toArray()) validateIntegerLiterals<Element>(value);
+        const auto object = json.toObject();
+        for (auto entry = object.begin(); entry != object.end(); ++entry)
+            validateIntegerLiterals(entry.value());
+    }
+    else if (json.isString())
+    {
+        (void)parseInt64(json.toString().toStdString());
     }
 }
 }
@@ -79,15 +85,10 @@ PortValue ValueJson::Document::decode(const QStringList &path, const TypeSpec &t
         return result;
     if (type.type == Type::Int)
         (void)parseInt64(locate(numberText_).toString().toStdString());
-    else if (type.type == Type::Array)
+    else if (type.type == Type::Array && type.dtype != DType::Bool && type.dtype != DType::Float32
+             && type.dtype != DType::Float64 && type.dtype != DType::String)
     {
-        const auto source = locate(numberText_);
-        std::get<Array>(result).visit(
-            [&](const auto &reference)
-            {
-                using Vector = std::remove_cvref_t<decltype(reference.get())>;
-                validateIntegerLiterals<Vector>(source);
-            });
+        validateIntegerLiterals(locate(numberText_));
     }
     return result;
 }

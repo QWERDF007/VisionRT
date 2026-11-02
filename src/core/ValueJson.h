@@ -15,7 +15,11 @@ public:
     enum class Purpose
     {
         Literal,
-        Display
+        Display,
+        // Project persistence keeps the complete structure (shape or ragged offsets), so empty
+        // trailing dimensions survive a round trip. Declaration defaults stay in the readable
+        // nested form.
+        Stored
     };
 
     class Document

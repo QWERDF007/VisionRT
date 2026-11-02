@@ -522,9 +522,9 @@ void roiParameterContract()
     draw(false, {15, 15}, {25, 25});
     require(rectangleGestures.count() == 2, "Explicit Rect redraw did not complete its gesture");
     const auto &redrawValue = rectangleGestures.last().at(1);
-    require(redrawValue.metaType() == QMetaType::fromType<ROI::value_type::value_type>(),
+    require(redrawValue.metaType() == QMetaType::fromType<EncodedRegion>(),
             "Rect gesture did not carry typed geometry");
-    const auto overlappingRedraw = *static_cast<const ROI::value_type::value_type *>(redrawValue.constData());
+    const auto overlappingRedraw = *static_cast<const EncodedRegion *>(redrawValue.constData());
     require(std::abs(overlappingRedraw[1] - 15) < 1 && std::abs(overlappingRedraw[3] - 10) < 1,
             "Explicit redraw inside the old Rect must create replacement geometry, not resize a handle");
     viewport.setDrawShape(2);
@@ -571,7 +571,7 @@ void roiParameterContract()
     require(rectangleBound, "Cancel removed the scalar Rect upstream binding");
     const auto previousTarget = rectangleGestures.first().at(0).value<RoiEditTarget>();
     const auto previousGeometry
-        = *static_cast<const ROI::value_type::value_type *>(rectangleGestures.first().at(1).constData());
+        = *static_cast<const EncodedRegion *>(rectangleGestures.first().at(1).constData());
     require(app.editRoi("rect", true), "Scalar Rect could not reopen the same upstream-copy input");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Reopened scalar Rect background was not presented");
@@ -715,7 +715,7 @@ void roiParameterContract()
         &viewport,
         [&]
         {
-            emit viewport.roiCommitted(oldBackgroundTarget, ROI::value_type::value_type{2, 50, 50, 5, 5, 0});
+            emit viewport.roiCommitted(oldBackgroundTarget, EncodedRegion{2, 50, 50, 5, 5, 0});
             emit viewport.roiDeleted(oldBackgroundTarget);
             oldBackgroundDelivered = true;
         },

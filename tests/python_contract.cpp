@@ -80,7 +80,7 @@ int main(int argc, char **argv)
                         {"images", images}
                     });
                     assert(testview::status(result).code == 0 && testview::businessCount(result) == 1);
-                    assert((std::get<Array>(result.outputs.at("means")).get<NestedVector<double, 1>>()
+                    assert((nestedOf<NestedVector<double, 1>>(std::get<Array>(result.outputs.at("means")))
                             == NestedVector<double, 1>{8.0, 2.0}));
                     // A wrong input type never reaches the Python function; the bridge reports it.
                     const auto wrongInput = testview::executionFailure(*mean, {{"images", std::int64_t{7}}});
@@ -94,7 +94,7 @@ int main(int argc, char **argv)
                         {"images", DataRef<Image>(Image{})}
                     });
                     assert(testview::status(empty).code == 0);
-                    assert((std::get<Array>(empty.outputs.at("means")).get<NestedVector<double, 1>>().empty()));
+                    assert((nestedOf<NestedVector<double, 1>>(std::get<Array>(empty.outputs.at("means"))).empty()));
                     assert(mean->release().code == 0);
                 }
                 {
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
                         {"images", images}
                     });
                     assert(testview::status(result).code == 0);
-                    assert((std::get<Array>(result.outputs.at("sizes")).get<NestedVector<std::int64_t, 2>>()
+                    assert((nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(result.outputs.at("sizes")))
                             == NestedVector<std::int64_t, 2>{
                                 {2, 3},
                                 {4, 5}

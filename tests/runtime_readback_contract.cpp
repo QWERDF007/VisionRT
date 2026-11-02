@@ -1,4 +1,5 @@
 #include "core/ProjectEditor.h"
+#include "result_view.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <atomic>
@@ -36,13 +37,13 @@ public:
 
     ToolResult execute(const Values &) override
     {
-        values_.get<NestedVector<std::int64_t, 1>>()[0] = ++calls_;
+        values_.elements<std::int64_t>()[0] = ++calls_;
         return toolResult({{"value", values_}}, {});
     }
 
 private:
     std::atomic<int> &calls_;
-    Array             values_{NestedVector<std::int64_t, 1>{0}};
+    Array             values_{Array::fromNested(NestedVector<std::int64_t, 1>{0})};
 };
 
 RuntimeUpdate readback(RuntimeEngine &engine)

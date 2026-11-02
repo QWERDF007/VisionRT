@@ -20,7 +20,7 @@ ColumnLayout {
     readonly property bool upstream: parameter.inputMode === "upstream"
     // Condition rows edit the single `condition` port, ordinary rows their own port.
     readonly property string bindingPort: root.conditionRow ? "condition" : root.parameter.id
-    readonly property bool editable: root.enabled && nodeId === app.selectedNode && !app.busy
+    readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
     readonly property string pathKind: parameter.editor || ""

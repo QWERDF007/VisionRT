@@ -1,6 +1,7 @@
 #pragma once
 #include <QAbstractItemModel>
 #include <QObject>
+#include <QPointF>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
@@ -17,12 +18,18 @@ class AppController : public QObject
     Q_PROPERTY(QString title READ title NOTIFY projectChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY runtimeChanged)
     Q_PROPERTY(bool runtimeBusy READ runtimeBusy NOTIFY runtimeChanged)
+    // Single interaction predicate derived from the runtime state: everything except stop and close
+    // is unavailable while a run owns the runtime. No second writable "UI locked" flag exists.
+    Q_PROPERTY(bool workspaceEnabled READ workspaceEnabled NOTIFY runtimeChanged)
+    // True exactly while a run that can still be stopped owns the runtime.
+    Q_PROPERTY(bool stopEnabled READ stopEnabled NOTIFY runtimeChanged)
     Q_PROPERTY(QString runState READ runState NOTIFY runtimeChanged)
     Q_PROPERTY(QString diagnostic READ diagnostic NOTIFY diagnosticChanged)
     Q_PROPERTY(QStringList diagnostics READ diagnostics NOTIFY diagnosticChanged)
     Q_PROPERTY(QVariantList flows READ flows NOTIFY projectChanged)
     Q_PROPERTY(QVariantList nodes READ nodes NOTIFY nodesChanged)
-    Q_PROPERTY(QVariantList wires READ wires NOTIFY nodesChanged)
+    Q_PROPERTY(QAbstractListModel *nodeListModel READ nodeListModel CONSTANT)
+    Q_PROPERTY(QVariantList wires READ wires NOTIFY wiresChanged)
     Q_PROPERTY(QString currentFlow READ currentFlow WRITE selectFlow NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedNode READ selectedNode NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList parameters READ parameters NOTIFY parametersChanged)
@@ -63,6 +70,8 @@ public:
     ~AppController() override;
     QString             title() const;
     bool                busy() const;
+    bool                workspaceEnabled() const;
+    bool                stopEnabled() const;
     // State-only view used by editors: drains caused by display conversion must not disable drawing.
     bool                runtimeBusy() const;
     QString             runState() const;
@@ -133,6 +142,8 @@ public:
     Q_INVOKABLE void         runOnce();
     Q_INVOKABLE void         toggleLoop();
     Q_INVOKABLE void         runNode();
+    // The one stop entry for single, loop and single-node runs; a repeated request is a no-op.
+    Q_INVOKABLE void         stop();
     Q_INVOKABLE void         resetRuntime();
     Q_INVOKABLE void         refreshPython();
     Q_INVOKABLE void         rescanTools();
@@ -175,6 +186,11 @@ public:
     // Chinese description of a type row, reusing the parameter panel's display mapping.
     Q_INVOKABLE QString      typeDescription(const QString &type, const QString &dtype, int rank) const;
     QString                  nodeModel() const;
+    QAbstractListModel      *nodeListModel() const;
+    // Single-row lookups by id: canvas helpers use these instead of scanning a list of maps.
+    Q_INVOKABLE QVariantMap  nodeRecord(const QString &id) const;
+    Q_INVOKABLE QPointF      nodePosition(const QString &id) const;
+    Q_INVOKABLE QVariantList nodePositions() const;
     QString                  executionGuardText() const;
     bool                     executionGuardActive() const;
     QString                  conditionMode() const;
@@ -198,6 +214,8 @@ signals:
     void projectChanged();
     void recentProjectsChanged();
     void nodesChanged();
+    // Only a change in the connection topology reaches the wires binding.
+    void wiresChanged();
     void selectionChanged();
     void parametersChanged();
     void resultsChanged();

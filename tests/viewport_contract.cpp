@@ -133,10 +133,10 @@ int main(int argc, char **argv)
     viewport.zoomBy(2);
     viewport.beginRoiEdit({9007199254740993ULL, "first", 0, -1}, {});
     int                commits = 0;
-    std::optional<ROI::value_type::value_type> committed;
+    std::optional<EncodedRegion> committed;
     RoiEditTarget      committedTarget;
     QObject::connect(&viewport, &ImageViewport::roiCommitted,
-                     [&](const RoiEditTarget &target, const ROI::value_type::value_type &roi)
+                     [&](const RoiEditTarget &target, const EncodedRegion &roi)
                      {
                          ++commits;
                          committed       = roi;
@@ -196,7 +196,7 @@ int main(int argc, char **argv)
         {
             4, "rotated", 0, 0
     },
-        {ROI::value_type::value_type{2., 40, 30, 40, 20, 0}});
+        {EncodedRegion{2., 40, 30, 40, 20, 0}});
     viewport.setDrawShape(0);
     const double rotationArm = 10 + 24 / viewport.zoom();
     drag(viewport, {60, 40 - rotationArm}, {60 + rotationArm, 40});
@@ -208,7 +208,7 @@ int main(int argc, char **argv)
         {
             4, "rotated", 0, 0
     },
-        {ROI::value_type::value_type{2., 40, 30, 40, 20, 90}});
+        {EncodedRegion{2., 40, 30, 40, 20, 90}});
     drag(viewport, {70, 20}, {80, 10});
     assert(commits == 8 && near((*committed)[1], 40) && near((*committed)[2], 20));
     assert(near((*committed)[3], 50) && near((*committed)[4], 30));
@@ -216,7 +216,7 @@ int main(int argc, char **argv)
         {
             4, "rotated", 0, 0
     },
-        {ROI::value_type::value_type{2., 40, 30, 40, 20, 0}});
+        {EncodedRegion{2., 40, 30, 40, 20, 0}});
     mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({40, 30}), Qt::LeftButton, Qt::LeftButton);
     mouse(viewport, QEvent::MouseMove, viewport.imageToItem({30, 20}), Qt::NoButton, Qt::LeftButton);
     mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({80, 50}), Qt::LeftButton, Qt::NoButton);
@@ -255,7 +255,7 @@ int main(int argc, char **argv)
     viewport.setSize(QSizeF(400, 300));
     viewport.setOverlays(
         {
-            ROI::value_type::value_type{2., 20, 20, 40, 40, 0}
+            EncodedRegion{2., 20, 20, 40, 40, 0}
     },
         {});
     window.show();
@@ -285,9 +285,9 @@ int main(int argc, char **argv)
     assert(pointColor.red() > 240 && pointColor.green() > 200 && pointColor.blue() < 10);
     viewport.setOverlays(
         {
-            ROI::value_type::value_type{2., 20, 20, 40, 40, 0}
+            EncodedRegion{2., 20, 20, 40, 40, 0}
     },
-        {ROI::value_type::value_type{2., 20, 20, 40, 40, 0}});
+        {EncodedRegion{2., 20, 20, 40, 40, 0}});
     const auto overlaid = renderedFrame(window);
     const auto blue     = overlaid.pixelColor(qRound(40 * dpr), qRound(130 * dpr));
     if (!(blue.blue() - blue.red() > 100 && blue.green() - blue.red() > 50))
@@ -298,14 +298,14 @@ int main(int argc, char **argv)
     assert(blue.blue() - blue.red() > 100 && blue.green() - blue.red() > 50);
     viewport.setOverlays(
         {
-            ROI::value_type::value_type{2., 100, 10, 40, 20, 0}
+            EncodedRegion{2., 100, 10, 40, 20, 0}
     },
-        {ROI::value_type::value_type{2., 20, 20, 40, 40, 0}});
+        {EncodedRegion{2., 20, 20, 40, 40, 0}});
     viewport.beginRoiEdit(
         {
             4, "layers", 0, 0
     },
-        {ROI::value_type::value_type{2., 20, 20, 40, 40, 0}}, false, true);
+        {EncodedRegion{2., 20, 20, 40, 40, 0}}, false, true);
     const auto editingLayers = renderedFrame(window);
     const auto selectedPoint = viewport.imageToItem({20, 20}) * dpr;
     const auto selectedColor = editingLayers.pixelColor(qRound(selectedPoint.x()), qRound(selectedPoint.y()));
@@ -326,7 +326,7 @@ int main(int argc, char **argv)
         [&] { viewport.restoreViewState({ImageViewport::Manual, 2, {50, 30}}); }};
     for (const auto &transform : transforms)
     {
-        const auto original = ROI::value_type::value_type{2., 20, 20, 40, 20, 25};
+        const auto original = EncodedRegion{2., 20, 20, 40, 20, 25};
         viewport.beginRoiEdit({4, "transform", 0, 0}, {original}, false, true);
         viewport.setDrawShape(0);
         const int before = commits;
@@ -339,7 +339,7 @@ int main(int argc, char **argv)
         assert(commits == before + 1 && near((*committed)[1], 25) && near((*committed)[2], 25));
         assert(near((*committed)[5], 25));
     }
-    const auto    original = ROI::value_type::value_type{2., 40, 30, 40, 20, 25};
+    const auto    original = EncodedRegion{2., 40, 30, 40, 20, 25};
     const auto    corners  = rectangleCorners(original);
     const QPointF rectangleCenter(60, 40);
     for (std::size_t corner = 0; corner < corners.size(); ++corner)
@@ -408,7 +408,7 @@ int main(int argc, char **argv)
             {
                 4, "small", 0, 0
         },
-            {ROI::value_type::value_type{2., 40, 30, 2, 2, 0}}, false, true);
+            {EncodedRegion{2., 40, 30, 2, 2, 0}}, false, true);
         viewport.setDrawShape(0);
         const int beforeSmall = commits;
         drag(viewport, {42, 32}, {46, 35});
@@ -419,11 +419,11 @@ int main(int argc, char **argv)
             {
                 4, "tie", 0, 0
         },
-            {ROI::value_type::value_type{2., 40, 30, 2, 2, 0}}, false, true);
+            {EncodedRegion{2., 40, 30, 2, 2, 0}}, false, true);
         drag(viewport, {41, 31}, {39, 29});
         assert(near((*committed)[1], 39) && near((*committed)[2], 29) && near((*committed)[3], 3)
                && near((*committed)[4], 3));
-        const auto    rotatedSmall = ROI::value_type::value_type{2., 40, 30, 2, 2, 25};
+        const auto    rotatedSmall = EncodedRegion{2., 40, 30, 2, 2, 25};
         const auto    smallCorners = rectangleCorners(rotatedSmall);
         const QPointF smallCenter(41, 31);
         const QPointF smallCorner(smallCorners[2].x, smallCorners[2].y);
@@ -456,7 +456,7 @@ int main(int argc, char **argv)
     viewport.restoreViewState({ImageViewport::Manual, 2, {0, 20}});
     viewport.setOverlays({}, {});
     window.setColor(QColor(18, 32, 46));
-    const auto beyondImage = ROI::value_type::value_type{2., -90, 5, 40, 30, 0};
+    const auto beyondImage = EncodedRegion{2., -90, 5, 40, 30, 0};
     viewport.beginRoiEdit({4, "viewport-edge", 0, 0}, {beyondImage}, false, true);
     viewport.setDrawShape(0);
     const int beforeEdge = commits;
@@ -499,7 +499,7 @@ int main(int argc, char **argv)
         {
             5, "window-owner", 0, 0, 100
     },
-        {ROI::value_type::value_type{2., 10, 10, 20, 20, 0}}, false, true);
+        {EncodedRegion{2., 10, 10, 20, 20, 0}}, false, true);
     viewport.setParentItem(relocatedWindow.contentItem());
     assert(windowCancellations == 1 && !viewport.editing() && viewport.selectedRoi() == -1
         && viewport.drawShape() == 0);
@@ -509,7 +509,7 @@ int main(int argc, char **argv)
         {
             5, "window-owner", 0, 0, 101
     },
-        {ROI::value_type::value_type{2., 10, 10, 20, 20, 0}}, false, true);
+        {EncodedRegion{2., 10, 10, 20, 20, 0}}, false, true);
     viewport.setParentItem(nullptr);
     assert(windowCancellations == 2 && !viewport.editing() && viewport.selectedRoi() == -1
         && viewport.drawShape() == 0);
@@ -520,7 +520,7 @@ int main(int argc, char **argv)
         {
             5, "window-owner", 0, 0, 102
     },
-        {ROI::value_type::value_type{2., 10, 10, 20, 20, 0}}, false, true);
+        {EncodedRegion{2., 10, 10, 20, 20, 0}}, false, true);
     relocatedWindow.requestActivate();
     await([&] { return relocatedWindow.isActive() && !window.isActive(); });
     assert(windowCancellations == 3 && !viewport.editing() && viewport.selectedRoi() == -1
@@ -538,7 +538,7 @@ int main(int argc, char **argv)
     stable.setDrawShape(2);
     int stableCommits = 0;
     QObject::connect(&stable, &ImageViewport::roiCommitted, &stable,
-                     [&](const RoiEditTarget &, const ROI::value_type::value_type &) { ++stableCommits; });
+                     [&](const RoiEditTarget &, const EncodedRegion &) { ++stableCommits; });
     mouse(stable, QEvent::MouseButtonPress, stable.imageToItem({10, 10}), Qt::LeftButton, Qt::LeftButton);
     mouse(stable, QEvent::MouseMove, stable.imageToItem({30, 30}), Qt::NoButton, Qt::LeftButton);
     stable.beginRoiEdit(stableTarget, {});
