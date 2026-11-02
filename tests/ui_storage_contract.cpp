@@ -1,3 +1,4 @@
+#include "result_view.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
@@ -109,7 +110,7 @@ def probe(inputs):
         require(std::get<std::int64_t>(allocations->value) == allocated
                     && std::get<std::int64_t>(releases->value) == released,
                 "deleted image storage was retained by the workbench");
-        const auto &tokens = std::get<Array>(live->value).get<NestedVector<std::int64_t, 1>>();
+        const auto tokens = nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(live->value));
         require(keeperAlive ? tokens == NestedVector<std::int64_t, 1>{1} : tokens.empty(),
                 "deleted image revived or retained node lost its last result");
         std::cout << "Workbench storage: allocated=" << allocated << " released=" << released

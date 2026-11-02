@@ -7,7 +7,15 @@ import VisionRT.Style 1.0
 
 Rectangle {
     id: root
-    required property var node
+    required property string nodeId
+    required property string nodeTitle
+    required property string nodeCategory
+    required property string nodeVersion
+    required property string nodeStatus
+    required property bool nodeMissing
+    required property bool nodeDefMissing
+    required property bool nodeImplUnavailable
+    required property string nodeTimingText
     property bool selected: false
     property real viewScale: 1
     signal pointerPressed(var mouse, var item)
@@ -19,10 +27,10 @@ Rectangle {
     width: 156; height: 52; radius: 2
     antialiasing: true
     color: "#ffffff"
-    objectName: "flowNode_" + node.id
+    objectName: "flowNode_" + nodeId
 
-    readonly property string nodeState: root.node.state || "idle"
-    readonly property bool isError: root.nodeState === "failed" || root.node.missing === true
+    readonly property string nodeState: root.nodeStatus || "idle"
+    readonly property bool isError: root.nodeState === "failed" || root.nodeMissing === true
     // Gated nodes never enter the algorithm: they keep a neutral canvas colour plus an explicit
     // badge, so a skipped branch can not be mistaken for a green success.
     readonly property bool isSkipped: root.nodeState === "skipped"
@@ -77,7 +85,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignVCenter
             }
             QuiText {
-                visible: root.node.defMissing === true
+                visible: root.nodeDefMissing === true
                 text: "缺定义"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
@@ -85,7 +93,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignVCenter
             }
             QuiText {
-                visible: !root.node.defMissing && root.node.implUnavailable === true
+                visible: !root.nodeDefMissing && root.nodeImplUnavailable === true
                 text: "缺实现"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
@@ -94,7 +102,7 @@ Rectangle {
             }
             QuiText {
                 visible: root.isSkipped
-                objectName: "nodeBadgeSkip_" + root.node.id
+                objectName: "nodeBadgeSkip_" + root.nodeId
                 text: "跳过"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
@@ -103,7 +111,7 @@ Rectangle {
             }
             QuiText {
                 visible: root.isBlocked
-                objectName: "nodeBadgeBlock_" + root.node.id
+                objectName: "nodeBadgeBlock_" + root.nodeId
                 text: "阻塞"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
@@ -112,7 +120,7 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             QuiText {
-                text: root.node.version ? ("v" + String(root.node.version).replace(/^v/i, "")) : "v1.0"
+                text: root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0"
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
                 color: root.headerText
@@ -128,7 +136,7 @@ Rectangle {
         QuiTextIcon {
             Layout.preferredWidth: 16; Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
-            iconSource: root.getIcon(root.node.title, root.node.category || "")
+            iconSource: root.getIcon(root.nodeTitle, root.nodeCategory || "")
             iconSize: Theme.iconSizeBase
             iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "running" ? Theme.nodeStateGreen : Theme.nodeStateGray)
             renderType: Text.QtRendering
@@ -136,13 +144,13 @@ Rectangle {
         ColumnLayout {
             Layout.fillWidth: true; spacing: 1
             QuiText {
-                text: root.node.title; Layout.fillWidth: true; elide: Text.ElideRight
+                text: root.nodeTitle; Layout.fillWidth: true; elide: Text.ElideRight
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall })
                 color: QuiColor.FontPrimary
             }
             QuiText {
-                text: root.node.timingText
+                text: root.nodeTimingText
                 renderType: Text.QtRendering
                 font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeCaption })
                 color: Theme.iconMuted
@@ -179,7 +187,7 @@ Rectangle {
             else root.hoverEntered()
         }
         onReleased: function(mouse) { root.pointerReleased(mouse, root) }
-        onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !app.busy) root.executeRequested() }
+        onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && app.workspaceEnabled) root.executeRequested() }
         onEntered: root.hoverEntered()
         onExited: root.hoverExited()
     }

@@ -317,7 +317,7 @@ int main()
         assert(!isMissing(normalizeInput(port("flag", {Type::Bool}), false).value));
         assert(!isMissing(normalizeInput(port("text", {Type::String}), std::string{}).value));
         assert(!isMissing(normalizeInput(port("list", {Type::Array, DType::Int64, 1}),
-                                        Array(NestedVector<std::int64_t, 1>{})).value));
+                                        Array::fromNested(NestedVector<std::int64_t, 1>{})).value));
 
         // A declared array port refuses a scalar with the same element dtype instead of reading it
         // as an array, and an int port refuses a float even when the value is integral.
@@ -326,7 +326,7 @@ int main()
         rejects(
             [&]
             {
-                normalizeInput(port("count", {Type::Int}), Array(NestedVector<std::int64_t, 1>{1}));
+                normalizeInput(port("count", {Type::Int}), Array::fromNested(NestedVector<std::int64_t, 1>{1}));
             },
             "count");
         rejects([&] { normalizeInput(port("ratio", {Type::Float}), std::numeric_limits<double>::quiet_NaN()); },

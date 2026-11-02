@@ -623,7 +623,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         auto           matrix = numpy.attr("zeros")(pybind11::make_tuple(10, 20), "float32");
         const TypeSpec type{Type::Array, DType::Float32, 2};
         auto           array  = fromPython(type, matrix.attr("tolist")(), storage);
-        const auto    &native = std::get<Array>(array).get<NestedVector<float, 2>>();
+        const auto    &native = nestedOf<NestedVector<float, 2>>(std::get<Array>(array));
         require(native.size() == 10 && native[0].size() == 20 && native[0][0] == 0.0f,
                 "Python Array must use the declared native nested-vector type");
         bool rejectedArray = false;

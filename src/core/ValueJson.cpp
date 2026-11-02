@@ -89,6 +89,223 @@ QJsonValue real(double value, const char *type, ValueJson::Purpose purpose)
     return QJsonObject{{"type", type}, {"non_finite", std::isnan(value) ? "NaN" : value < 0 ? "-Infinity" : "Infinity"}};
 }
 
+template<class T>
+QJsonValue arrayLeaf(const Array &array, std::size_t index, ValueJson::Purpose purpose)
+{
+    if constexpr (std::is_same_v<T, bool>)
+        return array.boolBytes()[index] != 0;
+    else if constexpr (std::is_same_v<T, std::string>)
+        return utf8(array.elements<std::string>()[index]);
+    else if constexpr (std::is_integral_v<T>)
+        return static_cast<qint64>(array.elements<T>()[index]);
+    else
+        return real(static_cast<double>(array.elements<T>()[index]), dtypeName(array.dtype()), purpose);
+}
+
+template<class T>
+QJsonArray denseNestedJson(const Array &array, int dimension, std::size_t &index, ValueJson::Purpose purpose)
+{
+    QJsonArray result;
+    const auto &shape = array.shape();
+    for (std::int64_t i = 0; i < shape[static_cast<std::size_t>(dimension)]; ++i)
+    {
+        if (dimension + 1 == static_cast<int>(shape.size()))
+            result.append(arrayLeaf<T>(array, index++, purpose));
+        else
+            result.append(denseNestedJson<T>(array, dimension + 1, index, purpose));
+    }
+    return result;
+}
+
+template<class T>
+QJsonArray raggedNestedJson(const Array &array, int level, std::size_t group, std::size_t &index,
+                            ValueJson::Purpose purpose)
+{
+    QJsonArray result;
+    const auto &offsets = array.offsets();
+    const auto &bounds  = offsets[static_cast<std::size_t>(level)];
+    if (level + 1 == static_cast<int>(offsets.size()))
+    {
+        for (auto leaf = bounds[group]; leaf < bounds[group + 1]; ++leaf)
+            result.append(arrayLeaf<T>(array, index++, purpose));
+        return result;
+    }
+    for (auto child = bounds[group]; child < bounds[group + 1]; ++child)
+        result.append(raggedNestedJson<T>(array, level + 1, static_cast<std::size_t>(child), index, purpose));
+    return result;
+}
+
+template<class T>
+QJsonValue arrayJsonTyped(const Array &array, ValueJson::Purpose purpose)
+{
+    if (purpose == ValueJson::Purpose::Stored)
+    {
+        QJsonArray values;
+        for (std::size_t index = 0; index < array.elementCount(); ++index)
+            values.append(arrayLeaf<T>(array, index, purpose));
+        if (array.layout() == ArrayLayout::Dense)
+        {
+            QJsonArray shape;
+            for (const auto dimension : array.shape()) shape.append(static_cast<qint64>(dimension));
+            return QJsonObject{{"shape", shape}, {"values", values}};
+        }
+        QJsonArray offsets;
+        for (const auto &level : array.offsets())
+        {
+            QJsonArray bounds;
+            for (const auto value : level) bounds.append(static_cast<qint64>(value));
+            offsets.append(bounds);
+        }
+        return QJsonObject{{"offsets", offsets}, {"values", values}};
+    }
+    if (array.layout() == ArrayLayout::Dense)
+    {
+        std::size_t index = 0;
+        return denseNestedJson<T>(array, 0, index, purpose);
+    }
+    std::size_t index = 0;
+    QJsonArray  result;
+    const auto  groups = array.offsets().empty() ? 0 : array.offsets()[0].size() - 1;
+    for (std::size_t group = 0; group < groups; ++group)
+        result.append(raggedNestedJson<T>(array, 0, group, index, purpose));
+    return result;
+}
+
+template<class T>
+std::vector<T> arrayValues(const QJsonArray &values)
+{
+    std::vector<T> result;
+    result.reserve(static_cast<std::size_t>(values.size()));
+    for (const auto value : values)
+    {
+        if constexpr (std::is_same_v<T, bool>)
+            result.push_back(number<bool>(value));
+        else if constexpr (std::is_same_v<T, std::string>)
+            result.push_back(string(value));
+        else
+            result.push_back(number<T>(value));
+    }
+    return result;
+}
+
+template<class T>
+Array typedNestedArray(const QJsonValue &json, int rank)
+{
+    switch (rank)
+    {
+    case 1:
+        return Array::fromNested(decodeNested<NestedVector<T, 1>>(json));
+    case 2:
+        return Array::fromNested(decodeNested<NestedVector<T, 2>>(json));
+    case 3:
+        return Array::fromNested(decodeNested<NestedVector<T, 3>>(json));
+    case 4:
+        return Array::fromNested(decodeNested<NestedVector<T, 4>>(json));
+    }
+    throw ContractError("数组 rank 必须在支持范围内");
+}
+
+template<class T>
+Array typedStructuredArray(const QJsonObject &object, int rank, DType dtype)
+{
+    for (auto field = object.begin(); field != object.end(); ++field)
+        if (field.key() != "shape" && field.key() != "offsets" && field.key() != "values")
+            throw ContractError("数组结构化值包含未知字段：" + field.key().toStdString());
+    if (!object.contains("values"))
+        throw ContractError("数组结构化值缺少 values");
+    const auto values = arrayValues<T>(array(object.value("values")));
+    if (object.contains("shape"))
+    {
+        if (object.contains("offsets"))
+            throw ContractError("数组结构化值不能同时包含 shape 与 offsets");
+        std::vector<std::int64_t> shape;
+        for (const auto value : array(object.value("shape"))) shape.push_back(integer(value));
+        auto result = Array::dense(dtype, std::move(shape), values);
+        if (result.rank() != rank)
+            throw ContractError("数组 shape 的 rank 与声明不一致");
+        return result;
+    }
+    if (object.contains("offsets"))
+    {
+        std::vector<std::vector<std::int64_t>> offsets;
+        for (const auto level : array(object.value("offsets")))
+        {
+            std::vector<std::int64_t> bounds;
+            for (const auto value : array(level)) bounds.push_back(integer(value));
+            offsets.push_back(std::move(bounds));
+        }
+        auto result = Array::ragged(dtype, rank, std::move(offsets), values);
+        return result;
+    }
+    throw ContractError("数组结构化值必须包含 shape 或 offsets");
+}
+
+Array decodeArray(const QJsonValue &json, DType dtype, int rank)
+{
+    if (json.isObject())
+    {
+        const auto object = json.toObject();
+        switch (dtype)
+        {
+        case DType::UInt8:
+            return typedStructuredArray<std::uint8_t>(object, rank, dtype);
+        case DType::Int32:
+            return typedStructuredArray<std::int32_t>(object, rank, dtype);
+        case DType::Int64:
+            return typedStructuredArray<std::int64_t>(object, rank, dtype);
+        case DType::Float32:
+            return typedStructuredArray<float>(object, rank, dtype);
+        case DType::Float64:
+            return typedStructuredArray<double>(object, rank, dtype);
+        case DType::Bool:
+            return typedStructuredArray<bool>(object, rank, dtype);
+        case DType::String:
+            return typedStructuredArray<std::string>(object, rank, dtype);
+        }
+        throw ContractError("未知数组 dtype");
+    }
+    switch (dtype)
+    {
+    case DType::UInt8:
+        return typedNestedArray<std::uint8_t>(json, rank);
+    case DType::Int32:
+        return typedNestedArray<std::int32_t>(json, rank);
+    case DType::Int64:
+        return typedNestedArray<std::int64_t>(json, rank);
+    case DType::Float32:
+        return typedNestedArray<float>(json, rank);
+    case DType::Float64:
+        return typedNestedArray<double>(json, rank);
+    case DType::Bool:
+        return typedNestedArray<bool>(json, rank);
+    case DType::String:
+        return typedNestedArray<std::string>(json, rank);
+    }
+    throw ContractError("未知数组 dtype");
+}
+
+QJsonValue arrayJson(const Array &array, ValueJson::Purpose purpose)
+{
+    switch (array.dtype())
+    {
+    case DType::UInt8:
+        return arrayJsonTyped<std::uint8_t>(array, purpose);
+    case DType::Int32:
+        return arrayJsonTyped<std::int32_t>(array, purpose);
+    case DType::Int64:
+        return arrayJsonTyped<std::int64_t>(array, purpose);
+    case DType::Float32:
+        return arrayJsonTyped<float>(array, purpose);
+    case DType::Float64:
+        return arrayJsonTyped<double>(array, purpose);
+    case DType::Bool:
+        return arrayJsonTyped<bool>(array, purpose);
+    case DType::String:
+        return arrayJsonTyped<std::string>(array, purpose);
+    }
+    throw ContractError("未知数组 dtype");
+}
+
 template<class Vector>
 QJsonArray encodeNested(const Vector &values, ValueJson::Purpose purpose, const char *type)
 {
@@ -193,17 +410,8 @@ PortValue ValueJson::decode(const QJsonValue &json, const TypeSpec &type)
         result = DataRef<Image>(Image{});
         break;
     case Type::Array:
-    {
-        auto values = Array::empty(*type.dtype, type.rank);
-        values.visit(
-            [&](const auto &reference)
-            {
-                using Vector    = std::remove_cvref_t<decltype(reference.get())>;
-                reference.get() = decodeNested<Vector>(json);
-            });
-        result = std::move(values);
+        result = decodeArray(json, *type.dtype, type.rank);
         break;
-    }
     case Type::ROI:
         result = DataRef<ROI>(decodeNested<ROI>(json));
         break;
@@ -230,13 +438,15 @@ QJsonValue ValueJson::encode(const PortValue &value, const TypeSpec &type, Purpo
             else if constexpr (std::is_same_v<Item, std::string>)
                 return utf8(item);
             else if constexpr (std::is_same_v<Item, Array>)
-                return item.visit([&](const auto &reference) -> QJsonValue
-                                  { return encodeNested(reference.get(), purpose, dtypeName(*type.dtype)); });
+                return arrayJson(item, purpose);
             else if constexpr (std::is_same_v<Item, DataRef<ROI>>)
                 return encodeNested(item.get(), purpose, "float64");
             else
             {
-                if (purpose == Purpose::Literal)
+                // Pixels are runtime data and never enter a document: a literal or a stored value
+                // keeps the declared empty batch and rejects a non-empty one. A display description
+                // carries geometry only, so a reader can show what the value was without pixels.
+                if (purpose != Purpose::Display)
                 {
                     if (!item.get().empty())
                         throw ContractError("图像字面量只能是 null 或空数组");

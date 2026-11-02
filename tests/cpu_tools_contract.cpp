@@ -86,7 +86,7 @@ void readImages(ToolRegistry &registry)
     assert((images.get().size() == 2));
     assert((images.get()[0].at<unsigned char>(0, 0) == 11));
     assert((images.get()[1].at<unsigned char>(0, 0) == 22));
-    const auto paths = std::get<Array>(result.outputs.at("paths")).get<NestedVector<std::string, 1>>();
+    const auto paths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at("paths")));
     assert((paths[0].ends_with("/a.png") && paths[1].ends_with("/b.png")));
     inputs["count"] = std::int64_t{-1};
     result = execute(registry, "visionrt.image.read", inputs, services);
@@ -183,7 +183,7 @@ void readImages(ToolRegistry &registry)
     assert((orderedImages.get().size() == 2));
     assert((orderedImages.get()[0].at<unsigned char>(0, 0) == 14));
     assert((orderedImages.get()[1].at<unsigned char>(0, 0) == 100));
-    const auto orderedPaths = std::get<Array>(result.outputs.at("paths")).get<NestedVector<std::string, 1>>();
+    const auto orderedPaths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at("paths")));
     assert((orderedPaths[0].ends_with(bmpName.toUtf8().toStdString())));
     assert((orderedPaths[1].ends_with(supplementaryName.toUtf8().toStdString())));
 }
@@ -280,7 +280,7 @@ void crop(ToolRegistry &registry)
         assert((image.step == images.get()[index].step));
     }
     assert((!result.outputs.contains("source_indices")));
-    const auto origins = std::get<Array>(result.outputs.at("origins")).get<NestedVector<double, 2>>();
+    const auto origins = nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at("origins")));
     assert(((origins
              == NestedVector<double, 2>{
                  {10, 0},
@@ -303,7 +303,7 @@ void crop(ToolRegistry &registry)
         assert((mixedCrops[index].u == mixed.get()[index].u));
         assert((mixedCrops[index].step == mixed.get()[index].step));
     }
-    const auto mixedOrigins = std::get<Array>(result.outputs.at("origins")).get<NestedVector<double, 2>>();
+    const auto mixedOrigins = nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at("origins")));
     assert(((mixedOrigins
              == NestedVector<double, 2>{
                  {4, 3},
@@ -344,7 +344,7 @@ void crop(ToolRegistry &registry)
     });
     success(result);
     assert((std::get<DataRef<Image>>(result.outputs.at("images")).get().empty()));
-    assert(((std::get<Array>(result.outputs.at("origins")).get<NestedVector<double, 2>>().empty())));
+    assert(((nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at("origins"))).empty())));
 }
 
 void preprocess(ToolRegistry &registry)
@@ -412,19 +412,19 @@ void filter(ToolRegistry &registry)
         {std::vector<double>{2, 0, 0, 10, 10, 0}, std::vector<double>{2, 15, 0, 4, 4, 0},
          std::vector<double>{2, 25, 0, 8, 8, 15}}
     });
-    const Array        scores(NestedVector<float, 2>{
+    const Array        scores = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
         std::vector<float>{0.8F, 0.95F, 0.7F}
     });
-    const Array        classes(NestedVector<std::int64_t, 2>{
+    const Array        classes = Array::fromNested(NestedVector<std::int64_t, 2>{
         std::vector<std::int64_t>{},
         std::vector<std::int64_t>{1, 2, 1}
     });
-    const Array        names(NestedVector<std::string, 2>{
+    const Array        names = Array::fromNested(NestedVector<std::string, 2>{
         {},
         {"first", "second", "third"}
     });
-    const Array        allowed(std::vector<std::int64_t>{1});
+    const Array        allowed = Array::fromNested(std::vector<std::int64_t>{1});
     Values             inputs{
         {         "images",  images},
         {           "rois",    rois},
@@ -437,54 +437,54 @@ void filter(ToolRegistry &registry)
     };
     auto result = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    const auto counts = std::get<Array>(result.outputs.at("counts")).get<NestedVector<std::int64_t, 1>>();
+    const auto counts = nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")));
     assert((counts.size() == 2 && counts[0] == 0 && counts[1] == 2));
     const auto &keptRois = std::get<DataRef<ROI>>(result.outputs.at("rois"));
     assert((keptRois.get()[0].empty()));
     assert((keptRois.get()[1][0][1] == 0 && keptRois.get()[1][1][1] == 25));
-    const auto keptScores = std::get<Array>(result.outputs.at("scores")).get<NestedVector<float, 2>>()[1];
+    const auto keptScores = nestedOf<NestedVector<float, 2>>(std::get<Array>(result.outputs.at("scores")))[1];
     assert((keptScores[0] == 0.8F && keptScores[1] == 0.7F));
-    const auto keptClasses = std::get<Array>(result.outputs.at("classes")).get<NestedVector<std::int64_t, 2>>()[1];
+    const auto keptClasses = nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(result.outputs.at("classes")))[1];
     assert((keptClasses[0] == 1 && keptClasses[1] == 1));
-    const auto keptNames = std::get<Array>(result.outputs.at("class_names")).get<NestedVector<std::string, 2>>()[1];
+    const auto keptNames = nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1];
     assert((keptNames[0] == "first" && keptNames[1] == "third"));
     assert((&std::get<DataRef<Image>>(result.outputs.at("images")).get() == &images.get()));
     inputs["min_area"] = 0.0;
     result             = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((std::get<Array>(result.outputs.at("counts")).get<NestedVector<std::int64_t, 1>>()[1] == 2));
-    inputs["allowed_classes"] = Array(std::vector<std::int64_t>{});
+    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")))[1] == 2));
+    inputs["allowed_classes"] = Array::fromNested(std::vector<std::int64_t>{});
     inputs["min_area"] = 64.0;
     result             = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((std::get<Array>(result.outputs.at("class_names")).get<NestedVector<std::string, 2>>()[1][1] == "third"));
-    assert((std::get<Array>(result.outputs.at("counts")).get<NestedVector<std::int64_t, 1>>()[1] == 2));
+    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1][1] == "third"));
+    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")))[1] == 2));
     inputs["min_area"]  = 0.0;
     inputs["min_score"] = 0.9;
     result              = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((std::get<Array>(result.outputs.at("counts")).get<NestedVector<std::int64_t, 1>>()[1] == 1));
-    assert((std::get<Array>(result.outputs.at("class_names")).get<NestedVector<std::string, 2>>()[1][0] == "second"));
+    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")))[1] == 1));
+    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1][0] == "second"));
     inputs["allowed_classes"] = allowed;
     inputs["min_area"]        = 64.0;
     inputs["min_score"]       = 0.9;
     result                    = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
     assert((std::get<DataRef<ROI>>(result.outputs.at("rois")).get()[1].empty()));
-    assert((std::get<Array>(result.outputs.at("class_names")).get<NestedVector<std::string, 2>>()[1].size() == 0));
-    inputs["scores"] = Array(NestedVector<float, 2>{
+    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1].size() == 0));
+    inputs["scores"] = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
         std::vector<float>{0.8F, 0.95F}
     });
     failure(execute(registry, "visionrt.detection.filter", inputs));
     inputs["scores"] = scores;
-    inputs["scores"] = Array(NestedVector<float, 2>{
+    inputs["scores"] = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
         std::vector<float>{0.8F, std::numeric_limits<float>::quiet_NaN(), 0.7F}
     });
     failure(execute(registry, "visionrt.detection.filter", inputs));
     inputs["scores"]  = scores;
-    inputs["classes"] = Array(NestedVector<std::int64_t, 2>{
+    inputs["classes"] = Array::fromNested(NestedVector<std::int64_t, 2>{
         std::vector<std::int64_t>{},
         std::vector<std::int64_t>{1, -1, 1}
     });

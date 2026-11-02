@@ -2,11 +2,22 @@
 
 | 工程 | 用途 |
 | --- | --- |
-| [CPU / Python](pipeline_cpu_python.vrt.json) | 图像处理与 Python 统计 |
+| [CPU / Python](pipeline_cpu_python.vrt.json) | 读图后的两条并行分支：ROI 定位与裁剪二值化、Python 原图均值 |
 | [GPU YOLO](pipeline_gpu_yolo.vrt.json) | 检测与缺陷过滤 |
 | [错误诊断](pipeline_error_diagnostic.vrt.json) | 缺参、模型加载失败与缺工具占位 |
 
 节点、参数、资源路径和连线以工程 JSON 为准；图像资源位于 [images](images)。工程需要提供对应工具定义和实现的 VisionTools 包。
+
+## CPU / Python 样例的数据流
+
+`pipeline_cpu_python.vrt.json` 是两条互不串联的分支，不是一条五节点串行链：
+
+| 分支 | 路径 | 产出 |
+| --- | --- | --- |
+| 图像处理 | 读图（节点1）→ 投影定位（节点2）；读图（节点1）→ 区域裁剪（节点3）→ 灰度二值化（节点4） | ROI 与二值化图像 |
+| Python 统计 | 读图（节点1）→ Python 均值（节点5） | 每张**原图**的灰度均值 |
+
+节点5 的上游是节点1 的 `images`，读取裁剪与二值化之前的数据；端口绑定以工程 JSON 为唯一来源，此处不重复连线细节。样例图像的原图均值（51.0、22.95）与裁剪二值化后的均值（95.625、191.25）不同，因此“均值取原图”是可被验证的语义，而不是巧合。
 
 ## 打开工程
 

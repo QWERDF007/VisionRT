@@ -108,22 +108,25 @@ try
     relay.outputs.push_back({"rect", "Rectangle", {Type::ROI}});
     write(root / "tools/custom/relay.json", emitNormalizedToolJson(relay));
     write(root / "python/custom/examples/image_sizes/tool.py", R"(
+import numpy as np
+
 def execute(inputs):
     images = inputs['images']
     assert isinstance(images, list) and len(images) == 2
     for image in images:
         assert image.flags.writeable and image.shape == (8, 10)
         image += 3
-    for name in ('rois', 'scores', 'classes', 'class_names'):
-        assert isinstance(inputs[name], list) and isinstance(inputs[name][0], list)
-    assert isinstance(inputs['rois'][0][0][0], float)
-    assert inputs['classes'][0][0] == 9007199254740993
+    # Rectangular numeric arrays arrive as writable NumPy views; text arrays keep the nested list
+    # form, and a ROI is always the three-level list plus its own geometry encoding.
+    assert isinstance(inputs['scores'], np.ndarray) and inputs['scores'].flags.writeable
+    assert isinstance(inputs['classes'], np.ndarray) and inputs['classes'].dtype == np.int64
+    assert isinstance(inputs['class_names'], list) and isinstance(inputs['class_names'][0], list)
+    assert isinstance(inputs['rois'], list) and isinstance(inputs['rois'][0][0][0], float)
+    assert int(inputs['classes'][0][0]) == 9007199254740993
     for regions in inputs['rois']:
         regions[0][1] += 1.0
-    for scores in inputs['scores']:
-        scores[0] += 0.125
-    for classes in inputs['classes']:
-        classes[0] += 1
+    inputs['scores'] += 0.125
+    inputs['classes'] += 1
     for names in inputs['class_names']:
         names[0] += '中文'
     out = {key: inputs[key] for key in ('images', 'rois', 'scores', 'classes', 'class_names')}
@@ -246,16 +249,15 @@ def execute(inputs):
     editor.setLiteral(flow, brightness, "offset", 1.0);
     editor.setLiteral(flow, brightness, "emit_mask", false);
     editor.setLiteral(flow, brightness, "rois", DataRef<ROI>(ROI{}));
-    editor.setLiteral(flow, brightness, "alignment",
-                      Array(DataRef<NestedVector<double, 3>>(NestedVector<double, 3>{})));
+    editor.setLiteral(flow, brightness, "alignment", Array::fromNested(NestedVector<double, 3>{}));
     editor.bindFreeInput(flow, {reader, "images"}, {before, "images"});
     // A second consumer keeps the primary reader -> relay -> crop storage chain intact while still
     // executing the function-registered tool through the real runtime.
     editor.bindFreeInput(flow, {reader, "images"}, {brightness, "images"});
     editor.setLiteral(flow, before, "rois", DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}, {{2., 1., 2., 3., 4., 0.}}}));
-    editor.setLiteral(flow, before, "scores", Array(NestedVector<float, 2>{{0.75F}, {0.5F}}));
-    editor.setLiteral(flow, before, "classes", Array(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {2}}));
-    editor.setLiteral(flow, before, "class_names", Array(NestedVector<std::string, 2>{{"first"}, {"second"}}));
+    editor.setLiteral(flow, before, "scores", Array::fromNested(NestedVector<float, 2>{{0.75F}, {0.5F}}));
+    editor.setLiteral(flow, before, "classes", Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {2}}));
+    editor.setLiteral(flow, before, "class_names", Array::fromNested(NestedVector<std::string, 2>{{"first"}, {"second"}}));
     for (const auto *port : {"rois", "scores", "classes", "class_names"})
         editor.setMode(flow, before, port, BindingMode::Literal);
     for (const auto &port : relay.inputs)
@@ -301,19 +303,19 @@ def execute(inputs):
                         && cv::mean(cropImages[batch])[0] == (batch == 0 ? 10 : 14),
                     "Native consumer received different image or ROI");
         }
-        require((std::get<Array>(filtered->outputs.at("scores")).get<NestedVector<float, 2>>()
+        require((nestedOf<NestedVector<float, 2>>(std::get<Array>(filtered->outputs.at("scores")))
                  == NestedVector<float, 2>{{0.875F}, {0.625F}}),
                 "Float array roundtrip differs");
-        require((std::get<Array>(filtered->outputs.at("classes")).get<NestedVector<std::int64_t, 2>>()
+        require((nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(filtered->outputs.at("classes")))
                  == NestedVector<std::int64_t, 2>{{9007199254740994LL}, {3}}),
                 "Int64 array precision lost");
-        require((std::get<Array>(filtered->outputs.at("class_names")).get<NestedVector<std::string, 2>>()
+        require((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(filtered->outputs.at("class_names")))
                  == NestedVector<std::string, 2>{{"first中文"}, {"second中文"}}),
                 "String array roundtrip differs");
         require((std::get<DataRef<ROI>>(filtered->outputs.at("rois")).get()
                  == ROI{{{2., 2., 2., 3., 4., 0.}}, {{2., 2., 2., 3., 4., 0.}}}),
                 "ROI roundtrip differs");
-        require((std::get<Array>(sizes->outputs.at("sizes")).get<NestedVector<std::int64_t, 2>>()
+        require((nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(sizes->outputs.at("sizes")))
                     == NestedVector<std::int64_t, 2>{{8, 10}, {8, 10}}), "Builtin/custom same-name packages collided");
         require(std::get<std::int64_t>(h35Snap->outputs.at("val")) == 42,
                 "H35 native helper queue output mismatch");

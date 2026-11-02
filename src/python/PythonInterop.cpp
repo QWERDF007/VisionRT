@@ -2,7 +2,10 @@
 
 #include "python/PythonImages.h"
 
+#include <pybind11/numpy.h>
+
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace visionrt {
@@ -93,6 +96,230 @@ py::list encodeList(const Vector &values)
     }
     return result;
 }
+
+py::dtype numpyDtype(DType dtype)
+{
+    switch (dtype)
+    {
+    case DType::UInt8:
+        return py::dtype::of<std::uint8_t>();
+    case DType::Int32:
+        return py::dtype::of<std::int32_t>();
+    case DType::Int64:
+        return py::dtype::of<std::int64_t>();
+    case DType::Float32:
+        return py::dtype::of<float>();
+    case DType::Float64:
+        return py::dtype::of<double>();
+    case DType::Bool:
+        return py::dtype("bool");
+    case DType::String:
+        break;
+    }
+    throw ContractError("字符串数组没有 NumPy 表示");
+}
+
+std::size_t numpyElementSize(DType dtype)
+{
+    switch (dtype)
+    {
+    case DType::UInt8:
+    case DType::Bool:
+        return 1;
+    case DType::Int32:
+    case DType::Float32:
+        return 4;
+    case DType::Int64:
+    case DType::Float64:
+        return 8;
+    case DType::String:
+        break;
+    }
+    throw ContractError("字符串数组没有 NumPy 表示");
+}
+
+py::array numpyView(const Array &array)
+{
+    const auto dtype = numpyDtype(array.dtype());
+    std::vector<py::ssize_t> shape;
+    shape.reserve(array.shape().size());
+    for (const auto dimension : array.shape()) shape.push_back(static_cast<py::ssize_t>(dimension));
+    std::vector<py::ssize_t> strides(shape.size());
+    py::ssize_t              stride = static_cast<py::ssize_t>(numpyElementSize(array.dtype()));
+    for (std::size_t index = shape.size(); index-- > 0;)
+    {
+        strides[index] = stride;
+        stride *= shape[index];
+    }
+    // The capsule keeps the Array's buffer owner alive for as long as NumPy references the view.
+    auto *holder = new Owner(array.bufferOwner());
+    py::capsule base(holder, [](void *pointer) { delete static_cast<Owner *>(pointer); });
+    return py::array(dtype, shape, strides, array.data(), base);
+}
+
+template<class T>
+py::object arrayLeaf(const Array &array, std::size_t index)
+{
+    if constexpr (std::is_same_v<T, bool>)
+        return py::bool_(array.boolBytes()[index] != 0);
+    else if constexpr (std::is_same_v<T, std::string>)
+        return py::str(array.elements<std::string>()[index]);
+    else
+        return py::cast(array.elements<T>()[index]);
+}
+
+template<class T>
+py::list denseList(const Array &array, int dimension, std::size_t &index)
+{
+    py::list  result;
+    const auto &shape = array.shape();
+    for (std::int64_t i = 0; i < shape[static_cast<std::size_t>(dimension)]; ++i)
+    {
+        if (dimension + 1 == static_cast<int>(shape.size()))
+            result.append(arrayLeaf<T>(array, index++));
+        else
+            result.append(denseList<T>(array, dimension + 1, index));
+    }
+    return result;
+}
+
+template<class T>
+py::list raggedList(const Array &array, int level, std::size_t group, std::size_t &index)
+{
+    py::list    result;
+    const auto &bounds = array.offsets()[static_cast<std::size_t>(level)];
+    if (level + 1 == static_cast<int>(array.offsets().size()))
+    {
+        for (auto leaf = bounds[group]; leaf < bounds[group + 1]; ++leaf)
+            result.append(arrayLeaf<T>(array, index++));
+        return result;
+    }
+    for (auto child = bounds[group]; child < bounds[group + 1]; ++child)
+        result.append(raggedList<T>(array, level + 1, static_cast<std::size_t>(child), index));
+    return result;
+}
+
+template<class T>
+py::object arrayList(const Array &array)
+{
+    if (array.layout() == ArrayLayout::Dense)
+    {
+        std::size_t index = 0;
+        return denseList<T>(array, 0, index);
+    }
+    std::size_t index = 0;
+    py::list    result;
+    const auto  groups = array.offsets().empty() ? 0 : array.offsets()[0].size() - 1;
+    for (std::size_t group = 0; group < groups; ++group)
+        result.append(raggedList<T>(array, 0, group, index));
+    return result;
+}
+
+py::object arrayToPython(const Array &array)
+{
+    if (array.layout() == ArrayLayout::Dense && array.dtype() != DType::String)
+        return numpyView(array);
+    switch (array.dtype())
+    {
+    case DType::UInt8:
+        return arrayList<std::uint8_t>(array);
+    case DType::Int32:
+        return arrayList<std::int32_t>(array);
+    case DType::Int64:
+        return arrayList<std::int64_t>(array);
+    case DType::Float32:
+        return arrayList<float>(array);
+    case DType::Float64:
+        return arrayList<double>(array);
+    case DType::Bool:
+        return arrayList<bool>(array);
+    case DType::String:
+        return arrayList<std::string>(array);
+    }
+    throw ContractError("未知数组 dtype");
+}
+
+template<class T>
+Array listArray(const py::handle &value, int rank, const std::string &path)
+{
+    switch (rank)
+    {
+    case 1:
+        return Array::fromNested(decodeList<NestedVector<T, 1>>(value, path));
+    case 2:
+        return Array::fromNested(decodeList<NestedVector<T, 2>>(value, path));
+    case 3:
+        return Array::fromNested(decodeList<NestedVector<T, 3>>(value, path));
+    case 4:
+        return Array::fromNested(decodeList<NestedVector<T, 4>>(value, path));
+    }
+    throw ContractError(path + " 的数组 rank 必须在支持范围内");
+}
+
+Array arrayFromList(const TypeSpec &expected, const py::handle &value, const std::string &path)
+{
+    Array result;
+    switch (*expected.dtype)
+    {
+    case DType::UInt8:
+        result = listArray<std::uint8_t>(value, expected.rank, path);
+        break;
+    case DType::Int32:
+        result = listArray<std::int32_t>(value, expected.rank, path);
+        break;
+    case DType::Int64:
+        result = listArray<std::int64_t>(value, expected.rank, path);
+        break;
+    case DType::Float32:
+        result = listArray<float>(value, expected.rank, path);
+        break;
+    case DType::Float64:
+        result = listArray<double>(value, expected.rank, path);
+        break;
+    case DType::Bool:
+        result = listArray<bool>(value, expected.rank, path);
+        break;
+    case DType::String:
+        result = listArray<std::string>(value, expected.rank, path);
+        break;
+    }
+    if (result.rank() != expected.rank || result.dtype() != *expected.dtype)
+        throw ContractError(path + " 的数组结构与声明不一致");
+    return result;
+}
+
+Array arrayFromNumpy(const TypeSpec &expected, const py::handle &value, const PythonStorage &storage,
+                     const std::string &path)
+{
+    auto array = py::reinterpret_borrow<py::array>(value);
+    if (!array.dtype().is(numpyDtype(*expected.dtype)))
+        throw ContractError(path + " 的 NumPy dtype 必须精确匹配，不接受隐式转换");
+    if (array.ndim() != expected.rank)
+        throw ContractError(path + " 的 NumPy 维度与声明 rank 不一致");
+    std::vector<std::int64_t> shape(static_cast<std::size_t>(array.ndim()));
+    std::size_t               count = 1;
+    for (py::ssize_t dimension = 0; dimension < array.ndim(); ++dimension)
+    {
+        shape[static_cast<std::size_t>(dimension)] = array.shape(dimension);
+        if (array.shape(dimension) < 0)
+            throw ContractError(path + " 的 NumPy shape 不能为负");
+        count *= static_cast<std::size_t>(array.shape(dimension));
+    }
+    if (count != static_cast<std::size_t>(array.size()))
+        throw ContractError(path + " 的 NumPy 元素数量与 shape 不一致");
+    if ((array.flags() & py::array::c_style) == 0 || !array.writeable())
+    {
+        // Read-only or strided input costs one explicit copy; it is never a zero-copy claim.
+        py::object numpy = py::module_::import("numpy");
+        py::array  contiguous = numpy.attr("ascontiguousarray")(array, numpyDtype(*expected.dtype));
+        if (!contiguous.writeable())
+            contiguous = contiguous.attr("copy")();
+        return Array::borrowedDense(*expected.dtype, std::move(shape), contiguous.mutable_data(), count,
+                                    storage.retain(contiguous));
+    }
+    return Array::borrowedDense(*expected.dtype, std::move(shape), array.mutable_data(), count,
+                                storage.retain(value));
+}
 }
 
 py::object toPython(const PortValue &value)
@@ -110,7 +337,7 @@ py::object toPython(const PortValue &value)
             else if constexpr (std::is_same_v<Payload, DataRef<ROI>>)
                 return encodeList(payload.get());
             else if constexpr (std::is_same_v<Payload, Array>)
-                return payload.visit([](const auto &data) { return encodeList(data.get()); });
+                return arrayToPython(payload);
             else
                 return py::cast(payload);
         },
@@ -135,16 +362,9 @@ PortValue fromPython(const TypeSpec &expected, py::handle value, const PythonSto
     case Type::Image:
         return python::imageHeaders(value, storage, path);
     case Type::Array:
-    {
-        auto result = Array::empty(*expected.dtype, expected.rank);
-        result.visit(
-            [&](const auto &data)
-            {
-                using Vector = std::remove_reference_t<decltype(data.get())>;
-                data.get()   = decodeList<Vector>(value, path);
-            });
-        return result;
-    }
+        if (py::isinstance<py::array>(value))
+            return arrayFromNumpy(expected, value, storage, path);
+        return arrayFromList(expected, value, path);
     case Type::ROI:
     {
         auto result = decodeList<ROI>(value, path);

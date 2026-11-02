@@ -7,7 +7,6 @@ import VisionRT.Style 1.0
 FocusScope {
     id: root
     property var selection: []
-    property var nodeIds: []
     property real zoom: 1
     property real panX: 0
     property real panY: 0
@@ -37,7 +36,13 @@ FocusScope {
         return null
     }
     property bool hoverCardVisible: false
-    readonly property var hoverNode: hoverNodeId === "" ? null : findNode(hoverNodeId)
+    // Every model row notification bumps this, so a hover card never keeps a copy taken before the
+    // current execution snapshot arrived.
+    property int recordRevision: 0
+    readonly property var hoverNode: {
+        root.recordRevision
+        return hoverNodeId === "" ? null : app.nodeRecord(hoverNodeId)
+    }
     readonly property int cellWidth: 180
     readonly property int cellHeight: 80
     property var routedWires: []
@@ -45,10 +50,9 @@ FocusScope {
         if (app.wires.length === 0) return []
         const geometry = []
         for (let index = 0; index < nodeRepeater.count; ++index) {
-            const loader = nodeRepeater.itemAt(index)
-            if (!loader || !loader.item) return []
-            const item = loader.item
-            geometry.push({id: loader.modelData, rectangle: Qt.rect(item.x, item.y, item.width, item.height)})
+            const item = nodeRepeater.itemAt(index)
+            if (!item) return []
+            geometry.push({id: item.nodeId, rectangle: Qt.rect(item.x, item.y, item.width, item.height)})
         }
         return geometry
     }
@@ -57,11 +61,6 @@ FocusScope {
     function updateRoutes() { routedWires = app.routeWires(routeGeometry) }
 
     function selected(id) { return selection.indexOf(id) !== -1 }
-    function findNode(id) { for (let n of app.nodes) if (n.id === id) return n; return null }
-    function refreshNodeIds() {
-        const ids = app.nodes.map(function(node) { return node.id })
-        if (ids.length !== nodeIds.length || ids.some(function(v, i) { return v !== nodeIds[i] })) nodeIds = ids
-    }
     function enterNode(id) {
         if (root.gesture !== "") return
         if (root.hoverNodeId === id && (root.hoverCardVisible || hoverTimer.running)) return
@@ -91,24 +90,26 @@ FocusScope {
         let maxY = Math.max(4, surface.height - hoverCard.height - 4)
         return Math.max(4, Math.min(maxY, root.nodeY(n.id) * root.zoom + root.panY))
     }
-    function nodeX(id) { let n = findNode(id); return n ? n.x * cellWidth + (selected(id) ? dragX : 0) : 0 }
-    function nodeY(id) { let n = findNode(id); return n ? n.y * cellHeight + (selected(id) ? dragY : 0) : 0 }
+    // One id-indexed lookup in the node model; no scan over a copy of the whole table.
+    function nodeX(id) { const p = app.nodePosition(id); return p.x * cellWidth + (selected(id) ? dragX : 0) }
+    function nodeY(id) { const p = app.nodePosition(id); return p.y * cellHeight + (selected(id) ? dragY : 0) }
     function focusSearch() { search.forceActiveFocus(); search.selectAll() }
     function locate(result) { search.text = ""; app.locateNode(result.flow, result.node); surface.forceActiveFocus() }
     function centerNode(id) {
-        let n = findNode(id)
-        if (!n) return
+        const p = app.nodePosition(id)
+        if (p.x === 0 && p.y === 0 && !app.nodeRecord(id).id) return
         selection = [id]
-        panX = surface.width / 2 - (n.x * cellWidth + 78) * zoom
-        panY = surface.height / 2 - (n.y * cellHeight + 34) * zoom
+        panX = surface.width / 2 - (p.x * cellWidth + 78) * zoom
+        panY = surface.height / 2 - (p.y * cellHeight + 34) * zoom
         surface.forceActiveFocus()
     }
     function fit() {
         if (surface.width <= 0 || surface.height <= 0) return
         fitRequested = false
-        if (!app.nodes.length) { zoom = 1; panX = surface.width / 2; panY = surface.height / 2; return }
+        const positions = app.nodePositions()
+        if (!positions.length) { zoom = 1; panX = surface.width / 2; panY = surface.height / 2; return }
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-        for (let n of app.nodes) {
+        for (let n of positions) {
             minX = Math.min(minX, n.x * cellWidth); minY = Math.min(minY, n.y * cellHeight)
             maxX = Math.max(maxX, n.x * cellWidth + 156); maxY = Math.max(maxY, n.y * cellHeight + 52)
         }
@@ -123,21 +124,22 @@ FocusScope {
         zoom = next
     }
     function beginNode(mouse, item) {
+        if (!app.workspaceEnabled) return
         root.hideHover()
         root.selectedWire = ""
         surface.forceActiveFocus()
         let p = item.mapToItem(surface, mouse.x, mouse.y)
         pressPoint = p; lastPoint = p; moved = false
         if (mouse.button === Qt.MiddleButton || mouse.button === Qt.RightButton) {
-            gesture = "pan"; contextNode = item.node.id; return
+            gesture = "pan"; contextNode = item.nodeId; return
         }
         if (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) {
-            let ids = selection.slice(), at = ids.indexOf(item.node.id)
-            if (at >= 0) ids.splice(at, 1); else ids.push(item.node.id)
+            let ids = selection.slice(), at = ids.indexOf(item.nodeId)
+            if (at >= 0) ids.splice(at, 1); else ids.push(item.nodeId)
             selection = ids
-        } else if (!selected(item.node.id)) selection = [item.node.id]
-        app.selectNode(item.node.id)
-        gesture = !app.busy && selected(item.node.id) ? "nodes" : ""
+        } else if (!selected(item.nodeId)) selection = [item.nodeId]
+        app.selectNode(item.nodeId)
+        gesture = app.workspaceEnabled && selected(item.nodeId) ? "nodes" : ""
     }
     function moveNode(mouse, item) { updateGesture(item.mapToItem(surface, mouse.x, mouse.y)) }
     function updateGesture(p) {
@@ -150,10 +152,11 @@ FocusScope {
         lastPoint = p
     }
     function endNode(mouse, item) {
+        if (!app.workspaceEnabled) { gesture = ""; dragX = 0; dragY = 0; return }
         if (gesture === "nodes" && moved && (dragX || dragY)) app.moveNodes(selection, Math.round(dragX / cellWidth), Math.round(dragY / cellHeight))
         if (mouse.button === Qt.RightButton && !moved) {
-            if (!selected(item.node.id)) selection = [item.node.id]
-            app.selectNode(item.node.id); contextNode = item.node.id
+            if (!selected(item.nodeId)) selection = [item.nodeId]
+            app.selectNode(item.nodeId); contextNode = item.nodeId
             nodeMenu.popup()
         }
         gesture = ""; dragX = 0; dragY = 0
@@ -172,7 +175,7 @@ FocusScope {
                             centerY: (surface.height / 2 - panY) / zoom, selection: selection }
         flowViews = views
     }
-    Component.onCompleted: { refreshNodeIds(); viewedFlow = app.currentFlow; fitTimer.restart() }
+    Component.onCompleted: { viewedFlow = app.currentFlow; fitTimer.restart() }
     Timer {
         id: fitTimer
         interval: 1
@@ -195,14 +198,21 @@ FocusScope {
             root.selection = view ? view.selection : []
         }
         function onNodeLocated(id) { root.centerNode(id) }
-        function onProjectReplaced() { root.hideHover(); root.selectedWire = ""; root.nodeIds = []; root.refreshNodeIds(); root.flowViews = ({}); root.selection = []; root.viewedFlow = app.currentFlow; root.fitRequested = true; fitTimer.restart() }
+        function onProjectReplaced() { root.hideHover(); root.selectedWire = ""; root.flowViews = ({}); root.selection = []; root.viewedFlow = app.currentFlow; root.fitRequested = true; fitTimer.restart() }
         function onNodesChanged() {
-            root.refreshNodeIds()
             if (!root.selectedConnection) root.selectedWire = ""
-            root.selection = root.selection.filter(function(id) { return root.findNode(id) !== null })
-            if (root.hoverNodeId !== "" && root.findNode(root.hoverNodeId) === null) root.hideHover()
+            root.selection = root.selection.filter(function(id) { return !!app.nodeRecord(id).id })
+            if (root.hoverNodeId !== "" && !app.nodeRecord(root.hoverNodeId).id) root.hideHover()
         }
         function onCatalogChanged() { root.hideHover() }
+    }
+    Connections {
+        target: app.nodeListModel
+        function onDataChanged() { root.recordRevision++ }
+        function onRowsInserted() { root.recordRevision++ }
+        function onRowsRemoved() { root.recordRevision++ }
+        function onRowsMoved() { root.recordRevision++ }
+        function onModelReset() { root.recordRevision++ }
     }
     Connections {
         target: root.Window.window
@@ -384,7 +394,7 @@ FocusScope {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    enabled: !app.busy
+                                    enabled: app.workspaceEnabled
                                     onClicked: app.setFlowSelected(modelData.id, !modelData.selected)
                                 }
                             }
@@ -413,7 +423,7 @@ FocusScope {
                     Layout.preferredWidth: 22; Layout.preferredHeight: 22; radius: 3
                     color: addMouse.containsMouse ? "#f0f2f5" : "#ffffff"
                     border.color: "#d0d7de"; border.width: 1
-                    enabled: !app.busy
+                    enabled: app.workspaceEnabled
                     QuiTextIcon {
                         anchors.centerIn: parent
                         iconSource: QuiFontIcon.Add; iconSize: Theme.iconSizeSmall; iconColor: Theme.iconSecondary
@@ -483,7 +493,7 @@ FocusScope {
                                         MouseArea {
                                             id: tabCloseMouse; objectName: "flowTabClose_" + flowTabItem.modelData.id
                                             anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
-                                            enabled: !app.busy && app.flows.length > 1
+                                            enabled: app.workspaceEnabled && app.flows.length > 1
                                             onClicked: {
                                                 root.contextFlow = flowTabItem.modelData.id
                                                 deleteFlowDialog.open()
@@ -511,7 +521,7 @@ FocusScope {
                 if (root.fitRequested) fitTimer.restart()
             }
             Keys.onPressed: function(event) {
-                if (!surface.activeFocus || app.busy) return
+                if (!surface.activeFocus || !app.workspaceEnabled) return
                 if (event.matches(StandardKey.Copy)) { app.copyNodes(root.selection); event.accepted = true }
                 else if (event.matches(StandardKey.Paste)) {
                     app.pasteNodes(Math.round((width / 2 - root.panX) / root.zoom / root.cellWidth), Math.round((height / 2 - root.panY) / root.zoom / root.cellHeight)); event.accepted = true
@@ -538,6 +548,7 @@ FocusScope {
             MouseArea {
                 id: backgroundMouse; anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton; preventStealing: true
+                enabled: app.workspaceEnabled
                 onPressed: function(mouse) {
                     surface.forceActiveFocus(); root.hideHover()
                     root.selectedWire = ""
@@ -553,7 +564,7 @@ FocusScope {
                         let right = (Math.max(root.pressPoint.x, mouse.x) - root.panX) / root.zoom
                         let bottom = (Math.max(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
                         let ids = root.selection.slice()
-                        for (let n of app.nodes)
+                        for (let n of app.nodePositions())
                             if (n.x * root.cellWidth + 156 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 52 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
                         root.selection = ids
                         if (ids.length) app.selectNode(ids[ids.length - 1])
@@ -567,6 +578,7 @@ FocusScope {
             }
             WheelHandler {
                 target: null
+                enabled: app.workspaceEnabled
                 onWheel: function(event) {
                     root.zoomAt(Math.pow(1.0015, event.angleDelta.y), event.x, event.y)
                     event.accepted = true
@@ -598,22 +610,18 @@ FocusScope {
                 }
                 Repeater {
                     id: nodeRepeater
-                    model: root.nodeIds
-                    Loader {
-                        id: nodeLoader
-                        required property string modelData
-                        readonly property var currentNode: root.findNode(modelData)
-                        active: currentNode !== null
-                        sourceComponent: NodeDelegate {
-                            node: nodeLoader.currentNode; selected: root.selected(nodeLoader.modelData); viewScale: root.zoom
-                            x: root.nodeX(nodeLoader.modelData); y: root.nodeY(nodeLoader.modelData)
-                            onPointerPressed: function(mouse, item) { root.beginNode(mouse, item) }
-                            onPointerMoved: function(mouse, item) { root.moveNode(mouse, item) }
-                            onPointerReleased: function(mouse, item) { root.endNode(mouse, item) }
-                            onExecuteRequested: { app.selectNode(nodeLoader.modelData); app.runNode() }
-                            onHoverEntered: root.enterNode(nodeLoader.modelData)
-                            onHoverExited: root.leaveNode(nodeLoader.modelData)
-                        }
+                    // Roles are the single source for the delegate: no per-frame map is rebuilt.
+                    model: app.nodeListModel
+                    NodeDelegate {
+                        selected: root.selected(nodeId)
+                        viewScale: root.zoom
+                        x: root.nodeX(nodeId); y: root.nodeY(nodeId)
+                        onPointerPressed: function(mouse, item) { root.beginNode(mouse, item) }
+                        onPointerMoved: function(mouse, item) { root.moveNode(mouse, item) }
+                        onPointerReleased: function(mouse, item) { root.endNode(mouse, item) }
+                        onExecuteRequested: { app.selectNode(nodeId); app.runNode() }
+                        onHoverEntered: root.enterNode(nodeId)
+                        onHoverExited: root.leaveNode(nodeId)
                     }
                 }
             }
@@ -641,8 +649,8 @@ FocusScope {
                         text: {
                             const wire = root.selectedConnection
                             if (!wire) return ""
-                            const source = root.findNode(wire.source)
-                            const target = root.findNode(wire.target)
+                            const source = app.nodeRecord(wire.source)
+                            const target = app.nodeRecord(wire.target)
                             return (source ? source.title : wire.source) + " → " + (target ? target.title : wire.target)
                         }
                     }
@@ -710,9 +718,9 @@ FocusScope {
             }
             DropArea {
                 anchors.fill: parent; keys: ["visionrt/tool"]
-                onEntered: function(drag) { drag.accepted = !app.busy }
+                onEntered: function(drag) { drag.accepted = app.workspaceEnabled }
                 onDropped: function(drop) {
-                    if (app.busy || !drop.source || !drop.source.toolId) return
+                    if (!app.workspaceEnabled || !drop.source || !drop.source.toolId) return
                     app.addNode(drop.source.toolId, Math.round((drop.x - root.panX) / root.zoom / root.cellWidth), Math.round((drop.y - root.panY) / root.zoom / root.cellHeight))
                     drop.acceptProposedAction(); surface.forceActiveFocus()
                 }
@@ -740,23 +748,23 @@ FocusScope {
     }
     QuiMenu {
         id: nodeMenu
-        QuiMenuItem { text: "复制"; enabled: !app.busy; onTriggered: app.copyNodes(root.selection) }
+        QuiMenuItem { text: "复制"; enabled: app.workspaceEnabled; onTriggered: app.copyNodes(root.selection) }
         QuiMenuItem {
-            text: "粘贴"; enabled: app.canPaste && !app.busy
+            text: "粘贴"; enabled: app.canPaste && app.workspaceEnabled
             onTriggered: {
-                let n = root.findNode(root.contextNode)
-                if (n) app.pasteNodes(n.x, n.y)
+                const p = app.nodePosition(root.contextNode)
+                if (app.nodeRecord(root.contextNode).id) app.pasteNodes(p.x, p.y)
             }
         }
-        QuiMenuItem { text: "删除"; enabled: !app.busy; onTriggered: { app.deleteNodes(root.selection); root.selection = [] } }
-        QuiMenuItem { text: "重命名备注…"; enabled: !app.busy; onTriggered: { let n = root.findNode(root.contextNode); root.openName("node", n ? n.alias : "") } }
+        QuiMenuItem { text: "删除"; enabled: app.workspaceEnabled; onTriggered: { app.deleteNodes(root.selection); root.selection = [] } }
+        QuiMenuItem { text: "重命名备注…"; enabled: app.workspaceEnabled; onTriggered: root.openName("node", app.nodeRecord(root.contextNode).alias || "") }
     }
     QuiMenu {
         id: blankMenu
         objectName: "flowBlankMenu"
         QuiMenuItem {
             objectName: "flowBlankPaste"
-            text: "粘贴"; enabled: app.canPaste && !app.busy
+            text: "粘贴"; enabled: app.canPaste && app.workspaceEnabled
             onTriggered: {
                 let p = root.gridPointAt(root.contextPoint.x, root.contextPoint.y)
                 app.pasteNodes(p.x, p.y)
@@ -766,9 +774,9 @@ FocusScope {
     QuiMenu {
         id: flowMenu
         objectName: "flowContextMenu"
-        QuiMenuItem { text: "重命名流程…"; enabled: !app.busy; onTriggered: { for (let f of app.flows) if (f.id === root.contextFlow) root.openName("flow", f.name) } }
-        QuiMenuItem { text: "复制流程"; enabled: !app.busy; onTriggered: app.copyFlow(root.contextFlow) }
-        QuiMenuItem { text: "删除流程…"; enabled: !app.busy && app.flows.length > 1; onTriggered: deleteFlowDialog.open() }
+        QuiMenuItem { text: "重命名流程…"; enabled: app.workspaceEnabled; onTriggered: { for (let f of app.flows) if (f.id === root.contextFlow) root.openName("flow", f.name) } }
+        QuiMenuItem { text: "复制流程"; enabled: app.workspaceEnabled; onTriggered: app.copyFlow(root.contextFlow) }
+        QuiMenuItem { text: "删除流程…"; enabled: app.workspaceEnabled && app.flows.length > 1; onTriggered: deleteFlowDialog.open() }
     }
     WorkbenchDialog {
         id: deleteFlowDialog; objectName: "flowDeleteDialog"
@@ -778,7 +786,7 @@ FocusScope {
     WorkbenchDialog {
         id: nameDialog; objectName: "flowNameDialog"
         title: root.nameOperation === "node" ? "节点备注" : "流程名称"
-        positiveButtonEnabled: !app.busy && root.nameDraft.trim().length > 0
+        positiveButtonEnabled: app.workspaceEnabled && root.nameDraft.trim().length > 0
         contentDelegate: Component {
             QuiTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }
         }

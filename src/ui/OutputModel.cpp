@@ -9,6 +9,8 @@
 
 namespace visionrt {
 namespace {
+std::size_t estimatedStringBytes(const std::string &value);
+
 QString q(const std::string &value)
 {
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
@@ -92,6 +94,149 @@ void appendNested(Preview &out, const Vector &values)
     out.append(QStringLiteral("]"));
 }
 
+
+template<class T>
+void appendArrayLeaf(Preview &out, const Array &array, std::size_t index)
+{
+    if constexpr (std::is_same_v<T, bool>)
+        out.append(array.boolBytes()[index] != 0 ? QStringLiteral("true") : QStringLiteral("false"));
+    else if constexpr (std::is_same_v<T, std::string>)
+        out.append(stringPreview(array.elements<std::string>()[index], out.limit - out.text.size(), true,
+                                 out.truncated));
+    else if constexpr (std::is_integral_v<T>)
+        out.append(QString::number(static_cast<qlonglong>(array.elements<T>()[index])));
+    else
+        out.append(QString::number(array.elements<T>()[index], 'g', std::numeric_limits<T>::max_digits10));
+}
+
+template<class T>
+void appendArrayDense(Preview &out, const Array &array, int dimension, std::size_t &index)
+{
+    out.append(QStringLiteral("["));
+    const auto &shape = array.shape();
+    for (std::int64_t i = 0; i < shape[static_cast<std::size_t>(dimension)]; ++i)
+    {
+        if (out.full())
+        {
+            out.truncated = true;
+            return;
+        }
+        if (i)
+            out.append(QStringLiteral(", "));
+        if (dimension + 1 == static_cast<int>(shape.size()))
+            appendArrayLeaf<T>(out, array, index++);
+        else
+            appendArrayDense<T>(out, array, dimension + 1, index);
+    }
+    out.append(QStringLiteral("]"));
+}
+
+template<class T>
+void appendArrayRagged(Preview &out, const Array &array, int level, std::size_t group, std::size_t &index)
+{
+    out.append(QStringLiteral("["));
+    const auto &bounds = array.offsets()[static_cast<std::size_t>(level)];
+    if (level + 1 == static_cast<int>(array.offsets().size()))
+    {
+        for (auto leaf = bounds[group]; leaf < bounds[group + 1]; ++leaf)
+        {
+            if (out.full())
+            {
+                out.truncated = true;
+                return;
+            }
+            if (leaf != bounds[group])
+                out.append(QStringLiteral(", "));
+            appendArrayLeaf<T>(out, array, index++);
+        }
+    }
+    else
+    {
+        for (auto child = bounds[group]; child < bounds[group + 1]; ++child)
+        {
+            if (out.full())
+            {
+                out.truncated = true;
+                return;
+            }
+            if (child != bounds[group])
+                out.append(QStringLiteral(", "));
+            appendArrayRagged<T>(out, array, level + 1, static_cast<std::size_t>(child), index);
+        }
+    }
+    out.append(QStringLiteral("]"));
+}
+
+template<class T>
+void appendArrayTyped(Preview &out, const Array &array)
+{
+    if (array.layout() == ArrayLayout::Dense)
+    {
+        std::size_t index = 0;
+        appendArrayDense<T>(out, array, 0, index);
+        return;
+    }
+    out.append(QStringLiteral("["));
+    std::size_t index  = 0;
+    const auto  groups = array.offsets().empty() ? 0 : array.offsets()[0].size() - 1;
+    for (std::size_t group = 0; group < groups; ++group)
+    {
+        if (out.full())
+        {
+            out.truncated = true;
+            return;
+        }
+        if (group)
+            out.append(QStringLiteral(", "));
+        appendArrayRagged<T>(out, array, 0, group, index);
+    }
+    out.append(QStringLiteral("]"));
+}
+
+void appendArray(Preview &out, const Array &array)
+{
+    switch (array.dtype())
+    {
+    case DType::UInt8:
+        appendArrayTyped<std::uint8_t>(out, array);
+        break;
+    case DType::Int32:
+        appendArrayTyped<std::int32_t>(out, array);
+        break;
+    case DType::Int64:
+        appendArrayTyped<std::int64_t>(out, array);
+        break;
+    case DType::Float32:
+        appendArrayTyped<float>(out, array);
+        break;
+    case DType::Float64:
+        appendArrayTyped<double>(out, array);
+        break;
+    case DType::Bool:
+        appendArrayTyped<bool>(out, array);
+        break;
+    case DType::String:
+        appendArrayTyped<std::string>(out, array);
+        break;
+    }
+}
+
+std::size_t estimatedArrayBytes(const Array &array)
+{
+    const auto maximum = std::numeric_limits<std::size_t>::max();
+    if (array.dtype() != DType::String)
+        return array.elementCount() > (maximum - 128) / 128 ? maximum : array.elementCount() * 128 + 128;
+    std::size_t size = 128;
+    for (const auto &value : array.elements<std::string>())
+    {
+        const auto bytes = estimatedStringBytes(value);
+        if (bytes >= maximum - size)
+            return maximum;
+        size += bytes + 1;
+    }
+    return size;
+}
+
 QString preview(const PortValue &value, qsizetype limit)
 {
     Preview out{{}, limit};
@@ -106,7 +251,7 @@ QString preview(const PortValue &value, qsizetype limit)
             else if constexpr (std::is_same_v<Element, DataRef<Image>>)
                 out.append(QStringLiteral("非显示型数据"));
             else if constexpr (std::is_same_v<Element, Array>)
-                item.visit([&](const auto &data) { appendNested(out, data.get()); });
+                appendArray(out, item);
             else if constexpr (std::is_same_v<Element, DataRef<ROI>>)
                 appendNested(out, item.get());
             else if constexpr (std::is_same_v<Element, bool>)
@@ -303,7 +448,7 @@ std::size_t OutputModel::estimatedTextBytes(const Captured &captured)
         {
             using Element = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<Element, Array>)
-                return value.visit([](const auto &data) { return estimatedNestedBytes(data.get()); });
+                return estimatedArrayBytes(value);
             else if constexpr (std::is_same_v<Element, std::string>)
                 return estimatedStringBytes(value);
             else if constexpr (std::is_same_v<Element, DataRef<ROI>>)

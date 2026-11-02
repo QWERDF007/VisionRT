@@ -1,4 +1,5 @@
 #include "core/ProjectStorage.h"
+#include "result_view.h"
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"
 #include "core/ToolRegistry.h"
@@ -124,8 +125,8 @@ void knownFailureDiagnostics(const QString &directory)
     const auto   filename = directory + "/错误 工程.vrt.json";
     for (const auto &[document, reason] : {
              std::pair{R"json({"format_version":4,"project":{},"flows":{}})json",                             "flows 必须是数组"},
-             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 4–5，实际 1"},
-             std::pair{                        R"json({"format_version":2})json", "format_version 不受支持，要求 4–5，实际 2"},
+             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 4–6，实际 1"},
+             std::pair{                        R"json({"format_version":2})json", "format_version 不受支持，要求 4–6，实际 2"},
              std::pair{                      R"json({"format_version":"4"})json",                    "format_version 必须是整数"},
              std::pair{                                                  "[1,2]",              "工程 JSON 根节点必须是对象"}
     })
@@ -180,7 +181,7 @@ void candidateAndRawPreservation(const QString &directory)
     storage.save(loaded.project, path(saved));
     const auto root = QJsonDocument::fromJson(get(saved)).object();
     const auto raw  = root.value("flows").toArray()[0].toObject().value("nodes").toArray()[0].toObject();
-    require(root.value("format_version").toInteger() == 5 && raw.value("node_seq").isString(),
+    require(root.value("format_version").toInteger() == 6 && raw.value("node_seq").isString(),
             "project version or identity encoding is wrong");
     require(raw.value("vendor_extension").toObject().value("opaque").toArray()[1].toObject().value("two") == "three",
             "extension lost");
@@ -372,7 +373,7 @@ void typedArraysAndRanges(const QString &directory)
     oldRegistry.addDefinition(tool);
     const auto  old   = ProjectStorage(oldRegistry).load(path(file));
     const auto &array = std::get<Array>(old.project.flows[0].nodes[0].inputs.at("value").literal);
-    const auto &rows  = array.get<NestedVector<float, 2>>();
+    const auto rows   = nestedOf<NestedVector<float, 2>>(array);
     require(rows.size() == 2 && rows[0].empty() && rows[1].empty(), "empty nested rows lost");
     auto rangedTool              = scalarTool();
     rangedTool.inputs[0].maximum = std::int64_t{10};

@@ -80,7 +80,7 @@ try
     {
         const auto rows = app.nodes();
         for (int iteration = 0; iteration < 100; ++iteration)
-            require(rows.isSharedWith(app.nodes()), "unchanged node readback rebuilt metadata storage");
+            require(app.nodes() == rows, "unchanged node readback changed its content");
         return rows;
     };
     const auto originalNodes = stableNodes();
@@ -94,10 +94,8 @@ try
     require(observedProjectNodes.size() == 1 && observedProjectNodes.front().toMap()["alias"] == "缓存节点",
             "project observers received stale node metadata before nodesChanged");
     const auto renamedNodes = stableNodes();
-    require(renamedNodes.front().toMap()["alias"] == "缓存节点"
-                && originalNodes.front().toMap()["alias"].toString().isEmpty()
-                && !renamedNodes.isSharedWith(originalNodes),
-            "node rename did not publish independent updated metadata");
+    require(renamedNodes.front().toMap()["alias"] == "缓存节点" && originalNodes.front().toMap()["alias"].toString().isEmpty(),
+            "node rename did not publish updated metadata without touching an earlier readback");
     require(app.moveNodes({source}, 1, 0), "cached node movement failed");
     const auto movedNodes = stableNodes();
     require(movedNodes.front().toMap()["x"] == 1 && renamedNodes.front().toMap()["x"] == 0,
@@ -150,11 +148,20 @@ try
     require(QTest::qWaitFor([&] { return textReady.size() == 1; }, 3000), "deferred full text was never delivered");
     require(textReady[0][0].toString() == "2", "deferred text did not capture the completed round");
     {
+        // A save requested during a run is refused, not queued: the witness file keeps its content
+        // and nothing is written once the run finishes.
         QFile file(projectPath);
-        require(file.open(QIODevice::ReadOnly), "deferred project file unavailable");
+        require(file.open(QIODevice::ReadOnly), "project file unavailable");
+        require(file.readAll() == "sentinel", "a refused save was written after the run finished");
+    }
+    require(app.save(), "idle save after the run failed");
+    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "saved project did not settle");
+    {
+        QFile file(projectPath);
+        require(file.open(QIODevice::ReadOnly), "saved project file unavailable");
         const auto saved = QJsonDocument::fromJson(file.readAll());
-        require(saved.isObject() && saved.object()["format_version"].toInt() == 5,
-                "queued save was not committed after the run finished");
+        require(saved.isObject() && saved.object()["format_version"].toInt() == 6,
+                "idle save after the run produced an incomplete project");
     }
     app.addNode("test.ui.editor", 100, 100);
     idle();

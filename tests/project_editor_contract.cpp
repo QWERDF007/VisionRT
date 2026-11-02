@@ -193,7 +193,7 @@ void inactiveDraftsOnlyDirty()
     arrays.inputs.front().type = {Type::Array, DType::Int64, 1};
     const auto makeValue       = []
     {
-        return Array(NestedVector<std::int64_t, 1>{2, 9});
+        return Array::fromNested(NestedVector<std::int64_t, 1>{2, 9});
     };
     arrays.inputs.front().defaultValue = makeValue();
     const auto arrayNode               = editor.addNode("flow_1", arrays, {2, 0});

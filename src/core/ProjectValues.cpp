@@ -9,7 +9,7 @@ PortValue copyProjectLiteral(const PortValue &value)
         {
             using Payload = std::decay_t<decltype(payload)>;
             if constexpr (std::is_same_v<Payload, Array>)
-                return payload.visit([](const auto &data) { return Array(data.get()); });
+                return payload.clone();
             else if constexpr (std::is_same_v<Payload, DataRef<ROI>>)
                 return DataRef<ROI>(payload.get());
             else if constexpr (std::is_same_v<Payload, DataRef<Image>>)

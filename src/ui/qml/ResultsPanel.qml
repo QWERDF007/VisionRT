@@ -36,6 +36,7 @@ Rectangle {
                         id: outputChoice
                         anchors.fill: parent; anchors.margins: 4
                         model: app.imageOutputs; textRole: "name"; valueRole: "id"
+                        enabled: app.workspaceEnabled
                         currentIndex: { for (let i = 0; i < app.imageOutputs.length; ++i) if (app.imageOutputs[i].id === app.selectedImageOutput) return i; return -1 }
                         displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "图像输出" : "") : (currentText === "images" ? "图像输出" : currentText)
                         onActivated: app.setImageOutput(currentValue)
@@ -76,7 +77,7 @@ Rectangle {
                                 onThumbnailIndexChanged: app.attachViewport(thumbnail)
                             }
                             QuiText { anchors.bottom: parent.bottom; anchors.bottomMargin: 3; anchors.horizontalCenter: parent.horizontalCenter; text: index; font: QuiFont.Caption; color: Theme.textPrimary }
-                            MouseArea { anchors.fill: parent; onClicked: app.setImageIndex(index) }
+                            MouseArea { anchors.fill: parent; enabled: app.workspaceEnabled; onClicked: app.setImageIndex(index) }
                         }
                     }
                 }
@@ -96,6 +97,8 @@ Rectangle {
                 anchors.top: parent.top; anchors.topMargin: 4
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 4
+                // Every button here changes only the view, but a run owns all user interaction.
+                enabled: app.workspaceEnabled
                 QuiTextIconButton {
                     iconSource: Theme.iconFitWindow
                     implicitWidth: Theme.toolbarButtonSize; implicitHeight: Theme.toolbarButtonSize
@@ -193,6 +196,8 @@ Rectangle {
                 ImageViewport {
                     id: viewport; objectName: "imageViewport"
                     anchors.fill: parent; readOnly: app.runtimeBusy
+                    // Zoom, pan and ROI gestures are user input; a run owns the interaction.
+                    enabled: app.workspaceEnabled
                     inputRoiColor: Theme.inputRoiColor
                     outputRoiColor: Theme.outputRoiColor
                     assistRoiColor: Theme.assistRoiColor

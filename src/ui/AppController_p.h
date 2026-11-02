@@ -10,8 +10,12 @@
 #include "ui/UiPreferences.h"
 #include "ui/Diagnostics.h"
 #include "ui/ImageViewport.h"
+#include "ui/NodeListModel.h"
 #include "ui/OutputModel.h"
+#include "ui/ProjectOperations.h"
+#include "ui/ResultPresentation.h"
 #include "ui/RecentProjects.h"
+#include "ui/RoiEditSession.h"
 #include "ui/ToolTreeModel.h"
 #include "ui/WireRouter.h"
 #include "common/Version.h"
@@ -37,7 +41,7 @@ const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string
 QVariantMap           metadata(const ToolDefinition &definition);
 } // namespace workbench
 
-struct AppController::Impl
+struct AppController::Impl : PresentationHost
 {
     explicit Impl(AppController *owner, std::size_t workers, const QString &directory);
     ~Impl();
@@ -63,21 +67,16 @@ struct AppController::Impl
     ToolRegistry                           registry;
     ProjectEditor                          editor;
     WireRouter                             wireRouter;
-    std::optional<QVariantList>            nodeRows;
     std::unique_ptr<PythonRuntime>         python;
     std::unique_ptr<RuntimeEngine>         runtime;
     ToolTreeModel                          tools;
     OutputModel                            outputs;
+    NodeListModel                          nodesModel{q};
     std::unique_ptr<LogModel>              logModel;
-    DisplayConverter                       converter;
     QTimer                                 timer;
     RuntimeState                           state        = RuntimeState::Idle;
     std::uint64_t                          generation   = 1;
     std::uint64_t                          projectEpoch = 1;
-    std::map<NodeId, ResultSlot::Snapshot> snapshots;
-    std::set<NodeId>                       active;
-    std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> lifecycleErrors;
-    std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> instanceErrors;
     QString                                flow = "flow_1";
     QString                                selected;
     QString                                search;
@@ -90,35 +89,15 @@ struct AppController::Impl
     std::deque<ApplicationDiagnostic>                       diagnostics;
     std::optional<CopiedSelection>         clipboard;
     std::set<std::string>                  routingErrors;
-    enum class Pending
+    // File-operation state has one owner; the controller executes side effects around it.
+    ProjectOperations operations;
+    // A user run owns the workspace; synchronize, refresh and reset are management tasks that keep
+    // the previous editing rules.
+    bool runActive() const noexcept
     {
-        None,
-        New,
-        Open,
-        Close,
-        Reset,
-        DeleteNodes
-    };
-    enum class ClosePhase
-    {
-        None,
-        Resetting,
-        AwaitOwners,
-        Ready
-    };
-    ClosePhase                       closePhase       = ClosePhase::None;
-    Pending                          pending          = Pending::None;
-    QString                          pendingPath;
-    bool                             pendingApproved  = false;
-    bool                             awaitingDecision = false;
-    bool                             pendingReset     = false;
-    bool                             closing          = false;
-    bool                             closeReadyEmitted = false;
-    bool isClosing() const noexcept
-    {
-        return closing || closePhase != ClosePhase::None;
+        return state == RuntimeState::RunningOnce || state == RuntimeState::RunningLoop
+            || state == RuntimeState::RunningNode || state == RuntimeState::Stopping;
     }
-    std::optional<ProjectDefinition> replacement;
 
     struct PendingDeletion
     {
@@ -136,13 +115,6 @@ struct AppController::Impl
     };
 
     std::shared_ptr<RefreshResult>       refreshResult;
-    QPointer<ImageViewport>              viewport;
-    std::vector<QPointer<ImageViewport>> thumbnails;
-    std::vector<QPointer<ImageViewport>> displayTargets;
-    ROI::value_type                      displayInputs, displayOutputs;
-    std::optional<RoiEditTarget>         displayRoiTarget;
-    quint64                              displayRequest   = 0;
-    QString                              imageOutput;
     // The UI consumes the same materialised contract execution does: expression results, condition
     // variables and select ports must have one name/type/signature source. The cache is an identity
     // check on the node revision, never a second derivation.
@@ -169,29 +141,13 @@ struct AppController::Impl
         std::map<std::string, std::vector<CandidateInput>, std::less<>> candidates;
     };
     mutable ConnectableState connectable;
-    int                                  index = 0;
-    int                                  count = 0;
-    NodeId                               displayedNode = 0;
 
-    struct RoiPreview
-    {
-        std::uint64_t            id;
-        NodeId                   node;
-        std::string              input;
-        QString                  flow;
-        TypeSpec                 type;
-        bool                     singleRectangle;
-        InputBinding             original;
-        PortValue                background;
-        PortValue                draft;
-        int                      index       = 0;
-        int                      resultIndex = 0;
-        ImageViewport::ViewState view;
-        bool                     fieldsValid = true;
-    };
-
-    std::optional<RoiPreview> roi;
-    std::uint64_t            roiSerial = 0;
+    // ROI editing state lives in one place; the controller only coordinates start/end with the
+    // viewport and the project.
+    RoiEditSession roiSession{editor};
+    // Presentation state (snapshots, output rows, image batch, text/readback and its drain) has one
+    // owner; the controller only connects QML and selection changes to it.
+    ResultPresentation presentation{*this, outputs, roiSession, q};
 
     // Smart point selection runs on its own bounded channel; the controller only forwards the
     // cursor and owns the proposal transaction.
@@ -204,57 +160,12 @@ struct AppController::Impl
     ROI                                   assistPreviewRois;
     std::optional<AssistContext>          assistPreviewContext;
 
-    struct TextRequest
-    {
-        QVariantMap context;
-        bool        copy;
-        bool        diagnostic;
-    };
-
-    struct SaveRequest
-    {
-        QString       path;
-        std::uint64_t project;
-    };
-
-    std::deque<std::variant<TextRequest, SaveRequest>> readRequests;
-    std::optional<RuntimeReadback>                     readback;
     QVariantList                                       parameterRows;
     NodeId                                             parameterRowsNode = 0;
 
-    struct TextResult
-    {
-        QString       text;
-        bool          copy;
-        std::uint64_t generation;
-        QVariantMap   context;
-    };
-
-    struct TextMailbox
-    {
-        std::mutex                mutex;
-        std::uint64_t             generation = 0;
-        bool                      done       = false;
-        std::optional<TextResult> value;
-        std::exception_ptr        error;
-    };
-
-    std::future<void>                    textTask;
-    std::shared_ptr<TextMailbox>         textMailbox;
-    std::atomic<int>                     textPending{0};
-    bool                                 draining = false;
-    std::function<void()>                drainContinuation;
-    bool                                 pendingDrained = false;
-    void                                 consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
-    const FlowDefinition                *currentFlow() const;
     const NodeDefinition                *currentNode() const;
     const NodeDefinition                *findNode(NodeId id) const;
     const ToolDefinition                *currentTool() const;
-    // Materialised contract for the selected node; the only definition UI rows may consume.
-    const ToolDefinition                *effectiveTool() const;
-    void                                 refreshConnectable(const FlowDefinition &flow,
-                                                             const NodeDefinition &node) const;
-    const PortDefinition                *parameter(const std::string &id, bool initialization) const;
     bool                                 idle();
     bool                                 applyParameter(const QString &id, bool initialization, PortValue value);
     void                                 report(const QString &text);
@@ -262,6 +173,10 @@ struct AppController::Impl
     void                                 report(const ErrorInfo &error);
     void                                 report(const std::exception &error, const QString &summary);
     void                                 changed(bool structure = false);
+    NodeListModel::Row                   nodeRow(const NodeDefinition &node) const;
+    void                                 refreshNodeModel();
+    void                                 publishWiresChanged();
+    QString                              wireState;
     void                                 publishNodesChanged();
 
     template<class Function>
@@ -283,8 +198,6 @@ struct AppController::Impl
     }
 
     void      setState(RuntimeState value);
-    // Writes project saves queued during a run, now that the editor is no longer frozen.
-    void      flushDeferredSaves();
     // Single acceptance predicate for hover, click, pending dispatch and result delivery.
     bool                 assistRequestsAllowed() const;
     bool                 readsAllowed() const noexcept;
@@ -294,16 +207,32 @@ struct AppController::Impl
     // display worker and the text task released their references.
     void                 beginDrain(std::function<void()> continuation);
     void                 finishDrain();
-    bool                 drainReady() const;
     void                 updateReadback();
     void      poll();
     void      start(RunMode mode);
     void      beginRun(RunMode mode);
-    void      request(Pending action, QString path = {});
+    void      request(ProjectOperations::Action action, QString path = {});
     void      advancePending();
     void      finishClose();
     void      clearResults();
     bool      nodeExists(NodeId id) const;
+    // PresentationHost: the presentation reads these facts and reports these effects only.
+    const NodeDefinition *selectedNode() const override { return currentNode(); }
+    const FlowDefinition *currentFlow() const override;
+    const ToolDefinition *effectiveTool() const override;
+    const PortDefinition *parameter(const std::string &id, bool initialization) const override;
+    const std::map<std::string, bool, std::less<>> *refreshConnectable(const FlowDefinition &flow,
+                                                                      const NodeDefinition &node) const override;
+    bool runtimeIdle() const override { return state == RuntimeState::Idle; }
+    bool closing() const override { return operations.isClosing(); }
+    bool contextCurrent(const QVariantMap &context) const override { return q->portContextCurrent(context); }
+    QVariantMap portContext(const QString &port) const override { return q->portContext(port, true); }
+    void deliverText(const QString &text) override { emit q->outputTextReady(text); }
+    void resultsChanged() override { emit q->resultsChanged(); }
+    void runtimeChanged() override { emit q->runtimeChanged(); }
+    void endRoiEdit() override { finishRoi(); }
+    void reportDiagnostic(const ApplicationDiagnostic &diagnostic) override { report(diagnostic); }
+    void reportFailure(const std::exception &error, const QString &summary) override { report(error, summary); }
     void      pruneDeletedNodes();
     void      synchronizeNodes();
     void      requestSynchronize();
@@ -314,11 +243,11 @@ struct AppController::Impl
     void      refreshFinished();
     void      updateResults();
     void      updateDisplay();
+    ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
     void      applyOverlays();
     const PortValue *resolvedInputRef(const NodeDefinition &node, const std::string &input) const;
     PortValue resolvedInput(const NodeDefinition &node, const std::string &input) const;
-    void                 commitRoi(const RoiEditTarget &target, const ROI::value_type::value_type *value);
-    ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
+    void                 commitRoi(const RoiEditTarget &target, const EncodedRegion *value);
     void      finishRoi();
     void      storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
 

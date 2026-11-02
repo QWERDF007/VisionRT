@@ -5,6 +5,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <pybind11/embed.h>
+#include <pybind11/numpy.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -174,8 +175,15 @@ public:
                 milliseconds(begin, inputReady), milliseconds(inputReady, algorithmDone),
                 milliseconds(algorithmDone, outputReady), milliseconds(outputReady, displayReady),
                 milliseconds(begin, displayReady)};
-            require(PyList_CheckExact(object.ptr()) && PyList_CheckExact(returned.ptr()),
-                    "Bridge substituted a non-list collection");
+            // A rectangular numeric Array crosses as one numpy view over the contract storage; a
+            // ragged or string Array has no rectangular numpy form and crosses as nested lists.
+            const auto *arrayValue = std::get_if<Array>(&value);
+            const bool  numpyForm  = arrayValue && arrayValue->layout() == ArrayLayout::Dense
+                                    && type.dtype && *type.dtype != DType::String;
+            const bool  arrayForm  = numpyForm
+                                         ? py::isinstance<py::array>(object) && py::isinstance<py::array>(returned)
+                                         : PyList_CheckExact(object.ptr()) && PyList_CheckExact(returned.ptr());
+            require(arrayForm, "Bridge substituted an unexpected collection form");
             if (sample == 0 && !images)
                 require(equalValues(value, decoded), "Array/ROI benchmark roundtrip changed native values");
             raw_ << prefix << sample;
@@ -195,6 +203,9 @@ public:
         raw_.flush();
         summary_.flush();
         require(raw_.good() && summary_.good(), "Benchmark CSV write failed");
+        // The display model keeps the last published snapshot on purpose; drop it so the bridge
+        // storage can report that every Python reference was released.
+        model.clear();
         storage_.waitForRelease();
         std::cout << prefix << "total_p95_ms=" << percentile(phases.back(), 0.95) << std::endl;
     }
@@ -209,7 +220,8 @@ private:
 template<class Element, int Rank = 1>
 void arrays(Benchmark &benchmark, const std::vector<std::size_t> &sizes)
 {
-    for (const auto size : sizes) benchmark.run(Array(nested<NestedVector<Element, Rank>>(size)), size);
+    for (const auto size : sizes)
+        benchmark.run(Array::fromNested(nested<NestedVector<Element, Rank>>(size)), size);
     if constexpr (Rank < kMaxArrayRank)
         arrays<Element, Rank + 1>(benchmark, sizes);
 }

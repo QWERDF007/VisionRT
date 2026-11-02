@@ -122,7 +122,6 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     , applicationDirectory(workbench::localPath(directory))
     , tools(owner)
     , outputs(owner)
-    , converter(owner)
 {
     // Read once, synchronously, while the window is still being built: a corrupt or slow
     // preferences file must not stand between the user and the first project.
@@ -144,6 +143,8 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
         report(error, QStringLiteral("Python 不可用"));
     }
     runtime = std::make_unique<RuntimeEngine>(workers);
+    presentation.setRuntime(runtime.get());
+    presentation.setExternalBusy([this] { return assist && assist->busy(); });
     runtime->setReadbackEnabled(true);
     runtime->setReadbackCallback(
         [owner](RuntimeReadback readback)
@@ -175,39 +176,11 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, owner,
                      [this](Qt::ApplicationState state)
                      {
-                         if (state != Qt::ApplicationActive && roi)
+                         if (state != Qt::ApplicationActive && roiSession.active())
                          {
                              finishRoi();
                              updateResults();
                          }
-                     });
-    QObject::connect(&converter, &DisplayConverter::batchConverted, owner,
-                     [this](const std::vector<DisplayFrame> &frames)
-                     {
-                         for (const auto &frame : frames)
-                         {
-                             if (frame.generation != generation || frame.requestId != displayRequest
-                                 || frame.batchIndex < 0
-                                 || static_cast<std::size_t>(frame.batchIndex) >= displayTargets.size())
-                                 continue;
-                             if (auto target = displayTargets[frame.batchIndex])
-                             {
-                                 target->setDisplayFrame(frame);
-                                 if (target == viewport)
-                                 {
-                                     applyOverlays();
-                                 }
-                             }
-                         }
-                         updateReadback();
-                     });
-    // The display worker released its batch: management continuations waiting on the drain may
-    // advance without ever blocking the GUI thread.
-    QObject::connect(&converter, &DisplayConverter::readersIdle, owner,
-                     [this]
-                     {
-                         if (draining)
-                             finishDrain();
                      });
     assist = std::make_unique<AssistPreview>();
     QObject::connect(assist.get(), &AssistPreview::outcomeReady, owner,
@@ -233,21 +206,21 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                          }
                          assistPreviewRois    = outcome.preview;
                          assistPreviewContext = outcome.context;
-                         if (viewport)
+                         if (auto *viewport = presentation.viewport())
                              viewport->setAssistPreview(assistPreviewRois);
                          emit q->assistChanged();
                      });
     QObject::connect(assist.get(), &AssistPreview::busyChanged, owner,
                      [this]
                      {
-                         if (draining)
+                         if (presentation.draining())
                              finishDrain();
                      });
     // Release completion is part of the drain condition: management never joins the worker.
     QObject::connect(assist.get(), &AssistPreview::sessionReleased, owner,
                      [this]
                      {
-                         if (draining)
+                         if (presentation.draining())
                              finishDrain();
                      });
     tools.setRegistry(registry);
@@ -270,23 +243,36 @@ AppController::Impl::~Impl()
     drainReaders();
     runtime->setReadbackEnabled(false);
     runtime.reset();
-    textTask = {};
-    readRequests.clear();
-    if (viewport)
+    presentation.setRuntime(nullptr);
+    if (auto *viewport = presentation.viewport())
         viewport->endRoiEdit();
-    roi.reset();
-    outputs.clear();
-    snapshots.clear();
-    displayInputs.clear();
-    displayOutputs.clear();
+    roiSession.end();
+    presentation.clearDisplay();
+    presentation.clear();
     clipboard.reset();
-    replacement.reset();
+    operations.clearReplacement();
     refreshResult.reset();
     for (const auto &tool : registry.definitions())
         if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
             registry.setPythonImplementation(
                 tool.id, {}, makeStatus(ErrorCode::PythonUnavailable, "Interpreter shutting down"));
     python.reset();
+}
+
+ResultSlot::Snapshot AppController::Impl::displaySnapshot(const NodeDefinition &node) const
+{
+    return presentation.displaySnapshot(node);
+}
+
+const PortValue *AppController::Impl::resolvedInputRef(const NodeDefinition &node, const std::string &input) const
+{
+    return presentation.resolvedInput(node, input);
+}
+
+PortValue AppController::Impl::resolvedInput(const NodeDefinition &node, const std::string &input) const
+{
+    const auto *value = presentation.resolvedInput(node, input);
+    return value ? *value : PortValue{Missing{}};
 }
 
 const FlowDefinition *AppController::Impl::currentFlow() const
@@ -352,11 +338,12 @@ const ToolDefinition *AppController::Impl::effectiveTool() const
     return contractCache.contract.get();
 }
 
-void AppController::Impl::refreshConnectable(const FlowDefinition &flow, const NodeDefinition &node) const
+const std::map<std::string, bool, std::less<>> *
+AppController::Impl::refreshConnectable(const FlowDefinition &flow, const NodeDefinition &node) const
 {
     if (connectable.valid && connectable.node == node.id && connectable.epoch == projectEpoch
         && connectable.structureRevision == flow.structureRevision && connectable.flow.toStdString() == flow.id)
-        return;
+        return connectable.valid ? &connectable.connectable : nullptr;
     connectable.epoch             = projectEpoch;
     connectable.flow              = workbench::q(flow.id);
     connectable.structureRevision = flow.structureRevision;
@@ -377,6 +364,7 @@ void AppController::Impl::refreshConnectable(const FlowDefinition &flow, const N
         connectable.connectable.emplace(id, free);
         connectable.candidates.emplace(id, std::move(candidates));
     }
+    return &connectable.connectable;
 }
 
 const PortDefinition *AppController::Impl::parameter(const std::string &id, bool initialization) const
@@ -387,9 +375,9 @@ const PortDefinition *AppController::Impl::parameter(const std::string &id, bool
 
 bool AppController::Impl::idle()
 {
-    if (isClosing())
+    if (operations.isClosing())
         return false;
-    if (state == RuntimeState::Idle && pending == Pending::None)
+    if (state == RuntimeState::Idle && !operations.active())
         return true;
     report(QStringLiteral("当前任务尚未结束，配置编辑不可用"));
     return false;
@@ -401,8 +389,8 @@ void AppController::Impl::setState(RuntimeState value)
     if (state == value)
         return;
     state = value;
-    if (viewport)
-        viewport->setReadOnly(state != RuntimeState::Idle || !roi);
+    if (auto *viewport = presentation.viewport())
+        viewport->setReadOnly(state != RuntimeState::Idle || !roiSession.active());
     refreshAssist();
     emit q->runtimeChanged();
 }
@@ -422,26 +410,11 @@ void AppController::Impl::pruneDeletedNodes()
     for (const auto &flow : editor.project().flows)
         for (const auto &node : flow.nodes)
             existing.insert(node.id);
-    std::vector<NodeId> removed;
-    for (auto it = snapshots.begin(); it != snapshots.end();)
+    const auto kept = presentation.snapshotCount();
+    presentation.retain(existing);
+    if (presentation.snapshotCount() != kept)
     {
-        if (existing.contains(it->first))
-        {
-            ++it;
-            continue;
-        }
-        removed.push_back(it->first);
-        it = snapshots.erase(it);
-    }
-    for (auto it = lifecycleErrors.begin(); it != lifecycleErrors.end();)
-        it = existing.contains(it->first) ? std::next(it) : lifecycleErrors.erase(it);
-    for (auto it = instanceErrors.begin(); it != instanceErrors.end();)
-        it = existing.contains(it->first) ? std::next(it) : instanceErrors.erase(it);
-    for (auto it = active.begin(); it != active.end();)
-        it = existing.contains(*it) ? std::next(it) : active.erase(it);
-    if (!removed.empty())
-    {
-        if (roi && !existing.contains(roi->node))
+        if (roiSession.active() && !existing.contains(roiSession.node()))
             finishRoi();
         updateResults();
     }
@@ -449,10 +422,24 @@ void AppController::Impl::pruneDeletedNodes()
 
 void AppController::Impl::publishNodesChanged()
 {
-    // QML bindings read app.nodes while this signal is delivered; invalidate the
-    // cached rows first so they never observe the previous state.
-    nodeRows.reset();
+    // Structural change: reconcile the model first so QML delegates never observe stale rows.
+    refreshNodeModel();
     emit q->nodesChanged();
+}
+
+void AppController::Impl::publishWiresChanged()
+{
+    // The wires binding depends on the edge topology only; timings and node state must not repaint
+    // every connection. A signature keeps the decision here instead of in QML.
+    QString signature;
+    if (const auto *flow = currentFlow())
+        for (const auto &relation : portRelations(*flow).active)
+            signature += QString::number(relation.source.node) + u':' + workbench::q(relation.source.port) + u'>'
+                       + QString::number(relation.target.node) + u':' + workbench::q(relation.target.port) + u';';
+    if (signature == wireState)
+        return;
+    wireState = std::move(signature);
+    emit q->wiresChanged();
 }
 
 void AppController::Impl::changed(bool structure)
@@ -465,7 +452,8 @@ void AppController::Impl::changed(bool structure)
         selected.clear();
         emit q->selectionChanged();
     }
-    nodeRows.reset();
+    refreshNodeModel();
+    publishWiresChanged();
     emit q->projectChanged();
     emit q->nodesChanged();
     emit q->parametersChanged();
@@ -477,7 +465,7 @@ void AppController::Impl::changed(bool structure)
 
 void AppController::Impl::synchronizeNodes()
 {
-    if (isClosing())
+    if (operations.isClosing())
         return;
     if (runtime->state() != RuntimeState::Idle)
         return;
@@ -486,7 +474,7 @@ void AppController::Impl::synchronizeNodes()
 
 void AppController::Impl::requestSynchronize()
 {
-    if (isClosing())
+    if (operations.isClosing())
         return;
     const auto status = runtime->requestSynchronize(editor.project(), registry);
     if (!status)
@@ -502,19 +490,14 @@ void AppController::Impl::storageDiagnostics(const std::vector<ProjectStorageDia
 
 void AppController::Impl::clearResults()
 {
-    readback.reset();
     parameterRows.clear();
     parameterRowsNode = 0;
-    snapshots.clear();
-    active.clear();
-    lifecycleErrors.clear();
-    instanceErrors.clear();
     flowLatestMs.clear();
     latestRoundMs.reset();
     latestElapsedMs = 0;
     timing.clear();
     finishRoi();
-    converter.invalidate(generation);
+    presentation.clear();
     updateResults();
     publishNodesChanged();
     emit q->runtimeChanged();
@@ -523,25 +506,20 @@ void AppController::Impl::clearResults()
 
 void AppController::Impl::poll()
 {
-    if (closePhase == ClosePhase::AwaitOwners)
+    if (operations.closePhase() == ProjectOperations::ClosePhase::AwaitOwners)
     {
         if ((!python || python->isCloseReady()) && (!assist || assist->finished()))
         {
             if (assist)
                 assist->finalizeShutdown();
-            closePhase = ClosePhase::Ready;
-            closing    = false;
-            pending    = Pending::None;
+            const bool announce = operations.markReady();
             emit q->closingChanged();
-            if (!closeReadyEmitted)
-            {
-                closeReadyEmitted = true;
+            if (announce)
                 emit q->closeReady();
-            }
         }
         return;
     }
-    if (closePhase == ClosePhase::Ready)
+    if (operations.closePhase() == ProjectOperations::ClosePhase::Ready)
         return;
     auto update = runtime->pollLatest();
     if (update.generation >= generation)
@@ -549,83 +527,65 @@ void AppController::Impl::poll()
         if (update.generation != generation)
         {
             generation = update.generation;
+            // Every presented frame and request carries the runtime generation; a stale value would
+            // make the viewport reject frames the converter just produced.
+            presentation.setGeneration(generation);
             clearResults();
         }
-        const bool enteringReadback = update.readback && readback != update.readback;
-        if (enteringReadback)
-            readback = update.readback;
+        const bool enteringReadback = update.readback && presentation.setReadback(&*update.readback);
         bool nodesChanged = false, selectedChanged = false, parametersChanged = false;
+        std::set<NodeId> touched;
         for (auto &item : update.nodes)
         {
             if (!nodeExists(item.node))
             {
-                snapshots.erase(item.node);
-                active.erase(item.node);
-                lifecycleErrors.erase(item.node);
+                presentation.forgetNode(item.node);
                 continue;
             }
-            if (item.active != active.contains(item.node))
+            const auto *lifecycleBefore = presentation.lifecycle(item.node);
+            const auto *instanceBefore  = presentation.instance(item.node);
+            if (!presentation.applyNode(item.node, item.active, item.lifecycleDiagnostic,
+                                        item.instanceDiagnostic, std::move(item.snapshot), generation))
+                continue;
+            nodesChanged = true;
+            touched.insert(item.node);
+            const auto *lifecycle = presentation.lifecycle(item.node);
+            if (lifecycle && lifecycle != lifecycleBefore)
             {
-                nodesChanged = true;
-                if (item.active)
-                    active.insert(item.node);
-                else
-                    active.erase(item.node);
-            }
-            if (item.lifecycleDiagnostic)
-            {
-                const auto previous = lifecycleErrors.find(item.node);
-                if (previous == lifecycleErrors.end() || previous->second != item.lifecycleDiagnostic)
+                selectedChanged |= selected == QString::number(item.node);
+                report(*lifecycle);
+                if (const auto *node = findNode(item.node))
                 {
-                    lifecycleErrors[item.node]  = item.lifecycleDiagnostic;
-                    nodesChanged                = true;
-                    selectedChanged |= selected == QString::number(item.node);
-                    report(*item.lifecycleDiagnostic);
-                    if (const auto *node = findNode(item.node))
-                    {
-                        const auto avail = registry.availability(node->toolId);
-                        tools.updateToolStatus(QString::fromStdString(node->toolId),
-                                               avail.state == ToolAvailability::Available,
-                                               QString::fromStdString(avail.status.message));
-                    }
+                    const auto avail = registry.availability(node->toolId);
+                    tools.updateToolStatus(QString::fromStdString(node->toolId),
+                                           avail.state == ToolAvailability::Available,
+                                           QString::fromStdString(avail.status.message));
                 }
             }
-            else if (lifecycleErrors.erase(item.node))
-                nodesChanged = true;
-            if (item.instanceDiagnostic)
+            const auto *instance = presentation.instance(item.node);
+            if (instance && instance != instanceBefore)
             {
-                const auto previous = instanceErrors.find(item.node);
-                if (previous == instanceErrors.end() || previous->second != item.instanceDiagnostic)
+                report(*instance);
+                if (const auto *node = findNode(item.node))
                 {
-                    instanceErrors[item.node] = item.instanceDiagnostic;
-                    nodesChanged              = true;
-                    report(*item.instanceDiagnostic);
-                    if (const auto *node = findNode(item.node))
-                    {
-                        const auto avail = registry.availability(node->toolId);
-                        tools.updateToolStatus(QString::fromStdString(node->toolId),
-                                               avail.state == ToolAvailability::Available,
-                                               QString::fromStdString(avail.status.message));
-                    }
+                    const auto avail = registry.availability(node->toolId);
+                    tools.updateToolStatus(QString::fromStdString(node->toolId),
+                                           avail.state == ToolAvailability::Available,
+                                           QString::fromStdString(avail.status.message));
                 }
             }
-            else if (instanceErrors.erase(item.node))
-                nodesChanged = true;
-            if (item.snapshot && item.snapshot->generation == generation)
+            const auto *snapshot = presentation.snapshot(item.node);
+            if (snapshot && (*snapshot)->generation == generation)
             {
-                const auto previous = snapshots.find(item.node);
-                if (previous == snapshots.end() || previous->second != item.snapshot)
-                {
-                    snapshots[item.node] = std::move(item.snapshot);
-                    nodesChanged         = true;
-                    selectedChanged |= QString::number(item.node) == selected;
-                    if (const auto *node = currentNode())
-                        parametersChanged |= std::any_of(node->inputs.begin(), node->inputs.end(), [&](const auto &input)
-                        {
-                            return input.second.mode == BindingMode::Upstream && input.second.source
-                                && input.second.source->node == item.node;
-                        });
-                }
+                selectedChanged |= QString::number(item.node) == selected;
+                if (const auto *node = currentNode())
+                    parametersChanged |= std::any_of(node->inputs.begin(), node->inputs.end(),
+                                                     [&](const auto &input)
+                                                     {
+                                                         return input.second.mode == BindingMode::Upstream
+                                                             && input.second.source
+                                                             && input.second.source->node == item.node;
+                                                     });
             }
         }
         for (const auto &event : update.diagnostics) report(event);
@@ -672,10 +632,16 @@ void AppController::Impl::poll()
         }
         setState(update.state);
         if (nodesChanged)
-            publishNodesChanged();
+        {
+            // Only the rows whose runtime state changed are recomputed and reported.
+            for (const auto node : touched)
+                if (const auto *definition = findNode(node))
+                    nodesModel.update(nodeRow(*definition));
+            emit q->nodesChanged();
+        }
         if (parametersChanged || enteringReadback)
         {
-            if (roi)
+            if (roiSession.active())
                 updateDisplay();
             emit q->parametersChanged();
         }
@@ -687,15 +653,14 @@ void AppController::Impl::poll()
         {
             state = runtime->state();
             editor.setBusy(false);
-            if (viewport)
-                viewport->setReadOnly(state != RuntimeState::Idle || !roi);
+            if (auto *viewport = presentation.viewport())
+                viewport->setReadOnly(state != RuntimeState::Idle || !roiSession.active());
             updateReadback();
             if (refreshResult)
                 refreshFinished();
             updateResults();
             emit q->parametersChanged();
             emit q->runtimeChanged();
-            flushDeferredSaves();
             advancePending();
         }
     }
@@ -706,7 +671,7 @@ void AppController::Impl::start(RunMode mode)
 {
     // A run may supersede a pending synchronize: it waits for the same drain and becomes the
     // continuation, so the newest management intent is the one that executes.
-    if (isClosing() || state != RuntimeState::Idle || pending != Pending::None)
+    if (operations.isClosing() || state != RuntimeState::Idle || operations.active())
         return;
     finishRoi();
     q->parameters();
@@ -715,7 +680,7 @@ void AppController::Impl::start(RunMode mode)
 
 void AppController::Impl::beginRun(RunMode mode)
 {
-    if (isClosing())
+    if (operations.isClosing())
         return;
     std::optional<NodeId> target;
     if (mode == RunMode::Node)
@@ -731,7 +696,7 @@ void AppController::Impl::beginRun(RunMode mode)
     runtime->setReadbackEnabled(true);
     // A read-safe window belongs to the session that requested it; drop the previous one before
     // the new session can publish its own.
-    readback.reset();
+    presentation.setReadback(nullptr);
     const auto result = runtime->start(editor.project(), registry, mode, target);
     if (!result)
     {
@@ -756,33 +721,30 @@ void AppController::Impl::beginRun(RunMode mode)
             emit q->timingChanged();
         }
     }
-    active.clear();
+    presentation.clearActive();
     setState(mode == RunMode::Once   ? RuntimeState::RunningOnce
              : mode == RunMode::Loop ? RuntimeState::RunningLoop
                                      : RuntimeState::RunningNode);
 }
 
-void AppController::Impl::request(Pending action, QString path)
+void AppController::Impl::request(ProjectOperations::Action action, QString path)
 {
-    if (action == Pending::Close)
+    using Action     = ProjectOperations::Action;
+    using ClosePhase = ProjectOperations::ClosePhase;
+    if (action == Action::Close)
     {
-        if (closePhase == ClosePhase::Ready || closeReadyEmitted)
+        if (operations.closePhase() == ClosePhase::Ready || operations.closeReadyEmitted())
             return;
-        if (closePhase == ClosePhase::AwaitOwners)
+        if (operations.closePhase() == ClosePhase::AwaitOwners)
         {
             if ((!python || python->isCloseReady()) && (!assist || assist->finished()))
             {
                 if (assist)
                     assist->finalizeShutdown();
-                closePhase = ClosePhase::Ready;
-                closing    = false;
-                pending    = Pending::None;
+                const bool announce = operations.markReady();
                 emit q->closingChanged();
-                if (!closeReadyEmitted)
-                {
-                    closeReadyEmitted = true;
+                if (announce)
                     emit q->closeReady();
-                }
             }
             else if (python && !python->isCloseReady())
             {
@@ -793,30 +755,25 @@ void AppController::Impl::request(Pending action, QString path)
                 report(QStringLiteral("等待智能点选释放后关闭"));
             return;
         }
-        if (closePhase == ClosePhase::Resetting || pending == Pending::Close)
+        if (operations.closePhase() == ClosePhase::Resetting || operations.action() == Action::Close)
             return;
     }
-    if (isClosing())
+    if (operations.isClosing())
     {
         report(QStringLiteral("正在关闭中，不能执行新操作"));
         return;
     }
-    if (pending != Pending::None)
+    if (operations.active())
     {
         report(QStringLiteral("请先完成或取消当前文件操作"));
         return;
     }
     finishRoi();
-    if (action == Pending::Reset && assist)
+    if (action == Action::Reset && assist)
         // Resetting tears the assist session down; the drain below waits for the async release.
         assist->releaseSession();
-    pending          = action;
-    pendingPath      = std::move(path);
-    pendingApproved  = action == Pending::Reset;
-    awaitingDecision = false;
-    pendingReset     = false;
-    pendingDrained   = false;
-    replacement.reset();
+    if (!operations.begin(action, std::move(path)))
+        return;
     if (state != RuntimeState::Idle)
     {
         runtime->requestStop();
@@ -830,38 +787,39 @@ void AppController::Impl::request(Pending action, QString path)
 
 void AppController::Impl::advancePending()
 {
-    if (pending == Pending::None || state != RuntimeState::Idle)
+    using Action     = ProjectOperations::Action;
+    using ClosePhase = ProjectOperations::ClosePhase;
+    if (!operations.active() || state != RuntimeState::Idle)
         return;
-    if (pending == Pending::DeleteNodes)
+    if (operations.action() == Action::DeleteNodes)
     {
         auto deletion = std::move(*pendingDeletion);
         pendingDeletion.reset();
-        pending = Pending::None;
+        operations.complete();
         if (command([&] { return editor.removeNodes(deletion.flow, deletion.nodes); }, true))
             LogService::write(LogLevel::Info, QStringLiteral("工程"),
                               QStringLiteral("删除 %1 个节点").arg(static_cast<qulonglong>(deletion.nodes.size())));
         return;
     }
-    if (!pendingApproved && editor.project().dirty)
+    if (!operations.approved() && editor.project().dirty)
     {
-        if (!awaitingDecision)
+        if (!operations.awaitingDecision())
         {
-            awaitingDecision = true;
+            operations.requestDecision();
             emit q->unsavedDecisionRequired();
         }
         return;
     }
-    pendingApproved = true;
-    if (!pendingReset)
+    operations.approve();
+    if (!operations.resetStarted())
     {
-        if (pending == Pending::Close)
+        if (operations.action() == Action::Close)
         {
-            closing    = true;
-            closePhase = ClosePhase::Resetting;
+            operations.beginResetting();
             emit q->closingChanged();
-            if (!pendingDrained)
+            if (!operations.drained())
             {
-                pendingDrained = true;
+                operations.markDrained();
                 beginDrain([this] { advancePending(); });
                 return;
             }
@@ -869,36 +827,34 @@ void AppController::Impl::advancePending()
             if (!result)
             {
                 report(result);
-                pending    = Pending::None;
-                closing    = false;
-                closePhase = ClosePhase::None;
+                operations.failReset();
                 emit q->closingChanged();
                 return;
             }
-            pendingReset = true;
+            operations.markResetStarted();
             setState(RuntimeState::Resetting);
             return;
         }
         try
         {
-            if (!replacement && pending == Pending::Open)
+            if (!operations.replacement() && operations.action() == Action::Open)
             {
-                auto loaded = ProjectStorage(registry).load(workbench::localPath(pendingPath));
+                auto loaded = ProjectStorage(registry).load(workbench::localPath(operations.path()));
                 storageDiagnostics(loaded.diagnostics);
-                replacement = std::move(loaded.project);
+                operations.replacement() = std::move(loaded.project);
             }
-            else if (!replacement && pending == Pending::New)
-                replacement = ProjectDefinition{};
+            else if (!operations.replacement() && operations.action() == Action::New)
+                operations.replacement() = ProjectDefinition{};
         }
         catch (const std::exception &error)
         {
             report(error, QStringLiteral("工程打开失败"));
-            pending = Pending::None;
+            operations.cancel();
             return;
         }
-        if (!pendingDrained)
+        if (!operations.drained())
         {
-            pendingDrained = true;
+            operations.markDrained();
             beginDrain([this] { advancePending(); });
             return;
         }
@@ -906,27 +862,20 @@ void AppController::Impl::advancePending()
         if (!result)
         {
             report(result);
-            pending = Pending::None;
+            operations.cancel();
             return;
         }
-        pendingReset = true;
+        operations.markResetStarted();
         setState(RuntimeState::Resetting);
         return;
     }
-    const auto completed  = pending;
-    const auto openedPath = pendingPath;
-    pending               = Pending::None;
-    pendingPath.clear();
-    awaitingDecision = false;
-    pendingApproved  = false;
-    pendingReset     = false;
+    auto completion = operations.complete();
     bool replacementCommitted = false;
-    if (replacement)
+    if (completion.replacement)
     {
-        editor.replaceProject(std::move(*replacement));
+        editor.replaceProject(std::move(*completion.replacement));
         replacementCommitted = true;
         ++projectEpoch;
-        replacement.reset();
         flow = editor.project().flows.empty() ? QString{} : workbench::q(editor.project().flows.front().id);
         selected.clear();
         clipboard.reset();
@@ -937,15 +886,14 @@ void AppController::Impl::advancePending()
         emit q->selectionChanged();
         emit q->projectReplaced();
     }
-    if (completed == Pending::Open && replacementCommitted)
+    if (completion.action == Action::Open && replacementCommitted)
     {
-        recordRecent(openedPath);
+        recordRecent(completion.path);
         LogService::write(LogLevel::Info, QStringLiteral("工程"),
-                          QStringLiteral("打开工程 %1").arg(workbench::pathText(workbench::localPath(openedPath))));
+                          QStringLiteral("打开工程 %1").arg(workbench::pathText(workbench::localPath(completion.path))));
     }
-    if (completed == Pending::Close)
+    if (completion.action == Action::Close)
     {
-        closing = true;
         // Release the helper before the drain: the barrier stays closed until the worker
         // acknowledges, so the close never races a release that is still destroying the instance.
         if (assist)
@@ -953,7 +901,7 @@ void AppController::Impl::advancePending()
         beginDrain([this] { finishClose(); });
         return;
     }
-    else if (completed == Pending::Reset)
+    else if (completion.action == Action::Reset)
         synchronizeNodes();
 }
 
@@ -976,23 +924,14 @@ void AppController::Impl::finishClose()
     }
     clearAssistPreview();
     assistEnabled = false;
-    converter.invalidate(generation);
-    if (viewport)
-    {
-        viewport->clearImage(displayRequest);
-        viewport->setOverlays({}, {});
+    presentation.clearDisplay();
+    if (auto *viewport = presentation.viewport())
         viewport->setAssistActive(false);
-        viewport->endRoiEdit();
-    }
-    roi.reset();
-    outputs.clear();
-    snapshots.clear();
-    displayInputs.clear();
-    displayOutputs.clear();
+    roiSession.end();
     parameterRows.clear();
     parameterRowsNode = 0;
     clipboard.reset();
-    replacement.reset();
+    operations.clearReplacement();
     refreshResult.reset();
     clearResults();
 
@@ -1001,31 +940,24 @@ void AppController::Impl::finishClose()
     const bool assistReady = !assist || assist->finished();
     if (!assistReady || (python && !python->isCloseReady()))
     {
-        closePhase      = ClosePhase::AwaitOwners;
+        operations.holdForOwners();
         if (python && !python->isCloseReady())
             report(QStringLiteral("等待外部资源释放后关闭 (剩余引用数: %1)").arg(python->activeReferences()));
         else
             report(QStringLiteral("等待智能点选释放后关闭"));
-        pending         = Pending::Close;
-        pendingApproved = true;
-        pendingReset    = true;
         return;
     }
     if (assist)
         assist->finalizeShutdown();
-    closePhase = ClosePhase::Ready;
-    closing = false;
+    const bool announce = operations.markReady();
     emit q->closingChanged();
-    if (!closeReadyEmitted)
-    {
-        closeReadyEmitted = true;
+    if (announce)
         emit q->closeReady();
-    }
 }
 
 void AppController::Impl::refresh(bool rescan)
 {
-    if (state != RuntimeState::Idle || isClosing() || pending == Pending::Close)
+    if (state != RuntimeState::Idle || operations.isClosing() || operations.action() == ProjectOperations::Action::Close)
         return;
     finishRoi();
     if (rescan)
@@ -1040,7 +972,7 @@ void AppController::Impl::refresh(bool rescan)
 
 void AppController::Impl::requestRefresh(bool rescan)
 {
-    if (isClosing())
+    if (operations.isClosing())
         return;
     auto        result        = std::make_shared<RefreshResult>();
     auto        definitions   = registry.definitions();
@@ -1207,7 +1139,7 @@ void AppController::Impl::loadToolsPackage()
 
 void AppController::Impl::rescanTools()
 {
-    if (state != RuntimeState::Idle || isClosing())
+    if (state != RuntimeState::Idle || operations.isClosing())
         return;
     finishRoi();
     // A catalog reload changes the active tool set, so the persistent helper session must go too.
@@ -1223,10 +1155,7 @@ AppController::AppController(std::size_t workers, const QString &applicationDire
     : QObject(parent)
     , impl_(std::make_unique<Impl>(this, workers, applicationDirectory))
 {
-    for (const auto signal :
-         {&AppController::nodesChanged, &AppController::projectChanged, &AppController::selectionChanged,
-          &AppController::runtimeChanged, &AppController::diagnosticChanged})
-        connect(this, signal, this, [this] { impl_->nodeRows.reset(); });
+    // The model notifies its own rows; no cache behind the nodes property can go stale.
 }
 
 AppController::~AppController() = default;
@@ -1239,12 +1168,24 @@ QString AppController::title() const
 
 bool AppController::busy() const
 {
-    return impl_->state != RuntimeState::Idle || impl_->draining;
+    return impl_->state != RuntimeState::Idle || impl_->presentation.draining();
 }
 
 bool AppController::runtimeBusy() const
 {
     return impl_->state != RuntimeState::Idle;
+}
+
+bool AppController::workspaceEnabled() const
+{
+    // Idle, not draining and not closing: the same conditions the editing commands already enforce.
+    return !busy() && !impl_->operations.isClosing();
+}
+
+bool AppController::stopEnabled() const
+{
+    return impl_->state == RuntimeState::RunningOnce || impl_->state == RuntimeState::RunningLoop
+        || impl_->state == RuntimeState::RunningNode;
 }
 
 QString AppController::runState() const
@@ -1388,114 +1329,136 @@ QVariantList AppController::parameterTabs() const
 
 QVariantList AppController::nodes() const
 {
-    if (impl_->nodeRows)
-        return *impl_->nodeRows;
+    return impl_->nodesModel.snapshot();
+}
+
+QAbstractListModel *AppController::nodeListModel() const
+{
+    return &impl_->nodesModel;
+}
+
+QVariantMap AppController::nodeRecord(const QString &id) const
+{
+    return impl_->nodesModel.rowMap(id);
+}
+
+QPointF AppController::nodePosition(const QString &id) const
+{
+    // A cell position, not a pixel one: the canvas owns the zoom and the grid size.
+    if (const auto *row = impl_->nodesModel.rowAt(impl_->nodesModel.rowOf(id)))
+        return {row->x, row->y};
+    return {};
+}
+
+QVariantList AppController::nodePositions() const
+{
     QVariantList result;
-    if (const auto *flow = impl_->currentFlow())
-        for (const auto &node : flow->nodes)
-        {
-            const bool running = impl_->active.contains(node.id);
-            const auto snapshot = impl_->displaySnapshot(node);
-            const auto disposition = snapshot ? snapshot->disposition : NodeDisposition::Pending;
-            QString state = "idle";
-            if (running)
-                state = "running";
-            else if (snapshot)
-                switch (disposition)
-                {
-                case NodeDisposition::Skipped:
-                    state = "skipped";
-                    break;
-                case NodeDisposition::Blocked:
-                    state = "blocked";
-                    break;
-                case NodeDisposition::Canceled:
-                    state = "cancelled";
-                    break;
-                case NodeDisposition::Failed:
-                    state = "failed";
-                    break;
-                default:
-                    state = snapshot->status.code == 0 ? "succeeded" : "failed";
-                    break;
-                }
-            std::int64_t statusCode = 0;
-            QString      statusMessage;
-            QString      statusDetail;
-            if (snapshot && (snapshot->status.code != 0 || disposition == NodeDisposition::Skipped
-                             || disposition == NodeDisposition::Blocked))
-            {
-                statusCode = snapshot->status.code;
-                // The gate reason stays separate from tool errors: no error code is invented.
-                statusMessage = disposition == NodeDisposition::Skipped || disposition == NodeDisposition::Blocked
-                                  ? (q(snapshot->status.message).isEmpty()
-                                         ? QStringLiteral("节点未执行")
-                                         : QStringLiteral("节点未执行：") + q(snapshot->status.message))
-                                  : diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase,
-                                                       snapshot->status});
-                statusDetail = statusDisplay(snapshot->status).detail;
-            }
-            const auto timing = nodeTimingText(snapshot.get(), running);
-            QVariantList phases;
-            for (const auto &phase : timingPhasesOf(timing))
-                phases.push_back(QVariantMap{{"label", phase.label}, {"value", phase.value}});
-            if (impl_->instanceErrors.contains(node.id))
-            {
-                state         = "failed";
-                const auto &diagnostic = *impl_->instanceErrors.at(node.id);
-                statusCode             = diagnostic.status.code;
-                statusMessage          = diagnosticMessage(diagnostic);
-                statusDetail           = q(diagnostic.status.detail);
-            }
-            QString lifecycleMessage;
-            QString lifecycleDetail;
-            if (impl_->lifecycleErrors.contains(node.id))
-            {
-                const auto &diagnostic = *impl_->lifecycleErrors.at(node.id);
-                lifecycleMessage       = diagnosticMessage(diagnostic);
-                lifecycleDetail        = q(diagnostic.status.detail);
-            }
-            const auto   *def             = impl_->registry.find(node.toolId);
-            const QString version         = def ? q(def->version) : QStringLiteral("1.0");
-            // A snapshot produced by an older configuration is still shown, but it must not claim
-            // to describe the current parameters.
-            const bool    stale           = snapshot && snapshot->executionRevision != node.executionRevision;
-            const QString category        = def ? q(def->category) : QString();
-            const auto    avail           = impl_->registry.availability(node.toolId);
-            const bool    defMissing      = (avail.state == ToolAvailability::DefinitionMissing);
-            const bool    implUnavailable
-                = !defMissing
-               && (avail.state != ToolAvailability::Available || impl_->instanceErrors.contains(node.id));
-            const bool    missing         = defMissing || implUnavailable;
-            result.push_back(QVariantMap{
-                {                   "id", QString::number(node.id)},
-                {                "title",          q(node.title())},
-                {                "alias",            q(node.alias)},
-                {               "toolId",           q(node.toolId)},
-                {              "version",                  version},
-                {             "category",                 category},
-                {                    "x",          node.position.x},
-                {                    "y",          node.position.y},
-                {                "state",                    state},
-                {          "disposition",          dispositionName(disposition)},
-                {             "executed", disposition == NodeDisposition::Succeeded
-                                              || disposition == NodeDisposition::Failed
-                                              || disposition == NodeDisposition::Canceled},
-                {                "stale",                   stale},
-                {           "timingText",             timing.total},
-                {         "timingPhases",                  phases},
-                {              "missing",                  missing},
-                {           "defMissing",               defMissing},
-                {      "implUnavailable",          implUnavailable},
-                {           "statusCode",               statusCode},
-                {        "statusMessage",            statusMessage},
-                {         "statusDetail",             statusDetail},
-                {     "lifecycleMessage",         lifecycleMessage},
-                {      "lifecycleDetail",          lifecycleDetail}
-            });
-        }
-    impl_->nodeRows = result;
+    const auto   rows = impl_->nodesModel.snapshot();
+    result.reserve(rows.size());
+    for (const auto &value : rows)
+    {
+        const auto row = value.toMap();
+        result.push_back(QVariantMap{{"id", row.value("id")}, {"x", row.value("x")}, {"y", row.value("y")}});
+    }
     return result;
+}
+
+NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) const
+{
+    const bool running = presentation.active(node.id);
+    const auto snapshot = displaySnapshot(node);
+    const auto disposition = snapshot ? snapshot->disposition : NodeDisposition::Pending;
+    QString state = "idle";
+    if (running)
+        state = "running";
+    else if (snapshot)
+        switch (disposition)
+        {
+        case NodeDisposition::Skipped:
+            state = "skipped";
+            break;
+        case NodeDisposition::Blocked:
+            state = "blocked";
+            break;
+        case NodeDisposition::Canceled:
+            state = "cancelled";
+            break;
+        case NodeDisposition::Failed:
+            state = "failed";
+            break;
+        default:
+            state = snapshot->status.code == 0 ? "succeeded" : "failed";
+            break;
+        }
+    std::int64_t statusCode = 0;
+    QString      statusMessage;
+    QString      statusDetail;
+    if (snapshot && (snapshot->status.code != 0 || disposition == NodeDisposition::Skipped
+                     || disposition == NodeDisposition::Blocked))
+    {
+        statusCode = snapshot->status.code;
+        // The gate reason stays separate from tool errors: no error code is invented.
+        statusMessage = disposition == NodeDisposition::Skipped || disposition == NodeDisposition::Blocked
+                          ? (workbench::q(snapshot->status.message).isEmpty()
+                                 ? QStringLiteral("节点未执行")
+                                 : QStringLiteral("节点未执行：") + workbench::q(snapshot->status.message))
+                          : diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status});
+        statusDetail = statusDisplay(snapshot->status).detail;
+    }
+    const auto timing = nodeTimingText(snapshot.get(), running);
+    QVariantList phases;
+    for (const auto &phase : timingPhasesOf(timing))
+        phases.push_back(QVariantMap{{"label", phase.label}, {"value", phase.value}});
+
+    NodeListModel::Row row;
+    row.id            = QString::number(node.id);
+    row.title         = workbench::q(node.title());
+    row.alias         = workbench::q(node.alias);
+    row.toolId        = workbench::q(node.toolId);
+    row.x             = node.position.x;
+    row.y             = node.position.y;
+    row.state         = state;
+    row.disposition   = dispositionName(disposition);
+    row.executed      = disposition == NodeDisposition::Succeeded || disposition == NodeDisposition::Failed
+                   || disposition == NodeDisposition::Canceled;
+    row.timingText    = timing.total;
+    row.timingPhases  = phases;
+    row.statusCode    = statusCode;
+    row.statusMessage = statusMessage;
+    row.statusDetail  = statusDetail;
+    if (const auto *instanceDiagnostic = presentation.instance(node.id))
+    {
+        row.state         = "failed";
+        row.statusCode    = instanceDiagnostic->status.code;
+        row.statusMessage = diagnosticMessage(*instanceDiagnostic);
+        row.statusDetail  = workbench::q(instanceDiagnostic->status.detail);
+    }
+    if (const auto *lifecycleDiagnostic = presentation.lifecycle(node.id))
+    {
+        row.lifecycleMessage = diagnosticMessage(*lifecycleDiagnostic);
+        row.lifecycleDetail  = workbench::q(lifecycleDiagnostic->status.detail);
+    }
+    const auto   *def     = registry.find(node.toolId);
+    row.version           = def ? workbench::q(def->version) : QStringLiteral("1.0");
+    // A snapshot produced by an older configuration is still shown, but it must not claim to
+    // describe the current parameters.
+    row.stale             = snapshot && snapshot->executionRevision != node.executionRevision;
+    row.category          = def ? workbench::q(def->category) : QString();
+    const auto avail      = registry.availability(node.toolId);
+    row.defMissing        = avail.state == ToolAvailability::DefinitionMissing;
+    row.implUnavailable   = !row.defMissing
+                          && (avail.state != ToolAvailability::Available || presentation.instance(node.id) != nullptr);
+    row.missing           = row.defMissing || row.implUnavailable;
+    return row;
+}
+
+void AppController::Impl::refreshNodeModel()
+{
+    std::vector<NodeListModel::Row> rows;
+    if (const auto *flow = currentFlow())
+        for (const auto &node : flow->nodes)
+            rows.push_back(nodeRow(node));
+    nodesModel.sync(std::move(rows));
 }
 
 QVariantList AppController::wires() const
@@ -1530,8 +1493,10 @@ void AppController::selectFlow(const QString &id)
             impl_->finishRoi();
             impl_->flow = id;
             impl_->selected.clear();
-            impl_->nodeRows.reset();
+            impl_->wireState.clear();
+            impl_->refreshNodeModel();
             emit selectionChanged();
+            emit wiresChanged();
             emit nodesChanged();
             emit parametersChanged();
             impl_->updateResults();
@@ -1541,6 +1506,9 @@ void AppController::selectFlow(const QString &id)
 
 void AppController::selectNode(const QString &id)
 {
+    // Selection is a user command: a run owns the workspace, so a late click cannot move it.
+    if (impl_->runActive() || impl_->operations.isClosing())
+        return;
     if (id == impl_->selected)
         return;
     if (!id.isEmpty())
@@ -1630,7 +1598,7 @@ bool AppController::moveNodes(const QVariantList &values, int dx, int dy)
 
 void AppController::deleteNodes(const QVariantList &values)
 {
-    if (impl_->isClosing() || impl_->pending != Impl::Pending::None)
+    if (impl_->operations.isClosing() || impl_->operations.active())
     {
         impl_->report(QStringLiteral("请先完成或取消当前操作"));
         return;
@@ -1638,7 +1606,7 @@ void AppController::deleteNodes(const QVariantList &values)
     try
     {
         impl_->pendingDeletion = Impl::PendingDeletion{impl_->flow.toStdString(), ids(values)};
-        impl_->request(Impl::Pending::DeleteNodes);
+        impl_->request(ProjectOperations::Action::DeleteNodes);
     }
     catch (const std::exception &error)
     {
@@ -1648,7 +1616,7 @@ void AppController::deleteNodes(const QVariantList &values)
 
 void AppController::copyNodes(const QVariantList &values)
 {
-    if (impl_->isClosing())
+    if (impl_->operations.isClosing())
         return;
     try
     {
@@ -1773,18 +1741,23 @@ void AppController::runNode()
 void AppController::toggleLoop()
 {
     if (impl_->state == RuntimeState::RunningLoop)
-    {
-        LogService::write(LogLevel::Info, QStringLiteral("运行"), QStringLiteral("请求停止循环运行"));
-        impl_->runtime->requestStop();
-        impl_->setState(RuntimeState::Stopping);
-    }
+        stop();
     else
         impl_->start(RunMode::Loop);
 }
 
+void AppController::stop()
+{
+    if (!stopEnabled())
+        return;
+    LogService::write(LogLevel::Info, QStringLiteral("运行"), QStringLiteral("请求停止运行"));
+    impl_->runtime->requestStop();
+    impl_->setState(RuntimeState::Stopping);
+}
+
 void AppController::resetRuntime()
 {
-    impl_->request(Impl::Pending::Reset);
+    impl_->request(ProjectOperations::Action::Reset);
 }
 
 void AppController::refreshPython()
@@ -1801,13 +1774,13 @@ void AppController::rescanTools()
 
 void AppController::requestNew()
 {
-    impl_->request(Impl::Pending::New);
+    impl_->request(ProjectOperations::Action::New);
 }
 
 void AppController::requestOpen(const QString &path)
 {
     if (!path.isEmpty())
-        impl_->request(Impl::Pending::Open, path);
+        impl_->request(ProjectOperations::Action::Open, path);
 }
 
 void AppController::openRecentProject(const QString &path)
@@ -1824,36 +1797,31 @@ QVariantList AppController::recentProjects() const
 
 void AppController::requestClose()
 {
-    impl_->request(Impl::Pending::Close);
+    impl_->request(ProjectOperations::Action::Close);
 }
 
 bool AppController::isCloseReady() const
 {
-    return impl_->closePhase == Impl::ClosePhase::Ready
-        || (impl_->closePhase == Impl::ClosePhase::None && (!impl_->python || impl_->python->isCloseReady()));
+    return impl_->operations.closePhase() == ProjectOperations::ClosePhase::Ready
+        || (impl_->operations.closePhase() == ProjectOperations::ClosePhase::None
+            && (!impl_->python || impl_->python->isCloseReady()));
 }
 
 bool AppController::isClosing() const
 {
-    return impl_->isClosing();
+    return impl_->operations.isClosing();
 }
 
 void AppController::resolveUnsaved(const QString &decision, const QString &savePath)
 {
-    if (impl_->pending == Impl::Pending::None || !impl_->awaitingDecision)
+    if (!impl_->operations.active() || !impl_->operations.awaitingDecision())
         return;
     if (decision == "cancel")
     {
-        if (impl_->pending == Impl::Pending::Close)
-        {
-            impl_->closing = false;
-            impl_->closePhase = Impl::ClosePhase::None;
-            impl_->closeReadyEmitted = false;
+        const bool wasClosing = impl_->operations.isClosing();
+        impl_->operations.cancel();
+        if (wasClosing)
             emit closingChanged();
-        }
-        impl_->pending          = Impl::Pending::None;
-        impl_->awaitingDecision = false;
-        impl_->replacement.reset();
         return;
     }
     if (decision == "save")
@@ -1863,14 +1831,14 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
     }
     else if (decision != "discard")
         return;
-    impl_->pendingApproved  = true;
-    impl_->awaitingDecision = false;
+    impl_->operations.approve();
+    impl_->operations.decisionMade();
     impl_->advancePending();
 }
 
 bool AppController::save(const QString &path)
 {
-    if (impl_->isClosing())
+    if (impl_->operations.isClosing())
         return false;
     const auto previousPath = impl_->editor.project().path;
     auto destination = path.isEmpty() ? previousPath : workbench::localPath(path);
@@ -1879,27 +1847,18 @@ bool AppController::save(const QString &path)
         emit savePathRequired();
         return false;
     }
-    if (busy() && destination != impl_->editor.project().path)
+    if (!workspaceEnabled())
     {
-        impl_->report(QStringLiteral("运行期间不能另存为；可保存当前已命名工程"));
+        // A run owns the project; writing it mid-run would serialise a moving project, so the
+        // request is refused instead of being queued for later.
+        impl_->report(QStringLiteral("运行期间不能保存工程，请先停止运行"));
         return false;
     }
     try
     {
-        // The editor project is frozen while a run owns the runtime, so a mid-run save is queued
-        // and written once the run finished instead of serialising a moving project.
-        if (busy() || !impl_->readsAllowed())
-        {
-            impl_->readRequests.push_back(Impl::SaveRequest{workbench::pathText(destination), impl_->projectEpoch});
-            impl_->report(QStringLiteral("工程保存已排队，等待运行结束后写入"));
-            return false;
-        }
         auto candidate   = impl_->editor.project();
         auto diagnostics = ProjectStorage(impl_->registry).save(candidate, destination);
-        if (busy())
-            impl_->editor.markSaved();
-        else
-            impl_->editor.replaceProject(std::move(candidate));
+        impl_->editor.replaceProject(std::move(candidate));
         impl_->synchronizeNodes();
         impl_->storageDiagnostics(diagnostics);
         emit projectChanged();

@@ -61,8 +61,7 @@ bool AppController::setRectParameter(const QString &id, bool initialization, dou
                                     double height, double angle)
 {
     return impl_->command(
-        [&]
-        { return impl_->applyParameter(id, initialization, DataRef<ROI>(ROI{{{2., x, y, width, height, angle}}})); });
+        [&] { return impl_->applyParameter(id, initialization, DataRef<ROI>(ROI{{makeRectangle(x, y, width, height, angle)}})); });
 }
 
 bool AppController::setParameterPath(const QString &id, bool initialization, const QString &path)

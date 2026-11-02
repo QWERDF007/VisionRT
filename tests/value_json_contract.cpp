@@ -1,4 +1,5 @@
 #include "core/ValueJson.h"
+#include "result_view.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -31,7 +32,7 @@ int main()
 {
     const TypeSpec type{Type::Array, DType::Int64, 2};
     const auto     value = ValueJson::parse("[[9007199254740993], [], [-9223372036854775808]]", type);
-    const auto    &items = std::get<Array>(value).get<NestedVector<std::int64_t, 2>>();
+    const auto    &items = nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(value));
     assert(items.size() == 3 && items[0][0] == 9007199254740993LL && items[1].empty());
     assert(items[2][0] == std::numeric_limits<std::int64_t>::min());
     assert(equalValues(value, ValueJson::parse(ValueJson::text(value, type), type)));
@@ -172,7 +173,7 @@ int main()
         rejects([&] { ValueJson::decode(display, {Type::Float}); });
     }
     const TypeSpec  floating{Type::Array, DType::Float64, 2};
-    const PortValue mixed = Array(NestedVector<double, 2>{
+    const PortValue mixed = Array::fromNested(NestedVector<double, 2>{
         {0, std::numeric_limits<double>::infinity(), 2},
         {}
     });

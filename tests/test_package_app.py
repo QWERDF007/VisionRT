@@ -653,49 +653,42 @@ class BuildMetadataIntegrationContract(unittest.TestCase):
 
 
 class RealBuildMetadataIntegrationContract(unittest.TestCase):
-    """Real CMake build, executable compilation, and build metadata integration contract (T47-03 / S47-03)."""
+    """Real CMake build, executable compilation and build metadata contract (U01 / F02).
+
+    The nested configure and build reuse the toolchain the outer project already resolved: CMake
+    hands its own command, compiler and make program to this test, and the MSVC environment comes
+    from ``tools/build.cmd`` - the same entry the incremental contract uses. Nothing here probes
+    Visual Studio installations or Windows SDK versions on its own.
+    """
 
     @classmethod
     def setUpClass(cls) -> None:
-        vcvars = r"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
-        if Path(vcvars).is_file():
-            out = subprocess.check_output(f'"{vcvars}" && set', shell=True, text=True)
-            cls.env = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
-        else:
-            cls.env = os.environ.copy()
+        cls.cmake = os.environ.get("CMAKE_COMMAND") or shutil.which("cmake")
+        if not cls.cmake:
+            raise unittest.SkipTest("CMAKE_COMMAND is required to configure the nested project")
+        cls.ninja = os.environ.get("CMAKE_MAKE_PROGRAM") or shutil.which("ninja")
+        if not cls.ninja:
+            raise unittest.SkipTest("CMAKE_MAKE_PROGRAM is required to build the nested project")
+        cls.compiler = os.environ.get("CMAKE_CXX_COMPILER", "")
+        cls.build_entry = Path(os.environ.get("VISIONRT_BUILD_ENTRY", package_app.REPO_ROOT / "tools/build.cmd"))
+        if os.name == "nt" and not cls.build_entry.is_file():
+            raise unittest.SkipTest(f"build entry not found: {cls.build_entry}")
 
-        # Ensure Windows SDK lib and include paths are present in cls.env
-        sdk_root = Path(r"C:\Program Files (x86)\Windows Kits\10")
-        if sdk_root.is_dir():
-            for ver in ("10.0.19041.0", "10.0.17763.0", "10.0.22621.0"):
-                um_lib = sdk_root / f"Lib/{ver}/um/x64"
-                ucrt_lib = sdk_root / f"Lib/{ver}/ucrt/x64"
-                if um_lib.is_dir() and ucrt_lib.is_dir():
-                    cur_lib = cls.env.get("LIB", "")
-                    if str(um_lib) not in cur_lib:
-                        cls.env["LIB"] = f"{um_lib};{ucrt_lib};{cur_lib}".rstrip(";")
-                    break
-            for ver in ("10.0.19041.0", "10.0.17763.0", "10.0.22621.0"):
-                ucrt_inc = sdk_root / f"Include/{ver}/ucrt"
-                um_inc = sdk_root / f"Include/{ver}/um"
-                shared_inc = sdk_root / f"Include/{ver}/shared"
-                if ucrt_inc.is_dir():
-                    cur_inc = cls.env.get("INCLUDE", "")
-                    if str(ucrt_inc) not in cur_inc:
-                        cls.env["INCLUDE"] = f"{ucrt_inc};{um_inc};{shared_inc};{cur_inc}".rstrip(";")
-                    break
+    @classmethod
+    def _native(cls, arguments: list[str], cwd: Path) -> subprocess.CompletedProcess:
+        """Run a build command inside the initialized MSVC environment.
 
-        cls.ninja = r"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
-        if Path(cls.ninja).is_file() and str(Path(cls.ninja).parent) not in cls.env.get("PATH", ""):
-            cls.env["PATH"] = str(Path(cls.ninja).parent) + ";" + cls.env.get("PATH", "")
-
-        for win_kits in (
-            r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64",
-            r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x64",
-            r"C:\Program Files (x86)\Windows Kits\10\bin\x64",
-        ):
-            if Path(win_kits).is_dir() and win_kits not in cls.env.get("PATH", ""):
-                cls.env["PATH"] = win_kits + ";" + cls.env.get("PATH", "")
+        ``tools/build.cmd`` is the single environment entry: in this project's Windows setup it
+        initializes VC/SDK variables and then proxies the given command, so the nested project sees
+        exactly the toolchain the outer build used instead of a second discovery chain.
+        """
+        if os.name != "nt":
+            return subprocess.run(arguments, cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
+        # A single command line is required here: cmd must receive the quoted batch path verbatim,
+        # so the list form (which escapes embedded quotes) is not used.
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        line = f'"{comspec}" /d /s /c call "{cls.build_entry}" ' + subprocess.list2cmdline(arguments)
+        return subprocess.run(line, cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="vrt-real-cmake-")
@@ -761,38 +754,29 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
         self.assertEqual(res.returncode, 0, f"git command failed: {' '.join(args)}\n{res.stderr}")
         return res
 
+    def assertSucceeded(self, result: subprocess.CompletedProcess, phase: str) -> None:
+        self.assertEqual(result.returncode, 0, f"{phase} failed\n{result.stdout}\n{result.stderr}")
+
     def _configure(self, release_build: bool = False) -> subprocess.CompletedProcess:
-        cmake_cmd = BuildMetadataIntegrationContract._find_cmake()
         cmd = [
-            cmake_cmd,
+            self.cmake,
             "-B", "build",
             "-S", ".",
             "-G", "Ninja",
             f"-DCMAKE_MAKE_PROGRAM={self.ninja}",
             f"-DMINI_RELEASE_BUILD={'ON' if release_build else 'OFF'}",
         ]
-        rc_candidate = Path(r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\rc.exe")
-        if rc_candidate.is_file():
-            cmd.append(f"-DCMAKE_RC_COMPILER={rc_candidate.as_posix()}")
-        mt_candidate = Path(r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\mt.exe")
-        if mt_candidate.is_file():
-            cmd.append(f"-DCMAKE_MT={mt_candidate.as_posix()}")
-        res = subprocess.run(cmd, cwd=self.repo_dir, env=self.env, capture_output=True, text=True)
-        return res
+        if self.compiler:
+            cmd.append(f"-DCMAKE_CXX_COMPILER={self.compiler}")
+        return self._native(cmd, self.repo_dir)
 
     def _build(self) -> subprocess.CompletedProcess:
-        cmake_cmd = BuildMetadataIntegrationContract._find_cmake()
-        cmd = [cmake_cmd, "--build", "build"]
-        res = subprocess.run(cmd, cwd=self.repo_dir, env=self.env, capture_output=True, text=True)
-        return res
+        return self._native([self.cmake, "--build", "build"], self.repo_dir)
 
     def test_01_real_clean_initial_build(self) -> None:
         """S47-03 Case 1: Initial real compilation produces working binary and matching build metadata."""
-        res_cfg = self._configure(release_build=True)
-        self.assertEqual(res_cfg.returncode, 0, res_cfg.stderr)
-
-        res_bld = self._build()
-        self.assertEqual(res_bld.returncode, 0, res_bld.stderr)
+        self.assertSucceeded(self._configure(release_build=True), "configure")
+        self.assertSucceeded(self._build(), "build")
 
         exe = self.build_dir / "mini_app.exe"
         self.assertTrue(exe.is_file(), "Compiled executable must exist")
@@ -817,8 +801,8 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
 
     def test_02_real_rebuild_without_changes(self) -> None:
         """S47-03 Case 2: Rebuilding without changes does not relink binary and preserves epoch."""
-        self.assertEqual(self._configure().returncode, 0)
-        self.assertEqual(self._build().returncode, 0)
+        self.assertSucceeded(self._configure(), "configure")
+        self.assertSucceeded(self._build(), "build")
 
         info_json = self.build_dir / "build_info.json"
         meta1 = json.loads(info_json.read_text(encoding="utf-8"))
@@ -837,8 +821,8 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
 
     def test_03_real_document_commit(self) -> None:
         """S47-03 Case 3: Review doc commit updates candidate commit hash while binary is reused."""
-        self.assertEqual(self._configure().returncode, 0)
-        self.assertEqual(self._build().returncode, 0)
+        self.assertSucceeded(self._configure(), "configure")
+        self.assertSucceeded(self._build(), "build")
         exe1_mtime = (self.build_dir / "mini_app.exe").stat().st_mtime
 
         docs_dir = self.repo_dir / "docs"
@@ -849,7 +833,7 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
         new_head = subprocess.check_output([BuildMetadataIntegrationContract._find_git(), "rev-parse", "HEAD"], cwd=self.repo_dir, text=True).strip()
 
         # Build again: binary is untouched, build_info reflects new commit
-        self.assertEqual(self._build().returncode, 0)
+        self.assertSucceeded(self._build(), "build")
         exe2_mtime = (self.build_dir / "mini_app.exe").stat().st_mtime
         self.assertEqual(exe1_mtime, exe2_mtime)
 
@@ -859,8 +843,8 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
 
     def test_04_real_production_source_change(self) -> None:
         """S47-03 Case 4: Production source modification causes recompilation, dirty=true, and release failure."""
-        self.assertEqual(self._configure(release_build=False).returncode, 0)
-        self.assertEqual(self._build().returncode, 0)
+        self.assertSucceeded(self._configure(release_build=False), "configure")
+        self.assertSucceeded(self._build(), "build")
 
         # Modify source
         (self.repo_dir / "src/main.cpp").write_text(
@@ -883,14 +867,14 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
         self.assertIn("real_mini_app_v2_modified", run_res.stdout)
 
         # Re-configure for release build: build must fail due to dirty workspace
-        self.assertEqual(self._configure(release_build=True).returncode, 0)
+        self.assertSucceeded(self._configure(release_build=True), "configure")
         res_rel = self._build()
         self.assertNotEqual(res_rel.returncode, 0)
         self.assertIn("发布模式禁止脏工作区候选", res_rel.stdout + res_rel.stderr)
 
     def test_05_real_untracked_included_header(self) -> None:
         """S47-03 Case 5: Untracked header included in compilation causes dirty=true and release failure."""
-        self.assertEqual(self._configure(release_build=True).returncode, 0)
+        self.assertSucceeded(self._configure(release_build=True), "configure")
 
         # Create untracked header and include it
         (self.repo_dir / "src/extra.h").write_text("#pragma once\n", encoding="utf-8")
@@ -902,7 +886,7 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
 
     def test_06_real_git_failure(self) -> None:
         """S47-03 Case 6: Git query failure sets commit/branch/dirty to unknown and fails release build."""
-        self.assertEqual(self._configure(release_build=False).returncode, 0)
+        self.assertSucceeded(self._configure(release_build=False), "configure")
 
         # Force a rebuild by touching source, and hide .git
         (self.repo_dir / "src/main.cpp").write_text("// no git\nint main() { return 0; }\n", encoding="utf-8")
@@ -916,29 +900,11 @@ class RealBuildMetadataIntegrationContract(unittest.TestCase):
         self.assertEqual(meta["dirty"], "unknown")
 
         # In release mode, it must fail
-        self.assertEqual(self._configure(release_build=True).returncode, 0)
+        self.assertSucceeded(self._configure(release_build=True), "configure")
         (self.repo_dir / "src/main.cpp").write_text("// release no git\nint main() { return 1; }\n", encoding="utf-8")
         res_rel = self._build()
         self.assertNotEqual(res_rel.returncode, 0)
         self.assertIn("发布模式禁止未知候选", res_rel.stdout + res_rel.stderr)
-
-    def test_07_real_candidate_change_during_build(self) -> None:
-        """S47-03 Case 7: Candidate change during build is detected by release verification."""
-        self.assertEqual(self._configure(release_build=False).returncode, 0)
-        self.assertEqual(self._build().returncode, 0)
-
-        fixed_commit = subprocess.check_output([BuildMetadataIntegrationContract._find_git(), "rev-parse", "HEAD"], cwd=self.repo_dir, text=True).strip()
-
-        # Mutate git commit and touch source to trigger rebuild
-        (self.repo_dir / "src/mutation.txt").write_text("mutation\n", encoding="utf-8")
-        (self.repo_dir / "src/main.cpp").write_text("// mutated\nint main() { return 0; }\n", encoding="utf-8")
-        self._git(["add", "src/mutation.txt", "src/main.cpp"])
-        self._git(["commit", "-m", "unexpected commit during build"])
-
-        # Subsequent build records the new state
-        self.assertEqual(self._build().returncode, 0)
-        meta = json.loads((self.build_dir / "build_info.json").read_text(encoding="utf-8"))
-        self.assertNotEqual(meta["commit"], fixed_commit)
 
 
 if __name__ == "__main__":

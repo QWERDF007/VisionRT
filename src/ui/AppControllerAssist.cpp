@@ -11,7 +11,6 @@
 
 namespace visionrt {
 namespace {
-using Matrices = NestedVector<double, 3>;
 
 const PortDefinition *firstRoiInput(const ToolDefinition &tool)
 {
@@ -52,15 +51,15 @@ bool nearCursor(std::span<const double> record, const std::array<double, 9> &ref
 // Identity in the current frame: a reference ROI already lives in the image the user sees.
 constexpr std::array<double, 9> kNoAlignment{1, 0, 0, 0, 1, 0, 0, 0, 1};
 
-std::array<double, 9> alignmentFor(const Matrices &matrices, int index)
+std::array<double, 9> alignmentFor(std::span<const double> matrices, int index)
 {
-    if (matrices.empty())
+    if (matrices.empty() || matrices.size() % 9 != 0)
         return kNoAlignment;
-    const auto &matrix = matrices[static_cast<std::size_t>(index < static_cast<int>(matrices.size()) ? index : 0)];
-    if (matrix.size() != 3 || matrix[0].size() != 3 || matrix[1].size() != 3 || matrix[2].size() != 3)
-        return kNoAlignment;
-    return {matrix[0][0], matrix[0][1], matrix[0][2], matrix[1][0], matrix[1][1],
-            matrix[1][2], matrix[2][0], matrix[2][1], matrix[2][2]};
+    const auto count  = matrices.size() / 9;
+    const auto offset = static_cast<std::size_t>(index >= 0 && static_cast<std::size_t>(index) < count ? index : 0) * 9;
+    return {matrices[offset],     matrices[offset + 1], matrices[offset + 2],
+            matrices[offset + 3], matrices[offset + 4], matrices[offset + 5],
+            matrices[offset + 6], matrices[offset + 7], matrices[offset + 8]};
 }
 
 const PortDefinition *mappedTarget(const ToolDefinition &tool, const InteractionMapping &mapping,
@@ -151,7 +150,7 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     if (!easyTouchEnabled)
         return reject(QStringLiteral("智能点选已关闭"));
     if (!assistRequestsAllowed())
-        return reject(state != RuntimeState::Idle || draining ? QStringLiteral("运行或排空期间不可用智能点选")
+        return reject(state != RuntimeState::Idle || presentation.draining() ? QStringLiteral("运行或排空期间不可用智能点选")
                                                               : QStringLiteral("当前管理操作尚未完成，暂不可用智能点选"));
     const auto *roiPort = firstRoiInput(*tool);
     if (!roiPort)
@@ -161,17 +160,18 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     const auto binding = node->inputs.find(roiPort->imageInput);
     if (binding == node->inputs.end() || binding->second.mode != BindingMode::Upstream || !binding->second.source)
         return reject(QStringLiteral("请先把图像输入连接到上游"));
-    const auto found = snapshots.find(binding->second.source->node);
-    if (found == snapshots.end() || !found->second)
+    const auto snapshot = presentation.sharedSnapshot(binding->second.source->node);
+    if (!snapshot)
         return reject(QStringLiteral("请先运行上游图像节点"));
-    const auto value = found->second->outputs.find(binding->second.source->port);
-    const auto *batch = value == found->second->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
+    const auto value = snapshot->outputs.find(binding->second.source->port);
+    const auto *batch = value == snapshot->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
     if (!batch || batch->get().empty())
         return reject(QStringLiteral("当前图像尚无可点选缓存，请先运行"));
+    const int index = presentation.imageIndex();
     if (index < 0 || static_cast<std::size_t>(index) >= batch->get().size())
         return reject(QStringLiteral("图像序号超出当前批次"));
     return AssistContext{projectEpoch, generation, flow.toStdString(), node->id, node->executionRevision, index,
-                         found->second};
+                         snapshot};
 }
 
 bool AppController::Impl::assistContextCurrent(const AssistContext &context) const
@@ -204,11 +204,12 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         return reject(QStringLiteral("辅助工具缺失：") + workbench::q(mapping.helperToolId));
 
     const auto binding = node->inputs.find(roiPort->imageInput);
-    const auto source  = snapshots.find(binding->second.source->node);
-    if (source == snapshots.end())
+    const auto source = presentation.sharedSnapshot(binding->second.source->node);
+    if (!source)
         return reject(QStringLiteral("上游结果已更新，请先运行"));
-    const auto value = source->second->outputs.find(binding->second.source->port);
-    const auto *batch = value == source->second->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
+    const auto value = source->outputs.find(binding->second.source->port);
+    const auto *batch = value == source->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
+    const int   index = presentation.imageIndex();
     if (!batch || index < 0 || static_cast<std::size_t>(index) >= batch->get().size())
         return reject(QStringLiteral("上游结果已更新，请先运行"));
 
@@ -230,7 +231,11 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         const auto *array    = std::get_if<Array>(&alignment);
         if (!array || array->type() != TypeSpec{Type::Array, DType::Float64, 3})
             return kNoAlignment;
-        return alignmentFor(array->get<Matrices>(), index);
+        if (array->elementCount() == 0)
+            return kNoAlignment;
+        if (array->shape().size() != 3 || array->shape()[1] != 3 || array->shape()[2] != 3)
+            return kNoAlignment;
+        return alignmentFor(array->elements<double>(), index);
     }();
 
     Values inputs;
@@ -241,7 +246,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
                                                       {batch->owner()}));
         else if (helperPort == "seed_rois")
         {
-            ROI::value_type seeds;
+            RegionGroup seeds;
             const auto      seedValue = resolvedInput(*node, nodeInput);
             if (const auto *groups = std::get_if<DataRef<ROI>>(&seedValue))
                 if (index < static_cast<int>(groups->get().size()))
@@ -254,18 +259,23 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         {
             const auto alignment = resolvedInput(*node, nodeInput);
             if (isMissing(alignment))
-                inputs.emplace(helperPort, Array(DataRef<Matrices>(Matrices{})));
+                inputs.emplace(helperPort, Array::empty(DType::Float64, 3));
             else
             {
                 const auto *array = std::get_if<Array>(&alignment);
                 if (!array || array->type() != TypeSpec{Type::Array, DType::Float64, 3})
                     return reject(QStringLiteral("对齐输入必须是 Array(float64, rank=3)"));
-                const auto &matrices = array->get<Matrices>();
-                if (matrices.empty() || matrices.size() == 1)
+                const auto matrices = array->elementCount();
+                if (matrices == 0 || matrices == 9)
                     inputs.emplace(helperPort, *array);
-                else if (index < static_cast<int>(matrices.size()))
+                else if (index >= 0 && static_cast<std::size_t>(index) * 9 + 9 <= matrices)
+                {
+                    const auto values = array->elements<double>();
+                    std::vector<double> slice(values.begin() + static_cast<std::ptrdiff_t>(index) * 9,
+                                              values.begin() + static_cast<std::ptrdiff_t>(index) * 9 + 9);
                     inputs.emplace(helperPort,
-                                   Array(DataRef<Matrices>(Matrices{matrices[static_cast<std::size_t>(index)]})));
+                                   Array::dense(DType::Float64, {1, 3, 3}, std::move(slice)));
+                }
                 else
                     return reject(QStringLiteral("对齐矩阵数量与图像数量不一致"));
             }
@@ -274,8 +284,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
             inputs.emplace(helperPort, resolvedInput(*node, nodeInput));
     }
 
-    inputs.emplace("cursor",
-                   Array(DataRef<NestedVector<double, 1>>(NestedVector<double, 1>{cursor.x(), cursor.y()})));
+    inputs.emplace("cursor", Array::dense(DType::Float64, {2}, std::vector<double>{cursor.x(), cursor.y()}));
     inputs.emplace("phase", std::string(learn ? "learn" : "hover"));
     std::int64_t extent = 256;
     if (const auto *port = workbench::port(helper->inputs, "search_extent"))
@@ -338,6 +347,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
         ROI groups;
         if (const auto *current = std::get_if<DataRef<ROI>>(&binding->second.literal))
             groups = current->get();
+        const int index = presentation.imageIndex();
         groups.resize(std::max(groups.size(), static_cast<std::size_t>(index) + 1));
         auto &group = groups[static_cast<std::size_t>(index)];
 
@@ -399,15 +409,15 @@ void AppController::Impl::clearAssistPreview()
     if (assistPreviewRois.empty())
         return;
     assistPreviewRois.clear();
-    if (viewport)
+    if (auto *viewport = presentation.viewport())
         viewport->setAssistPreview({});
     emit q->assistChanged();
 }
 
 bool AppController::Impl::assistRequestsAllowed() const
 {
-    return easyTouchEnabled && !isClosing() && state == RuntimeState::Idle && !draining
-        && pending == Pending::None && !roi && readsAllowed();
+    return easyTouchEnabled && !operations.isClosing() && state == RuntimeState::Idle && !presentation.draining()
+        && !operations.active() && !roiSession.active() && readsAllowed();
 }
 
 void AppController::Impl::refreshAssist()
@@ -418,7 +428,7 @@ void AppController::Impl::refreshAssist()
     const auto *tool    = currentTool();
     const auto *roiPort = tool ? firstRoiInput(*tool) : nullptr;
     const bool  candidate = node && tool && tool->interaction && roiPort && state == RuntimeState::Idle
-                         && !isClosing() && !roi && readsAllowed();
+                         && !operations.isClosing() && !roiSession.active() && readsAllowed();
     if (!easyTouchEnabled)
         hint = QStringLiteral("智能点选已关闭");
     else if (candidate)
@@ -455,9 +465,9 @@ void AppController::Impl::refreshAssist()
             }
         }
     }
-    else if (node && tool && tool->interaction && roiPort && state == RuntimeState::Idle && !isClosing())
+    else if (node && tool && tool->interaction && roiPort && state == RuntimeState::Idle && !operations.isClosing())
         hint = QStringLiteral("智能点选需要已运行的图像输入");
-    else if (node && tool && tool->interaction && (draining || pending != Pending::None || isClosing()))
+    else if (node && tool && tool->interaction && (presentation.draining() || operations.active() || operations.isClosing()))
         hint = QStringLiteral("运行或排空期间不可用智能点选");
     if (!enabled && assist)
         assist->invalidate();
@@ -465,7 +475,7 @@ void AppController::Impl::refreshAssist()
     if (assistPreviewContext && !assistContextCurrent(*assistPreviewContext))
         clearAssistPreview();
     assistEnabled = enabled;
-    if (viewport)
+    if (auto *viewport = presentation.viewport())
         viewport->setAssistActive(enabled);
     setAssistHint(hint);
 }
@@ -482,7 +492,7 @@ bool AppController::easyTouchEnabled() const
 
 void AppController::setEasyTouchEnabled(bool enabled)
 {
-    if (impl_->easyTouchEnabled == enabled || impl_->isClosing())
+    if (impl_->easyTouchEnabled == enabled || impl_->operations.isClosing())
         return;
     impl_->easyTouchEnabled = enabled;
     UiPreferences::setEasyTouchEnabled(enabled);

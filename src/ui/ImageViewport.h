@@ -59,9 +59,9 @@ public:
     void setDisplayFrame(const DisplayFrame &frame);
     void clearImage(quint64 requestId);
     void setGeneration(quint64 generation);
-    void setOverlays(ROI::value_type inputs, ROI::value_type outputs);
+    void setOverlays(RegionGroup inputs, RegionGroup outputs);
     // Caller freezes the matching background and performs the project edit command.
-    void beginRoiEdit(RoiEditTarget target, ROI::value_type targetRois, bool readOnly = false,
+    void beginRoiEdit(RoiEditTarget target, RegionGroup targetRois, bool readOnly = false,
                       bool singleRectangle = false);
     void endRoiEdit();
     // Transient assist candidate in current image coordinates. It never reaches the project and
@@ -176,7 +176,7 @@ signals:
     void assistLeave();
     void assistClicked(const QPointF &imagePoint, bool append);
     void assistCanceled();
-    void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::ROI::value_type::value_type &roi);
+    void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::EncodedRegion &roi);
     void roiDeleted(const visionrt::RoiEditTarget &target);
     void roiEditCanceled();
     void roiSelected(int index, QPointF point);
@@ -214,8 +214,8 @@ private:
     void                 selectRoi(int index);
     bool                 canEdit() const;
     void                 changeDraft(QPointF imagePoint);
-    std::optional<ROI::value_type::value_type> completedDraft() const;
-    std::vector<QPointF>                       handles(const ROI::value_type::value_type &roi) const;
+    std::optional<EncodedRegion> completedDraft() const;
+    std::vector<QPointF>                       handles(const EncodedRegion &roi) const;
     int                  hitRoi(QPointF imagePoint) const;
     void                 commitDraft();
     void                 clearGesture();
@@ -236,9 +236,9 @@ private:
     ViewMode                          mode_            = Contain;
     double                            scale_           = 1;
     QPointF                           center_;
-    ROI::value_type                            inputs_;
-    ROI::value_type                            outputs_;
-    ROI::value_type                            editable_;
+    RegionGroup                            inputs_;
+    RegionGroup                            outputs_;
+    RegionGroup                            editable_;
     ROI                                        assistPreview_;
     bool                                       assistActive_    = false;
     std::optional<RoiEditTarget>      target_;
@@ -256,13 +256,13 @@ private:
     QPointF                           anchor_;
     QPointF                           lastPointer_;
     int                               handle_ = -1;
-    std::optional<ROI::value_type::value_type> original_;
-    std::optional<ROI::value_type::value_type> draft_;
+    std::optional<EncodedRegion> original_;
+    std::optional<EncodedRegion> draft_;
     std::vector<QPointF>              vertices_;
     bool                              draftChanged_ = false;
 };
 
 } // namespace visionrt
 
-Q_DECLARE_METATYPE(visionrt::ROI::value_type::value_type)
+Q_DECLARE_METATYPE(visionrt::EncodedRegion)
 Q_DECLARE_METATYPE(visionrt::RoiEditTarget)

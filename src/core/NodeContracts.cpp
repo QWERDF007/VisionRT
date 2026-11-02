@@ -299,9 +299,8 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
         for (const auto &result : node.expression->program)
             program.push_back({result.portId, result.symbol, result.expression, typeCell(result.type),
                                dtypeCell(result.type), rankCell(result.type), result.exposed ? "true" : "false"});
-        parameters.emplace("variables",
-                           Array(DataRef<NestedVector<std::string, 2>>(std::move(variables))));
-        parameters.emplace("program", Array(DataRef<NestedVector<std::string, 2>>(std::move(program))));
+        parameters.emplace("variables", Array::fromNested(std::move(variables)));
+        parameters.emplace("program", Array::fromNested(std::move(program)));
         if (definition.nodeModel == NodeModel::Condition)
             parameters.emplace("condition_mode", conditionModeText(node));
         return parameters;

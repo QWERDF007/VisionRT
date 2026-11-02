@@ -40,8 +40,12 @@ function(visionrt_apply_test_environment TEST_NAME)
         file(TO_NATIVE_PATH "${CUDAToolkit_BIN_DIR}" _p6)
         file(TO_NATIVE_PATH "${VISIONRT_PYTHON_BIN}" _pyhome)
 
+        # A property value is a CMake list, so every directory separator must be escaped: otherwise
+        # PATH is split into separate entries and the test only sees the first directory - no
+        # System32, no MSVC, no rc.exe. The inherited PATH needs the same treatment.
+        string(REPLACE ";" "\\;" _inherited_path "$ENV{PATH}")
         set_tests_properties(${TEST_NAME} PROPERTIES
-            ENVIRONMENT "PATH=${_p0}\;${_p1}\;${_p2}\;${_p3}\;${_p4}\;${_p5}\;${_p6}\;$ENV{PATH};PYTHONHOME=${_pyhome};TMP=${_tmp};TEMP=${_tmp}"
+            ENVIRONMENT "PATH=${_p0}\\;${_p1}\\;${_p2}\\;${_p3}\\;${_p4}\\;${_p5}\\;${_p6}\\;${_inherited_path};PYTHONHOME=${_pyhome};TMP=${_tmp};TEMP=${_tmp}"
         )
     endif()
 endfunction()

@@ -26,7 +26,7 @@ QVariantMap AppController::portDeclarationContext(const QString &port, bool outp
                        {"port", port},
                        {"output", output},
                        {"kind", QStringLiteral("declaration")},
-                       {"interaction", QString::number(impl_->roiSerial)},
+                       {"interaction", QString::number(impl_->roiSession.id())},
                        {"structure", QString::number(flow->structureRevision)}};
 }
 
@@ -47,7 +47,7 @@ QVariantMap AppController::portResultContext(const QString &port) const
                        {"port", port},
                        {"output", true},
                        {"kind", QStringLiteral("result")},
-                       {"interaction", QString::number(impl_->roiSerial)},
+                       {"interaction", QString::number(impl_->roiSession.id())},
                        {"structure", QString::number(flow->structureRevision)},
                        {"revision", QString::number(node->executionRevision)},
                        // A missing value is a real row without data; copy must be visibly disabled
@@ -100,7 +100,7 @@ bool AppController::portContextCurrent(const QVariantMap &context) const
         if (!captured || QString::number(captured->publication) != context.value("publication").toString())
             return false;
     }
-    if (context.contains("interaction") && context.value("interaction").toString() != QString::number(impl_->roiSerial))
+    if (context.contains("interaction") && context.value("interaction").toString() != QString::number(impl_->roiSession.id()))
         return false;
     return true;
 }

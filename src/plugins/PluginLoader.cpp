@@ -132,6 +132,9 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
 
     ToolStatus                    local;
     std::shared_ptr<LoadedModule> module;
+    // A module rejected after it was opened must outlive the mutex: its destructor unloads the
+    // library, and module finalizers may call back into the loader.
+    std::shared_ptr<LoadedModule> rejectedModule;
     try
     {
         module = loadModuleFile(key, local);
@@ -167,7 +170,8 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
                 break;
         }
     }
-    auto rejected = !local ? std::move(module) : nullptr;
+    if (!local && module)
+        rejectedModule = std::move(module);
     if (module)
     {
         loadedModules_[key] = module;
@@ -180,6 +184,9 @@ std::shared_ptr<const LoadedModule> PluginLoader::loadModule(const std::filesyst
     }
     loadedChanged_.notify_all();
     lock.unlock();
+    // Destroying the rejected module unloads its library, so it happens after the mutex is
+    // released: module finalizers are foreign code and may call back into the loader.
+    rejectedModule.reset();
     return module;
 }
 
@@ -268,7 +275,7 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     {
         status = makeStatus(ErrorCode::PluginLoadFailed,
                             "模块 ABI 主版本不匹配（期望 " + std::to_string(MODULE_ABI_MAJOR) + "，实际 "
-                                + std::to_string(api->abi_major) + "）");
+                                + std::to_string(api->abi_major) + "）：" + libraryPath.string());
         return nullptr;
     }
 

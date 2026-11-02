@@ -132,13 +132,14 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     const auto &preprocessed = std::get<DataRef<Image>>(s4->outputs.at("images"));
     assert((preprocessed.get().size() == croppedImages.get().size()));
 
-    // Node 5: python mean
+    // Node 5: Python mean over node 1's original images, not over the cropped and binarised branch.
+    // The fixture keeps the two paths distinguishable: nodes 3/4 would yield 95.625 and 191.25.
     auto s5 = snapshot(update, 5);
     assert((s5 && s5->status.code == 0));
     const auto &means = std::get<Array>(s5->outputs.at("means"));
     assert(((means.type() == TypeSpec{Type::Array, DType::Float64, 1})));
-    assert((means.get<std::vector<double>>().size() == static_cast<std::int64_t>(images1.get().size())));
-    const auto values = means.get<std::vector<double>>();
+    assert((nestedOf<std::vector<double>>(means).size() == static_cast<std::int64_t>(images1.get().size())));
+    const auto values = nestedOf<std::vector<double>>(means);
     assert((values.size() == 2));
     assert((std::abs(values[0] - 51.0) < 0.5));
     assert((std::abs(values[1] - 22.95) < 0.5));
@@ -158,7 +159,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     auto reloadedS5     = snapshot(reloadedUpdate, 5);
     assert((reloadedS5 && reloadedS5->status.code == 0));
     const auto &reloadedMeans  = std::get<Array>(reloadedS5->outputs.at("means"));
-    const auto  reloadedValues = reloadedMeans.get<std::vector<double>>();
+    const auto  reloadedValues = nestedOf<std::vector<double>>(reloadedMeans);
     assert((reloadedValues.size() == 2));
     assert((std::abs(reloadedValues[0] - values[0]) < 1e-6));
     assert((std::abs(reloadedValues[1] - values[1]) < 1e-6));
@@ -200,10 +201,10 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         cv::Mat      mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
         DataRef<Image> imgBatch(Image{(mat)});
         DataRef<ROI>   emptyRois(ROI{{}});
-        Array          emptyScores(NestedVector<float, 2>{{}});
-        Array          emptyClasses(NestedVector<std::int64_t, 2>{{}});
-        Array          emptyNames(NestedVector<std::string, 2>{std::vector<std::string>{}});
-        Array          allowed(std::vector<std::int64_t>{});
+        Array          emptyScores  = Array::fromNested(NestedVector<float, 2>{{}});
+        Array          emptyClasses = Array::fromNested(NestedVector<std::int64_t, 2>{{}});
+        Array          emptyNames   = Array::fromNested(NestedVector<std::string, 2>{std::vector<std::string>{}});
+        Array          allowed      = Array::fromNested(std::vector<std::int64_t>{});
 
         Values inputs;
         inputs.emplace("images", std::move(imgBatch));
@@ -218,23 +219,23 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         auto res = inst->execute(inputs);
         assert((testview::status(res).code == 0));
         const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
-        assert((outCounts && !outCounts->get<NestedVector<std::int64_t, 1>>().empty()));
-        assert((outCounts->get<NestedVector<std::int64_t, 1>>()[0] == 0));
+        assert((outCounts && !nestedOf<NestedVector<std::int64_t, 1>>(*outCounts).empty()));
+        assert((nestedOf<NestedVector<std::int64_t, 1>>(*outCounts)[0] == 0));
 
         const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
         assert((outRois && outRois->get().size() == 1 && outRois->get()[0].empty()));
 
         const auto *outScores = std::get_if<Array>(&res.outputs["scores"]);
-        assert((outScores && !outScores->get<NestedVector<float, 2>>().empty()));
-        assert((outScores->get<NestedVector<float, 2>>()[0].empty()));
+        assert((outScores && !nestedOf<NestedVector<float, 2>>(*outScores).empty()));
+        assert((nestedOf<NestedVector<float, 2>>(*outScores)[0].empty()));
 
         const auto *outClasses = std::get_if<Array>(&res.outputs["classes"]);
-        assert((outClasses && !outClasses->get<NestedVector<std::int64_t, 2>>().empty()));
-        assert((outClasses->get<NestedVector<std::int64_t, 2>>()[0].empty()));
+        assert((outClasses && !nestedOf<NestedVector<std::int64_t, 2>>(*outClasses).empty()));
+        assert((nestedOf<NestedVector<std::int64_t, 2>>(*outClasses)[0].empty()));
 
         const auto *outNames = std::get_if<Array>(&res.outputs["class_names"]);
-        assert((outNames && !outNames->get<NestedVector<std::string, 2>>().empty()));
-        assert((outNames->get<NestedVector<std::string, 2>>()[0].empty()));
+        assert((outNames && !nestedOf<NestedVector<std::string, 2>>(*outNames).empty()));
+        assert((nestedOf<NestedVector<std::string, 2>>(*outNames)[0].empty()));
     }
 
     // 2. Scenario: 3 distinct targets (different class, name, score, coords, angle)
@@ -244,7 +245,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
     {
         cv::Mat          mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
         DataRef<Image>   imgBatch(Image{(mat)});
-        ROI::value_type  rois3;
+        RegionGroup  rois3;
         rois3.push_back(std::vector<double>{2, 10.0f, 10.0f, 20.0f, 20.0f, 5.0f});
         rois3.push_back(std::vector<double>{2, 30.0f, 30.0f, 40.0f, 40.0f, 15.0f});
         rois3.push_back(std::vector<double>{2, 50.0f, 50.0f, 60.0f, 60.0f, 30.0f});
@@ -254,10 +255,10 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         std::vector<std::int64_t> classVals = {10, 20, 30};
         std::vector<std::string>  nameVals  = {"scratch", "crack", "dent"};
 
-        Array scores(NestedVector<float, 2>{scoreVals});
-        Array classes(NestedVector<std::int64_t, 2>{classVals});
-        Array names(NestedVector<std::string, 2>{nameVals});
-        Array allowed(std::vector<std::int64_t>{});
+        Array scores  = Array::fromNested(NestedVector<float, 2>{scoreVals});
+        Array classes = Array::fromNested(NestedVector<std::int64_t, 2>{classVals});
+        Array names   = Array::fromNested(NestedVector<std::string, 2>{nameVals});
+        Array allowed = Array::fromNested(std::vector<std::int64_t>{});
 
         Values inputs;
         inputs.emplace("images", std::move(imgBatch));
@@ -272,8 +273,8 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         auto res = inst->execute(inputs);
         assert((testview::status(res).code == 0));
         const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
-        assert((outCounts && !outCounts->get<NestedVector<std::int64_t, 1>>().empty()));
-        assert((outCounts->get<NestedVector<std::int64_t, 1>>()[0] == 2));
+        assert((outCounts && !nestedOf<NestedVector<std::int64_t, 1>>(*outCounts).empty()));
+        assert((nestedOf<NestedVector<std::int64_t, 1>>(*outCounts)[0] == 2));
 
         const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
         assert((outRois && outRois->get().size() == 1 && outRois->get()[0].size() == 2));
@@ -305,22 +306,23 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         assert((corners2.size() == 4));
 
         const auto *outScores = std::get_if<Array>(&res.outputs["scores"]);
-        assert((outScores && !outScores->get<NestedVector<float, 2>>().empty()));
-        const auto outScoreVals = outScores->get<NestedVector<float, 2>>()[0];
+        assert((outScores && !nestedOf<NestedVector<float, 2>>(*outScores).empty()));
+        const auto outScoreVals = nestedOf<NestedVector<float, 2>>(*outScores)[0];
         assert((outScoreVals.size() == 2));
         assert((std::abs(outScoreVals[0] - 0.70f) < 1e-4f));
         assert((std::abs(outScoreVals[1] - 0.95f) < 1e-4f));
 
         const auto *outClasses = std::get_if<Array>(&res.outputs["classes"]);
-        assert((outClasses && !outClasses->get<NestedVector<std::int64_t, 2>>().empty()));
-        const auto outClassVals = outClasses->get<NestedVector<std::int64_t, 2>>()[0];
+        assert((outClasses && !nestedOf<NestedVector<std::int64_t, 2>>(*outClasses).empty()));
+        const auto outClassVals = nestedOf<NestedVector<std::int64_t, 2>>(*outClasses)[0];
         assert((outClassVals.size() == 2));
         assert((outClassVals[0] == 20));
         assert((outClassVals[1] == 30));
 
         const auto *outNames = std::get_if<Array>(&res.outputs["class_names"]);
-        assert((outNames && !outNames->get<NestedVector<std::string, 2>>().empty()));
-        const auto &outNameVals = outNames->get<NestedVector<std::string, 2>>()[0];
+        const auto  nameRows = nestedOf<NestedVector<std::string, 2>>(*outNames);
+        assert((outNames && !nameRows.empty()));
+        const auto &outNameVals = nameRows[0];
         assert((outNameVals.size() == 2));
         assert((outNameVals[0] == "crack"));
         assert((outNameVals[1] == "dent"));
@@ -542,8 +544,8 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     assert((s2_node5 && s2_node5->status.code == 0));
 
     // Verify output isolation: Engine 1 produced 2 mean values, Engine 2 produced 1 mean value
-    const auto v1 = std::get<Array>(s1_node5->outputs.at("means")).get<std::vector<double>>();
-    const auto v2 = std::get<Array>(s2_node5->outputs.at("means")).get<std::vector<double>>();
+    const auto v1 = nestedOf<std::vector<double>>(std::get<Array>(s1_node5->outputs.at("means")));
+    const auto v2 = nestedOf<std::vector<double>>(std::get<Array>(s2_node5->outputs.at("means")));
     assert((v1.size() == 2));
     assert((v2.size() == 1));
     assert((std::abs(v1[0] - v2[0]) < 1e-6));
