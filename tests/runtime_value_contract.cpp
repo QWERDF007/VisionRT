@@ -1,5 +1,5 @@
 #include "core/ProjectEditor.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <algorithm>

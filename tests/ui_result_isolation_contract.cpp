@@ -170,7 +170,7 @@ def scalar(inputs):
     require(!mainView.hasImage() && !thumbnail.hasImage() && !app.portContextCurrent(oldContext),
             "project replacement retained an old frame or output context");
     QSignalSpy text(&app, &AppController::outputTextReady);
-    app.requestOutputText(oldContext, false, false);
+    app.requestOutputText(oldContext);
     QTest::qWait(20);
     require(text.isEmpty(), "old output action read a reused NodeId in another project");
     app.runNode();

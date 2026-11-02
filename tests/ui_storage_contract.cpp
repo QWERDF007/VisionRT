@@ -1,4 +1,4 @@
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"

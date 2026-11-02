@@ -132,7 +132,7 @@ def refreshed(inputs):
     // second confirmation or truncated into something that looks complete.
     const auto exportLarge = [&]
     {
-        app.requestOutputText(app.portContext("values", true), false, false);
+        app.requestOutputText(app.portContext("values", true));
     };
     const auto verifyText = [&](const QString &text)
     {

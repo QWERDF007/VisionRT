@@ -122,7 +122,7 @@ public:
     bool setReadback(const RuntimeReadback *readback);
     bool hasReadback() const { return readback_.has_value(); }
     void updateReadback();
-    void requestText(const QVariantMap &context, bool copy, bool diagnostic);
+    void requestText(const QVariantMap &context);
     bool textRunning() const { return textTask_.valid(); }
 
     // --- drain --------------------------------------------------------------------------------
@@ -136,14 +136,11 @@ private:
     struct TextRequest
     {
         QVariantMap context;
-        bool        copy;
-        bool        diagnostic;
     };
 
     struct TextResult
     {
         QString       text;
-        bool          copy;
         std::uint64_t generation;
         QVariantMap   context;
     };

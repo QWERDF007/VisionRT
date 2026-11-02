@@ -14,6 +14,7 @@
 #include <QTest>
 
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -141,7 +142,7 @@ public:
                 }
                 catch (...)
                 {
-                    failure_ = std::current_exception();
+                    captureFailure();
                 }
             });
     }
@@ -154,6 +155,15 @@ public:
     }
 
 private:
+    // Two workers can fail at the same time; the first exception wins under the lock, and join()
+    // reads it only after every thread has been joined.
+    void captureFailure() noexcept
+    {
+        std::lock_guard lock(failureMutex_);
+        if (!failure_)
+            failure_ = std::current_exception();
+    }
+
     void joinQuietly()
     {
         for (auto &thread : threads_)
@@ -163,6 +173,7 @@ private:
     }
 
     std::vector<std::thread> threads_;
+    std::mutex               failureMutex_;
     std::exception_ptr       failure_;
 };
 

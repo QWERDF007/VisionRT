@@ -1,5 +1,5 @@
 #include "core/ProjectStorage.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"
 #include "core/ToolRegistry.h"

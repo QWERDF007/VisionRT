@@ -32,9 +32,9 @@ void AppController::Impl::updateReadback()
     presentation.updateReadback();
 }
 
-void AppController::requestOutputText(const QVariantMap &context, bool copy, bool diagnostic)
+void AppController::requestOutputText(const QVariantMap &context)
 {
-    impl_->presentation.requestText(context, copy, diagnostic);
+    impl_->presentation.requestText(context);
 }
 
 } // namespace visionrt

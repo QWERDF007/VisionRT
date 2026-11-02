@@ -1,6 +1,6 @@
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "runtime/RuntimeEngine.h"
 #include <core/ToolPackage.h>
 
@@ -77,6 +77,13 @@ int main(int argc, char **argv)
             || (buildWeights && !std::filesystem::is_regular_file(weights)))
         {
             std::cout << "[NOT RUN] YOLO fixture is missing: " << fixtures << '\n';
+            return 77;
+        }
+        // The engine-only lane reuses a previously built engine; a machine that never built one has
+        // nothing to load, which is a missing fixture rather than a failed conversion.
+        if (!buildWeights && !std::filesystem::is_regular_file(enginePath))
+        {
+            std::cout << "[NOT RUN] YOLO engine is missing: " << enginePath << '\n';
             return 77;
         }
         // A package built from a profile without inference carries no infer module: the contract

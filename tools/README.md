@@ -10,6 +10,7 @@
 | 宿主发布、工具 ZIP 部署与校验 | [package_app.py](package_app.py) |
 | 工具声明与包语义校验 | [Qt 校验器](visionrt_validate_tool.cpp)、[ToolPackage](../src/core/ToolPackage.cpp) |
 | 部署事务与资源反例 | [test_package_app.py](../tests/test_package_app.py) |
+| 六个真实 Git+CMake 元数据构建（`-L integration`） | [test_build_metadata_integration.py](../tests/test_build_metadata_integration.py) |
 | 跨 CMake/Python 依赖清单验证 | [dependency_manifest_contract.py](../tests/dependency_manifest_contract.py) |
 
 ## 常用入口

@@ -1,5 +1,5 @@
 #include <pybind11/embed.h>
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"

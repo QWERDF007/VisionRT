@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <memory>
 
 namespace visionrt {
 namespace py = pybind11;
@@ -151,9 +152,12 @@ py::array numpyView(const Array &array)
         strides[index] = stride;
         stride *= shape[index];
     }
-    // The capsule keeps the Array's buffer owner alive for as long as NumPy references the view.
-    auto *holder = new Owner(array.bufferOwner());
-    py::capsule base(holder, [](void *pointer) { delete static_cast<Owner *>(pointer); });
+    // The capsule holds a shallow Array copy, not just its buffer owner: the shared Storage owns the
+    // buffer and the dependency that keeps a plugin module loaded. Holding only the buffer would let
+    // the module unload while NumPy still reads the view.
+    auto        keeper = std::make_unique<Array>(array);
+    py::capsule base(keeper.get(), [](void *pointer) { delete static_cast<Array *>(pointer); });
+    keeper.release();
     return py::array(dtype, shape, strides, array.data(), base);
 }
 

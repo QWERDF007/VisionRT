@@ -6,7 +6,7 @@
 #include "core/ProjectStorage.h"
 #include "runtime/RuntimeEngine.h"
 #include "runtime/SelectTool.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 
 #include <atomic>
 #include <chrono>

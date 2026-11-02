@@ -78,7 +78,6 @@ public:
     QString             diagnostic() const;
     QStringList         diagnostics() const;
     Q_INVOKABLE QString diagnosticsJson() const;
-    Q_INVOKABLE void    copyDiagnostics() const;
     QVariantList        flows() const;
     QVariantList        nodes() const;
     QVariantList        wires() const;
@@ -169,7 +168,7 @@ public:
     Q_INVOKABLE bool         setRoiRectangle(const QString &session, const QVariantList &coordinates);
     Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
     Q_INVOKABLE void         endRoiPreview();
-    Q_INVOKABLE void         requestOutputText(const QVariantMap &context, bool copy, bool diagnostic = false);
+    Q_INVOKABLE void         requestOutputText(const QVariantMap &context);
     Q_INVOKABLE QVariantMap  expressionConfig(const QString &node) const;
     Q_INVOKABLE bool         applyExpressionConfig(const QString &node, const QVariantList &variables,
                                                    const QVariantList &program);

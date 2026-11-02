@@ -6,7 +6,7 @@
 #endif
 
 #include "core/ToolRegistry.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include <python/PythonInterop.h>
 #include "python/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
@@ -303,34 +303,47 @@ void test200NodesExecution()
         waitCompletion(engine);
     }
 
-    // Benchmark 30 rounds
-    std::vector<double> latencies;
+    // Benchmark 30 rounds. Updates are incremental, so the terminal node is collected from whichever
+    // batch carried it instead of being required in the completion batch.
+    std::vector<double>                latencies;
+    std::optional<NodeSnapshot>        terminal;
     for (int r = 0; r < 30; ++r)
     {
         auto t0 = std::chrono::high_resolution_clock::now();
         require(engine.start(project, registry, RunMode::Once).code == 0, "benchmark start failed");
-        auto   update = waitCompletion(engine);
-        auto   t1     = std::chrono::high_resolution_clock::now();
-        double ms     = std::chrono::duration<double, std::milli>(t1 - t0).count();
-        latencies.push_back(ms);
-
-        for (const auto &nu : update.nodes)
+        const auto deadline = std::chrono::steady_clock::now() + 10000ms;
+        bool       completed = false;
+        while (!completed && std::chrono::steady_clock::now() < deadline)
         {
-            if (nu.node == kNodeCount && nu.snapshot)
+            auto update = engine.pollLatest();
+            for (const auto &nu : update.nodes)
+                if (nu.node == kNodeCount && nu.snapshot)
+                    terminal = *nu.snapshot;
+            if (update.completion)
             {
-                require(nu.snapshot->status.code == 0, "node 200 status non-zero");
-                require(std::get<std::int64_t>(nu.snapshot->outputs.at("out")) == kNodeCount,
-                        "node 200 calculation incorrect");
+                engine.acknowledgeCompletion(*update.completion);
+                completed = true;
             }
+            else
+                std::this_thread::sleep_for(1ms);
         }
+        auto   t1 = std::chrono::high_resolution_clock::now();
+        double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        latencies.push_back(ms);
+        require(completed, "200-node round did not complete");
+        require(terminal.has_value(), "terminal node published no result");
+        require(terminal->status.code == 0, "node 200 status non-zero");
+        require(std::get<std::int64_t>(terminal->outputs.at("out")) == kNodeCount,
+                "node 200 calculation incorrect");
+        terminal.reset();
     }
 
     double p50 = calculatePercentile(latencies, 50.0);
     double p95 = calculatePercentile(latencies, 95.0);
     double p99 = calculatePercentile(latencies, 99.0);
+    require(p95 <= 100.0, "200-Node p95 latency exceeded 100ms: p95=" + std::to_string(p95) + " ms");
     std::cout << "  -> 200 Nodes Latency (ms): p50=" << p50 << " ms, p95=" << p95 << " ms, p99=" << p99
               << " ms [Target <= 100ms: PASS]\n";
-    require(p95 <= 100.0, "200-Node p95 latency exceeded 100ms");
 }
 
 // -------------------------------------------------------------
@@ -540,15 +553,13 @@ void test10x4KZeroCopyAndPythonPassthrough()
         for (quint64 reqId = 1; reqId <= 5; ++reqId)
         {
             converter.requestBatch(batch, "BGR", reqId, 1);
-            const std::size_t inFlight = converter.isBusy() ? 1 : 0;
-            const std::size_t pending  = converter.hasPending() ? 1 : 0;
-            maxInFlight                = std::max(maxInFlight, inFlight);
-            maxPending                 = std::max(maxPending, pending);
-            require(inFlight <= 1, "Scheduler in-flight invariant violated");
-            require(pending <= 1, "Scheduler pending invariant violated");
+            maxInFlight = std::max(maxInFlight, converter.isBusy() ? std::size_t{1} : std::size_t{0});
+            maxPending  = std::max(maxPending, converter.hasPending() ? std::size_t{1} : std::size_t{0});
         }
 
-        require(maxInFlight <= 1, "Scheduler maxInFlight invariant violated");
+        // The burst must actually start one conversion and park exactly one pending request; a
+        // comparison against a bool-derived 0/1 would always hold and prove nothing.
+        require(maxInFlight == 1, "the saturated burst never started a conversion");
         require(maxPending == 1, "Scheduler pending queue did not reach high-water mark of 1 under saturation");
 
         const auto deadline = std::chrono::steady_clock::now() + 5000ms;
@@ -626,16 +637,11 @@ void test10x4KZeroCopyAndPythonPassthrough()
         const auto    &native = nestedOf<NestedVector<float, 2>>(std::get<Array>(array));
         require(native.size() == 10 && native[0].size() == 20 && native[0][0] == 0.0f,
                 "Python Array must use the declared native nested-vector type");
-        bool rejectedArray = false;
-        try
-        {
-            fromPython(type, matrix, storage);
-        }
-        catch (const ContractError &)
-        {
-            rejectedArray = true;
-        }
-        require(rejectedArray, "Array must reject ndarray instead of adding a second representation");
+        // Accepting a numpy array is the value-bridge contract; python_value_contract owns both the
+        // acceptance and the dtype/rank rejection cases, so this file does not restate them.
+        const auto numpyArray = fromPython(type, matrix, storage);
+        require(std::get<Array>(numpyArray).elementCount() == 200,
+                "Python Array must accept the declared numpy dtype and rank");
         bool rejectedShape = false;
         try
         {
@@ -653,12 +659,12 @@ void test10x4KZeroCopyAndPythonPassthrough()
 }
 
 // -------------------------------------------------------------
-// 3. 循环压力测试与内存/队列稳定性监测 (HS2-05 / RS-07 / RT-07)
+// 3. 反复 Once 运行的内存/队列稳定性监测 (HS2-05 / RS-07 / RT-07)
 // -------------------------------------------------------------
-void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir, int maxRounds, int maxSeconds,
-                                       PythonRuntime *pyRuntime)
+void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &evidenceDir, int maxRounds,
+                                             int maxSeconds, PythonRuntime *pyRuntime)
 {
-    std::cout << "[Test 3] Continuous Real-Graph Loop Execution & Memory Stability ("
+    std::cout << "[Test 3] Repeated RunMode::Once Execution & Memory Stability ("
               << (maxSeconds > 0 ? (std::to_string(maxSeconds) + "s limit / ") : "") << maxRounds << " rounds)...\n";
 
     auto         engine = std::make_unique<RuntimeEngine>(2);
@@ -849,16 +855,16 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     std::size_t         peakWorkingSetKB = initialProbe.workingSetKB;
     std::vector<double> roundLatencies;
     // 三层计时分别采样：宿主看到的整轮墙钟、引擎从节点窗口派生的流程区间、以及最慢节点的总计。
-    // 三者相减就是本轮真实的调度间隙与提交/读回开销，而不是靠猜。
+    // 轮时减去最慢节点只说明“除最慢节点外的其余耗时”，其中仍含其他节点的计算，不能当作纯调度间隙。
     std::vector<double> engineRoundLatencies;
     std::vector<double> slowestNodeLatencies;
-    std::vector<double> schedulerGaps;
+    std::vector<double> roundMinusSlowest;
     std::vector<double> setupLatencies;
     std::vector<double> waitLatencies;
     roundLatencies.reserve(maxRounds);
     engineRoundLatencies.reserve(maxRounds);
     slowestNodeLatencies.reserve(maxRounds);
-    schedulerGaps.reserve(maxRounds);
+    roundMinusSlowest.reserve(maxRounds);
     setupLatencies.reserve(maxRounds);
     waitLatencies.reserve(maxRounds);
 
@@ -887,7 +893,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
                     slowest = std::max(slowest, node.snapshot->timing.totalMs);
             engineRoundLatencies.push_back(*update.roundMilliseconds);
             slowestNodeLatencies.push_back(slowest);
-            schedulerGaps.push_back(std::max(0.0, *update.roundMilliseconds - slowest));
+            roundMinusSlowest.push_back(std::max(0.0, *update.roundMilliseconds - slowest));
         }
 
         auto currentProbe = getWorkingSetMemory();
@@ -943,13 +949,13 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
     auto probeAfterReset = getWorkingSetMemory();
     auto vramAfterReset  = queryGpuVram();
 
-    std::cout << "  -> Loop " << actualRounds << " rounds: wall p50=" << p50 << " ms, p95=" << p95
-              << " ms, p99=" << p99 << " ms\n";
+    std::cout << "  -> Repeated once " << actualRounds << " rounds: harness wall p50=" << p50
+              << " ms, p95=" << p95 << " ms, p99=" << p99 << " ms\n";
     std::cout << "  -> Engine round p50=" << percentileOf(engineRoundLatencies, 50.0)
               << " ms, p95=" << percentileOf(engineRoundLatencies, 95.0)
               << " ms, p99=" << percentileOf(engineRoundLatencies, 99.0) << " ms; slowest node p99="
-              << percentileOf(slowestNodeLatencies, 99.0) << " ms; scheduler gap p99="
-              << percentileOf(schedulerGaps, 99.0) << " ms\n";
+              << percentileOf(slowestNodeLatencies, 99.0) << " ms; round minus slowest p99="
+              << percentileOf(roundMinusSlowest, 99.0) << " ms\n";
     std::cout << "  -> Host split: session setup p50=" << percentileOf(setupLatencies, 50.0)
               << " ms, p99=" << percentileOf(setupLatencies, 99.0) << " ms; completion wait p50="
               << percentileOf(waitLatencies, 50.0) << " ms, p99=" << percentileOf(waitLatencies, 99.0)
@@ -977,7 +983,7 @@ void testMemoryAndQueueStabilityInLoop(const std::filesystem::path &evidenceDir,
         benchmark << ",\n  ";
         block("slowest_node_ms", slowestNodeLatencies);
         benchmark << ",\n  ";
-        block("scheduler_gap_ms", schedulerGaps);
+        block("round_minus_slowest_ms", roundMinusSlowest);
         benchmark << ",\n  ";
         block("session_setup_ms", setupLatencies);
         benchmark << ",\n  ";
@@ -1346,17 +1352,19 @@ void testWorkbenchBrowsingLatency()
         auto    t0     = std::chrono::high_resolution_clock::now();
         QString filter = QString("Tool %1").arg(q % 50);
         model.setFilter(filter);
-        int rows = model.rowCount();
-        require(rows >= 0, "Invalid rowCount");
+        require(model.rowCount() > 0, "filter matched no tool");
         auto t1 = std::chrono::high_resolution_clock::now();
         queryLatencies.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
     }
 
+    model.setFilter("does-not-exist");
+    require(model.rowCount() == 0, "filter must hide tools that do not match");
+
     double p50 = calculatePercentile(queryLatencies, 50.0);
     double p95 = calculatePercentile(queryLatencies, 95.0);
+    require(p95 <= 100.0, "Tree query p95 latency exceeded 100ms: p95=" + std::to_string(p95) + " ms");
     std::cout << "  -> Tree Filter Latency (500 tools): p50=" << p50 << " ms, p95=" << p95
               << " ms [Target <= 100ms: PASS]\n";
-    require(p95 <= 100.0, "Tree query p95 latency exceeded 100ms");
 }
 
 } // namespace
@@ -1419,7 +1427,7 @@ int main(int argc, char **argv)
         {
             testRealPythonTimingPhasesAndFailureIsolation(*app.pythonRuntime());
         }
-        testMemoryAndQueueStabilityInLoop(evidenceDir, maxRounds, maxSeconds, app.pythonRuntime());
+        testRepeatedOnceMemoryAndQueueStability(evidenceDir, maxRounds, maxSeconds, app.pythonRuntime());
         testGuiEventToPresentationLatency(app, evidenceDir);
         testWorkbenchBrowsingLatency();
         std::cout << "\n>>> ALL RT-07 PERFORMANCE CONTRACT TESTS PASSED <<<\n";

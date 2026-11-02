@@ -100,6 +100,8 @@ add_library(visionrt_presentation
 target_link_libraries(visionrt_presentation PUBLIC visionrt_core Qt6::Gui)
 
 option(VISIONRT_BUILD_APP "Build the desktop workbench" ON)
+# DPI/外观截图只在人工视觉验收时运行：常规回归不需要为每个缩放级别启动窗口并落图。
+option(VISIONRT_TEST_VISUAL "注册 DPI 与外观截图场景" OFF)
 if(VISIONRT_BUILD_APP)
     include(ConfigLibavoid)
     add_library(visionrt_viewport src/ui/ImageViewport.cpp src/ui/ImageViewport.h)
@@ -169,6 +171,7 @@ if(VISIONRT_BUILD_APP)
             -DSOURCE_FILE=$<TARGET_FILE:VisionRT>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/build_info.json
             -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
+            -DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMAND ${CMAKE_COMMAND}
             -DCOMPONENT=VisionRTContracts
@@ -179,6 +182,7 @@ if(VISIONRT_BUILD_APP)
             -DSOURCE_FILE=$<TARGET_FILE:VisionRTContracts>
             -DOUTPUT=$<TARGET_FILE_DIR:VisionRT>/contracts-build-info.json
             -DRELEASE_BUILD=${VISIONRT_RELEASE_BUILD}
+            -DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}
             -P "${CMAKE_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
         COMMENT "记录 VisionRT 与 VisionRTContracts 的构建完成时刻"
         VERBATIM)
@@ -213,9 +217,9 @@ if(BUILD_TESTING)
     visionrt_contract(path_contract visionrt_core)
 
     visionrt_contract(tool_registry_contract visionrt_core)
-    visionrt_contract(declaration_values_contract visionrt_core)
+    visionrt_contract(port_value_validation_test visionrt_core)
     visionrt_contract(definition_json_contract visionrt_core)
-    visionrt_contract(declaration_value_contract visionrt_core)
+    visionrt_contract(tool_definition_validation_test visionrt_core)
     visionrt_contract(tools_package_contract visionrt_core)
     add_test(NAME validator_cli_contract COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
@@ -230,6 +234,17 @@ if(BUILD_TESTING)
         "VISIONRT_BUILD_ENTRY=${CMAKE_SOURCE_DIR}/tools/build.cmd"
         "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_package_app.py")
     visionrt_apply_test_environment(package_app_contract)
+    # The six real nested Git+CMake builds are a separate entry: the quick package suite must not
+    # recurse into a compiler, and a candidate selects them explicitly with -L integration.
+    add_test(NAME build_metadata_integration_contract COMMAND "${CMAKE_COMMAND}" -E env
+        "VISIONTOOLS_VALIDATOR=$<TARGET_FILE:visionrt_validate_tool>"
+        "CMAKE_COMMAND=${CMAKE_COMMAND}"
+        "CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+        "CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "VISIONRT_BUILD_ENTRY=${CMAKE_SOURCE_DIR}/tools/build.cmd"
+        "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_build_metadata_integration.py")
+    visionrt_apply_test_environment(build_metadata_integration_contract)
+    set_tests_properties(build_metadata_integration_contract PROPERTIES LABELS "package;integration")
     add_test(NAME dependency_manifest_contract COMMAND "${CMAKE_COMMAND}" -E env
         "CMAKE_COMMAND=${CMAKE_COMMAND}" "${Python3_EXECUTABLE}" -S
         "${CMAKE_SOURCE_DIR}/tests/dependency_manifest_contract.py")
@@ -250,7 +265,7 @@ if(BUILD_TESTING)
     # The log contract is split by responsibility: text/allocation, aggregation and lifecycle.
     # All three share the production logging library and the same test hooks.
     foreach(log_test log_text_contract log_aggregation_contract log_lifecycle_contract)
-        visionrt_contract(${log_test} visionrt_log_testing LABELS backend perf)
+        visionrt_contract(${log_test} visionrt_log_testing LABELS backend)
         target_compile_definitions(${log_test} PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
         target_link_libraries(${log_test} PRIVATE Qt6::Test)
         set_tests_properties(${log_test} PROPERTIES TIMEOUT 60)
@@ -262,7 +277,7 @@ if(BUILD_TESTING)
         --output "${CMAKE_BINARY_DIR}/evidence/roi-view-smoke.csv" LABELS perf)
     visionrt_contract(output_value_contract visionrt_presentation)
     visionrt_contract(python_value_contract visionrt_python_values)
-    visionrt_contract(value_bridge_benchmark visionrt_presentation --output "${CMAKE_BINARY_DIR}/evidence/value_bridge-smoke.csv")
+    visionrt_contract(value_bridge_benchmark visionrt_presentation --output "${CMAKE_BINARY_DIR}/evidence/value_bridge-smoke.csv" LABELS perf)
     target_link_libraries(value_bridge_benchmark PRIVATE visionrt_python_values)
     if(WIN32)
         target_link_libraries(value_bridge_benchmark PRIVATE psapi)
@@ -273,7 +288,7 @@ if(BUILD_TESTING)
     visionrt_contract(tool_discovery_contract visionrt_core "$<TARGET_FILE:visionrt_validate_tool>")
     add_dependencies(tool_discovery_contract visionrt_validate_tool)
     visionrt_contract(project_editor_contract visionrt_core)
-    visionrt_contract(node_gate_contract visionrt_runtime)
+    visionrt_contract(logic_node_execution_test visionrt_runtime)
     visionrt_contract(edge_hierarchy_contract visionrt_core)
     target_link_libraries(edge_hierarchy_contract PRIVATE visionrt_runtime)
     visionrt_contract(project_storage_contract visionrt_core)
@@ -283,7 +298,7 @@ if(BUILD_TESTING)
     visionrt_contract(example_metadata_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples")
     add_executable(gpu_tools_contract tests/gpu_tools_contract.cpp)
     target_link_libraries(gpu_tools_contract PRIVATE visionrt_runtime)
-    visionrt_contract(python_contract visionrt_python "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    visionrt_contract(python_tools_execution_test visionrt_python "${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(installed_pipeline_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}" LABELS installed)
     target_link_libraries(installed_pipeline_contract PRIVATE visionrt_python)
     visionrt_contract(installed_python_author_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}" LABELS installed)
@@ -293,7 +308,7 @@ if(BUILD_TESTING)
     target_link_libraries(runtime_python_lazy_contract PRIVATE visionrt_python)
     visionrt_contract(runtime_diagnostics_contract visionrt_runtime)
     visionrt_contract(runtime_value_contract visionrt_runtime)
-    visionrt_contract(runtime_readback_contract visionrt_runtime)
+    visionrt_contract(result_readback_barrier_test visionrt_runtime)
 
     if(VISIONRT_BUILD_APP)
         add_executable(libavoid_contract tests/libavoid_contract.cpp)
@@ -322,8 +337,9 @@ if(BUILD_TESTING)
         target_link_libraries(ui_notifications_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_notifications_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
-        visionrt_contract(node_model_contract visionrt_ui)
-        target_link_libraries(node_model_contract PRIVATE Qt6::Test)
+        # The node list model has no window: it must not take the desktop lock or join the ui group.
+        visionrt_contract(node_list_model_test visionrt_ui LABELS backend)
+        target_link_libraries(node_list_model_test PRIVATE Qt6::Test)
         visionrt_contract(ui_project_paths_contract visionrt_ui)
         target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_project_paths_contract PRIVATE
@@ -338,12 +354,12 @@ if(BUILD_TESTING)
         target_link_libraries(ui_completion_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_completion_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
-        visionrt_contract(ui_readback_contract visionrt_ui)
-        target_link_libraries(ui_readback_contract PRIVATE Qt6::Test)
-        target_compile_definitions(ui_readback_contract PRIVATE
+        visionrt_contract(output_text_readback_test visionrt_ui)
+        target_link_libraries(output_text_readback_test PRIVATE Qt6::Test)
+        target_compile_definitions(output_text_readback_test PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
-        visionrt_contract(ui_drain_contract visionrt_ui)
-        target_link_libraries(ui_drain_contract PRIVATE Qt6::Test)
+        visionrt_contract(display_reader_drain_test visionrt_ui)
+        target_link_libraries(display_reader_drain_test PRIVATE Qt6::Test)
         visionrt_contract(assist_viewport_contract visionrt_ui)
         target_link_libraries(assist_viewport_contract PRIVATE Qt6::Test)
         visionrt_contract(workbench_expression_contract visionrt_ui)
@@ -352,7 +368,9 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
-        visionrt_contract(runtime_hotpath_contract visionrt_ui LABELS bridge perf)
+        # Reuse of the Python instance is a correctness property, not a measurement: keeping it out
+        # of the perf group leaves that group as benchmarks only, which is what the docs promise.
+        visionrt_contract(runtime_hotpath_contract visionrt_ui LABELS bridge)
         target_link_libraries(runtime_hotpath_contract PRIVATE Qt6::Test)
         target_compile_definitions(runtime_hotpath_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
@@ -430,11 +448,14 @@ if(BUILD_TESTING)
         if(WIN32)
             target_link_libraries(ui_storage_contract PRIVATE psapi)
         endif()
-        visionrt_contract(workbench_contract visionrt_ui)
-        target_sources(workbench_contract PRIVATE
+        # One runner, one CTest entry per scenario: the aggregate entry used to run the same
+        # scenarios again after the focused entries had already covered them. The source list is
+        # explicit so a scenario file can be named for its responsibility, not for the target.
+        visionrt_contract(workbench_contract visionrt_ui NO_TEST SOURCES
+            tests/workbench_contract.cpp
             tests/workbench_parameters.cpp
             tests/workbench_parameter_states.cpp
-            tests/workbench_canvas.cpp
+            tests/flow_canvas_scenarios.cpp
             tests/workbench_cancellation.cpp
             tests/workbench_startup.cpp
             tests/workbench_paths.cpp
@@ -442,14 +463,25 @@ if(BUILD_TESTING)
             tests/workbench_roi.cpp)
         target_link_libraries(workbench_contract PRIVATE Qt6::Test)
         add_dependencies(workbench_contract test_plugin_module)
-        set_tests_properties(workbench_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-        set_property(TEST workbench_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
-        foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse cancellation)
+        set(VISIONRT_WORKBENCH_SCENARIOS core roi output parameters paths canvas startup catalog popups
+            output-reuse cancellation short-window)
+        foreach(_scenario IN LISTS VISIONRT_WORKBENCH_SCENARIOS)
             add_test(NAME workbench_${_scenario}_contract COMMAND workbench_contract --${_scenario}-child)
             visionrt_apply_test_environment(workbench_${_scenario}_contract)
             set_tests_properties(workbench_${_scenario}_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
             set_property(TEST workbench_${_scenario}_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
         endforeach()
+        if(VISIONRT_TEST_VISUAL)
+            foreach(_dpi IN ITEMS 1.0 1.5 2.0)
+                string(REPLACE "." "_" _dpi_name "${_dpi}")
+                add_test(NAME workbench_dpi_${_dpi_name}_contract COMMAND workbench_contract --dpi-child ${_dpi})
+                visionrt_apply_test_environment(workbench_dpi_${_dpi_name}_contract)
+                set_tests_properties(workbench_dpi_${_dpi_name}_contract
+                    PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+                set_property(TEST workbench_dpi_${_dpi_name}_contract APPEND PROPERTY
+                    ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
+            endforeach()
+        endif()
         target_compile_definitions(workbench_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
@@ -502,7 +534,8 @@ if(BUILD_TESTING)
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
 
-    add_library(test_plugin_legacy SHARED tests/fixtures/test_plugin_legacy.cpp)
+    # Negative fixture, not dead code: it publishes an older ABI so the loader's refusal is exercised.
+    add_library(test_plugin_legacy SHARED tests/fixtures/incompatible_abi_plugin.cpp)
     target_link_libraries(test_plugin_legacy PRIVATE VisionRT::Contracts)
     target_compile_definitions(test_plugin_legacy PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     set_target_properties(test_plugin_legacy PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_legacy)
@@ -527,6 +560,8 @@ if(BUILD_TESTING)
     target_compile_definitions(test_plugin_value_lifetime PRIVATE VISIONRT_CONTRACTS_EXPORTS)
     visionrt_contract(native_value_lifetime_contract visionrt_core "$<TARGET_FILE:test_plugin_value_lifetime>")
     add_dependencies(native_value_lifetime_contract test_plugin_value_lifetime)
+    visionrt_contract(python_array_lifetime_contract visionrt_python_values "$<TARGET_FILE:test_plugin_value_lifetime>")
+    add_dependencies(python_array_lifetime_contract test_plugin_value_lifetime)
 
     add_executable(plugin_contract tests/plugin_contract.cpp)
     if(VISIONRT_BUILD_APP)
@@ -554,15 +589,22 @@ if(BUILD_TESTING)
         target_compile_options(plugin_contract PRIVATE /UNDEBUG)
     endif()
 
-    add_executable(examples_contract tests/examples_contract.cpp)
-    target_link_libraries(examples_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core)
-    add_dependencies(examples_contract test_plugin_module test_plugin_a test_dep_a)
-    target_compile_definitions(examples_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-    add_test(NAME examples_contract COMMAND examples_contract --tools-package "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}")
-    visionrt_apply_test_environment(examples_contract)
+    add_executable(example_pipelines_contract tests/example_pipelines.cpp)
+    target_link_libraries(example_pipelines_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core)
+    add_dependencies(example_pipelines_contract test_plugin_module test_plugin_a test_dep_a)
+    target_compile_definitions(example_pipelines_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME example_pipelines_contract COMMAND example_pipelines_contract --tools-package "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}")
+    visionrt_apply_test_environment(example_pipelines_contract)
     if(MSVC)
-        target_compile_options(examples_contract PRIVATE /UNDEBUG)
+        target_compile_options(example_pipelines_contract PRIVATE /UNDEBUG)
     endif()
+
+    # Package replacement is a deployment transaction, not an example pipeline: it is registered
+    # with the package group and builds its own temporary tools package.
+    visionrt_contract(package_replacement_test visionrt_runtime
+        SOURCES tests/package_replacement_test.cpp LABELS package)
+    target_link_libraries(package_replacement_test PRIVATE visionrt_python Qt6::Core)
+    add_dependencies(package_replacement_test test_plugin_module)
 
     # Entries registered outside visionrt_contract go through the same table: one owning group per
     # test, the build prerequisites ctest needs, and no property writes for tests that a
@@ -572,12 +614,17 @@ if(BUILD_TESTING)
     if(TEST plugin_late_runtime_contract)
         visionrt_group_test(plugin_late_runtime_contract LABELS backend REQUIRES plugin_contract)
     endif()
-    visionrt_group_test(examples_contract LABELS backend REQUIRES examples_contract)
+    visionrt_group_test(example_pipelines_contract LABELS backend REQUIRES example_pipelines_contract)
 
     if(VISIONRT_BUILD_APP)
-        foreach(_scenario IN ITEMS roi output parameters paths canvas startup catalog popups output-reuse cancellation)
-            visionrt_group_test(workbench_${_scenario}_contract LABELS ui REQUIRES workbench_${_scenario}_contract)
+        foreach(_scenario IN LISTS VISIONRT_WORKBENCH_SCENARIOS)
+            visionrt_group_test(workbench_${_scenario}_contract LABELS ui REQUIRES workbench_contract)
         endforeach()
+        if(VISIONRT_TEST_VISUAL)
+            foreach(_dpi_name IN ITEMS 1_0 1_5 2_0)
+                visionrt_group_test(workbench_dpi_${_dpi_name}_contract LABELS ui REQUIRES workbench_contract)
+            endforeach()
+        endif()
     endif()
     if(TEST libavoid_contract)
         visionrt_group_test(libavoid_contract LABELS ui REQUIRES libavoid_contract)
@@ -590,6 +637,7 @@ if(BUILD_TESTING)
     visionrt_group_test(validator_cli_contract LABELS package
         REQUIRES visionrt_validate_tool test_registration_valid test_plugin_legacy)
     visionrt_group_test(package_app_contract LABELS package)
+    visionrt_group_test(build_metadata_integration_contract LABELS package integration)
     visionrt_group_test(dependency_manifest_contract LABELS package)
     if(TEST build_incremental_contract)
         visionrt_group_test(build_incremental_contract LABELS package)
@@ -622,9 +670,20 @@ if(BUILD_TESTING)
         set_tests_properties(gpu_tools_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)
         set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_gpu gpu_tools_contract)
         add_dependencies(tests-gpu gpu_tools_contract)
+
+        # Converting weights rebuilds a TensorRT engine and can take tens of minutes; checking that
+        # an existing engine still infers correctly is a separate, cheap capability. It shares the
+        # binary but not the failure domain, and reports NOT RUN when no engine was ever built.
+        add_test(NAME gpu_inference_contract COMMAND gpu_tools_contract
+            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/pipeline_gpu_yolo.vrt.json"
+            "${VISIONRT_GPU_FIXTURES}" --engine-only)
+        visionrt_apply_test_environment(gpu_inference_contract)
+        set_tests_properties(gpu_inference_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)
+        set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_gpu gpu_inference_contract)
+        add_dependencies(tests-gpu gpu_tools_contract)
     endif()
 
-    foreach(_executable IN ITEMS plugin_contract examples_contract libavoid_contract performance_contract
+    foreach(_executable IN ITEMS plugin_contract example_pipelines_contract libavoid_contract performance_contract
             gpu_tools_contract)
         if(TARGET ${_executable})
             set_target_properties(${_executable} PROPERTIES EXCLUDE_FROM_ALL TRUE)

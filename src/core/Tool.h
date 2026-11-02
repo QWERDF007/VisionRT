@@ -37,10 +37,16 @@ struct PlatformToolServices : ToolServices
 
 using ToolFactory = std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)>;
 
+// A Python tool's ports can differ per node: an expression or condition node derives its inputs and
+// outputs from the project. The registry therefore asks the runtime for a factory bound to the
+// contract it is about to instantiate instead of reusing the packaged declaration.
+using PythonFactoryResolver = std::function<ToolFactory(const ToolDefinition &)>;
+
 struct PythonFactoryFunctor
 {
     std::shared_ptr<PythonLoadState>                                            loadState;
     std::function<std::unique_ptr<IToolInstance>(const PlatformToolServices &)> create;
+    PythonFactoryResolver                                                       resolve;
 
     std::unique_ptr<IToolInstance> operator()(const PlatformToolServices &services) const
     {

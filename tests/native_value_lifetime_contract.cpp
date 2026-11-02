@@ -1,5 +1,5 @@
 #include "plugins/PluginLoader.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 
 #include <QTemporaryDir>
 #include <cassert>
@@ -27,7 +27,7 @@ int main(int argc, char **argv)
             {"marker", marker}
         }));
         auto result = instance->execute({});
-        assert(testview::status(result) && testview::businessCount(result) == 3);
+        assert(testview::status(result) && testview::businessCount(result) == 4);
         PortValue value = result.outputs.at(port);
         PortValue alias = value;
         result.outputs.clear();

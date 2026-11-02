@@ -4,7 +4,7 @@
 
 #include "core/ToolPackage.h"
 #include "core/Error.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "plugins/PluginLoader.h"
 
 #include <QLibrary>

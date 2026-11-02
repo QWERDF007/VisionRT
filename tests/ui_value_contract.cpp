@@ -129,7 +129,7 @@ try
         QFile file(projectPath);
         require(file.open(QIODevice::ReadOnly) && file.readAll() == "sentinel", "deferred save wrote during execution");
     }
-    app.requestOutputText(app.portContext("epoch", true), false, false);
+    app.requestOutputText(app.portContext("epoch", true));
     QTest::qWait(30);
     require(textReady.isEmpty(), "full text was read from a mutable publication during execution");
     idle();
@@ -202,7 +202,7 @@ try
                                                     if (!pub.isEmpty() && pub != lastPublication)
                                                     {
                                                         lastPublication = pub;
-                                                        app.requestOutputText(context, false, false);
+                                                        app.requestOutputText(context);
                                                     }
                                                 }
                                             });
@@ -213,7 +213,7 @@ try
     app.toggleLoop();
     idle();
     QObject::disconnect(frameText);
-    app.requestOutputText(app.portContext("epoch", true), false, false);
+    app.requestOutputText(app.portContext("epoch", true));
     require(QTest::qWaitFor([&] { return textReady.size() == 1; }, 3000),
             "stopped loop did not deliver final text");
     bool       valid   = false;

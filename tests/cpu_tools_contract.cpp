@@ -1,6 +1,6 @@
 #include "core/ToolRegistry.h"
 #include "core/StatusCodes.h"
-#include "result_view.h"
+#include "ToolResultAssertions.h"
 #include "plugins/PluginLoader.h"
 #include <core/ToolPackage.h>
 #include "ImageFixtures.h"
