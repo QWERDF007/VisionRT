@@ -39,20 +39,8 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.ui.source","definition":"tools/custom/fixture/source.json"},
         {"tool_id":"test.ui.editor","definition":"tools/custom/fixture/editor.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/fixture/source.json", R"({"schema_version":4,"tool_id":"test.ui.source",
-        "display_name":"图像源","version":"1","kind":"python_function",
-        "entry":{"package":"fixture","file":"tool.py","symbol":"source"},"init_params":[],"inputs":[],"outputs":[
-        {"id":"images","name":"图像","type":"Image","display":{"color_order":"BGR"}},
-        {"id":"values","name":"列表","type":"Array","dtype":"int64","rank":2},
-        {"id":"epoch","name":"轮次","type":"Int"},
-        {"id":"regions","name":"区域","type":"ROI","image_port":"images"}]})");
-    write("tools/custom/fixture/editor.json", R"({"schema_version":4,"tool_id":"test.ui.editor",
-        "display_name":"图像编辑","version":"1","kind":"python_function",
-        "entry":{"package":"fixture","file":"tool.py","symbol":"edit"},"init_params":[],"inputs":[
-        {"id":"images","name":"图像","type":"Image"},
-        {"id":"rect","name":"裁剪区域","type":"ROI","editor":"rect","image_input":"images","default":[]},
-        {"id":"regions","name":"区域","type":"ROI","editor":"roi","image_input":"images","default":[]}],
-        "outputs":[{"id":"images","name":"图像","type":"Image","display":{"same_geometry_as_input":"images"}}]})");
+    write("tools/custom/fixture/source.json", R"({"schema_version":5,"name_en":"test.ui.source","name_zh":"图像源","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"source"},"ports":{"outputs":[{"name_en":"images","name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"name_en":"values","name_zh":"列表","type":"vec_vec_int"},{"name_en":"epoch","name_zh":"轮次","type":"int"},{"name_en":"regions","name_zh":"区域","type":"roi","relations":{"image":"outputs.images"}}]}})");
+    write("tools/custom/fixture/editor.json", R"({"schema_version":5,"name_en":"test.ui.editor","name_zh":"图像编辑","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"edit"},"ports":{"inputs":[{"name_en":"images","name_zh":"图像","type":"image"},{"name_en":"rect","name_zh":"裁剪区域","type":"roi","default":[],"ui":{"editor":"rect"},"relations":{"image":"inputs.images"}},{"name_en":"regions","name_zh":"区域","type":"roi","default":[],"ui":{"editor":"roi"},"relations":{"image":"inputs.images"}}],"outputs":[{"name_en":"images","name_zh":"图像","type":"image","relations":{"same_geometry_as":"inputs.images"}}]}})");
     write("python/custom/fixture/tool.py",
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"
           "def source(inputs):\n"

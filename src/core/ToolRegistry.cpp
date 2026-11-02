@@ -16,13 +16,13 @@ std::string pathText(const std::filesystem::path &path)
 
 void align(const ToolDefinition &definition, const ToolDefinition &contract)
 {
-    if (definition.kind != contract.kind || definition.id != contract.id)
-        throw ContractError("C++ 工具种类或 ID 与注册合同不一致：" + definition.id);
+    if (definition.kind != contract.kind || definition.nameEn != contract.nameEn)
+        throw ContractError("C++ 工具种类或名称与注册合同不一致：" + definition.nameEn);
     const auto portsMatch = [](const auto &actual, const auto &expected, const char *direction)
     {
         const auto business = [](const auto &port)
         {
-            return !port.id.starts_with("__");
+            return !port.nameEn.starts_with("__");
         };
         if (std::count_if(actual.begin(), actual.end(), business)
             != std::count_if(expected.begin(), expected.end(), business))
@@ -32,9 +32,9 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
             if (!business(port))
                 continue;
             const auto other
-                = std::find_if(expected.begin(), expected.end(), [&](const auto &item) { return item.id == port.id; });
+                = std::find_if(expected.begin(), expected.end(), [&](const auto &item) { return item.nameEn == port.nameEn; });
             if (other == expected.end() || !compatible(port.type, other->type))
-                throw ContractError(std::string("C++ 合同端口不一致：") + direction + "." + port.id);
+                throw ContractError(std::string("C++ 合同端口不一致：") + direction + "." + port.nameEn);
         }
     };
     portsMatch(definition.initParams, contract.initParams, "init_params");
@@ -86,8 +86,8 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
         normalizeToolDefinition(definition);
         validateToolDefinition(definition);
         validateContract(definition);
-        if (!index.emplace(definition.id, definitions.size()).second)
-            throw ContractError("工具包内 tool_id 重复：" + definition.id);
+        if (!index.emplace(definition.nameEn, definitions.size()).second)
+            throw ContractError("工具包内 name_en 重复：" + definition.nameEn);
         definitions.push_back(std::move(definition));
     }
     if (pluginLoader_)
@@ -103,9 +103,9 @@ void ToolRegistry::loadNativeImplementations() const
         return;
     std::set<std::filesystem::path> paths;
     for (const auto &definition : definitions_)
-        if (definition.kind == ToolKind::Cpp && !cpp_.contains(definition.id))
+        if (definition.kind == ToolKind::Cpp && !cpp_.contains(definition.nameEn))
         {
-            const auto path = pluginLoader_->resolveModulePath(definition.id);
+            const auto path = pluginLoader_->resolveModulePath(definition.nameEn);
             if (!path.empty())
                 paths.insert(path);
         }
@@ -120,19 +120,19 @@ void ToolRegistry::addDefinition(ToolDefinition definition)
 {
     normalizeToolDefinition(definition);
     validateToolDefinition(definition);
-    if (const auto *previous = find(definition.id))
-        throw ContractError("tool_id 重复：" + definition.id + "，声明位于 " + pathText(previous->definitionPath)
+    if (const auto *previous = find(definition.nameEn))
+        throw ContractError("name_en 重复：" + definition.nameEn + "，声明位于 " + pathText(previous->definitionPath)
                             + " 和 " + pathText(definition.definitionPath));
     validateContract(definition);
     const auto index = definitions_.size();
-    const auto id    = definition.id;
+    const auto id    = definition.nameEn;
     definitions_.push_back(std::move(definition));
     index_.emplace(id, index);
 }
 
 void ToolRegistry::replaceDefinition(ToolDefinition definition)
 {
-    const auto existing = index_.find(definition.id);
+    const auto existing = index_.find(definition.nameEn);
     if (existing == index_.end())
     {
         addDefinition(std::move(definition));
@@ -151,9 +151,9 @@ void ToolRegistry::registerCpp(ToolDefinition contract, ToolFactory factory)
         throw ContractError("C++ 工厂注册无效：需要 cpp 工具种类和非空工厂");
     normalizeToolDefinition(contract);
     validateToolDefinition(contract);
-    const auto id = contract.id;
+    const auto id = contract.nameEn;
     if (cpp_.contains(id))
-        throw ContractError("C++ 工厂 tool_id 重复：" + id);
+        throw ContractError("C++ 工厂 name_en 重复：" + id);
     if (const auto *definition = find(id))
         align(*definition, contract);
     cpp_.emplace(id, CppImplementation{std::move(contract), std::move(factory)});
@@ -163,7 +163,7 @@ void ToolRegistry::validateContract(const ToolDefinition &definition) const
 {
     if (definition.kind == ToolKind::Cpp)
     {
-        const auto implementation = cpp_.find(definition.id);
+        const auto implementation = cpp_.find(definition.nameEn);
         if (implementation != cpp_.end())
             align(definition, implementation->second.contract);
     }
@@ -223,13 +223,13 @@ Availability ToolRegistry::availability(std::string_view id) const
     }
     if (definition->kind == ToolKind::Cpp)
     {
-        if (cpp_.contains(definition->id))
+        if (cpp_.contains(definition->nameEn))
             return {ToolAvailability::Available, {}};
         if (pluginLoader_)
-            return pluginLoader_->availability(definition->id);
+            return pluginLoader_->availability(definition->nameEn);
         return {
             ToolAvailability::ImplementationUnavailable,
-            makeStatus(ErrorCode::ResourceUnavailable, "C++ 实现不可用：" + definition->id,
+            makeStatus(ErrorCode::ResourceUnavailable, "C++ 实现不可用：" + definition->nameEn,
                        pathText(definition->definitionPath))
         };
     }
@@ -262,13 +262,13 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const P
 std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &definition,
                                                     const PlatformToolServices &services) const
 {
-    const std::string_view id    = definition.id;
+    const std::string_view id    = definition.nameEn;
     const auto             state = availability(id);
     if (state.state != ToolAvailability::Available)
         throw RegistryError(state.state, state.status);
     for (const auto &port : definition.outputs)
         if (port.typeFrom)
-            throw ContractError("工具输出类型尚未解析：" + definition.id + "." + port.id);
+            throw ContractError("工具输出类型尚未解析：" + definition.nameEn + "." + port.nameEn);
     if (definition.kind == ToolKind::Host)
     {
         const auto execIt = hostBindingExecutors_.find(definition.hostBinding);
@@ -284,7 +284,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     }
     if (definition.kind == ToolKind::Cpp)
     {
-        const auto it = cpp_.find(definition.id);
+        const auto it = cpp_.find(definition.nameEn);
         if (it != cpp_.end() && it->second.factory)
         {
             auto instance = it->second.factory(services);
@@ -294,7 +294,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
             return instance;
         }
         if (pluginLoader_)
-            return pluginLoader_->createAdapter(definition.id, services);
+            return pluginLoader_->createAdapter(definition.nameEn, services);
     }
     const auto it = python_.find(id);
     if (it == python_.end() || !it->second.factory)

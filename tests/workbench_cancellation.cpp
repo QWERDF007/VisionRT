@@ -52,15 +52,15 @@ void cancellationWindowContract()
         return result;
     };
     ToolDefinition gate;
-    gate.id          = "test.cancellation.gate";
-    gate.displayName = "Uninterruptible Python gate";
+    gate.nameEn          = "test.cancellation.gate";
+    gate.nameZh = "Uninterruptible Python gate";
     gate.kind        = ToolKind::PythonClass;
     gate.entry       = {"cancellation", "tool.py", "Gate"};
     gate.outputs     = {
         {"value", "Value", {Type::Int}}
     };
     auto tail         = gate;
-    tail.id           = "test.cancellation.tail";
+    tail.nameEn           = "test.cancellation.tail";
     tail.kind         = ToolKind::PythonFunction;
     tail.entry.symbol = "tail";
     tail.inputs       = gate.outputs;
@@ -106,8 +106,8 @@ def tail(inputs):
     definitions.registerPackage(readToolsPackage(std::filesystem::path(root.toStdU16String()) / "tools-package"));
     ProjectEditor editor;
     const auto    flow   = editor.project().flows.front().id;
-    const auto    parent = editor.addNode(flow, *definitions.find(gate.id), {0, 0});
-    const auto    child  = editor.addNode(flow, *definitions.find(tail.id), {2, 2});
+    const auto    parent = editor.addNode(flow, *definitions.find(gate.nameEn), {0, 0});
+    const auto    child  = editor.addNode(flow, *definitions.find(tail.nameEn), {2, 2});
     editor.bindFreeInput(flow, {parent, "value"}, {child, "value"});
     auto project = editor.project();
     project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.vrt.json";

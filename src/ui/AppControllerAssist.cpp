@@ -65,8 +65,8 @@ std::array<double, 9> alignmentFor(std::span<const double> matrices, int index)
 const PortDefinition *mappedTarget(const ToolDefinition &tool, const InteractionMapping &mapping,
                                    std::string_view helperOutput)
 {
-    const auto found = mapping.proposalMap.find(helperOutput);
-    return found == mapping.proposalMap.end() ? nullptr : workbench::port(tool.inputs, found->second);
+    const auto found = mapping.proposals.find(helperOutput);
+    return found == mapping.proposals.end() ? nullptr : workbench::port(tool.inputs, found->second.port);
 }
 
 const std::string *stringLiteral(const NodeDefinition &node, std::string_view input)
@@ -117,15 +117,15 @@ void requireCompatible(const ToolDefinition &tool, const InteractionMapping &map
 {
     if (const auto *suggested = stringOutput(outputs, "suggested_polarity"))
         if (const auto *target = mappedTarget(tool, mapping, "suggested_polarity"))
-            if (const auto *current = stringLiteral(node, target->id))
+            if (const auto *current = stringLiteral(node, target->nameEn))
                 if (*current != "any" && *suggested != "any" && *current != *suggested)
                     throw ContractError("候选极性与当前参数不兼容");
     const auto minPort = mappedTarget(tool, mapping, "suggested_width_min");
     const auto maxPort = mappedTarget(tool, mapping, "suggested_width_max");
     const auto low     = numberOutput(outputs, "suggested_width_min");
     const auto high    = numberOutput(outputs, "suggested_width_max");
-    const auto currentMin = minPort ? numberLiteral(node, minPort->id) : std::nullopt;
-    const auto currentMax = maxPort ? numberLiteral(node, maxPort->id) : std::nullopt;
+    const auto currentMin = minPort ? numberLiteral(node, minPort->nameEn) : std::nullopt;
+    const auto currentMax = maxPort ? numberLiteral(node, maxPort->nameEn) : std::nullopt;
     if (low && high && currentMin && currentMax && (*currentMin > *high || *currentMax < *low))
         throw ContractError("候选宽度范围与当前参数不兼容");
 }
@@ -155,9 +155,9 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     const auto *roiPort = firstRoiInput(*tool);
     if (!roiPort)
         return reject(QStringLiteral("该工具没有可点选的 ROI 输入"));
-    if (roiPort->imageInput.empty())
-        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(roiPort->id));
-    const auto binding = node->inputs.find(roiPort->imageInput);
+    if (!roiPort->image)
+        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(roiPort->nameEn));
+    const auto binding = node->inputs.find(roiPort->image->port);
     if (binding == node->inputs.end() || binding->second.mode != BindingMode::Upstream || !binding->second.source)
         return reject(QStringLiteral("请先把图像输入连接到上游"));
     const auto snapshot = presentation.sharedSnapshot(binding->second.source->node);
@@ -199,11 +199,13 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     if (!node || !tool || !roiPort || !tool->interaction)
         return reject(QStringLiteral("当前节点不支持智能点选"));
     const auto &mapping = *tool->interaction;
-    const auto *helper  = registry.find(mapping.helperToolId);
+    const auto *helper  = registry.find(mapping.helperNameEn);
     if (!helper)
-        return reject(QStringLiteral("辅助工具缺失：") + workbench::q(mapping.helperToolId));
+        return reject(QStringLiteral("辅助工具缺失：") + workbench::q(mapping.helperNameEn));
 
-    const auto binding = node->inputs.find(roiPort->imageInput);
+    if (!roiPort->image)
+        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(roiPort->nameEn));
+    const auto binding = node->inputs.find(roiPort->image->port);
     const auto source = presentation.sharedSnapshot(binding->second.source->node);
     if (!source)
         return reject(QStringLiteral("上游结果已更新，请先运行"));
@@ -215,7 +217,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
 
     if (learn)
     {
-        const auto roiBinding = node->inputs.find(roiPort->id);
+        const auto roiBinding = node->inputs.find(roiPort->nameEn);
         if (roiBinding == node->inputs.end() || roiBinding->second.mode == BindingMode::Upstream
             || effectiveSource(roiBinding->second))
             return reject(QStringLiteral("该参数由上游提供"));
@@ -225,9 +227,9 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     // the current image, so the frame mapping is resolved once here and the hit test uses it.
     const auto seedAlignment = [&]
     {
-        if (roiPort->alignmentInput.empty())
+        if (!roiPort->alignment)
             return kNoAlignment;
-        const auto alignment = resolvedInput(*node, roiPort->alignmentInput);
+        const auto alignment = resolvedInput(*node, roiPort->alignment->port);
         const auto *array    = std::get_if<Array>(&alignment);
         if (!array || array->type() != TypeSpec{Type::Array, DType::Float64, 3})
             return kNoAlignment;
@@ -239,7 +241,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     }();
 
     Values inputs;
-    for (const auto &[helperPort, nodeInput] : mapping.inputMap)
+    for (const auto &[helperPort, nodeInput] : mapping.inputs)
     {
         if (helperPort == "images")
             inputs.emplace(helperPort, DataRef<Image>(Image{batch->get()[static_cast<std::size_t>(index)]},
@@ -247,7 +249,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         else if (helperPort == "seed_rois")
         {
             RegionGroup seeds;
-            const auto      seedValue = resolvedInput(*node, nodeInput);
+            const auto      seedValue = resolvedInput(*node, nodeInput.port);
             if (const auto *groups = std::get_if<DataRef<ROI>>(&seedValue))
                 if (index < static_cast<int>(groups->get().size()))
                     for (const auto &record : groups->get()[static_cast<std::size_t>(index)])
@@ -257,7 +259,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         }
         else if (helperPort == "alignment")
         {
-            const auto alignment = resolvedInput(*node, nodeInput);
+            const auto alignment = resolvedInput(*node, nodeInput.port);
             if (isMissing(alignment))
                 inputs.emplace(helperPort, Array::empty(DType::Float64, 3));
             else
@@ -281,7 +283,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
             }
         }
         else
-            inputs.emplace(helperPort, resolvedInput(*node, nodeInput));
+            inputs.emplace(helperPort, resolvedInput(*node, nodeInput.port));
     }
 
     inputs.emplace("cursor", Array::dense(DType::Float64, {2}, std::vector<double>{cursor.x(), cursor.y()}));
@@ -325,7 +327,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                                                 : QStringLiteral("未找到有效目标：") + outcome.quality);
         return;
     }
-    const auto binding = node->inputs.find(roiPort->id);
+    const auto binding = node->inputs.find(roiPort->nameEn);
     if (binding == node->inputs.end())
         return;
     if (binding->second.mode == BindingMode::Upstream || effectiveSource(binding->second))
@@ -360,15 +362,15 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
         else
         {
             group = outcome.proposal.front();
-            for (const auto &[helperOutput, nodeInput] : mapping.proposalMap)
+            for (const auto &[helperOutput, nodeInput] : mapping.proposals)
             {
-                if (nodeInput == roiPort->id)
+                if (nodeInput.port == roiPort->nameEn)
                     continue;
-                const auto *target     = workbench::port(tool->inputs, nodeInput);
+                const auto *target     = workbench::port(tool->inputs, nodeInput.port);
                 const auto  suggestion = outcome.outputs.find(helperOutput);
                 if (!target || suggestion == outcome.outputs.end() || isMissing(suggestion->second))
                     continue;
-                const auto current = node->inputs.find(nodeInput);
+                const auto current = node->inputs.find(nodeInput.port);
                 if (current == node->inputs.end() || current->second.mode == BindingMode::Upstream
                     || effectiveSource(current->second))
                     continue;
@@ -377,10 +379,10 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                 const auto normalized = normalizeInput(*target, suggestion->second);
                 if (equalValues(current->second.literal, normalized.value))
                     continue;
-                edits.emplace_back(nodeInput, normalized.value);
+                edits.emplace_back(nodeInput.port, normalized.value);
             }
         }
-        edits.insert(edits.begin(), {roiPort->id, DataRef<ROI>(std::move(groups))});
+        edits.insert(edits.begin(), {roiPort->nameEn, DataRef<ROI>(std::move(groups))});
         clearAssistPreview();
         if (!editor.setLiteralBindings(flow.toStdString(), node->id, edits))
             return;
@@ -434,31 +436,31 @@ void AppController::Impl::refreshAssist()
     else if (candidate)
     {
         const auto &mapping = *tool->interaction;
-        const auto *helper  = registry.find(mapping.helperToolId);
+        const auto *helper  = registry.find(mapping.helperNameEn);
         if (!helper)
-            hint = QStringLiteral("辅助工具缺失：") + workbench::q(mapping.helperToolId);
+            hint = QStringLiteral("辅助工具缺失：") + workbench::q(mapping.helperNameEn);
         else
         {
             QString missing;
-            if (mapping.inputMap.contains("cursor") || mapping.inputMap.contains("phase")
-                || mapping.inputMap.contains("search_extent"))
+            if (mapping.inputs.contains("cursor") || mapping.inputs.contains("phase")
+                || mapping.inputs.contains("search_extent"))
                 missing = QStringLiteral("协议端口 cursor/phase/search_extent");
             for (const auto &port : helper->inputs)
-                if (port.id != "cursor" && port.id != "phase" && port.id != "search_extent"
-                    && !mapping.inputMap.contains(port.id) && isMissing(port.defaultValue))
-                    missing = workbench::q(port.id);
-            for (const auto &[helperOutput, target] : mapping.proposalMap)
+                if (port.nameEn != "cursor" && port.nameEn != "phase" && port.nameEn != "search_extent"
+                    && !mapping.inputs.contains(port.nameEn) && isMissing(port.defaultValue))
+                    missing = workbench::q(port.nameEn);
+            for (const auto &[helperOutput, target] : mapping.proposals)
                 if (!workbench::port(helper->outputs, helperOutput))
                     missing = workbench::q(helperOutput);
             if (!missing.isEmpty())
                 hint = QStringLiteral("辅助工具映射缺少端口：") + missing;
             else
             {
-                if (assistToolId != tool->id || assist->helperId() != helper->id)
+                if (assistToolId != tool->nameEn || assist->helperId() != helper->nameEn)
                 {
                     assist->configure(std::make_shared<const ToolRegistry>(registry), *helper,
                                       editor.project().path.parent_path());
-                    assistToolId = tool->id;
+                    assistToolId = tool->nameEn;
                 }
                 enabled = true;
                 hint    = QStringLiteral("智能点选：移动鼠标预选，单击替换，Ctrl+单击追加，Esc 取消");

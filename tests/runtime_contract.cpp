@@ -53,9 +53,9 @@ public:
 ToolDefinition definition(std::string id, std::vector<std::string> inputs = {})
 {
     ToolDefinition d;
-    d.id           = id;
+    d.nameEn           = id;
 
-    d.displayName  = id;
+    d.nameZh  = id;
     d.version      = "1";
     d.kind         = ToolKind::Cpp;
     for (auto &input : inputs) d.inputs.push_back({input, input, {Type::Int}});
@@ -85,14 +85,14 @@ NodeDefinition node(NodeId id, const ToolDefinition &d)
     NodeDefinition n;
     n.id               = id;
     n.position         = {0, static_cast<int>(id)};
-    n.toolId           = d.id;
-    n.toolNameSnapshot = d.displayName;
+    n.toolId           = d.nameEn;
+    n.toolNameSnapshot = d.nameZh;
     for (auto &port : d.inputs)
     {
-        n.signatures.inputs.emplace(port.id, port.type);
-        n.inputs[port.id] = {};
+        n.signatures.inputs.emplace(port.nameEn, port.type);
+        n.inputs[port.nameEn] = {};
     }
-    for (auto &port : d.outputs) n.signatures.outputs.emplace(port.id, port.type);
+    for (auto &port : d.outputs) n.signatures.outputs.emplace(port.nameEn, port.type);
     n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
     n.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
     return n;
@@ -212,21 +212,15 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(std::get<std::int64_t>(snapshot(manual, 2)->outputs.at("value")) == 42);
     assert(snapshot(manual, 2)->session != snapshot(first, 2)->session);
     assert(engine.start(project, registry, RunMode::Once));
-    auto failed = finish(engine);
-    // The declared port never arrived: the tool's answer broke its own declaration (DataInvalid).
-    assert(snapshot(failed, 1)->status.code == -13);
-    // A framework failure is a diagnostic, not a tool answer: no status port is invented for it.
-    assert(!snapshot(failed, 1)->toolResultPublished);
-    assert(!snapshot(failed, 1)->outputs.contains("__status_code"));
-    assert(!snapshot(failed, 1)->outputs.contains("__status_message"));
-    assert(isMissing(snapshot(failed, 1)->outputs.at("value")));
-    // The upstream published no value, so the consumer's required input cannot be normalised:
-    // that is its own parameter error, not a host block and not a borrowed tool code.
-    assert(snapshot(failed, 2)->disposition == NodeDisposition::Failed);
-    assert(isMissing(snapshot(failed, 2)->outputs.at("value")));
-    assert(snapshot(failed, 2)->status.message.find("input") != std::string::npos);
-    assert(snapshot(failed, 1)->round == snapshot(failed, 2)->round);
-    assert(snapshot(failed, 1)->session == snapshot(failed, 2)->session);
+    auto defaults = finish(engine);
+    // The tool omitted its business port: the declaration supplies the value and the run stays a
+    // normal success, so the consumer receives 0 instead of an absent input.
+    assert(snapshot(defaults, 1)->status.code == 0 && snapshot(defaults, 1)->toolResultPublished);
+    assert(equalValues(snapshot(defaults, 1)->outputs.at("value"), PortValue{std::int64_t{0}}));
+    assert(std::get<std::int64_t>(snapshot(defaults, 2)->outputs.at("value")) == 0);
+    assert(snapshot(defaults, 2)->disposition == NodeDisposition::Succeeded);
+    assert(snapshot(defaults, 1)->round == snapshot(defaults, 2)->round);
+    assert(snapshot(defaults, 1)->session == snapshot(defaults, 2)->session);
 }
 
 void initializationSuppressionRetryAndReset()
@@ -256,7 +250,6 @@ void initializationSuppressionRetryAndReset()
         });
     auto observer = definition("test.observer", {"input"});
     observer.inputs[0].defaultValue = std::int64_t{0};
-    observer.inputs[0].required = false;
     install(registry, observer,
             [&](const Values &)
             {
@@ -405,7 +398,7 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     assert(engine.start(project, registry, RunMode::Node, receiver.id).code == hostCode(ErrorCode::InvalidArgument));
     assert(sourceCalls == 0);
     auto second = receiver;
-    second.id   = 3;
+    second.id     = 3;
     project.flows.push_back({"receiver2", "receiver2", true, {second}});
     assert(engine.start(project, registry, RunMode::Once).code == hostCode(ErrorCode::InvalidArgument));
     assert(sourceCalls == 0);
@@ -481,12 +474,13 @@ void receiverConsumesFailures()
                                  auto           failed = reader->receive(request, cursor);
                                  request.timeout       = 0ms;
                                  auto       next       = reader->receive(request, cursor);
-                                 const bool consumed
-                                     = failed.disposition == ReceiveDisposition::Missing
+const bool consumed
+                                     = failed.disposition == ReceiveDisposition::Value
                                     && failed.sourceStatus.code == 12
                                     && failed.sourceStatus.message == "源执行失败"
                                     && failed.sourceStatus.detail == "source detail"
-                                    && isMissing(failed.value) && next.disposition == ReceiveDisposition::Timeout;
+                                    && equalValues(failed.value, PortValue{std::int64_t{0}})
+                                    && next.disposition == ReceiveDisposition::Timeout;
                                  return toolResult({{"value", std::int64_t{consumed ? 1 : 0}}}, {});
                              };
                              return instance;
@@ -852,8 +846,8 @@ void crossRoundPythonMetricIsolation()
 void hostBindingReceiverContract()
 {
     ToolDefinition recvDef;
-    recvDef.id           = "test.custom.receiver";
-    recvDef.displayName  = "自定义接收";
+    recvDef.nameEn           = "test.custom.receiver";
+    recvDef.nameZh  = "自定义接收";
     recvDef.version      = "1.0.0";
     recvDef.kind         = ToolKind::Host;
 
@@ -878,14 +872,14 @@ void hostBindingReceiverContract()
     pkg.tools.push_back(pt);
 
     ToolDefinition unknownDef = recvDef;
-    unknownDef.id             = "test.unknown.receiver";
+    unknownDef.nameEn             = "test.unknown.receiver";
     PackageTool ptUnknown;
     ptUnknown.definition  = unknownDef;
     ptUnknown.definition.hostBinding = "visionrt.nonexistent_binding";
     pkg.tools.push_back(ptUnknown);
 
     ToolDefinition missingValDef = recvDef;
-    missingValDef.id             = "test.missing_val.receiver";
+    missingValDef.nameEn             = "test.missing_val.receiver";
     missingValDef.outputs.erase(missingValDef.outputs.begin());
     PackageTool ptMissingVal;
     ptMissingVal.definition  = missingValDef;
@@ -965,13 +959,15 @@ void hostBindingReceiverContract()
         const auto result = snapshot(finish(rejected), receiverNode.id);
         assert(result->status.code == 1);
         assert(result->status.message.find("source_node_seq") != std::string::npos);
-        assert(isMissing(result->outputs.at("value")));
+        // The run failed on its own declaration, so the business port carries the default of the
+        // resolved type and the status message names the offending parameter.
+        assert(equalValues(result->outputs.at("value"), PortValue{std::int64_t{0}}));
     }
 
     // Dynamic type: string
     ToolDefinition strRecvDef  = recvDef;
-    strRecvDef.id              = "test.str.receiver";
-    strRecvDef.displayName     = "字符串接收器";
+    strRecvDef.nameEn              = "test.str.receiver";
+    strRecvDef.nameZh     = "字符串接收器";
     strRecvDef.outputs[0].type = {Type::String};
     ToolsPackage strPkg;
     strPkg.root = std::filesystem::current_path();
@@ -1303,17 +1299,21 @@ void singleNodeUpstreamValidity()
     std::cout << "Single-node execution rejects stale upstream publications and ignores layout changes\n";
 }
 
-void explicitRequirednessAtExecution()
+void declaredDefaultsAtExecution()
 {
     for (const bool initialization : {false, true})
-        for (const bool required : {false, true})
+        for (const bool explicitDefault : {false, true})
             for (const bool explicitMissing : {false, true})
             {
                 RuntimeEngine engine(1);
                 ToolRegistry registry;
-                auto declared = definition("test.required");
-                PortDefinition limit{"limit", "限制", {Type::Int}, std::int64_t{5}};
-                limit.required = required;
+                auto declared = definition("test.defaults");
+                PortDefinition limit;
+                limit.nameEn       = "limit";
+                limit.nameZh       = "限制";
+                limit.type         = TypeSpec{Type::Int};
+                limit.defaultValue = explicitDefault ? PortValue{std::int64_t{5}} : defaultValue(limit.type);
+                const auto expected = explicitDefault ? std::int64_t{5} : std::int64_t{0};
                 (initialization ? declared.initParams : declared.inputs).push_back(limit);
                 int initialized = 0;
                 int executed = 0;
@@ -1322,9 +1322,10 @@ void explicitRequirednessAtExecution()
                         {
                             ++executed;
                             if (!initialization)
-                                // An explicit Missing literal is normalised to the declared default;
-                                // the value is never invented for a port without one.
-                                assert(equalValues(inputs.at("limit"), PortValue{std::int64_t{5}}));
+                                // A missing literal is normalised to the declared default, and an
+                                // omitted default is the type's empty value: the tool never sees an
+                                // invented value it did not declare.
+                                assert(equalValues(inputs.at("limit"), PortValue{expected}));
                             return toolResult({{"value", std::int64_t{1}}}, {});
                         },
                         [&]
@@ -1345,25 +1346,27 @@ void explicitRequirednessAtExecution()
                 project.flows.front().nodes = {configured};
                 assert(engine.start(project, registry, RunMode::Once));
                 const auto result = snapshot(finish(engine), 1);
-                // A declared default satisfies Missing regardless of `required`: the host fills the
-                // declaration, it never turns a missing draft into a parameter error.
                 assert(static_cast<bool>(result->status));
                 assert(initialized == 1);
                 assert(executed == 1);
             }
-    // Without a default, a required port is a parameter error instead of an invented value.
+    // A port without an explicit default is normalised to the type's empty value, so an omitted
+    // literal executes with 0 instead of becoming a parameter error.
     {
         RuntimeEngine engine(1);
         ToolRegistry  registry;
-        auto          declared = definition("test.required.no_default");
-        PortDefinition limit{"limit", "限制", {Type::Int}};
-        limit.required = true;
+        auto          declared = definition("test.defaults.no_default");
+        PortDefinition limit;
+        limit.nameEn = "limit";
+        limit.nameZh = "限制";
+        limit.type   = TypeSpec{Type::Int};
         declared.inputs.push_back(limit);
         int executed = 0;
         install(registry, declared,
-                [&](const Values &)
+                [&](const Values &inputs)
                 {
                     ++executed;
+                    assert(equalValues(inputs.at("limit"), PortValue{std::int64_t{0}}));
                     return toolResult({{"value", std::int64_t{1}}}, {});
                 });
         auto configured = node(1, declared);
@@ -1372,10 +1375,10 @@ void explicitRequirednessAtExecution()
         project.flows.front().nodes = {configured};
         assert(engine.start(project, registry, RunMode::Once));
         const auto result = snapshot(finish(engine), 1);
-        assert(!result->status && result->status.message.find("limit") != std::string::npos);
-        assert(executed == 0);
+        assert(static_cast<bool>(result->status));
+        assert(executed == 1);
     }
-    std::cout << "Declared defaults satisfy Missing; required without default is a parameter error\n";
+    std::cout << "Declared defaults materialise Missing; the type empty value is the single fallback\n";
 }
 
 void managementDiagnosticsPreserveStatus()
@@ -1421,7 +1424,6 @@ void optionalOutputsAndCachedMissing()
 {
     ToolRegistry registry;
     auto         source        = definition("test.optional_output");
-    source.outputs[0].required = false;
     source.kind                = ToolKind::Host;
     source.hostBinding         = "test.optional_output";
     registry.addDefinition(source);
@@ -1435,12 +1437,13 @@ void optionalOutputsAndCachedMissing()
                                      };
                                      return instance;
                                  });
-    auto middle               = definition("test.optional_input", {"input"});
-    middle.inputs[0].required = false;
+    auto middle = definition("test.optional_input", {"input"});
     install(registry, middle,
             [](const Values &inputs)
             {
-                assert(isMissing(inputs.at("input")));
+                // A business output the tool did not publish arrives as the declared default, never
+                // as an absent value the next tool has to interpret.
+                assert(equalValues(inputs.at("input"), PortValue{std::int64_t{0}}));
                 return toolResult({{"value", std::int64_t{42}}}, {});
             });
     auto sink = definition("test.optional_sink", {"input"});
@@ -1453,18 +1456,14 @@ void optionalOutputsAndCachedMissing()
     RuntimeEngine engine(1);
     assert(engine.start(project, registry, RunMode::Once));
     auto full = finish(engine);
-    assert(snapshot(full, 1)->status.code == 0 && isMissing(snapshot(full, 1)->outputs.at("value")));
+    assert(snapshot(full, 1)->status.code == 0
+           && equalValues(snapshot(full, 1)->outputs.at("value"), PortValue{std::int64_t{0}}));
     assert(snapshot(full, 1)->outputTypes == first.signatures.outputs);
     assert(snapshot(full, 2)->status.code == 0 && snapshot(full, 3)->status.code == 0);
     assert(engine.start(project, registry, RunMode::Node, 3));
     auto cached = finish(engine);
     assert(snapshot(cached, 3)->status.code == 0);
     assert(std::get<std::int64_t>(snapshot(cached, 3)->outputs.at("value")) == 42);
-    auto nowRequired                = source;
-    nowRequired.outputs[0].required = true;
-    registry.replaceDefinition(nowRequired);
-    const auto requiredRejected = engine.start(project, registry, RunMode::Node, 3);
-    assert(!requiredRejected && requiredRejected.message.find("value") != std::string::npos);
     auto changed            = source;
     changed.outputs[0].type = {Type::Float};
     registry.replaceDefinition(changed);
@@ -1494,7 +1493,6 @@ void failedBusinessOutputsRemainInputs()
             });
     int optionalCalls = 0;
     auto optional     = definition("test.optional_consumer", {"input"});
-    optional.inputs[0].required = false;
     install(registry, optional,
             [&](const Values &inputs)
             {
@@ -1612,7 +1610,7 @@ try
     assert(argc == 2);
     std::cout << "1\n"; optionalOutputsAndCachedMissing();
     std::cout << "2\n"; failedBusinessOutputsRemainInputs();
-    std::cout << "3\n"; explicitRequirednessAtExecution();
+    std::cout << "3\n"; declaredDefaultsAtExecution();
     std::cout << "4\n"; managementDiagnosticsPreserveStatus();
     std::cout << "5\n"; singleNodeUpstreamValidity();
     std::cout << "6\n"; stopWakesReceiverWait(argv[1]);

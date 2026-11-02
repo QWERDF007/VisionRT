@@ -43,13 +43,15 @@ void rejects(F &&operation, const std::string &expectedFragment = {})
     std::abort();
 }
 
-PortDefinition port(std::string id, TypeSpec type, bool required = true)
+// A declaration port always carries a value: the explicit default or the type's empty value. The
+// helper mirrors what normalisation does so a hand-built port behaves like a parsed one.
+PortDefinition port(std::string nameEn, TypeSpec type)
 {
     PortDefinition definition;
-    definition.id       = std::move(id);
-    definition.name     = definition.id;
-    definition.type     = type;
-    definition.required = required;
+    definition.nameEn       = std::move(nameEn);
+    definition.nameZh       = definition.nameEn;
+    definition.type         = type;
+    definition.defaultValue = defaultValue(type);
     return definition;
 }
 } // namespace
@@ -59,19 +61,52 @@ int main()
     // CT-01: a single classification for every resource-path editor.
     {
         const auto definition = parseToolDefinitionJson(R"json({
-  "schema_version": 4,
-  "tool_id": "runtime.paths",
-  "display_name": "路径分类",
+  "schema_version": 5,
+  "name_en": "runtime.paths",
+  "name_zh": "路径分类",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "mode", "name": "模式", "type": "String", "editor": "text"},
-    {"id": "file", "name": "文件", "type": "String", "editor": "file"},
-    {"id": "directory", "name": "目录", "type": "String", "editor": "directory"},
-    {"id": "dynamic", "name": "动态路径", "type": "String", "editor": "path", "path_mode_from": "mode"}
-  ],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "mode",
+        "name_zh": "模式",
+        "type": "string",
+        "ui": {
+          "editor": "text"
+        }
+      },
+      {
+        "name_en": "file",
+        "name_zh": "文件",
+        "type": "string",
+        "ui": {
+          "editor": "file"
+        }
+      },
+      {
+        "name_en": "directory",
+        "name_zh": "目录",
+        "type": "string",
+        "ui": {
+          "editor": "directory"
+        }
+      },
+      {
+        "name_en": "dynamic",
+        "name_zh": "动态路径",
+        "type": "string",
+        "ui": {
+          "editor": "path"
+        },
+        "relations": {
+          "path_mode": "inputs.mode"
+        }
+      }
+    ]
+  }
 })json");
         assert(isPathPort(definition.inputs[2]));
         assert(isPathPort(definition.inputs[3]));
@@ -88,16 +123,25 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 4,
-  "tool_id": "runtime.paths.bad.file",
-  "display_name": "错误文件端口",
+  "schema_version": 5,
+  "name_en": "runtime.paths.bad.file",
+  "name_zh": "错误文件端口",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "file", "name": "文件", "type": "Int", "editor": "file"}
-  ],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "file",
+        "name_zh": "文件",
+        "type": "int",
+        "ui": {
+          "editor": "file"
+        }
+      }
+    ]
+  }
 })json");
             },
             "路径编辑器");
@@ -105,16 +149,25 @@ int main()
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 4,
-  "tool_id": "runtime.paths.bad.directory",
-  "display_name": "错误目录端口",
+  "schema_version": 5,
+  "name_en": "runtime.paths.bad.directory",
+  "name_zh": "错误目录端口",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "directory", "name": "目录", "type": "Bool", "editor": "directory"}
-  ],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "directory",
+        "name_zh": "目录",
+        "type": "bool",
+        "ui": {
+          "editor": "directory"
+        }
+      }
+    ]
+  }
 })json");
             },
             "路径编辑器");
@@ -251,19 +304,10 @@ int main()
         },
             {{"ratio", std::numeric_limits<double>::quiet_NaN()}});
 
-        rejects([&] { validateToolValues({port("image", {Type::Image})}, {}); }, "image");
-        validateToolValues({port("image", {Type::Image}, false)}, {});
-        rejects(
-            [&]
-            {
-                validateToolValues(
-                    {
-                        port("image", {Type::Image}
-                         )
-                },
-                    {{"image", Missing{}}});
-            },
-            "image");
+        // An absent business value is a normal state, not a validation failure: the port already
+        // carries the declared default and the run status says whether the tool succeeded.
+        validateToolValues({port("image", {Type::Image})}, {});
+        validateToolValues({port("image", {Type::Image})}, {{"image", Missing{}}});
         rejects(
             [&]
             {
@@ -281,16 +325,14 @@ int main()
         declared.minimum        = PortValue{std::int64_t{1}};
         declared.maximum        = PortValue{std::int64_t{9}};
         declared.options        = {PortValue{std::int64_t{5}}, PortValue{std::int64_t{7}}};
-        assert(declared.required);
-        rejects([&] { validateToolValues({declared}, {}); }, "limit");
-        rejects([&] { validateToolValue(declared, Missing{}); }, "limit");
-        validateToolValue(declared, std::int64_t{5});
-        declared.required = false;
+        // A missing value is not an error any more: the port already holds its declared default, and
+        // an empty status port keeps Missing without turning into a 0.
         validateToolValues({declared}, {});
         validateToolValue(declared, Missing{});
+        validateToolValue(declared, std::int64_t{5});
         rejects([&] { validateToolValue(declared, std::int64_t{0}); }, "limit");
         rejects([&] { validateToolValue(declared, std::int64_t{6}); }, "limit");
-        auto optional = port("optional", {Type::Image}, false);
+        const auto optional = port("optional", {Type::Image});
         validateToolValue(optional, DataRef<Image>(Image{}));
         rejects([&] { validateToolValue(optional, std::int64_t{0}); }, "optional");
     }
@@ -340,32 +382,50 @@ int main()
 
     {
         const auto declared = parseToolDefinitionJson(R"json({
-  "schema_version": 4,
-  "tool_id": "runtime.required",
-  "display_name": "必填声明",
+  "schema_version": 5,
+  "name_en": "runtime.required",
+  "name_zh": "必填声明",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [
-    {"id": "seed", "name": "种子", "type": "Int", "default": 5, "required": false}
-  ],
-  "inputs": [
-    {"id": "input", "name": "输入", "type": "String", "default": "text"},
-    {"id": "optional", "name": "可选输入", "type": "Int", "required": false}
-  ],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "seed",
+        "name_zh": "种子",
+        "type": "int",
+        "default": 5
+      }
+    ],
+    "inputs": [
+      {
+        "name_en": "input",
+        "name_zh": "输入",
+        "type": "string",
+        "default": "text"
+      },
+      {
+        "name_en": "optional",
+        "name_zh": "可选输入",
+        "type": "int"
+      }
+    ]
+  }
 })json");
-        assert(!declared.initParams[0].required);
-        assert(declared.inputs[1].required);
-        assert(!declared.inputs[2].required);
+        // Explicit defaults survive, omitted ones become the type's empty value.
+        assert(equalValues(declared.initParams[0].defaultValue, PortValue{std::int64_t{5}}));
+        assert(equalValues(declared.inputs[1].defaultValue, PortValue{std::string{"text"}}));
+        assert(equalValues(declared.inputs[2].defaultValue, PortValue{std::int64_t{0}}));
         validateToolValues(declared.initParams, {
                                                     {"seed", Missing{}}
         });
         validateToolValue(declared.inputs[2], Missing{});
-        rejects([&] { validateToolValue(declared.inputs[1], Missing{}); }, "input");
+        validateToolValue(declared.inputs[1], Missing{});
         const auto roundTrip = parseToolDefinitionJson(emitNormalizedToolJson(declared));
-        assert(!roundTrip.initParams[0].required);
-        assert(roundTrip.inputs[1].required);
-        assert(!roundTrip.inputs[2].required);
+        assert(equalValues(roundTrip.initParams[0].defaultValue, PortValue{std::int64_t{5}}));
+        assert(equalValues(roundTrip.inputs[1].defaultValue, PortValue{std::string{"text"}}));
+        assert(equalValues(roundTrip.inputs[2].defaultValue, PortValue{std::int64_t{0}}));
     }
 
     {

@@ -59,13 +59,12 @@ void treeContract()
 {
     ToolRegistry   registry;
     ToolDefinition tool;
-    tool.id          = "custom.precise";
-    tool.displayName = "精确整数";
+    tool.nameEn          = "custom.precise";
+    tool.nameZh = "精确整数";
     tool.version     = "1.0";
     tool.kind        = ToolKind::PythonFunction;
     tool.entry       = PythonEntry{"fixture", "precise.py", "execute"};
-    tool.category    = "数据";
-    tool.subcategory = "整数";
+    tool.categories  = {"数据", "整数"};
     registry.addDefinition(tool);
     ToolTreeModel model;
     model.setRegistry(registry);
@@ -95,8 +94,8 @@ void outputContract()
             "scalar rectangle output must retain floating geometry in full text");
     ToolDefinition tool;
     PortDefinition port;
-    port.id   = "value";
-    port.name = "值";
+    port.nameEn   = "value";
+    port.nameZh = "值";
     port.type = {Type::String};
     tool.outputs.push_back(port);
     auto snapshot    = std::make_shared<NodeSnapshot>();
@@ -130,7 +129,9 @@ void outputContract()
     model.clear();
     require(frozen && OutputModel::fullText(*frozen).size() >= 10000,
             "captured output follows current selection or truncates");
-    tool.outputs.front().typeFrom = PortTypeReference{"flow", "node", "port"};
+    tool.outputs.front().typeFrom = PortTypeReference{{PortStage::Init, "flow"},
+                                                      {PortStage::Init, "node"},
+                                                      {PortStage::Init, "port"}};
     model.setResult(&tool, {}, {});
     require(model.get(2).value("type").toString() == QStringLiteral("未绑定"), "unbound output pretends to have a concrete type");
     require(!model.capture(2), "unbound output can be captured as a typed value");
@@ -151,8 +152,8 @@ void outputContract()
             "release diagnostics without execution must remain independently exportable");
 
     ToolDefinition typed;
-    typed.id          = "test.typed";
-    typed.displayName = "类型展示";
+    typed.nameEn          = "test.typed";
+    typed.nameZh = "类型展示";
     typed.version     = "1";
     typed.outputs     = {
         {  "zero",  "零", {Type::Int}},
@@ -162,7 +163,7 @@ void outputContract()
     };
     auto typedSnapshot    = std::make_shared<NodeSnapshot>();
     typedSnapshot->node   = 2;
-    typedSnapshot->toolId = typed.id;
+    typedSnapshot->toolId = typed.nameEn;
     typedSnapshot->status = {0, "运行成功"};
     typedSnapshot->outputs = {
         {  "zero", std::int64_t{0}},
@@ -389,19 +390,40 @@ void nodeDiagnosticsContract()
     {
         jsonFile.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.diag.python",
-  "display_name": "诊断测试",
+  "schema_version": 5,
+  "name_en": "test.diag.python",
+  "name_zh": "诊断测试",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "test_category/test_diag", "file": "test_diag.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [
-    {"id": "x", "name": "输入", "type": "Int", "default": 1, "min": 0, "max": 100, "step": 1}
-  ],
-  "outputs": [
-    {"id": "value", "name": "输出", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "test_category/test_diag",
+    "file": "test_diag.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "x",
+        "name_zh": "输入",
+        "type": "int",
+        "default": 1,
+        "constraints": {
+          "min": 0,
+          "max": 100
+        },
+        "ui": {
+          "step": 1
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "输出",
+        "type": "int"
+      }
+    ]
+  }
 })json");
         jsonFile.close();
     }
@@ -410,17 +432,25 @@ void nodeDiagnosticsContract()
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.diag.fail",
-  "display_name": "诊断失败",
+  "schema_version": 5,
+  "name_en": "test.diag.fail",
+  "name_zh": "诊断失败",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "test_category/test_diag", "file": "test_diag_fail.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [],
-  "outputs": [
-    {"id": "value", "name": "输出", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "test_category/test_diag",
+    "file": "test_diag_fail.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "输出",
+        "type": "int"
+      }
+    ]
+  }
 })json");
         failJsonFile.close();
     }
@@ -429,15 +459,14 @@ void nodeDiagnosticsContract()
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.diag.unfulfilled",
-  "display_name": "未提供实现测试",
+  "schema_version": 5,
+  "name_en": "test.diag.unfulfilled",
+  "name_zh": "未提供实现测试",
   "version": "1.0.0",
-  "kind": "host",
-  "init_params": [],
-  "inputs": [],
-  "outputs": [],
-  "entry": {"binding": "nonexistent.binding"}
+  "implementation": {
+    "kind": "host",
+    "binding": "nonexistent.binding"
+  }
 })json");
         unfulfilledJson.close();
     }
@@ -682,16 +711,22 @@ void mainQmlContract(double scale)
     {
         sleepJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.sleep",
-  "display_name": "Plugin Sleep",
+  "schema_version": 5,
+  "name_en": "test.plugin.sleep",
+  "name_zh": "Plugin Sleep",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [],
-  "outputs": [
-    {"id": "y", "name": "Y", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "outputs": [
+      {
+        "name_en": "y",
+        "name_zh": "Y",
+        "type": "int"
+      }
+    ]
+  }
 })json");
         sleepJson.close();
     }
@@ -701,18 +736,30 @@ void mainQmlContract(double scale)
     {
         counterJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.counter",
-  "display_name": "Plugin Counter",
+  "schema_version": 5,
+  "name_en": "test.plugin.counter",
+  "name_zh": "Plugin Counter",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "step", "name": "Step", "type": "Int", "default": 1}
-  ],
-  "outputs": [
-    {"id": "count", "name": "Count", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "step",
+        "name_zh": "Step",
+        "type": "int",
+        "default": 1
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "count",
+        "name_zh": "Count",
+        "type": "int"
+      }
+    ]
+  }
 })json");
         counterJson.close();
     }
@@ -722,14 +769,13 @@ void mainQmlContract(double scale)
     {
         failJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.fail_init",
-  "display_name": "Fail Init Tool",
+  "schema_version": 5,
+  "name_en": "test.plugin.fail_init",
+  "name_zh": "Fail Init Tool",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  }
 })json");
         failJson.close();
     }
@@ -1041,14 +1087,13 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 4,
-  "tool_id": "test.legacy.func",
-  "display_name": "遗留函数",
+  "schema_version": 5,
+  "name_en": "test.legacy.func",
+  "name_zh": "遗留函数",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  }
 })json");
             legacyJson.close();
         }
@@ -1064,15 +1109,15 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 4,
-  "tool_id": "test.legacy.python",
-  "display_name": "遗留脚本",
+  "schema_version": 5,
+  "name_en": "test.legacy.python",
+  "name_zh": "遗留脚本",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"file": "legacy.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [],
-  "outputs": []
+  "implementation": {
+    "kind": "python_function",
+    "file": "legacy.py",
+    "symbol": "run"
+  }
 })json");
             legacyPyJson.close();
         }
@@ -1104,18 +1149,30 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.counter",
-  "display_name": "计数器插件",
+  "schema_version": 5,
+  "name_en": "test.plugin.counter",
+  "name_zh": "计数器插件",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [
-    {"id": "initial", "name": "初始值", "type": "Int", "default": 10}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "count", "name": "计数值", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "initial",
+        "name_zh": "初始值",
+        "type": "int",
+        "default": 10
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "count",
+        "name_zh": "计数值",
+        "type": "int"
+      }
+    ]
+  }
 })json");
         rootCounterJson.close();
     }
@@ -1127,18 +1184,30 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.plugin.function",
-  "display_name": "函数插件",
+  "schema_version": 5,
+  "name_en": "test.plugin.function",
+  "name_zh": "函数插件",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [
-    {"id": "x", "name": "输入", "type": "Int", "default": 5}
-  ],
-  "outputs": [
-    {"id": "y", "name": "输出", "type": "Int"}
-  ]
+  "implementation": {
+    "kind": "cpp"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "x",
+        "name_zh": "输入",
+        "type": "int",
+        "default": 5
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "y",
+        "name_zh": "输出",
+        "type": "int"
+      }
+    ]
+  }
 })json");
         rootFunctionJson.close();
     }
@@ -1159,18 +1228,30 @@ void packageDrivenCatalogAndRefreshContract()
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.user.pythonA",
-  "display_name": "用户脚本A",
+  "schema_version": 5,
+  "name_en": "test.user.pythonA",
+  "name_zh": "用户脚本A",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "user/py", "file": "user_node_a.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [],
-  "outputs": [
-    {"id": "result", "name": "结果", "type": "Int"},
-    {"id": "image", "name": "图像", "type": "Image"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "user/py",
+    "file": "user_node_a.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "outputs": [
+      {
+        "name_en": "result",
+        "name_zh": "结果",
+        "type": "int"
+      },
+      {
+        "name_en": "image",
+        "name_zh": "图像",
+        "type": "image"
+      }
+    ]
+  }
 })json");
         root3JsonA.close();
     }
@@ -1182,24 +1263,60 @@ void packageDrivenCatalogAndRefreshContract()
     {
         recvJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.custom.receiver",
-  "display_name": "动态接收器",
+  "schema_version": 5,
+  "name_en": "test.custom.receiver",
+  "name_zh": "动态接收器",
   "version": "1.0.0",
-  "kind": "host",
-  "init_params": [
-    {"id": "source_flow_id", "name": "源流程", "type": "String", "default": ""},
-    {"id": "source_node_seq", "name": "源节点", "type": "String", "default": ""},
-    {"id": "source_port_id", "name": "源端口", "type": "String", "default": ""},
-    {"id": "timeout_ms", "name": "超时时间(ms)", "type": "Int", "default": 500}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "value", "name": "接收值", "type_from": {"flow": "source_flow_id", "node": "source_node_seq", "port": "source_port_id"}},
-    {"id": "source_status_code", "name": "源状态码", "type": "Int"},
-    {"id": "source_status_message", "name": "源状态消息", "type": "String"}
-  ],
-  "entry": {"binding": "visionrt.receiver"}
+  "implementation": {
+    "kind": "host",
+    "binding": "visionrt.receiver"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "source_flow_id",
+        "name_zh": "源流程",
+        "type": "string"
+      },
+      {
+        "name_en": "source_node_seq",
+        "name_zh": "源节点",
+        "type": "string"
+      },
+      {
+        "name_en": "source_port_id",
+        "name_zh": "源端口",
+        "type": "string"
+      },
+      {
+        "name_en": "timeout_ms",
+        "name_zh": "超时时间(ms)",
+        "type": "int",
+        "default": 500
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "接收值",
+        "type_from": {
+          "flow": "init.source_flow_id",
+          "node": "init.source_node_seq",
+          "port": "init.source_port_id"
+        }
+      },
+      {
+        "name_en": "source_status_code",
+        "name_zh": "源状态码",
+        "type": "int"
+      },
+      {
+        "name_en": "source_status_message",
+        "name_zh": "源状态消息",
+        "type": "string"
+      }
+    ]
+  }
 })json");
         recvJson.close();
     }
@@ -1211,14 +1328,13 @@ void packageDrivenCatalogAndRefreshContract()
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 4,
-  "tool_id": "test.unindexed.tool",
-  "display_name": "未索引工具",
+  "schema_version": 5,
+  "name_en": "test.unindexed.tool",
+  "name_zh": "未索引工具",
   "version": "1.0.0",
-  "kind": "cpp",
-  "init_params": [],
-  "inputs": [],
-  "outputs": []
+  "implementation": {
+    "kind": "cpp"
+  }
 })json");
         unindexedJson.close();
     }
@@ -1283,8 +1399,8 @@ void packageDrivenCatalogAndRefreshContract()
             {
                 hasReceiver = true;
                 require(avail, "receiver tool not available");
-                require(map.value("displayName").toString() == QStringLiteral("动态接收器"),
-                        "receiver displayName mismatch");
+                require(map.value("nameZh").toString() == QStringLiteral("动态接收器"),
+                        "receiver nameZh mismatch");
             }
             if (id == "test.unindexed.tool")
                 hasUnindexed = true;
@@ -1484,24 +1600,60 @@ void packageDrivenCatalogAndRefreshContract()
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 4,
-  "tool_id": "test.custom.renamed_recv",
-  "display_name": "改名接收器",
+  "schema_version": 5,
+  "name_en": "test.custom.renamed_recv",
+  "name_zh": "改名接收器",
   "version": "1.0.0",
-  "kind": "host",
-  "init_params": [
-    {"id": "source_flow_id", "name": "源流程", "type": "String", "default": ""},
-    {"id": "source_node_seq", "name": "源节点", "type": "String", "default": ""},
-    {"id": "source_port_id", "name": "源端口", "type": "String", "default": ""},
-    {"id": "timeout_ms", "name": "超时时间(ms)", "type": "Int", "default": 500}
-  ],
-  "inputs": [],
-  "outputs": [
-    {"id": "value", "name": "接收值", "type_from": {"flow": "source_flow_id", "node": "source_node_seq", "port": "source_port_id"}},
-    {"id": "source_status_code", "name": "源状态码", "type": "Int"},
-    {"id": "source_status_message", "name": "源状态消息", "type": "String"}
-  ],
-  "entry": {"binding": "visionrt.receiver"}
+  "implementation": {
+    "kind": "host",
+    "binding": "visionrt.receiver"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "source_flow_id",
+        "name_zh": "源流程",
+        "type": "string"
+      },
+      {
+        "name_en": "source_node_seq",
+        "name_zh": "源节点",
+        "type": "string"
+      },
+      {
+        "name_en": "source_port_id",
+        "name_zh": "源端口",
+        "type": "string"
+      },
+      {
+        "name_en": "timeout_ms",
+        "name_zh": "超时时间(ms)",
+        "type": "int",
+        "default": 500
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "value",
+        "name_zh": "接收值",
+        "type_from": {
+          "flow": "init.source_flow_id",
+          "node": "init.source_node_seq",
+          "port": "init.source_port_id"
+        }
+      },
+      {
+        "name_en": "source_status_code",
+        "name_zh": "源状态码",
+        "type": "int"
+      },
+      {
+        "name_en": "source_status_message",
+        "name_zh": "源状态消息",
+        "type": "string"
+      }
+    ]
+  }
 })json");
             renamedJson.close();
         }
@@ -1546,8 +1698,8 @@ void packageDrivenCatalogAndRefreshContract()
             {
                 foundRenamed = true;
                 require(map.value("available").toBool(), "renamed receiver tool must be available");
-                require(map.value("displayName").toString() == QStringLiteral("改名接收器"),
-                        "renamed receiver displayName mismatch");
+                require(map.value("nameZh").toString() == QStringLiteral("改名接收器"),
+                        "renamed receiver nameZh mismatch");
             }
         }
         require(!foundOld, "old receiver tool ID still present in definitions");

@@ -28,14 +28,14 @@ try
     for (const char *id : {"test.registration.first", "test.registration.second", "not.registered"})
     {
         ToolDefinition definition;
-        definition.id          = id;
-        definition.displayName = "注册测试";
+        definition.nameEn          = id;
+        definition.nameZh = "注册测试";
         definition.version     = "1";
         definition.kind        = ToolKind::Cpp;
         package.tools.push_back({definition, path});
     }
     auto rejectedTool          = package.tools.front();
-    rejectedTool.definition.id = "test.rejected.module";
+    rejectedTool.definition.nameEn = "test.rejected.module";
     rejectedTool.moduleLibrary = std::filesystem::path(argv[2]);
     package.tools.push_back(std::move(rejectedTool));
     catalog.registerPackage(package);

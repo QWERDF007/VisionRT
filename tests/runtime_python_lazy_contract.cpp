@@ -62,13 +62,7 @@ try
                   "                        '__status_code': 0, '__status_message': '运行成功'},\n"
                   "            'detail': ''}\n";
     }
-    const auto definition = parseToolDefinitionJson(R"({
-        "schema_version":4,"tool_id":"python.lazy.runtime","display_name":"Lazy runtime","version":"1",
-        "kind":"python_function","entry":{"package":"lazy","file":"tool.py","symbol":"execute"},
-        "init_params":[],"inputs":[],"outputs":[
-            {"id":"value","name":"Value","type":"Int"},
-            {"id":"rois","name":"ROIs","type":"ROI"}]
-    })",
+    const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"python.lazy.runtime","name_zh":"Lazy runtime","version":"1","implementation":{"kind":"python_function","package":"lazy","file":"tool.py","symbol":"execute"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"},{"name_en":"rois","name_zh":"ROIs","type":"roi"}]}})",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {
                                                           ToolOrigin::Custom,
@@ -79,12 +73,12 @@ try
     PythonRuntime python;
     const auto    refreshed = python.refresh(registry.definitions());
     assert(refreshed.size() == 1 && refreshed.front().status.code == 0);
-    registry.setPythonImplementation(definition.id, python.factory(definition));
+    registry.setPythonImplementation(definition.nameEn, python.factory(definition));
 
     NodeDefinition node;
     node.id               = 1;
-    node.toolId           = definition.id;
-    node.toolNameSnapshot = definition.displayName;
+    node.toolId           = definition.nameEn;
+    node.toolNameSnapshot = definition.nameZh;
     node.signatures.outputs = {
         {"value",            {Type::Int}},
         {"rois",             {Type::ROI}},

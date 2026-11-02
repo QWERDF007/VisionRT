@@ -46,12 +46,12 @@ int main(int argc, char **argv)
                         if (std::none_of(parameter.options.begin(), parameter.options.end(),
                                          [&](const auto &option) { return visionrt::equalValues(option, value); }))
                             throw std::runtime_error(file.path().filename().string() + ": " + node.toolId + "."
-                                                     + parameter.id + " is not a declared option");
+                                                     + parameter.nameEn + " is not a declared option");
                         ++checked;
                     };
                     for (const auto &parameter : definition->initParams)
-                        check(parameter, node.initParams.at(parameter.id));
-                    for (const auto &input : definition->inputs) check(input, node.inputs.at(input.id).literal);
+                        check(parameter, node.initParams.at(parameter.nameEn));
+                    for (const auto &input : definition->inputs) check(input, node.inputs.at(input.nameEn).literal);
                 }
         }
         if (checked == 0)

@@ -20,6 +20,20 @@ std::filesystem::path ToolDefinition::pythonScript() const
 
 namespace {
 
+const char *stageName(PortStage stage) noexcept
+{
+    switch (stage)
+    {
+    case PortStage::Init:
+        return "init";
+    case PortStage::Inputs:
+        return "inputs";
+    case PortStage::Outputs:
+        return "outputs";
+    }
+    return "inputs";
+}
+
 void validateIdentifier(const std::string& value, bool isPort) {
     const auto letter = [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); };
     if (value.empty() || (!letter(value.front()) && value.front() != '_') ||
@@ -55,124 +69,146 @@ bool lessNumber(const PortValue& left, const PortValue& right, Type type) {
     return std::get<double>(left) < std::get<double>(right);
 }
 
-const PortDefinition* findPort(const std::vector<PortDefinition>& ports, std::string_view id) {
-    const auto it = std::find_if(ports.begin(), ports.end(), [&](const auto& p) { return p.id == id; });
+const PortDefinition* findPort(const std::vector<PortDefinition>& ports, std::string_view name) {
+    const auto it = std::find_if(ports.begin(), ports.end(), [&](const auto& p) { return p.nameEn == name; });
     return it == ports.end() ? nullptr : &*it;
 }
 
-void validatePorts(const std::vector<PortDefinition>& ports, const std::string& direction) {
-    const bool output = (direction == "outputs");
-    std::set<std::string> ids;
+const std::vector<PortDefinition>& stagePorts(const ToolDefinition& def, PortStage stage)
+{
+    switch (stage)
+    {
+    case PortStage::Init:
+        return def.initParams;
+    case PortStage::Inputs:
+        return def.inputs;
+    case PortStage::Outputs:
+        return def.outputs;
+    }
+    return def.inputs;
+}
+
+const PortDefinition* findPort(const ToolDefinition& def, const PortRef& reference)
+{
+    return findPort(stagePorts(def, reference.stage), reference.port);
+}
+
+// A declaration never repeats what the type already says, so an output carries display hints and
+// relations only: values, constraints and editors belong to the editing side.
+void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
+    const bool output = stage == PortStage::Outputs;
+    std::set<std::string> names;
 
     for (const auto& port : ports) {
-        const bool isStatus = output && (port.id == "__status_code" || port.id == "__status_message");
-        validateIdentifier(port.id, !isStatus);
-        if (!ids.insert(port.id).second) {
-            throw ContractError("Duplicate " + direction + " port ID: " + port.id);
+        const bool isStatus = output && isHostOwnedPort(port.nameEn);
+        validateIdentifier(port.nameEn, !isStatus);
+        if (!names.insert(port.nameEn).second) {
+            throw ContractError("Duplicate " + std::string(stageName(stage)) + " port name: " + port.nameEn);
         }
-        if (port.name.empty()) {
-            throw ContractError("Port name must not be empty: " + port.id);
+        if (port.nameZh.empty()) {
+            throw ContractError("Port name_zh must not be empty: " + port.nameEn);
         }
 
         if (port.typeFrom) {
-            if (!output || isStatus) throw ContractError("type_from requires a business output: " + port.id);
+            if (!output || isStatus)
+                throw ContractError("type_from requires a business output: " + port.nameEn);
             if (!isMissing(port.defaultValue) || !port.editor.empty() || port.minimum || port.maximum || port.step
-                || port.decimals || !port.options.empty() || !port.optionsProvider.empty() || !port.imageInput.empty()
-                || !port.imagePort.empty() || !port.colorOrder.empty() || !port.sameGeometryAsInput.empty()
-                || !port.pathModeFrom.empty())
-                throw ContractError("type_from cannot have concrete value or display attributes: " + port.id);
+                || port.decimals || !port.options.empty() || !port.optionsProvider.empty() || port.image
+                || port.alignment || port.pathModeFrom || port.sameGeometryAs || !port.colorOrder.empty())
+                throw ContractError("type_from cannot have concrete value or display attributes: " + port.nameEn);
             continue;
         }
         validateTypeSpec(port.type);
 
         if (output) {
-            if (!port.editor.empty()) throw ContractError("editor is not an output field: " + port.id);
-            if (port.minimum.has_value()) throw ContractError("min is not an output field: " + port.id);
-            if (port.maximum.has_value()) throw ContractError("max is not an output field: " + port.id);
-            if (port.step.has_value()) throw ContractError("step is not an output field: " + port.id);
-            if (port.decimals.has_value()) throw ContractError("decimals is not an output field: " + port.id);
-            if (!port.options.empty()) throw ContractError("options is not an output field: " + port.id);
-            if (!port.optionsProvider.empty()) throw ContractError("options_provider is not an output field: " + port.id);
-            if (!port.imageInput.empty()) throw ContractError("image_input is not an output field: " + port.id);
+            if (!port.editor.empty()) throw ContractError("editor is not an output field: " + port.nameEn);
+            if (port.minimum.has_value()) throw ContractError("constraints.min is not an output field: " + port.nameEn);
+            if (port.maximum.has_value()) throw ContractError("constraints.max is not an output field: " + port.nameEn);
+            if (port.step.has_value()) throw ContractError("ui.step is not an output field: " + port.nameEn);
+            if (port.decimals.has_value()) throw ContractError("ui.decimals is not an output field: " + port.nameEn);
+            if (!port.options.empty()) throw ContractError("constraints.options is not an output field: " + port.nameEn);
+            if (!port.optionsProvider.empty()) throw ContractError("ui.options_provider is not an output field: " + port.nameEn);
+            if (port.alignment || port.pathModeFrom)
+                throw ContractError("relations.alignment and relations.path_mode apply to inputs: " + port.nameEn);
         } else {
-            if (!port.colorOrder.empty() || !port.sameGeometryAsInput.empty() || !port.imagePort.empty()) {
-                throw ContractError("display and image_port apply only to outputs: " + port.id);
-            }
+            if (!port.colorOrder.empty())
+                throw ContractError("display.color_order applies only to outputs: " + port.nameEn);
         }
 
         if (!port.editor.empty()) {
             const std::set<std::string> validEditors
                 = {"number", "text", "bool", "file", "directory", "path", "array", "roi", "rect"};
             if (!validEditors.contains(port.editor)) {
-                throw ContractError("Unknown editor: " + port.editor + " on port " + port.id);
+                throw ContractError("Unknown editor: " + port.editor + " on port " + port.nameEn);
             }
         }
 
         const bool pathEditor = port.editor == "file" || port.editor == "directory" || port.editor == "path";
         if (port.editor == "rect" && port.type.type != Type::ROI)
-            throw ContractError("矩形编辑器要求 ROI 类型端口：" + port.id);
+            throw ContractError("矩形编辑器要求 ROI 类型端口：" + port.nameEn);
         if (pathEditor && port.type != TypeSpec{Type::String})
-            throw ContractError("路径编辑器要求 String 类型端口：" + port.id);
+            throw ContractError("路径编辑器要求 String 类型端口：" + port.nameEn);
 
-        if (!port.pathModeFrom.empty() && (output || port.editor != "path"))
-            throw ContractError("path_mode_from requires a path editor: " + port.id);
+        if (port.pathModeFrom && (output || port.editor != "path"))
+            throw ContractError("relations.path_mode requires a path editor: " + port.nameEn);
 
         if (!port.tab.empty()) {
             const auto tabs = toolTabs();
             if (std::find(tabs.begin(), tabs.end(), port.tab) == tabs.end()) {
-                throw ContractError("Unknown tab: " + port.tab + " on port " + port.id);
+                throw ContractError("Unknown tab: " + port.tab + " on port " + port.nameEn);
             }
         }
 
         const bool numeric = (port.type.type == Type::Int || port.type.type == Type::Float);
         if (!numeric) {
             if (port.minimum.has_value() || port.maximum.has_value() || port.step.has_value() || port.decimals.has_value()) {
-                throw ContractError("Numeric constraints (min, max, step, decimals) require an Int or Float port: " + port.id);
+                throw ContractError("Numeric constraints (min, max, step, decimals) require an Int or Float port: " + port.nameEn);
             }
             if (!isMissing(port.defaultValue)) {
                 validateValue(port.type, port.defaultValue);
             }
         } else {
             if (port.minimum.has_value()) {
-                validateNumericPortValue(*port.minimum, port.type.type, "min", port.id);
+                validateNumericPortValue(*port.minimum, port.type.type, "min", port.nameEn);
             }
             if (port.maximum.has_value()) {
-                validateNumericPortValue(*port.maximum, port.type.type, "max", port.id);
+                validateNumericPortValue(*port.maximum, port.type.type, "max", port.nameEn);
             }
             if (port.minimum.has_value() && port.maximum.has_value()) {
                 if (lessNumber(*port.maximum, *port.minimum, port.type.type)) {
-                    throw ContractError("min must not exceed max on port: " + port.id);
+                    throw ContractError("min must not exceed max on port: " + port.nameEn);
                 }
             }
             if (port.step.has_value()) {
-                validateNumericPortValue(*port.step, port.type.type, "step", port.id);
+                validateNumericPortValue(*port.step, port.type.type, "step", port.nameEn);
                 const PortValue zero = port.type.type == Type::Int ? PortValue{std::int64_t{0}} : PortValue{0.0};
                 if (!lessNumber(zero, *port.step, port.type.type)) {
-                    throw ContractError("step must be positive on port: " + port.id);
+                    throw ContractError("step must be positive on port: " + port.nameEn);
                 }
             }
             if (port.decimals.has_value() && *port.decimals < 0) {
-                throw ContractError("decimals must be non-negative on port: " + port.id);
+                throw ContractError("decimals must be non-negative on port: " + port.nameEn);
             }
             if (!isMissing(port.defaultValue)) {
-                validateNumericPortValue(port.defaultValue, port.type.type, "default", port.id);
+                validateNumericPortValue(port.defaultValue, port.type.type, "default", port.nameEn);
                 if (port.minimum.has_value() && lessNumber(port.defaultValue, *port.minimum, port.type.type)) {
-                    throw ContractError("Default is less than min on port: " + port.id);
+                    throw ContractError("Default is less than min on port: " + port.nameEn
+                                        + "（类型空值不满足约束时必须显式声明 default）");
                 }
                 if (port.maximum.has_value() && lessNumber(*port.maximum, port.defaultValue, port.type.type)) {
-                    throw ContractError("Default exceeds max on port: " + port.id);
+                    throw ContractError("Default exceeds max on port: " + port.nameEn);
                 }
             }
         }
 
         for (const auto& opt : port.options) {
             if (numeric) {
-                validateNumericPortValue(opt, port.type.type, "option", port.id);
+                validateNumericPortValue(opt, port.type.type, "option", port.nameEn);
                 if (port.minimum.has_value() && lessNumber(opt, *port.minimum, port.type.type)) {
-                    throw ContractError("Option is less than min on port: " + port.id);
+                    throw ContractError("Option is less than min on port: " + port.nameEn);
                 }
                 if (port.maximum.has_value() && lessNumber(*port.maximum, opt, port.type.type)) {
-                    throw ContractError("Option exceeds max on port: " + port.id);
+                    throw ContractError("Option exceeds max on port: " + port.nameEn);
                 }
             } else {
                 validateValue(port.type, opt);
@@ -182,52 +218,68 @@ void validatePorts(const std::vector<PortDefinition>& ports, const std::string& 
             const bool found = std::any_of(port.options.begin(), port.options.end(),
                 [&](const auto& opt) { return equalValues(opt, port.defaultValue); });
             if (!found) {
-                throw ContractError("default value is not one of declared options on port: " + port.id);
+                throw ContractError("default value is not one of declared options on port: " + port.nameEn);
             }
         }
 
         if (!port.optionsProvider.empty() && port.optionsProvider != "platform.gpu_devices") {
-            throw ContractError("Unknown options_provider: " + port.optionsProvider + " on port " + port.id);
+            throw ContractError("Unknown options_provider: " + port.optionsProvider + " on port " + port.nameEn);
         }
 
-        if (!port.imageInput.empty()) {
-            if (direction != "inputs" || port.type.type != Type::ROI)
-            {
-                throw ContractError("image_input requires an ROI input: " + port.id);
-            }
-        }
+        if (port.image && port.type.type != Type::ROI)
+            throw ContractError("relations.image requires an ROI port: " + port.nameEn);
 
-        if (!port.alignmentInput.empty() && (direction != "inputs" || port.type.type != Type::ROI))
-            throw ContractError("alignment_input requires an ROI input: " + port.id);
-
-        if (!port.imagePort.empty()) {
-            if (port.type.type != Type::ROI)
-            {
-                throw ContractError("image_port requires an ROI output: " + port.id);
-            }
-        }
+        if (port.alignment && (stage != PortStage::Inputs || port.type.type != Type::ROI))
+            throw ContractError("relations.alignment requires an ROI input: " + port.nameEn);
 
         if (!port.colorOrder.empty()) {
             if (port.type.type != Type::Image)
             {
-                throw ContractError("display.color_order requires an Image output: " + port.id);
+                throw ContractError("display.color_order requires an Image output: " + port.nameEn);
             }
             const std::set<std::string> validColors = {"Gray", "BGR", "BGRA", "RGB", "RGBA"};
             if (!validColors.contains(port.colorOrder)) {
-                throw ContractError("Unknown color_order: " + port.colorOrder + " on port " + port.id);
+                throw ContractError("Unknown color_order: " + port.colorOrder + " on port " + port.nameEn);
             }
         }
 
-        if (!port.sameGeometryAsInput.empty()) {
-            if (port.type.type != Type::Image)
-            {
-                throw ContractError("display.same_geometry_as_input requires an Image output: " + port.id);
-            }
-        }
+        if (port.sameGeometryAs && port.type.type != Type::Image)
+            throw ContractError("relations.same_geometry_as requires an Image output: " + port.nameEn);
     }
 }
 
 } // namespace
+
+PortRef parsePortRef(std::string_view text)
+{
+    const auto dot = text.find('.');
+    if (dot == std::string_view::npos)
+        throw ContractError("端口引用必须带阶段前缀（init./inputs./outputs.）：" + std::string(text));
+    const auto stage = text.substr(0, dot);
+    const auto port  = text.substr(dot + 1);
+    if (port.empty() || port.find('.') != std::string_view::npos)
+        throw ContractError("端口引用必须形如 inputs.images：" + std::string(text));
+    if (stage == "init")
+        return {PortStage::Init, std::string(port)};
+    if (stage == "inputs")
+        return {PortStage::Inputs, std::string(port)};
+    if (stage == "outputs")
+        return {PortStage::Outputs, std::string(port)};
+    throw ContractError("未知端口引用阶段：" + std::string(stage));
+}
+
+std::string formatPortRef(const PortRef& reference)
+{
+    return std::string(stageName(reference.stage)) + "." + reference.port;
+}
+
+std::string categoryPath(const ToolDefinition& def)
+{
+    std::string path;
+    for (const auto &name : def.categories)
+        path += (path.empty() ? "" : "/") + name;
+    return path;
+}
 
 bool isPathPort(const PortDefinition& port) {
     return port.type == TypeSpec{Type::String} &&
@@ -263,6 +315,13 @@ std::span<const std::string_view> toolTabs() noexcept {
     return tabs;
 }
 
+PortValue portDefault(const PortDefinition& port)
+{
+    if (const auto *array = std::get_if<Array>(&port.defaultValue))
+        return array->clone();
+    return port.defaultValue;
+}
+
 void normalizeToolDefinition(ToolDefinition &def)
 {
     // Every contract carries the two status outputs, whatever the node model: the tool writes them
@@ -271,12 +330,11 @@ void normalizeToolDefinition(ToolDefinition &def)
     for (const auto id : {kStatusMessagePort, kStatusCodePort})
     {
         const auto existing = std::find_if(def.outputs.begin(), def.outputs.end(),
-                                           [&](const auto &port) { return port.id == id; });
+                                           [&](const auto &port) { return port.nameEn == id; });
         PortDefinition canonical;
-        canonical.id         = std::string(id);
-        canonical.name       = id == kStatusCodePort ? "状态码" : "状态消息";
-        canonical.type       = TypeSpec{id == kStatusCodePort ? Type::Int : Type::String};
-        canonical.required   = true;
+        canonical.nameEn       = std::string(id);
+        canonical.nameZh       = id == kStatusCodePort ? "状态码" : "状态消息";
+        canonical.type         = TypeSpec{id == kStatusCodePort ? Type::Int : Type::String};
         canonical.defaultValue = Missing{};
         if (existing == def.outputs.end())
             def.outputs.insert(def.outputs.begin(), std::move(canonical));
@@ -284,15 +342,11 @@ void normalizeToolDefinition(ToolDefinition &def)
             *existing = std::move(canonical);
     }
 
-    if (def.nodeModel != NodeModel::Fixed)
-        return;
-
     const auto canonical = [](PortDefinition port)
     {
-        port.name         = port.name.empty() ? std::string("上层工具状态") : port.name;
+        port.nameZh       = port.nameZh.empty() ? std::string("上层工具状态") : port.nameZh;
         port.type         = TypeSpec{Type::Int};
         port.defaultValue = PortValue{std::int64_t{0}};
-        port.required     = true;
         port.editor.clear();
         port.tab          = "基本输入";
         port.group.clear();
@@ -302,164 +356,174 @@ void normalizeToolDefinition(ToolDefinition &def)
         port.decimals.reset();
         port.options.clear();
         port.optionsProvider.clear();
-        port.imageInput.clear();
-        port.imagePort.clear();
+        port.image.reset();
+        port.alignment.reset();
+        port.pathModeFrom.reset();
+        port.sameGeometryAs.reset();
         port.colorOrder.clear();
-        port.sameGeometryAsInput.clear();
-        port.alignmentInput.clear();
-        port.pathModeFrom.clear();
         port.typeFrom.reset();
         return port;
     };
 
-    const auto existing = std::find_if(def.inputs.begin(), def.inputs.end(),
-                                       [](const auto &port) { return port.id == kUpstreamStatusPort; });
-    if (existing == def.inputs.end())
+    if (def.nodeModel == NodeModel::Fixed)
     {
-        PortDefinition status;
-        status.id = std::string(kUpstreamStatusPort);
-        def.inputs.insert(def.inputs.begin(), canonical(std::move(status)));
-        return;
+        const auto existing = std::find_if(def.inputs.begin(), def.inputs.end(),
+                                           [](const auto &port) { return port.nameEn == kUpstreamStatusPort; });
+        if (existing == def.inputs.end())
+        {
+            PortDefinition status;
+            status.nameEn = std::string(kUpstreamStatusPort);
+            def.inputs.insert(def.inputs.begin(), canonical(std::move(status)));
+        }
+        else if (existing->type != TypeSpec{Type::Int})
+            throw ContractError("upstream_status 必须是 Int 输入：" + def.nameEn);
+        else if (existing->typeFrom)
+            throw ContractError("upstream_status 不能由 type_from 派生：" + def.nameEn);
+        else if (!existing->options.empty() || !existing->optionsProvider.empty())
+            throw ContractError("upstream_status 不接受 options 约束：" + def.nameEn);
+        else if (existing->minimum || existing->maximum || existing->step || existing->decimals)
+            throw ContractError("upstream_status 不接受数值范围约束：" + def.nameEn);
+        else if (!isMissing(existing->defaultValue) && !equalValues(existing->defaultValue, PortValue{std::int64_t{0}}))
+            throw ContractError("upstream_status 的默认值必须为 0：" + def.nameEn);
+        else if (existing != def.inputs.begin())
+        {
+            auto replacement = canonical(*existing);
+            def.inputs.erase(existing);
+            def.inputs.insert(def.inputs.begin(), std::move(replacement));
+        }
+        else
+            *existing = canonical(*existing);
     }
 
-    if (existing->type != TypeSpec{Type::Int})
-        throw ContractError("upstream_status 必须是 Int 输入：" + def.id);
-    if (existing->typeFrom)
-        throw ContractError("upstream_status 不能由 type_from 派生：" + def.id);
-    if (!existing->options.empty() || !existing->optionsProvider.empty())
-        throw ContractError("upstream_status 不接受 options 约束：" + def.id);
-    if (existing->minimum || existing->maximum || existing->step || existing->decimals)
-        throw ContractError("upstream_status 不接受数值范围约束：" + def.id);
-    if (!isMissing(existing->defaultValue) && !equalValues(existing->defaultValue, PortValue{std::int64_t{0}}))
-        throw ContractError("upstream_status 的默认值必须为 0：" + def.id);
-    if (!existing->required)
-        throw ContractError("upstream_status 必须是必填输入：" + def.id);
-
-    auto replacement = canonical(*existing);
-    if (existing != def.inputs.begin())
-    {
-        def.inputs.erase(existing);
-        def.inputs.insert(def.inputs.begin(), std::move(replacement));
-    }
-    else
-        *existing = std::move(replacement);
+    // The one place a port without an explicit default receives the type's empty value. A status
+    // port keeps Missing: the run's status, not a 0, says whether the tool succeeded.
+    for (auto *list : {&def.initParams, &def.inputs, &def.outputs})
+        for (auto &port : *list)
+            if (!port.typeFrom && !isHostOwnedPort(port.nameEn) && isMissing(port.defaultValue))
+                port.defaultValue = defaultValue(port.type);
 }
 
 void validateToolDefinition(const ToolDefinition& def) {
-    if (def.schemaVersion != 4)
+    if (def.schemaVersion != 5)
     {
         throw ContractError("Unsupported schema_version: " + std::to_string(def.schemaVersion));
     }
-    validateIdentifier(def.id, false);
-    if (def.displayName.empty()) {
-        throw ContractError("Tool displayName must not be empty: " + def.id);
+    validateIdentifier(def.nameEn, false);
+    if (def.nameZh.empty()) {
+        throw ContractError("Tool name_zh must not be empty: " + def.nameEn);
     }
     if (def.version.empty()) {
-        throw ContractError("Tool version must not be empty: " + def.id);
+        throw ContractError("Tool version must not be empty: " + def.nameEn);
     }
+    for (const auto &name : def.categories)
+        if (name.empty())
+            throw ContractError("ui.category must not contain an empty name: " + def.nameEn);
 
     const int kindInt = static_cast<int>(def.kind);
     if (kindInt < 0 || kindInt > 3) {
-        throw ContractError("Unknown tool kind on: " + def.id);
+        throw ContractError("Unknown tool kind on: " + def.nameEn);
     }
 
     if (def.kind == ToolKind::PythonFunction || def.kind == ToolKind::PythonClass) {
         if (def.entry.package.empty() || def.entry.file.empty() || def.entry.symbol.empty())
         {
-            throw ContractError("Python tool requires entry.package, entry.file and entry.symbol: " + def.id);
+            throw ContractError("Python tool requires implementation.package, implementation.file and implementation.symbol: " + def.nameEn);
         }
         for (const auto &path : {def.entry.package, def.entry.file})
             if (path.is_absolute() || path.has_root_name() || path.has_root_directory()
                 || *path.lexically_normal().begin() == "..")
-                throw ContractError("Python entry paths must remain inside their selected root: " + def.id);
+                throw ContractError("Python entry paths must remain inside their selected root: " + def.nameEn);
         if (def.entry.file.extension() != ".py")
-            throw ContractError("Python entry.file must name a .py source: " + def.id);
+            throw ContractError("Python implementation.file must name a .py source: " + def.nameEn);
     }
     else if (!def.entry.package.empty() || !def.entry.file.empty() || !def.entry.symbol.empty())
-        throw ContractError("Non-Python tool cannot declare a Python entry: " + def.id);
+        throw ContractError("Non-Python tool cannot declare a Python entry: " + def.nameEn);
     for (const auto &resource : def.resources)
         if (resource.empty() || resource.is_absolute() || resource.has_root_name() || resource.has_root_directory())
-            throw ContractError("resources must contain relative paths: " + def.id);
+            throw ContractError("resources must contain relative paths: " + def.nameEn);
     if (def.kind == ToolKind::Host && def.hostBinding.empty())
-        throw ContractError("宿主工具必须声明 entry.binding：" + def.id);
+        throw ContractError("宿主工具必须声明 implementation.binding：" + def.nameEn);
     if (def.kind != ToolKind::Host && !def.hostBinding.empty())
-        throw ContractError("非宿主工具不能声明 entry.binding：" + def.id);
+        throw ContractError("非宿主工具不能声明 implementation.binding：" + def.nameEn);
 
-    validatePorts(def.initParams, "init_params");
+    validatePorts(def.initParams, PortStage::Init);
     if (def.kind == ToolKind::PythonFunction) {
         if (!def.initParams.empty()) {
-            throw ContractError("Function tool cannot have init_params: " + def.id);
+            throw ContractError("Function tool cannot have init params: " + def.nameEn);
         }
     }
-    validatePorts(def.inputs, "inputs");
-    validatePorts(def.outputs, "outputs");
+    validatePorts(def.inputs, PortStage::Inputs);
+    validatePorts(def.outputs, PortStage::Outputs);
 
     for (const auto& port : def.initParams) {
-        if (findPort(def.inputs, port.id)) {
-            throw ContractError("init_params and inputs share ID: " + port.id);
+        if (findPort(def.inputs, port.nameEn)) {
+            throw ContractError("init and inputs share a name: " + port.nameEn);
         }
     }
 
-    const auto checkImageRef = [](const std::vector<PortDefinition>& ports, const std::string& id, const char* context) {
-        if (id.empty()) return;
-        const auto* target = findPort(ports, id);
+    const auto requireImage = [&](const PortRef &reference, const char *context)
+    {
+        const auto *target = findPort(def, reference);
         if (!target || target->type.type != Type::Image)
-        {
-            throw ContractError(std::string(context) + " must reference an Image port: " + id);
-        }
+            throw ContractError(std::string(context) + " must reference an Image port: " + formatPortRef(reference));
     };
 
-    for (const auto* ports : {&def.initParams, &def.inputs})
+    for (const auto *ports : {&def.initParams, &def.inputs})
         for (const auto& port : *ports) {
-            if (port.pathModeFrom.empty()) continue;
-            const auto* mode = findPort(*ports, port.pathModeFrom);
-            if (!mode || mode->id == port.id || mode->type != TypeSpec{Type::String})
-                throw ContractError("path_mode_from must reference another String parameter: " + port.id);
+            if (!port.pathModeFrom) continue;
+            if (port.pathModeFrom->stage != (ports == &def.initParams ? PortStage::Init : PortStage::Inputs))
+                throw ContractError("relations.path_mode must reference the same stage: " + port.nameEn);
+            const auto* mode = findPort(*ports, port.pathModeFrom->port);
+            if (!mode || mode->nameEn == port.nameEn || mode->type != TypeSpec{Type::String})
+                throw ContractError("relations.path_mode must reference another String parameter: " + port.nameEn);
         }
 
-    for (const auto& port : def.inputs) {
-        checkImageRef(def.inputs, port.imageInput, "image_input");
-    }
-    for (const auto& port : def.outputs) {
+    for (const auto *list : {&def.initParams, &def.inputs, &def.outputs})
+        for (const auto& port : *list)
+        {
+            if (port.image)
+            {
+                if (port.image->stage == PortStage::Outputs && port.image->port == port.nameEn
+                    && list == &def.outputs)
+                    throw ContractError("relations.image must not reference itself: " + port.nameEn);
+                requireImage(*port.image, "relations.image");
+            }
+            if (port.sameGeometryAs)
+                requireImage(*port.sameGeometryAs, "relations.same_geometry_as");
+        }
+
+    for (const auto &port : def.outputs) {
         if (port.typeFrom) {
             if (def.kind != ToolKind::Host)
-                throw ContractError("type_from 仅适用于宿主工具：" + def.id);
-            for (const auto& parameter : {port.typeFrom->flowParameter, port.typeFrom->nodeParameter,
+                throw ContractError("type_from 仅适用于宿主工具：" + def.nameEn);
+            for (const auto& reference : {port.typeFrom->flowParameter, port.typeFrom->nodeParameter,
                     port.typeFrom->portParameter}) {
-                const auto* reference = findPort(def.initParams, parameter);
-                if (!reference || reference->typeFrom || reference->type != TypeSpec{Type::String})
-                    throw ContractError("type_from must reference a String initialization parameter: " + parameter);
+                if (reference.stage != PortStage::Init)
+                    throw ContractError("type_from must reference initialization parameters: "
+                                        + formatPortRef(reference));
+                const auto* target = findPort(def.initParams, reference.port);
+                if (!target || target->typeFrom || target->type != TypeSpec{Type::String})
+                    throw ContractError("type_from must reference a String initialization parameter: "
+                                        + formatPortRef(reference));
             }
         }
-        if (!port.imagePort.empty() && !findPort(def.outputs, port.imagePort)
-            && !findPort(def.inputs, port.imagePort))
-            throw ContractError("image_port must reference an Image port: " + port.imagePort);
-        if (!port.imagePort.empty())
-        {
-            const auto *target = findPort(def.outputs, port.imagePort);
-            if (!target)
-                target = findPort(def.inputs, port.imagePort);
-            if (!target || target->type.type != Type::Image)
-                throw ContractError("image_port must reference an Image port: " + port.imagePort);
-        }
-        checkImageRef(def.inputs, port.sameGeometryAsInput, "same_geometry_as_input");
     }
 
     for (const auto &port : def.inputs)
     {
-        if (port.alignmentInput.empty())
+        if (!port.alignment)
             continue;
-        const auto *target = findPort(def.inputs, port.alignmentInput);
-        if (!target || target->id == port.id || target->typeFrom
+        const auto *target = findPort(def, *port.alignment);
+        if (!target || target->nameEn == port.nameEn || target->typeFrom
             || target->type != TypeSpec{Type::Array, DType::Float64, 3})
-            throw ContractError("alignment_input 必须引用另一个 Array(float64, rank=3) 输入：" + port.id);
+            throw ContractError("relations.alignment 必须引用另一个 Array(float64, rank=3) 输入：" + port.nameEn);
     }
 
-    const auto requireParameter = [&](const char *id)
+    const auto requireParameter = [&](const char *name)
     {
-        const auto *parameter = findPort(def.initParams, id);
+        const auto *parameter = findPort(def.initParams, name);
         if (!parameter || parameter->type != TypeSpec{Type::Array, DType::String, 2})
-            throw ContractError(std::string("节点模型需要 Array(string, rank=2) 初始化参数：") + id);
+            throw ContractError(std::string("节点模型需要 vec_vec_string 初始化参数：") + name);
     };
     switch (def.nodeModel)
     {
@@ -468,7 +532,7 @@ void validateToolDefinition(const ToolDefinition& def) {
     case NodeModel::Expression:
     case NodeModel::Condition:
         if (def.kind != ToolKind::PythonClass)
-            throw ContractError("表达式与条件节点必须是 python_class 工具：" + def.id);
+            throw ContractError("表达式与条件节点必须是 python_class 工具：" + def.nameEn);
         requireParameter("variables");
         requireParameter("program");
         if (def.nodeModel == NodeModel::Condition)
@@ -482,46 +546,48 @@ void validateToolDefinition(const ToolDefinition& def) {
                               [](const auto &value) { return equalValues(value, PortValue{std::string{"upstream"}}); })
                && equalValues(mode->defaultValue, PortValue{std::string{"formula"}});
             if (!validMode)
-                throw ContractError("条件节点必须声明 condition_mode:String，选项 formula/upstream，默认 formula：" + def.id);
+                throw ContractError("条件节点必须声明 condition_mode:string，选项 formula/upstream，默认 formula：" + def.nameEn);
             if (def.outputs.size() != 6 || !findPort(def.outputs, "on_true") || !findPort(def.outputs, "on_false")
                 || !findPort(def.outputs, "on_true_status") || !findPort(def.outputs, "on_false_status"))
-                throw ContractError("条件节点必须声明两个布尔输出与两路状态输出：" + def.id);
+                throw ContractError("条件节点必须声明两个布尔输出与两路状态输出：" + def.nameEn);
         }
         break;
     case NodeModel::Select:
         if (def.kind != ToolKind::Host)
-            throw ContractError("合流节点必须是宿主工具：" + def.id);
+            throw ContractError("合流节点必须是宿主工具：" + def.nameEn);
         if (findPort(def.inputs, "selector") || findPort(def.inputs, "if_true") || findPort(def.inputs, "if_false")
             || findPort(def.outputs, "value"))
-            throw ContractError("合流节点端口由节点类型派生，声明中不能固定声明：" + def.id);
+            throw ContractError("合流节点端口由节点类型派生，声明中不能固定声明：" + def.nameEn);
         break;
     }
 
     if (def.visibility == ToolVisibility::Assist)
     {
         if (def.nodeModel != NodeModel::Fixed || def.interaction)
-            throw ContractError("辅助工具必须是固定节点且不能声明交互映射：" + def.id);
+            throw ContractError("辅助工具必须是固定节点且不能声明交互映射：" + def.nameEn);
         if (def.kind == ToolKind::Host)
-            throw ContractError("辅助工具不能是宿主工具：" + def.id);
+            throw ContractError("辅助工具不能是宿主工具：" + def.nameEn);
     }
     if (def.interaction)
     {
         if (def.visibility != ToolVisibility::Normal)
-            throw ContractError("只有普通工具可以声明交互映射：" + def.id);
-        if (def.interaction->helperToolId.empty())
-            throw ContractError("交互映射缺少 helper_tool_id：" + def.id);
+            throw ContractError("只有普通工具可以声明交互映射：" + def.nameEn);
+        if (def.interaction->helperNameEn.empty())
+            throw ContractError("交互映射缺少 interaction.helper：" + def.nameEn);
         if (def.interaction->roiKinds.empty())
-            throw ContractError("交互映射必须声明允许的 ROI kind：" + def.id);
-        for (const auto &[helper, port] : def.interaction->inputMap)
+            throw ContractError("交互映射必须声明允许的 ROI kind：" + def.nameEn);
+        for (const auto &[helper, reference] : def.interaction->inputs)
         {
-            if (helper.empty() || !findPort(def.inputs, port))
-                throw ContractError("交互 input_map 引用了不存在的输入：" + port + "（" + def.id + "）");
+            if (helper.empty() || !findPort(def, reference))
+                throw ContractError("交互 interaction.inputs 引用了不存在的端口：" + formatPortRef(reference)
+                                    + "（" + def.nameEn + "）");
         }
-        for (const auto &[helper, port] : def.interaction->proposalMap)
+        for (const auto &[helper, reference] : def.interaction->proposals)
         {
-            const auto *target = findPort(def.inputs, port);
-            if (helper.empty() || !target || target->type.type == Type::Image)
-                throw ContractError("交互 proposal_map 引用了不可写输入：" + port + "（" + def.id + "）");
+            const auto *target = findPort(def, reference);
+            if (helper.empty() || !target || reference.stage == PortStage::Outputs || target->type.type == Type::Image)
+                throw ContractError("交互 interaction.proposals 引用了不可写输入：" + formatPortRef(reference)
+                                    + "（" + def.nameEn + "）");
         }
     }
 }

@@ -24,10 +24,10 @@ ToolResult execute(ToolRegistry &registry, const char *id, Values inputs, const 
     const auto *definition = registry.find(id);
     assert((definition));
     for (const auto &port : definition->inputs)
-        inputs.try_emplace(port.id, port.defaultValue);
+        inputs.try_emplace(port.nameEn, port.defaultValue);
     Values parameters;
     for (const auto &port : definition->initParams)
-        parameters.emplace(port.id, port.defaultValue);
+        parameters.emplace(port.nameEn, port.defaultValue);
     auto tool = registry.create(id, services);
     assert((tool->initialize(parameters)));
     auto result = tool->execute(inputs);

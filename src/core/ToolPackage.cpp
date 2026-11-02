@@ -59,24 +59,24 @@ ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::opt
             (void)resolveToolPath(source.roots.declarations, file.path().lexically_relative(source.roots.declarations));
             PackageTool tool;
             tool.definition                 = parseToolDefinitionFile(file.path(), source);
-            const auto [previous, inserted] = identities.emplace(tool.definition.id, tool.definition.definitionPath);
+            const auto [previous, inserted] = identities.emplace(tool.definition.nameEn, tool.definition.definitionPath);
             if (!inserted)
-                throw ContractError("tool_id 重复：" + tool.definition.id + "："
+                throw ContractError("name_en 重复：" + tool.definition.nameEn + "："
                                     + json::pathText(previous->second).toStdString() + " / "
                                     + json::pathText(tool.definition.definitionPath).toStdString());
-            const auto indexed = package.index.tools.find(tool.definition.id);
+            const auto indexed = package.index.tools.find(tool.definition.nameEn);
             if (source.origin == ToolOrigin::Builtin && indexed == package.index.tools.end())
-                throw ContractError("内建声明缺少发行索引：" + tool.definition.id);
+                throw ContractError("内建声明缺少发行索引：" + tool.definition.nameEn);
             if (tool.definition.kind == ToolKind::Cpp)
             {
                 if (indexed == package.index.tools.end() || indexed->second.module.empty())
-                    throw ContractError("C++ 工具必须引用索引 module：" + tool.definition.id);
+                    throw ContractError("C++ 工具必须引用索引 module：" + tool.definition.nameEn);
                 tool.moduleLibrary = resolveToolPath(
                     package.root,
                     json::relativePath(package.index.modules.at(indexed->second.module).library, "modules.library"));
             }
             else if (indexed != package.index.tools.end() && !indexed->second.module.empty())
-                throw ContractError("Python/host 工具不能引用 module：" + tool.definition.id);
+                throw ContractError("Python/host 工具不能引用 module：" + tool.definition.nameEn);
             if (tool.definition.kind == ToolKind::PythonFunction || tool.definition.kind == ToolKind::PythonClass)
                 (void)tool.definition.pythonScript();
             for (const auto &resource : tool.definition.resources)

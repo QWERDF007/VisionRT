@@ -58,22 +58,69 @@ void pathEditorsContract()
           "def run(inputs):\n    return {'outputs': {'mode_value': 'directory', '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 4,
-  "tool_id": "test.paths",
-  "display_name": "路径测试",
+  "schema_version": 5,
+  "name_en": "test.paths",
+  "name_zh": "路径测试",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "Test", "file": "run.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [
-    {"id": "file", "name": "文件", "type": "String", "default": "original file", "editor": "file"},
-    {"id": "folder", "name": "目录", "type": "String", "default": "original folder", "editor": "directory"},
-    {"id": "mode", "name": "模式", "type": "String", "default": "file", "options": ["file", "directory"]},
-    {"id": "path", "name": "动态路径", "type": "String", "default": "original path", "editor": "path", "path_mode_from": "mode"}
-  ],
-  "outputs": [
-    {"id": "mode_value", "name": "模式输出", "type": "String"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "Test",
+    "file": "run.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "file",
+        "name_zh": "文件",
+        "type": "string",
+        "default": "original file",
+        "ui": {
+          "editor": "file"
+        }
+      },
+      {
+        "name_en": "folder",
+        "name_zh": "目录",
+        "type": "string",
+        "default": "original folder",
+        "ui": {
+          "editor": "directory"
+        }
+      },
+      {
+        "name_en": "mode",
+        "name_zh": "模式",
+        "type": "string",
+        "default": "file",
+        "constraints": {
+          "options": [
+            "file",
+            "directory"
+          ]
+        }
+      },
+      {
+        "name_en": "path",
+        "name_zh": "动态路径",
+        "type": "string",
+        "default": "original path",
+        "ui": {
+          "editor": "path"
+        },
+        "relations": {
+          "path_mode": "inputs.mode"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "mode_value",
+        "name_zh": "模式输出",
+        "type": "string"
+      }
+    ]
+  }
 })json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
     const QString folderName = QStringLiteral("选择的目录 # %");

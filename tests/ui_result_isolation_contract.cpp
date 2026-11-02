@@ -47,8 +47,8 @@ try
                 "isolation fixture write failed");
     };
     ToolDefinition image;
-    image.id          = "test.isolation.image";
-    image.displayName = "隔离图像";
+    image.nameEn          = "test.isolation.image";
+    image.nameZh = "隔离图像";
     image.kind        = ToolKind::PythonFunction;
     image.entry       = {"isolation", "tool.py", "source"};
     image.inputs      = {
@@ -62,8 +62,8 @@ try
     const auto declaration           = package + "tools/custom/isolation/image.json";
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(image)));
     auto scalar         = image;
-    scalar.id           = "test.isolation.scalar";
-    scalar.displayName  = "隔离数值";
+    scalar.nameEn           = "test.isolation.scalar";
+    scalar.nameZh  = "隔离数值";
     scalar.entry.symbol = "scalar";
     scalar.inputs.clear();
     scalar.outputs = {
@@ -98,8 +98,8 @@ def scalar(inputs):
     {
         ProjectEditor editor;
         const auto    flow   = editor.project().flows.front().id;
-        const auto    parent = editor.addNode(flow, *definitions.find(image.id), {0, 0});
-        const auto    other  = editor.addNode(flow, *definitions.find(scalar.id), {2, 0});
+        const auto    parent = editor.addNode(flow, *definitions.find(image.nameEn), {0, 0});
+        const auto    other  = editor.addNode(flow, *definitions.find(scalar.nameEn), {2, 0});
         require(!imageId || *imageId == parent, "saved projects do not reuse the same image NodeId");
         imageId  = parent;
         scalarId = other;

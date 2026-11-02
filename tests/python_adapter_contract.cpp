@@ -65,8 +65,8 @@ struct Sources
                               bool secondOutput = false)
     {
         ToolDefinition tool;
-        tool.id             = id;
-        tool.displayName    = "Contract tool";
+        tool.nameEn             = id;
+        tool.nameZh    = "Contract tool";
         tool.kind           = kind;
         tool.definitionPath = declarations / (id + ".json");
         tool.source         = source();
@@ -131,9 +131,8 @@ def absent(inputs):
     auto partial     = sources.definition("python.partial", ToolKind::PythonFunction, "partial", true);
     auto optional    = sources.definition("python.optional", ToolKind::PythonFunction, "absent");
     for (auto &port : optional.outputs)
-        if (port.id == "value")
-            port.required = false;
-    sources.put("python.optional.json", emitNormalizedToolJson(optional));
+        if (port.nameEn == "value")
+            sources.put("python.optional.json", emitNormalizedToolJson(optional));
     std::vector<ToolDefinition> definitions{function, counter, broken,   constructor, missing,
                                             extra,    wrong,   business, partial,     optional};
     std::uintptr_t              numpyIdentity;
@@ -189,11 +188,11 @@ def absent(inputs):
         auto        instance = runtime.factory(definition)(services);
         const auto failed    = testview::executionFailure(*instance);
         assert(failed.find("技术详情") == std::string::npos);
-        if (definition.id == wrong.id)
+        if (definition.nameEn == wrong.nameEn)
             assert(failed.find("Python int") != std::string::npos);
-        else if (definition.id == extra.id)
-            // A key set that does not match the declaration is refused before any value is read.
-            assert(failed.find("输出键必须与声明端口") != std::string::npos);
+        else if (definition.nameEn == extra.nameEn)
+            // A name the declaration never mentions is still refused; an omitted declared port is not.
+            assert(failed.find("输出键不在声明中") != std::string::npos);
         else
             // A status dict is a lifecycle answer: execute owes the two-field envelope.
             assert(failed.find("execute 必须返回 outputs 与 detail") != std::string::npos);
@@ -277,23 +276,67 @@ class PathProbe:
         return {'code': 0, 'message': 'ok', 'detail': ''}
 )");
     Sources::write(sources.declarations / "paths.json", R"json({
-  "schema_version": 4,
-  "tool_id": "python.paths",
-  "display_name": "Path probe",
+  "schema_version": 5,
+  "name_en": "python.paths",
+  "name_zh": "Path probe",
   "version": "1.0.0",
-  "kind": "python_class",
-  "entry": {"package": "math", "file": "entry.py", "symbol": "PathProbe"},
-  "init_params": [
-    {"id": "init_mode", "name": "Mode", "type": "String", "editor": "text"},
-    {"id": "base_dir", "name": "Base", "type": "String", "editor": "path", "path_mode_from": "init_mode"}
-  ],
-  "inputs": [
-    {"id": "input_mode", "name": "Mode", "type": "String", "editor": "text"},
-    {"id": "input_path", "name": "Input", "type": "String", "editor": "path", "path_mode_from": "input_mode"}
-  ],
-  "outputs": [
-    {"id": "resolved", "name": "Resolved", "type": "String"}
-  ]
+  "implementation": {
+    "kind": "python_class",
+    "package": "math",
+    "file": "entry.py",
+    "symbol": "PathProbe"
+  },
+  "ports": {
+    "init": [
+      {
+        "name_en": "init_mode",
+        "name_zh": "Mode",
+        "type": "string",
+        "ui": {
+          "editor": "text"
+        }
+      },
+      {
+        "name_en": "base_dir",
+        "name_zh": "Base",
+        "type": "string",
+        "ui": {
+          "editor": "path"
+        },
+        "relations": {
+          "path_mode": "init.init_mode"
+        }
+      }
+    ],
+    "inputs": [
+      {
+        "name_en": "input_mode",
+        "name_zh": "Mode",
+        "type": "string",
+        "ui": {
+          "editor": "text"
+        }
+      },
+      {
+        "name_en": "input_path",
+        "name_zh": "Input",
+        "type": "string",
+        "ui": {
+          "editor": "path"
+        },
+        "relations": {
+          "path_mode": "inputs.input_mode"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "resolved",
+        "name_zh": "Resolved",
+        "type": "string"
+      }
+    ]
+  }
 })json");
     const auto definition = parseToolDefinitionFile(sources.declarations / "paths.json", sources.source());
     const auto loaded     = runtime.refresh(std::span<const ToolDefinition>(&definition, 1));

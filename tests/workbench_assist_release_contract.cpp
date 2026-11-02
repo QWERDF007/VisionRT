@@ -120,8 +120,8 @@ public:
 ToolDefinition helperDefinition()
 {
     ToolDefinition definition;
-    definition.id          = "test.assist.release";
-    definition.displayName = "释放闩锁辅助";
+    definition.nameEn          = "test.assist.release";
+    definition.nameZh = "释放闩锁辅助";
     definition.version     = "1";
     definition.kind        = ToolKind::Cpp;
     definition.outputs     = {{"valid", "有效", {Type::Bool}},
@@ -206,7 +206,7 @@ try
     // 1. Execute phase ContractError -> ErrorCode::DataInvalid (-13)
     {
         ToolDefinition execDef = helperDefinition();
-        execDef.id = "test.assist.exec_error";
+        execDef.nameEn = "test.assist.exec_error";
         registry->registerCpp(execDef, [](const ToolServices &) { return std::make_unique<ExecuteContractErrorTool>(); });
         registry->addDefinition(execDef);
 
@@ -228,7 +228,7 @@ try
     // 2. Setup phase ContractError -> ErrorCode::InvalidArgument (-2)
     {
         ToolDefinition setupDef = helperDefinition();
-        setupDef.id = "test.assist.setup_error";
+        setupDef.nameEn = "test.assist.setup_error";
         setupDef.inputs = {{"count", "数量", {Type::Int}}};
         registry->registerCpp(setupDef, [](const ToolServices &) { return std::make_unique<LatchedReleaseTool>(); });
         registry->addDefinition(setupDef);
@@ -252,7 +252,7 @@ try
     // 3. Unknown std::exception -> ErrorCode::Internal (-1)
     {
         ToolDefinition throwDef = helperDefinition();
-        throwDef.id = "test.assist.throw_error";
+        throwDef.nameEn = "test.assist.throw_error";
         registry->registerCpp(throwDef, [](const ToolServices &) { return std::make_unique<UnexpectedThrowingTool>(); });
         registry->addDefinition(throwDef);
 

@@ -60,12 +60,12 @@ bool AppController::editRoi(const QString &parameter, bool copyUpstream)
         const auto *declaration = impl_->parameter(parameter.toStdString(), false);
         if (!node || !declaration || declaration->type.type != Type::ROI)
             throw ContractError("参数不是可编辑的 ROI 输入：" + parameter.toStdString());
-        if (declaration->imageInput.empty())
-            throw ContractError("ROI 输入未声明 image_input 图像关联：" + parameter.toStdString());
-        const auto  imageValue = impl_->resolvedInput(*node, declaration->imageInput);
+        if (!declaration->image)
+            throw ContractError("ROI 输入未声明关联图像：" + parameter.toStdString());
+        const auto  imageValue = impl_->resolvedInput(*node, declaration->image->port);
         const auto *images     = std::get_if<DataRef<Image>>(&imageValue);
         if (declaration->editor != "rect" && (!images || images->get().empty()))
-            throw ContractError("ROI 输入 " + parameter.toStdString() + " 的关联图像 " + declaration->imageInput
+            throw ContractError("ROI 输入 " + parameter.toStdString() + " 的关联图像 " + declaration->image->port
                                 + " 没有缓存，请先运行图像源或上游");
         auto roiValue = impl_->resolvedInput(*node, parameter.toStdString());
         if (isMissing(roiValue))
@@ -176,7 +176,7 @@ bool AppController::applyRoi()
             || binding->second.source != impl_->roiSession.original().source
             || !equalValues(binding->second.literal, impl_->roiSession.original().literal))
             throw ContractError("ROI 输入绑定已在编辑期间改变：" + input);
-        if (!equalValues(impl_->roiSession.background(), impl_->resolvedInput(*node, declaration->imageInput)))
+        if (!equalValues(impl_->roiSession.background(), impl_->resolvedInput(*node, declaration->image->port)))
             throw ContractError("ROI 背景图像已在编辑期间改变：" + input);
         validateValue(impl_->roiSession.type(), impl_->roiSession.draft());
         InputBinding committed{BindingMode::Literal, impl_->roiSession.draft(), std::nullopt};

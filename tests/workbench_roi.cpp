@@ -65,19 +65,41 @@ void roiParameterContract()
           "'__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools/custom/roi/source.json",
           R"json({
-  "schema_version": 4,
-  "tool_id": "test.roi.source",
-  "display_name": "ROI图像源",
+  "schema_version": 5,
+  "name_en": "test.roi.source",
+  "name_zh": "ROI图像源",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "roi", "file": "source.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [],
-  "outputs": [
-    {"id": "images", "name": "图像", "type": "Image", "display": {"color_order": "BGR"}},
-    {"id": "rois", "name": "源区域", "type": "ROI"},
-    {"id": "rect", "name": "源矩形", "type": "ROI", "image_port": "images"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "roi",
+    "file": "source.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "outputs": [
+      {
+        "name_en": "images",
+        "name_zh": "图像",
+        "type": "image",
+        "display": {
+          "color_order": "BGR"
+        }
+      },
+      {
+        "name_en": "rois",
+        "name_zh": "源区域",
+        "type": "roi"
+      },
+      {
+        "name_en": "rect",
+        "name_zh": "源矩形",
+        "type": "roi",
+        "relations": {
+          "image": "outputs.images"
+        }
+      }
+    ]
+  }
 })json");
     write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
@@ -91,30 +113,144 @@ void roiParameterContract()
           "'__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
     write("tools/custom/roi/editor.json",
           R"json({
-  "schema_version": 4,
-  "tool_id": "test.roi.editor",
-  "display_name": "ROI编辑",
+  "schema_version": 5,
+  "name_en": "test.roi.editor",
+  "name_zh": "ROI编辑",
   "version": "1.0.0",
-  "kind": "python_function",
-  "entry": {"package": "roi", "file": "editor.py", "symbol": "run"},
-  "init_params": [],
-  "inputs": [
-    {"id": "images", "name": "图像", "type": "Image"},
-    {"id": "rois", "name": "区域", "type": "ROI", "default": [[]], "image_input": "images"},
-    {"id": "rect", "name": "矩形", "type": "ROI", "editor": "rect", "default": [[[2, 1.234567881, 2.5, 3.75, 4.5, 17.5]]], "image_input": "images"},
-    {"id": "guide", "name": "参考区域", "type": "ROI", "editor": "rect", "default": [[[2, 80, 50, 20, 20, 0]]], "image_input": "images"}
-  ],
-  "outputs": [
-    {"id": "count", "name": "区域数量", "type": "Int"},
-    {"id": "images", "name": "图像", "type": "Image", "display": {"color_order": "BGR", "same_geometry_as_input": "images"}},
-    {"id": "regions", "name": "结果区域", "type": "ROI", "image_port": "images"},
-    {"id": "unrelated_images", "name": "其他坐标图像", "type": "Image"},
-    {"id": "unavailable_images", "name": "空图像输出", "type": "Image"},
-    {"id": "cropped_images", "name": "裁剪坐标图像", "type": "Image"},
-    {"id": "crop_regions", "name": "裁剪坐标区域", "type": "ROI", "image_port": "cropped_images"},
-    {"id": "origins", "name": "原点坐标", "type": "Array", "dtype": "float64", "rank": 2},
-    {"id": "unrelated_regions", "name": "其他坐标区域", "type": "ROI", "image_port": "unrelated_images"}
-  ]
+  "implementation": {
+    "kind": "python_function",
+    "package": "roi",
+    "file": "editor.py",
+    "symbol": "run"
+  },
+  "ports": {
+    "inputs": [
+      {
+        "name_en": "images",
+        "name_zh": "图像",
+        "type": "image"
+      },
+      {
+        "name_en": "rois",
+        "name_zh": "区域",
+        "type": "roi",
+        "default": [
+          []
+        ],
+        "relations": {
+          "image": "inputs.images"
+        }
+      },
+      {
+        "name_en": "rect",
+        "name_zh": "矩形",
+        "type": "roi",
+        "default": [
+          [
+            [
+              2,
+              1.234567881,
+              2.5,
+              3.75,
+              4.5,
+              17.5
+            ]
+          ]
+        ],
+        "ui": {
+          "editor": "rect"
+        },
+        "relations": {
+          "image": "inputs.images"
+        }
+      },
+      {
+        "name_en": "guide",
+        "name_zh": "参考区域",
+        "type": "roi",
+        "default": [
+          [
+            [
+              2,
+              80,
+              50,
+              20,
+              20,
+              0
+            ]
+          ]
+        ],
+        "ui": {
+          "editor": "rect"
+        },
+        "relations": {
+          "image": "inputs.images"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name_en": "count",
+        "name_zh": "区域数量",
+        "type": "int"
+      },
+      {
+        "name_en": "images",
+        "name_zh": "图像",
+        "type": "image",
+        "relations": {
+          "same_geometry_as": "inputs.images"
+        },
+        "display": {
+          "color_order": "BGR"
+        }
+      },
+      {
+        "name_en": "regions",
+        "name_zh": "结果区域",
+        "type": "roi",
+        "relations": {
+          "image": "outputs.images"
+        }
+      },
+      {
+        "name_en": "unrelated_images",
+        "name_zh": "其他坐标图像",
+        "type": "image"
+      },
+      {
+        "name_en": "unavailable_images",
+        "name_zh": "空图像输出",
+        "type": "image"
+      },
+      {
+        "name_en": "cropped_images",
+        "name_zh": "裁剪坐标图像",
+        "type": "image"
+      },
+      {
+        "name_en": "crop_regions",
+        "name_zh": "裁剪坐标区域",
+        "type": "roi",
+        "relations": {
+          "image": "outputs.cropped_images"
+        }
+      },
+      {
+        "name_en": "origins",
+        "name_zh": "原点坐标",
+        "type": "vec_vec_float"
+      },
+      {
+        "name_en": "unrelated_regions",
+        "name_zh": "其他坐标区域",
+        "type": "roi",
+        "relations": {
+          "image": "outputs.unrelated_images"
+        }
+      }
+    ]
+  }
 })json");
 
     AppController app(1, directory.path());

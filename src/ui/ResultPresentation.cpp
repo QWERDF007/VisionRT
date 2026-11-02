@@ -40,7 +40,7 @@ QString text(const std::string &value)
 const PortDefinition *findPort(const std::vector<PortDefinition> &ports, std::string_view id)
 {
     for (const auto &value : ports)
-        if (value.id == id)
+        if (value.nameEn == id)
             return &value;
     return nullptr;
 }
@@ -280,8 +280,8 @@ void ResultPresentation::updateResults()
         std::vector<std::string> imagePorts;
         if (tool)
             for (const auto &port : tool->outputs)
-                if (port.type.type == Type::Image && node->signatures.outputs.contains(port.id))
-                    imagePorts.push_back(port.id);
+                if (port.type.type == Type::Image && node->signatures.outputs.contains(port.nameEn))
+                    imagePorts.push_back(port.nameEn);
         if (std::find(imagePorts.begin(), imagePorts.end(), imageOutput_.toStdString()) == imagePorts.end())
             imageOutput_ = imagePorts.empty() ? QString{} : text(imagePorts.front());
     }
@@ -328,7 +328,8 @@ void ResultPresentation::updateDisplay()
         // An image-free editor freezes a Missing background; a missing port must compare equal to it
         // instead of ending the session that just started.
         const PortValue  missing{Missing{}};
-        const auto      *background = node && declaration ? resolvedInput(*node, declaration->imageInput) : nullptr;
+        const auto      *background
+            = node && declaration && declaration->image ? resolvedInput(*node, declaration->image->port) : nullptr;
         const PortValue &current    = background ? *background : missing;
         if (!node || node->id != roi_.node() || !declaration
             || !equalValues(roi_.background(), current))
@@ -359,15 +360,15 @@ void ResultPresentation::updateDisplay()
             if (const auto *tool = host_.effectiveTool())
             {
                 const auto *selectedImage = findPort(tool->outputs, imageOutput_.toStdString());
-                if (selectedImage && !selectedImage->sameGeometryAsInput.empty())
+                if (selectedImage && selectedImage->sameGeometryAs)
                 {
-                    if (const auto *val = resolvedInput(*node, selectedImage->sameGeometryAsInput))
+                    if (const auto *val = resolvedInput(*node, selectedImage->sameGeometryAs->port))
                     {
                         if (const auto *inputBatch = std::get_if<DataRef<Image>>(val);
                             inputBatch && !inputBatch->get().empty())
                         {
                             batch            = inputBatch;
-                            fallbackInputPort = selectedImage->sameGeometryAsInput;
+                            fallbackInputPort = selectedImage->sameGeometryAs->port;
                         }
                     }
                 }
@@ -377,13 +378,13 @@ void ResultPresentation::updateDisplay()
                     {
                         if (port.type.type != Type::Image)
                             continue;
-                        if (const auto *val = resolvedInput(*node, port.id))
+                        if (const auto *val = resolvedInput(*node, port.nameEn))
                         {
                             if (const auto *inputBatch = std::get_if<DataRef<Image>>(val);
                                 inputBatch && !inputBatch->get().empty())
                             {
                                 batch            = inputBatch;
-                                fallbackInputPort = port.id;
+                                fallbackInputPort = port.nameEn;
                                 break;
                             }
                         }
@@ -411,13 +412,13 @@ void ResultPresentation::updateDisplay()
         const auto *node        = host_.selectedNode();
         if (declaration && node)
         {
-            imageInput = declaration->imageInput;
+            imageInput = declaration->image ? declaration->image->port : std::string{};
             if (const auto *tool = host_.effectiveTool())
                 for (const auto &port : tool->inputs)
-                    if (port.id != roi_.input() && port.type.type == Type::ROI
-                        && port.imageInput == imageInput)
+                    if (port.nameEn != roi_.input() && port.type.type == Type::ROI && port.image
+                        && port.image->port == imageInput)
                     {
-                        const auto *value = resolvedInput(*node, port.id);
+                        const auto *value = resolvedInput(*node, port.nameEn);
                         if (!value)
                             continue;
                         auto values = imageRois(*value, selectedIndex, port.editor == "rect");
@@ -442,11 +443,11 @@ void ResultPresentation::updateDisplay()
                 }
                 for (const auto &port : tool->inputs)
                 {
-                    if (port.type.type != Type::ROI || port.imageInput != fallbackInputPort)
+                    if (port.type.type != Type::ROI || !port.image || port.image->port != fallbackInputPort)
                         continue;
                     if (snapshot)
                     {
-                        const auto value = snapshot->roiInputs.find(port.id);
+                        const auto value = snapshot->roiInputs.find(port.nameEn);
                         if (value != snapshot->roiInputs.end())
                         {
                             auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
@@ -454,19 +455,20 @@ void ResultPresentation::updateDisplay()
                             continue;
                         }
                     }
-                    if (const auto *val = resolvedInput(*node, port.id))
+                    if (const auto *val = resolvedInput(*node, port.nameEn))
                     {
                         auto values = imageRois(*val, selectedIndex, port.editor == "rect");
                         displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
                     }
                 }
             }
-            else if (image && !image->sameGeometryAsInput.empty() && snapshot)
+            else if (image && image->sameGeometryAs && snapshot)
             {
                 for (const auto &port : tool->inputs)
-                    if (port.type.type == Type::ROI && port.imageInput == image->sameGeometryAsInput)
+                    if (port.type.type == Type::ROI && port.image
+                        && port.image->port == image->sameGeometryAs->port)
                     {
-                        const auto value = snapshot->roiInputs.find(port.id);
+                        const auto value = snapshot->roiInputs.find(port.nameEn);
                         if (value != snapshot->roiInputs.end())
                         {
                             auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
@@ -481,12 +483,15 @@ void ResultPresentation::updateDisplay()
         {
             if (port.type.type != Type::ROI)
                 continue;
-            const auto *image = findPort(tool->outputs, port.imagePort);
-            if (!image
-                || (roi_.active() ? image->sameGeometryAsInput != imageInput
-                                  : image->id != imageOutput_.toStdString()))
+            if (!port.image)
                 continue;
-            const auto value = snapshot->outputs.find(port.id);
+            const auto &imagePorts = port.image->stage == PortStage::Outputs ? tool->outputs : tool->inputs;
+            const auto *image      = findPort(imagePorts, port.image->port);
+            if (!image
+                || (roi_.active() ? (!image->sameGeometryAs || image->sameGeometryAs->port != imageInput)
+                                  : image->nameEn != imageOutput_.toStdString()))
+                continue;
+            const auto value = snapshot->outputs.find(port.nameEn);
             if (value != snapshot->outputs.end())
             {
                 auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
@@ -565,11 +570,11 @@ QVariantList ResultPresentation::imageOutputs() const
     {
         const auto *node = host_.selectedNode();
         for (const auto &output : tool->outputs)
-            if (node && node->signatures.outputs.contains(output.id)
-                && node->signatures.outputs.at(output.id).type == Type::Image)
+            if (node && node->signatures.outputs.contains(output.nameEn)
+                && node->signatures.outputs.at(output.nameEn).type == Type::Image)
                 result.push_back(QVariantMap{
-                    {  "id",   text(output.id)},
-                    {"name", text(output.name)}
+                    {  "id",   text(output.nameEn)},
+                    {"name", text(output.nameZh)}
                 });
     }
     else if (const auto *node = host_.selectedNode())

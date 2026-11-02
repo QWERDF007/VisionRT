@@ -67,13 +67,13 @@ int main(int argc, char **argv)
                 {
                     if (definition.kind != visionrt::ToolKind::Cpp)
                         continue;
-                    const auto state = registry.availability(definition.id);
+                    const auto state = registry.availability(definition.nameEn);
                     if (state.state == visionrt::ToolAvailability::Available)
-                        std::cout << "Native factory available: " << definition.id << '\n';
+                        std::cout << "Native factory available: " << definition.nameEn << '\n';
                     else
                     {
                         available = false;
-                        std::cerr << "Native factory unavailable: " << definition.id << ": " << state.status.message
+                        std::cerr << "Native factory unavailable: " << definition.nameEn << ": " << state.status.message
                                   << '\n';
                         if (!state.status.detail.empty())
                             std::cerr << state.status.detail << '\n';
@@ -95,7 +95,7 @@ int main(int argc, char **argv)
         else
         {
             const auto definition = visionrt::parseToolDefinitionFile(path);
-            std::cout << "Valid tool definition: " << definition.id << " (" << definition.displayName << ")\n";
+            std::cout << "Valid tool definition: " << definition.nameEn << " (" << definition.nameZh << ")\n";
         }
         return 0;
     }

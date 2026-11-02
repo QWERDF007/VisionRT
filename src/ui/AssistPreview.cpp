@@ -61,7 +61,7 @@ bool AssistPreview::configured() const
 
 std::string AssistPreview::helperId() const
 {
-    return session_ ? session_->helper.id : std::string{};
+    return session_ ? session_->helper.nameEn : std::string{};
 }
 
 bool AssistPreview::request(AssistRequest value)
@@ -275,7 +275,7 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             PlatformToolServices services{PathResolver(session.directory)};
             instance_ = session.registry->create(session.helper, services);
             if (!instance_)
-                throw ContractError("辅助工具实例不可用：" + session.helper.id);
+                throw ContractError("辅助工具实例不可用：" + session.helper.nameEn);
             const auto status = instance_->initialize({});
             if (!status)
             {

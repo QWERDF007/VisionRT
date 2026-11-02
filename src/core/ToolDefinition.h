@@ -13,6 +13,22 @@ namespace visionrt {
 
 enum class ToolKind { Cpp, PythonFunction, PythonClass, Host };
 
+// Which port list a reference points at. A declaration never guesses: an author writes
+// "inputs.images", "outputs.rect" or "init.source_flow_id", and the stage is resolved once here.
+enum class PortStage
+{
+    Init,
+    Inputs,
+    Outputs
+};
+
+struct PortRef
+{
+    PortStage   stage = PortStage::Inputs;
+    std::string port;
+    bool        operator==(const PortRef &) const = default;
+};
+
 // How the host edits and materialises a node contract. Only fixed nodes use the
 // declaration ports directly; the other models derive ports from node config.
 enum class NodeModel
@@ -31,11 +47,11 @@ enum class ToolVisibility
 
 struct InteractionMapping
 {
-    std::string                        helperToolId;
-    std::map<std::string, std::string, std::less<>> inputMap;
-    std::map<std::string, std::string, std::less<>> proposalMap;
-    std::vector<RoiKind>               roiKinds;
-    bool                               operator==(const InteractionMapping &) const = default;
+    std::string                                    helperNameEn;
+    std::map<std::string, PortRef, std::less<>>     inputs;    // helper input port -> tool port
+    std::map<std::string, PortRef, std::less<>>     proposals; // helper output port -> tool input port
+    std::vector<RoiKind>                           roiKinds;
+    bool operator==(const InteractionMapping &) const = default;
 };
 
 enum class ToolOrigin
@@ -66,56 +82,56 @@ struct PythonEntry
     bool                  operator==(const PythonEntry &) const = default;
 };
 
+// A dynamic output type names three initialisation parameters by reference.
 struct PortTypeReference {
-    std::string flowParameter;
-    std::string nodeParameter;
-    std::string portParameter;
+    PortRef flowParameter;
+    PortRef nodeParameter;
+    PortRef portParameter;
     bool operator==(const PortTypeReference&) const = default;
 };
 
 struct PortDefinition {
-    std::string id;
-    std::string name;
-    TypeSpec type;
+    std::string nameEn;
+    std::string nameZh;
+    TypeSpec    type;
+    // The declaration's explicit default, or the type's empty value materialised during
+    // normalisation. A host-owned status port and a type_from output keep it Missing.
     PortValue defaultValue = Missing{};
     std::string editor;
     std::string tab = "基本输入";
     std::string group;
+    std::optional<PortValue> step;
+    std::optional<int>       decimals;
+    std::string              optionsProvider;
     std::optional<PortValue> minimum;
     std::optional<PortValue> maximum;
-    std::optional<PortValue> step;
-    std::optional<int> decimals;
-    std::vector<PortValue> options;
-    std::string optionsProvider;
-    std::string imageInput;
-    std::string imagePort;
-    std::string colorOrder;
-    std::string sameGeometryAsInput;
-    std::string alignmentInput;
+    std::vector<PortValue>   options;
+    std::optional<PortRef>   image;
+    std::optional<PortRef>   alignment;
+    std::optional<PortRef>   pathModeFrom;
+    std::optional<PortRef>   sameGeometryAs;
+    std::string              colorOrder;
     std::optional<PortTypeReference> typeFrom;
-    std::string pathModeFrom;
-    bool required = true;
 };
 
 struct ToolDefinition {
-    int                                schemaVersion = 4;
-    std::string id;
-    std::string displayName;
-    std::string version = "1.0.0";
-    ToolKind kind = ToolKind::Cpp;
-    NodeModel        nodeModel  = NodeModel::Fixed;
-    ToolVisibility   visibility = ToolVisibility::Normal;
-    std::optional<InteractionMapping> interaction;
-    std::filesystem::path definitionPath;
-    std::string category;
-    std::string subcategory;
+    int                                schemaVersion = 5;
+    std::string                        nameEn;
+    std::string                        nameZh;
+    std::string                        version = "1.0.0";
+    ToolKind                           kind = ToolKind::Cpp;
+    NodeModel                          nodeModel  = NodeModel::Fixed;
+    ToolVisibility                     visibility = ToolVisibility::Normal;
+    std::optional<InteractionMapping>  interaction;
+    std::filesystem::path              definitionPath;
+    std::vector<std::string>           categories;
     ToolSource                         source;
-    std::string hostBinding;
+    std::string                        hostBinding;
     PythonEntry                        entry;
     std::vector<std::filesystem::path> resources;
-    std::vector<PortDefinition> initParams;
-    std::vector<PortDefinition> inputs;
-    std::vector<PortDefinition> outputs;
+    std::vector<PortDefinition>        initParams;
+    std::vector<PortDefinition>        inputs;
+    std::vector<PortDefinition>        outputs;
 
     bool derivesPorts() const noexcept
     {
@@ -125,6 +141,14 @@ struct ToolDefinition {
     std::filesystem::path pythonPackage() const;
     std::filesystem::path pythonScript() const;
 };
+
+// "inputs.images" / "outputs.rect" / "init.source_flow_id". The stage prefix is mandatory: a
+// reference that could mean two things is an author error, never a guess.
+PortRef     parsePortRef(std::string_view text);
+std::string formatPortRef(const PortRef& reference);
+
+// The one Chinese breadcrumb of a tool ("预处理/图像处理"), used by the tool tree and node badges.
+std::string categoryPath(const ToolDefinition& def);
 
 // True only for String ports whose editor selects a resource path (file, directory, path).
 bool isPathPort(const PortDefinition& port);
@@ -146,11 +170,15 @@ bool isDerivedInitParam(std::string_view id) noexcept;
 // Fixed parameter pages shared by the validator and the workbench.
 std::span<const std::string_view> toolTabs() noexcept;
 
-// Materialises host-owned contract requirements (currently upstream_status) and
-// then validates. Idempotent; conflicting author declarations fail loudly.
+// The one place that turns a declaration into an effective contract: host-owned ports are
+// materialised, every value-carrying port receives its explicit default or the type's empty
+// value, and the result is validated. Idempotent; conflicting author declarations fail loudly.
 void normalizeToolDefinition(ToolDefinition &def);
 
 // Validating entry used after normalisation; kept separate for read-only checks.
 void validateToolDefinition(const ToolDefinition& def);
+
+// An independent copy of a port's default value, safe to hand to a node that may write it.
+PortValue portDefault(const PortDefinition& port);
 
 } // namespace visionrt

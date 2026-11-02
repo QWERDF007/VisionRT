@@ -16,6 +16,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <unordered_set>
 
@@ -84,7 +85,7 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
     for (const auto &[id, value] : values)
     {
         const auto definition = std::find_if(declarations.begin(), declarations.end(),
-                                             [&](const PortDefinition &port) { return port.id == id; });
+                                             [&](const PortDefinition &port) { return port.nameEn == id; });
         if (definition != declarations.end())
         {
             validateValue(definition->type, value);
@@ -391,24 +392,35 @@ public:
                     throw ContractError("outputs 必须是字典且 detail 必须是字符串");
                 const auto outputsDictionary = py::reinterpret_borrow<py::dict>(envelope["outputs"]);
                 detail = envelope["detail"].cast<std::string>();
+                // Only what the tool actually returned is converted: the host's completion entry owns
+                // the declared defaults, so an omitted business port is not an author error here.
+                std::set<std::string, std::less<>> declared;
                 for (const auto &output : definition_.outputs)
                 {
-                    const auto key = py::str(output.id);
+                    declared.insert(output.nameEn);
+                    const auto key = py::str(output.nameEn);
                     if (!outputsDictionary.contains(key))
-                        throw ContractError("输出键必须与声明端口一致，缺少：" + output.id);
+                        continue;
                     PortValue value;
                     try
                     {
-                        value = fromPython(output.type, outputsDictionary[key], state_->storage, output.id);
+                        value = fromPython(output.type, outputsDictionary[key], state_->storage, output.nameEn);
                     }
                     catch (const std::exception &error)
                     {
-                        throw ContractError("输出端口 " + output.id + "：" + error.what());
+                        throw ContractError("输出端口 " + output.nameEn + "：" + error.what());
                     }
-                    outputs.emplace(output.id, std::move(value));
+                    outputs.emplace(output.nameEn, std::move(value));
                 }
-                if (outputsDictionary.size() != definition_.outputs.size())
-                    throw ContractError("输出键必须与声明端口完全一致：多出或缺少业务端口");
+                for (auto item : outputsDictionary)
+                {
+                    const auto key = py::reinterpret_borrow<py::object>(item.first);
+                    if (!py::isinstance<py::str>(key))
+                        throw ContractError("输出键必须是字符串");
+                    const auto name = key.cast<std::string>();
+                    if (!declared.contains(name))
+                        throw ContractError("输出键不在声明中：" + name);
+                }
                 outputTimer.stop();
             }
             catch (const py::error_already_set &error)
@@ -460,13 +472,13 @@ private:
         if (!state_ || !state_->alive || generation_ != state_->generation)
         {
             ToolStatus err = makeStatus(ErrorCode::PythonUnavailable,
-                                        "Python 实例跨代失效或运行时已关闭：" + definition_.id);
+                                        "Python 实例跨代失效或运行时已关闭：" + definition_.nameEn);
             return err;
         }
-        const auto it = state_->implementations.find(definition_.id);
+        const auto it = state_->implementations.find(definition_.nameEn);
         if (it == state_->implementations.end())
         {
-            ToolStatus err = makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + definition_.id);
+            ToolStatus err = makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + definition_.nameEn);
             if (sharedLoadState_)
                 sharedLoadState_->update(err);
             return err;
@@ -731,10 +743,10 @@ std::vector<PythonImplementation> PythonRuntime::refresh(std::span<const ToolDef
             initStatus = makeStatus(ErrorCode::InvalidArgument, error.what());
         }
         implementation.loadState->set(std::move(initStatus), state.generation);
-        const auto [entry, inserted] = state.implementations.emplace(definition.id, std::move(implementation));
+        const auto [entry, inserted] = state.implementations.emplace(definition.nameEn, std::move(implementation));
         if (!inserted)
-            throw ContractError("Python 目录有重复工具 ID：" + definition.id);
-        statuses.push_back({definition.id, entry->second.loadState->status()});
+            throw ContractError("Python 目录有重复工具 ID：" + definition.nameEn);
+        statuses.push_back({definition.nameEn, entry->second.loadState->status()});
     }
     return statuses;
 }
@@ -748,12 +760,12 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
     ToolDefinition normalized = definition;
     normalizeToolDefinition(normalized);
     std::shared_ptr<PythonLoadState> loadState;
-    const auto it = state->implementations.find(normalized.id);
+    const auto it = state->implementations.find(normalized.nameEn);
     if (it != state->implementations.end())
         loadState = it->second.loadState;
     else
         loadState
-            = std::make_shared<PythonLoadState>(makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + normalized.id));
+            = std::make_shared<PythonLoadState>(makeStatus(ErrorCode::NotFound, "Python 实现未注册：" + normalized.nameEn));
 
     auto defPtr = std::make_shared<const ToolDefinition>(std::move(normalized));
     auto createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState,
@@ -763,10 +775,10 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
         auto lockedState = weak.lock();
         if (!lockedState || !lockedState->alive)
             throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                                makeStatus(ErrorCode::PythonUnavailable, "Python 运行时已关闭：" + defPtr->id));
+                                makeStatus(ErrorCode::PythonUnavailable, "Python 运行时已关闭：" + defPtr->nameEn));
         if (lockedState->generation != generation)
             throw RegistryError(ToolAvailability::ImplementationUnavailable,
-                                makeStatus(ErrorCode::PythonUnavailable, "Python 运行时已刷新：" + defPtr->id));
+                                makeStatus(ErrorCode::PythonUnavailable, "Python 运行时已刷新：" + defPtr->nameEn));
         if (loadState)
         {
             auto status = loadState->status();

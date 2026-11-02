@@ -128,8 +128,8 @@ try
                 "notification fixture write failed");
     };
     ToolDefinition definition;
-    definition.id          = "test.notifications";
-    definition.displayName = "静默轮询";
+    definition.nameEn          = "test.notifications";
+    definition.nameZh = "静默轮询";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"notifications", "tool.py", "source"};
     definition.outputs     = {

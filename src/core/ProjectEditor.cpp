@@ -229,7 +229,7 @@ TypeMap portTypes(const std::vector<PortDefinition> &ports)
     TypeMap result;
     for (const auto &port : ports)
         if (!port.typeFrom)
-            result.emplace(port.id, port.type);
+            result.emplace(port.nameEn, port.type);
     return result;
 }
 
@@ -260,11 +260,11 @@ void applyContract(NodeDefinition &node, const ToolDefinition &tool)
     }
     for (const auto &port : contract.inputs)
     {
-        if (node.inputs.contains(port.id))
+        if (node.inputs.contains(port.nameEn))
             continue;
         const bool hasDefault   = !isMissing(port.defaultValue);
         const bool canBeLiteral = port.type.type != Type::Image && hasDefault;
-        node.inputs.emplace(port.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
+        node.inputs.emplace(port.nameEn, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
                                                    copyProjectLiteral(port.defaultValue),
                                                    {}});
     }
@@ -718,7 +718,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     auto &target = edit.flow(flowId);
     requireIncrement(edit.project_.nextNodeId);
     requireIncrement(target.structureRevision);
-    if (tool.id.empty())
+    if (tool.nameEn.empty())
         throw ContractError("工具标识不能为空");
     // A node contract always carries the host-owned ports, so a definition handed in by a caller
     // is normalised before it becomes a node. Otherwise a hand-built contract would give the node a
@@ -727,8 +727,8 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     normalizeToolDefinition(definition);
     NodeDefinition node;
     node.id               = edit.project_.nextNodeId;
-    node.toolId           = definition.id;
-    node.toolNameSnapshot = definition.displayName;
+    node.toolId           = definition.nameEn;
+    node.toolNameSnapshot = definition.nameZh;
     if (definition.nodeModel == NodeModel::Expression || definition.nodeModel == NodeModel::Condition)
         node.expression = ExpressionConfig{};
     if (definition.nodeModel == NodeModel::Select)
@@ -738,22 +738,22 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
         for (const auto &parameter : contract.initParams)
         {
             validateLiteral(parameter.type, parameter.defaultValue);
-            if (!node.signatures.initParams.emplace(parameter.id, parameter.type).second)
+            if (!node.signatures.initParams.emplace(parameter.nameEn, parameter.type).second)
                 throw ContractError("初始化参数标识重复");
-            node.initParams.emplace(parameter.id, copyProjectLiteral(parameter.defaultValue));
+            node.initParams.emplace(parameter.nameEn, copyProjectLiteral(parameter.defaultValue));
         }
     else
         for (const auto &parameter : contract.initParams)
-            node.signatures.initParams.insert_or_assign(parameter.id, parameter.type);
+            node.signatures.initParams.insert_or_assign(parameter.nameEn, parameter.type);
     for (const auto &input : contract.inputs)
     {
         validateLiteral(input.type, input.defaultValue);
-        if (node.signatures.initParams.contains(input.id)
-            || !node.signatures.inputs.emplace(input.id, input.type).second)
+        if (node.signatures.initParams.contains(input.nameEn)
+            || !node.signatures.inputs.emplace(input.nameEn, input.type).second)
             throw ContractError("输入参数标识重复");
         const bool hasDefault = !isMissing(input.defaultValue);
         const bool canBeLiteral = input.type.type != Type::Image && hasDefault;
-        node.inputs.emplace(input.id, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
+        node.inputs.emplace(input.nameEn, InputBinding{canBeLiteral ? BindingMode::Literal : BindingMode::Upstream,
                                                    copyProjectLiteral(input.defaultValue),
                                                    {}});
     }
@@ -762,7 +762,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
         if (output.typeFrom)
             continue;
         validateTypeSpec(output.type);
-        if (!node.signatures.outputs.emplace(output.id, output.type).second)
+        if (!node.signatures.outputs.emplace(output.nameEn, output.type).second)
             throw ContractError("输出端口标识重复");
     }
     const GridPoint origin{};
@@ -925,7 +925,7 @@ bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, Expr
     auto         &target = edit.flow(flowId);
     auto         &node   = findNode(target, id);
     requireEditable(node);
-    if (node.toolId != tool.id)
+    if (node.toolId != tool.nameEn)
         throw ContractError("工具定义与节点不匹配");
     if (tool.nodeModel != NodeModel::Expression && tool.nodeModel != NodeModel::Condition)
         throw ContractError("该节点不使用表达式配置");
@@ -951,7 +951,7 @@ bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, Expr
     const auto contract  = nodeContract(candidate, tool);
     TypeMap    nextInputs;
     for (const auto &port : contract.inputs)
-        nextInputs.emplace(port.id, port.type);
+        nextInputs.emplace(port.nameEn, port.type);
     for (const auto &[portId, binding] : node.inputs)
     {
         const auto next = nextInputs.find(portId);
@@ -961,14 +961,14 @@ bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, Expr
     }
     std::set<std::string> nextOutputs;
     for (const auto &port : contract.outputs)
-        if (!port.id.starts_with("__"))
-            nextOutputs.insert(port.id);
+        if (!port.nameEn.starts_with("__"))
+            nextOutputs.insert(port.nameEn);
     for (const auto &[portId, type] : node.signatures.outputs)
     {
         if (portId.starts_with("__"))
             continue;
         const auto next = std::find_if(contract.outputs.begin(), contract.outputs.end(),
-                                       [&](const auto &port) { return port.id == portId; });
+                                       [&](const auto &port) { return port.nameEn == portId; });
         const bool kept = next != contract.outputs.end() && next->type == type;
         if (kept)
             continue;
@@ -1035,14 +1035,14 @@ bool ProjectEditor::setConditionMode(std::string_view flowId, NodeId id, Binding
 
     std::set<std::string, std::less<>> nextOutputs;
     for (const auto &port : tool.outputs)
-        if (!port.id.starts_with("__"))
-            nextOutputs.insert(port.id);
+        if (!port.nameEn.starts_with("__"))
+            nextOutputs.insert(port.nameEn);
     for (const auto &[portId, type] : node.signatures.outputs)
     {
         if (portId.starts_with("__"))
             continue;
         const auto next = std::find_if(tool.outputs.begin(), tool.outputs.end(),
-                                       [&](const auto &port) { return port.id == portId; });
+                                       [&](const auto &port) { return port.nameEn == portId; });
         const bool kept = next != tool.outputs.end() && next->type == type;
         if (kept)
             continue;
@@ -1069,23 +1069,23 @@ bool ProjectEditor::setConditionMode(std::string_view flowId, NodeId id, Binding
     const auto contract = nodeContract(node, tool);
     for (const auto &port : contract.inputs)
     {
-        const auto found = node.inputs.find(port.id);
+        const auto found = node.inputs.find(port.nameEn);
         if (found == node.inputs.end())
-            throw ContractError("条件节点缺少输入绑定：" + port.id);
+            throw ContractError("条件节点缺少输入绑定：" + port.nameEn);
         try
         {
             validateLiteral(port.type, found->second.literal);
         }
         catch (const ContractError &error)
         {
-            throw ContractError("输入 " + port.id + " 的已存值在新模式下无效：" + error.what());
+            throw ContractError("输入 " + port.nameEn + " 的已存值在新模式下无效：" + error.what());
         }
         if (found->second.mode == BindingMode::Upstream && found->second.source)
         {
             const auto check
-                = validateBinding(target, found->second.source->node, found->second.source->port, id, port.id);
+                = validateBinding(target, found->second.source->node, found->second.source->port, id, port.nameEn);
             if (!check)
-                throw ContractError("输入 " + port.id + " 的已存来源在新模式下无效：" + check.message);
+                throw ContractError("输入 " + port.nameEn + " 的已存来源在新模式下无效：" + check.message);
         }
     }
     if (hasDependencyCycle(target))
@@ -1105,7 +1105,7 @@ bool ProjectEditor::setSelectType(std::string_view flowId, NodeId id, TypeSpec t
     auto         &target = edit.flow(flowId);
     auto         &node   = findNode(target, id);
     requireEditable(node);
-    if (node.toolId != tool.id)
+    if (node.toolId != tool.nameEn)
         throw ContractError("工具定义与节点不匹配");
     if (tool.nodeModel != NodeModel::Select)
         throw ContractError("该节点不是合流节点");
