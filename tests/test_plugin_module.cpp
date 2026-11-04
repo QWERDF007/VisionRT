@@ -8,6 +8,15 @@
 
 namespace {
 
+// Port numbers, never names: a plugin tool keys its values by the number its declaration reserved.
+// The fixture declarations used by the tests declare init[0], inputs[1] and outputs[2].
+constexpr visionrt::PortId kInitCode      = 0;
+constexpr visionrt::PortId kInitInitial   = 0;
+constexpr visionrt::PortId kInputX        = 1;
+constexpr visionrt::PortId kOutputValue   = 2;
+constexpr visionrt::PortId kOutputY       = 2;
+constexpr visionrt::PortId kOutputCount   = 2;
+
 std::atomic<int> g_instanceCount{0};
 std::atomic<int> g_destroyCalls{0};
 std::atomic<int> g_counterReleaseCalls{0};
@@ -35,7 +44,7 @@ public:
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(80));
         visionrt::Values out;
-        out.emplace("y", std::int64_t{42});
+        out.emplace(kOutputY, std::int64_t{42});
         return visionrt::toolResult(std::move(out), {0, "ok"});
     }
 
@@ -60,7 +69,7 @@ public:
 
     visionrt::ToolStatus initialize(const visionrt::Values &params) override
     {
-        const auto it = params.find("initial");
+        const auto it = params.find(kInitInitial);
         if (it != params.end() && std::holds_alternative<std::int64_t>(it->second))
         {
             count_ = std::get<std::int64_t>(it->second);
@@ -76,7 +85,7 @@ public:
     {
         ++count_;
         visionrt::Values outputs;
-        outputs.emplace("count", count_);
+        outputs.emplace(kOutputCount, count_);
         return visionrt::toolResult(std::move(outputs), {0, "ok"});
     }
 
@@ -142,12 +151,12 @@ public:
     {
         visionrt::Values out;
         std::int64_t     x  = 0;
-        const auto       it = in.find("x");
+        const auto       it = in.find(kInputX);
         if (it != in.end() && std::holds_alternative<std::int64_t>(it->second))
         {
             x = std::get<std::int64_t>(it->second);
         }
-        out.emplace("y", x * 2);
+        out.emplace(kOutputY, x * 2);
         return visionrt::toolResult(std::move(out), {0, "ok"});
     }
 
@@ -220,13 +229,13 @@ class PublicationTool final : public visionrt::IToolInstance
 public:
     visionrt::ToolStatus initialize(const visionrt::Values &parameters) override
     {
-        code = std::get<std::int64_t>(parameters.at("code"));
+        code = std::get<std::int64_t>(parameters.at(kInitCode));
         return {};
     }
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return visionrt::toolResult({{"value", visionrt::Missing{}}}, {code, code == 0 ? "" : "业务输出缺失"});
+        return visionrt::toolResult({{kOutputValue, visionrt::Missing{}}}, {code, code == 0 ? "" : "业务输出缺失"});
     }
 
     visionrt::ToolStatus release() override

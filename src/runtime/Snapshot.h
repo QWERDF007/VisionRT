@@ -79,9 +79,9 @@ public:
 
 struct InputUse
 {
-    std::string   inputPort;
-    NodeId        sourceNode      = 0;
-    std::string   sourcePort;
+    PortId        inputPort;
+    NodeId        sourceNode        = 0;
+    PortId        sourcePort        = 0;
     std::uint64_t sourcePublication = 0;
 };
 

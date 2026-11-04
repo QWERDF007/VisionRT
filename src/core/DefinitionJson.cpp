@@ -11,14 +11,40 @@ namespace {
 
 PortRef reference(const QJsonValue &value, const QString &context)
 {
-    try
-    {
-        return parsePortRef(json::text(value, context));
-    }
-    catch (const std::exception &error)
-    {
-        throw ContractError((context + "：" + error.what()).toStdString());
-    }
+    const auto block = json::object(value, context);
+    json::fields(block, {"stage", "id"}, context);
+    const auto stage = json::text(block.value("stage"), context + ".stage");
+    PortStage  parsed = PortStage::Inputs;
+    if (stage == "init")
+        parsed = PortStage::Init;
+    else if (stage == "inputs")
+        parsed = PortStage::Inputs;
+    else if (stage == "outputs")
+        parsed = PortStage::Outputs;
+    else
+        throw ContractError("未知端口引用阶段：" + stage);
+    const auto id = block.value("id");
+    if (!id.isDouble() || id.toDouble() < 0.0 || id.toDouble() > 4294967295.0
+        || id.toDouble() != std::floor(id.toDouble()))
+        throw ContractError((context + ".id 必须是非负 32 位整数").toStdString());
+    return {parsed, static_cast<PortId>(id.toDouble())};
+}
+
+PortId portId(const QJsonValue &value, const QString &context)
+{
+    if (!value.isDouble() || value.toDouble() < 0.0 || value.toDouble() > 4294967295.0
+        || value.toDouble() != std::floor(value.toDouble()))
+        throw ContractError((context + " 必须是非负 32 位整数").toStdString());
+    return static_cast<PortId>(value.toDouble());
+}
+
+std::uint64_t highWater(const QJsonValue &value, const QString &context)
+{
+    const double number = value.toDouble(-1.0);
+    if (!value.isDouble() || number < 0.0 || number > static_cast<double>(kPortIdExhausted)
+        || number != std::floor(number))
+        throw ContractError((context + " 必须是 0 到 2^32 之间的整数").toStdString());
+    return static_cast<std::uint64_t>(number);
 }
 
 std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJsonObject &root, PortStage stage)
@@ -38,12 +64,16 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
         const auto context = direction + "[" + QString::number(index) + "]";
         const auto item    = json::object(items[index], context);
         json::fields(item,
-                     {"name_en", "name_zh", "type", "type_from", "default", "constraints", "ui", "relations",
+                     {"id", "name_zh", "name_en", "type", "type_from", "default", "constraints", "ui", "relations",
                       "display"},
                      context);
         PortDefinition port;
-        port.nameEn = json::text(item.value("name_en"), context + ".name_en");
+        if (!item.contains("id"))
+            throw ContractError((context + " 缺少 id").toStdString());
+        port.id     = portId(item.value("id"), context + ".id");
         port.nameZh = json::text(item.value("name_zh"), context + ".name_zh");
+        if (item.contains("name_en"))
+            port.nameEn = json::text(item.value("name_en"), context + ".name_en", false);
         const auto decode = [&](const QString &field, const QStringList &suffix = QStringList{})
         {
             QStringList location = path;
@@ -151,29 +181,47 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
         }
         catch (const std::exception &error)
         {
-            throw ContractError(context.toStdString() + "（" + port.nameEn + "）：" + error.what());
+            throw ContractError(context.toStdString() + "（" + portLabel(port.id) + "）：" + error.what());
         }
         result.push_back(std::move(port));
     }
     return result;
 }
 
-QJsonArray encodePorts(const std::vector<PortDefinition> &ports)
+QString stageText(PortStage stage)
+{
+    switch (stage)
+    {
+    case PortStage::Init:
+        return QStringLiteral("init");
+    case PortStage::Inputs:
+        return QStringLiteral("inputs");
+    case PortStage::Outputs:
+        return QStringLiteral("outputs");
+    }
+    return QStringLiteral("inputs");
+}
+
+QJsonValue referenceJson(const PortRef &reference)
+{
+    return QJsonObject{{"stage", stageText(reference.stage)}, {"id", static_cast<double>(reference.id)}};
+}
+
+QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage)
 {
     QJsonArray result;
     for (const auto &port : ports)
     {
-        if (isHostOwnedPort(port.nameEn))
+        if (isReservedPort(stage, port.id))
             continue;
-        QJsonObject item{
-            {"name_en", QString::fromStdString(port.nameEn)},
-            {"name_zh", QString::fromStdString(port.nameZh)}
-        };
+        QJsonObject item{{"id", static_cast<double>(port.id)}, {"name_zh", QString::fromStdString(port.nameZh)}};
+        if (!port.nameEn.empty())
+            item.insert("name_en", QString::fromStdString(port.nameEn));
         if (port.typeFrom)
             item.insert("type_from", QJsonObject{
-                                         {"flow", QString::fromStdString(formatPortRef(port.typeFrom->flowParameter))},
-                                         {"node", QString::fromStdString(formatPortRef(port.typeFrom->nodeParameter))},
-                                         {"port", QString::fromStdString(formatPortRef(port.typeFrom->portParameter))}
+                                         {"flow", referenceJson(port.typeFrom->flowParameter)},
+                                         {"node", referenceJson(port.typeFrom->nodeParameter)},
+                                         {"port", referenceJson(port.typeFrom->portParameter)}
             });
         else
             item.insert("type", QString::fromStdString(typeToken(port.type)));
@@ -217,7 +265,7 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports)
                  {"same_geometry_as", &port.sameGeometryAs}
         })
             if (*value)
-                relations.insert(key, QString::fromStdString(formatPortRef(**value)));
+                relations.insert(key, referenceJson(**value));
         if (!relations.isEmpty())
             item.insert("relations", relations);
         if (!port.colorOrder.empty())
@@ -237,11 +285,11 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             throw ContractError("工具声明必须是 JSON 对象");
         const auto root = document.json().object();
         json::fields(root,
-                     {"schema_version", "name_en", "name_zh", "version", "implementation", "ui", "ports",
-                      "node_model", "interaction"},
+                     {"schema_version", "name_en", "name_zh", "version", "implementation", "ui", "next_port_id",
+                      "ports", "node_model", "interaction"},
                      "工具声明");
-        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{5}}))
-            throw ContractError("schema_version 必须是整数 5");
+        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{6}}))
+            throw ContractError("schema_version 必须是整数 6");
         ToolDefinition definition;
         definition.nameEn  = json::text(root.value("name_en"), "name_en");
         definition.nameZh  = json::text(root.value("name_zh"), "name_zh");
@@ -338,11 +386,21 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             {
                 if (!item.contains(field))
                     continue;
-                const auto values = json::object(item.value(field), QString{"interaction."} + field);
+                const auto values = json::array(item.value(field), QString{"interaction."} + field);
                 auto      &target = std::string_view(field) == "inputs" ? mapping.inputs : mapping.proposals;
-                for (auto entry = values.begin(); entry != values.end(); ++entry)
-                    target.emplace(entry.key().toUtf8().toStdString(),
-                                   reference(entry.value(), QString{"interaction."} + field + "." + entry.key()));
+                for (qsizetype index = 0; index < values.size(); ++index)
+                {
+                    const auto context = QString{"interaction."} + field + "[" + QString::number(index) + "]";
+                    const auto entry   = json::object(values[index], context);
+                    json::fields(entry, {"helper_port_id", std::string_view(field) == "inputs" ? "source" : "target"},
+                                 context);
+                    const auto helper = portId(entry.value("helper_port_id"), context + ".helper_port_id");
+                    if (helper == 0)
+                        throw ContractError((context + ".helper_port_id 必须大于 0").toStdString());
+                    target.emplace(helper,
+                                   reference(entry.value(std::string_view(field) == "inputs" ? "source" : "target"),
+                                             context));
+                }
             }
             if (item.contains("roi_kinds"))
             {
@@ -367,6 +425,17 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             }
             definition.interaction = std::move(mapping);
         }
+        if (root.contains("next_port_id"))
+        {
+            const auto block = json::object(root.value("next_port_id"), "next_port_id");
+            json::fields(block, {"init", "inputs", "outputs"}, "next_port_id");
+            for (const char *key : {"init", "inputs", "outputs"})
+                if (!block.contains(key))
+                    throw ContractError("next_port_id 必须声明 init/inputs/outputs 三项");
+            definition.setNextPortId(PortStage::Init, highWater(block.value("init"), "next_port_id.init"));
+            definition.setNextPortId(PortStage::Inputs, highWater(block.value("inputs"), "next_port_id.inputs"));
+            definition.setNextPortId(PortStage::Outputs, highWater(block.value("outputs"), "next_port_id.outputs"));
+        }
         if (root.contains("ports"))
         {
             const auto container = json::object(root.value("ports"), "ports");
@@ -375,10 +444,15 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             definition.inputs     = ports(document, container, PortStage::Inputs);
             definition.outputs    = ports(document, container, PortStage::Outputs);
         }
+        if (!root.contains("next_port_id") && (!definition.inputs.empty() || !definition.outputs.empty()))
+            throw ContractError("声明必须保存 next_port_id，否则重启后无法保证编号不复用");
         for (const auto *list : {&definition.initParams, &definition.inputs, &definition.outputs})
             for (const auto &port : *list)
-                if (isHostOwnedPort(port.nameEn))
-                    throw ContractError("工具声明不得定义宿主公共端口：" + port.nameEn);
+                if (isReservedPort(list == &definition.inputs   ? PortStage::Inputs
+                                   : list == &definition.outputs ? PortStage::Outputs
+                                                                 : PortStage::Init,
+                                   port.id))
+                    throw ContractError("工具声明不得定义宿主公共端口：" + portLabel(port.id));
         normalizeToolDefinition(definition);
         validateToolDefinition(definition);
         return definition;
@@ -442,12 +516,16 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
         ui.insert("visibility", "assist");
     if (!ui.isEmpty())
         root.insert("ui", ui);
+    root.insert("next_port_id",
+                QJsonObject{{"init", static_cast<double>(definition.nextInitPortId)},
+                            {"inputs", static_cast<double>(definition.nextInputPortId)},
+                            {"outputs", static_cast<double>(definition.nextOutputPortId)}});
     QJsonObject ports;
-    if (auto init = encodePorts(definition.initParams); !init.isEmpty())
+    if (auto init = encodePorts(definition.initParams, PortStage::Init); !init.isEmpty())
         ports.insert("init", init);
-    if (auto inputs = encodePorts(definition.inputs); !inputs.isEmpty())
+    if (auto inputs = encodePorts(definition.inputs, PortStage::Inputs); !inputs.isEmpty())
         ports.insert("inputs", inputs);
-    if (auto outputs = encodePorts(definition.outputs); !outputs.isEmpty())
+    if (auto outputs = encodePorts(definition.outputs, PortStage::Outputs); !outputs.isEmpty())
         ports.insert("outputs", outputs);
     if (!ports.isEmpty())
         root.insert("ports", ports);
@@ -474,14 +552,14 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
     {
         QJsonObject interaction;
         interaction.insert("helper", QString::fromStdString(definition.interaction->helperNameEn));
-        QJsonObject inputs;
+        QJsonArray inputs;
         for (const auto &[helper, port] : definition.interaction->inputs)
-            inputs.insert(QString::fromStdString(helper), QString::fromStdString(formatPortRef(port)));
+            inputs.append(QJsonObject{{"helper_port_id", static_cast<double>(helper)}, {"source", referenceJson(port)}});
         if (!inputs.isEmpty())
             interaction.insert("inputs", inputs);
-        QJsonObject proposals;
+        QJsonArray proposals;
         for (const auto &[helper, port] : definition.interaction->proposals)
-            proposals.insert(QString::fromStdString(helper), QString::fromStdString(formatPortRef(port)));
+            proposals.append(QJsonObject{{"helper_port_id", static_cast<double>(helper)}, {"target", referenceJson(port)}});
         if (!proposals.isEmpty())
             interaction.insert("proposals", proposals);
         if (!definition.interaction->roiKinds.empty())

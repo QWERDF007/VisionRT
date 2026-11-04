@@ -17,6 +17,8 @@
 #include "ui/RecentProjects.h"
 #include "ui/RoiEditSession.h"
 #include "ui/ToolTreeModel.h"
+#include "ui/ToolEditorController.h"
+#include "core/CustomToolStore.h"
 #include "ui/WireRouter.h"
 #include "common/Version.h"
 
@@ -37,7 +39,13 @@ QString               q(const std::string &text);
 QString               pathText(const std::filesystem::path &path);
 std::filesystem::path localPath(const QString &text);
 NodeId                nodeId(const QString &text);
-const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id);
+const PortDefinition *port(const std::vector<PortDefinition> &ports, PortId id);
+
+// Controller-owned parameter rows carry a negative row id: they open an editor, they are not a port.
+inline constexpr int kGuardRow     = -1;
+inline constexpr int kExpressionRow = -2;
+inline constexpr int kConditionRow = -3;
+inline constexpr int kSelectTypeRow = -4;
 QVariantMap           metadata(const ToolDefinition &definition);
 } // namespace workbench
 
@@ -91,6 +99,8 @@ struct AppController::Impl : PresentationHost
     std::set<std::string>                  routingErrors;
     // File-operation state has one owner; the controller executes side effects around it.
     ProjectOperations operations;
+    CustomToolStore   customStore;
+    ToolEditorController toolEditor;
     // A user run owns the workspace; synchronize, refresh and reset are management tasks that keep
     // the previous editing rules.
     bool runActive() const noexcept
@@ -137,8 +147,8 @@ struct AppController::Impl : PresentationHost
         std::uint64_t                                                structureRevision = 0;
         NodeId                                                       node              = 0;
         bool                                                         valid             = false;
-        std::map<std::string, bool, std::less<>>                     connectable;
-        std::map<std::string, std::vector<CandidateInput>, std::less<>> candidates;
+        std::map<PortId, bool>                                       connectable;
+        std::map<PortId, std::vector<CandidateInput>>               candidates;
     };
     mutable ConnectableState connectable;
 
@@ -167,7 +177,7 @@ struct AppController::Impl : PresentationHost
     const NodeDefinition                *findNode(NodeId id) const;
     const ToolDefinition                *currentTool() const;
     bool                                 idle();
-    bool                                 applyParameter(const QString &id, bool initialization, PortValue value);
+    bool                                 applyParameter(PortId id, bool initialization, PortValue value);
     void                                 report(const QString &text);
     void                                 report(ApplicationDiagnostic diagnostic);
     void                                 report(const ErrorInfo &error);
@@ -220,13 +230,13 @@ struct AppController::Impl : PresentationHost
     const NodeDefinition *selectedNode() const override { return currentNode(); }
     const FlowDefinition *currentFlow() const override;
     const ToolDefinition *effectiveTool() const override;
-    const PortDefinition *parameter(const std::string &id, bool initialization) const override;
-    const std::map<std::string, bool, std::less<>> *refreshConnectable(const FlowDefinition &flow,
+    const PortDefinition *parameter(PortId id, bool initialization) const override;
+    const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
                                                                       const NodeDefinition &node) const override;
     bool runtimeIdle() const override { return state == RuntimeState::Idle; }
     bool closing() const override { return operations.isClosing(); }
     bool contextCurrent(const QVariantMap &context) const override { return q->portContextCurrent(context); }
-    QVariantMap portContext(const QString &port) const override { return q->portContext(port, true); }
+    QVariantMap portContext(PortId port) const override { return q->portContext(port, true); }
     void deliverText(const QString &text) override { emit q->outputTextReady(text); }
     void resultsChanged() override { emit q->resultsChanged(); }
     void runtimeChanged() override { emit q->runtimeChanged(); }
@@ -245,8 +255,8 @@ struct AppController::Impl : PresentationHost
     void      updateDisplay();
     ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
     void      applyOverlays();
-    const PortValue *resolvedInputRef(const NodeDefinition &node, const std::string &input) const;
-    PortValue resolvedInput(const NodeDefinition &node, const std::string &input) const;
+    const PortValue *resolvedInputRef(const NodeDefinition &node, PortId input) const;
+    PortValue        resolvedInput(const NodeDefinition &node, PortId input) const;
     void                 commitRoi(const RoiEditTarget &target, const EncodedRegion *value);
     void      finishRoi();
     void      storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);

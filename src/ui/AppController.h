@@ -1,4 +1,7 @@
 #pragma once
+#include "core/ToolDefinition.h"
+#include "ui/ToolEditorController.h"
+
 #include <QAbstractItemModel>
 #include <QObject>
 #include <QPointF>
@@ -11,6 +14,8 @@
 namespace visionrt {
 class ImageViewport;
 class PythonRuntime;
+class ToolEditorController;
+struct ProjectDefinition;
 
 class AppController : public QObject
 {
@@ -36,11 +41,11 @@ class AppController : public QObject
     Q_PROPERTY(QVariantList parameterTabs READ parameterTabs CONSTANT)
     Q_PROPERTY(QVariantList imageOutputs READ imageOutputs NOTIFY resultsChanged)
     Q_PROPERTY(QVariantMap roiEditor READ roiEditor NOTIFY resultsChanged)
-    Q_PROPERTY(QString activeRoiParameter READ activeRoiParameter NOTIFY resultsChanged)
+    Q_PROPERTY(int activeRoiParameter READ activeRoiParameter NOTIFY resultsChanged)
     Q_PROPERTY(int activeRoiShape READ activeRoiShape NOTIFY resultsChanged)
     Q_PROPERTY(int imageIndex READ imageIndex WRITE setImageIndex NOTIFY resultsChanged)
     Q_PROPERTY(int imageCount READ imageCount NOTIFY resultsChanged)
-    Q_PROPERTY(QString selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
+    Q_PROPERTY(int selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
     Q_PROPERTY(QAbstractItemModel *toolModel READ toolModel CONSTANT)
     Q_PROPERTY(QAbstractItemModel *outputModel READ outputModel CONSTANT)
     // 日志窗口模型：服务未启动时为空，启动后按可见性批量追加
@@ -51,6 +56,7 @@ class AppController : public QObject
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
     Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
     Q_PROPERTY(QString aboutText READ aboutText NOTIFY aboutTextChanged)
+    Q_PROPERTY(visionrt::ToolEditorController *toolEditor READ toolEditor CONSTANT)
     Q_PROPERTY(QString nodeModel READ nodeModel NOTIFY parametersChanged)
     Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
     Q_PROPERTY(bool executionGuardActive READ executionGuardActive NOTIFY parametersChanged)
@@ -87,11 +93,11 @@ public:
     QVariantList        parameterTabs() const;
     QVariantList        imageOutputs() const;
     QVariantMap         roiEditor() const;
-    QString             activeRoiParameter() const;
+    int                 activeRoiParameter() const;
     int                 activeRoiShape() const;
     int                 imageIndex() const;
     int                 imageCount() const;
-    QString             selectedImageOutput() const;
+    int                 selectedImageOutput() const;
     QAbstractItemModel *toolModel() const;
     QAbstractItemModel *outputModel() const;
     QAbstractItemModel *logModel();
@@ -102,6 +108,14 @@ public:
     QString             aboutText() const;
     Q_INVOKABLE void    copyAboutText() const;
     PythonRuntime      *pythonRuntime() const;
+    ToolEditorController *toolEditor() const noexcept;
+    // The open project is the only source an impact preview reads; the tool editor never keeps a
+    // second copy of it.
+    const ProjectDefinition &project() const noexcept;
+    // Every definition the runtime catalog holds, in one place: the editor lists installed tools
+    // from here instead of scanning package roots a second time. Distinct from the QML-facing
+    // toolDefinitions() list, which is a presentation of the same catalog.
+    const std::vector<ToolDefinition> &toolCatalog() const noexcept;
 
     Q_INVOKABLE void         attachViewport(QObject *viewport);
     Q_INVOKABLE void         selectFlow(const QString &id);
@@ -121,23 +135,23 @@ public:
     Q_INVOKABLE void         deleteFlow(const QString &id);
     Q_INVOKABLE void         copyFlow(const QString &id);
     Q_INVOKABLE void         setFlowSelected(const QString &id, bool selected);
-    Q_INVOKABLE bool         setParameter(const QString &id, bool initialization, const QString &text, bool jsonInput = false);
-    Q_INVOKABLE bool         setRectParameter(const QString &id, bool initialization, double x, double y, double width, double height, double angle = 0.0);
-    Q_INVOKABLE bool         setParameterPath(const QString &id, bool initialization, const QString &path);
-    Q_INVOKABLE bool         setParameterPath(const QString &id, bool initialization, const QUrl &url);
-    Q_INVOKABLE bool         stepIntegerParameter(const QString &id, bool initialization, int direction,
+    Q_INVOKABLE bool         setParameter(int port, bool initialization, const QString &text, bool jsonInput = false);
+    Q_INVOKABLE bool         setRectParameter(int port, bool initialization, double x, double y, double width, double height, double angle = 0.0);
+    Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QString &path);
+    Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QUrl &url);
+    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction,
                                                   const QString &literal);
-    Q_INVOKABLE bool         setParameterMode(const QString &id, bool upstream);
-    Q_INVOKABLE QVariantMap  portDeclarationContext(const QString &port, bool output = false) const;
-    Q_INVOKABLE QVariantMap  portResultContext(const QString &port) const;
-    Q_INVOKABLE QVariantMap  portContext(const QString &port, bool output = false) const;
+    Q_INVOKABLE bool         setParameterMode(int port, bool upstream);
+    Q_INVOKABLE QVariantMap  portDeclarationContext(PortId port, bool output = false) const;
+    Q_INVOKABLE QVariantMap  portResultContext(PortId port) const;
+    Q_INVOKABLE QVariantMap  portContext(PortId port, bool output = false) const;
     Q_INVOKABLE bool         portContextCurrent(const QVariantMap &context) const;
     Q_INVOKABLE QVariantList bindingCandidates(const QVariantMap &context) const;
-    Q_INVOKABLE bool         bindInput(const QVariantMap &context, const QString &node, const QString &output);
+    Q_INVOKABLE bool         bindInput(const QVariantMap &context, const QString &node, int output);
     Q_INVOKABLE bool         unbindInput(const QVariantMap &context);
     Q_INVOKABLE QVariantList cascadeOutputCandidates(const QVariantMap &context) const;
-    Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, const QString &input);
-    Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, const QString &input);
+    Q_INVOKABLE bool         bindOutputTo(const QVariantMap &context, const QString &node, int input);
+    Q_INVOKABLE bool         unbindOutputFrom(const QVariantMap &context, const QString &node, int input);
     Q_INVOKABLE void         runOnce();
     Q_INVOKABLE void         toggleLoop();
     Q_INVOKABLE void         runNode();
@@ -160,10 +174,10 @@ public:
     Q_INVOKABLE void         logParameterDraftRejected(const QString &detail);
     Q_INVOKABLE bool         save(const QString &path = {});
     Q_INVOKABLE void         setImageIndex(int index);
-    Q_INVOKABLE void         setImageOutput(const QString &output);
-    Q_INVOKABLE bool         editRoi(const QString &parameter, bool copyUpstream);
-    Q_INVOKABLE bool         startRoiDraw(const QString &parameter, int shape = 2);
-    Q_INVOKABLE bool         clearRoi(const QString &parameter);
+    Q_INVOKABLE void         setImageOutput(int output);
+    Q_INVOKABLE bool         editRoi(int parameter, bool copyUpstream);
+    Q_INVOKABLE bool         startRoiDraw(int parameter, int shape = 2);
+    Q_INVOKABLE bool         clearRoi(int parameter);
     Q_INVOKABLE bool         applyRoi();
     Q_INVOKABLE bool         setRoiRectangle(const QString &session, const QVariantList &coordinates);
     Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
@@ -174,8 +188,7 @@ public:
                                                    const QVariantList &program);
     Q_INVOKABLE bool         applySingleExpression(const QString &node, const QString &text);
     Q_INVOKABLE QVariantList guardCandidates(const QString &node) const;
-    Q_INVOKABLE bool         applyExecutionGuard(const QString &node, const QString &sourceNode,
-                                                 const QString &port);
+    Q_INVOKABLE bool         applyExecutionGuard(const QString &node, const QString &sourceNode, int port);
     // Mode switch is one transaction; binding a source is a separate one.
     Q_INVOKABLE bool         setExecutionGuardMode(const QString &node, bool upstream);
     Q_INVOKABLE bool         setConditionMode(const QString &node, bool upstream);

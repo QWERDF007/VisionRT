@@ -33,10 +33,10 @@ public:
     virtual const NodeDefinition *selectedNode() const                            = 0;
     virtual const FlowDefinition *currentFlow() const                             = 0;
     virtual const ToolDefinition *effectiveTool() const                           = 0;
-    virtual const PortDefinition *parameter(const std::string &id, bool init) const = 0;
+    virtual const PortDefinition *parameter(PortId id, bool init) const = 0;
     // Same candidate/validate rule the binding menu uses, cached by the controller. The returned map
     // is the cache itself, not a copy.
-    virtual const std::map<std::string, bool, std::less<>> *refreshConnectable(const FlowDefinition &flow,
+    virtual const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
                                                                                const NodeDefinition &node) const = 0;
 
     // Runtime facts the presentation must not duplicate.
@@ -46,7 +46,7 @@ public:
     // Effects that belong to the controller: QML notifications and the user-visible ROI session.
     virtual bool contextCurrent(const QVariantMap &context) const = 0;
     // Rebuilds the live context for a port; a queued read is only served when it still matches.
-    virtual QVariantMap portContext(const QString &port) const = 0;
+    virtual QVariantMap portContext(PortId port) const = 0;
     virtual void deliverText(const QString &text)                 = 0;
     virtual void resultsChanged()                                 = 0;
     virtual void runtimeChanged()                                 = 0;
@@ -84,7 +84,7 @@ public:
     const NodeDiagnostic       *instance(NodeId node) const;
     ResultSlot::Snapshot        displaySnapshot(const NodeDefinition &node) const;
     // The bound value of an input, read through this module's snapshots. One lookup, no second copy.
-    const PortValue *resolvedInput(const NodeDefinition &node, const std::string &input) const;
+    const PortValue *resolvedInput(const NodeDefinition &node, PortId input) const;
 
     // One polled node. Returns true when its visible role or result changed.
     bool applyNode(NodeId node, bool active, const std::shared_ptr<const NodeDiagnostic> &lifecycle,
@@ -110,9 +110,9 @@ public:
     QVariantList imageOutputs() const;
     int          imageIndex() const;
     int          imageCount() const;
-    QString      selectedImageOutput() const;
+    int          selectedImageOutput() const;
     bool         setImageIndex(int index);
-    bool         setImageOutput(const QString &output);
+    bool         setImageOutput(int output);
     // Restores the pre-edit index without the user-command guards; the ROI session owns that rule.
     void restoreImageIndex(int index);
 
@@ -167,7 +167,7 @@ private:
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> lifecycle_;
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> instances_;
 
-    QString  imageOutput_;
+    PortId   imageOutput_ = 0;
     int      index_    = 0;
     int      count_    = 0;
     NodeId   displayed_ = 0;

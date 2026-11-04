@@ -33,8 +33,10 @@ QVariantList AppController::routeWires(const QVariantList &geometry)
                 points.push_back(point);
             QVariantList ports;
             for (const auto &relation : wire.ports)
-                ports.push_back(QVariantMap{{"output", workbench::q(relation.source.port)},
-                                             {"input", workbench::q(relation.target.port)}});
+                // The list is read by people, so it carries the one port breadcrumb the rest of the
+                // window uses instead of a bare number.
+                ports.push_back(QVariantMap{{"output", workbench::q(portLabel(relation.source.port))},
+                                             {"input", workbench::q(portLabel(relation.target.port))}});
             if (!wire.error.empty())
             {
                 const auto key = wire.error + ":" + std::to_string(wire.source) + ":" + std::to_string(wire.target);

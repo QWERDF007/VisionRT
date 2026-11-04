@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import package_app
 
-from toolchain_support import find_cmake, find_git
+from toolchain_support import find_git
 
 
 class BuildMetadataIntegrationContract(unittest.TestCase):

@@ -1,9 +1,25 @@
 #pragma once
 
 #include <visionrt/contracts/TypeSpec.h>
+
+#include <QCoreApplication>
+#include <QString>
+
 #include <filesystem>
 
 namespace visionrt {
+
+// The one writable root of an installation: the software directory the executable was launched
+// from. Tool declarations, user tools, preferences and logs all live under it; nothing this
+// application writes belongs in a per-user profile or on the system drive.
+inline std::filesystem::path softwareDataDir()
+{
+    const auto directory = QCoreApplication::applicationDirPath();
+    return std::filesystem::weakly_canonical(directory.isEmpty()
+                                                 ? std::filesystem::current_path()
+                                                 : std::filesystem::path(directory.toStdWString()));
+}
+
 inline std::filesystem::path resolveToolPath(const std::filesystem::path &root, const std::filesystem::path &relative)
 {
     if (root.empty() || relative.empty() || relative.is_absolute() || relative.has_root_name()

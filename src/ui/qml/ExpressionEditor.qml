@@ -43,7 +43,7 @@ Dialog {
         let config = app.expressionConfig(id)
         model = config.model || "expression"
         conditionMode = model === "condition"
-        nextSeq = config.nextPortSeq || 1
+        nextSeq = config.nextPortId || 2
         variables = (config.variables || []).map(function(item) { return Object.assign({}, item) })
         program = (config.program || []).map(function(item) { return Object.assign({}, item) })
         // The presence of a draft is explicit: an empty draft is the user clearing the field, not
@@ -75,8 +75,9 @@ Dialog {
                 root.close()
         }
     }
+    // Port numbers are allocated here and never reused: a removed row leaves a permanent hole.
     function allocatePort() {
-        let id = "p" + nextSeq
+        let id = nextSeq
         nextSeq += 1
         return id
     }

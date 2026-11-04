@@ -23,7 +23,7 @@ public:
     struct Start
     {
         NodeId        node            = 0;
-        std::string   input;
+        PortId        input           = 0;
         QString       flow;
         TypeSpec      type;
         bool          singleRectangle = false;
@@ -51,7 +51,7 @@ public:
     bool               active() const noexcept { return draft_.has_value(); }
     std::uint64_t      id() const noexcept { return draft_ ? draft_->id : 0; }
     NodeId             node() const noexcept { return draft_ ? draft_->node : 0; }
-    const std::string &input() const noexcept;
+    PortId             input() const noexcept;
     const QString     &flow() const noexcept;
     const TypeSpec    &type() const noexcept;
     bool               singleRectangle() const noexcept { return draft_ && draft_->singleRectangle; }
@@ -78,7 +78,7 @@ private:
     {
         std::uint64_t            id;
         NodeId                   node;
-        std::string              input;
+        PortId                   input = 0;
         QString                  flow;
         TypeSpec                 type;
         bool                     singleRectangle;

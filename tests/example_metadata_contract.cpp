@@ -46,12 +46,17 @@ int main(int argc, char **argv)
                         if (std::none_of(parameter.options.begin(), parameter.options.end(),
                                          [&](const auto &option) { return visionrt::equalValues(option, value); }))
                             throw std::runtime_error(file.path().filename().string() + ": " + node.toolId + "."
-                                                     + parameter.nameEn + " is not a declared option");
+                                                     + visionrt::portLabel(parameter.id) + " is not a declared option");
                         ++checked;
                     };
+                    // The declaration number is the key of both maps; an entry the node never wrote
+                    // is absent, and an absent value is not a rejected option.
                     for (const auto &parameter : definition->initParams)
-                        check(parameter, node.initParams.at(parameter.nameEn));
-                    for (const auto &input : definition->inputs) check(input, node.inputs.at(input.nameEn).literal);
+                        if (const auto found = node.initParams.find(parameter.id); found != node.initParams.end())
+                            check(parameter, found->second);
+                    for (const auto &input : definition->inputs)
+                        if (const auto found = node.inputs.find(input.id); found != node.inputs.end())
+                            check(input, found->second.literal);
                 }
         }
         if (checked == 0)

@@ -13,12 +13,25 @@
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QTest>
+#include <array>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
+#include <utility>
 
 using namespace visionrt;
 
 namespace {
+// The fixture declares every field once; init parameters reuse the same numbers in their own scope.
+constexpr PortId kFileInput      = 1;
+constexpr PortId kDirectoryInput = 2;
+constexpr PortId kDynamicInput   = 3;
+constexpr PortId kModeInput      = 4;
+constexpr PortId kEmptyInput     = 5;
+constexpr PortId kMissingInput   = 6;
+constexpr PortId kNoteInput      = 7;
+constexpr PortId kDataOutput     = 2;
+
 void require(bool condition, const char *message)
 {
     if (!condition)
@@ -58,45 +71,57 @@ try
     definition.nameZh = "工程路径实读";
     definition.kind        = ToolKind::PythonClass;
     definition.entry       = {"project_paths", "tool.py", "Reader"};
-    for (const auto &id : {"file", "directory", "dynamic", "mode", "empty", "missing", "note"})
+    // One port per field, numbered in the order the fixture reads them.
+    const std::array<std::pair<PortId, const char *>, 7> fields{{{kFileInput, "file"},
+                                                                 {kDirectoryInput, "directory"},
+                                                                 {kDynamicInput, "dynamic"},
+                                                                 {kModeInput, "mode"},
+                                                                 {kEmptyInput, "empty"},
+                                                                 {kMissingInput, "missing"},
+                                                                 {kNoteInput, "note"}}};
+    for (const auto &[id, name] : fields)
     {
         PortDefinition port;
-        port.nameEn       = id;
-        port.nameZh     = id;
-        port.type     = {Type::String};
-        port.editor   = std::string(id) == "directory" ? "directory" : "file";
-        if (port.nameEn == "dynamic")
+        port.id     = id;
+        port.nameEn = name;
+        port.nameZh = name;
+        port.type   = {Type::String};
+        port.editor = id == kDirectoryInput ? "directory" : "file";
+        if (id == kDynamicInput)
         {
             port.editor       = "path";
-            port.pathModeFrom = PortRef{PortStage::Inputs, "mode"};
+            port.pathModeFrom = PortRef{PortStage::Inputs, kModeInput};
         }
-        if (port.nameEn == "mode" || port.nameEn == "note")
+        if (id == kModeInput || id == kNoteInput)
         {
             port.editor       = "text";
-            port.defaultValue = std::string(port.nameEn == "mode" ? "file" : "original");
+            port.defaultValue = std::string(id == kModeInput ? "file" : "original");
         }
-        if (port.nameEn == "empty")
+        if (id == kEmptyInput)
             port.defaultValue = std::string{};
         definition.inputs.push_back(port);
     }
-    definition.initParams = definition.inputs;
+    definition.nextInputPortId = 8;
+    definition.initParams      = definition.inputs;
     for (auto &port : definition.initParams)
-    {
-        port.nameEn = "init_" + port.nameEn;
         if (port.pathModeFrom)
-            port.pathModeFrom = PortRef{PortStage::Init, "init_" + port.pathModeFrom->port};
-    }
+            port.pathModeFrom = PortRef{PortStage::Init, kModeInput};
+    definition.nextInitPortId = 8;
     definition.outputs = {
-        {"data", "实读内容", {Type::String}}
+        {kDataOutput, "实读内容", {Type::String}}
     };
+    definition.nextOutputPortId = 3;
     write(root + "/tools-package/tools/custom/project_paths/reader.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(root + "/tools-package/python/custom/project_paths/tool.py", R"py(import json
 from pathlib import Path
 
+# Port numbers travel as dictionary keys; the fixture maps them back to readable field names.
+FIELDS = {1: 'file', 2: 'directory', 3: 'dynamic', 4: 'mode', 5: 'empty', 6: 'missing', 7: 'note'}
+
 class Reader:
     def initialize(self, params):
-        self.params = {name.removeprefix('init_'): value for name, value in params.items()}
+        self.params = {FIELDS[int(key)]: value for key, value in params.items() if int(key) in FIELDS}
         return {'code': 0, 'message': '', 'detail': ''}
 
     def release(self):
@@ -104,15 +129,18 @@ class Reader:
 
     def execute(self, inputs):
         result = {}
-        for scope, values in [('inputs', inputs), ('init', self.params)]:
-            assert values['empty'] == '' and values['missing'] is None
+        named = {FIELDS[int(key)]: value for key, value in inputs.items() if int(key) in FIELDS}
+        for scope, values in [('inputs', named), ('init', self.params)]:
+            # R45 materialises the type's empty value on every value-carrying port, so an
+            # unbound string input arrives as an empty string instead of null.
+            assert values['empty'] == '' and values['missing'] == ''
             for name in ['file', 'directory', 'dynamic']:
                 path = Path(values[name])
                 assert path.is_absolute(), str(path)
                 resource = path / '资源 文本.txt' if name == 'directory' or (name == 'dynamic' and values['mode'] == 'directory') else path
                 result[scope + '.' + name] = {'path': str(path), 'text': resource.read_text(encoding='utf-8')}
             result[scope + '.note'] = values['note']
-        return {'outputs': {'data': json.dumps(result, ensure_ascii=False), '__status_code': 0, '__status_message': ''}, 'detail': ''}
+        return {'outputs': {2: json.dumps(result, ensure_ascii=False), 0: 0, 1: ''}, 'detail': ''}
 
 )py");
     const auto original  = root + "/原始 工程/项目.vrt.json";
@@ -137,32 +165,31 @@ class Reader:
     require(!nodeId.isEmpty(), "path fixture node was not selected");
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs, "path fixture output model unavailable");
-    const auto commit = [&](const QString &id, bool initialization, const QString &value)
+    const auto commit = [&](PortId id, bool initialization, const QString &value)
     {
-        require(app.setParameter(initialization ? "init_" + id : id, initialization, value),
-                "path parameter was not committed");
+        require(app.setParameter(static_cast<int>(id), initialization, value), "path parameter was not committed");
         idle();
         if (!initialization)
         {
-            require(app.setParameterMode(id, false), "path parameter did not switch to literal mode");
+            require(app.setParameterMode(static_cast<int>(id), false), "path parameter did not switch to literal mode");
             idle();
         }
     };
     for (bool initialization : {false, true})
     {
-        commit("file", initialization, "资料 图像/资源 文本.txt");
-        commit("directory", initialization, "资料 图像");
-        commit("dynamic", initialization, "资料 图像/资源 文本.txt");
+        commit(kFileInput, initialization, "资料 图像/资源 文本.txt");
+        commit(kDirectoryInput, initialization, "资料 图像");
+        commit(kDynamicInput, initialization, "资料 图像/资源 文本.txt");
     }
     idle();
     const auto execute = [&](const QString &note, bool directory = false)
     {
         app.runNode();
         idle();
-        const auto value = outputs->capture("data");
+        const auto value = outputs->capture(kDataOutput);
         if (!value || !std::holds_alternative<std::string>(value->value))
         {
-            const auto status = outputs->capture("__status_message");
+            const auto status = outputs->capture(kStatusMessagePort);
             throw std::runtime_error(
                 "real Python resource read failed: "
                 + (status ? OutputModel::diagnosticText(*status) : app.diagnosticsJson()).toStdString());
@@ -195,36 +222,51 @@ class Reader:
             .toArray()[0]
             .toObject();
     };
+    // Stored ports are an array of {port_id, value|literal}; a lookup is by number, never by name.
+    const auto storedValue = [](const QJsonArray &items, PortId id, const char *key)
+    {
+        for (const auto &item : items)
+        {
+            const auto entry = item.toObject();
+            if (entry.value("port_id").toInt() == static_cast<int>(id))
+                return entry.value(QLatin1String(key));
+        }
+        return QJsonValue{};
+    };
     const auto checkPaths = [&](const QString &path, bool absolute, bool dynamicAbsolute = false)
     {
-        const auto node = saved(path);
-        for (const auto &scope : {QStringLiteral("inputs"), QStringLiteral("init_params")})
+        const auto node  = saved(path);
+        const auto paths = std::array<std::pair<PortId, const char *>, 4>{{{kFileInput, "file"},
+                                                                          {kDirectoryInput, "directory"},
+                                                                          {kDynamicInput, "dynamic"},
+                                                                          {kEmptyInput, "empty"}}};
+        for (const bool initialization : {false, true})
         {
-            const auto values = node.value(scope).toObject();
-            for (const auto &name : {QStringLiteral("file"), QStringLiteral("directory"), QStringLiteral("dynamic"),
-                                     QStringLiteral("empty"), QStringLiteral("missing")})
+            const auto items = node.value(initialization ? "init_params" : "inputs").toArray();
+            for (const auto &[id, name] : paths)
             {
-                const auto value
-                    = scope == "inputs" ? values.value(name).toObject().value("literal") : values.value("init_" + name);
-                if (name == "missing")
-                    require(value.isNull(), "save-as replaced Missing path");
-                else if (name == "empty")
+                const auto value = initialization ? storedValue(items, id, "value") : storedValue(items, id, "literal");
+                if (std::string_view(name) == "empty")
                     require(value.isString() && value.toString().isEmpty(), "save-as replaced empty path");
                 else
                 {
-                    const auto stored          = value.toString();
-                    const bool expectAbsolute  = name == "dynamic" && dynamicAbsolute ? true : absolute;
-                    const auto policy = "save-as used an invalid path root policy: " + scope.toStdString() + "." + name.toStdString()
+                    const auto stored         = value.toString();
+                    const bool expectAbsolute = std::string_view(name) == "dynamic" && dynamicAbsolute ? true : absolute;
+                    const auto policy = "save-as used an invalid path root policy: "
+                                        + std::string(initialization ? "init." : "inputs.") + name
                                         + " stored=" + stored.toStdString()
                                         + " project=" + QFileInfo(path).absolutePath().toStdString();
                     require(QDir::isAbsolutePath(stored) == expectAbsolute, policy.c_str());
-                    const auto mode = scope == "inputs" ? values.value("mode").toObject().value("literal").toString()
-                                                        : values.value("init_mode").toString();
-                    const auto expected = name == "file" || (name == "dynamic" && mode == "file") ? resource : folder;
+                    const auto mode = initialization ? storedValue(items, kModeInput, "value").toString()
+                                                     : storedValue(items, kModeInput, "literal").toString();
+                    const auto expected = std::string_view(name) == "file"
+                                              || (std::string_view(name) == "dynamic" && mode == "file")
+                                            ? resource
+                                            : folder;
                     const auto resolved
                         = QFileInfo(QDir(QFileInfo(path).absolutePath()).absoluteFilePath(stored)).canonicalFilePath();
                     const auto resolution = "saved Unicode path no longer resolves to the original resource: "
-                                            + scope.toStdString() + "." + name.toStdString()
+                                            + std::string(initialization ? "init." : "inputs.") + name
                                             + " stored=" + stored.toStdString() + " resolved=" + resolved.toStdString()
                                             + " expected=" + QFileInfo(expected).canonicalFilePath().toStdString();
                     require(resolved == QFileInfo(expected).canonicalFilePath(), resolution.c_str());
@@ -234,8 +276,8 @@ class Reader:
     };
     app.runNode();
     idle();
-    const auto unnamed           = outputs->capture("data");
-    const auto unnamedStatus     = outputs->capture("__status_message");
+    const auto unnamed           = outputs->capture(kDataOutput);
+    const auto unnamedStatus     = outputs->capture(kStatusMessagePort);
     const auto unnamedDiagnostic = unnamedStatus ? OutputModel::diagnosticText(*unnamedStatus) : app.diagnosticsJson();
     if (!unnamed || !isMissing(unnamed->value)
         || !unnamedDiagnostic.contains(QStringLiteral("相对资源路径需要先保存工程")))
@@ -262,9 +304,9 @@ class Reader:
     execute("original");
     for (bool initialization : {false, true})
     {
-        commit("mode", initialization, "directory");
-        commit("dynamic", initialization, folder);
-        commit("note", initialization, "directory");
+        commit(kModeInput, initialization, "directory");
+        commit(kDynamicInput, initialization, folder);
+        commit(kNoteInput, initialization, "directory");
     }
     idle();
     require(app.save(), "dynamic directory save failed");
@@ -285,8 +327,8 @@ class Reader:
     execute("directory", true);
     const auto beforeFailure = read(returned);
     write(root + "/阻塞 父位置", "not a directory");
-    commit("note", false, "failed-directory");
-    commit("note", true, "failed-directory");
+    commit(kNoteInput, false, "failed-directory");
+    commit(kNoteInput, true, "failed-directory");
     idle();
     require(app.dirty() && !app.save(root + "/阻塞 父位置/失败.vrt.json") && app.dirty(),
             "failed save-as changed dirty state");
@@ -298,9 +340,15 @@ class Reader:
     require(app.save(), "failed save-as replaced the current project destination");
     idle();
     checkPaths(returned, false);
-    require(saved(returned).value("inputs").toObject().value("note").toObject().value("literal").toString()
-                == "failed-directory",
-            "saved draft went to a different project");
+    const auto savedNote = [&]
+    {
+        const auto node = saved(returned);
+        for (const auto &item : node.value("inputs").toArray())
+            if (item.toObject().value("port_id").toInt() == static_cast<int>(kNoteInput))
+                return item.toObject().value("literal").toString();
+        return QString{};
+    }();
+    require(savedNote == QStringLiteral("failed-directory"), "saved draft went to a different project");
     std::cout << "Project paths: resource_root=" << resourceRoot.string() << " project_root=" << projectRoot.string()
               << " cross_drive=" << crossDrive
               << " successful_executions=7 resource_reads=42 same_drive=1 reopened=" << replacements.count()

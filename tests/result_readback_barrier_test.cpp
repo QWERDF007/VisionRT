@@ -38,7 +38,7 @@ public:
     ToolResult execute(const Values &) override
     {
         values_.elements<std::int64_t>()[0] = ++calls_;
-        return toolResult({{"value", values_}}, {});
+        return toolResult({{2, values_}}, {});
     }
 
 private:
@@ -85,7 +85,7 @@ try
     definition.nameEn          = "test.readback";
     definition.nameZh = "读取阶段";
     definition.outputs     = {
-        {"value", "值", {Type::Array, DType::Int64, 1}}
+        {2, "值", {Type::Array, DType::Int64, 1}}
     };
     registry.addDefinition(definition);
     registry.registerCpp(definition, [&](const ToolServices &) { return std::make_unique<Counter>(calls); });

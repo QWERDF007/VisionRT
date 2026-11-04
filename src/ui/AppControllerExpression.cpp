@@ -79,7 +79,7 @@ QString AppController::executionGuardText() const
     const auto &guardSource = *node->executionGuard->source;
     const auto *source   = impl_->findNode(guardSource.node);
     const auto *tool     = source ? impl_->registry.find(source->toolId) : nullptr;
-    QString     portName = QString::fromStdString(guardSource.port);
+    QString     portName = workbench::q(portLabel(guardSource.port));
     if (source && tool)
     {
         const PortDefinition *port = workbench::port(tool->outputs, guardSource.port);
@@ -139,7 +139,7 @@ QVariantMap AppController::expressionConfig(const QString &nodeId) const
     for (const auto &variable : config.variables)
     {
         auto row = typeMap(variable.type);
-        row.insert("portId", workbench::q(variable.portId));
+        row.insert("portId", static_cast<uint>(variable.portId));
         row.insert("name", workbench::q(variable.name));
         row.insert("symbol", workbench::q(variable.symbol));
         row.insert("allowMissing", variable.allowMissing);
@@ -149,7 +149,7 @@ QVariantMap AppController::expressionConfig(const QString &nodeId) const
     for (const auto &result : config.program)
     {
         auto row = typeMap(result.type);
-        row.insert("portId", workbench::q(result.portId));
+        row.insert("portId", static_cast<uint>(result.portId));
         row.insert("name", workbench::q(result.name));
         row.insert("symbol", workbench::q(result.symbol));
         row.insert("expression", workbench::q(result.expression));
@@ -158,7 +158,7 @@ QVariantMap AppController::expressionConfig(const QString &nodeId) const
     }
     return {{"node", nodeId},
             {"model", QString::fromLatin1(modelName(tool->nodeModel))},
-            {"nextPortSeq", static_cast<qulonglong>(config.nextPortSeq)},
+            {"nextPortId", static_cast<qulonglong>(config.nextPortId)},
             {"variables", variables},
             {"program", program}};
 }
@@ -174,9 +174,10 @@ bool AppController::applyExpressionConfig(const QString &nodeId, const QVariantL
         return false;
     // The allocator only moves forward: committed identifiers are never recycled, even when the
     // highest one was deleted in this very transaction.
-    std::uint64_t sequenceFloor = 1;
+    // Business outputs start after the host status ports 0 and 1.
+    std::uint64_t sequenceFloor = 2;
     if (const auto *existing = impl_->findNode(id); existing && existing->expression)
-        sequenceFloor = existing->expression->nextPortSeq;
+        sequenceFloor = existing->expression->nextPortId;
     bool ok = impl_->command(
         [&]
         {
@@ -186,28 +187,28 @@ bool AppController::applyExpressionConfig(const QString &nodeId, const QVariantL
             {
                 const auto row = item.toMap();
                 ExpressionVariable variable;
-                variable.portId     = row.value("portId").toString().toStdString();
+                variable.portId     = static_cast<PortId>(row.value("portId").toUInt());
                 variable.name       = row.value("name").toString().toStdString();
                 variable.symbol     = row.value("symbol").toString().toStdString();
                 variable.type       = typeFromMap(row);
                 variable.allowMissing = row.value("allowMissing").toBool();
-                next = std::max(next, static_cast<std::uint64_t>(row.value("portId").toString().mid(1).toULongLong()) + 1);
+                next = std::max(next, static_cast<std::uint64_t>(variable.portId) + 1);
                 config.variables.push_back(std::move(variable));
             }
             for (const auto &item : program)
             {
                 const auto row = item.toMap();
                 ExpressionResult result;
-                result.portId     = row.value("portId").toString().toStdString();
+                result.portId     = static_cast<PortId>(row.value("portId").toUInt());
                 result.name       = row.value("name").toString().toStdString();
                 result.symbol     = row.value("symbol").toString().toStdString();
                 result.expression = row.value("expression").toString().toStdString();
                 result.type       = typeFromMap(row);
                 result.exposed    = row.value("exposed").toBool();
-                next = std::max(next, static_cast<std::uint64_t>(row.value("portId").toString().mid(1).toULongLong()) + 1);
+                next = std::max(next, static_cast<std::uint64_t>(result.portId) + 1);
                 config.program.push_back(std::move(result));
             }
-            config.nextPortSeq = next;
+            config.nextPortId = next;
             return impl_->editor.setExpressionConfig(impl_->flow.toStdString(), id, std::move(config), *tool);
         },
         true);
@@ -229,19 +230,20 @@ bool AppController::applySingleExpression(const QString &nodeId, const QString &
     if (!impl_->idle())
         return false;
 
-    std::uint64_t sequenceFloor = 1;
+    // Business outputs start after the host status ports 0 and 1.
+    std::uint64_t sequenceFloor = 2;
     if (node->expression)
-        sequenceFloor = node->expression->nextPortSeq;
+        sequenceFloor = node->expression->nextPortId;
 
     bool ok = impl_->command(
         [&]
         {
             ExpressionConfig config = node->expression.value_or(ExpressionConfig{});
-            config.nextPortSeq      = sequenceFloor;
+            config.nextPortId       = sequenceFloor;
             if (config.program.empty())
             {
                 ExpressionResult result;
-                result.portId     = "p" + std::to_string(config.nextPortSeq++);
+                result.portId     = static_cast<PortId>(config.nextPortId++);
                 result.name       = tool->nodeModel == NodeModel::Condition ? "条件" : "结果1";
                 result.symbol     = tool->nodeModel == NodeModel::Condition ? "c" : "r1";
                 result.type       = tool->nodeModel == NodeModel::Condition ? TypeSpec{Type::Bool} : TypeSpec{Type::Float};
@@ -288,10 +290,10 @@ QVariantList AppController::guardCandidates(const QString &nodeId) const
                         continue;
                     const bool selected = target->executionGuard && target->executionGuard->source
                                        && target->executionGuard->source->node == node.id
-                                       && target->executionGuard->source->port == port.nameEn;
+                                       && target->executionGuard->source->port == port.id;
                     result.push_back(QVariantMap{{"node", QString::number(node.id)},
                                                  {"title", workbench::q(node.title())},
-                                                 {"port", workbench::q(port.nameEn)},
+                                                 {"port", static_cast<uint>(port.id)},
                                                  {"portName", workbench::q(port.nameZh)},
                                                  {"selected", selected}});
                 }
@@ -356,7 +358,7 @@ bool AppController::setExecutionGuardMode(const QString &nodeId, bool upstream)
     return ok;
 }
 
-bool AppController::applyExecutionGuard(const QString &nodeId, const QString &sourceNode, const QString &port)
+bool AppController::applyExecutionGuard(const QString &nodeId, const QString &sourceNode, int port)
 {
     const auto id = workbench::nodeId(nodeId);
     if (!impl_->idle())
@@ -367,7 +369,7 @@ bool AppController::applyExecutionGuard(const QString &nodeId, const QString &so
     std::optional<ExecutionGuard> guard;
     if (!sourceNode.isEmpty())
     {
-        guard = ExecutionGuard{SourcePort{workbench::nodeId(sourceNode), port.toStdString()}};
+        guard = ExecutionGuard{SourcePort{workbench::nodeId(sourceNode), static_cast<PortId>(port)}};
         guard->mode = BindingMode::Upstream;
     }
     else if (const auto *current = impl_->currentNode(); current && current->executionGuard)

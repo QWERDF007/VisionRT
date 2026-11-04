@@ -7,6 +7,9 @@ namespace {
 std::atomic<int> createCalls{0};
 std::atomic<int> initializeCalls{0};
 
+// The value travels on output 2: 0 and 1 are the host-owned status envelope.
+constexpr visionrt::PortId kOutputValue = 2;
+
 class ValueTool final : public visionrt::IToolInstance
 {
 public:
@@ -23,7 +26,7 @@ public:
 
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
-        return visionrt::toolResult({{"value", value_}}, {});
+        return visionrt::toolResult({{kOutputValue, value_}}, {});
     }
 
     visionrt::ToolStatus release() override

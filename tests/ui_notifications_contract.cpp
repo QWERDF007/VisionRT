@@ -32,6 +32,10 @@
 using namespace visionrt;
 
 namespace {
+// The fixture declares 次数 on output 2 and 图像 on output 3.
+constexpr PortId kValueOutput  = 2;
+constexpr PortId kImagesOutput = 3;
+
 void require(bool condition, const char *message)
 {
     if (!condition)
@@ -99,7 +103,8 @@ void observeQuiet(AppController &app, ImageViewport &viewport, bool running)
     QSignalSpy pixels(&viewport, &ImageViewport::imageChanged);
     QSignalSpy frames(&viewport, &ImageViewport::imagePresented);
     std::cout << "QUIET_BEGIN " << phase << std::endl;
-    QTest::qWait(5000);
+    const int quietMs = qEnvironmentVariableIsSet("VISIONRT_EXTENDED_TESTS") ? 5000 : 200;
+    QTest::qWait(quietMs);
     std::cout << "QUIET_END " << phase << " runtime=" << runtime.count() << " nodes=" << nodes.count()
               << " results=" << results.count() << " parameters=" << parameters.count() << " pixels=" << pixels.count()
               << " frames=" << frames.count() << std::endl;
@@ -132,10 +137,11 @@ try
     definition.nameZh = "静默轮询";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"notifications", "tool.py", "source"};
-    definition.outputs     = {
-        { "value", "次数",   {Type::Int}},
-        {"images", "图像", {Type::Image}}
+    definition.outputs = {
+        {2, "次数", {Type::Int}},
+        {3, "图像", {Type::Image}}
     };
+    definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
     write(package + "tools/custom/notifications/source.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
@@ -157,7 +163,7 @@ def source(inputs):
         while not (root / 'allow').exists():
             time.sleep(0.002)
     image.fill(17 if calls == 1 else 37)
-    return {'outputs': {'value': calls, 'images': [image], '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: calls, 3: [image], 0: 0, 1: ''},
             'detail': ''}
 )py");
     QQuickWindow window;
@@ -211,7 +217,7 @@ def source(inputs):
                 },
                 5000),
             "notification initial display work did not settle");
-    const auto original = outputs->capture("images");
+    const auto original = outputs->capture(kImagesOutput);
     require(original && std::holds_alternative<DataRef<Image>>(original->value),
             "notification source image unavailable");
     const auto &images = std::get<DataRef<Image>>(original->value).get();
@@ -238,14 +244,14 @@ def source(inputs):
                 "notification tool did not enter its controlled active state");
         observeQuiet(app, viewport, true);
         frame(17);
-        const auto current = outputs->capture("images");
+        const auto current = outputs->capture(kImagesOutput);
         require(current && current->publication == original->publication,
                 "quiet active polling fabricated a new image publication");
     }
     write(permission, "allow");
     idle();
-    const auto value = outputs->capture("value");
-    const auto image = outputs->capture("images");
+    const auto value = outputs->capture(kValueOutput);
+    const auto image = outputs->capture(kImagesOutput);
     require(value && std::get<std::int64_t>(value->value) == 2 && image && image->publication != original->publication,
             "notification writer did not resume with its final publication");
     frame(37);

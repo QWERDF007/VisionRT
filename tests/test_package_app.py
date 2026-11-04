@@ -35,7 +35,7 @@ class ToolsDeploymentContract(unittest.TestCase):
         (self.source / "bin/plugin.dll").write_bytes(b"metadata-only module")
         (self.source / "bin/runtime.dll").write_bytes(b"runtime dependency")
         self.definition = {
-            "schema_version": 5, "name_en": "test.plugin", "name_zh": "部署测试",
+            "schema_version": 6, "name_en": "test.plugin", "name_zh": "部署测试",
             "version": "1.0.0", "implementation": {"kind": "cpp"},
         }
         self.index = {
@@ -244,6 +244,25 @@ class InstallationContract(unittest.TestCase):
             for protected in (package_app.REPO_ROOT, package_app.REPO_ROOT / "src"):
                 with self.subTest(path=protected), self.assertRaisesRegex(RuntimeError, "refusing to clean"):
                     package_app.clear_install_directory(protected, clean=True, force=True)
+
+    def test_clean_replaces_program_files_but_keeps_user_data(self) -> None:
+        """A clean install replaces the program, never what the user authored or configured."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-userdata-") as temporary:
+            root = Path(temporary)
+            (root / package_app.MARKER_FILE).touch()
+            (root / "custom-tools").mkdir()
+            (root / "custom-tools" / "tools").mkdir()
+            (root / "logs").mkdir()
+            (root / "logs" / "visionrt.log").write_text("log", encoding="utf-8")
+            (root / "ui-preferences.json").write_text("{}", encoding="utf-8")
+            (root / "stale.dll").write_text("old", encoding="utf-8")
+
+            package_app.clear_install_directory(root, clean=True, force=False)
+
+            self.assertFalse((root / "stale.dll").exists(), "program files must be replaced")
+            for name in package_app.PRESERVED_INSTALL_ENTRIES:
+                self.assertTrue((root / name).exists(), f"{name} must survive a clean install")
+            self.assertEqual((root / "logs" / "visionrt.log").read_text(encoding="utf-8"), "log")
 
     def test_python_runtime_uses_build_selected_installation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-python-") as temporary:

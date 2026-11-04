@@ -329,28 +329,28 @@ void OutputModel::clear()
 }
 
 void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
-                            const std::map<std::string, std::size_t, std::less<>> &references,
-                            const std::map<std::string, bool, std::less<>> *connectable,
+                            const std::map<PortId, std::size_t> &references,
+                            const std::map<PortId, bool> *connectable,
                             const TypeMap *nodeOutputs, std::shared_ptr<const NodeDiagnostic> lifecycle)
 {
     beginResetModel();
     rows_.clear();
-    auto add = [&](std::string id, std::string name, TypeSpec type, bool system)
+    auto add = [&](PortId id, std::string name, TypeSpec type, bool system)
     {
         PortValue value = Missing{};
         // A framework-stopped node has no tool answer: its diagnostic must never appear as port
         // data. Only a real ToolResult fills the two status rows.
         if (snapshot && (!system || snapshot->toolResultPublished))
         {
-            if (id == "__status_code")
+            if (id == kStatusCodePort)
                 value = snapshot->status.code;
-            else if (id == "__status_message")
+            else if (id == kStatusMessagePort)
                 value = snapshot->status.message;
             else if (const auto found = snapshot->outputs.find(id); found != snapshot->outputs.end())
                 value = found->second;
         }
         const auto count = references.find(id);
-        Captured   captured{std::move(value), type, snapshot ? snapshot->publication : 0, q(id)};
+        Captured   captured{std::move(value), type, snapshot ? snapshot->publication : 0, id};
         if (system && snapshot)
         {
             captured.diagnostic = NodeDiagnostic{snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status};
@@ -363,7 +363,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
             const auto found = connectable->find(id);
             canConnect       = found != connectable->end() && found->second;
         }
-        Row        row{q(id),
+        Row        row{id,
                        q(name),
                        typeText(type),
                        {},
@@ -374,7 +374,7 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                        std::move(captured)};
         row.preview = preview(row.captured.value, 256);
         row.tooltip = preview(row.captured.value, 4096);
-        if (id == "__status_message" && row.captured.diagnostic)
+        if (id == kStatusMessagePort && row.captured.diagnostic)
         {
             const auto &diagnostic = *row.captured.diagnostic;
             const auto rawMsg = q(diagnostic.status.message);
@@ -382,21 +382,21 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
         }
         rows_.push_back(std::move(row));
     };
-    add("__status_code", "状态码", {Type::Int}, true);
-    add("__status_message", "状态消息", {Type::String}, true);
+    add(kStatusCodePort, "状态码", {Type::Int}, true);
+    add(kStatusMessagePort, "状态消息", {Type::String}, true);
     if (definition)
         for (const auto &port : definition->outputs)
         {
-            if (port.nameEn != "__status_code" && port.nameEn != "__status_message")
+            if (!isReservedPort(PortStage::Outputs, port.id))
             {
                 if (!port.typeFrom)
-                    add(port.nameEn, port.nameZh, port.type, false);
-                else if (nodeOutputs && nodeOutputs->contains(port.nameEn))
-                    add(port.nameEn, port.nameZh, nodeOutputs->at(port.nameEn), false);
+                    add(port.id, port.nameZh, port.type, false);
+                else if (nodeOutputs && nodeOutputs->contains(port.id))
+                    add(port.id, port.nameZh, nodeOutputs->at(port.id), false);
                 else
                 {
                     Row row;
-                    row.id = q(port.nameEn);
+                    row.id = port.id;
                     row.name = q(port.nameZh);
                     row.type = QStringLiteral("未绑定");
                     row.tooltip = QStringLiteral("请选择源流程、源节点和输出端口");
@@ -408,8 +408,8 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     else if (nodeOutputs)
         for (const auto &[id, type] : *nodeOutputs)
         {
-            if (id != "__status_code" && id != "__status_message")
-                add(id, id, type, false);
+            if (!isReservedPort(PortStage::Outputs, id))
+                add(id, portLabel(id), type, false);
         }
     endResetModel();
 }
@@ -421,7 +421,7 @@ std::optional<OutputModel::Captured> OutputModel::capture(int row) const
     return rows_[row].captured;
 }
 
-std::optional<OutputModel::Captured> OutputModel::capture(const QString &port) const
+std::optional<OutputModel::Captured> OutputModel::capture(PortId port) const
 {
     for (const auto &row : rows_)
         if (row.id == port && row.resolved)

@@ -34,7 +34,12 @@ public:
 
     ToolResult execute(const Values &inputs) override
     {
-        return toolResult(inputs, {});
+        // Inputs and outputs are separate number spaces: the pass-through tool copies business
+        // input 1 to business output 2 and leaves the status envelope to toolResult.
+        Values outputs;
+        if (const auto found = inputs.find(1); found != inputs.end())
+            outputs[2] = found->second;
+        return toolResult(std::move(outputs), {});
     }
 
     ToolStatus release() override
@@ -48,11 +53,12 @@ ToolDefinition definition(std::string id)
     ToolDefinition result;
     result.nameEn      = std::move(id);
     result.nameZh = "注册工具";
-    result.inputs      = {
-        {"value", "输入", {Type::Int}}
+    // 输入与输出各自编号：业务输入从 1 起，业务输出从 2 起，同名不冲突。
+    result.inputs = {
+        {1, "输入", {Type::Int}}
     };
     result.outputs = {
-        {"value", "输出", {Type::Int}}
+        {2, "输出", {Type::Int}}
     };
     return result;
 }
@@ -81,15 +87,16 @@ int main()
     assert(instance->initialize({}));
     assert(std::get<std::int64_t>(instance
                                       ->execute({
-                                          {"value", std::int64_t{7}}
+                                          {1, std::int64_t{7}}
     })
-                                      .outputs.at("value"))
+                                      .outputs.at(2))
            == 7);
     assert(instance->release());
 
+    // The host owns outputs 0 and 1; a declaration that repeats them changes nothing.
     tool.outputs.insert(tool.outputs.begin(), {
-                                                  {   "__status_code", "状态",    {Type::Int}},
-                                                  {"__status_message", "消息", {Type::String}}
+                                                  {kStatusCodePort,    "状态", {Type::Int}},
+                                                  {kStatusMessagePort, "消息", {Type::String}}
     });
     registry.registerPackage(package(tool));
     auto invalid                = tool;

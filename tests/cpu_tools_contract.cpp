@@ -23,11 +23,12 @@ ToolResult execute(ToolRegistry &registry, const char *id, Values inputs, const 
 {
     const auto *definition = registry.find(id);
     assert((definition));
+    // 声明的每个端口都有编号：缺省值按编号补齐，名字从不参与查找。
     for (const auto &port : definition->inputs)
-        inputs.try_emplace(port.nameEn, port.defaultValue);
+        inputs.try_emplace(port.id, port.defaultValue);
     Values parameters;
     for (const auto &port : definition->initParams)
-        parameters.emplace(port.nameEn, port.defaultValue);
+        parameters.emplace(port.id, port.defaultValue);
     auto tool = registry.create(id, services);
     assert((tool->initialize(parameters)));
     auto result = tool->execute(inputs);
@@ -48,7 +49,7 @@ void failure(const ToolResult &result)
     assert((!testview::status(result).message.empty()));
     // The two status keys are the tool's own answer and are never Missing.
     for (const auto &[id, value] : result.outputs)
-        if (id != "__status_code" && id != "__status_message")
+        if (id != kStatusCodePort && id != kStatusMessagePort)
             assert(isMissing(value));
 }
 
@@ -73,40 +74,40 @@ void readImages(ToolRegistry &registry)
     const auto         root = std::filesystem::u8path(directory.path().toUtf8().toStdString());
     const ToolServices services{PathResolver(root)};
     Values             inputs{
-                    {"path", std::string("中文目录")},
-                    {"recursive", false},
-                    {"traversal", std::string("循环")},
-                    {"order", std::string("顺序（下一张）")},
-                    {"count", std::int64_t(2)},
-                    {"reload", false}
+                    {1, std::string("中文目录")},
+                    {2, false},
+                    {3, std::string("循环")},
+                    {4, std::string("顺序（下一张）")},
+                    {5, std::int64_t(2)},
+                    {6, false}
     };
     auto result = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
-    const auto &images = std::get<DataRef<Image>>(result.outputs.at("images"));
+    const auto &images = std::get<DataRef<Image>>(result.outputs.at(2));
     assert((images.get().size() == 2));
     assert((images.get()[0].at<unsigned char>(0, 0) == 11));
     assert((images.get()[1].at<unsigned char>(0, 0) == 22));
-    const auto paths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at("paths")));
+    const auto paths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at(3)));
     assert((paths[0].ends_with("/a.png") && paths[1].ends_with("/b.png")));
-    inputs["count"] = std::int64_t{-1};
+    inputs[5] = std::int64_t{-1};
     result = execute(registry, "visionrt.image.read", inputs, services);
     failure(result);
-    assert((testview::status(result).message.find("count") != std::string::npos));
-    inputs["count"] = std::int64_t{1};
+    assert((testview::status(result).message.find(portLabel(5)) != std::string::npos));
+    inputs[5] = std::int64_t{1};
     result          = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
-    assert((std::get<DataRef<Image>>(result.outputs.at("images")).get().size() == 1));
+    assert((std::get<DataRef<Image>>(result.outputs.at(2)).get().size() == 1));
     saveImage(folder + "/a.png", 99);
-    inputs["reload"] = true;
+    inputs[6] = true;
     result = execute(registry, "visionrt.image.read", inputs, services);
     success(result);
-    assert((std::get<DataRef<Image>>(result.outputs.at("images")).get()[0].at<unsigned char>(0, 0) == 99));
-    inputs["reload"] = false;
+    assert((std::get<DataRef<Image>>(result.outputs.at(2)).get()[0].at<unsigned char>(0, 0) == 99));
+    inputs[6] = false;
     QFile corrupt(folder + "/c.png");
     assert((corrupt.open(QIODevice::WriteOnly)));
     assert((corrupt.write("corrupt") == 7));
     corrupt.close();
-    inputs["path"] = std::string("中文目录/c.png");
+    inputs[1] = std::string("中文目录/c.png");
     result          = execute(registry, "visionrt.image.read", inputs, services);
     failure(result);
     assert((testview::status(result).message.find("c.png") != std::string::npos));
@@ -128,12 +129,12 @@ void readImages(ToolRegistry &registry)
     oversizedFile.close();
     result = execute(registry, "visionrt.image.read",
                      {
-                         {"path", std::string("中文目录/oversized.bmp")},
-                         {"recursive", false},
-                         {"traversal", std::string("循环")},
-                         {"order", std::string("顺序（下一张）")},
-                         {"count", std::int64_t(1)},
-                         {"reload", false}
+                         {1, std::string("中文目录/oversized.bmp")},
+                         {2, false},
+                         {3, std::string("循环")},
+                         {4, std::string("顺序（下一张）")},
+                         {5, std::int64_t(1)},
+                         {6, false}
                      },
                      services);
     failure(result);
@@ -145,19 +146,19 @@ void readImages(ToolRegistry &registry)
     assert((decodeStatus.message.find("批次索引 0") != std::string::npos));
     assert((decodeStatus.message.find("OpenCV") == std::string::npos));
     assert((decodeStatus.detail == decoderDetail));
-    inputs["path"] = std::string("中文目录/a.png");
+    inputs[1] = std::string("中文目录/a.png");
     success(execute(registry, "visionrt.image.read", inputs, services));
-    inputs["path"] = std::string("absent.png");
+    inputs[1] = std::string("absent.png");
     failure(execute(registry, "visionrt.image.read", inputs, services));
     assert((QDir().mkpath(directory.path() + "/empty")));
     result = execute(registry, "visionrt.image.read",
                      {
-                         {"path",     std::string("empty")},
-                         {"recursive", false},
-                         {"traversal", std::string("循环")},
-                         {"order", std::string("顺序（下一张）")},
-                         {"count", std::int64_t(1)},
-                         {"reload", false}
+                         {1,     std::string("empty")},
+                         {2, false},
+                         {3, std::string("循环")},
+                         {4, std::string("顺序（下一张）")},
+                         {5, std::int64_t(1)},
+                         {6, false}
                      },
                      services);
     // 空目录没有任何可用文件，按规范明确失败而不是发布空批次。
@@ -170,20 +171,20 @@ void readImages(ToolRegistry &registry)
     saveImage(unicodeFolder + "/" + supplementaryName, 100);
     saveImage(unicodeFolder + "/" + bmpName, 14);
     const Values unicodeInputs{
-        {"path", std::string("unicode_sort")},
-        {"recursive", false},
-        {"traversal", std::string("循环")},
-        {"order", std::string("顺序（下一张）")},
-        {"count", std::int64_t(2)},
-        {"reload", false}
+        {1, std::string("unicode_sort")},
+        {2, false},
+        {3, std::string("循环")},
+        {4, std::string("顺序（下一张）")},
+        {5, std::int64_t(2)},
+        {6, false}
     };
     result = execute(registry, "visionrt.image.read", unicodeInputs, services);
     success(result);
-    const auto &orderedImages = std::get<DataRef<Image>>(result.outputs.at("images"));
+    const auto &orderedImages = std::get<DataRef<Image>>(result.outputs.at(2));
     assert((orderedImages.get().size() == 2));
     assert((orderedImages.get()[0].at<unsigned char>(0, 0) == 14));
     assert((orderedImages.get()[1].at<unsigned char>(0, 0) == 100));
-    const auto orderedPaths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at("paths")));
+    const auto orderedPaths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at(3)));
     assert((orderedPaths[0].ends_with(bmpName.toUtf8().toStdString())));
     assert((orderedPaths[1].ends_with(supplementaryName.toUtf8().toStdString())));
 }
@@ -201,61 +202,61 @@ void projection(ToolRegistry &registry)
     const auto images = fixtureImages();
     auto       result = execute(registry, "visionrt.roi.projection",
                                 {
-                                    {"images", images}
+                                    {1, images}
     });
     success(result);
-    const auto &rois = std::get<DataRef<ROI>>(result.outputs.at("rois"));
+    const auto &rois = std::get<DataRef<ROI>>(result.outputs.at(3));
     assert((rois.get().size() == 2 && rois.get()[0].empty()));
     assert((rois.get()[1].size() == 2));
     const std::array<float, 6> first{2, 10, 0, 20, 64, 0};
     const std::array<float, 6> second{2, 55, 0, 20, 64, 0};
     assert((std::equal(first.begin(), first.end(), rois.get()[1][0].begin())));
     assert((std::equal(second.begin(), second.end(), rois.get()[1][1].begin())));
-    assert((&std::get<DataRef<Image>>(result.outputs.at("images")).get() == &images.get()));
+    assert((&std::get<DataRef<Image>>(result.outputs.at(2)).get() == &images.get()));
     result = execute(registry, "visionrt.roi.projection",
                      {
-                         {    "images",           images},
-                         { "merge_gap", std::int64_t{25}},
-                         {"min_extent", std::int64_t{60}},
-                         {   "padding", std::int64_t{12}}
+                         {    1,           images},
+                         { 7, std::int64_t{25}},
+                         {6, std::int64_t{60}},
+                         {   8, std::int64_t{12}}
     });
     success(result);
-    const auto merged = std::get<DataRef<ROI>>(result.outputs.at("rois")).get()[1][0];
+    const auto merged = std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1][0];
     assert((merged[1] == 0 && merged[3] == 87));
     result = execute(registry, "visionrt.roi.projection",
                      {
-                         {   "images",              images},
-                         {     "axis",    std::string("y")},
-                         { "polarity", std::string("dark")},
-                         {"threshold",     std::int64_t{0}}
+                         {   1,              images},
+                         {     2,    std::string("y")},
+                         { 3, std::string("dark")},
+                         {4,     std::int64_t{0}}
     });
     success(result);
-    assert((std::get<DataRef<ROI>>(result.outputs.at("rois")).get()[1].empty()));
+    assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
     result = execute(registry, "visionrt.roi.projection",
                      {
-                         {    "images",            images},
-                         {      "axis",  std::string("y")},
-                         { "threshold", std::int64_t{255}},
-                         {"min_pixels",  std::int64_t{40}}
+                         {    1,            images},
+                         {      2,  std::string("y")},
+                         { 4, std::int64_t{255}},
+                         {5,  std::int64_t{40}}
     });
     success(result);
-    const auto vertical = std::get<DataRef<ROI>>(result.outputs.at("rois")).get()[1][0];
+    const auto vertical = std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1][0];
     assert((vertical[1] == 0 && vertical[2] == 0 && vertical[3] == 96 && vertical[4] == 64));
     result = execute(registry, "visionrt.roi.projection",
                      {
-                         {    "images",           images},
-                         {"min_pixels", std::int64_t{65}}
+                         {    1,           images},
+                         {5, std::int64_t{65}}
     });
     success(result);
-    assert((std::get<DataRef<ROI>>(result.outputs.at("rois")).get()[1].empty()));
+    assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
     failure(execute(registry, "visionrt.roi.projection",
                     {
-                        {"images", Missing{}}
+                        {1, Missing{}}
     }));
     failure(execute(registry, "visionrt.roi.projection",
                     {
-                        {   "images",            images},
-                        {"threshold", std::int64_t{256}}
+                        {   1,            images},
+                        {4, std::int64_t{256}}
     }));
 }
 
@@ -264,11 +265,11 @@ void crop(ToolRegistry &registry)
     const auto images = fixtureImages();
     auto       result = execute(registry, "visionrt.image.crop",
                                 {
-                              {"images",                                     images},
-                              {  "rect", DataRef<ROI>(ROI{{{2, 10, 0, 20, 64, 0}}})}
+                              {1,                                     images},
+                              {  2, DataRef<ROI>(ROI{{{2, 10, 0, 20, 64, 0}}})}
     });
     success(result);
-    const auto &crops = std::get<DataRef<Image>>(result.outputs.at("images"));
+    const auto &crops = std::get<DataRef<Image>>(result.outputs.at(2));
     assert((crops.get().size() == images.get().size()));
     for (std::size_t index = 0; index < crops.get().size(); ++index)
     {
@@ -279,8 +280,8 @@ void crop(ToolRegistry &registry)
         assert((image.u == images.get()[index].u));
         assert((image.step == images.get()[index].step));
     }
-    assert((!result.outputs.contains("source_indices")));
-    const auto origins = nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at("origins")));
+    assert((!result.outputs.contains(99)));   // 未声明的编号不会出现在结果里
+    const auto origins = nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at(3)));
     assert(((origins
              == NestedVector<double, 2>{
                  {10, 0},
@@ -290,11 +291,11 @@ void crop(ToolRegistry &registry)
         Image{(cv::Mat(8, 10, CV_8UC1, cv::Scalar(11))), (cv::Mat(5, 6, CV_8UC1, cv::Scalar(29)))});
     result = execute(registry, "visionrt.image.crop",
                      {
-                         {"images",                                   mixed},
-                         {  "rect", DataRef<ROI>(ROI{{{2, 4, 3, 4, 4, 0}}})}
+                         {1,                                   mixed},
+                         {  2, DataRef<ROI>(ROI{{{2, 4, 3, 4, 4, 0}}})}
     });
     success(result);
-    const auto &mixedCrops = std::get<DataRef<Image>>(result.outputs.at("images")).get();
+    const auto &mixedCrops = std::get<DataRef<Image>>(result.outputs.at(2)).get();
     assert((mixedCrops.size() == 2 && mixedCrops[0].rows == 4 && mixedCrops[0].cols == 4));
     assert((mixedCrops[1].rows == 2 && mixedCrops[1].cols == 2));
     for (std::size_t index = 0; index < mixedCrops.size(); ++index)
@@ -303,7 +304,7 @@ void crop(ToolRegistry &registry)
         assert((mixedCrops[index].u == mixed.get()[index].u));
         assert((mixedCrops[index].step == mixed.get()[index].step));
     }
-    const auto mixedOrigins = nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at("origins")));
+    const auto mixedOrigins = nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at(3)));
     assert(((mixedOrigins
              == NestedVector<double, 2>{
                  {4, 3},
@@ -311,23 +312,23 @@ void crop(ToolRegistry &registry)
     })));
     failure(execute(registry, "visionrt.image.crop",
                     {
-                        {"images",                                   mixed},
-                        {  "rect", DataRef<ROI>(ROI{{{2, 7, 6, 2, 2, 0}}})}
+                        {1,                                   mixed},
+                        {  2, DataRef<ROI>(ROI{{{2, 7, 6, 2, 2, 0}}})}
     }));
     const DataRef<Image> solid(Image{(cv::Mat(5, 5, CV_8UC1, cv::Scalar(17)))});
     const auto run = [&](PortValue rectangle)
     {
-        return execute(registry, "visionrt.image.crop", {{"images", solid}, {"rect", std::move(rectangle)}});
+        return execute(registry, "visionrt.image.crop", {{1, solid}, {2, std::move(rectangle)}});
     };
     result = run(DataRef<ROI>(ROI{{{2, 1, 1, 2, 2, 45}}}));
     success(result);
-    const auto &rotated = std::get<DataRef<Image>>(result.outputs.at("images")).get()[0];
+    const auto &rotated = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((rotated.rows == 4 && rotated.cols == 4));
     assert((cv::countNonZero(rotated) == 4));
     assert((rotated.at<unsigned char>(1, 1) == 17 && rotated.at<unsigned char>(0, 0) == 0));
     result = run(DataRef<ROI>(ROI{{{2, -1, -1, 3, 3, 0}}}));
     success(result);
-    const auto &clipped = std::get<DataRef<Image>>(result.outputs.at("images")).get()[0];
+    const auto &clipped = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((clipped.rows == 2 && clipped.cols == 2));
     assert((cv::countNonZero(solid.get()[0] != 17) == 0));
     failure(run(DataRef<ROI>(ROI{{{2, 6, 0, 2, 2, 0}}})));
@@ -339,12 +340,12 @@ void crop(ToolRegistry &registry)
     })));
     result = execute(registry, "visionrt.image.crop",
                      {
-                         {"images",                 DataRef<Image>(Image{})},
-                         {  "rect", DataRef<ROI>(ROI{{{2, 0, 0, 2, 2, 0}}})}
+                         {1,                 DataRef<Image>(Image{})},
+                         {  2, DataRef<ROI>(ROI{{{2, 0, 0, 2, 2, 0}}})}
     });
     success(result);
-    assert((std::get<DataRef<Image>>(result.outputs.at("images")).get().empty()));
-    assert(((nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at("origins"))).empty())));
+    assert((std::get<DataRef<Image>>(result.outputs.at(2)).get().empty()));
+    assert(((nestedOf<NestedVector<double, 2>>(std::get<Array>(result.outputs.at(3))).empty())));
 }
 
 void preprocess(ToolRegistry &registry)
@@ -356,27 +357,27 @@ void preprocess(ToolRegistry &registry)
     const DataRef<Image> images(Image{(std::move(source))});
     auto             result = execute(registry, "visionrt.image.preprocess",
                                       {
-                                          {"images", images}
+                                          {1, images}
     });
     success(result);
-    assert((&std::get<DataRef<Image>>(result.outputs.at("images")).get() == &images.get()));
+    assert((&std::get<DataRef<Image>>(result.outputs.at(2)).get() == &images.get()));
     result = execute(registry, "visionrt.image.preprocess",
                      {
-                         {   "images",              images},
-                         {"operation", std::string("gray")}
+                         {   1,              images},
+                         {2, std::string("gray")}
     });
     success(result);
-    const auto &grayscale = std::get<DataRef<Image>>(result.outputs.at("images")).get()[0];
+    const auto &grayscale = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((grayscale.rows == 1 && grayscale.cols == 3 && grayscale.channels() == 1));
     assert((grayscale.at<unsigned char>(0, 0) == 76));
     result = execute(registry, "visionrt.image.preprocess",
                      {
-                         {   "images",                   images},
-                         {"operation", std::string("threshold")},
-                         {"threshold",        std::int64_t{128}}
+                         {   1,                   images},
+                         {2, std::string("threshold")},
+                         {4,        std::int64_t{128}}
     });
     success(result);
-    const auto &binary = std::get<DataRef<Image>>(result.outputs.at("images")).get()[0];
+    const auto &binary = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((binary.at<unsigned char>(0, 0) == 0));
     assert((binary.at<unsigned char>(0, 1) == 255 && binary.at<unsigned char>(0, 2) == 255));
     cv::Mat impulse(3, 3, CV_8UC1, cv::Scalar(0));
@@ -384,23 +385,23 @@ void preprocess(ToolRegistry &registry)
     const DataRef<Image> impulseBatch(Image{(std::move(impulse))});
     result = execute(registry, "visionrt.image.preprocess",
                      {
-                         {   "images",            impulseBatch},
-                         {"operation", std::string("gaussian")}
+                         {   1,            impulseBatch},
+                         {2, std::string("gaussian")}
     });
     success(result);
-    const auto &blurred = std::get<DataRef<Image>>(result.outputs.at("images")).get()[0];
+    const auto &blurred = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((cv::countNonZero(blurred != 40) == 0));
     assert((impulseBatch.get()[0].at<unsigned char>(1, 1) == 160));
     failure(execute(registry, "visionrt.image.preprocess",
                     {
-                        {   "images",                  images},
-                        {"operation", std::string("gaussian")},
-                        {   "kernel",         std::int64_t{2}}
+                        {   1,                  images},
+                        {2, std::string("gaussian")},
+                        {   3,         std::int64_t{2}}
     }));
     const DataRef<Image> invalid(Image{(cv::Mat(2, 2, CV_16UC1, cv::Scalar(1)))});
     failure(execute(registry, "visionrt.image.preprocess",
                     {
-                        {"images", invalid}
+                        {1, invalid}
     }));
 }
 
@@ -426,71 +427,71 @@ void filter(ToolRegistry &registry)
     });
     const Array        allowed = Array::fromNested(std::vector<std::int64_t>{1});
     Values             inputs{
-        {         "images",  images},
-        {           "rois",    rois},
-        {         "scores",  scores},
-        {        "classes", classes},
-        {    "class_names",   names},
-        {      "min_score",     0.6},
-        {       "min_area",    64.0},
-        {"allowed_classes", allowed}
+        {         1,  images},
+        {           2,    rois},
+        {         3,  scores},
+        {        4, classes},
+        {    5,   names},
+        {      6,     0.6},
+        {       7,    64.0},
+        {8, allowed}
     };
     auto result = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    const auto counts = nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")));
+    const auto counts = nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)));
     assert((counts.size() == 2 && counts[0] == 0 && counts[1] == 2));
-    const auto &keptRois = std::get<DataRef<ROI>>(result.outputs.at("rois"));
+    const auto &keptRois = std::get<DataRef<ROI>>(result.outputs.at(3));
     assert((keptRois.get()[0].empty()));
     assert((keptRois.get()[1][0][1] == 0 && keptRois.get()[1][1][1] == 25));
-    const auto keptScores = nestedOf<NestedVector<float, 2>>(std::get<Array>(result.outputs.at("scores")))[1];
+    const auto keptScores = nestedOf<NestedVector<float, 2>>(std::get<Array>(result.outputs.at(4)))[1];
     assert((keptScores[0] == 0.8F && keptScores[1] == 0.7F));
-    const auto keptClasses = nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(result.outputs.at("classes")))[1];
+    const auto keptClasses = nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(result.outputs.at(5)))[1];
     assert((keptClasses[0] == 1 && keptClasses[1] == 1));
-    const auto keptNames = nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1];
+    const auto keptNames = nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1];
     assert((keptNames[0] == "first" && keptNames[1] == "third"));
-    assert((&std::get<DataRef<Image>>(result.outputs.at("images")).get() == &images.get()));
-    inputs["min_area"] = 0.0;
+    assert((&std::get<DataRef<Image>>(result.outputs.at(2)).get() == &images.get()));
+    inputs[7] = 0.0;
     result             = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")))[1] == 2));
-    inputs["allowed_classes"] = Array::fromNested(std::vector<std::int64_t>{});
-    inputs["min_area"] = 64.0;
+    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)))[1] == 2));
+    inputs[8] = Array::fromNested(std::vector<std::int64_t>{});
+    inputs[7] = 64.0;
     result             = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1][1] == "third"));
-    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")))[1] == 2));
-    inputs["min_area"]  = 0.0;
-    inputs["min_score"] = 0.9;
+    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1][1] == "third"));
+    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)))[1] == 2));
+    inputs[7]  = 0.0;
+    inputs[6] = 0.9;
     result              = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at("counts")))[1] == 1));
-    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1][0] == "second"));
-    inputs["allowed_classes"] = allowed;
-    inputs["min_area"]        = 64.0;
-    inputs["min_score"]       = 0.9;
+    assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)))[1] == 1));
+    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1][0] == "second"));
+    inputs[8] = allowed;
+    inputs[7]        = 64.0;
+    inputs[6]       = 0.9;
     result                    = execute(registry, "visionrt.detection.filter", inputs);
     success(result);
-    assert((std::get<DataRef<ROI>>(result.outputs.at("rois")).get()[1].empty()));
-    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at("class_names")))[1].size() == 0));
-    inputs["scores"] = Array::fromNested(NestedVector<float, 2>{
+    assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
+    assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1].size() == 0));
+    inputs[3] = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
         std::vector<float>{0.8F, 0.95F}
     });
     failure(execute(registry, "visionrt.detection.filter", inputs));
-    inputs["scores"] = scores;
-    inputs["scores"] = Array::fromNested(NestedVector<float, 2>{
+    inputs[3] = scores;
+    inputs[3] = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
         std::vector<float>{0.8F, std::numeric_limits<float>::quiet_NaN(), 0.7F}
     });
     failure(execute(registry, "visionrt.detection.filter", inputs));
-    inputs["scores"]  = scores;
-    inputs["classes"] = Array::fromNested(NestedVector<std::int64_t, 2>{
+    inputs[3]  = scores;
+    inputs[4] = Array::fromNested(NestedVector<std::int64_t, 2>{
         std::vector<std::int64_t>{},
         std::vector<std::int64_t>{1, -1, 1}
     });
     failure(execute(registry, "visionrt.detection.filter", inputs));
-    inputs["classes"] = classes;
-    inputs["rois"]    = DataRef<ROI>(ROI{
+    inputs[4] = classes;
+    inputs[2]    = DataRef<ROI>(ROI{
            {},
            {std::vector<double>{3, 2, 2, 1}, rois.get()[1][1], rois.get()[1][2]}
     });
@@ -508,26 +509,37 @@ void incompleteInstallation(ToolRegistry &completeRegistry)
     pixels.at<unsigned char>(0, 1) = 128;
     const auto result              = execute(registry, "visionrt.image.preprocess",
                                              {
-                                    {   "images", DataRef<Image>(Image{(std::move(pixels))})},
-                                    {"operation",                   std::string("threshold")}
+                                    {1, DataRef<Image>(Image{(std::move(pixels))})},
+                                    {2, std::string("threshold")}
     });
     success(result);
-    const auto &output = std::get<DataRef<Image>>(result.outputs.at("images")).get()[0];
+    const auto &output = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((output.at<unsigned char>(0, 0) == 0 && output.at<unsigned char>(0, 1) == 255));
 }
 } // namespace
 
 int main(int argc, char **argv)
 {
-    assert((argc == 2));
-    ToolRegistry registry;
-    registry.setPluginLoader(std::make_shared<PluginLoader>());
-    registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
-    registry.loadNativeImplementations();
-    readImages(registry);
-    projection(registry);
-    crop(registry);
-    preprocess(registry);
-    filter(registry);
-    incompleteInstallation(registry);
+    // A contract failure is a message, not a silent abort: a test that dies without one hides
+    // which declaration or value broke.
+    try
+    {
+        assert((argc == 2));
+        ToolRegistry registry;
+        registry.setPluginLoader(std::make_shared<PluginLoader>());
+        registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
+        registry.loadNativeImplementations();
+        readImages(registry);
+        projection(registry);
+        crop(registry);
+        preprocess(registry);
+        filter(registry);
+        incompleteInstallation(registry);
+        return 0;
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
 }

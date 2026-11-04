@@ -50,10 +50,10 @@ void AppController::attachViewport(QObject *object)
                              {
                                  if (port.type.type == Type::ROI)
                                  {
-                                     const auto found = node->inputs.find(port.nameEn);
+                                     const auto found = node->inputs.find(port.id);
                                      if (found != node->inputs.end() && found->second.mode == BindingMode::Literal)
                                      {
-                                         editRoi(workbench::q(port.nameEn), true);
+                                         editRoi(static_cast<int>(port.id), true);
                                          break;
                                      }
                                  }
@@ -80,7 +80,7 @@ int AppController::imageCount() const
     return impl_->presentation.imageCount();
 }
 
-QString AppController::selectedImageOutput() const
+int AppController::selectedImageOutput() const
 {
     return impl_->presentation.selectedImageOutput();
 }
@@ -97,7 +97,7 @@ void AppController::setImageIndex(int index)
     emit resultsChanged();
 }
 
-void AppController::setImageOutput(const QString &output)
+void AppController::setImageOutput(int output)
 {
     if (impl_->operations.isClosing())
         return;

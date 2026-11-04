@@ -296,6 +296,8 @@ ApplicationWindow {
     }
     QuiMenu {
         id: toolsMenu
+        QuiMenuItem { text: "自定义工具..."; enabled: app.workspaceEnabled; onTriggered: customToolDialog.openDialog() }
+        MenuSeparator {}
         QuiMenuItem { text: "刷新 Python 工具"; enabled: app.workspaceEnabled; onTriggered: app.refreshPython() }
     }
     QuiMenu {
@@ -586,6 +588,10 @@ ApplicationWindow {
         id: authorHelp; title: "工具作者说明"; width: Math.min(700, window.width - 40)
         useNegativeButton: false; positiveText: "关闭"
         message: "工具声明与实现由 VisionTools 维护。通过工具库打包脚本生成 ZIP，再由 VisionRT 部署入口安装。安装元数据只读；修改后重新打包，在退出宿主后更换工具包。"
+    }
+    CustomToolDialog {
+        id: customToolDialog
+        transientParent: window
     }
     LogDialog {
         id: logDialog; objectName: "logWindow"

@@ -14,21 +14,30 @@ int main(int argc, char **argv)
     const auto    library = std::filesystem::absolute(argv[1]);
     QTemporaryDir directory;
     assert(directory.isValid());
-    for (const auto *port : {"image", "array", "roi"})
+    // The fixture declares init 0 for the marker and outputs 2..5 for the four payload shapes.
+    struct Case
     {
-        const auto marker = directory.filePath(QString::fromUtf8(port) + ".txt").toUtf8().toStdString();
-        auto       loader = std::make_shared<PluginLoader>();
-        ToolStatus status;
-        auto       module = loader->loadModule(library, status);
+        PortId      port;
+        const char *kind;
+    };
+    for (const auto &item : {Case{2, "image"}, Case{3, "array"}, Case{5, "roi"}})
+    {
+        const auto *port   = item.kind;
+        const auto  marker = directory.filePath(QString::fromUtf8(item.kind) + ".txt").toUtf8().toStdString();
+        auto        loader = std::make_shared<PluginLoader>();
+        ToolStatus  status;
+        auto        module = loader->loadModule(library, status);
+        if (!status || !module)
+            std::cerr << "模块加载失败：" << status.message << std::endl;
         assert(status && module);
         std::weak_ptr<const LoadedModule> alive = module;
         auto instance = std::make_unique<DomainToolAdapter>(module, "test.value.lifetime", PlatformToolServices{});
         assert(instance->initialize({
-            {"marker", marker}
+            {0, marker}
         }));
         auto result = instance->execute({});
         assert(testview::status(result) && testview::businessCount(result) == 4);
-        PortValue value = result.outputs.at(port);
+        PortValue value = result.outputs.at(item.port);
         PortValue alias = value;
         result.outputs.clear();
         assert(instance->release());

@@ -27,10 +27,10 @@ QString kindName(ToolKind kind)
     return {};
 }
 
-QVariantMap portMetadata(const PortDefinition &port)
+QVariantMap portMetadata(const PortDefinition &port, PortStage stage)
 {
     QVariantMap row{
-        {"id", q(port.nameEn)},
+        {"id", static_cast<uint>(port.id)},
         {"name", q(port.nameZh)},
         {"type", QString::fromLatin1(visionrt::typeName(port.type.type))},
         {"rank", port.type.rank},
@@ -45,17 +45,24 @@ QVariantMap portMetadata(const PortDefinition &port)
         {"decimals", port.decimals ? *port.decimals : -1},
         {"optionsProvider", q(port.optionsProvider)},
         {"colorOrder", q(port.colorOrder)},
-        {"system", port.nameEn.starts_with("__")}
+        {"system", isReservedPort(stage, port.id)}
     };
     QVariantMap relations;
+    const auto relationRef = [](const PortRef &reference)
+    {
+        return QVariantMap{{"stage", reference.stage == PortStage::Init     ? "init"
+                                     : reference.stage == PortStage::Inputs ? "inputs"
+                                                                            : "outputs"},
+                           {"id", static_cast<uint>(reference.id)}};
+    };
     if (port.image)
-        relations.insert("image", QString::fromStdString(formatPortRef(*port.image)));
+        relations.insert("image", relationRef(*port.image));
     if (port.alignment)
-        relations.insert("alignment", QString::fromStdString(formatPortRef(*port.alignment)));
+        relations.insert("alignment", relationRef(*port.alignment));
     if (port.pathModeFrom)
-        relations.insert("pathMode", QString::fromStdString(formatPortRef(*port.pathModeFrom)));
+        relations.insert("pathMode", relationRef(*port.pathModeFrom));
     if (port.sameGeometryAs)
-        relations.insert("sameGeometryAs", QString::fromStdString(formatPortRef(*port.sameGeometryAs)));
+        relations.insert("sameGeometryAs", relationRef(*port.sameGeometryAs));
     if (!relations.isEmpty())
         row.insert("relations", relations);
     if (port.typeFrom)
@@ -64,9 +71,9 @@ QVariantMap portMetadata(const PortDefinition &port)
         row.remove("rank");
         row["default"] = QString{};
         row["typeFrom"] = QVariantMap{
-            {"flow", QString::fromStdString(formatPortRef(port.typeFrom->flowParameter))},
-            {"node", QString::fromStdString(formatPortRef(port.typeFrom->nodeParameter))},
-            {"port", QString::fromStdString(formatPortRef(port.typeFrom->portParameter))}};
+            {"flow", relationRef(port.typeFrom->flowParameter)},
+            {"node", relationRef(port.typeFrom->nodeParameter)},
+            {"port", relationRef(port.typeFrom->portParameter)}};
     }
     if (port.type.dtype)
     {
@@ -105,10 +112,10 @@ QVariantMap metadata(const ToolDefinition &definition)
  {"file", pathText(definition.entry.file)},
  {"symbol", q(definition.entry.symbol)}}                             }
     };
-    auto ports = [](const auto &values)
+    auto ports = [](const auto &values, PortStage stage)
     {
         QVariantList rows;
-        for (const auto &port : values) rows.push_back(portMetadata(port));
+        for (const auto &port : values) rows.push_back(portMetadata(port, stage));
         return rows;
     };
     if (definition.interaction)
@@ -119,9 +126,9 @@ QVariantMap metadata(const ToolDefinition &definition)
         result["interaction"] = QVariantMap{{"helper", q(definition.interaction->helperNameEn)},
                                             {"roiKinds", kinds}};
     }
-    result["inputs"]     = ports(definition.inputs);
-    result["initParams"] = ports(definition.initParams);
-    result["outputs"]    = ports(definition.outputs);
+    result["inputs"]     = ports(definition.inputs, PortStage::Inputs);
+    result["initParams"] = ports(definition.initParams, PortStage::Init);
+    result["outputs"]    = ports(definition.outputs, PortStage::Outputs);
     return result;
 }
 } // namespace workbench
@@ -159,7 +166,7 @@ QVariantList AppController::parameters() const
     // Rows come from the materialised contract, the same definition execution consumes; the raw
     // declaration is still the source for type_from selection options.
     const auto *contract = impl_->effectiveTool();
-    auto add = [&](const std::string &id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
+    auto add = [&](PortId id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
     {
         PortValue literal = Missing{};
         QString   mode    = "literal", source;
@@ -181,7 +188,7 @@ QVariantList AppController::parameters() const
                 const auto *parentDef = parent ? impl_->registry.find(parent->toolId) : nullptr;
                 // The display name is copied while its contract is alive: a derived contract is a
                 // temporary, so a bare PortDefinition pointer would dangle past this scope.
-                QString portName = q(found->second.source->port);
+                QString portName = q(portLabel(found->second.source->port));
                 if (parent && parentDef)
                 {
                     if (const auto *declared = workbench::port(parentDef->outputs, found->second.source->port))
@@ -231,7 +238,7 @@ QVariantList AppController::parameters() const
                 if (output.typeFrom)
                 {
                     const auto &reference = *output.typeFrom;
-                    auto selected = [&](const std::string &parameter) -> QString
+                    auto selected = [&](PortId parameter) -> QString
                     {
                         const auto found = node->initParams.find(parameter);
                         const auto *value
@@ -241,16 +248,16 @@ QVariantList AppController::parameters() const
                     for (const auto &sourceFlow : impl_->editor.project().flows)
                     {
                         if (sourceFlow.id == impl_->flow.toStdString()) continue;
-                        if (id == reference.flowParameter.port) addOption(q(sourceFlow.name), q(sourceFlow.id));
-                        if (q(sourceFlow.id) != selected(reference.flowParameter.port)) continue;
+                        if (id == reference.flowParameter.id) addOption(q(sourceFlow.name), q(sourceFlow.id));
+                        if (q(sourceFlow.id) != selected(reference.flowParameter.id)) continue;
                         for (const auto &sourceNode : sourceFlow.nodes)
                         {
                             const auto sequence = QString::number(sourceNode.id);
-                            if (id == reference.nodeParameter.port) addOption(q(sourceNode.title()), sequence);
-                            if (sequence != selected(reference.nodeParameter.port)) continue;
-                            if (id == reference.portParameter.port)
+                            if (id == reference.nodeParameter.id) addOption(q(sourceNode.title()), sequence);
+                            if (sequence != selected(reference.nodeParameter.id)) continue;
+                            if (id == reference.portParameter.id)
                                 for (const auto &[port, signature] : sourceNode.signatures.outputs)
-                                    addOption(q(port), q(port));
+                                    addOption(workbench::q(portLabel(port)), QString::number(port));
                         }
                     }
                 }
@@ -267,11 +274,11 @@ QVariantList AppController::parameters() const
                 PortValue modeValue = Missing{};
                 if (initialization)
                 {
-                    const auto found = node->initParams.find(declaration->pathModeFrom->port);
+                    const auto found = node->initParams.find(declaration->pathModeFrom->id);
                     if (found != node->initParams.end()) modeValue = found->second;
                 }
                 else
-                    modeValue = impl_->resolvedInput(*node, declaration->pathModeFrom->port);
+                    modeValue = impl_->resolvedInput(*node, declaration->pathModeFrom->id);
                 const auto *pathMode = std::get_if<std::string>(&modeValue);
                 editorKind = pathMode && (*pathMode == "file" || *pathMode == "directory") ? q(*pathMode) : QString{};
             }
@@ -327,8 +334,8 @@ QVariantList AppController::parameters() const
             displayText = text;
 
         QVariantMap row{
-            {             "id",                                                                    q(id)},
-            {           "name",                             declaration ? q(declaration->nameZh) : q(id)},
+            {             "id",                                                       static_cast<uint>(id)},
+            {           "name",       declaration ? q(declaration->nameZh) : q(portLabel(id))},
             {           "type",                                 QString::fromLatin1(typeName(type.type))},
             {     "typeDetail",                                                           typeText(type)},
             {    "typeDisplay",                                                    displayTypeName(type)},
@@ -346,7 +353,7 @@ QVariantList AppController::parameters() const
             {        "hasRois",                                                                  hasRois},
             {         "source",                                                                   source},
             {     "sourceNode", hasSource ? QString::number(inputFound->second.source->node) : QString{}},
-            {     "sourcePort",               hasSource ? q(inputFound->second.source->port) : QString{}},
+            {     "sourcePort",     hasSource ? static_cast<uint>(inputFound->second.source->port) : 0u},
             {          "title",                                                         q(node->title())},
             {         "editor",                                                               editorKind},
             {            "tab",       declaration ? q(declaration->tab) : QStringLiteral("基本输入")},
@@ -406,7 +413,7 @@ QVariantList AppController::parameters() const
         result.push_back(row);
     };
 
-    auto addMeta = [&](const QString &id, const QString &name, const QString &editorKind,
+    auto addMeta = [&](int id, const QString &name, const QString &editorKind,
                        const QString &displayText, bool isSingle = false, const QVariantMap &extras = {})
     {
         QVariantMap row{
@@ -448,15 +455,15 @@ QVariantList AppController::parameters() const
             // Derived initialisation entries are internal presentation sources: the parameter
             // editors own them, so they never appear as editable rows while still being handed to
             // the tool through nodeParameters().
-            if (tool->derivesPorts() && isDerivedInitParam(port.nameEn))
+            if (tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, port.id))
                 continue;
-            add(port.nameEn, port.type, true, &port);
+            add(port.id, port.type, true, &port);
         }
 
         // Explicit execution conditions exist on the logical models only; a fixed
         // tool exposes its real upstream_status input instead.
         if (supportsExecutionGuard(tool->nodeModel))
-            addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
+            addMeta(workbench::kGuardRow, QStringLiteral("执行条件"), QStringLiteral("guard"),
                     executionGuardText(), false,
                     QVariantMap{{"inputMode", node->executionGuard
                                                   && node->executionGuard->mode == BindingMode::Upstream
@@ -496,7 +503,7 @@ QVariantList AppController::parameters() const
                 exprText = QString{};
                 isSingle = true;
             }
-            addMeta(QStringLiteral("__expression"), QStringLiteral("表达式"), QStringLiteral("expression"),
+            addMeta(workbench::kExpressionRow, QStringLiteral("表达式"), QStringLiteral("expression"),
                     exprText, isSingle);
         }
         else if (tool->nodeModel == NodeModel::Condition)
@@ -505,14 +512,14 @@ QVariantList AppController::parameters() const
             if (node->expression && !node->expression->program.empty())
                 condText = workbench::q(node->expression->program[0].expression);
             const bool       upstream = conditionUsesUpstream(*node);
-            const auto       found    = node->inputs.find("condition");
+            const auto       found    = node->inputs.find(kConditionInputPort);
             const bool       bound    = found != node->inputs.end() && found->second.source.has_value();
             QVariantMap      extras{{"inputMode", upstream ? "upstream" : "literal"}};
             if (bound)
             {
                 const auto &source = *found->second.source;
                 const auto *parent = impl_->findNode(source.node);
-                QString     name   = QString::fromStdString(source.port);
+                QString     name   = workbench::q(portLabel(source.port));
                 if (parent)
                 {
                     const auto *parentTool = impl_->registry.find(parent->toolId);
@@ -525,21 +532,21 @@ QVariantList AppController::parameters() const
                         }
                         catch (const ContractError &)
                         {
-                            name = QString::fromStdString(source.port);
+                            name = workbench::q(portLabel(source.port));
                         }
                     extras.insert("source", workbench::q(parent->title()) + "-" + name);
                 }
                 extras.insert("sourceNode", QString::number(source.node));
-                extras.insert("sourcePort", workbench::q(source.port));
+                extras.insert("sourcePort", static_cast<uint>(source.port));
             }
-            addMeta(QStringLiteral("__condition"), QStringLiteral("条件公式"),
+            addMeta(workbench::kConditionRow, QStringLiteral("条件公式"),
                     upstream ? QStringLiteral("condition_upstream") : QStringLiteral("condition"), condText, true,
                     extras);
         }
         else if (tool->nodeModel == NodeModel::Select)
         {
             QString selectText = node->selectType ? displayTypeName(*node->selectType) : QString{};
-            addMeta(QStringLiteral("__select_type"), QStringLiteral("合流类型"), QStringLiteral("select_type"),
+            addMeta(workbench::kSelectTypeRow, QStringLiteral("合流类型"), QStringLiteral("select_type"),
                     selectText, false);
         }
 
@@ -548,21 +555,21 @@ QVariantList AppController::parameters() const
             {
                 // A condition node maps its single condition input onto the dedicated condition row;
                 // enumerating the raw port again would show the same value twice.
-                if (tool && tool->nodeModel == NodeModel::Condition && port.nameEn == "condition")
+                if (tool && tool->nodeModel == NodeModel::Condition && port.id == kConditionInputPort)
                     continue;
-                add(port.nameEn, port.type, false, &port);
+                add(port.id, port.type, false, &port);
             }
     }
     else
     {
         for (const auto &[id, type] : node->signatures.initParams)
         {
-            if (tool && tool->derivesPorts() && isDerivedInitParam(id))
+            if (tool && tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, id))
                 continue;
             add(id, type, true, nullptr);
         }
         if (tool && supportsExecutionGuard(tool->nodeModel))
-            addMeta(QStringLiteral("__execution_guard"), QStringLiteral("执行条件"), QStringLiteral("guard"),
+            addMeta(workbench::kGuardRow, QStringLiteral("执行条件"), QStringLiteral("guard"),
                     executionGuardText(), false);
         for (const auto &[id, type] : node->signatures.inputs) add(id, type, false, nullptr);
     }

@@ -138,7 +138,10 @@ try
     require(QTest::qWaitForWindowExposed(&window), "Benchmark window was not exposed");
     auto *surface = findItem(canvas, "flowSurface");
     require(surface != nullptr, "Canvas surface is missing");
-    const std::array<const char *, 5> ports{"images", "rois", "scores", "classes", "class_names"};
+    // visionrt.detection.filter declares the five business inputs as 1..5 and publishes the same
+    // five values as outputs 2..6; a routing graph connects output N to input N.
+    const std::array<PortId, 5> sources{2, 3, 4, 5, 6};
+    const std::array<PortId, 5> targets{1, 2, 3, 4, 5};
     const auto sizes = parser.isSet("full") ? std::vector<int>{20, 50, 100} : std::vector<int>{nodeCount};
     for (const auto count : sizes)
         for (const bool dense : {false, true})
@@ -151,7 +154,7 @@ try
                 const auto id = editor.addNode(flow, *definition, {2 * (index % 10), 2 * index});
                 ids.push_back(id);
                 for (int port = 0; port < (dense ? 5 : 1) && port < index; ++port)
-                    require(editor.bindFreeInput(flow, {ids[index - port - 1], ports[port]}, {id, ports[port]}),
+                    require(editor.bindFreeInput(flow, {ids[index - port - 1], sources[port]}, {id, targets[port]}),
                             "Cannot bind routing graph");
             }
             auto       project = editor.project();

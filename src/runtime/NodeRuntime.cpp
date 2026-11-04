@@ -325,10 +325,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         snapshot->toolResultPublished = false;
         snapshot->phase               = NodePhase::Prepare;
         for (const auto &port : definition->outputs)
-            if (port.nameEn != kStatusCodePort && port.nameEn != kStatusMessagePort)
-                snapshot->outputs.emplace(port.nameEn, Missing{});
-        snapshot->outputs.emplace(std::string(kStatusCodePort), kNotExecutedStatus);
-        snapshot->outputs.emplace(std::string(kStatusMessagePort), snapshot->status.message);
+            if (!isReservedPort(PortStage::Outputs, port.id))
+                snapshot->outputs.emplace(port.id, Missing{});
+        snapshot->outputs.emplace(kStatusCodePort, kNotExecutedStatus);
+        snapshot->outputs.emplace(kStatusMessagePort, snapshot->status.message);
         // A gated node never entered a stage, so it has no execution window at all.
         snapshot->timing.totalMs = 0.0;
         slot.publish(std::move(snapshot));
@@ -350,7 +350,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 // Every node owns its default: a shared array default would let one node's edit
                 // change another node's value.
                 PortValue  value   = portDefault(port);
-                const auto binding = config.inputs.find(port.nameEn);
+                const auto binding = config.inputs.find(port.id);
                 if (binding != config.inputs.end())
                 {
                     const auto &input = binding->second;
@@ -362,7 +362,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     {
                         const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
                         snapshot->inputUses.push_back(
-                            {port.nameEn, input.source->node, input.source->port, upstream ? upstream->publication : 0});
+                            {port.id, input.source->node, input.source->port, upstream ? upstream->publication : 0});
                         if (frozen.mode != RunMode::Node
                             && (!upstream || upstream->generation != context->generation
                                 || upstream->session != context->session || upstream->round != context->round))
@@ -382,7 +382,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                         }
                     }
                 }
-                inputs.emplace(port.nameEn, std::move(value));
+                inputs.emplace(port.id, std::move(value));
             }
             inputs = normalizeInputs(definition->inputs, std::move(inputs));
             prepareTimer.stop();
@@ -491,7 +491,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     for (const auto &input : definition->inputs)
                     {
                         if (input.type.type == Type::ROI && input.image && *input.image == *output.sameGeometryAs)
-                            snapshot->roiInputs.emplace(input.nameEn, inputs.at(input.nameEn));
+                            snapshot->roiInputs.emplace(input.id, inputs.at(input.id));
                     }
                 }
             }
@@ -540,8 +540,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         snapshot->roiInputs.clear();
         snapshot->status = std::move(frameworkStatus);
         for (const auto &port : definition->outputs)
-            if (port.nameEn != kStatusCodePort && port.nameEn != kStatusMessagePort)
-                result.outputs.emplace(port.nameEn, Missing{});
+            if (!isReservedPort(PortStage::Outputs, port.id))
+                result.outputs.emplace(port.id, Missing{});
     }
     else
     {

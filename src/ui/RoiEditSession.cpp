@@ -43,10 +43,9 @@ void RoiEditSession::end()
     draft_.reset();
 }
 
-const std::string &RoiEditSession::input() const noexcept
+PortId RoiEditSession::input() const noexcept
 {
-    static const std::string empty;
-    return draft_ ? draft_->input : empty;
+    return draft_ ? draft_->input : 0;
 }
 
 const QString &RoiEditSession::flow() const noexcept
@@ -184,7 +183,7 @@ QVariantMap RoiEditSession::editor() const
     return {
         {         "id",   QString::number(draft_->id)},
         {       "node", QString::number(draft_->node)},
-        {      "input",   QString::fromStdString(draft_->input)},
+        {      "input",                                   draft_->input},
         {  "rectangle",                   coordinates},
         { "imageWidth",           image ? image->cols : 0},
         {"imageHeight",           image ? image->rows : 0}

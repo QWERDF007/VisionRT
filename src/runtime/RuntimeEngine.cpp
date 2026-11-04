@@ -126,8 +126,8 @@ std::optional<std::string> upstreamValidityError(
         {
             return "上游节点 " + node.title() + " 的输出值不符合当前声明：" + error.what();
         }
-        std::map<std::string, const PortDefinition *, std::less<>> inputs;
-        for (const auto &port : contract.inputs) inputs.emplace(port.nameEn, &port);
+        std::map<PortId, const PortDefinition *, std::less<>> inputs;
+        for (const auto &port : contract.inputs) inputs.emplace(port.id, &port);
         for (const auto &use : snapshot->inputUses)
         {
             const auto binding = node.inputs.find(use.inputPort);

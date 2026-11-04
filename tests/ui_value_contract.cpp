@@ -21,6 +21,14 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// 夹具声明的端口编号：身份是数字，调用点直接用编号而不是中文名。
+constexpr PortId kImagesOutput = 2;  // test.ui.source 输出
+constexpr PortId kValuesOutput = 3;
+constexpr PortId kEpochOutput  = 4;
+constexpr PortId kImagesInput  = 1;  // test.ui.editor 输入
+constexpr PortId kRectInput    = 2;
+constexpr PortId kRegionsInput = 3;
 }
 
 int main(int argc, char **argv)
@@ -39,17 +47,17 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.ui.source","definition":"tools/custom/fixture/source.json"},
         {"tool_id":"test.ui.editor","definition":"tools/custom/fixture/editor.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/fixture/source.json", R"({"schema_version":5,"name_en":"test.ui.source","name_zh":"图像源","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"source"},"ports":{"outputs":[{"name_en":"images","name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"name_en":"values","name_zh":"列表","type":"vec_vec_int"},{"name_en":"epoch","name_zh":"轮次","type":"int"},{"name_en":"regions","name_zh":"区域","type":"roi","relations":{"image":"outputs.images"}}]}})");
-    write("tools/custom/fixture/editor.json", R"({"schema_version":5,"name_en":"test.ui.editor","name_zh":"图像编辑","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"edit"},"ports":{"inputs":[{"name_en":"images","name_zh":"图像","type":"image"},{"name_en":"rect","name_zh":"裁剪区域","type":"roi","default":[],"ui":{"editor":"rect"},"relations":{"image":"inputs.images"}},{"name_en":"regions","name_zh":"区域","type":"roi","default":[],"ui":{"editor":"roi"},"relations":{"image":"inputs.images"}}],"outputs":[{"name_en":"images","name_zh":"图像","type":"image","relations":{"same_geometry_as":"inputs.images"}}]}})");
+    write("tools/custom/fixture/source.json", R"({"schema_version":6,"name_en":"test.ui.source","name_zh":"图像源","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"source"},"next_port_id":{"init":0,"inputs":1,"outputs":6},"ports":{"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"id":3,"name_zh":"列表","type":"vec_vec_int"},{"id":4,"name_zh":"轮次","type":"int"},{"id":5,"name_zh":"区域","type":"roi","relations":{"image":{"stage":"outputs","id":2}}}]}})");
+    write("tools/custom/fixture/editor.json", R"({"schema_version":6,"name_en":"test.ui.editor","name_zh":"图像编辑","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"edit"},"next_port_id":{"init":0,"inputs":4,"outputs":3},"ports":{"inputs":[{"id":1,"name_zh":"图像","type":"image"},{"id":2,"name_zh":"裁剪区域","type":"roi","default":[],"ui":{"editor":"rect"},"relations":{"image":{"stage":"inputs","id":1}}},{"id":3,"name_zh":"区域","type":"roi","default":[],"ui":{"editor":"roi"},"relations":{"image":{"stage":"inputs","id":1}}}],"outputs":[{"id":2,"name_zh":"图像","type":"image","relations":{"same_geometry_as":{"stage":"inputs","id":1}}}]}})");
     write("python/custom/fixture/tool.py",
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"
           "def source(inputs):\n"
           " global epoch\n epoch += 1\n pixels[:40] = epoch\n time.sleep(0.12)\n pixels[40:] = epoch\n"
-          " return {'outputs':{'images':[pixels, pixels[:40,:60]], "
-          "'epoch':epoch, 'values':[[9007199254740993],[],[4,5]], 'regions':[[[3.,20.,20.,5.]],[]], "
-          "'__status_code':0, '__status_message':''}, 'detail':''}\n"
+          " return {'outputs':{2:[pixels, pixels[:40,:60]], "
+          "4:epoch, 3:[[9007199254740993],[],[4,5]], 5:[[[3.,20.,20.,5.]],[]], "
+          "0:0, 1:''}, 'detail':''}\n"
           "def edit(inputs):\n"
-          " return {'outputs':{'images':inputs['images'], '__status_code':0, '__status_message':''}, 'detail':''}\n");
+          " return {'outputs':{2:inputs[1], 0:0, 1:''}, 'detail':''}\n");
     AppController app(2, directory.path());
     const auto    idle = [&]
     {
@@ -59,7 +67,14 @@ try
     const auto metadata = app.toolMetadata("test.ui.source");
     require(metadata["entry"].toMap()["package"] == "fixture" && !metadata.contains("script"),
             "Python metadata still exposes the JSON-relative script path");
-    require(!metadata["outputs"].toList()[1].toMap().contains("layout"), "UI metadata still exposes Array layout");
+    const auto metadataOutput = [&](int port)
+    {
+        for (const auto &row : metadata["outputs"].toList())
+            if (row.toMap()["id"].toInt() == port)
+                return row.toMap();
+        return QVariantMap{};
+    };
+    require(!metadataOutput(3).contains("layout"), "UI metadata still exposes Array layout");
     app.addNode("test.ui.source", 0, 0);
     idle();
     const auto source = app.selectedNode();
@@ -110,8 +125,8 @@ try
             "node execution did not invalidate the metadata readback");
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs != nullptr, "output model unavailable");
-    require(OutputModel::fullText(*outputs->capture("__status_code")) == "0", "Python image source failed");
-    const auto values = QJsonDocument::fromJson(OutputModel::fullText(*outputs->capture("values")).toUtf8()).array();
+    require(OutputModel::fullText(*outputs->capture(kStatusCodePort)) == "0", "Python image source failed");
+    const auto values = QJsonDocument::fromJson(OutputModel::fullText(*outputs->capture(3)).toUtf8()).array();
     require(values[0].toArray()[0].toInteger() == 9007199254740993LL && values[1].toArray().isEmpty(),
             "workbench lost nested native output values");
     const auto projectPath = directory.path() + "/project.vrt.json";
@@ -129,7 +144,7 @@ try
         QFile file(projectPath);
         require(file.open(QIODevice::ReadOnly) && file.readAll() == "sentinel", "deferred save wrote during execution");
     }
-    app.requestOutputText(app.portContext("epoch", true));
+    app.requestOutputText(app.portContext(kEpochOutput, true));
     QTest::qWait(30);
     require(textReady.isEmpty(), "full text was read from a mutable publication during execution");
     idle();
@@ -148,7 +163,7 @@ try
         QFile file(projectPath);
         require(file.open(QIODevice::ReadOnly), "saved project file unavailable");
         const auto saved = QJsonDocument::fromJson(file.readAll());
-        require(saved.isObject() && saved.object()["format_version"].toInt() == 6,
+        require(saved.isObject() && saved.object()["format_version"].toInt() == 7,
                 "idle save after the run produced an incomplete project");
     }
     app.addNode("test.ui.editor", 100, 100);
@@ -156,36 +171,36 @@ try
     ImageViewport viewport;
     viewport.setSize({480, 320});
     app.attachViewport(&viewport);
-    require(app.editRoi("rect", false), "rectangle metadata did not select the existing editor");
+    require(app.editRoi(kRectInput, false), "rectangle metadata did not select the existing editor");
     const auto session = app.roiEditor()["id"].toString();
     require(!session.isEmpty() && viewport.singleRectangle(), "ROI editor is not a single rectangle");
     require(app.setRoiRectangle(session, {100000000.125, 2.5, 20.5, 10.75, 17.5}), "native double rectangle rejected");
     require(app.roiEditor()["rectangle"].toList()[0].toDouble() == 100000000.125, "rectangle editor narrowed doubles");
     require(app.applyRoi(), "rectangle editor failed to apply");
-    const auto parameter = [&](const QString &id)
+    const auto parameter = [&](PortId id)
     {
         for (const auto &row : app.parameters())
-            if (row.toMap()["id"] == id)
+            if (row.toMap()["id"].toUInt() == id)
                 return row.toMap();
         return QVariantMap{};
     };
-    const auto rectangle = parameter("rect");
+    const auto rectangle = parameter(kRectInput);
     require(rectangle["type"] == "ROI" && rectangle["editor"] == "rect" && rectangle["hasRect"].toBool(),
             "rectangle editor reintroduced a separate value type");
     const auto encoded = QJsonDocument::fromJson(rectangle["literal"].toString().toUtf8()).array();
     require(encoded.size() == 1 && encoded[0].toArray().size() == 1
                 && encoded[0].toArray()[0].toArray()[1].toDouble() == 100000000.125,
             "rectangle is not one group containing one native ROI record");
-    require(app.clearRoi("rect"), "rectangle clearing failed");
-    const auto cleared = QJsonDocument::fromJson(parameter("rect")["literal"].toString().toUtf8());
+    require(app.clearRoi(kRectInput), "rectangle clearing failed");
+    const auto cleared = QJsonDocument::fromJson(parameter(kRectInput)["literal"].toString().toUtf8());
     require(cleared.isArray() && cleared.array().isEmpty(), "rectangle clearing did not produce empty ROI");
-    require(app.bindInput(app.portContext("images"), source, "images"), "cannot bind writable source images");
+    require(app.bindInput(app.portContext(kImagesInput), source, kImagesOutput), "cannot bind writable source images");
     idle();
     app.runNode();
     idle();
     require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 5000), "workbench did not convert cached image");
     require(app.imageCount() == 2, "native image list lost its batch size");
-    require(app.editRoi("regions", false), "generic ROI editor failed to open");
+    require(app.editRoi(kRegionsInput, false), "generic ROI editor failed to open");
     require(QTest::qWaitFor([&] { return viewport.editing() && !viewport.singleRectangle(); }, 3000),
             "generic ROI editor became rectangle-only");
     app.endRoiPreview();
@@ -197,7 +212,7 @@ try
                                             {
                                                 if (app.busy())
                                                 {
-                                                    const auto context = app.portContext("epoch", true);
+                                                    const auto context = app.portContext(kEpochOutput, true);
                                                     const auto pub     = context.value("publication").toString();
                                                     if (!pub.isEmpty() && pub != lastPublication)
                                                     {
@@ -213,7 +228,7 @@ try
     app.toggleLoop();
     idle();
     QObject::disconnect(frameText);
-    app.requestOutputText(app.portContext("epoch", true));
+    app.requestOutputText(app.portContext(kEpochOutput, true));
     require(QTest::qWaitFor([&] { return textReady.size() == 1; }, 3000),
             "stopped loop did not deliver final text");
     bool       valid   = false;

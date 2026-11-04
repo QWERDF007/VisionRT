@@ -115,7 +115,7 @@ ColumnLayout {
                                        : root.isMeta ? metaEditor
                                        : root.upstream ? upstreamEditor
                                        : (root.parameter.options || []).length > 0 ? choiceEditor
-                                       : (root.parameter.type === "Bool" && (root.parameter.editor === "switch" || root.parameter.id === "reload")) ? toggleSwitchComponent
+                                       : (root.parameter.type === "Bool" && (root.parameter.editor === "switch" || root.parameter.editor === "recursive")) ? toggleSwitchComponent
                                        : root.parameter.type === "Bool" ? boolEditor
                                        : root.parameter.type === "Int" ? integerEditor
                                        : root.parameter.type === "Float" ? floatEditor
@@ -362,7 +362,7 @@ ColumnLayout {
             flat: true
             font: root.editorFont
             implicitHeight: Theme.paramEditorHeight
-            readonly property bool isRecursive: root.parameter.id === "recursive"
+            readonly property bool isRecursive: root.parameter.editor === "recursive"
             model: isRecursive ? ["不递归", "递归"] : ["是", "否"]
             currentIndex: {
                 let val = (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")

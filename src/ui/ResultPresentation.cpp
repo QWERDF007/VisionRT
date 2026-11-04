@@ -18,7 +18,7 @@ RegionGroup imageRois(const PortValue &value, int index, bool singleRectangle = 
     return regions->get()[index];
 }
 
-const DataRef<Image> *images(const ResultSlot::Snapshot &snapshot, const std::string &port)
+const DataRef<Image> *images(const ResultSlot::Snapshot &snapshot, PortId port)
 {
     if (!snapshot)
         return nullptr;
@@ -37,10 +37,10 @@ QString text(const std::string &value)
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
-const PortDefinition *findPort(const std::vector<PortDefinition> &ports, std::string_view id)
+const PortDefinition *findPort(const std::vector<PortDefinition> &ports, PortId id)
 {
     for (const auto &value : ports)
-        if (value.nameEn == id)
+        if (value.id == id)
             return &value;
     return nullptr;
 }
@@ -215,7 +215,7 @@ void ResultPresentation::clearDisplay()
     displayRoiTarget_.reset();
     displayTargets_.clear();
     outputs_.clear();
-    imageOutput_.clear();
+    imageOutput_ = 0;
     index_    = 0;
     count_    = 0;
     displayed_ = 0;
@@ -241,7 +241,7 @@ void ResultPresentation::updateResults()
         {
             displayed_ = nodeId;
             outputs_.clear();
-            imageOutput_.clear();
+            imageOutput_ = 0;
             index_ = 0;
             if (viewport_)
             {
@@ -259,31 +259,31 @@ void ResultPresentation::updateResults()
     if (!node)
     {
         outputs_.clear();
-        imageOutput_.clear();
+        imageOutput_ = 0;
         index_ = 0;
     }
     else
     {
         const auto snapshot = displaySnapshot(*node);
-        std::map<std::string, std::size_t, std::less<>> references;
+        std::map<PortId, std::size_t> references;
         if (const auto *current = host_.currentFlow())
             for (const auto &relation : portRelations(*current).active)
                 if (relation.source.node == node->id)
                     ++references[relation.source.port];
         // An output name may only look actionable when a legal and still free downstream input
         // exists. The answer comes from the same candidate/validate rule the binding menu uses.
-        const std::map<std::string, bool, std::less<>> *connectable = nullptr;
+        const std::map<PortId, bool> *connectable = nullptr;
         if (const auto *flow = host_.currentFlow())
             connectable = host_.refreshConnectable(*flow, *node);
         outputs_.setResult(tool, snapshot, references, connectable, &node->signatures.outputs,
                            lifecycleShared(node->id));
-        std::vector<std::string> imagePorts;
+        std::vector<PortId> imagePorts;
         if (tool)
             for (const auto &port : tool->outputs)
-                if (port.type.type == Type::Image && node->signatures.outputs.contains(port.nameEn))
-                    imagePorts.push_back(port.nameEn);
-        if (std::find(imagePorts.begin(), imagePorts.end(), imageOutput_.toStdString()) == imagePorts.end())
-            imageOutput_ = imagePorts.empty() ? QString{} : text(imagePorts.front());
+                if (port.type.type == Type::Image && node->signatures.outputs.contains(port.id))
+                    imagePorts.push_back(port.id);
+        if (std::find(imagePorts.begin(), imagePorts.end(), imageOutput_) == imagePorts.end())
+            imageOutput_ = imagePorts.empty() ? 0 : imagePorts.front();
     }
     updateDisplay();
     host_.resultsChanged();
@@ -301,7 +301,7 @@ void ResultPresentation::applyOverlays()
         viewport_->endRoiEdit();
 }
 
-const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, const std::string &input) const
+const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, PortId input) const
 {
     const auto found = node.inputs.find(input);
     if (found == node.inputs.end())
@@ -329,7 +329,7 @@ void ResultPresentation::updateDisplay()
         // instead of ending the session that just started.
         const PortValue  missing{Missing{}};
         const auto      *background
-            = node && declaration && declaration->image ? resolvedInput(*node, declaration->image->port) : nullptr;
+            = node && declaration && declaration->image ? resolvedInput(*node, declaration->image->id) : nullptr;
         const PortValue &current    = background ? *background : missing;
         if (!node || node->id != roi_.node() || !declaration
             || !equalValues(roi_.background(), current))
@@ -342,33 +342,33 @@ void ResultPresentation::updateDisplay()
     const DataRef<Image> *batch = nullptr;
     ResultSlot::Snapshot  snapshot;
     QString               color;
-    std::string           imageInput;
+    PortId                imageInput = 0;
     displayInputs_.clear();
     displayOutputs_.clear();
     displayRoiTarget_.reset();
     int selectedIndex = index_;
     if (const auto *node = host_.selectedNode())
         snapshot = displaySnapshot(*node);
-    std::string fallbackInputPort;
+    PortId      fallbackInputPort = 0;
     if (!roi_.active())
     {
-        batch = images(snapshot, imageOutput_.toStdString());
+        batch = images(snapshot, imageOutput_);
         const bool executionFailed = snapshot && snapshot->status.code != 0;
         if ((!batch || batch->get().empty()) && executionFailed && host_.selectedNode())
         {
             const auto *node = host_.selectedNode();
             if (const auto *tool = host_.effectiveTool())
             {
-                const auto *selectedImage = findPort(tool->outputs, imageOutput_.toStdString());
+                const auto *selectedImage = findPort(tool->outputs, imageOutput_);
                 if (selectedImage && selectedImage->sameGeometryAs)
                 {
-                    if (const auto *val = resolvedInput(*node, selectedImage->sameGeometryAs->port))
+                    if (const auto *val = resolvedInput(*node, selectedImage->sameGeometryAs->id))
                     {
                         if (const auto *inputBatch = std::get_if<DataRef<Image>>(val);
                             inputBatch && !inputBatch->get().empty())
                         {
                             batch            = inputBatch;
-                            fallbackInputPort = selectedImage->sameGeometryAs->port;
+                            fallbackInputPort = selectedImage->sameGeometryAs->id;
                         }
                     }
                 }
@@ -378,13 +378,13 @@ void ResultPresentation::updateDisplay()
                     {
                         if (port.type.type != Type::Image)
                             continue;
-                        if (const auto *val = resolvedInput(*node, port.nameEn))
+                        if (const auto *val = resolvedInput(*node, port.id))
                         {
                             if (const auto *inputBatch = std::get_if<DataRef<Image>>(val);
                                 inputBatch && !inputBatch->get().empty())
                             {
                                 batch            = inputBatch;
-                                fallbackInputPort = port.nameEn;
+                                fallbackInputPort = port.id;
                                 break;
                             }
                         }
@@ -412,13 +412,13 @@ void ResultPresentation::updateDisplay()
         const auto *node        = host_.selectedNode();
         if (declaration && node)
         {
-            imageInput = declaration->image ? declaration->image->port : std::string{};
+            imageInput = declaration->image ? declaration->image->id : 0;
             if (const auto *tool = host_.effectiveTool())
                 for (const auto &port : tool->inputs)
-                    if (port.nameEn != roi_.input() && port.type.type == Type::ROI && port.image
-                        && port.image->port == imageInput)
+                    if (port.id != roi_.input() && port.type.type == Type::ROI && port.image
+                        && port.image->id == imageInput)
                     {
-                        const auto *value = resolvedInput(*node, port.nameEn);
+                        const auto *value = resolvedInput(*node, port.id);
                         if (!value)
                             continue;
                         auto values = imageRois(*value, selectedIndex, port.editor == "rect");
@@ -430,11 +430,11 @@ void ResultPresentation::updateDisplay()
     {
         if (const auto *tool = host_.effectiveTool())
         {
-            const auto *image = findPort(tool->outputs, imageOutput_.toStdString());
+            const auto *image = findPort(tool->outputs, imageOutput_);
             if (image)
                 color = text(image->colorOrder);
 
-            if (!fallbackInputPort.empty())
+            if (fallbackInputPort != 0)
             {
                 if (color.isEmpty())
                 {
@@ -443,11 +443,11 @@ void ResultPresentation::updateDisplay()
                 }
                 for (const auto &port : tool->inputs)
                 {
-                    if (port.type.type != Type::ROI || !port.image || port.image->port != fallbackInputPort)
+                    if (port.type.type != Type::ROI || !port.image || port.image->id != fallbackInputPort)
                         continue;
                     if (snapshot)
                     {
-                        const auto value = snapshot->roiInputs.find(port.nameEn);
+                        const auto value = snapshot->roiInputs.find(port.id);
                         if (value != snapshot->roiInputs.end())
                         {
                             auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
@@ -455,7 +455,7 @@ void ResultPresentation::updateDisplay()
                             continue;
                         }
                     }
-                    if (const auto *val = resolvedInput(*node, port.nameEn))
+                    if (const auto *val = resolvedInput(*node, port.id))
                     {
                         auto values = imageRois(*val, selectedIndex, port.editor == "rect");
                         displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
@@ -466,9 +466,9 @@ void ResultPresentation::updateDisplay()
             {
                 for (const auto &port : tool->inputs)
                     if (port.type.type == Type::ROI && port.image
-                        && port.image->port == image->sameGeometryAs->port)
+                        && port.image->id == image->sameGeometryAs->id)
                     {
-                        const auto value = snapshot->roiInputs.find(port.nameEn);
+                        const auto value = snapshot->roiInputs.find(port.id);
                         if (value != snapshot->roiInputs.end())
                         {
                             auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
@@ -486,12 +486,12 @@ void ResultPresentation::updateDisplay()
             if (!port.image)
                 continue;
             const auto &imagePorts = port.image->stage == PortStage::Outputs ? tool->outputs : tool->inputs;
-            const auto *image      = findPort(imagePorts, port.image->port);
+            const auto *image      = findPort(imagePorts, port.image->id);
             if (!image
-                || (roi_.active() ? (!image->sameGeometryAs || image->sameGeometryAs->port != imageInput)
-                                  : image->nameEn != imageOutput_.toStdString()))
+                || (roi_.active() ? (!image->sameGeometryAs || image->sameGeometryAs->id != imageInput)
+                                  : image->id != imageOutput_))
                 continue;
-            const auto value = snapshot->outputs.find(port.nameEn);
+            const auto value = snapshot->outputs.find(port.id);
             if (value != snapshot->outputs.end())
             {
                 auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
@@ -561,8 +561,8 @@ QVariantList ResultPresentation::imageOutputs() const
     if (roi_.active())
     {
         result.push_back(QVariantMap{
-            {  "id",                                                    "__input_preview"},
-            {"name", QStringLiteral("输入预览 · ") + QString::fromStdString(roi_.input())}
+            {  "id",                                                                   0},
+            {"name", QStringLiteral("输入预览 · ") + QString::fromStdString(portLabel(roi_.input()))}
         });
         return result;
     }
@@ -570,10 +570,10 @@ QVariantList ResultPresentation::imageOutputs() const
     {
         const auto *node = host_.selectedNode();
         for (const auto &output : tool->outputs)
-            if (node && node->signatures.outputs.contains(output.nameEn)
-                && node->signatures.outputs.at(output.nameEn).type == Type::Image)
+            if (node && node->signatures.outputs.contains(output.id)
+                && node->signatures.outputs.at(output.id).type == Type::Image)
                 result.push_back(QVariantMap{
-                    {  "id",   text(output.nameEn)},
+                    {  "id",   output.id},
                     {"name", text(output.nameZh)}
                 });
     }
@@ -581,8 +581,8 @@ QVariantList ResultPresentation::imageOutputs() const
         for (const auto &[id, type] : node->signatures.outputs)
             if (type.type == Type::Image)
                 result.push_back(QVariantMap{
-                    {  "id", text(id)},
-                    {"name", text(id)}
+                    {  "id", id},
+                    {"name", text(portLabel(id))}
                 });
     return result;
 }
@@ -600,9 +600,11 @@ int ResultPresentation::imageCount() const
     return images ? static_cast<int>(images->get().size()) : 0;
 }
 
-QString ResultPresentation::selectedImageOutput() const
+int ResultPresentation::selectedImageOutput() const
 {
-    return roi_.active() ? QStringLiteral("__input_preview") : imageOutput_;
+    // 0 is the reserved status-code number, so it can never be a business image output: it means
+    // "the ROI editor's background image".
+    return roi_.active() ? 0 : static_cast<int>(imageOutput_);
 }
 
 bool ResultPresentation::setImageIndex(int index)
@@ -630,15 +632,15 @@ void ResultPresentation::restoreImageIndex(int index)
         index_ = index;
 }
 
-bool ResultPresentation::setImageOutput(const QString &output)
+bool ResultPresentation::setImageOutput(int output)
 {
-    if (roi_.active() || imageOutput_ == output)
+    if (roi_.active() || output <= 0 || imageOutput_ == static_cast<PortId>(output))
         return false;
     const auto choices = imageOutputs();
     if (std::none_of(choices.begin(), choices.end(),
-                     [&](const auto &choice) { return choice.toMap().value("id").toString() == output; }))
+                     [&](const auto &choice) { return choice.toMap().value("id").toInt() == output; }))
         return false;
-    imageOutput_ = output;
+    imageOutput_ = static_cast<PortId>(output);
     updateDisplay();
     if (viewport_)
         viewport_->forceActiveFocus();
@@ -689,7 +691,7 @@ void ResultPresentation::updateReadback()
         readRequests_.pop_front();
         // The queued context dropped its publication; rebuild the live one and serve only when the
         // identity still matches, exactly as the direct entry would.
-        const auto current = host_.portContext(intent.context.value("port").toString());
+        const auto current = host_.portContext(intent.context.value("port").toInt());
         if (intent.context == textTarget(current))
             requestText(current);
     }
@@ -723,7 +725,7 @@ void ResultPresentation::requestText(const QVariantMap &context)
         host_.reportDiagnostic(QStringLiteral("正在生成完整输出，请稍候"));
         return;
     }
-    auto captured = outputs_.capture(context.value("port").toString());
+    auto captured = outputs_.capture(static_cast<PortId>(context.value("port").toUInt()));
     if (!captured)
         return;
     // Copy always runs; a large value is formatted on the bounded worker rather than gated behind a

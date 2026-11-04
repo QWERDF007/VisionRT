@@ -1,3 +1,5 @@
+#include "core/NodeContracts.h"
+
 #include <visionrt/contracts/Parameters.h>
 #include "runtime/Receiver.h"
 #include "ToolResultAssertions.h"
@@ -50,6 +52,23 @@ public:
     }
 };
 
+// 端口编号按声明顺序分配：输入从 1 起，唯一的业务输出固定 2。场景里仍写标签，只是为了让
+// 断言读得出来，协议上流动的自始至终是编号。
+PortId inputPort(std::string_view label)
+{
+    if (label == "a")
+        return 1;
+    if (label == "a_again")
+        return 2;
+    if (label == "b")
+        return 3;
+    if (label == "code")
+        return 1;
+    if (label == "message")
+        return 2;
+    return 1;   // 单输入工具：input / in
+}
+
 ToolDefinition definition(std::string id, std::vector<std::string> inputs = {})
 {
     ToolDefinition d;
@@ -58,8 +77,9 @@ ToolDefinition definition(std::string id, std::vector<std::string> inputs = {})
     d.nameZh  = id;
     d.version      = "1";
     d.kind         = ToolKind::Cpp;
-    for (auto &input : inputs) d.inputs.push_back({input, input, {Type::Int}});
-    d.outputs.push_back({"value", "Value", {Type::Int}});
+    PortId next = 1;
+    for (auto &input : inputs) d.inputs.push_back({next++, input, {Type::Int}});
+    d.outputs.push_back({2, "Value", {Type::Int}});
     return d;
 }
 
@@ -89,20 +109,20 @@ NodeDefinition node(NodeId id, const ToolDefinition &d)
     n.toolNameSnapshot = d.nameZh;
     for (auto &port : d.inputs)
     {
-        n.signatures.inputs.emplace(port.nameEn, port.type);
-        n.inputs[port.nameEn] = {};
+        n.signatures.inputs.emplace(port.id, port.type);
+        n.inputs[port.id] = {};
     }
-    for (auto &port : d.outputs) n.signatures.outputs.emplace(port.nameEn, port.type);
-    n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-    n.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+    for (auto &port : d.outputs) n.signatures.outputs.emplace(port.id, port.type);
+    n.signatures.outputs.emplace(kStatusCodePort, TypeSpec{Type::Int});
+    n.signatures.outputs.emplace(kStatusMessagePort, TypeSpec{Type::String});
     return n;
 }
 
-void bind(NodeDefinition &n, const std::string &input, NodeId source)
+void bind(NodeDefinition &n, PortId input, NodeId source)
 {
     n.inputs[input] = {
         BindingMode::Upstream, Missing{},
-         SourcePort{source, "value"}
+         SourcePort{source, 2}
     };
 }
 
@@ -149,27 +169,27 @@ void branchesOverlapAndJoin()
                 ++visits;
                 arrived.notify_all();
                 if (!arrived.wait_for(lock, 2s, [&] { return active == 2; }))
-                    return toolResult({{"value", Missing{}}}, {1, "branches did not overlap"});
-                return toolResult({{"value", std::int64_t{7}}}, {});
+                    return toolResult({{2, Missing{}}}, {1, "branches did not overlap"});
+                return toolResult({{2, std::int64_t{7}}}, {});
             });
     auto join = definition("test.join", {"a", "a_again", "b"});
     install(registry, join,
             [](const Values &in)
             {
-                return toolResult({{"value", std::get<std::int64_t>(in.at("a")) + std::get<std::int64_t>(in.at("a_again"))
-                                   + std::get<std::int64_t>(in.at("b"))}}, {});
+                return toolResult({{2, std::get<std::int64_t>(in.at(inputPort("a"))) + std::get<std::int64_t>(in.at(inputPort("a_again")))
+                                   + std::get<std::int64_t>(in.at(inputPort("b")))}}, {});
             });
     auto a = node(1, branch), b = node(2, branch), c = node(3, join);
-    bind(c, "a", 1);
-    bind(c, "a_again", 1);
-    bind(c, "b", 2);
+    bind(c, inputPort("a"), 1);
+    bind(c, inputPort("a_again"), 1);
+    bind(c, inputPort("b"), 2);
     ProjectDefinition project;
     project.flows.front().nodes = {a, b, c};
     assert(engine.start(project, registry, RunMode::Once));
     auto result = finish(engine);
     assert(visits == 2);
     assert(snapshot(result, 3)->status.code == 0);
-    assert(std::get<std::int64_t>(snapshot(result, 3)->outputs.at("value")) == 21);
+    assert(std::get<std::int64_t>(snapshot(result, 3)->outputs.at(2)) == 21);
     assert(snapshot(result, 1)->round == snapshot(result, 3)->round);
     assert(result.flows.size() == 1 && result.flows.front().milliseconds > 0);
     // 单流程时“全流程”就是该流程的执行区间；每个节点的总计都落在它内部。
@@ -189,35 +209,35 @@ void failureReplacesOldValueAndManualUsesCache()
             [&](const Values &)
             {
                 if (++calls == 1)
-                    return toolResult({{"value", std::int64_t{42}}}, {});
+                    return toolResult({{2, std::int64_t{42}}}, {});
                 return toolResult({}, {});
             });
     auto consumer = definition("test.consumer", {"input"});
     install(registry, consumer,
             [](const Values &in)
             {
-                return toolResult({{"value", isMissing(in.at("input")) ? std::int64_t{-99}
-                                                                       : std::get<std::int64_t>(in.at("input"))}}, {});
+                return toolResult({{2, isMissing(in.at(inputPort("input"))) ? std::int64_t{-99}
+                                                                       : std::get<std::int64_t>(in.at(inputPort("input")))}}, {});
             });
     auto a = node(1, source), b = node(2, consumer);
-    bind(b, "input", 1);
+    bind(b, inputPort("input"), 1);
     ProjectDefinition project;
     project.flows.front().nodes = {a, b};
     assert(engine.start(project, registry, RunMode::Once));
     auto first = finish(engine);
-    assert(std::get<std::int64_t>(snapshot(first, 2)->outputs.at("value")) == 42);
+    assert(std::get<std::int64_t>(snapshot(first, 2)->outputs.at(2)) == 42);
     assert(engine.start(project, registry, RunMode::Node, 2));
     auto manual = finish(engine);
     assert(calls == 1);
-    assert(std::get<std::int64_t>(snapshot(manual, 2)->outputs.at("value")) == 42);
+    assert(std::get<std::int64_t>(snapshot(manual, 2)->outputs.at(2)) == 42);
     assert(snapshot(manual, 2)->session != snapshot(first, 2)->session);
     assert(engine.start(project, registry, RunMode::Once));
     auto defaults = finish(engine);
     // The tool omitted its business port: the declaration supplies the value and the run stays a
     // normal success, so the consumer receives 0 instead of an absent input.
     assert(snapshot(defaults, 1)->status.code == 0 && snapshot(defaults, 1)->toolResultPublished);
-    assert(equalValues(snapshot(defaults, 1)->outputs.at("value"), PortValue{std::int64_t{0}}));
-    assert(std::get<std::int64_t>(snapshot(defaults, 2)->outputs.at("value")) == 0);
+    assert(equalValues(snapshot(defaults, 1)->outputs.at(2), PortValue{std::int64_t{0}}));
+    assert(std::get<std::int64_t>(snapshot(defaults, 2)->outputs.at(2)) == 0);
     assert(snapshot(defaults, 2)->disposition == NodeDisposition::Succeeded);
     assert(snapshot(defaults, 1)->round == snapshot(defaults, 2)->round);
     assert(snapshot(defaults, 1)->session == snapshot(defaults, 2)->session);
@@ -230,13 +250,13 @@ void initializationSuppressionRetryAndReset()
     int           initializations = 0, releases = 0, executions = 0, rounds = 0;
     bool          fail     = true;
     auto          resource = definition("test.resource");
-    resource.initParams.push_back({"resource", "Resource", {Type::Int}, std::int64_t{1}});
+    resource.initParams.push_back({0, "Resource", {Type::Int}, std::int64_t{1}});
     install(
         registry, resource,
         [&](const Values &)
         {
             ++executions;
-            return toolResult({{"value", std::int64_t{8}}}, {});
+            return toolResult({{2, std::int64_t{8}}}, {});
         },
         [&]
         {
@@ -255,10 +275,10 @@ void initializationSuppressionRetryAndReset()
             {
                 if (++rounds == 3)
                     engine.requestStop();
-                return toolResult({{"value", std::int64_t{rounds}}}, {});
+                return toolResult({{2, std::int64_t{rounds}}}, {});
             });
     auto a = node(1, resource), b = node(2, observer);
-    bind(b, "input", 1);
+    bind(b, inputPort("input"), 1);
     ProjectDefinition project;
     project.dirty               = true;
     project.flows.front().nodes = {a, b};
@@ -274,7 +294,7 @@ void initializationSuppressionRetryAndReset()
     assert(engine.start(project, registry, RunMode::Once));
     auto reused = finish(engine);
     assert(initializations == 2 && executions == 2);
-    project.flows.front().nodes.front().initParams["resource"] = std::int64_t{2};
+    project.flows.front().nodes.front().initParams[0] = std::int64_t{2};
     assert(engine.start(project, registry, RunMode::Once));
     auto changed = finish(engine);
     assert(initializations == 3 && executions == 3 && releases == 2);
@@ -286,7 +306,7 @@ void initializationSuppressionRetryAndReset()
     auto reset = finish(engine);
     assert(reset.generation == generation + 1 && !snapshot(reset, 1));
     assert(reset.nodes.front().lifecycleDiagnostic->status.code == 9);
-    assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at("resource")) == 2);
+    assert(project.dirty && std::get<std::int64_t>(project.flows.front().nodes.front().initParams.at(0)) == 2);
     assert(releases == 3);
 }
 
@@ -305,7 +325,7 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
             {
                 ++fastCalls;
                 gate.notify_all();
-                return toolResult({{"value", in.at("input")}}, {});
+                return toolResult({{2, in.at(inputPort("input"))}}, {});
             });
     auto slow = definition("test.slow");
     install(registry, slow,
@@ -316,11 +336,11 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
                 entered = true;
                 gate.notify_all();
                 if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
-                    return toolResult({{"value", Missing{}}}, {1, "test gate timeout"});
-                return toolResult({{"value", std::int64_t{1}}}, {});
+                    return toolResult({{2, Missing{}}}, {1, "test gate timeout"});
+                return toolResult({{2, std::int64_t{1}}}, {});
             });
     auto a = node(1, fast), b = node(2, slow);
-    a.inputs["input"].literal = std::int64_t{17};
+    a.inputs[inputPort("input")].literal = std::int64_t{17};
     ProjectDefinition project;
     project.flows = {
         {"fast", "fast", true, {a}},
@@ -331,7 +351,7 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
         std::unique_lock lock(mutex);
         assert(gate.wait_for(lock, 2s, [&] { return entered && fastCalls == 1; }));
     }
-    project.flows.front().nodes.front().inputs["input"].literal = std::int64_t{99};
+    project.flows.front().nodes.front().inputs[inputPort("input")].literal = std::int64_t{99};
     engine.requestStop();
     assert(!engine.start(project, registry, RunMode::Once));
     {
@@ -341,7 +361,7 @@ void stopDrainsCommittedFlowsAndFreezesConfiguration()
     gate.notify_all();
     auto completed = finish(engine);
     assert(completed.round == 1 && fastCalls == 1 && slowCalls == 1);
-    assert(std::get<std::int64_t>(snapshot(completed, 1)->outputs.at("value")) == 17);
+    assert(std::get<std::int64_t>(snapshot(completed, 1)->outputs.at(2)) == 17);
     assert(completed.flows.size() == 2);
     const auto deadline = std::chrono::steady_clock::now() + 1s;
     while (wakeups == 0 && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
@@ -360,7 +380,7 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
             [&](const Values &)
             {
                 ++sourceCalls;
-                return toolResult({{"value", std::int64_t{25}}}, {});
+                return toolResult({{2, std::int64_t{25}}}, {});
             });
     auto        sender  = node(1, source);
     const auto *receive = registry.find("visionrt.flow.receive");
@@ -375,10 +395,10 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     registry.replaceDefinition(typed);
     auto receiver       = node(2, typed);
     receiver.initParams = {
-        { "source_flow_id",                  std::string("sender")},
-        {"source_node_seq", std::string(std::to_string(sender.id))},
-        { "source_port_id",                   std::string("value")},
-        {     "timeout_ms",                     std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow,                  std::string("sender")},
+        {ReceiveInitPorts::SourceNode, std::string(std::to_string(sender.id))},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                     std::int64_t{5000}}
     };
     ProjectDefinition project;
     project.flows = {
@@ -407,35 +427,35 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
     assert(engine.start(project, registry, RunMode::Once));
     auto received = finish(engine);
     assert(snapshot(received, 2)->status.code == 0);
-    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 25);
-    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("source_status_code")) == 0);
+    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at(2)) == 25);
+    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at(ReceivePorts::SourceStatus)) == 0);
     assert(sourceCalls == 1);
     auto relay       = node(4, typed);
     relay.initParams = {
-        { "source_flow_id",                  std::string("receiver")},
-        {"source_node_seq", std::string(std::to_string(receiver.id))},
-        { "source_port_id",                     std::string("value")},
-        {     "timeout_ms",                       std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow,                  std::string("receiver")},
+        {ReceiveInitPorts::SourceNode, std::string(std::to_string(receiver.id))},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                       std::int64_t{5000}}
     };
     project.flows.push_back({"relay", "relay", true, {relay}});
     assert(engine.start(project, registry, RunMode::Once));
     const auto chained = finish(engine);
     assert(snapshot(chained, 4)->status.code == 0);
-    assert(std::get<std::int64_t>(snapshot(chained, 4)->outputs.at("value")) == 25);
+    assert(std::get<std::int64_t>(snapshot(chained, 4)->outputs.at(2)) == 25);
     assert(sourceCalls == 2);
     auto first       = node(10, typed);
     first.initParams = {
-        { "source_flow_id",                  std::string("b")},
-        {"source_node_seq",                    std::string("11")},
-        { "source_port_id",                     std::string("value")},
-        {     "timeout_ms",                       std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow,                  std::string("b")},
+        {ReceiveInitPorts::SourceNode,                    std::string("11")},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                       std::int64_t{5000}}
     };
     auto secondNode       = node(11, typed);
     secondNode.initParams = {
-        { "source_flow_id",                  std::string("a")},
-        {"source_node_seq",                    std::string("10")},
-        { "source_port_id",                     std::string("value")},
-        {     "timeout_ms",                       std::int64_t{5000}}
+        {ReceiveInitPorts::SourceFlow,                  std::string("a")},
+        {ReceiveInitPorts::SourceNode,                    std::string("10")},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                       std::int64_t{5000}}
     };
     ProjectDefinition cyclic;
     cyclic.flows = {
@@ -459,7 +479,7 @@ void receiverConsumesFailures()
     install(registry, source,
             [](const Values &)
             {
-                return toolResult({{"value", Missing{}}}, {12, "源执行失败", "source detail"});
+                return toolResult({{2, Missing{}}}, {12, "源执行失败", "source detail"});
             });
     auto sender   = node(1, source);
     auto consumer = definition("test.cursor");
@@ -470,7 +490,7 @@ void receiverConsumesFailures()
                              instance->run = [reader = services.results, name](const Values &)
                              {
                                  ReceiveCursor  cursor;
-                                 ReceiveRequest request{"sender", name, "value", {Type::Int}, 1000ms};
+                                 ReceiveRequest request{"sender", name, 2, {Type::Int}, 1000ms};
                                  auto           failed = reader->receive(request, cursor);
                                  request.timeout       = 0ms;
                                  auto       next       = reader->receive(request, cursor);
@@ -481,7 +501,7 @@ const bool consumed
                                     && failed.sourceStatus.detail == "source detail"
                                     && equalValues(failed.value, PortValue{std::int64_t{0}})
                                     && next.disposition == ReceiveDisposition::Timeout;
-                                 return toolResult({{"value", std::int64_t{consumed ? 1 : 0}}}, {});
+                                 return toolResult({{2, std::int64_t{consumed ? 1 : 0}}}, {});
                              };
                              return instance;
                          });
@@ -494,7 +514,7 @@ const bool consumed
     RuntimeEngine engine(2);
     assert(engine.start(project, registry, RunMode::Once));
     auto received = finish(engine);
-    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at("value")) == 1);
+    assert(std::get<std::int64_t>(snapshot(received, 2)->outputs.at(2)) == 1);
 }
 
 void executionDiagnostics()
@@ -511,8 +531,8 @@ void executionDiagnostics()
                 if (scenario == 0)
                     throw std::runtime_error("third-party detail");
                 if (scenario == 1)
-                    return toolResult({{"value", std::string("wrong type")}}, {});
-                return toolResult({{"value", std::int64_t{42}}}, {7, "业务条件未满足", "business detail"});
+                    return toolResult({{2, std::string("wrong type")}}, {});
+                return toolResult({{2, std::int64_t{42}}}, {7, "业务条件未满足", "business detail"});
             },
             [scenario] { return scenario == 3 ? ToolStatus{6, "资源未准备", "init detail"} : ToolStatus{}; });
         ProjectDefinition project;
@@ -523,16 +543,16 @@ void executionDiagnostics()
         if (scenario == 2)
         {
             assert(result->toolResultPublished);
-            assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == result->status.code);
-            assert(std::get<std::string>(result->outputs.at("__status_message")) == result->status.message);
+            assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == result->status.code);
+            assert(std::get<std::string>(result->outputs.at(kStatusMessagePort)) == result->status.message);
         }
         else
         {
             // The framework stopped the node before any ToolResult existed, so no status port may
             // be fabricated from the framework diagnostic.
             assert(!result->toolResultPublished);
-            assert(!result->outputs.contains("__status_code"));
-            assert(!result->outputs.contains("__status_message"));
+            assert(!result->outputs.contains(kStatusCodePort));
+            assert(!result->outputs.contains(kStatusMessagePort));
         }
         if (scenario == 0)
         {
@@ -543,7 +563,7 @@ void executionDiagnostics()
         {
             // A tool that answers outside its declaration produced bad data, not a bad call.
             assert(result->phase == NodePhase::Convert && result->status.code == -13);
-            assert(!result->status.message.empty() && isMissing(result->outputs.at("value")));
+            assert(!result->status.message.empty() && isMissing(result->outputs.at(2)));
         }
         else if (scenario == 2)
         {
@@ -578,9 +598,9 @@ void managementWaitsForActiveInvocation()
                 entered = true;
                 gate.notify_all();
                 if (!gate.wait_for(lock, 2s, [&] { return proceed; }))
-                    return toolResult({{"value", Missing{}}}, {1, "test gate timeout"});
+                    return toolResult({{2, Missing{}}}, {1, "test gate timeout"});
                 finishedExecution = true;
-                return toolResult({{"value", std::int64_t{1}}}, {});
+                return toolResult({{2, std::int64_t{1}}}, {});
             },
             [] { return ToolStatus{}; },
             [&]
@@ -637,7 +657,7 @@ void executionMetricsAndTimingSeparation()
         ToolResult execute(const Values &) override
         {
             std::this_thread::sleep_for(10ms);
-            return toolResult({{"value", std::int64_t{42}}}, {});
+            return toolResult({{2, std::int64_t{42}}}, {});
         }
 
         ToolStatus release() override
@@ -777,7 +797,7 @@ void crossRoundPythonMetricIsolation()
             {
                 throw std::runtime_error("simulated failure after delay in execute");
             }
-            return toolResult({{"value", std::int64_t{42}}}, {});
+            return toolResult({{2, std::int64_t{42}}}, {});
         }
 
         ToolStatus release() override
@@ -801,8 +821,8 @@ void crossRoundPythonMetricIsolation()
     registry.addDefinition(mockDef);
 
     auto n                 = node(1, mockDef);
-    n.inputs["in"].mode    = BindingMode::Literal;
-    n.inputs["in"].literal = std::int64_t{10};
+    n.inputs[inputPort("in")].mode    = BindingMode::Literal;
+    n.inputs[inputPort("in")].literal = std::int64_t{10};
 
     ProjectDefinition project;
     project.dirty               = true;
@@ -816,7 +836,7 @@ void crossRoundPythonMetricIsolation()
     assert(snap1->timing.adapterExecuteMs >= 10.0);
     assert(snap1->timing.pythonCallMs == 15.0);
 
-    project.flows.front().nodes.front().inputs["in"].literal = std::string("not_an_int");
+    project.flows.front().nodes.front().inputs[inputPort("in")].literal = std::string("not_an_int");
     assert(engine.start(project, registry, RunMode::Once));
     auto r2    = finish(engine);
     auto snap2 = snapshot(r2, 1);
@@ -831,7 +851,7 @@ void crossRoundPythonMetricIsolation()
     assert(snap2->timing.pythonOutputMs == 0.0);
 
     shouldFailInExecute.store(true);
-    project.flows.front().nodes.front().inputs["in"].literal = std::int64_t{20};
+    project.flows.front().nodes.front().inputs[inputPort("in")].literal = std::int64_t{20};
     assert(engine.start(project, registry, RunMode::Once));
     auto r3    = finish(engine);
     auto snap3 = snapshot(r3, 1);
@@ -852,15 +872,15 @@ void hostBindingReceiverContract()
     recvDef.kind         = ToolKind::Host;
 
     recvDef.initParams = {
-        { "source_flow_id", "源流程", {Type::String},   std::string{""}},
-        {"source_node_seq", "源节点", {Type::String},   std::string{""}},
-        { "source_port_id", "源端口", {Type::String},   std::string{""}},
-        {     "timeout_ms",    "超时",    {Type::Int}, std::int64_t{500}}
+        {ReceiveInitPorts::SourceFlow, "源流程", {Type::String},   std::string{""}},
+        {ReceiveInitPorts::SourceNode, "源节点", {Type::String},   std::string{""}},
+        {ReceiveInitPorts::SourcePort, "源端口",    {Type::Int}, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,    "超时",    {Type::Int}, std::int64_t{500}}
     };
     recvDef.outputs = {
-        {                "value",   "接收值",    {Type::Int}},
-        {   "source_status_code",   "状态码",    {Type::Int}},
-        {"source_status_message", "状态消息", {Type::String}}
+        {    ReceivePorts::Value,   "接收值",    {Type::Int}},
+        {ReceivePorts::SourceStatus,   "状态码",    {Type::Int}},
+        {ReceivePorts::SourceStatusMessage, "状态消息", {Type::String}}
     };
 
     ToolsPackage pkg;
@@ -925,14 +945,14 @@ void hostBindingReceiverContract()
     assert(thrownMissingVal);
 
     auto source = definition("test.sender");
-    install(registry, source, [](const Values &) { return toolResult({{"value", std::int64_t{999}}}, {}); });
+    install(registry, source, [](const Values &) { return toolResult({{2, std::int64_t{999}}}, {}); });
     auto senderNode         = node(1, source);
     auto receiverNode       = node(2, *registry.find("test.custom.receiver"));
     receiverNode.initParams = {
-        { "source_flow_id",                 std::string("sender_flow")},
-        {"source_node_seq", std::string(std::to_string(senderNode.id))},
-        { "source_port_id",                       std::string("value")},
-        {     "timeout_ms",                          std::int64_t{500}}
+        {ReceiveInitPorts::SourceFlow,                 std::string("sender_flow")},
+        {ReceiveInitPorts::SourceNode, std::string(std::to_string(senderNode.id))},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                          std::int64_t{500}}
     };
     ProjectDefinition project;
     project.flows = {
@@ -946,14 +966,14 @@ void hostBindingReceiverContract()
     auto recvSnap = snapshot(completed, 2);
     assert(recvSnap != nullptr);
     assert(recvSnap->status.code == 0);
-    assert(std::get<std::int64_t>(recvSnap->outputs.at("value")) == 999);
-    assert(std::get<std::int64_t>(recvSnap->outputs.at("source_status_code")) == 0);
+    assert(std::get<std::int64_t>(recvSnap->outputs.at(2)) == 999);
+    assert(std::get<std::int64_t>(recvSnap->outputs.at(ReceivePorts::SourceStatus)) == 0);
 
     for (const auto &value : {std::string("01"), std::string("+1"), std::string(" 1"), std::string("1 "),
                               std::string("18446744073709551616")})
     {
         auto invalid                                            = project;
-        invalid.flows[1].nodes[0].initParams["source_node_seq"] = value;
+        invalid.flows[1].nodes[0].initParams[ReceiveInitPorts::SourceNode] = value;
         RuntimeEngine rejected(2);
         assert(rejected.start(invalid, registry, RunMode::Once));
         const auto result = snapshot(finish(rejected), receiverNode.id);
@@ -961,7 +981,7 @@ void hostBindingReceiverContract()
         assert(result->status.message.find("source_node_seq") != std::string::npos);
         // The run failed on its own declaration, so the business port carries the default of the
         // resolved type and the status message names the offending parameter.
-        assert(equalValues(result->outputs.at("value"), PortValue{std::int64_t{0}}));
+        assert(equalValues(result->outputs.at(2), PortValue{std::int64_t{0}}));
     }
 
     // Dynamic type: string
@@ -984,14 +1004,14 @@ void hostBindingReceiverContract()
     auto strSource            = definition("test.str_sender");
     strSource.outputs[0].type = {Type::String};
     install(strRegistry, strSource,
-            [](const Values &) { return toolResult({{"value", std::string("dynamic host binding works")}}, {}); });
+            [](const Values &) { return toolResult({{2, std::string("dynamic host binding works")}}, {}); });
     auto strSenderNode         = node(1, strSource);
     auto strReceiverNode       = node(2, *strRegistry.find("test.str.receiver"));
     strReceiverNode.initParams = {
-        { "source_flow_id",                std::string("flow_str_sender")},
-        {"source_node_seq", std::string(std::to_string(strSenderNode.id))},
-        { "source_port_id",                          std::string("value")},
-        {     "timeout_ms",                             std::int64_t{500}}
+        {ReceiveInitPorts::SourceFlow,                std::string("flow_str_sender")},
+        {ReceiveInitPorts::SourceNode, std::string(std::to_string(strSenderNode.id))},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                             std::int64_t{500}}
     };
     ProjectDefinition strProject;
     strProject.flows = {
@@ -1004,7 +1024,7 @@ void hostBindingReceiverContract()
     auto strSnap      = snapshot(strCompleted, 2);
     assert(strSnap != nullptr);
     assert(strSnap->status.code == 0);
-    assert(std::get<std::string>(strSnap->outputs.at("value")) == "dynamic host binding works");
+    assert(std::get<std::string>(strSnap->outputs.at(2)) == "dynamic host binding works");
 }
 } // namespace
 
@@ -1074,16 +1094,16 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         registerReceiveTools(registry);
         auto source = definition("test.typed.sender");
         source.outputs.front().type = type;
-        install(registry, source, [value](const Values &) { return toolResult({{"value", value}}, {}); });
+        install(registry, source, [value](const Values &) { return toolResult({{2, value}}, {}); });
         ProjectEditor editor;
         const auto sourceFlow = editor.addFlow("source");
         const auto sender = editor.addNode(sourceFlow, source, {});
         const auto receiver = editor.addNode("flow_1", *registry.find("visionrt.flow.receive"), {});
         assert(!engine.start(editor.project(), registry, RunMode::Once));
-        editor.setInitParam("flow_1", receiver, "source_flow_id", std::string(sourceFlow));
-        editor.setInitParam("flow_1", receiver, "source_node_seq", std::string(std::to_string(sender)));
-        editor.setInitParam("flow_1", receiver, "source_port_id", std::string("value"));
-        editor.setInitParam("flow_1", receiver, "timeout_ms", std::int64_t{1000});
+        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourceFlow, std::string(sourceFlow));
+        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourceNode, std::string(std::to_string(sender)));
+        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourcePort, std::int64_t{2});
+        editor.setInitParam("flow_1", receiver, ReceiveInitPorts::Timeout, std::int64_t{1000});
         ProjectStorage storage(registry);
         QTemporaryDir temporary;
         assert(temporary.isValid());
@@ -1093,30 +1113,30 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         const auto loaded = storage.load(file);
         for (const auto &d : loaded.diagnostics) std::cerr << "DIAG " << d.message << "\n";
         assert(loaded.diagnostics.empty());
-        assert(loaded.project.flows.front().nodes.front().signatures.outputs.at("value") == type);
+        assert(loaded.project.flows.front().nodes.front().signatures.outputs.at(2) == type);
         assert(engine.start(loaded.project, registry, RunMode::Once));
         const auto result = snapshot(finish(engine), receiver);
         assert(result->status.code == 0);
-        assert(equalValues(result->outputs.at("value"), value));
+        assert(equalValues(result->outputs.at(2), value));
         if (type == TypeSpec{Type::Int})
         {
             auto sinkDefinition = definition("test.integer.sink", {"input"});
-            install(registry, sinkDefinition, [](const Values &) { return toolResult({{"value", std::int64_t{0}}}, {}); });
+            install(registry, sinkDefinition, [](const Values &) { return toolResult({{2, std::int64_t{0}}}, {}); });
             const auto sink = editor.addNode("flow_1", sinkDefinition, {0, 1});
-            editor.setSource("flow_1", sink, "input", SourcePort{receiver, "value"});
-            editor.setMode("flow_1", sink, "input", BindingMode::Upstream);
+            editor.setSource("flow_1", sink, inputPort("input"), SourcePort{receiver, ReceivePorts::Value});
+            editor.setMode("flow_1", sink, inputPort("input"), BindingMode::Upstream);
             source.outputs.front().type = {Type::String};
             ToolRegistry changedRegistry;
             changedRegistry.registerPackage(readToolsPackage(toolsRoot));
             changedRegistry.loadNativeImplementations();
             registerReceiveTools(changedRegistry);
             install(changedRegistry, source,
-                    [](const Values &) { return toolResult({{"value", std::string("changed")}}, {}); });
-            install(changedRegistry, sinkDefinition, [](const Values &) { return toolResult({{"value", std::int64_t{0}}}, {}); });
+                    [](const Values &) { return toolResult({{2, std::string("changed")}}, {}); });
+            install(changedRegistry, sinkDefinition, [](const Values &) { return toolResult({{2, std::int64_t{0}}}, {}); });
             const auto rejected = engine.start(editor.project(), changedRegistry, RunMode::Once);
             assert(!rejected && rejected.message.find("类型不兼容") != std::string::npos);
             const auto reconciled = ProjectStorage(changedRegistry).reconcile(editor.project());
-            assert(reconciled.project.flows.front().nodes.front().signatures.outputs.at("value") == TypeSpec{Type::String});
+            assert(reconciled.project.flows.front().nodes.front().signatures.outputs.at(2) == TypeSpec{Type::String});
             assert(std::any_of(reconciled.diagnostics.begin(), reconciled.diagnostics.end(), [](const auto &diagnostic)
                 { return diagnostic.code == ProjectStorageCode::InvalidReference; }));
         }
@@ -1139,7 +1159,7 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
             {
                 std::unique_lock lock(gateMutex);
                 gate.wait_for(lock, 5s, [&] { return released; });
-                return toolResult({{"value", std::int64_t{1}}}, {});
+                return toolResult({{2, std::int64_t{1}}}, {});
             });
     auto sender = node(1, source);
     auto typed = *registry.find("visionrt.flow.receive");
@@ -1151,12 +1171,12 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
         }
     registry.replaceDefinition(typed);
     auto receiver = node(2, typed);
-    receiver.signatures.outputs.emplace("value", TypeSpec{Type::Int});
+    receiver.signatures.outputs.emplace(ReceivePorts::Value, TypeSpec{Type::Int});
     receiver.initParams = {
-        { "source_flow_id",                  std::string("sender")},
-        {"source_node_seq", std::string(std::to_string(sender.id))},
-        { "source_port_id",                   std::string("value")},
-        {     "timeout_ms",                    std::int64_t{10000}}
+        {ReceiveInitPorts::SourceFlow,                  std::string("sender")},
+        {ReceiveInitPorts::SourceNode, std::string(std::to_string(sender.id))},
+        {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+        {ReceiveInitPorts::Timeout,                    std::int64_t{10000}}
     };
     ProjectDefinition project;
     project.flows = {
@@ -1236,25 +1256,25 @@ void singleNodeUpstreamValidity()
             [&](const Values &)
             {
                 ++executions[0];
-                return toolResult({{"value", std::int64_t{1}}}, {});
+                return toolResult({{2, std::int64_t{1}}}, {});
             });
     auto middle = definition("test.chain.middle", {"input"});
     install(registry, middle,
             [&](const Values &in)
             {
                 ++executions[1];
-                return toolResult({{"value", std::get<std::int64_t>(in.at("input")) + 1}}, {});
+                return toolResult({{2, std::get<std::int64_t>(in.at(inputPort("input"))) + 1}}, {});
             });
     auto last = definition("test.chain.last", {"input"});
     install(registry, last,
             [&](const Values &in)
             {
                 ++executions[2];
-                return toolResult({{"value", std::get<std::int64_t>(in.at("input")) + 1}}, {});
+                return toolResult({{2, std::get<std::int64_t>(in.at(inputPort("input"))) + 1}}, {});
             });
     auto a = node(1, first), b = node(2, middle), c = node(3, last);
-    bind(b, "input", 1);
-    bind(c, "input", 2);
+    bind(b, inputPort("input"), 1);
+    bind(c, inputPort("input"), 2);
     ProjectDefinition project;
     project.flows.front().nodes = {a, b, c};
     assert(engine.start(project, registry, RunMode::Once));
@@ -1308,7 +1328,9 @@ void declaredDefaultsAtExecution()
                 RuntimeEngine engine(1);
                 ToolRegistry registry;
                 auto declared = definition("test.defaults");
+                // 同一个参数在两种场景里各占一条命名空间：初始化 0，业务输入 1。
                 PortDefinition limit;
+                limit.id           = initialization ? 0 : 1;
                 limit.nameEn       = "limit";
                 limit.nameZh       = "限制";
                 limit.type         = TypeSpec{Type::Int};
@@ -1325,8 +1347,8 @@ void declaredDefaultsAtExecution()
                                 // A missing literal is normalised to the declared default, and an
                                 // omitted default is the type's empty value: the tool never sees an
                                 // invented value it did not declare.
-                                assert(equalValues(inputs.at("limit"), PortValue{expected}));
-                            return toolResult({{"value", std::int64_t{1}}}, {});
+                                assert(equalValues(inputs.at(inputPort("limit")), PortValue{expected}));
+                            return toolResult({{2, std::int64_t{1}}}, {});
                         },
                         [&]
                         {
@@ -1336,12 +1358,12 @@ void declaredDefaultsAtExecution()
                 auto configured = node(1, declared);
                 if (initialization)
                 {
-                    configured.signatures.initParams.emplace("limit", TypeSpec{Type::Int});
+                    configured.signatures.initParams.emplace(0, TypeSpec{Type::Int});
                     if (explicitMissing)
-                        configured.initParams.emplace("limit", Missing{});
+                        configured.initParams.emplace(0, Missing{});
                 }
                 else if (!explicitMissing)
-                    configured.inputs.erase("limit");
+                    configured.inputs.erase(1);
                 ProjectDefinition project;
                 project.flows.front().nodes = {configured};
                 assert(engine.start(project, registry, RunMode::Once));
@@ -1357,6 +1379,7 @@ void declaredDefaultsAtExecution()
         ToolRegistry  registry;
         auto          declared = definition("test.defaults.no_default");
         PortDefinition limit;
+        limit.id     = 1;
         limit.nameEn = "limit";
         limit.nameZh = "限制";
         limit.type   = TypeSpec{Type::Int};
@@ -1366,11 +1389,11 @@ void declaredDefaultsAtExecution()
                 [&](const Values &inputs)
                 {
                     ++executed;
-                    assert(equalValues(inputs.at("limit"), PortValue{std::int64_t{0}}));
-                    return toolResult({{"value", std::int64_t{1}}}, {});
+                    assert(equalValues(inputs.at(inputPort("limit")), PortValue{std::int64_t{0}}));
+                    return toolResult({{2, std::int64_t{1}}}, {});
                 });
         auto configured = node(1, declared);
-        configured.inputs.emplace("limit", InputBinding{BindingMode::Literal, Missing{}, std::nullopt});
+        configured.inputs.emplace(1, InputBinding{BindingMode::Literal, Missing{}, std::nullopt});
         ProjectDefinition project;
         project.flows.front().nodes = {configured};
         assert(engine.start(project, registry, RunMode::Once));
@@ -1433,7 +1456,7 @@ void optionalOutputsAndCachedMissing()
                                      auto instance = std::make_unique<Function>();
                                      instance->run = [](const Values &)
                                      {
-                                         return toolResult({{"value", Missing{}}}, {});
+                                         return toolResult({{2, Missing{}}}, {});
                                      };
                                      return instance;
                                  });
@@ -1443,27 +1466,27 @@ void optionalOutputsAndCachedMissing()
             {
                 // A business output the tool did not publish arrives as the declared default, never
                 // as an absent value the next tool has to interpret.
-                assert(equalValues(inputs.at("input"), PortValue{std::int64_t{0}}));
-                return toolResult({{"value", std::int64_t{42}}}, {});
+                assert(equalValues(inputs.at(inputPort("input")), PortValue{std::int64_t{0}}));
+                return toolResult({{2, std::int64_t{42}}}, {});
             });
     auto sink = definition("test.optional_sink", {"input"});
-    install(registry, sink, [](const Values &inputs) { return toolResult({{"value", inputs.at("input")}}, {}); });
+    install(registry, sink, [](const Values &inputs) { return toolResult({{2, inputs.at(inputPort("input"))}}, {}); });
     ProjectDefinition project;
     auto              first = node(1, source), second = node(2, middle), third = node(3, sink);
-    bind(second, "input", 1);
-    bind(third, "input", 2);
+    bind(second, inputPort("input"), 1);
+    bind(third, inputPort("input"), 2);
     project.flows.front().nodes = {first, second, third};
     RuntimeEngine engine(1);
     assert(engine.start(project, registry, RunMode::Once));
     auto full = finish(engine);
     assert(snapshot(full, 1)->status.code == 0
-           && equalValues(snapshot(full, 1)->outputs.at("value"), PortValue{std::int64_t{0}}));
+           && equalValues(snapshot(full, 1)->outputs.at(2), PortValue{std::int64_t{0}}));
     assert(snapshot(full, 1)->outputTypes == first.signatures.outputs);
     assert(snapshot(full, 2)->status.code == 0 && snapshot(full, 3)->status.code == 0);
     assert(engine.start(project, registry, RunMode::Node, 3));
     auto cached = finish(engine);
     assert(snapshot(cached, 3)->status.code == 0);
-    assert(std::get<std::int64_t>(snapshot(cached, 3)->outputs.at("value")) == 42);
+    assert(std::get<std::int64_t>(snapshot(cached, 3)->outputs.at(2)) == 42);
     auto changed            = source;
     changed.outputs[0].type = {Type::Float};
     registry.replaceDefinition(changed);
@@ -1480,7 +1503,7 @@ void failedBusinessOutputsRemainInputs()
     install(registry, source,
             [](const Values &)
             {
-                return toolResult({{"value", std::int64_t{99}}}, {7, "业务执行失败"});
+                return toolResult({{2, std::int64_t{99}}}, {7, "业务执行失败"});
             });
     auto required      = definition("test.required_consumer", {"input"});
     int  requiredCalls = 0;
@@ -1488,8 +1511,8 @@ void failedBusinessOutputsRemainInputs()
             [&](const Values &inputs)
             {
                 ++requiredCalls;
-                assert(std::get<std::int64_t>(inputs.at("input")) == 99);
-                return toolResult({{"value", std::int64_t{1}}}, {});
+                assert(std::get<std::int64_t>(inputs.at(inputPort("input"))) == 99);
+                return toolResult({{2, std::int64_t{1}}}, {});
             });
     int optionalCalls = 0;
     auto optional     = definition("test.optional_consumer", {"input"});
@@ -1497,23 +1520,23 @@ void failedBusinessOutputsRemainInputs()
             [&](const Values &inputs)
             {
                 ++optionalCalls;
-                assert(std::get<std::int64_t>(inputs.at("input")) == 99);
-                return toolResult({{"value", std::int64_t{42}}}, {});
+                assert(std::get<std::int64_t>(inputs.at(inputPort("input"))) == 99);
+                return toolResult({{2, std::int64_t{42}}}, {});
             });
     auto observer           = definition("test.status_consumer", {"code", "message"});
     observer.inputs[1].type = {Type::String};
     install(registry, observer,
             [](const Values &inputs)
             {
-                assert(std::get<std::int64_t>(inputs.at("code")) == 7);
-                assert(std::get<std::string>(inputs.at("message")) == "业务执行失败");
-                return toolResult({{"value", inputs.at("code")}}, {});
+                assert(std::get<std::int64_t>(inputs.at(inputPort("code"))) == 7);
+                assert(std::get<std::string>(inputs.at(inputPort("message"))) == "业务执行失败");
+                return toolResult({{2, inputs.at(inputPort("code"))}}, {});
             });
     auto first = node(1, source), second = node(2, required), third = node(3, optional), fourth = node(4, observer);
-    bind(second, "input", 1);
-    bind(third, "input", 1);
-    fourth.inputs["code"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "__status_code"}};
-    fourth.inputs["message"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "__status_message"}};
+    bind(second, inputPort("input"), 1);
+    bind(third, inputPort("input"), 1);
+    fourth.inputs[inputPort("code")] = {BindingMode::Upstream, Missing{}, SourcePort{1, kStatusCodePort}};
+    fourth.inputs[inputPort("message")] = {BindingMode::Upstream, Missing{}, SourcePort{1, kStatusMessagePort}};
     ProjectDefinition project;
     project.flows.front().nodes = {first, second, third, fourth};
     RuntimeEngine engine(1);
@@ -1522,7 +1545,7 @@ void failedBusinessOutputsRemainInputs()
     assert(snapshot(result, 1)->status.code == 7);
     // A tool answers with one message; the host neither rewrites it nor invents a detail.
     assert(snapshot(result, 1)->status.message == "业务执行失败" && snapshot(result, 1)->status.detail.empty());
-    assert(std::get<std::int64_t>(snapshot(result, 1)->outputs.at("value")) == 99);
+    assert(std::get<std::int64_t>(snapshot(result, 1)->outputs.at(2)) == 99);
     assert(requiredCalls == 1);
     assert(optionalCalls == 1);
     assert(snapshot(result, 2)->disposition == NodeDisposition::Succeeded);
@@ -1537,7 +1560,7 @@ void businessNegativeIsNotCancellation()
     const auto    tool = definition("test.negative_status");
     install(registry, tool,
             [](const Values &)
-            { return toolResult({{"value", std::int64_t{1}}}, {kCancelledStatus, "业务负数"}); });
+            { return toolResult({{2, std::int64_t{1}}}, {kCancelledStatus, "业务负数"}); });
     ProjectDefinition project;
     project.flows.front().nodes = {node(1, tool)};
     assert(engine.start(project, registry, RunMode::Once));
@@ -1546,8 +1569,8 @@ void businessNegativeIsNotCancellation()
     assert(result->disposition == NodeDisposition::Succeeded);
     assert(result->toolResultPublished);
     assert(result->status.code == kCancelledStatus && result->status.message == "业务负数");
-    assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == kCancelledStatus);
-    assert(std::get<std::string>(result->outputs.at("__status_message")) == "业务负数");
+    assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == kCancelledStatus);
+    assert(std::get<std::string>(result->outputs.at(kStatusMessagePort)) == "业务负数");
 }
 
 
@@ -1561,11 +1584,11 @@ struct FlawedAuthorOutputs : public OutputParametersBase
         {
             // Defect: writing reserved status port
             writer.integer(kStatusCodePort, 0);
-            writer.integer("value", *payload);
+            writer.integer(2, *payload);
         }
         else
         {
-            writer.missing("value");
+            writer.missing(2);
         }
     }
 };
@@ -1600,8 +1623,8 @@ void authorContractErrorPassesThroughBusinessBoundary()
     const auto snap = snapshot(outcome, 1);
     assert(snap->status.code == hostCode(ErrorCode::DataInvalid));
     assert(!snap->toolResultPublished);
-    assert(!snap->outputs.contains("__status_code"));
-    assert(!snap->outputs.contains("__status_message"));
+    assert(!snap->outputs.contains(kStatusCodePort));
+    assert(!snap->outputs.contains(kStatusMessagePort));
 }
 
 int main(int argc, char **argv)

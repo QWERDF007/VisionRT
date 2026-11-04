@@ -79,21 +79,21 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     auto adapter1 = loader->createAdapter("test.plugin.counter", services);
     assert(adapter1 != nullptr);
     Values initParams1;
-    initParams1.emplace("initial", std::int64_t{10});
+    initParams1.emplace(0, std::int64_t{10});
     auto initStatus1 = adapter1->initialize(initParams1);
     assert(initStatus1.code == 0);
 
     auto res1 = adapter1->execute({});
     assert(testview::status(res1).code == 0);
-    assert(std::get<std::int64_t>(res1.outputs.at("count")) == 11);
+    assert(std::get<std::int64_t>(res1.outputs.at(2)) == 11);
 
     auto res2 = adapter1->execute({});
     assert(testview::status(res2).code == 0);
-    assert(std::get<std::int64_t>(res2.outputs.at("count")) == 12);
+    assert(std::get<std::int64_t>(res2.outputs.at(2)) == 12);
 
     auto res3 = adapter1->execute({});
     assert(testview::status(res3).code == 0);
-    assert(std::get<std::int64_t>(res3.outputs.at("count")) == 13);
+    assert(std::get<std::int64_t>(res3.outputs.at(2)) == 13);
 
     auto relStatus1 = adapter1->release();
     assert(relStatus1.code == 0);
@@ -102,13 +102,13 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     auto adapter2 = loader->createAdapter("test.plugin.counter", services);
     assert(adapter2 != nullptr);
     Values initParams2;
-    initParams2.emplace("initial", std::int64_t{100});
+    initParams2.emplace(0, std::int64_t{100});
     auto initStatus2 = adapter2->initialize(initParams2);
     assert(initStatus2.code == 0);
 
     auto res4 = adapter2->execute({});
     assert(testview::status(res4).code == 0);
-    assert(std::get<std::int64_t>(res4.outputs.at("count")) == 101);
+    assert(std::get<std::int64_t>(res4.outputs.at(2)) == 101);
 
     assert(adapter2->release().code == 0);
 }
@@ -239,15 +239,17 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         const auto declaration
             = QJsonDocument(
                   QJsonObject{
-                      {"schema_version", 5},
+                      {"schema_version", 6},
                       {       "name_en", "test.plugin.publication"},
                       {       "name_zh",               "输出发布"},
                       {       "version",                   "1.0.0"},
                       {"implementation", QJsonObject{{"kind", "cpp"}}},
+                      {   "next_port_id",
+                       QJsonObject{{"init", 1}, {"inputs", 1}, {"outputs", 3}}},
                       {         "ports",
                        QJsonObject{
-                           {"init", QJsonArray{QJsonObject{{"name_en", "code"}, {"name_zh", "状态码"}, {"type", "int"}}}},
-                           {"outputs", QJsonArray{QJsonObject{{"name_en", "value"}, {"name_zh", "值"}, {"type", "int"}}}}}}
+                           {"init", QJsonArray{QJsonObject{{"id", 0}, {"name_en", "code"}, {"name_zh", "状态码"}, {"type", "int"}}}},
+                           {"outputs", QJsonArray{QJsonObject{{"id", 2}, {"name_en", "value"}, {"name_zh", "值"}, {"type", "int"}}}}}}
             })
                   .toJson(QJsonDocument::Compact)
                   .toStdString();
@@ -263,9 +265,9 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         node.id               = 1;
         node.toolId           = definition.nameEn;
         node.toolNameSnapshot = definition.nameZh;
-        node.signatures.initParams.emplace("code", TypeSpec{Type::Int});
-        node.initParams.emplace("code", code);
-        for (const auto &output : definition.outputs) node.signatures.outputs.emplace(output.nameEn, output.type);
+        node.signatures.initParams.emplace(0, TypeSpec{Type::Int});
+        node.initParams.emplace(0, code);
+        for (const auto &output : definition.outputs) node.signatures.outputs.emplace(output.id, output.type);
         ProjectDefinition project;
         project.flows.front().nodes = {node};
         RuntimeEngine engine(1);
@@ -274,13 +276,13 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         // A business output the tool never wrote is materialised from the declaration; the tool's own
         // status, not a fabricated value, says whether the run succeeded.
         assert(result->status.code == code);
-        assert(equalValues(result->outputs.at("value"), PortValue{std::int64_t{0}}));
+        assert(equalValues(result->outputs.at(2), PortValue{std::int64_t{0}}));
         if (result->toolResultPublished)
-            assert(std::get<std::int64_t>(result->outputs.at("__status_code")) == code);
+            assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == code);
         else
             // A framework stop has no tool answer, so it must not publish status ports either.
-            assert(!result->outputs.contains("__status_code") && !result->outputs.contains("__status_message"));
-        assert(result->outputTypes.at("value") == TypeSpec{Type::Int});
+            assert(!result->outputs.contains(kStatusCodePort) && !result->outputs.contains(kStatusMessagePort));
+        assert(result->outputTypes.at(2) == TypeSpec{Type::Int});
     }
 }
 
@@ -298,9 +300,9 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     def.version      = "1.0.0";
     def.kind         = ToolKind::Cpp;
 
-    def.inputs.push_back({"x", "输入", {Type::Int}, std::int64_t{0}});
-    def.initParams.push_back({"resource", "资源", {Type::Int}, std::int64_t{1}});
-    def.outputs.push_back({"y", "输出", {Type::Int}});
+    def.inputs.push_back({1, "输入", {Type::Int}, std::int64_t{0}});
+    def.initParams.push_back({0, "资源", {Type::Int}, std::int64_t{1}});
+    def.outputs.push_back({2, "输出", {Type::Int}});
     registry.addDefinition(def);
     registry.loadNativeImplementations();
 
@@ -315,11 +317,11 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     node.id               = 1;
     node.toolId           = def.nameEn;
     node.toolNameSnapshot = def.nameZh;
-    node.signatures.inputs.emplace("x", TypeSpec{Type::Int});
-    node.signatures.outputs.emplace("y", TypeSpec{Type::Int});
-    node.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-    node.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
-    node.inputs["x"] = {BindingMode::Literal, std::int64_t{21}, std::nullopt};
+    node.signatures.inputs.emplace(1, TypeSpec{Type::Int});
+    node.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+    node.signatures.outputs.emplace(kStatusCodePort, TypeSpec{Type::Int});
+    node.signatures.outputs.emplace(kStatusMessagePort, TypeSpec{Type::String});
+    node.inputs[1] = {BindingMode::Literal, std::int64_t{21}, std::nullopt};
     flow.nodes.push_back(node);
     project.flows = {flow};
 
@@ -343,18 +345,18 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     auto snap   = snapshot(update, 1);
     assert(snap != nullptr);
     assert(snap->status.code == 0);
-    assert(std::get<std::int64_t>(snap->outputs.at("y")) == 42);
+    assert(std::get<std::int64_t>(snap->outputs.at(2)) == 42);
     assert(instanceCount() == 1 && initializeCount() == initializations + 1);
-    project.flows.front().nodes.front().inputs.at("x").literal = std::int64_t{42};
+    project.flows.front().nodes.front().inputs.at(1).literal = std::int64_t{42};
     assert(engine.requestSynchronize(project, registry));
     assert(engine.state() == RuntimeState::Idle);
     assert(engine.start(project, registry, RunMode::Once));
     snap = snapshot(finish(engine), 1);
-    assert(std::get<std::int64_t>(snap->outputs.at("y")) == 84);
+    assert(std::get<std::int64_t>(snap->outputs.at(2)) == 84);
     assert(instanceCount() == 1 && initializeCount() == initializations + 1);
 
     const auto publication                                     = snap->publication;
-    project.flows.front().nodes.front().initParams["resource"] = std::int64_t{2};
+    project.flows.front().nodes.front().initParams[0] = std::int64_t{2};
     assert(engine.requestSynchronize(project, registry));
     prepared = finish(engine);
     assert(snapshot(prepared, 1)->publication == publication);
@@ -397,7 +399,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     assert(snap && snap->status.code == 5);
     assert(snap->status.detail == "factory diagnostic");
     assert(snap->phase == NodePhase::Create && snap->status.message.find("节点") == std::string::npos);
-    assert(isMissing(snap->outputs.at("y")));
+    assert(isMissing(snap->outputs.at(2)));
 }
 
 void writeText(const std::filesystem::path &path, const std::string &content)
@@ -421,7 +423,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
                                std::filesystem::copy_options::overwrite_existing);
 
     writeText(declarationDir / "counter.json", R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "打包计数器",
   "version": "1.0.0",
@@ -434,20 +436,28 @@ void packageRegistration(const std::filesystem::path &modulePath)
         "name_en": "initial",
         "name_zh": "初始值",
         "type": "int",
-        "default": 10
+        "default": 10,
+        "id": 0
       }
     ],
     "outputs": [
       {
         "name_en": "count",
         "name_zh": "计数值",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "inputs": []
+  },
+  "next_port_id": {
+    "init": 1,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
     writeText(declarationDir / "function.json", R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "打包函数",
   "version": "1.0.0",
@@ -459,21 +469,29 @@ void packageRegistration(const std::filesystem::path &modulePath)
       {
         "name_en": "x",
         "name_zh": "输入X",
-        "type": "int"
+        "type": "int",
+        "id": 1
       }
     ],
     "outputs": [
       {
         "name_en": "y",
         "name_zh": "输出Y",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "init": []
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json");
     // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.ghost.packaged",
   "name_zh": "未索引工具",
   "version": "1.0.0",
@@ -485,9 +503,17 @@ void packageRegistration(const std::filesystem::path &modulePath)
       {
         "name_en": "count",
         "name_zh": "计数值",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "init": [],
+    "inputs": []
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
     writeText(pkgDir / "module_index.json", R"json({
@@ -537,7 +563,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
     writeText(legacyDir / "legacy.json", R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.legacy",
   "name_zh": "旧目录工具",
   "version": "1.0.0",
@@ -549,16 +575,24 @@ void packageRegistration(const std::filesystem::path &modulePath)
       {
         "name_en": "x",
         "name_zh": "输入X",
-        "type": "int"
+        "type": "int",
+        "id": 1
       }
     ],
     "outputs": [
       {
         "name_en": "y",
         "name_zh": "输出Y",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "init": []
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
@@ -567,7 +601,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
     writeText(duplicateDir / "counter.json", R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "重复计数器",
   "version": "2.0.0",
@@ -580,16 +614,24 @@ void packageRegistration(const std::filesystem::path &modulePath)
         "name_en": "initial",
         "name_zh": "初始值",
         "type": "int",
-        "default": 10
+        "default": 10,
+        "id": 0
       }
     ],
     "outputs": [
       {
         "name_en": "count",
         "name_zh": "计数值",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "inputs": []
+  },
+  "next_port_id": {
+    "init": 1,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
@@ -603,21 +645,21 @@ void packageRegistration(const std::filesystem::path &modulePath)
     auto                 instance = registry.create("test.plugin.counter", services);
     assert(instance != nullptr);
     Values initParams;
-    initParams.emplace("initial", std::int64_t{10});
+    initParams.emplace(0, std::int64_t{10});
     assert(instance->initialize(initParams).code == 0);
     auto counterResult = instance->execute({});
     assert(testview::status(counterResult).code == 0);
-    assert(std::get<std::int64_t>(counterResult.outputs.at("count")) == 11);
+    assert(std::get<std::int64_t>(counterResult.outputs.at(2)) == 11);
     assert(instance->release().code == 0);
 
     auto function = registry.create("test.plugin.function", services);
     assert(function != nullptr);
     assert(function->initialize({}).code == 0);
     Values functionInputs;
-    functionInputs.emplace("x", std::int64_t{21});
+    functionInputs.emplace(1, std::int64_t{21});
     auto functionResult = function->execute(functionInputs);
     assert(testview::status(functionResult).code == 0);
-    assert(std::get<std::int64_t>(functionResult.outputs.at("y")) == 42);
+    assert(std::get<std::int64_t>(functionResult.outputs.at(2)) == 42);
     assert(function->release().code == 0);
 
     // Registering another package replaces the tool set instead of merging it.
@@ -626,7 +668,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     std::filesystem::copy_file(modulePath, otherDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
     writeText(otherDir / std::filesystem::path(u8"tools/custom/Python/示例/function.json"), R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "另一包函数",
   "version": "1.0.0",
@@ -638,16 +680,24 @@ void packageRegistration(const std::filesystem::path &modulePath)
       {
         "name_en": "x",
         "name_zh": "输入X",
-        "type": "int"
+        "type": "int",
+        "id": 1
       }
     ],
     "outputs": [
       {
         "name_en": "y",
         "name_zh": "输出Y",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "init": []
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json");
     writeText(otherDir / "module_index.json", R"json({
@@ -728,7 +778,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
         const char *jsonContent = R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "实际打包插件",
   "version": "1.0.0",
@@ -741,16 +791,24 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         "name_en": "initial",
         "name_zh": "初始值",
         "type": "int",
-        "default": 10
+        "default": 10,
+        "id": 0
       }
     ],
     "outputs": [
       {
         "name_en": "count",
         "name_zh": "计数值",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "inputs": []
+  },
+  "next_port_id": {
+    "init": 1,
+    "inputs": 1,
+    "outputs": 3
   }
 })json";
         f.write(jsonContent);
@@ -823,7 +881,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(funcJsonFile));
         assert(f.open(QIODevice::WriteOnly));
         const char *funcJsonContent = R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "函数插件",
   "version": "1.0.0",
@@ -835,16 +893,24 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
       {
         "name_en": "x",
         "name_zh": "输入X",
-        "type": "int"
+        "type": "int",
+        "id": 1
       }
     ],
     "outputs": [
       {
         "name_en": "y",
         "name_zh": "输出Y",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "init": []
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json";
         f.write(funcJsonContent);
@@ -888,7 +954,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.nodes().size() == 2);
     const auto nodeBId = app.nodes().last().toMap().value("id").toString();
-    assert(app.bindInput(app.portContext("x"), nodeAId, "count"));
+    assert(app.bindInput(app.portContext(1), nodeAId, 2));
     app.runOnce();
     waitForIdle();
     for (const auto &n : app.nodes())
@@ -944,9 +1010,9 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         validIndex = file.readAll();
     }
     app.selectNode(nodeBId);
-    assert(app.setParameterMode("x", false));
+    assert(app.setParameterMode(1, false));
     waitForIdle();
-    assert(app.setParameter("x", false, "21"));
+    assert(app.setParameter(1, false, "21"));
     waitForIdle();
     const auto stableCatalog  = app.toolDefinitions();
     auto       duplicateIndex = QJsonDocument::fromJson(validIndex).object();
@@ -982,7 +1048,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         waitForIdle();
         auto *output = qobject_cast<OutputModel *>(app.outputModel());
         assert(output);
-        const auto captured = output->capture("y");
+        const auto captured = output->capture(2);
         assert(captured && std::get<std::int64_t>(captured->value) == 42);
         std::cout << "Rejected package refresh preserves completed catalog and real DLL output=42\n";
     }
@@ -1038,7 +1104,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
         QFile definition(toQString(jsonDir / "release.json"));
         assert(definition.open(QIODevice::WriteOnly));
-        definition.write(R"({"schema_version":5,"name_en":"test.plugin.release_fail","name_zh":"释放诊断","version":"1.0.0","implementation":{"kind":"cpp"}})");
+        definition.write(R"({"schema_version":6,"name_en":"test.plugin.release_fail","name_zh":"释放诊断","version":"1.0.0","implementation":{"kind":"cpp"},"ports":{"init":[],"inputs":[],"outputs":[]},"next_port_id":{"init":0,"inputs":1,"outputs":2}})");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
         index.write(
@@ -1132,7 +1198,7 @@ void registryIntegration(const std::filesystem::path &modulePath)
     assert(instance->initialize({}).code == 0);
     auto res = instance->execute({});
     assert(testview::status(res).code == 0);
-    assert(std::get<std::int64_t>(res.outputs.at("count")) == 1);
+    assert(std::get<std::int64_t>(res.outputs.at(2)) == 1);
     assert(instance->release().code == 0);
 }
 
@@ -1191,7 +1257,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
                     auto r = ad->execute({});
                     if (testview::status(r).code == 0)
                     {
-                        val1 = std::get<std::int64_t>(r.outputs.at("val"));
+                        val1 = std::get<std::int64_t>(r.outputs.at(2));
                     }
                     ad->release();
                 }
@@ -1212,7 +1278,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
                     auto r = ad->execute({});
                     if (testview::status(r).code == 0)
                     {
-                        val2 = std::get<std::int64_t>(r.outputs.at("val"));
+                        val2 = std::get<std::int64_t>(r.outputs.at(2));
                     }
                     ad->release();
                 }
@@ -1251,7 +1317,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
 
     writeText(unicodeDir / std::filesystem::path(u8"tools/builtin/测试/示例") / "plugin_a.json",
               R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.a",
   "name_zh": "插件甲",
   "version": "1.0.0",
@@ -1263,9 +1329,17 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
       {
         "name_en": "val",
         "name_zh": "值",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
-    ]
+    ],
+    "init": [],
+    "inputs": []
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
     writeText(unicodeDir / "module_index.json", R"json({
@@ -1308,10 +1382,10 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     assert(initStatus.code == 0);
     auto res = instance->execute({});
     assert(testview::status(res).code == 0);
-    assert(std::get<std::int64_t>(res.outputs.at("val")) == 111);
+    assert(std::get<std::int64_t>(res.outputs.at(2)) == 111);
 
     // Cross-release snapshot check: hold output while releasing adapter and loader
-    const auto retainedVal = res.outputs.at("val");
+    const auto retainedVal = res.outputs.at(2);
     assert(instance->release().code == 0);
     instance.reset();
     loader.reset();
@@ -1386,9 +1460,9 @@ static int runMissingDepChild(const std::filesystem::path &pluginAPath, const st
         std::cerr << "Failed to execute ok adapter\n";
         return 6;
     }
-    if (std::get<std::int64_t>(res.outputs.at("val")) != 222)
+    if (std::get<std::int64_t>(res.outputs.at(2)) != 222)
     {
-        std::cerr << "Expected val 222, got " << std::get<std::int64_t>(res.outputs.at("val")) << "\n";
+        std::cerr << "Expected val 222, got " << std::get<std::int64_t>(res.outputs.at(2)) << "\n";
         return 7;
     }
     ad->release();

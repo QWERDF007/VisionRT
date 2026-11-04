@@ -72,31 +72,31 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
 
     auto s1 = snapshot(update, 1);
     assert((s1 && s1->status.code == 0));
-    const auto &images1 = std::get<DataRef<Image>>(s1->outputs.at("images"));
+    const auto &images1 = std::get<DataRef<Image>>(s1->outputs.at(2));
     assert((images1.get().size() >= 2));
 
     auto s2 = snapshot(update, 2);
     assert((s2 && s2->status.code == 0));
-    const auto &rois2 = std::get<DataRef<ROI>>(s2->outputs.at("rois"));
+    const auto &rois2 = std::get<DataRef<ROI>>(s2->outputs.at(3));
     assert((rois2.get().size() == images1.get().size()));
 
     auto s3 = snapshot(update, 3);
     assert((s3 && s3->status.code == 0));
-    const auto &croppedImages = std::get<DataRef<Image>>(s3->outputs.at("images"));
+    const auto &croppedImages = std::get<DataRef<Image>>(s3->outputs.at(2));
     assert((croppedImages.get().size() == images1.get().size()));
     for (const auto &image : croppedImages.get()) assert((image.rows == 40 && image.cols == 20));
-    assert((!s3->outputs.contains("source_indices")));
+    assert((s3->outputs.contains(2) && s3->outputs.contains(3) && !s3->outputs.contains(4)));
 
     auto s4 = snapshot(update, 4);
     assert((s4 && s4->status.code == 0));
-    const auto &preprocessed = std::get<DataRef<Image>>(s4->outputs.at("images"));
+    const auto &preprocessed = std::get<DataRef<Image>>(s4->outputs.at(2));
     assert((preprocessed.get().size() == croppedImages.get().size()));
 
     // Node 5: Python mean over node 1's original images, not over the cropped and binarised branch.
     // The fixture keeps the two paths distinguishable: nodes 3/4 would yield 95.625 and 191.25.
     auto s5 = snapshot(update, 5);
     assert((s5 && s5->status.code == 0));
-    const auto &means = std::get<Array>(s5->outputs.at("means"));
+    const auto &means = std::get<Array>(s5->outputs.at(2));
     assert(((means.type() == TypeSpec{Type::Array, DType::Float64, 1})));
     assert((nestedOf<std::vector<double>>(means).size() == static_cast<std::int64_t>(images1.get().size())));
     const auto values = nestedOf<std::vector<double>>(means);
@@ -118,7 +118,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     auto reloadedUpdate = finish(engine);
     auto reloadedS5     = snapshot(reloadedUpdate, 5);
     assert((reloadedS5 && reloadedS5->status.code == 0));
-    const auto &reloadedMeans  = std::get<Array>(reloadedS5->outputs.at("means"));
+    const auto &reloadedMeans  = std::get<Array>(reloadedS5->outputs.at(2));
     const auto  reloadedValues = nestedOf<std::vector<double>>(reloadedMeans);
     assert((reloadedValues.size() == 2));
     assert((std::abs(reloadedValues[0] - values[0]) < 1e-6));
@@ -167,33 +167,33 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         Array          allowed      = Array::fromNested(std::vector<std::int64_t>{});
 
         Values inputs;
-        inputs.emplace("images", std::move(imgBatch));
-        inputs.emplace("rois", std::move(emptyRois));
-        inputs.emplace("scores", std::move(emptyScores));
-        inputs.emplace("classes", std::move(emptyClasses));
-        inputs.emplace("class_names", std::move(emptyNames));
-        inputs.emplace("allowed_classes", std::move(allowed));
-        inputs.emplace("min_score", 0.5);
-        inputs.emplace("min_area", 0.0);
+        inputs.emplace(1, std::move(imgBatch));
+        inputs.emplace(2, std::move(emptyRois));
+        inputs.emplace(3, std::move(emptyScores));
+        inputs.emplace(4, std::move(emptyClasses));
+        inputs.emplace(5, std::move(emptyNames));
+        inputs.emplace(8, std::move(allowed));
+        inputs.emplace(6, 0.5);
+        inputs.emplace(7, 0.0);
 
         auto res = inst->execute(inputs);
         assert((testview::status(res).code == 0));
-        const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
+        const auto *outCounts = std::get_if<Array>(&res.outputs[7]);
         assert((outCounts && !nestedOf<NestedVector<std::int64_t, 1>>(*outCounts).empty()));
         assert((nestedOf<NestedVector<std::int64_t, 1>>(*outCounts)[0] == 0));
 
-        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
+        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs[3]);
         assert((outRois && outRois->get().size() == 1 && outRois->get()[0].empty()));
 
-        const auto *outScores = std::get_if<Array>(&res.outputs["scores"]);
+        const auto *outScores = std::get_if<Array>(&res.outputs[4]);
         assert((outScores && !nestedOf<NestedVector<float, 2>>(*outScores).empty()));
         assert((nestedOf<NestedVector<float, 2>>(*outScores)[0].empty()));
 
-        const auto *outClasses = std::get_if<Array>(&res.outputs["classes"]);
+        const auto *outClasses = std::get_if<Array>(&res.outputs[5]);
         assert((outClasses && !nestedOf<NestedVector<std::int64_t, 2>>(*outClasses).empty()));
         assert((nestedOf<NestedVector<std::int64_t, 2>>(*outClasses)[0].empty()));
 
-        const auto *outNames = std::get_if<Array>(&res.outputs["class_names"]);
+        const auto *outNames = std::get_if<Array>(&res.outputs[6]);
         assert((outNames && !nestedOf<NestedVector<std::string, 2>>(*outNames).empty()));
         assert((nestedOf<NestedVector<std::string, 2>>(*outNames)[0].empty()));
     }
@@ -221,34 +221,34 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         Array allowed = Array::fromNested(std::vector<std::int64_t>{});
 
         Values inputs;
-        inputs.emplace("images", std::move(imgBatch));
-        inputs.emplace("rois", std::move(roiBatch));
-        inputs.emplace("scores", std::move(scores));
-        inputs.emplace("classes", std::move(classes));
-        inputs.emplace("class_names", std::move(names));
-        inputs.emplace("allowed_classes", std::move(allowed));
-        inputs.emplace("min_score", 0.5);
-        inputs.emplace("min_area", 0.0);
+        inputs.emplace(1, std::move(imgBatch));
+        inputs.emplace(2, std::move(roiBatch));
+        inputs.emplace(3, std::move(scores));
+        inputs.emplace(4, std::move(classes));
+        inputs.emplace(5, std::move(names));
+        inputs.emplace(8, std::move(allowed));
+        inputs.emplace(6, 0.5);
+        inputs.emplace(7, 0.0);
 
         auto res = inst->execute(inputs);
         assert((testview::status(res).code == 0));
-        const auto *outCounts = std::get_if<Array>(&res.outputs["counts"]);
+        const auto *outCounts = std::get_if<Array>(&res.outputs[7]);
         assert((outCounts && !nestedOf<NestedVector<std::int64_t, 1>>(*outCounts).empty()));
         assert((nestedOf<NestedVector<std::int64_t, 1>>(*outCounts)[0] == 2));
 
-        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
+        const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs[3]);
         assert((outRois && outRois->get().size() == 1 && outRois->get()[0].size() == 2));
 
         // Target 1 ROI geometric fields
         const auto &r1 = outRois->get()[0][0];
         assert((roiKind(r1) == RoiKind::Rectangle));
         assert((r1.size() == 6));
-        assert((r1[0] == static_cast<float>(RoiKind::Rectangle)));
-        assert((std::abs(r1[1] - 30.0f) < 1e-4f)); // x
-        assert((std::abs(r1[2] - 30.0f) < 1e-4f)); // y
-        assert((std::abs(r1[3] - 40.0f) < 1e-4f)); // width
-        assert((std::abs(r1[4] - 40.0f) < 1e-4f)); // height
-        assert((std::abs(r1[5] - 15.0f) < 1e-4f)); // angle
+        assert((r1[0] == static_cast<double>(RoiKind::Rectangle)));
+        assert((std::abs(r1[1] - 30.0) < 1e-4)); // x
+        assert((std::abs(r1[2] - 30.0) < 1e-4)); // y
+        assert((std::abs(r1[3] - 40.0) < 1e-4)); // width
+        assert((std::abs(r1[4] - 40.0) < 1e-4)); // height
+        assert((std::abs(r1[5] - 15.0) < 1e-4)); // angle
         const auto corners1 = rectangleCorners(r1);
         assert((corners1.size() == 4));
 
@@ -256,30 +256,30 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
         const auto &r2 = outRois->get()[0][1];
         assert((roiKind(r2) == RoiKind::Rectangle));
         assert((r2.size() == 6));
-        assert((r2[0] == static_cast<float>(RoiKind::Rectangle)));
-        assert((std::abs(r2[1] - 50.0f) < 1e-4f)); // x
-        assert((std::abs(r2[2] - 50.0f) < 1e-4f)); // y
-        assert((std::abs(r2[3] - 60.0f) < 1e-4f)); // width
-        assert((std::abs(r2[4] - 60.0f) < 1e-4f)); // height
-        assert((std::abs(r2[5] - 30.0f) < 1e-4f)); // angle
+        assert((r2[0] == static_cast<double>(RoiKind::Rectangle)));
+        assert((std::abs(r2[1] - 50.0) < 1e-4)); // x
+        assert((std::abs(r2[2] - 50.0) < 1e-4)); // y
+        assert((std::abs(r2[3] - 60.0) < 1e-4)); // width
+        assert((std::abs(r2[4] - 60.0) < 1e-4)); // height
+        assert((std::abs(r2[5] - 30.0) < 1e-4)); // angle
         const auto corners2 = rectangleCorners(r2);
         assert((corners2.size() == 4));
 
-        const auto *outScores = std::get_if<Array>(&res.outputs["scores"]);
+        const auto *outScores = std::get_if<Array>(&res.outputs[4]);
         assert((outScores && !nestedOf<NestedVector<float, 2>>(*outScores).empty()));
         const auto outScoreVals = nestedOf<NestedVector<float, 2>>(*outScores)[0];
         assert((outScoreVals.size() == 2));
         assert((std::abs(outScoreVals[0] - 0.70f) < 1e-4f));
         assert((std::abs(outScoreVals[1] - 0.95f) < 1e-4f));
 
-        const auto *outClasses = std::get_if<Array>(&res.outputs["classes"]);
+        const auto *outClasses = std::get_if<Array>(&res.outputs[5]);
         assert((outClasses && !nestedOf<NestedVector<std::int64_t, 2>>(*outClasses).empty()));
         const auto outClassVals = nestedOf<NestedVector<std::int64_t, 2>>(*outClasses)[0];
         assert((outClassVals.size() == 2));
         assert((outClassVals[0] == 20));
         assert((outClassVals[1] == 30));
 
-        const auto *outNames = std::get_if<Array>(&res.outputs["class_names"]);
+        const auto *outNames = std::get_if<Array>(&res.outputs[6]);
         const auto  nameRows = nestedOf<NestedVector<std::string, 2>>(*outNames);
         assert((outNames && !nameRows.empty()));
         const auto &outNameVals = nameRows[0];
@@ -318,13 +318,13 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
 
     DataRef<Image> imgBatch(Image{(mat)});
     Values     inputs;
-    inputs.emplace("images", std::move(imgBatch));
-    inputs.emplace("block_size", std::int64_t{3});
-    inputs.emplace("constant_offset", 5.0);
+    inputs.emplace(1, std::move(imgBatch));
+    inputs.emplace(2, std::int64_t{3});
+    inputs.emplace(3, 5.0);
 
     auto res = inst->execute(inputs);
     assert((testview::status(res).code == 0));
-    const auto *outImages = std::get_if<DataRef<Image>>(&res.outputs["images"]);
+    const auto *outImages = std::get_if<DataRef<Image>>(&res.outputs[2]);
     assert((outImages && !outImages->get().empty()));
     const auto &outImg = outImages->get()[0];
     assert((outImg.rows == 10 && outImg.cols == 10 && outImg.type() == CV_8UC1));
@@ -356,14 +356,14 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     DataRef<Image> imgBatch(Image{(mat)});
 
     Values inputs;
-    inputs.emplace("images", std::move(imgBatch));
-    inputs.emplace("axis", std::string{"x"});
-    inputs.emplace("polarity", std::string{"bright"});
-    inputs.emplace("threshold", std::int64_t{128});
-    inputs.emplace("min_pixels", std::int64_t{1});
-    inputs.emplace("min_extent", std::int64_t{5});
-    inputs.emplace("merge_gap", std::int64_t{0});
-    inputs.emplace("padding", std::int64_t{0});
+    inputs.emplace(1, std::move(imgBatch));
+    inputs.emplace(2, std::string{"x"});
+    inputs.emplace(3, std::string{"bright"});
+    inputs.emplace(4, std::int64_t{128});
+    inputs.emplace(5, std::int64_t{1});
+    inputs.emplace(6, std::int64_t{5});
+    inputs.emplace(7, std::int64_t{0});
+    inputs.emplace(8, std::int64_t{0});
 
     auto res = inst->execute(inputs);
     if (testview::status(res).code != 0)
@@ -371,7 +371,7 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
         std::cerr << "ROI projection execute failed: " << testview::status(res).message << std::endl;
     }
     assert((testview::status(res).code == 0));
-    const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs["rois"]);
+    const auto *outRois = std::get_if<DataRef<ROI>>(&res.outputs[3]);
     assert((outRois && outRois->get().size() == 1 && !outRois->get()[0].empty()));
     const auto &r = outRois->get()[0][0];
     assert((roiKind(r) == RoiKind::Rectangle));
@@ -476,7 +476,7 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     // Prepare 2 projects with different inputs (Engine 1: 2 images; Engine 2: 1 image via count=1)
     ProjectDefinition project1                 = loaded.project;
     ProjectDefinition project2                 = loaded.project;
-    project2.flows[0].nodes[0].inputs["count"] = {BindingMode::Literal, std::int64_t{1}, {}};
+    project2.flows[0].nodes[0].inputs[5] = {BindingMode::Literal, std::int64_t{1}, {}};
 
     // Concurrent execution of 2 independent engines sharing registry & plugin loader
     RuntimeEngine engine1(2);
@@ -504,8 +504,8 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     assert((s2_node5 && s2_node5->status.code == 0));
 
     // Verify output isolation: Engine 1 produced 2 mean values, Engine 2 produced 1 mean value
-    const auto v1 = nestedOf<std::vector<double>>(std::get<Array>(s1_node5->outputs.at("means")));
-    const auto v2 = nestedOf<std::vector<double>>(std::get<Array>(s2_node5->outputs.at("means")));
+    const auto v1 = nestedOf<std::vector<double>>(std::get<Array>(s1_node5->outputs.at(2)));
+    const auto v2 = nestedOf<std::vector<double>>(std::get<Array>(s2_node5->outputs.at(2)));
     assert((v1.size() == 2));
     assert((v2.size() == 1));
     assert((std::abs(v1[0] - v2[0]) < 1e-6));
@@ -516,7 +516,7 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     assert((engine1.requestReset().code == 0));
     finish(engine1);
     assert((s1_node5->status.code == 0));
-    const auto &retainedImg = std::get<DataRef<Image>>(s1_node1->outputs.at("images")).get()[0];
+    const auto &retainedImg = std::get<DataRef<Image>>(s1_node1->outputs.at(2)).get()[0];
     assert((retainedImg.cols > 0 && retainedImg.rows > 0));
     const auto *pxPtr = retainedImg.data;
     assert((pxPtr != nullptr));
@@ -525,12 +525,12 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
 
     // Success-then-failure isolation: the 2nd run with an invalid path publishes the declared empty
     // batch instead of the previous run's images, and its own status explains the failure.
-    project1.flows[0].nodes[0].inputs["path"] = {BindingMode::Literal, std::string{"nonexistent_images_dir"}, {}};
+    project1.flows[0].nodes[0].inputs[1] = {BindingMode::Literal, std::string{"nonexistent_images_dir"}, {}};
     assert((engine1.start(project1, registry, RunMode::Once).code == 0));
     auto u1_fail       = finish(engine1);
     auto s1_fail_node1 = snapshot(u1_fail, 1);
     assert((s1_fail_node1 && s1_fail_node1->status.code != 0));
-    assert((std::get<DataRef<Image>>(s1_fail_node1->outputs.at("images")).get().empty()));
+    assert((std::get<DataRef<Image>>(s1_fail_node1->outputs.at(2)).get().empty()));
 }
 
 void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
@@ -592,7 +592,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     auto s2 = snapshot(update, 2);
     assert((s2));
     assert((!s2->status));
-    assert((std::get<DataRef<Image>>(s2->outputs.at("images")).get().empty()));
+    assert((std::get<DataRef<Image>>(s2->outputs.at(2)).get().empty()));
 
     // Node 3: yolo fails because nonexistent model weights
     if (inferenceIncluded)
@@ -634,42 +634,56 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     // Register plugin counter tool
     ToolDefinition counterDef;
+    counterDef.schemaVersion    = 6;
     counterDef.nameEn           = "test.plugin.counter";
-    counterDef.nameZh  = "Plugin Counter";
-    counterDef.version      = "1.0.0";
-    counterDef.kind         = ToolKind::Cpp;
+    counterDef.nameZh           = "Plugin Counter";
+    counterDef.version          = "1.0.0";
+    counterDef.kind             = ToolKind::Cpp;
+    counterDef.nextInitPortId   = 1;
+    counterDef.nextInputPortId  = 1;
+    counterDef.nextOutputPortId = 3;
 
     PortDefinition initParam;
-    initParam.nameEn           = "initial";
-    initParam.nameZh         = "Initial";
+    initParam.id           = 0;
+    initParam.nameEn       = "initial";
+    initParam.nameZh       = "Initial";
     initParam.type         = {Type::Int};
     initParam.defaultValue = std::int64_t{10};
     counterDef.initParams.push_back(initParam);
     PortDefinition outCount;
-    outCount.nameEn   = "count";
+    outCount.id     = 2;
+    outCount.nameEn = "count";
     outCount.nameZh = "Count";
-    outCount.type = {Type::Int};
+    outCount.type   = {Type::Int};
     counterDef.outputs.push_back(outCount);
+    normalizeToolDefinition(counterDef);
     registry.addDefinition(counterDef);
 
     // Register plugin function tool
     ToolDefinition funcDef;
+    funcDef.schemaVersion    = 6;
     funcDef.nameEn           = "test.plugin.function";
-    funcDef.nameZh  = "Plugin Function";
-    funcDef.version      = "1.0.0";
-    funcDef.kind         = ToolKind::Cpp;
+    funcDef.nameZh           = "Plugin Function";
+    funcDef.version          = "1.0.0";
+    funcDef.kind             = ToolKind::Cpp;
+    funcDef.nextInitPortId   = 0;
+    funcDef.nextInputPortId  = 2;
+    funcDef.nextOutputPortId = 3;
 
     PortDefinition inX;
-    inX.nameEn           = "x";
-    inX.nameZh         = "X";
+    inX.id           = 1;
+    inX.nameEn       = "x";
+    inX.nameZh       = "X";
     inX.type         = {Type::Int};
     inX.defaultValue = std::int64_t{25};
     funcDef.inputs.push_back(inX);
     PortDefinition outY;
-    outY.nameEn   = "y";
+    outY.id     = 2;
+    outY.nameEn = "y";
     outY.nameZh = "Y";
-    outY.type = {Type::Int};
+    outY.type   = {Type::Int};
     funcDef.outputs.push_back(outY);
+    normalizeToolDefinition(funcDef);
     registry.addDefinition(funcDef);
     registry.loadNativeImplementations();
 
@@ -687,9 +701,9 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     InputBinding b1;
     b1.mode    = BindingMode::Literal;
     b1.literal = std::int64_t{25};
-    n1.inputs.emplace("x", b1);
-    n1.signatures.inputs["x"]  = {Type::Int};
-    n1.signatures.outputs["y"] = {Type::Int};
+    n1.inputs.emplace(1, b1);
+    n1.signatures.inputs[1]  = {Type::Int};
+    n1.signatures.outputs[2] = {Type::Int};
     flow.nodes.push_back(n1);
 
     NodeDefinition n2;
@@ -697,9 +711,9 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     n2.toolId           = "test.plugin.counter";
     n2.toolNameSnapshot = "Plugin Counter";
     n2.position         = {300, 100};
-    n2.initParams.emplace("initial", std::int64_t{10});
-    n2.signatures.initParams["initial"] = {Type::Int};
-    n2.signatures.outputs["count"]      = {Type::Int};
+    n2.initParams.emplace(0, std::int64_t{10});
+    n2.signatures.initParams[0] = {Type::Int};
+    n2.signatures.outputs[2]    = {Type::Int};
     flow.nodes.push_back(n2);
 
     project.flows.clear();
@@ -713,11 +727,11 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     auto s1 = snapshot(update, 1);
     assert((s1 && s1->status.code == 0));
-    assert((std::get<std::int64_t>(s1->outputs.at("y")) == 50));
+    assert((std::get<std::int64_t>(s1->outputs.at(2)) == 50));
 
     auto s2 = snapshot(update, 2);
     assert((s2 && s2->status.code == 0));
-    assert((std::get<std::int64_t>(s2->outputs.at("count")) == 11));
+    assert((std::get<std::int64_t>(s2->outputs.at(2)) == 11));
 
     // Test Save / Reopen consistency
     QTemporaryDir tmpDir;
@@ -733,10 +747,10 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     assert((engine.start(reloaded.project, registry, RunMode::Once).code == 0));
     const auto reloadedUpdate = finish(engine);
     auto       rs1            = snapshot(reloadedUpdate, 1);
-    assert((rs1 && std::get<std::int64_t>(rs1->outputs.at("y")) == std::get<std::int64_t>(s1->outputs.at("y"))));
+    assert((rs1 && std::get<std::int64_t>(rs1->outputs.at(2)) == std::get<std::int64_t>(s1->outputs.at(2))));
     auto rs2 = snapshot(reloadedUpdate, 2);
     assert(
-        (rs2 && std::get<std::int64_t>(rs2->outputs.at("count")) == std::get<std::int64_t>(s2->outputs.at("count"))));
+        (rs2 && std::get<std::int64_t>(rs2->outputs.at(2)) == std::get<std::int64_t>(s2->outputs.at(2))));
 }
 
 } // namespace

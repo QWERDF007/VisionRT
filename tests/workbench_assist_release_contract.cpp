@@ -97,10 +97,10 @@ public:
         // The two status ports are the host's to materialise after a successful run; a tool that
         // writes them is a contract error, so this fixture only reports its own business ports.
         Values outputs;
-        outputs.emplace("valid", false);
-        outputs.emplace("quality", std::string{});
-        outputs.emplace("preview", DataRef<ROI>(ROI{}));
-        outputs.emplace("proposal", DataRef<ROI>(ROI{}));
+        outputs.emplace(4, false);
+        outputs.emplace(5, std::string{});
+        outputs.emplace(2, DataRef<ROI>(ROI{}));
+        outputs.emplace(3, DataRef<ROI>(ROI{}));
         return toolResult(std::move(outputs), {0, "运行成功"});
     }
 
@@ -124,10 +124,12 @@ ToolDefinition helperDefinition()
     definition.nameZh = "释放闩锁辅助";
     definition.version     = "1";
     definition.kind        = ToolKind::Cpp;
-    definition.outputs     = {{"valid", "有效", {Type::Bool}},
-                              {"quality", "质量", {Type::String}},
-                              {"preview", "预览", {Type::ROI}},
-                              {"proposal", "坐标", {Type::ROI}}};
+    // The helper protocol is numbered: 2 预览, 3 坐标, 4 有效, 5 质量.
+    definition.outputs = {{2, "预览", {Type::ROI}},
+                          {3, "坐标", {Type::ROI}},
+                          {4, "有效", {Type::Bool}},
+                          {5, "质量", {Type::String}}};
+    definition.nextOutputPortId = 6;
     return definition;
 }
 
@@ -229,7 +231,8 @@ try
     {
         ToolDefinition setupDef = helperDefinition();
         setupDef.nameEn = "test.assist.setup_error";
-        setupDef.inputs = {{"count", "数量", {Type::Int}}};
+        setupDef.inputs = {{1, "数量", {Type::Int}}};
+        setupDef.nextInputPortId = 2;
         registry->registerCpp(setupDef, [](const ToolServices &) { return std::make_unique<LatchedReleaseTool>(); });
         registry->addDefinition(setupDef);
 
@@ -239,7 +242,7 @@ try
 
         AssistRequest req;
         req.learn = true;
-        req.inputs.emplace("count", std::string("not-a-number"));
+        req.inputs.emplace(1, std::string("not-a-number"));
         require(setupPreview.request(req), "request was rejected");
         require(QTest::qWaitFor([&] { return !outcomeSpy.isEmpty(); }, 2000), "outcome was not received");
         const auto outcome = outcomeSpy.takeFirst().at(0).value<AssistOutcome>();

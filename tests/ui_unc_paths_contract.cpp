@@ -21,6 +21,10 @@ void require(bool condition, const std::string &message)
 }
 }
 
+// visionrt.image.read: 图像路径 is input 1, 图像 is output 2.
+constexpr PortId kPathInput    = 1;
+constexpr PortId kImagesOutput = 2;
+
 int main(int argc, char **argv)
 try
 {
@@ -47,7 +51,7 @@ try
     app.addNode("visionrt.image.read", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 1; }, 5000),
             "UNC reader node was not created");
-    require(app.setParameter("path", false, uncImage), "UNC path was rejected");
+    require(app.setParameter(kPathInput, false, uncImage), "UNC path was rejected");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC path did not settle");
     const auto projectDirectory = QStringLiteral(VISIONRT_SOURCE_DIR "/build/unc-project");
     require(QDir().mkpath(projectDirectory), "cannot create the UNC project directory");
@@ -64,7 +68,7 @@ try
                 [&]
                 {
                     for (const auto &value : app.parameters())
-                        if (value.toMap().value("id").toString() == "path")
+                        if (value.toMap().value("id").toUInt() == kPathInput)
                             return true;
                     return false;
                 },
@@ -72,7 +76,7 @@ try
             "UNC path parameter did not appear after reopen");
     QVariantMap pathParameter;
     for (const auto &value : app.parameters())
-        if (value.toMap().value("id").toString() == "path")
+        if (value.toMap().value("id").toUInt() == kPathInput)
             pathParameter = value.toMap();
     require(pathParameter.value("valueText").toString() == uncImage,
             "UNC path was not preserved exactly after save/reopen: "
@@ -81,7 +85,7 @@ try
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "UNC image read did not finish");
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs != nullptr, "UNC output model is unavailable");
-    const auto images = outputs->capture(QStringLiteral("images"));
+    const auto images = outputs->capture(kImagesOutput);
     require(images && std::holds_alternative<DataRef<Image>>(images->value), "UNC image output is missing");
     const auto &batch = std::get<DataRef<Image>>(images->value).get();
     require(batch.size() == 1 && batch[0].at<std::uint8_t>(0, 0) == 70,

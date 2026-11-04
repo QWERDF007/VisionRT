@@ -16,12 +16,19 @@ struct Payload
     }
 };
 
+// Port numbers: init 0 carries the release marker, outputs 2..5 the four payload shapes.
+constexpr PortId kInitMarker     = 0;
+constexpr PortId kOutputImage    = 2;
+constexpr PortId kOutputArray    = 3;
+constexpr PortId kOutputGrid     = 4;
+constexpr PortId kOutputRoi      = 5;
+
 class ValueTool final : public IToolInstance
 {
 public:
     ToolStatus initialize(const Values &parameters) override
     {
-        marker_ = std::filesystem::u8path(std::get<std::string>(parameters.at("marker")));
+        marker_ = std::filesystem::u8path(std::get<std::string>(parameters.at(kInitMarker)));
         return {};
     }
 
@@ -30,10 +37,10 @@ public:
         auto payload    = std::make_shared<Payload>();
         payload->marker = marker_;
         cv::Mat image(2, 3, CV_8UC1, payload->pixels.data(), 4);
-        return toolResult({{"image", DataRef<Image>(Image{image}, {payload})},
-             {"array", Array::fromNested(NestedVector<std::int64_t, 2>{{17}, {}}).retainedBy(payload)},
-             {"grid", Array::fromNested(NestedVector<std::int64_t, 2>{{17, 18}, {19, 20}}).retainedBy(payload)},
-             {"roi", DataRef<ROI>(ROI{{{2, 16777217.125, 0, 3, 2, 0}}}, {payload})}}, {});
+        return toolResult({{kOutputImage, DataRef<Image>(Image{image}, {payload})},
+             {kOutputArray, Array::fromNested(NestedVector<std::int64_t, 2>{{17}, {}}).retainedBy(payload)},
+             {kOutputGrid, Array::fromNested(NestedVector<std::int64_t, 2>{{17, 18}, {19, 20}}).retainedBy(payload)},
+             {kOutputRoi, DataRef<ROI>(ROI{{{2, 16777217.125, 0, 3, 2, 0}}}, {payload})}}, {});
     }
 
     ToolStatus release() override

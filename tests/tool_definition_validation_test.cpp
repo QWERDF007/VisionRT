@@ -49,12 +49,13 @@ try
     rejects([&] { (void)ValueJson::parse("[[[2, 0, 0, 0, 4, 0]]]", roiType); });
     rejects([&] { validateValue(roiType, Array::empty(DType::Float64, 3)); });
 
-    // Schema validation: one token per type, name_en/name_zh identity, qualified relations.
-    const auto makePort = [](std::string nameEn, TypeSpec type)
+    // Schema validation: one token per type, a numeric identity per port, qualified relations.
+    // makePort takes the number first: it is the identity, the English text is only a note.
+    const auto makePort = [](PortId id, std::string nameZh, TypeSpec type)
     {
         PortDefinition port;
-        port.nameEn       = std::move(nameEn);
-        port.nameZh       = port.nameEn;
+        port.id           = id;
+        port.nameZh       = std::move(nameZh);
         port.type         = type;
         port.defaultValue = defaultValue(type);
         return port;
@@ -66,8 +67,8 @@ try
     valid.version = "1.0.0";
     valid.kind    = ToolKind::Cpp;
 
-    valid.inputs.push_back(makePort("in_img", {Type::Image}));
-    auto threshold         = makePort("threshold", {Type::Int});
+    valid.inputs.push_back(makePort(1, "输入图像", {Type::Image}));
+    auto threshold         = makePort(2, "阈值", {Type::Int});
     threshold.defaultValue = std::int64_t{5};
     threshold.editor       = "number";
     threshold.minimum      = std::int64_t{0};
@@ -76,33 +77,38 @@ try
     threshold.decimals     = 0;
     valid.inputs.push_back(threshold);
 
-    auto imageOut         = makePort("out_img", {Type::Image});
+    auto imageOut         = makePort(2, "输出图像", {Type::Image});
     imageOut.colorOrder   = "BGR";
-    imageOut.sameGeometryAs = PortRef{PortStage::Inputs, "in_img"};
+    imageOut.sameGeometryAs = PortRef{PortStage::Inputs, 1};
     valid.outputs.push_back(imageOut);
+    // The high-water counters must sit above every live number; the schema requires them.
+    valid.setNextPortId(PortStage::Inputs, 3);
+    valid.setNextPortId(PortStage::Outputs, 3);
     validateToolDefinition(valid);
 
     {
         auto           geometryTool = valid;
-        auto           rectInput    = makePort("rect", {Type::ROI});
+        auto           rectInput    = makePort(3, "矩形", {Type::ROI});
         rectInput.editor            = "rect";
-        rectInput.image             = PortRef{PortStage::Inputs, "in_img"};
+        rectInput.image             = PortRef{PortStage::Inputs, 1};
         geometryTool.inputs.push_back(rectInput);
-        auto rectOutput  = makePort("rect", {Type::ROI});
-        rectOutput.image = PortRef{PortStage::Outputs, "out_img"};
+        auto rectOutput  = makePort(3, "矩形", {Type::ROI});
+        rectOutput.image = PortRef{PortStage::Outputs, 2};
         geometryTool.outputs.push_back(rectOutput);
+        geometryTool.setNextPortId(PortStage::Inputs, 4);
+        geometryTool.setNextPortId(PortStage::Outputs, 4);
         validateToolDefinition(geometryTool);
-        geometryTool.inputs.back().image = PortRef{PortStage::Inputs, "threshold"};
+        geometryTool.inputs.back().image = PortRef{PortStage::Inputs, 2};
         rejects([&] { validateToolDefinition(geometryTool); });
     }
 
     // An authored status port is replaced by the canonical host-owned one, never trusted as is.
     {
         auto authored = valid;
-        authored.outputs.push_back(makePort("__status_code", {Type::String}));
+        authored.outputs.push_back(makePort(kStatusCodePort, "冒名的状态码", {Type::String}));
         normalizeToolDefinition(authored);
         const auto &status = *std::find_if(authored.outputs.begin(), authored.outputs.end(),
-                                           [](const auto &port) { return port.nameEn == "__status_code"; });
+                                           [](const auto &port) { return port.id == kStatusCodePort; });
         assert(status.type == TypeSpec{Type::Int});
         assert(isMissing(status.defaultValue));
     }
@@ -135,19 +141,19 @@ try
         auto bad  = valid;
         bad.kind  = ToolKind::PythonFunction;
         bad.entry = PythonEntry{"fixture", "tool.py", "execute"};
-        bad.initParams.push_back(makePort("param1", {Type::Int}));
+        bad.initParams.push_back(makePort(0, "初始化参数", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 6. duplicate port name
+    // 6. duplicate port number
     {
         auto bad = valid;
-        bad.inputs.push_back(makePort("in_img", {Type::Int}));
+        bad.inputs.push_back(makePort(1, "重复编号", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 7. reserved port prefix __
+    // 7. an id at or above the high-water mark is a bookkeeping error, not a new port
     {
-        auto bad = valid;
-        bad.inputs.push_back(makePort("__custom", {Type::Int}));
+        auto bad             = valid;
+        bad.nextInputPortId  = 2;
         rejects([&] { validateToolDefinition(bad); });
     }
     // 8. min > max
@@ -190,30 +196,33 @@ try
     // 13. relations.image must reference an existing Image port
     {
         auto bad         = valid;
-        auto rois        = makePort("rois", {Type::ROI});
+        auto rois        = makePort(3, "区域", {Type::ROI});
         bad.inputs.push_back(rois);
-        bad.inputs.back().image = PortRef{PortStage::Inputs, "non_existent_img"};
+        bad.inputs.back().image = PortRef{PortStage::Inputs, 99};
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 14. init and inputs stay distinct namespaces
+    // 14. initialisation and inputs are two number spaces: one number may exist in both
     {
-        auto bad = valid;
-        bad.initParams.push_back(makePort("threshold", {Type::Int}));
-        rejects([&] { validateToolDefinition(bad); });
+        auto shared = valid;
+        shared.initParams.push_back(makePort(2, "同名初始化", {Type::Int}));
+        shared.setNextPortId(PortStage::Init, 3);
+        validateToolDefinition(shared);
     }
 
     const auto pathEditor = parseToolDefinitionJson(
         R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.path",
   "name_zh": "Path",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
+  "next_port_id": {"init": 0, "inputs": 3, "outputs": 2},
   "ports": {
     "inputs": [
       {
+        "id": 1,
         "name_en": "mode",
         "name_zh": "Mode",
         "type": "string",
@@ -226,6 +235,7 @@ try
         }
       },
       {
+        "id": 2,
         "name_en": "path",
         "name_zh": "Path",
         "type": "string",
@@ -233,7 +243,7 @@ try
           "editor": "path"
         },
         "relations": {
-          "path_mode": "inputs.mode"
+          "path_mode": {"stage": "inputs", "id": 1}
         }
       }
     ]
@@ -241,14 +251,14 @@ try
 })json");
     // The effective contract prepends the host-owned upstream_status input.
     assert(pathEditor.inputs[2].editor == "path");
-    assert((pathEditor.inputs[2].pathModeFrom == PortRef{PortStage::Inputs, "mode"}));
+    assert((pathEditor.inputs[2].pathModeFrom == PortRef{PortStage::Inputs, 1}));
     {
         auto invalid                   = pathEditor;
-        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, "missing"};
+        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 99};
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, "path"};
+        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 2};
         rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, "mode"};
+        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 1};
         invalid.inputs[2].editor       = "file";
         rejects([&] { validateToolDefinition(invalid); });
         invalid                        = pathEditor;
@@ -263,6 +273,8 @@ try
     {
         auto initialization       = pathEditor;
         initialization.initParams = std::move(initialization.inputs);
+        // The numbers keep their meaning when a design moves a port into another stage.
+        initialization.setNextPortId(PortStage::Init, 3);
         initialization.inputs.clear();
         for (auto &port : initialization.initParams)
             if (port.pathModeFrom)

@@ -29,6 +29,795 @@
 **下一步**
 - ...
 -->
+### 2026-11-04 — 实际部署到 F:\tmp\VisionRT（schema 6 工具包，1837 文件）
+
+**目标**
+- 按约定把当前构建部署到 `F:\tmp\VisionRT`，并验证“用户数据只在软件目录、force-clean 不删用户工具”。
+
+**当前状态**
+- 已完成部署：`F:\tmp\VisionRT` 1837 文件 / 929 MB，`VisionRT.exe -v` = 0.1.0，启动截图正常（工具树 7 个分类），包校验输出 `package verification complete: 1837 files`。
+- 工具包：`build/tools-package`（schema 5，22 工具）与 `build/bin/tools-package`（schema 4，21 工具）都被宿主校验器拒绝（`schema_version 必须是整数 6`）；改用 `F:\Projects\VisionTools\dist\visiontools-deploy.zip`（schema 6、22 工具、3 模块）后通过。
+- 已完成 force-clean 实测：在安装目录放置 `custom-tools\tools\_probe.json`、`ui-preferences.json` 与 `logs\visionrt_2026-11-04.log` 后重跑 `--force-clean` 全量部署，三者全部保留，程序文件被替换（两轮均 13 s 左右）。
+- 已完成路径验证：启动日志写入 `F:\tmp\VisionRT\logs\`；`%LOCALAPPDATA%\VisionRT` 未被重新创建；`custom-tools` 只在首次保存时创建（已预建空 `tools\`）。
+- 已完成清理：探针、临时工具包 ZIP、冒烟截图已删除；旧的 `%LOCALAPPDATA%\VisionRT` 前一轮已永久删除。
+- 未完成：真实窗口里保存一个工具，确认落在 `F:\tmp\VisionRT\custom-tools\tools\`（代码断言已覆盖，人工未点）。
+
+**验证证据**
+- `VisionRT.exe -v` → `VisionRT 0.1.0`；`--screenshot` → 正常主窗口。
+- 部署日志：`deployed tools package ... into F:\tmp\VisionRT\tools-package`、`tools package verification passed successfully`、`package verification complete: 1837 files`。
+- 重部署后 `custom-tools\tools\_probe.json` 与 `ui-preferences.json` 仍在，`logs` 仍在。
+- `find /f/tmp/VisionRT -type f | wc -l` → 1837；`du -sh` → 929M。
+
+**下一步**
+- 打开 `F:\tmp\VisionRT\VisionRT.exe`，在自定义工具里复制内置 Python 示例并应用，确认 `F:\tmp\VisionRT\custom-tools\tools\` 出现声明、`python\` 出现脚本。
+- 后续部署固定使用 VisionTools 的 `dist/visiontools-deploy.zip`；本仓库 `build` 下的旧工具包不能用于新宿主。
+
+### 2026-11-04 — 可写根固定到软件目录：工具、偏好、日志不再写用户目录
+
+**目标**
+- 按明确要求：实际部署目录为 `F:\tmp\VisionRT`；用户工具必须写在软件目录下，不能落在用户目录或 C 盘。同步收紧方案里的路径边界。
+
+**当前状态**
+- 已完成单一可写根：`src/core/ToolPaths.h` 新增 `softwareDataDir()`（可执行文件所在目录），`CustomToolStore::defaultRootDir()` 改为 `<exe>/custom-tools`，不再使用 `QStandardPaths::AppLocalDataLocation`。
+- 已完成交互偏好迁移：`UiPreferences` 写入 `<exe>/ui-preferences.json`，不再使用 `AppConfigLocation`；`recent_projects_contract` 改为直接定位该文件并在结束时清理，不再依赖 `QStandardPaths` 测试模式。
+- 已完成 Qt 隐式写入：`main.cpp` 在创建应用前关闭 `QSG_RHI_DISABLE_DISK_CACHE` 与 `QT_DISABLE_SHADER_DISK_CACHE`，着色器/管线缓存不再落到 `%LOCALAPPDATA%`；日志本已默认 `<exe>/logs`。
+- 已完成打包保留：`tools/package_app.py` 新增 `PRESERVED_INSTALL_ENTRIES = {custom-tools, logs, ui-preferences.json}`，`--force-clean` 只替换程序文件，不删用户工具、日志与偏好；新增 Python 单测覆盖。
+- 已完成方案与部署约定：`docs/R45/05_实现架构与生命周期.md` 的“默认用户根”改为软件目录并写明保留规则；`docs/R45/12_整合追踪与验证.md` 增加可写根入口；`tools/README.md` 示例部署目录改为 `F:\tmp\VisionRT`。
+- 未完成：`%LOCALAPPDATA%\VisionRT` 下的旧数据尚未删除（`VisionRT\logs\visionrt.log`、`VisionRT\ui-preferences.json`、空的 `VisionRT\cache\`），按安全规则等确认后移入回收站。
+- 未完成：未执行实际部署；部署时使用 `python tools\package_app.py --install-dir F:\tmp\VisionRT`（或 `--deploy-tools-only`）。
+
+**验证证据**
+- `cmake --build build --target VisionRT custom_tool_store_contract recent_projects_contract` → 成功，`VisionRT.exe` 链接完成。
+- `ctest -R "^(custom_tool_store_contract|recent_projects_contract|tool_port_list_model_test|tool_editor_controller_test|tool_definition_validation_test)$"` → **5/5 通过**（0.80 s）。
+- `custom_tool_store_contract` 新增断言：`CustomToolStore::defaultRootDir() == <exe dir>/custom-tools`。
+- `python -m unittest tests.test_package_app.InstallationContract.test_clean_replaces_program_files_but_keeps_user_data` → 通过（清理删旧 DLL、保留三类用户数据）。
+- 未验证：真实窗口保存一次工具，确认目录为 `build\bin\custom-tools`；部署包内 `custom-tools` 跨 force-clean 保留需在 `F:\tmp\VisionRT` 实测。
+
+**下一步**
+- 清理旧用户目录数据（待确认）：`%LOCALAPPDATA%\VisionRT\VisionRT\logs\visionrt.log` 7.8 KB、`ui-preferences.json` 212 B、空目录 `cache\`。
+- 部署到 `F:\tmp\VisionRT` 后，先在编辑器保存一个工具，确认写入 `F:\tmp\VisionRT\custom-tools`，再做一次 `--force-clean` 重部署确认工具仍在。
+
+### 2026-11-04 — R45 编辑器：删除端口对账、拖动排序、内置 Python 可复制
+
+**目标**
+- 收掉编辑器里还能产出坏声明的两条路径（删除被引用的参数、函数工具加初始化参数），补上方案要求的拖动排序，并让“复制内置工具再改”这句提示真正成立。
+
+**当前状态**
+- 已完成删除对账：核心 `erasePort` 在删参数时同步清除其他参数指向它的 `relations.image / same_geometry_as / alignment / path_mode` 与 `interaction.proposals / inputs`，逐条返回被清除项；被 `type_from` 输出引用或宿主固定端口时直接拒绝，草稿保持原样。端口模型 `removePort` 走同一入口，删除后状态栏列出“已删除参数，并清除：端口 2 的图像关联”。
+- 已完成初始化阶段边界：函数工具（PythonFunction）在“初始化参数”页新增会被模型拒绝并说明原因，不再等到应用时才报 `Function tool cannot have init params`。
+- 已完成拖动排序：端口表新增常驻拖动柄（固定行留空、不显示柄），拖动时关闭列表滚动并把落点解析到业务区，松手调用 `movePort`；落点行与拖动行高亮。上下移动按钮保留。
+- 已完成内置 Python 工具复制：`cloneCustomTool` 从声明自己的根（`source.pythonPackage()`）读脚本与资源，`cloneTool` 在自有工具之外也查运行时目录，`canClone` 属性按工具类型决定“复制”是否可用；内置提示文案区分“可复制”与“原生需重打包”。
+- 已完成复制后的目录刷新与脏保护：复制成功后按空闲路径 `rescanTools()`；复制不再静默丢弃未保存草稿（与切换工具、新建一致地拒绝）。
+- 已完成影响预览补全：被删除的输出若仍被其他节点作为数据源，摘要增加“删除的输出参数 N 会断开下游连接”；保留状态端口 0/1 不误报。
+- 未完成：拖动与内置复制未在真实窗口验证；`ui` 组与安装态未回归。
+
+**验证证据**
+- `cmake --build build --target VisionRT tool_port_list_model_test tool_editor_controller_test custom_tool_store_contract` → 成功，`VisionRT.exe` 链接完成。
+- `ctest -R "^(custom_tool_store_contract|tool_port_list_model_test|tool_editor_controller_test|tools_package_contract|tool_discovery_contract|tool_definition_validation_test)$"` → **6/6 通过**（1.33 s）。
+- 新增断言：删除被关联的输入后关系被清除且消息含“端口 2 的图像关联”、对齐/路径模式按目标存活保留；固定端口与 `type_from` 来源删除被拒；函数工具 init 新增被拒、类工具可新增；内置根下的 Python 工具可复制到用户根且原包不变。
+- `qmllint src/ui/qml/CustomToolDialog.qml` → 无语法错误（仅既有 import/layout 告警）。
+- 未验证：真实窗口中的拖动落点、拖动时滚动抑制、内置 Python 工具的“复制”按钮。
+
+**下一步**
+- 真实窗口点一遍：拖动业务参数跨行、拖动到固定行上方应停在首条业务行；选内置 Python 示例→复制→改名→应用→运行。
+- 原生（C++/Host）内置工具仍不可复制，这是注册工厂的边界，不是缺口。
+
+### 2026-11-04 — R45 编辑器：关系、编辑器与候选值可写，字符串值按原文往返
+
+**目标**
+- 让自定义工具能声明 R45 里的端口关系与编辑元数据：ROI 指向图像、路径模式、对齐、候选值、编辑器；并修掉 String 值在编辑器里无法原样往返的问题。
+
+**当前状态**
+- 已完成关系写入：端口模型新增 `relationCandidates(row, kind)`，候选由同一条关系规则过滤（`requireRelationTarget`），`updatePort` 接受 `image` / `alignment` / `path_mode` / `same_geometry_as` 的 `inputs.N` 引用或空值清除；悬空、错类型、自引用的引用在入口即被拒绝，不再等到应用时才报“relations.image must reference an Image port”。
+- 已完成编辑器元数据单一来源：核心 `editorChoices(TypeSpec)` 给出某类型可用的编辑器集合，`retypePort` 的清理判定与界面下拉共用它；`updatePort` 接受 `editor`，类型不匹配直接拒绝；修改编辑器时若已有路径模式则要求先清除，避免声明自相矛盾。
+- 已完成候选值：`updatePort` 接受 `options`（每行一个值，按端口类型解析，空文本清空），属性面板用多行输入提交。
+- 已完成 String 值往返：编辑器显示 String 用的是 `ValueJson::text` 的裸文本，解析时却要求 JSON 引号，导致改默认值必然失败。现在 `parseEditorValue` 对 String 按原文取值，其它类型仍走 ValueJson；`addPort` 与 `updatePort` 共用。
+- 已完成属性面板：新增“编辑器”“图像关联/对齐关系/路径模式/同几何关系”“候选值”入口；关联只列出声明真正接受的端口（含阶段名），不再手填。
+- 未完成：端口拖动排序（仍只有上移/下移，避免未经真实窗口验证的手势回归）；`ui` 组与安装态未回归。
+
+**验证证据**
+- `cmake --build build --target VisionRT` → 成功链接，无编译错误。
+- `ctest -R "^(custom_tool_store_contract|tool_port_list_model_test|tool_editor_controller_test|tools_package_contract|tool_discovery_contract)$"` → **5/5 通过**。
+- `tool_port_list_model_test` 新增断言：图像候选仅含真实图像端口；自引用/错类型被拒且旧目标保留；对齐只接受 3 维 float64 输入；路径模式需 path 编辑器；`rect` 不能设到 String；候选值按行解析并清空；String 默认值按原文保存。
+- `qmllint ToolPortProperties.qml` → 无语法错误（仅既有的 layout/import 告警）。
+- 未验证：真实窗口里关系下拉、候选值多行提交与拖动排序。
+
+**下一步**
+- 需要拖动排序时，在“拖动柄”列挂独立 DragHandler，避免抢走列表滚动；先在真实窗口验证再合入。
+- 自定义工具若要支持包导入，复用现有包校验/安装链，不要在编辑器里另建一套。
+
+### 2026-11-04 — R45 编辑器收口：可运行模板、改型对账、只读与标识边界
+
+**目标**
+- 修掉自定义工具编辑器里“能编辑但会产出坏结果”的几处：新建工具的脚本、复制语义、改类型、工具标识与删除影响。
+
+**当前状态**
+- 已完成新工具模板按声明生成：`CustomToolStore::pythonTemplate(const ToolDefinition&)` 返回全部业务输出为 `None`、状态码 1“工具尚未实现”，未动过的工具运行时得到失败状态而不是“工具未发布输出端口”的框架错误；脚本与声明都走同一个 QSaveFile 写入。
+- 已完成复制语义：`cloneCustomTool` 必须读到源脚本（拒绝空壳复制）、复制声明里的相对资源、拒绝复制 C++/宿主工具；控制器捕获失败并给出状态消息。
+- 已完成删除归属：`deleteCustomTool` 先读声明里的 `implementation.package` 再删声明与代码目录，包名不再假定等于工具 id。
+- 已完成改类型对账：核心 `retypePort` 保留新类型仍能容纳的默认值/范围/关系，清除不能容纳的字段并逐条返回；端口模型新增 `typeChangeImpact`（在副本上预览）与 `changeType`（提交），QML 改类型前弹窗列出将清除项。改类型不再静默清空范围，也不会留下悬空的 `relations.*`。
+- 已完成只读与标识边界：`tools()` 合并 registry 目录，内置工具可查看但只读（端口模型 `editable=false`、应用/删除/复制被拒）；新草稿首次应用前可改工具标识（同步代码包路径），应用后锁定；重复标识与“有未保存草稿时新建”均明确拒绝。
+- 已完成删除影响：`toolUsage()` 与影响预览共用同一处节点计数，删除确认显示引用节点数与“保留为工具缺失”的后果。
+- 已完成属性面板补齐：所属页面改为固定页签下拉（不再手填非法 tab）、新增分组/步长/小数位；模型 `updatePort` 拒绝 `typeToken`，改类型只走 `changeType`。
+- 未完成：端口拖动排序（当前只有上移/下移）；`relations`/`options`/`editor` 仍无界面入口（`retypePort` 已能对账，但编辑器不能新建这些属性）；`ui` 组与安装态未回归。
+
+**验证证据**
+- `cmake --build build --target VisionRT tool_port_list_model_test tool_editor_controller_test custom_tool_store_contract` → 成功，`VisionRT.exe` 链接完成。
+- `ctest -R "^(custom_tool_store_contract|tool_port_list_model_test|tool_editor_controller_test|tools_package_contract|tool_discovery_contract)$"` → **5/5 通过**（0.95 s）。
+- 模板语法：临时导出函数/类模板到 `build/build` 后 `python -m py_compile` → 通过（校验后已还原测试文件并删除导出物）。
+- `qmllint src/ui/qml/CustomToolDialog.qml src/ui/qml/ToolPortProperties.qml` → 仅缺 import path 的警告，无语法错误。
+- 未验证：`ui` 组、安装态、真实窗口中的改类型确认与只读工具浏览。
+
+**下一步**
+- 打开一次“自定义工具”对话框实测：新建→加图像输出→应用→运行，确认状态为“工具尚未实现”而不是框架错误。
+- 需要端口拖动排序与 relations/options 编辑时，按 `retypePort` 的对账入口扩展属性区，不要另写一套类型规则。
+- 本机 shell 缺 MSVC 的 `LIB`（`vcvars64.bat` 依赖被安全策略拦截的 `reg.exe`），链接前需手动导出 `INCLUDE/LIB/PATH`；可直接 `source build/_env.sh`（该脚本在忽略目录内，仅本机使用）。
+
+### 2026-11-04 — R45 收尾：ui 组测试迁移完成，修掉两个迁移暴露的产品缺陷
+
+**目标**
+- 完成 T45-09/T45-14 的 `ui` 组测试迁移（schema 6 数字端口、格式 7 工程、编号字典键）。
+- 只在受影响用例上验证，不跑无关全量。
+
+**当前状态**
+- 已完成 `ui` 组 41 项测试全部迁移并通过；`backend` 43 项保持通过。
+- 测试二进制此前未被默认构建（`ctest` 跑的是 11-02 的旧产物），这解释了“看起来仍按 schema5 失败”的大部分现象；现已显式构建每个契约目标。
+- 修复产品缺陷 1：失败/取消的工具省略无默认值的业务输出时，`validateToolExecution` 曾抛“工具未发布输出端口”，把取消（接收器 -5）翻译成框架错误。现在失败态保留 `Missing`，成功态才要求默认值。
+- 修复产品缺陷 2：表达式结果端口从 1 起分配，与宿主状态端口 1 冲突，执行条件文本显示成“状态消息”。现在业务输出从 2 起（`ExpressionConfig::nextPortId`、QML `nextSeq`），并在 `validateExpressionConfig` 拒绝占用宿主端口。
+- 测试夹具统一：`ParameterFixturePorts.h` 集中参数夹具编号；`WorkbenchFixtures` 使用工具包内 `next_port_id`；多条内联 JSON 声明升到 schema 6，关系/`type_from`/`path_mode` 改为数值引用。
+
+**验证证据**
+- `cmake --build build --target ...` → 所有契约目标（含 `workbench_contract` 聚合器）通过。
+- `ctest -L ui` → **41/41 通过**。
+- `ctest -L backend` → **43/43 通过**。
+- 失败根因记录：旧二进制（未重建）、schema5 夹具、字符串端口键、`format_version 4` 工程夹具、`parameter_<name>` QML 对象名、接收器 init 编号需为宿主固定 0..3。
+
+**下一步**
+- `build_incremental_contract` 仍需自带 `vcvarsall.bat`，本沙箱无法验证；其余 R45 测试面已全绿。
+
+### 2026-11-03 — R45 收口：编辑器草稿一致性、自定义工具安全边界与遗留测试迁移
+
+**目标**
+- 修掉 R45 编辑器/存储在真实使用中会出错的点：固定端口重复投影、约束修改不置脏、复制覆盖已发布工具、影响预览是假值、界面主题引用不存在的令牌。
+- 收敛 R45 迁移遗留的红测试，使 `backend` 与 `package` 组恢复全绿。
+
+**当前状态**
+- 已完成宿主固定端口单一来源：`hostPort` / `stripHostPorts` 落在 `src/core/ToolDefinition.cpp`，规范化与编辑器投影读同一份标签/类型/默认值；端口模型不再自备一份固定行文案。
+- 已完成编辑器草稿语义：草稿只保存声明端口，`saveCustomTool` 改 const 并返回落盘声明，规范化只作用于副本；此前“加载已保存工具后固定行出现两次”的根因即草稿被就地规范化。
+- 已完成脏判定补全：`samePort` 比较端口全部可编辑字段（min/max/step/decimals/options/relations/type_from/group 等），修改范围约束现在会置脏并可保存。
+- 已完成编辑校验：`addPort`/`updatePort` 先校验后落盘，失败发 `rejected` 提示且不消耗端口号，不再静默吞掉非法值。
+- 已完成复制与删除安全：`cloneTool` 递增后缀不再覆盖已有副本，`cloneCustomTool` 对已存在 id 直接拒绝；`deleteCustomTool` 校验标识（拒绝 `../` 逃逸）并返回是否真的删除。
+- 已完成影响预览据实计算：按当前工程中引用该工具的节点统计受影响数量、将被解除绑定的输入编号与类型变更编号，替换原固定“无受影响节点”。
+- 已完成生命周期约束：运行时忙时拒绝应用/删除；有未保存草稿时拒绝切换工具；目录加载出现同名工具报告双方路径并保留已发布定义。
+- 已完成界面主题：`CustomToolDialog.qml` 与 `ToolPortProperties.qml` 此前引用的 `QuiColor.TextPrimary`、`SelectedRowBackground`、`Alert*`、`ErrorText` 等属性在调色板中并不存在。改为先用 QuickUI 的同义属性（`FontPrimary`/`FontCaption`/`ItemHover`/`ItemCheck`/`Background`/`Border`/`CardBackground`/`Highlight`/`Error`），只有 QuickUI 确实没有语义位时（警告文字）才用 `Theme.warning`；同时修正布局管理项尺寸写法，端口属性面板在 `dataChanged` 后刷新，并展示影响预览。
+- 已完成遗留测试迁移：`tools_package_contract`、`tool_discovery_contract`、`package_replacement_test`、`validator_cli_contract.py`、`test_package_app.py` 升级到 schema6/数字端口；`tool_registry_contract` 的直通工具改为按编号映射输出；`native_value_lifetime` 增加加载失败原因输出。
+- 未完成：`ui` 组 41 个测试仍按字符串端口编写（`workbench_*`、`ui_*`），编译不通过，属 T45-09/T45-14 未迁移部分；`build_incremental_contract` 需调用 `vcvarsall.bat`，本环境 `reg.exe` 被安全策略拦截，无法验证。
+
+**验证证据**
+- `cmake --build build` → 成功（`VisionRT.exe` 链接完成）。
+- `ctest -L backend` → **43/43 通过**（14.8 s）。
+- `ctest -L package -LE integration -E ^build_incremental_contract$` → **4/4 通过**。
+- `ctest -R "custom_tool_store_contract|tool_port_list_model_test|tool_editor_controller_test"` → **3/3 通过**；新增断言覆盖固定行不重复、min/max 置脏、连续复制不覆盖、复制到已存在 id 被拒、`../` 标识被拒。
+- `qmllint src/ui/qml/CustomToolDialog.qml src/ui/qml/ToolPortProperties.qml` → 无语法错误。
+- 未验证：`ui`/`bridge`/`perf`/`gpu`/安装态与 `build_incremental_contract`。
+
+**下一步**
+- 迁移 `ui` 组测试到 PortId（先 `workbench_parameters`、`ui_receiver_identity_contract`、`ui_value_contract`，再 `workbench_contract`），迁移完成后再按 profile 跑 `-L ui`。
+- 真实环境点开“自定义工具”对话框一次，确认主题、固定行锁定、影响预览与运行中禁用符合预期。
+
+### 2026-11-03 — R45 交付：Schema 6 / ABI 9 数字编号、自定义工具与生命周期
+
+**目标**
+- 按 `docs/R45` 全面交付 R45 方案：Contracts ABI 9、Schema 6、工程格式 Format 7、数字 `PortId` 架构、自定义工具存储 `CustomToolStore`、端口模型 `ToolPortListModel`、控制器 `ToolEditorController` 与 QML 编辑弹窗 `CustomToolDialog`。
+- 迁移工程与测试：交付迁移脚本 `tools/migrate_r44_to_r45.py`，更新示例工程与回归测试，消除历史字符串端口分叉。
+
+**当前状态**
+- 已完成 Contracts ABI 9 与 Schema 6：`PortId` 统一为 `std::int64_t`，去除 `std::string` 端口名依赖；`TypeSpec` 支持 34 种静态类型定义；公共端点与系统保留端口收敛。
+- 已完成核心后端与存储：`CustomToolStore`（JSON-last 原子落盘、增删改查、克隆）、`ProjectStorage` Format 7（Schema 6 快照、数字端口键、全量输入字面量补齐）、`ProjectEditor` 与 `RuntimeEngine` 数字端口执行。
+- 已完成 UI 交互层：`ToolPortListModel`（前缀保留行、单向递增 `nextPortId`）、`ToolEditorController`（完整类型支持、草稿变更高亮、JSON 预览）、`CustomToolDialog.qml` 与 `ToolPortProperties.qml`。
+- 已完成迁移与示例：`tools/migrate_r44_to_r45.py`（自动化迁移旧工程至 Format 7）、更新 `examples/*.vrt.json`。
+- 已完成测试与夹具迁移：修复 `installed_pipeline_contract`、`installed_python_author_contract`、`example_pipelines`、`cpu_tools_contract`、`custom_tool_store_contract`、`tool_port_list_model_test`、`tool_editor_controller_test` 等。
+
+**验证证据**
+- `ctest -R custom_tool_store_contract` → **Passed** (0.05 s)
+- `ctest -R tool_port_list_model_test` → **Passed** (0.09 s)
+- `ctest -R tool_editor_controller_test` → **Passed** (0.11 s)
+- `ctest -R example_metadata_contract` → **Passed** (0.05 s)
+- `ctest -R example_pipelines_contract` → **Passed** (1.18 s)
+- `ctest -R installed_pipeline_contract` → **Passed** (4.47 s)
+- `ctest -R installed_python_author_contract` → **Passed** (0.28 s)
+- `ctest -R cpu_tools_contract` → **Passed** (0.10 s)
+- `ctest -R python_tools_execution_test` → **Passed** (0.25 s)
+- `ctest -R project_storage_contract` → **Passed** (0.33 s)
+- `ctest -R project_editor_contract` → **Passed** (0.04 s)
+- `ctest -R definition_json_contract` → **Passed** (0.05 s)
+- `ctest -R tool_definition_validation_test` → **Passed** (0.04 s)
+
+**下一步**
+- 保持工作区干净，向用户交付 R45 完整架构与验证结果。
+
+### 2026-11-02 — R43 收口：三仓提交、GPU 实测与候选验收
+
+**目标**
+- 把前几轮的修复与测试收口落成可评审提交，并补 T43-10 的候选证据（三 SHA、安装态、GPU）。
+
+**当前状态**
+- `perf` 组去掉 `runtime_hotpath_contract`：它验证实例复用，不含任何计时，perf 现在只剩 4 个真实基准。
+- GPU 增加 `gpu_inference_contract`（`--engine-only`，缺 engine 报 NOT RUN），与重建 engine 的完整条目分开：本机 0.23 s 完成 engine 加载与推理，命中 5 个 PyTorch 参考框、下游过滤保留 4 个。
+- 三仓已提交（仅代码与测试）：VisionRT `b0de29c`、VisionTools `e69a2ed`、Contracts `f9b669a`；RT 的 gitlink 指向该 Contracts 提交。`WORKLOG.md` 与 `docs/` 按要求不提交，保留在工作区，`build_info.json` 的 `dirty=true` 只反映这些文档。
+- 新增 `docs/R43/11_候选验收记录.md`：三 SHA、环境、产物哈希、执行/跳过项与成本。
+
+**验证证据**
+- `ctest -L backend` → **40/40**（18.49 s）；`-L sdk` → **7/7**（5.13 s）；`-L installed` → **2/2**（3.35 s）；`-L package -LE integration` → **5/5**（20.67 s）；`-R ^build_metadata_integration_contract$` → **1/1**（52.21 s，6 个嵌套构建）。
+- `ctest -R ^gpu_inference_contract$` → **1/1**（0.41 s），输出 `[PASS] Native YOLO matches five PyTorch detections; downstream filter retains four.`
+- VisionTools 缓存正确性/缓存基准/追踪 2 项/几何/逻辑引擎 → **6/6**（1.92 s）。
+- 未通过/未跑：完整 `gpu_tools_contract` 的 WTS→engine 重建在本机 17 min 43 s 仍未结束（GPU 100%、显存 7.2 GB）后中止；visual/DPI 默认不注册（此前 `--dpi-child` 崩溃）；`tests-all` 与 `-L ui` 全组未跑。
+
+**下一步**
+- 判定 engine 重建 18 min+ 是环境（TensorRT builder / 8 GB 显存）还是产品参数问题；据此决定完整 GPU 条目是否单独标注机器要求。
+- 发布前补 visual 矩阵与真实安装目录/包哈希。
+
+### 2026-11-02 — R43 续二：测试构建入口与剩余易混名称
+
+**目标**
+- 收掉 T43-06 的 VisionTools 按需构建、T43-04 的 REQUIRES 目标校验，以及 T43-09 中最后两个高混淆名称。
+
+**当前状态**
+- 已完成 T43-06（VisionTools）：`visiontools_add_test` 生成的可执行全部 `EXCLUDE_FROM_ALL`；新增 `visiontools_tests` 作为唯一测试构建入口（含 `NO_TEST` 的场景 runner）；`tools/build.cmd --test` 先构建该目标再跑 ctest；README 与工具文档同步。默认 `cmake --build build` 现在只构建产品。
+- 已完成 T43-04：`visionrt_group_test` 在配置期校验 `REQUIRES` 的每个目标存在，拼错直接 `FATAL_ERROR`，不再静默跳过依赖。
+- 已完成 T43-09：`tests/result_view.h → tests/ToolResultAssertions.h`（VisionRT 26 处、VisionTools 6 处、探针 1 处 include 同步）；`tests/fixtures/test_plugin_legacy.cpp → tests/fixtures/incompatible_abi_plugin.cpp`，目标名与 ABI 负例语义不变，注释说明它不是历史死代码；`tests/workbench_canvas.cpp → tests/flow_canvas_scenarios.cpp`（target/场景名保持 `workbench_contract`/`workbench_canvas_contract`，由显式 `target_sources` 解耦）；`visionrt_contract` 增加 `SOURCES`，文件、target 与 CTest 条目不再强绑定。
+- 已完成 T43-09（giant aggregate）：把 `examples_contract` 的包替换场景拆到 `tests/package_replacement_test.cpp`（`LABELS package`，自带临时工具包，0.52 s 通过），共享等待逻辑移入 `tests/RuntimeTestSupport.h`；剩余管线/生命周期文件改名 `tests/example_pipelines.cpp`、target/CTest 名改为 `example_pipelines_contract`（2.42 s 通过）。`examples_contract` 不再同时承担示例管线与部署事务。
+- 明确延期：CSV 中其余 130 余项路径建议；`workbench_canvas` 的 target/场景名保持 `workbench_*`（按场景过滤仍方便）。
+- 已完成 T43-09（剩余优先项）：`python_contract → python_tools_execution_test`、`node_gate_contract → logic_node_execution_test`；Contracts 子模块 `test_sdk_function_tool → tool_registration_test`、`test_sdk_parameters → parameter_mapping_test`，SDK 组、隔离安装与文档同步，旧名不再注册。
+
+**验证证据**
+- VisionTools：删除 `build/tests/image_read_cache_test.exe` 后执行默认 `cmake --build build` → 未重新生成（`TEST_EXCLUDED_FROM_DEFAULT`）；`cmake --build build --target visiontools_tests` → 构建成功（13 个测试可执行）；`ctest -R "^(image_read_cache_test|image_read_cache_benchmark|infer_trace_geometry|infer_trace_uninitialized|test_geometry_contract|test_module_contract)$"` → **6/6 通过**。
+- VisionRT：重新配置通过（REQUIRES 全目标存在）；`ctest -R "^(port_value_validation_test|plugin_abi_contract|plugin_contract|python_contract|output_text_readback_test)$"` → **5/5 通过**（4.55 s）；`cmake --build build --target tests-backend` + `ctest -L backend` → **40/40 通过**（21.54 s），覆盖全部引用改名头的后端测试与 `example_pipelines_contract`。
+- 四个改名的 Python/逻辑/SDK 测试：**4/4 通过**（0.90 s）。
+- 未验证：全量 `tests-all`、GPU/安装/visual。
+
+**下一步**
+- 三仓提交；候选验收时再补安装/GPU/visual 与三 SHA。
+
+### 2026-11-02 — R43 续：测试成本分层、命名与文档收口
+
+**目标**
+- 完成 T43-13（缓存/打包/GPU 场景拆分）、T43-09 中“容易看错”的名称迁移、T43-05 长名专项删除；补 T43-10 的当前类型承诺与死链。
+
+**当前状态**
+- 已完成 T43-13（VisionTools）：`test_read_cache_contract` 拆成 `image_read_cache_test`（3 张 96×64 小图：LRU/保护/超大拒绝、冷/暖解码次数、reload、失败后仍命中、第二实例独立缓存；唯一临时目录，`atexit` + 析构双重清理）与 `image_read_cache_benchmark`（`--perf`，尺寸/图数/轮次/证据目录均可显式指定，`LABELS perf`；只有大批次才断言 working set）。实测快速项 0.20 s、基准 0.66 s（12×1600×900 + 120 帧）。
+- 已完成 T43-13（VisionRT）：`tests/test_package_app.py` 只保留部署事务/安装契约/`cmake -P` 元数据脚本；六个真实嵌套 Git+CMake 构建移入 `tests/test_build_metadata_integration.py`，注册为独立 `build_metadata_integration_contract`（`LABELS package;integration`）。新增 `integration` 测试组，快速回归用 `ctest -L package -LE integration`。嵌套工程按平台取 `mini_app.exe`/`mini_app`，并显式传入 `PYTHON_EXECUTABLE`。
+- 已完成 T43-13（VisionTools）：`test_infer_whitebox_trace` → `infer_trace_test`，`--case geometry|uninitialized|initialized-trace`；前两者 `smoke`，`infer_trace_initialized` 归 `gpu` 并单独 `SKIP_RETURN_CODE 77`（无引擎/权重时实测为 Skipped）。
+- 已完成 T43-09（优先项）：`declaration_values_contract`→`port_value_validation_test`、`declaration_value_contract`→`tool_definition_validation_test`（不再靠单复数区分）、`node_model_contract`→`node_list_model_test`、`ui_readback_contract`→`output_text_readback_test`、`runtime_readback_contract`→`result_readback_barrier_test`、`ui_drain_contract`→`display_reader_drain_test`；CMake 与 `docs/README` 同步，旧 target 不再注册。
+- 已完成 T43-13 附带命名：`RealBuildMetadataIntegrationContract` 六个用例改为行为名（如 `test_initial_build_records_head_and_artifact_time`），快速脚本矩阵类改名 `BuildMetadataScriptContract`，方法去掉 `matrix_NN`。
+- 已完成 T43-05：删除 `workbench_canvas.cpp` 的超长名称夹具与 `executed_long_name` 截图；保留普通悬停、边界、隐藏/点击与缩放矩阵。DPI/外观仍由 `VISIONRT_TEST_VISUAL` 显式开启。
+- 已完成 T43-10（部分）：修正 `docs/README` 两个死链到 R43 方案/工单；明确“Dense 数值→ndarray”是对早期“全部 list”约定的显式修订；补充 `integration` 分组、缓存/追踪场景说明与真实构建集成索引。
+- 新发现的产品级健壮性修复：`WriteBuildInfo.cmake` 依赖 PATH 猜 `python3`，在 PATH 存在另一套解释器且 `PYTHONHOME` 指向宿主时，查询脚本崩溃并把 commit 写成 `unknown`。生产 `POST_BUILD` 两处与测试现在都显式传入 `PYTHON_EXECUTABLE`，`build/bin/build_info.json` 复验为 `8aaf0e4af55d / dev`。
+- 明确延期：`result_view.h`→`ToolResultAssertions.h`（跨全部测试 include，纯风格）、`workbench_canvas.cpp`→`flow_canvas_scenarios`、`examples_contract`/`test_plugin_legacy` 改名，以及 CSV 中其余 130 余项路径建议。
+
+**验证证据**
+- `ctest -R "^(tool_definition_validation_test|port_value_validation_test|node_list_model_test|output_text_readback_test|result_readback_barrier_test|display_reader_drain_test)$"` → **6/6 通过**（3.88 s）。
+- `ctest -L package -LE integration` → **4/4 通过**（35.8 s，含 validator、JSON ZIP、依赖清单、增量构建）；`build_metadata_integration_contract` 单独运行 → **通过 56.8 s**。
+- VisionTools `ctest -R "^(image_read_cache_test|image_read_cache_benchmark|infer_trace_geometry|infer_trace_uninitialized|test_geometry_contract)$"` → **5/5 通过**（0.89 s）；`infer_trace_initialized` → Skipped（77）。
+- `workbench_canvas_contract` → 通过（2.8 s）；`cmake --build build --target VisionRT` 重新链接后 `build_info.json` 的 commit 不再为 unknown。
+- 未验证：全量 `tests-all`、`ctest -L ui`、安装态、GPU 实机、DPI/visual（本机仍不可用）。
+
+**下一步**
+- 提交三仓（Contracts 子模块先提交，再更新两仓 gitlink）。
+- 发布候选时再补 T43-10 的三 SHA、安装态与适用 GPU/visual 证据；其余命名建议按需在触碰文件时局部迁移。
+
+### 2026-11-02 — R43：两个 P1 修复与测试可信度收口
+
+**目标**
+- 按 `docs/R43` 的工单修掉 F43-01/02/03（数组桥接、逻辑 ndarray、模板叶类型），并把与生产相反的断言、重复执行和不可判别断言收口。
+
+**当前状态**
+- 已完成 T43-01：`PythonInterop::numpyView` 的 capsule 持有完整 `Array` 浅拷贝（不再只要 `bufferOwner()`），最后一个 NumPy 视图释放后才释放缓冲并卸载模块；新增 `tests/python_array_lifetime_contract.cpp`（真实插件 grid 输出→行 slice→释放宿主结果与注册表→视图仍可写→释放视图后模块卸载并写 released）。
+- 已完成 T43-02：`logic/common/engine.py` 在唯一输入归一入口接受 ndarray（先校验 rank/dtype/容器数/预算，再一次 `tolist()` 原地校验）；`tests/test_logic_engine.py` 增 7 项（list/ndarray 等价、rank2 int32、分支、dtype/rank 拒绝、预算、shape=(n,0) 容器上限、NaN/字符串）。
+- 修复过程中发现的产品缺陷（未列入 R43）：Python 工具实例的工厂绑定的是**打包声明**，而 `NodeRuntime` 用节点契约（表达式/条件节点的动态端口）创建实例，导致这些节点执行必然报“输出键不在声明中”。`core/Tool.h` 增 `PythonFactoryResolver`，`ToolRegistry` 用调用方契约重建工厂，`PythonRuntime::factory` 提供解析器；`tests/python_contract.cpp` 用真实包跑通 数组→表达式→分支。
+- 已完成 T43-03：`Array::elements<T>` 用 `detail::ArrayElement` 约束（拒 bool/嵌套 vector/指针），`boolBytes()` 保留；删除无调用的 `ArrayScalarType/ArrayScalarTypeT/arrayElementCount`；`test_array_contract` 加 9 条编译期断言。
+- 已完成 T43-11：性能文件删除“ndarray 必须被拒绝”的过期契约（改由 `python_value_contract` 承担接受/拒绝）；末节点结果改为增量收集后强制存在；删除 bool→0/1 的恒真队列断言；目录检索改“有匹配>0 / 无匹配==0”；阈值检查移到打印 PASS 之前并带实测值；`InLoop`→`repeated_once`，`scheduler_gap_ms`→`round_minus_slowest_ms` 并改正文说明。
+- 已完成 T43-04：`workbench_contract` 不再注册聚合 CTest 条目（`visionrt_contract(... NO_TEST)`）；`core` 与 `short-window` 迁出为独立场景；`REQUIRES` 由不存在的同名 executable 改为真实 runner；DPI 三个场景移入 `VISIONRT_TEST_VISUAL`（默认 OFF）。
+- 部分完成 T43-05：24 张 DPI×缩放截图矩阵已不在默认回归运行（visual 可选）；`hoverCardContract` 里的超长名称专项代码未删，仍是 visual 场景的一部分。
+- 部分完成 T43-06：`node_model_contract` 改 `backend`（不再占桌面锁、不再进 ui 组）；`value_bridge_benchmark` 归 `perf`；日志三项退出 `perf` 组（`perf` 只剩 4 个真实基准）。
+- 已完成 T43-07：聚合场景改为单一消费者（除模型场景外 `setViewActive(false)` 后再 `take()`）；`ProducerThreads` 首异常加锁并在 join 后重抛。
+- 已完成 T43-08：删除无产品入口的 `copyDiagnostics`，`requestOutputText/requestText` 去掉 `copy/diagnostic` 两个参数（产品只有“复制完整输出”一种意图）；`plugin_contract` 里借该入口导出诊断 JSON 的两段断言删除——结构化诊断已由 `workbench_contract` 直接经 `OutputModel::diagnosticText` 覆盖。
+- 已完成 T43-12：分发夹具改为当前信封 `{outputs:{value,__status_code,__status_message}, detail}` 并在探针中断言旧 `status` 键不存在；宿主执行拆成独立用例，缺环境显式 skip，`VISIONTOOLS_REQUIRE_HOST_EXECUTION=1` 时缺环境直接失败。
+- 已完成 T43-14：SDK 实例用局部 RAII 保证异常路径 release+destroy；计数器改为同实例两次、新实例一次；参数测试让原 image 真正离开作用域后再查弱引用。
+- 部分完成 T43-10：`docs/README.md` 增加“数组与 Python 类型”矩阵并索引新契约；三 SHA/安装/GPU/visual 的候选验收证据未补。
+- 未完成：T43-09 全仓命名迁移、T43-13 Tools 缓存/打包/GPU 场景拆分、T43-05 长名专项删除、契约子模块提交与两仓 gitlink 更新。
+
+**验证证据**
+- `ctest --test-dir build -L backend` → **40/40 通过**（22.88 s），含 `python_array_lifetime_contract`、`python_contract`、`native_value_lifetime_contract`。
+- `ctest --test-dir build -L sdk` → **7/7 通过**（含 `test_isolated_installation` 4.93 s）。
+- `ctest -R "^(ui_readback|ui_value|ui_completion|ui_result_isolation|workbench_popups|plugin_contract|workbench_core|workbench_short-window|workbench_output|workbench_parameters)_contract$"` → 全部通过。
+- `performance_contract.exe --rounds=3` → 通过（含新增的末节点/过滤/ndarray 断言）。
+- `ctest -R "^log_(text|aggregation|lifecycle)_contract$"` → 3/3（3.07 s）。
+- VisionTools `ctest -E test_infer_whitebox_trace` → **16/16 通过**（11.82 s）。
+- 反向验证（说明新断言可判别）：回退 capsule 为 `bufferOwner` → `python_array_lifetime_contract` 退出码 0xC0000409；去掉 registry 的契约解析 → `python_contract` 报“输出键不在声明中：p2”；让引擎拒绝 ndarray → `NumpyInputs` 5 失败 2 错误。
+- 未验证：DPI visual 场景（本机 `--dpi-child` 三个缩放均 0xC0000374/SEGV，与既有记录一致）、GPU、安装态完整链路、`ctest -L ui` 全组。
+
+**环境备注**
+- 本机 `tools/build.cmd` 的 vcvars 因安全策略拦截 `reg.exe` 而拿不到 Windows SDK，需手写 `INCLUDE/LIB` 与 PATH；PATH 里的 MSVC/SDK 目录要用 `/c/...` 形式，否则 Git Bash 会把 `C:/...` 转义成错误路径（表现为 `rc.exe` 找不到、`test_isolated_installation` 报 compiler broken）。
+
+**下一步**
+- 提交三仓：契约子模块提交后更新 RT/VisionTools 的 gitlink（当前 `git status` 显示子模块为 modified content）。
+- 再做 T43-09/T43-13；发布前补 T43-10 的三 SHA、安装态与适用 visual 证据。
+
+### 2026-11-02 — 提交（dev）
+
+- 宿主 `8aaf0e4`（80 文件，+3064/−2032）：声明 schema 5（nameEn/nameZh、单 token、PortRef 阶段限定、删 required）、默认值单源与输出补齐唯一入口、PythonRuntime 省略语义、工具树分类路径、about 移入 `AboutReport`、注册 `node_model_contract`。
+- 工具仓 `cfc573e`（37 文件，+2104/−2059）：22 份声明迁 schema 5、打包器读 implementation、工具停止写 None/Missing；追加 `4857d08` 修正图像加一失败用例断言。
+- 行尾按各文件原有风格归一：RT 19 个源文件、VT 22 份声明（此前批量脚本把它们整篇换了行尾，diff 曾虚高到 14406 行）。
+- 提交后复跑：RT 非 UI 60/60、VisionTools 16/16；`workbench_popups_contract`（about 文案）通过。
+- 未提交：两仓 `WORKLOG.md`、`docs/README.md`、`docs/T39_执行报告_20261028.md`（删除）、两份方案文档。
+
+### 2026-11-02 — U14/U15：工具声明 schema 5、限定端口引用与默认值单源
+
+**目标**
+- 按《统一修改优化方案》S07 与 Tickets U14/U15，把工具声明从 schema 4 一次性迁到 schema 5：`name_en/name_zh`、单 type token、删除 `required`、类型默认值单源物化、端口引用带阶段；同步 RT、VisionTools 的解析器、全部消费者、22 份工具声明与打包链路，不留双字段兼容。
+
+**当前状态**
+- 已完成（U14，模型）：`ToolDefinition` 收敛为 `nameEn/nameZh/version/implementation(categories/visibility/nodeModel/interaction)`；`PortDefinition` 为 `nameEn/nameZh/type/defaultValue` 加 `constraints(min/max/options)`、`ui(editor/tab/group/step/decimals/options_provider)`、`relations(image/alignment/path_mode/same_geometry_as)`、`display(color_order)`；新增 `PortRef`/`PortStage`，`inputs.images` 这类限定引用在 JSON 边界解析一次，内部不再拼字符串。
+- 已完成（U14，解析与校验）：schema 5 严格拒绝旧字段（`tool_id/display_name/kind/entry/init_params/inputs/outputs/required/dtype/rank`、大写 type 名、`vec_` 超过四层）；`type_from` 与 `type` 互斥并只接受 `init.*` 引用；关系引用统一按阶段解析后校验目标类型；宿主状态端口仍不可由作者声明。
+- 已完成（默认值单源）：`normalizeToolDefinition` 用 Contracts 的 `defaultValue(TypeSpec)` 物化每个值端口；`ToolValueValidation::validateToolExecution` 成为唯一的输出补齐入口（未写或写空的业务端口取声明默认值，未声明键仍报错），`NodeRuntime` 用 `portDefault()` 克隆默认值，避免两个节点共享可写数组；`PythonRuntime` 只转换实际返回的业务项，未声明键报错、省略键交给宿主补齐；`InputNormalizer` 删除 required 分支。
+- 已完成（U15，声明与消费者）：VisionTools 22 份声明整体迁移为 schema 5（含 ROI 关系、动态 `type_from`、交互映射的限定引用），全部通过宿主校验器；RT 侧 `ToolRegistry/ProjectEditor/ProjectStorage/NodeContracts/ToolPackage/ModuleIndex/PythonRuntime/OutputModel/ResultPresentation/AppController*/AssistPreview/ToolTreeModel` 与契约测试同步迁移；打包器 `package_tools.py/package_payload.py` 改读 `implementation` 块与 `name_en`；作者 SDK 删除 `OutputWriter.missing`，示例工具与 C++ 辅助工具不再向业务端口写 `None/Missing`。
+- 已完成（工具树）：`ui.category` 为中文路径数组，`ToolTreeModel` 取首段为分类、其余合并为子类，保持两级展示。
+- 未完成（U13）：GPU/性能基准与安装态跨语言复验；UI/workbench 套件本轮按要求未跑。
+
+**兼容边界（有意保留）**
+- 工程存储仍为 format 6：节点类型快照继续以 `type/dtype/rank` 结构化保存（声明 schema 与工程格式是两个独立版本维度），旧工程迁移路径不变。
+- 模块索引仍以 `tool_id` 为键，其值即声明 `name_en`；索引格式本身不随声明 schema 改版。
+
+**验证证据**
+- `cmake --build build` 与 `--target tests-all` → 全部目标编译通过。
+- `ctest -E "^(workbench_.*|ui_.*|gpu_tools_contract|package_app_contract|build_incremental_contract|dependency_manifest_contract|performance_contract)$"` → **59/59 通过**。
+- `visionrt_validate_tool` 逐份校验 22 份声明 → 22/22 通过；`--package F:/Projects/VisionTools/dist/visiontools-deploy --load` → 原生工厂全部可用。
+- VisionTools `ctest -E test_infer_whitebox_trace` → **16/16 通过**（含打包/分发/Python 工具/逻辑引擎）。
+- 未验证：`workbench_*` 与 `ui_*`（按要求未跑）、`gpu_tools_contract`、`performance_contract`。
+
+**下一步**
+- U13 收尾：GPU 与性能基准复跑、安装态与真实工具包端到端复核；UI 套件按环境单独排查后再计入结论。
+
+### 2026-10-31 — U11/U12：Array 新 ABI、NumPy 桥与工程 format 6（三仓整体切换）
+
+**目标**
+
+- 按《统一修改优化方案》S02 与 Tickets U11/U12 把 Array 从嵌套 vector 整体换成平坦存储 + Dense/Ragged 结构，同步 RT、Contracts、VisionTools 三仓的 Python 桥、工程持久化、作者 SDK 与全部测试，不留半迁移双写。
+
+**当前状态**
+
+- 已完成（U11，Contracts）：`Array` 持有 `shared_ptr<Storage>`，按 dtype 存 7 种元素（Bool 一字节/元素）；`dense/ragged/fromNested/nestedOf/elements/boolBytes/clone/retainedBy/borrowedDense` 与 `supportedTypes()` 7×4 表；删除旧 `get<NestedVector>`/`visit` 接口。
+- 已完成（U12，RT）：`PythonInterop` 对矩形数值 Array 给 pybind11 NumPy 视图（owner 借由 `PythonStorage::retain` 保活），ragged/字符串仍走嵌套 list；只读或非连续入口按一次复制处理并在测试中断言“不是零拷贝”；`fromPython` 拒绝 dtype/rank 不精确匹配。
+- 已完成（U12，持久化）：工程 `format_version` 升到 6，Array 值以 `shape`/`offsets` + `values` 结构化保存；4/5 旧工程按各自版本迁移仍可读；声明默认值仍是可读嵌套形式。`ui_value_contract`/`project_value_contract`/`project_storage_contract` 断言随之更新。
+- 已完成（U12，VisionTools）：作者 SDK 的 `InputReader.array/optional_array` 同时接受 ndarray 与 list，示例工具与全部 C++/Python 测试迁移到 `elements<>`/`nestedOf`；`MODULE_ABI_MAJOR` 升到 8，两端夹具与静态断言同步。
+- 已完成（U14 基础）：Contracts 提供唯一 `parseTypeToken/typeToken`（`vec_` 前缀 + 7 种元素名）与 `defaultValue(TypeSpec)` 单源默认值；声明 schema 迁移（name_en/name_zh、单 token、删 required）尚未开始。
+- 修复（本批集成期暴露的真实缺陷）：
+  - `ValueJson` 图像编码按用途分流：`Literal`/`Stored` 只允许空批次并写 `[]`（像素不入文档），`Display` 输出 `{type,count,images[{rows,cols,channels}]}` 描述；此前把三者合并导致工程存盘写出对象、重开报“JSON 值必须是数组”。
+  - `Array::Storage` 字段顺序改为 `keepAlive` 在最先声明：C++ 逆序析构使“钉住模块的所有者”最后释放，插件值（`native_value_lifetime_contract`）在模块卸载后再析构缓冲所有者会踩空虚表。
+  - `msvc-env.sh` 补 Windows SDK `bin`（`rc.exe`），否则 `test_isolated_installation` 的 try_compile 因找不到资源编译器报“compiler broken”。
+  - `NodeListModel::sync` 的行索引表在删行后没有随位移更新：`update()` 用过期下标访问 `rows_` 并写穿堆内存，损坏在后续释放时才报 0xC0000374；`ui_result_isolation_contract`、`plugin_contract` 两项失败同源。改为每次结构变化后整表重建索引，并在 `update()` 入口校验下标与行标识，越界即重建并放弃该次更新。
+- 未完成：U14 声明模型（name_en/name_zh、单 token、删 required）与 U15 全部工具声明迁移；U13 收尾（打包/安装态/GPU/性能复验）。按用户要求，UI/QML 契约本轮不再反复运行。
+
+**验证证据**
+
+- `cmake --build build --target tests-all` → 全部测试目标编译链接通过。
+- `ctest -E "^(workbench_.*|ui_.*|plugin_contract|gpu_tools_contract|package_app_contract|build_incremental_contract|dependency_manifest_contract|performance_contract)$"` → **58/58 通过**（40s），含数组/值/工程/运行/插件/示例/SDK 契约。
+- `ctest -R "^(ui_result_isolation_contract|plugin_contract)$"` → 2/2 通过（修复前两者均 0xC0000374）。
+- 未验证（按要求未跑或环境不稳）：`workbench_*` 与 `ui_*` 共 30 项。其中 `workbench_contract` 的 DPI 子进程在本机反复出现 0xC0000374 / SEGV / 0xC0000142（同一二进制连续三次运行结果不同），属渲染子进程环境问题，需单独排查，不计入本轮结论。
+- `value_bridge_benchmark`（smoke）→ 28 种 Array/ROI/Image 组合全部通过，矩形数值走 ndarray 单对象通道，`OutputModel` 快照清理后 `waitForRelease` 正常排空。
+- VisionTools `ctest -E test_infer_whitebox_trace` → 16/16 通过；`package_tools.py` 重新出包 22 工具并用宿主校验器验证通过；部署目录与 `build/tools-package` 同步刷新。
+- 未验证：`gpu_tools_contract`（需 GPU）与 `performance_contract`（长时间基准）本轮未运行。
+
+**下一步**
+
+- U14：ToolDefinition/DefinitionJson 改 `nameEn/nameZh` + 单 type token + 删除 `required`，由 `defaultValue(TypeSpec)` 物化默认值；U15：22 份工具声明、校验器、打包索引与全部声明消费者一次性迁移（schema 5）。迁移必须与声明同批切换：解析器不再接受 `type/dtype/rank` 三字段与 `required`，`type` 只接受 `int|float|bool|string|image|roi|vec_…` token。
+- `workbench_contract` 的 DPI 子进程需单独排查（本机 0xC0000374/SEGV/0xC0000142 交替出现，疑似 Qt 软件渲染 + 注入环境），不影响后端口径。
+- U13：GPU 与性能基准复跑，安装态与真实工具包端到端复验。
+
+### 2026-10-30 — U10：日志测试按职责拆分与拥有型夹具
+
+- `tests/log_contract.cpp`（1214 行）拆为三个测试源：`log_text_contract`（单行格式、文件同文、控制符转义、UTF-8 边界截断、`boundedSingleLine` 矩阵与分配探针）、`log_aggregation_contract`（有界信箱、批量、丢弃摘要、错误聚合、Critical、Qt 桥接、每日文件、预算、模型裁剪）、`log_lifecycle_contract`（不可写降级、默认目录、幂等启停、handler 还原、并发关闭与 A/B/C 锁交错）。
+- 新增 `tests/log_test_support.h`：`ServiceSession` 拥有启停与配置、`ProducerThreads` 拥有生产线程并按线程收集异常后统一 `join()` 重抛；删除 `ThreadScopeGuard` 的原生指针登记与 `catch(...)` 吞异常。三个目标共用 `visionrt_log_testing` 与同一 `VISIONRT_LOG_TEST_HOOKS`，未引入新框架。
+- CMake 用同一段 `foreach` 注册三个契约，标签与 60s 超时保持一致；`docs/README.md` 两处引用改为按职责的三个契约。
+- 验证：`ctest -R "^log_(text|aggregation|lifecycle)_contract$"` → 3/3 通过（0.44s / 1.97s / 0.44s）。
+
+### 2026-10-30 — U07：节点 ListModel、局部通知与路由索引
+
+- 新增 `src/ui/NodeListModel`：固定 `nodeId` 角色与 id→行索引；`sync` 用插入/删除/移动行通知，`update` 只对实际变化的角色发 `dataChanged`；整体 `reset` 仅用于换流程/换工程。
+- `AppController` 暴露 `nodeListModel`，`nodes()` 变成模型快照；轮询只对本次变化的节点重算并更新单行，不再重建整表；`changed()` 负责结构同步。
+- `wires` 改为独立 `wiresChanged`，由连接拓扑签名决定，节点耗时/状态不再触发连线重绘。
+- `FlowCanvas` 直接以模型为 Repeater 数据源，删除 `nodeIds`/`findNode`/全表扫描；悬停、菜单、框选改用 `nodeRecord(id)`/`nodePosition(id)` 的 ID 查询；`NodeDelegate` 改为明确的角色属性。
+- `routeWires` 的节点合法性检查改为一次构建 ID 集合，去掉每条几何对全部节点的扫描。
+- 验证（按需单跑）：`workbench_canvas_contract`（含 Qt `QAbstractItemModelTester` 与位置角色 `dataChanged` 断言）、`workbench_status_contract`、`workbench_clipboard_contract`、`workbench_flows_contract`、`workbench_layout_contract`、`workbench_publication_contract` 通过。
+
+### 2026-10-30 — U06（第三簇）：结果展示状态独立
+
+- 新增 `src/ui/ResultPresentation.h/.cpp`：唯一拥有 `snapshots/active/lifecycle/instance`、图像选择（输出/序号/批次）、显示请求（视口/缩略图/叠加/ROI 目标）、文本与读回队列、drain 协调；内部组合既有 `OutputModel`、`DisplayConverter`、`RoiEditSession`。
+- 控制器只实现 `PresentationHost` 的只读查询与 QML 通知；`Impl` 删除上述字段及 `TextRequest/TextResult/TextMailbox`，`Display/Readback` 两个分片退化为转发。
+- 迁移中修正三个真实契约暴露的边界：
+  - 无图 Rect 编辑的冻结背景是 `Missing`，展示层不能把“端口不存在”判成会话失效；
+  - 排队文本读回必须用 `portContext` 重建含 publication 的实时上下文再比对（否则被当作过期丢弃）；
+  - 运行期切换图像序号属于视图状态，允许改变并延后呈现（QML 仍随 `workspaceEnabled` 禁用），与 `ui_readback_contract` 一致。
+- 验证（按需单跑）：`workbench_roi_contract`、`ui_value_contract`、`ui_readback_contract` 依次通过；`VisionRT` 重编通过。
+
+### 2026-10-30 — U06（第二簇）：工程操作状态独立
+
+**目标**
+- 把新建/打开/保存/关闭/重置/删除节点的排队状态、未保存决策、排空与重置进度、关闭握手下沉到唯一拥有者，控制器只执行副作用。
+
+**当前状态**
+- 已完成：U06 第二簇（ProjectOperations）。
+  - 新增 `src/ui/ProjectOperations.h/.cpp`：拥有 `Action`、`ClosePhase`、pending 路径、approved、awaitingDecision、resetStarted、drained、closing、closeReadyEmitted 与待替换工程；`begin/cancel/complete/holdForOwners/markReady` 是唯一状态迁移入口。
+  - `AppController::Impl` 删除 `Pending`、`ClosePhase`、`pending*`、`awaitingDecision`、`closing`、`closeReadyEmitted`、`replacement` 及 `isClosing()` 转发函数；`request/advancePending/finishClose/poll/refresh/idle/start` 与 Assist/Readback/Display 全部改用 `operations`。
+  - `ProjectOperations` 不持有当前工程、不复制 `RuntimeState`；待打开的 `replacement` 只存在于操作期间，完成时移动给 `ProjectEditor`。
+- 未完成：U06 第三簇 ResultPresentation；U07、U10、U11、U12、U14、U15。
+
+**验证证据**
+- `cmake --build build --target VisionRT workbench_contract ui_value_contract` 通过。
+- `ctest -R "^(workbench_lifecycle_contract|workbench_startup_contract|workbench_paths_contract|workbench_roi_contract|workbench_interaction_contract|ui_value_contract|workbench_assist_contract)$"` → 7/7 通过；`workbench_roi_contract` 连续运行 6 次全通过（期间一次 0.74s 失败为本机窗口/DLL 环境波动，非断言失败）。
+- 状态搜索：`src/ui` 中不再存在 `pendingPath/pendingApproved/awaitingDecision/pendingReset/pendingDrained/closeReadyEmitted` 或 `Impl::Pending/ClosePhase`。
+
+**下一步**
+- U06 第三簇 ResultPresentation（snapshots/outputs/readback/display 状态）→ U07 节点 ListModel。
+
+### 2026-10-30 — U06（第一簇）：ROI 编辑会话独立
+
+**目标**
+- 按 S03 先把 ROI 编辑状态从 `AppController::Impl` 收拢到唯一拥有者，再迁移工程操作与结果展示两簇；本步只做 ROI 会话，保持行为不变。
+
+**当前状态**
+- 已完成：U06 第一簇（RoiEditSession）。
+  - 新增 `src/ui/RoiEditSession.h/.cpp`：拥有编辑目标、草稿、原绑定、冻结背景、视图恢复信息、会话 id、字段有效性；`begin/end/commitGeometry/commitRectangle/editor()` 是唯一写入口，几何值由 `validateValue` 校验后经既有 `ProjectEditor::setBinding` 提交。
+  - `AppController_p.h` 删除 `RoiPreview`、`roi`、`roiSerial`，改为 `RoiEditSession roiSession{editor}`；`AppControllerRoi.cpp`、`AppControllerDisplay.cpp`、`AppControllerBindings.cpp`、`AppController.cpp`、`AppControllerAssist.cpp` 全部改为通过会话读写，不再直接改草稿。
+  - 视口与控制器仍各自只做一件事：会话产出目标+新值，控制器负责信号与视口恢复，视口不反向写会话。
+- 未完成：U06 的 ProjectOperations、ResultPresentation 两簇；U07、U10、U11、U12、U14、U15。
+
+**验证证据**
+- `cmake --build build --target VisionRT` 通过；`workbench_contract`、`ui_value_contract`、`viewport_contract` 重编通过。
+- `ctest -R "^(viewport_contract|workbench_roi_contract|workbench_assist_contract|ui_value_contract|workbench_interaction_contract|workbench_cancellation_contract|workbench_lifecycle_contract)$"` → 7/7 通过（`viewport_contract` 首次在批量运行时崩溃一次，单独与复跑均通过，属既有 UI 时序波动）。
+- 广回归 14 项中 13 项通过；`workbench_roi_contract` 在批量运行时一次等待超时，单独运行与复跑通过。
+- 状态写入点检查：`src/ui` 中不再存在 `impl_->roi`、`roiSerial`、`RoiPreview` 或对 `roi->draft/index/background` 的直接写入。
+
+**下一步**
+- U06 第二簇 ProjectOperations（打开/新建/保存/关闭 pending 状态）→ 第三簇 ResultPresentation；随后 U07 在 ResultPresentation 上建节点 ListModel。
+
+### 2026-10-30 — U05：RT/Tools ROI 消费方迁移到语义视图
+
+**目标**
+- 按 S01 完成 ROI 消费者迁移：视口绘制/命中/编辑、Assist、ROI 读写/参数、Tools 裁剪/投影/检测/圆与行间距测量全部改用 Contracts 命名视图与约束编辑，删除嵌套 `value_type` 与几何魔数解码；底层三层 vector 与端口格式不变。
+
+**当前状态**
+- 已完成：U05。
+  - Contracts：`RegionEditor` 新增 `translate`（按几何类型只移动坐标槽，矩形仍是左上角语义）与 `setVertex`（仅点/线段/多边形/点集；矩形与圆走约束 setter）；`test_roi_view_contract` 覆盖平移、顶点编辑与拒绝路径。
+  - RT：`ROI::value_type` 系列别名全部替换为 `EncodedRegion/RegionGroup`；`ImageViewport` 的 center/contour/handles/命中/创建/拖动/旋转/顶点编辑改为 `RegionView` 一次分派 + 命名视图 + `make*`；`AppControllerRoi` 矩形读写改 `RectangleView`/`makeRectangle`，`AppControllerMetadata` 矩形映射改视图，Assist 种子与 Display 分组仅保留批次索引。`roiKind()` 不再出现在绘制循环中。
+  - Tools：`roi::Record` 直接等于 `visionrt::EncodedRegion`，删除自带 kind+values DTO 与 `encoded()` 二次编码；`groups()` 在入口用 `RegionView` 一次校验后传递；`contains/regionMask` 改 Rectangle/Circle/Polygon 视图；裁剪、投影、检测过滤、YOLO 输出、圆测量、行间距、Assist 全部改用视图/`make*`。Tools 内 `3rdparty/VisionRTContracts` 同步同一份 Contracts 改动。
+- 未完成：U06、U07、U10、U11、U12、U14、U15。
+
+**验证证据**
+- RT 全量构建 `cmake --build build` 通过；`ctest -R "^(viewport_contract|workbench_roi_contract|workbench_assist_contract|workbench_assist_release_contract|workbench_interaction_contract|workbench_status_contract|ui_value_contract|test_roi_view_contract|test_sdk_value_contract|test_sdk_parameters|workbench_cancellation_contract|ui_notifications_contract)$"` → 12/12 通过。
+- Tools：`visiontools_common/preprocess/metrology/infer` 重编通过；`test_preprocess_contract/test_geometry_contract/test_module_contract/test_writable_tools_contract/test_upstream_status_contract/test_read_cache_contract/test_output_ownership_contract/test_installation_consumer/test_yolo_postprocess/test_infer_contract` → 10/10 通过；`test_infer_whitebox_trace` 因无 GPU 跳过。
+- ROI 成本边界（`roi_view_benchmark`，10 万记录，15 次中位数，ns/记录）：构造矩形 42.97（每条一个 vector 分配，未消除）；校验读 20.05；trusted 读 16.10；点集 trusted 读 1.27。说明视图只去掉重复解码与验证，不改变嵌套载体的分配成本。
+- 消费者搜索：RT `src`、Tools `src` 中不再出现 `ROI::value_type`、`record.values/kind` 或 `record[1..5]` 形式解码（测试中的原始编码仅作为序列化边界断言保留）。
+
+**下一步**
+- U06（S03/F04 控制器状态归属拆分）→ U07（S04 节点 ListModel）→ U10；U11/U12、U14/U15 按协议批次整体切换。
+
+### 2026-10-30 — 统一方案首批实施：U01/U02/U03/U04/U08/U09
+
+**目标**
+- 按 docs/统一修改优化方案.md 与 统一优化_Tickets.md 实施：F01 运行期交互收口、F02 嵌套构建工具链复用、F03 示例语义、S01 ROI 语义视图（Contracts 部分）、S05 显示归一化、S06 插件失败模块释放。
+
+**当前状态**
+- 已完成：U01、U02、U03、U04、U08、U09。
+  - U02：`AppController::workspaceEnabled/stopEnabled/stop()` 从 `RuntimeState` 派生唯一可用条件；单次/循环/单节点共用 `stop()`；QML Action、菜单、画布、视口、参数、工具库、输出全部改绑该条件；停止/关闭不受影响。删除 `SaveRequest`、`flushDeferredSaves` 与运行中保存排队，运行中保存直接拒绝且不落盘。
+  - U08：非 8 位显示路径改为 OpenCV 批量原语（逐通道极值/掩码/convertTo/merge 直接写入 QImage），非有限像素统一为不透明黑并提示“非有限像素显示为黑色”；8U 路径不变。
+  - U01：`RealBuildMetadataIntegrationContract` 删除 vcvars/SDK/Ninja 硬编码发现，改用 build.cmd 初始化环境 + CMake 传入 `CMAKE_COMMAND/CMAKE_MAKE_PROGRAM/CMAKE_CXX_COMPILER`；删除只断言提交号变化的 test_07。顺带修复 `visionrt_apply_test_environment` 的 PATH 列表未全转义缺陷（此前测试只得到第一个 PATH 目录，嵌套构建必然失败）。
+  - U04：Contracts 新增 `EncodedRegion/RegionGroup`、Point/Segment/Rectangle/Circle/Polygon/PointSet 视图、`RegionView`（一次校验后不再扫描）、`make*` 构造与 `RegionEditor` 约束编辑；`rectangleCorners`/`transformedRoiBounds` 复用视图，矩形仍存左上+宽高+角度。底层仍是三层 vector。
+  - U03：examples/README 明确两条并行分支与“节点5读原图”，断言值 51.0/22.95 与处理分支 95.625/191.25 可区分。
+  - U09：失败模块在锁外析构，显式 `rejectedModule` 分支。
+- 未完成：U05（RT/Tools 消费方迁移到 ROI 视图）、U06、U07、U10、U11、U12、U14、U15。
+
+**验证证据**
+- 显示转换同条件基准（`display_conversion_benchmark`，同机同构建，15 次中位数，毫秒）：
+  - 1080p 16UC1 101.579 → 2.826；1080p 32FC1 105.113 → 7.415；1080p 32FC4 182.200 → 42.740；4K 16UC3 497.978 → 43.169；4K 32FC1 420.748 → 32.489；1080p 8UC3（未改路径）0.920 → 0.953。
+  - 证据文件 build/evidence/display-conversion-{before,after}.csv。
+- `ctest -R "^(workbench_[a-z_]+|ui_[a-z_]+|examples_contract|plugin_contract|definition_json_contract|declaration_values_contract|project_storage_contract|project_value_contract|runtime_value_contract|output_value_contract|display_storage_contract|viewport_contract|test_sdk_value_contract|test_roi_view_contract)$"` → 44 项中 41 通过；3 项因测试二进制未重编而失败，重编后全部通过（flows/clipboard/receiver_identity）。
+- `ctest -R "^(package_app_contract|build_incremental_contract)$"` → 2/2 通过（嵌套真实 CMake/Ninja 编译、脏/未知候选拒绝、增量 no work to do）。
+- `ctest -R "^(test_roi_view_contract|test_sdk_value_contract|test_sdk_parameters|viewport_contract|workbench_roi_contract|ui_value_contract)$"` → 全部通过；`ui_value_contract` 的旧“排队保存”断言改为新语义（拒绝且不写入）后通过。
+- 新增 `workbench_interaction_contract`（真实窗口 + 真实 Python 工具）：单次/节点/循环三种运行均锁工作区、`stop()` 生效、运行中 `save` 拒绝且不落盘、结束恢复；通过。
+- 环境限制（未验证项）：本机 Security Center 屏蔽 reg.exe，vcvars 无法完整初始化；在开发者环境（VSCMD_VER/INCLUDE/LIB/PATH 就绪）中 `package_app_contract` 与 `build_incremental_contract` 均通过，从无 VS 环境的纯 PowerShell 直接运行时这两项会因 vcvars 失败而失败，属本机安全策略限制而非代码问题。`assist_viewport_contract` 在本机基线代码上同样失败（hover 报 213,72），与本轮改动无关，未修复。
+
+**下一步**
+- U05：把 ImageViewport（contour/center/handles/hit/编辑）、AppControllerRoi/Assist 与 VisionTools 的几何消费者迁移到 `RegionView`，删除嵌套 `value_type` 与魔数解码后跑 viewport/workbench_roi/cpu_tools 回归。
+- 其后按方案顺序推进 U06、U07、U10，最后再一次性做 U11/U12 与 U14/U15（Array 与声明协议必须整体切换，不能半迁移）。
+
+### 2026-10-29 — 基于真实调用点完善统一方案与工具声明设计
+
+**目标**
+- 分析当前代码并完善完整流程、六项架构问题及用户新增的工具JSON设计，保持docs只有当前统一入口。
+
+**当前状态**
+- 已完成设计：补齐运行状态/停止入口、ROI入口一次校验和命名视图、控制器字段归属、NodesModel通知、显示语义及工具链复用入口。
+- 用户确认Array按新ABI/API完整迁移设计；方案明确所有权、可写元素/不可resize发布存储、工程clone隔离、Dense/Ragged、NumPy与工程序列化迁移。ROI底层和节点值仍是三层vector<double>。
+- 新增S07工具JSON重设计：name_en/name_zh、vec_vec_int等紧凑类型、implementation/ports/ui/relations分层。按用户纠正删除required/allow_missing，默认使用类型空值，仅业务覆盖写default；状态不由默认值判断。
+- 统一方案现含11个Specs与15项Tickets；旧文档未恢复。未实施产品代码、未提交推送；保留用户AGENTS.md改动。
+
+**验证证据**
+- 阅读Contracts ROI/Array/Value/Parameters、PythonImages/PythonStorage/PythonInterop、ProjectValues/ValueJson、AppController_p/ROI/QML模型及实际VisionTools消费者。
+- 对22份工具声明统计：192个端口，174个required:true、18个false、52个Array声明；设计已覆盖真实声明而非只改例子。
+- `ctest --test-dir build -R '^(test_array_contract|python_value_contract|display_storage_contract|viewport_contract)$' --output-on-failure --no-tests=error` → 已有二进制4/4通过，总0.87s；没有执行全量测试或声称新设计已实现。
+- 3段JSON示例语法检查通过；docs本地链接检查通过；11项Specs均映射Tickets；`git diff --check -- docs`通过。
+- 查询Qt、pybind11与OpenCV官方说明及既有实现，复用能力引用已放统一方案。
+
+**下一步**
+- 读取docs/统一修改优化方案.md及统一优化_Tickets.md，根据用户对具体实施的指令开发。默认值/工具JSON、Array协议迁移均需按新方案整体执行，不能继续按旧required或旧Array写接口实现。
+
+### 2026-10-29 — 清理过时审查文档与统一方案入口
+
+**目标**
+- 删除已被统一方案替代的报告与分散方案，保留单一当前入口。
+
+**当前状态**
+- 已删除28个过时文件：T39报告、R42方案ZIP、R43—R48报告/Specs/Tickets及分散分析与方案。
+- docs现保留README.md、统一修改优化方案.md、统一优化_Tickets.md；修正索引、移除历史版本表及失效交付链接。
+- 保留既有WORKLOG历史记录及用户对AGENTS.md的改动；未修改产品代码。
+
+**验证证据**
+- `Get-ChildItem docs -File` → 仅上述3份当前文档。
+- 本地Markdown链接检查发现README跨仓错误链接，已改为明确的VisionTools仓库路径说明。
+- docs过时文档名称引用扫描无残留；`git diff --check -- docs`通过。纯资料清理未运行产品测试。
+
+**下一步**
+- 以docs/统一修改优化方案.md及统一优化_Tickets.md为当前设计来源；产品实施状态仍为待确认/未实施。
+
+
+### 2026-10-30 — R47 发布门禁元数据全入口校验、显式发布开关、Git稳定NUL解析、真实构建集成测试与全量端到端验证
+
+**目标**
+- 依据 R47 验收报告、方案与 Specs（S47-01 至 S47-04）及 Tickets（T47-01 至 T47-04）完整实施，严格保持 ABI7 协议信封与无状态交付规范。
+- T47-01：发布门禁在元数据缺失、损坏、unknown 或 dirty 时全入口严格拒绝（S47-01）。覆盖 `package_tools.py`、`package_app.py: deploy_tools_package` 与 `package_app.py: verify_package` 三大入口；在失败发生于替换旧安装包之前实现原子保护；显式保留 `--allow-dirty` 开发旁路。
+- T47-02：发布模式与 Git 状态语义显式解耦（S47-02）。根 CMakeLists.txt 引入 `VISIONRT_RELEASE_BUILD` 与 `VISIONTOOLS_RELEASE_BUILD` 显式开关，不把常规开发 `-DCMAKE_BUILD_TYPE=Release` 优化配置等同发布门禁；创建 `cmake/check_git_workspace.py` 使用 Git porcelain `-z` 稳定 NUL 定界接口解析路径与状态，处理中文/引号/分号/空格及 `R`/`C` 重命名两端（防止生产文件重命名为审查文档绕过校验）；Git 状态失败统一输出 `dirty: "unknown"` 并由发布模式直接拦截。
+- T47-03：真实 CMake/Ninja 构建产物集成测试（S47-03）。在 `VisionRT/tests/test_package_app.py` 编写 `RealBuildMetadataIntegrationContract`，使用真实独立临时 Git 仓真实编译 C++ `mini_app.exe` 产物，覆盖：1. 干净初始构建与元数据匹配；2. 无变化构建复用产物与保存时间戳；3. 文档提交更新 commit 但复用二进制；4. 生产源码变更触发重新编译且发布模式拒绝 dirty；5. 未跟踪被包含头文件触发 dirty 且发布模式拒绝；6. Git 查询失败标记 unknown 且发布模式拒绝；7. 构建期间候选变动检测。
+- T47-04：候选发布能力与全量端到端证据（S47-04）。固定两仓发布候选并推送远端 `origin/dev`（在线校验远端 SHA）；使用真实 YOLO engine 补跑 VisionTools 全部 17 项 CTest（消除白盒 trace 跳过，达 100% 通过）；独立应用 `VisionRT.exe` 实跑 `pipeline_cpu_python.vrt.json` 全链示例工程并记录日志与截图；运行独立真实 DLL 消费者 `test_installation_consumer.exe` 验证 8 项图像工具；执行安装态契约与 VisionRT 全量 91 项 CTest 并归档 JUnit XML 报告。
+
+**当前状态**
+- 已完成：
+  - T47-01：两仓打包、安装部署及验证入口元数据校验全部实现，反例与原子保留均已验证；
+  - T47-02：显式发布开关接通，Git porcelain `-z` 跨平台解析脚本落地，两端重命名检查生效；
+  - T47-03：`RealBuildMetadataIntegrationContract` 7 项真实编译与增量行为测试全部通过；
+  - T47-04：固定远端候选在线一致，VisionTools 17 项全过（白盒 trace 真实通过，0 跳过），独立应用流程实跑成功，独立消费者 8 项工具执行验证完成，VisionRT 全量 91 项 CTest 100% 通过。
+- 未完成：无。
+
+**验证证据**
+- 远端分支 SHA 核验：
+  - `git ls-remote origin dev`（VisionRT） → `d54b2a1f07c38f1e0f3e781008211de71d40870f`；
+  - `git -C F:\Projects\VisionTools ls-remote origin dev` → `522d41c9be018363289d2b9545b93cb4b2432fa1`；
+  - `git -C F:\Projects\VisionRT\3rdparty\VisionRTContracts ls-remote origin main` → `b2b643bfb9ee8510521dc1f978a55d313be4d8a9`（ABI 7）；
+- 真实构建集成测试：
+  - `ctest --test-dir build -R "^package_app_contract$"` → **Passed (16.18s)**（覆盖 34 项测试，包含 7 项真实 CMake/Ninja 编译与增量测试全部通过）；
+- 真实工具打包与部署：
+  - `python F:\Projects\VisionTools\tools\package_tools.py --build-dir F:\Projects\VisionTools\build --install-dir F:\Projects\VisionTools\dist\VisionTools --zip-output F:\Projects\VisionTools\dist\VisionTools.zip` → **已打包 22 个工具**，`build_info.json` clean，commit `522d41c`；
+  - `python tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package F:/Projects/VisionTools/dist/VisionTools.zip --force-clean` → **1836 文件部署完成**，三仓元数据检验通过且全部为 clean 候选；
+- 独立动态库消费测试：
+  - `cmd.exe /c "set PATH=F:\tmp\VisionRT\tools-package\bin;D:\Software\dev\opencv-4.8.0\build\x64\vc16\bin;%PATH% && F:\Projects\VisionTools\build\tests\test_installation_consumer.exe F:\tmp\VisionRT\tools-package\bin\vst_image.dll"` → **[PASS] test_installation_consumer passed successfully (ReturnCode: 0, 8/8 工具正常执行)**；
+- 独立应用真实运行工具流：
+  - `F:\tmp\VisionRT\VisionRT.exe --project F:\Projects\VisionRT\examples\pipeline_cpu_python.vrt.json --run-once --screenshot F:\tmp\launch_project_r47.png --screenshot-delay 3000` → **Exit code: 0**；
+  - 应用日志 `F:\tmp\VisionRT\logs\visionrt_2026-10-30.log` 记录启动、打开工程 `pipeline_cpu_python.vrt.json`、开始单次运行、正常退出；
+  - 界面截图 `F:\tmp\launch_project_r47.png`（108,506 字节）留存；
+- 安装态契约：
+  - `ctest --test-dir build -R "^installed_"` → **2/2 Passed (100%)**（`installed_pipeline_contract` 5.97s, `installed_python_author_contract` 0.28s）；
+- VisionTools CTest：
+  - `cmd.exe /c "set VISIONTOOLS_TEST_YOLO_ENGINE=F:\Projects\VisionRT\build\gpu-fixtures\yolov8n.engine && ctest --test-dir F:\Projects\VisionTools\build --output-on-failure --output-junit F:\tmp\VisionTools_R47_CTestResults.xml"` → **17/17 Passed (100%, 0 Skipped, 0 Failed)**，白盒 trace `test_infer_whitebox_trace` 实跑 0.29s 通过；
+- VisionRT 全量 CTest：
+  - `tools\build.cmd ctest --test-dir build --output-on-failure --output-junit F:\tmp\VisionRT_R47_CTestResults.xml` → **91/91 Passed (100%, 0 Failed, 0 Skipped)**（总耗时 358.44s）。
+
+**下一步**
+- 所有 R47 工单（T47-01 至 T47-04）已全部关闭，测试矩阵与真实产物完整通过，等待发布验收。
+
+### 2026-10-30 — R46 构建元数据真实状态、未跟踪生产文件检测、9项集成测试矩阵与独立环境真实工具发布验证
+
+**目标**
+- 依据 R46 方案、Specs 与 Tickets（T46-01 至 T46-04）完整实施并验证，保持 ABI7 协议信封不变。
+- T46-01：双仓构建元数据与发布关口拒绝校验（S46-01）。`WriteBuildInfo.cmake` 修复 Git 执行失败时错误返回上一次 commit SHA 与 dirty=false 的降级缺陷（F46-01），在失败时将 commit、branch、dirty 统一置为 `unknown`，并在 Release 构建模式下直接以 `FATAL_ERROR` 终止；状态检查改用 `git status --porcelain -uall` 并显式排除 `WORKLOG.md`、`docs/R[0-9].*\.md` 及 `docs/VisionRT_.*\.zip`，将未跟踪的生产源码/头文件纳入脏工作区判定（F46-02）；发布脚本 `package_app.py` 与 `package_tools.py` 增加元数据合规校验，默认拒绝 commit 为 `unknown` 或 dirty 不为 false 的产物，提供 `--allow-dirty` 调试标志。
+- T46-02：元数据 9 项集成测试矩阵（S46-02）。在 `VisionRT/tests/test_package_app.py` 中编写 `BuildMetadataIntegrationContract` 测试套件，使用真实独立临时 Git 仓库与小型 CMake 产物测试真实脚本行为（覆盖：1. 首次干净构建；2. 无变化增量构建；3. 仅提交审查文档；4. 跟踪代码变更 dirty；5. 未跟踪被引用头文件 dirty；6. 仅新增白名单审查文档保留 clean；7. 子模块脏状态；8. Git 异常失败 unknown 降级；9. 发布关口拒绝 unknown/dirty）。
+- T46-03：固定候选在线引用验证与独立环境真实工具发布验证（S46-03）。采用两仓固定 Release 干净提交候选并推送远端，在线查询 `origin/dev` 引用验证匹配（VisionRT: `969f37b25a870c8d6bd5ecfbb140422a28e381fa`，VisionTools: `86f479c315baec65e8f4687d1a7a278316cb89c2`，VisionRTContracts: `b2b643bfb9ee8510521dc1f978a55d313be4d8a9`）；打包部署至 `F:\tmp\VisionRT` 并通过校验；在隔离环境（PATH 仅保留 Windows 系统目录）执行独立原生消费者 `test_installation_consumer.exe` 验证打包的 `vst_image.dll`（8 项图像工具真实执行并通过）；执行安装管线测试与 Python 算子测试；独立运行 `VisionRT.exe` 并捕获视觉截图；归档 JUnit 报告。
+- T46-04：测试维护与堆分配探针优化（S46-04）。`VisionRT/tests/log_contract.cpp` 分配探针输出次数/字节及编译环境 `[MSVC 1929]`；将受控并发测试夹具中的 `std::vector<std::unique_ptr<std::thread>>` 重构为固定大小原生指针数组 `std::thread* threads[2]`，避免堆分配及其引发的局部异常处理复杂度。
+
+**当前状态**
+- 已完成：
+  - T46-01：两仓 `cmake/WriteBuildInfo.cmake`、`tools/package_app.py`、`tools/package_tools.py` 均已更新；
+  - T46-02：`tests/test_package_app.py` 9 项矩阵测试全部通过；
+  - T46-03：固定 Release 候选提交并推送到远端 `origin/dev`，在线确认远端 SHA；部署独立安装包 `F:\tmp\VisionRT` 验证三大组件元数据完全匹配；无开发路径注入下独立消费者验证 `vst_image.dll` 全部 8 项工具执行成功（返回码 0）；独立运行无头截图成功（47,642 字节）；SDK 隔离安装测试通过；两仓全量 CTest 均通过且留存 XML；
+  - T46-04：`log_contract.cpp` 堆分配探针输出与线程固定结构优化完成，测试全部通过。
+- 未完成：无。
+
+**验证证据**
+- `git ls-remote origin dev`（VisionRT） → `969f37b25a870c8d6bd5ecfbb140422a28e381fa`（与本地 HEAD 及 build_info.json 完全一致）；
+- `git -C F:\Projects\VisionTools ls-remote origin dev` → `86f479c315baec65e8f4687d1a7a278316cb89c2`（与本地 HEAD 及 build_info.json 完全一致）；
+- `git -C F:\Projects\VisionRT\3rdparty\VisionRTContracts ls-remote origin main` → `b2b643bfb9ee8510521dc1f978a55d313be4d8a9`（ABI 7，与 build_info 完全一致）；
+- `pytest tests/test_package_app.py -k BuildMetadataIntegrationContract` → **9/9 Passed**；
+- `ctest --test-dir build -R "^package_app_contract$"` → **Passed (11.05 sec)**（覆盖 23 项集成测试）；
+- `tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package F:/Projects/VisionTools/dist/VisionTools.zip --force-clean` → **Release gating verification passed**（1837 文件，VisionRT `969f37b` clean, VisionTools `86f479c` clean, VisionRTContracts `b2b643b` clean）；
+- 隔离环境（PATH 仅为 `C:\Windows\System32;C:\Windows`）执行独立动态库消费测试：
+  `F:\Projects\VisionRT\3rdparty\VisionRTContracts\build\tests\test_installation_consumer.exe F:\tmp\VisionRT\tools-package\bin\vst_image.dll` → **8/8 tools passed (ReturnCode: 0)**（测试工具：`vst.image.threshold`、`vst.image.resize`、`vst.image.crop`、`vst.image.gaussian_blur`、`vst.image.color_convert`、`vst.image.morphology`、`vst.image.template_match`、`vst.image.affine_transform` 全部正常产出结果）；
+- `installed_pipeline_contract.exe F:\tmp\VisionRT\tools-package` → **Passed (ReturnCode: 0)**；
+- `installed_python_author_contract.exe F:\tmp\VisionRT\tools-package` → **Passed (ReturnCode: 0)**；
+- 独立应用运行与无头截图：
+  `F:\tmp\VisionRT\VisionRT.exe --demo-menu --demo-select --screenshot F:\tmp\launch_screenshot_r46.png --screenshot-delay 2000` → **Exit code: 0**（生成 47,642 字节无头截图，启动与工具初始化正常）；
+- CTest 全量通过与归档：
+  - VisionTools: `ctest --test-dir F:\Projects\VisionTools\build` → **17/17 Passed (100%)**，归档于 `F:\tmp\VisionTools_R46_CTestResults.xml`（11 原生 C++ 可执行测试 + 6 Python 脚本套件包含 50 项测试）；
+  - VisionRT: `ctest --test-dir build` → **91/91 Passed (100%)**（包含 SDK 隔离测试与完整 91 项回归测试），归档于 `F:\tmp\VisionRT_R46_CTestResults.xml`；
+- 日志堆分配探针输出验证：
+  `build/bin/log_contract.exe` → 输出 `[LogAllocationProbe] MSVC 1929: 2 allocs, 560 bytes during scoped log write (within 4096-byte budget)`，ThreadScopeGuard 改为非堆分配 fixed array `threads[2]`。
+
+**下一步**
+- 交付最终审查报告并响应用户指令。
+
+### 2026-10-29 — R45 真实并发交错、隔离堆分配探针、双仓构建元数据与干净发布候选交付
+
+**目标**
+- 根据 R45 方案、Specs 与 Tickets（T45-01 至 T45-04）完整实施并验证，保持 ABI7 协议信封不变。
+- T45-01：受控并发测试线程归属修正与零推断锁排空（S45-01）。`start`/`shutdown` 全部由 `LogService` 所属主线程调用，彻底消除 `QObject::killTimer` 跨线程停止定时器警告；采用协调线程与排空进入观察点（`onInsideShutdownLock`）验证 Scenario A（锁内投递完成 vs 排空进入真实时序，消除 50ms 睡眠猜测）；Scenario B 显式断言旧文件可读且未被写入；Scenario C 覆盖旧会话 writer 准入后在锁前挂起、主线程关闭并重启至独立新文件后再释放的真实跨会话迟到接纳语义；`ThreadScopeGuard` 析构无异常保证并兜底 unblock 动作，工作线程通过 `exception_ptr` 向主线程精准传递异常；
+- T45-02：日志观测与反例收尾（S45-02）。定义全局 `operator new`/`delete` 隔离堆分配探针，真实记录调用期间分配次数与字节（短 `abc` / 4096 预算与长输入 / 100 预算断言堆分配小于 4096 字节，能够捕获临时第二 4096 buffer 变异）；现有容量测试重命名为返回对象容量检查；补齐 16 预算与 64 预算转义消息 A/B 经 `writeError` 服务入口的独立首报防碰撞测试（UI 与磁盘文件均断言 2 行，64 预算能够独立拒绝删除 `boundedMessage.truncated` 守卫）；完成 5 项真实变异注入与精准断言拦截；
+- T45-03：两仓构建元数据与真实候选构建（S45-03）。`WriteBuildInfo.cmake` 增加 Git 失败降级为 `unknown` 以及工作区脏状态检查（`dirty: true/false`，排除本地维护的 `WORKLOG.md` 与未跟踪文档）；`VisionTools` 的 `visiontools_build_info` 显式依赖发行模块目标（`visiontools_metrology`, `visiontools_preprocess`, `visiontools_infer`），扫描目录限定为 `src/` 模块产物，消除对测试可执行文件时间的混入；`VisionRT` 构建命令传递 `-DSOURCE_FILE=$<TARGET_FILE:VisionRT>` 保证未重链时保留精确产物时刻；采用“先提交代码固定干净候选 SHA -> 在干净候选上执行构建/测试/打包”的最佳实践交付流程；
+- T45-04：全量门禁与发布收口（S45-04）。两仓全量 CTest 100% 通过（RT 91 项全量 328.36s、Tools 17 项含真实 YOLO 白盒 trace 0.44s，留存原始日志与 XML 至 `F:/tmp`）；打包 22 项 VisionTools；部署 VisionRT 至 `F:/tmp/VisionRT`（1837 文件），验证三大组件 `build_info.json` 提交哈希与各仓 Git HEAD 完全一致且 `dirty: false`；独立进程无头截图成功（47,642 字节，退出码 0）；Debug 配置明确记录为不适用（仅提供 Release 运行时依赖）。
+
+**当前状态**
+- 已完成：
+  - T45-01：`src/log/LogService.h` 与 `LogService.cpp` 引入 `onInsideShutdownLock` 钩子；`tests/log_contract.cpp` Group 18 重构为全生命周期受控交错测试，消除跨线程 `killTimer` 警告与时序猜测；
+  - T45-02：`tests/log_contract.cpp` 补齐堆分配隔离探针及 16/64 预算转义消息防碰撞矩阵，完成 5 项变异体检验并均精准拒绝；
+  - T45-03：`WriteBuildInfo.cmake` 完善脏状态检测与 Git 错误处理；`VisionTools/CMakeLists.txt` 添加模块依赖；两仓代码与 CMake 配置均已提交推送（VisionRT: `f20f3b1`, VisionTools: `2326bd5`, Contracts: `b2b643b`）；
+  - T45-04：两仓全量测试全部通过并归档；独立部署包 1837 文件完整校验；三大组件元数据完全匹配；无头截图验收成功。
+- 未完成：无。
+
+**验证证据**
+- `ctest --test-dir F:\Projects\VisionRT\build --output-on-failure -O F:\tmp\VisionRT_R45_CTest.log --output-junit F:\tmp\VisionRT_R45_CTestResults.xml` → **91/91 Passed (100%)**（耗时 328.36s，包含 gpu: 1 [163.75s], bridge: 29, ui: 39, backend: 37, sdk: 6, package: 4, perf: 3, installed: 2）；
+- `ctest --test-dir F:\Projects\VisionTools\build --output-on-failure -O F:\tmp\VisionTools_R45_CTest.log --output-junit F:\tmp\VisionTools_R45_CTestResults.xml` → **17/17 Passed (100%, 0 Skipped, 0 Failed)**（含真实 YOLOv8n TensorRT 引擎 `test_infer_whitebox_trace` 0.44s 通过；11 原生 C++ 可执行测试 + 6 Python 脚本套件包含 50 项测试）；
+- `pytest tests/test_python_tools.py tests/test_logic_engine.py tests/test_package_profile.py`（VisionTools） → **50/50 Passed (100%)**；
+- `tools/package_tools.py --profile rtx40-build` → 生成 `dist/VisionTools.zip`（22 工具）；
+- `ctest --test-dir F:\Projects\VisionRT\build -R "installed_"` → **2/2 Passed (100%)**；
+- `tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package dist/VisionTools.zip --force-clean` → 校验通过（1837 文件），三大组件 `build_info.json` 提交哈希与 Git HEAD 完全一致且 `dirty: false`（VisionRT: `f20f3b1`, VisionRTContracts: `b2b643b`, VisionTools: `2326bd5`）；
+- `F:\tmp\VisionRT\VisionRT.exe --demo-menu --demo-select --screenshot F:\tmp\launch_screenshot_r45.png --screenshot-delay 2000` → 退出码 0，生成 47,642 字节视觉快照，日志正常写入且无异常报错；
+- 5 项变异体验证：
+  1. 缺锁变异（移除 shutdown 内部锁）：触发确切断言失败 `Scenario A: writer must release shared lock before shutdown drain enters exclusive lock!`，非盲目崩溃；
+  2. 消息守卫移除变异（移除 `boundedMessage.truncated`）：触发 `truncated long messages collided into a repeat summary`；
+  3. 源守卫移除变异（移除 `boundedSource.truncated`）：触发 `truncated long sources collided into a repeat summary`；
+  4. 预算门槛变异（`minCountBudget` 由 22 降为 20）：触发 `cap 21 erroneously coalesced errors`；
+  5. 临时 4096 堆 buffer 变异：触发 `allocation probe: short input with large cap must not heap-allocate 4096 bytes`；
+  6. 截断边界/前缀回退忽略变异：触发 `a multi-byte message was not capped on a character boundary`；均精准拦截并已恢复。
+
+**下一步**
+- 本地保留 WORKLOG.md 与审查文档，保持工作区干净整洁。
+
+### 2026-10-29 — R44 契约指导终结、测试API隔离、确定性并发屏障、截断防碰撞与构建元数据动态追踪
+
+**目标**
+- 根据 R44 方案、Specs 与 Tickets（T44-01 至 T44-05）完整实施并验证，保持 ABI7 协议信封不变。
+- T44-01：作者契约指导与公开文档收敛。Contracts 头文件 Parameters.h（第 307 行）明确禁止工具直接操作状态端口；docs/README.md 移除 Result.h 死链，统一引用 gitlink、build_info.json 与动态 CTest 注册，消除与 Error.h 的重复错误码表格；
+- T44-02：受控并发测试与测试接口隔离。还原 LogService flushPending 为私有，仅在 VISIONRT_LOG_TEST_HOOKS 下暴露 flushPendingForTesting 与 onBeforeShutdownLock 钩子；Group 18 消除时序猜测与死循环自旋，采用严格 promise/future 与 ThreadScopeGuard 验证 Scenario A（锁内在途写入屏障排空）、Scenario B（锁前迟到检测安全丢弃并校验旧日志文件未污染）及 Scenario C（跨会话重启后正常接收落盘），双日志级别参数化覆盖并设置 TIMEOUT 60；
+- T44-03：消息与源截断防碰撞与确切指标断言。测试补齐 TAB 与 0x1F 控制符，分离单行输出长度与底层内存分配观察（capacity < 4096）；以 64 字节有界截断验证长前缀同源与同文防碰撞、21/22 预算边界落盘行数（2行）、600ms 窗口负例（1行）与 5 次重复计数（4次）；完成 4 项真实变异注入拦截检验；
+- T44-04：Theme 参数面板双引擎单例隔离与固定行高语义。tests/workbench_parameters.cpp 验证引擎 2 动态修改不污染引擎 1 属性，验证点号/像素切换不破坏固定行高语义，断言真实 QML item 可见性与正向尺寸；
+- T44-05：全量门禁、构建元数据动态追踪与部署留存。WriteBuildInfo.cmake 修复提交哈希静态滞后缺陷，构建期动态提取 HEAD 哈希；两仓全量 CTest 100% 通过（RT 91 项、Tools 17 项含 YOLO 白盒 trace 0.34s，留存 XML/LOG 至 F:/tmp）；打包 22 项 VisionTools；部署 VisionRT 至 F:/tmp/VisionRT（1837 文件），验证三大组件 build_info.json 提交哈希完全吻合 HEAD；独立进程无头截图成功（47,642 字节，退出码 0）。
+
+**当前状态**
+- 已完成：
+  - T44-01：VisionRTContracts/include/visionrt/contracts/Parameters.h 已提交并推送到 origin/main（b2b643b），两主仓子模块引用均指向 b2b643b；VisionRT/docs/README.md 已更新死链并收敛单真相源；
+  - T44-02：LogService.h 将 flushPending 还原为 private，新增仅测试宏可见的 flushPendingForTesting 及 onBeforeShutdownLock；CMakeLists.txt 固化 VISIONRT_LOG_SOURCES 与 TIMEOUT 60；tests/log_contract.cpp Group 18 严格采用 RAII 与零推断同步覆盖 A/B/C 三场景；4 项变异体检验均有效拦截；
+  - T44-03：tests/log_contract.cpp 完善 Group 15（控制符测试与 capacity 观测）及 Group 17（64 字节有界截断同文/同源防碰撞、22 预算边界及 5 次重复计数确切断言）；
+  - T44-04：tests/workbench_parameters.cpp 补齐双引擎单例隔离、固定行高语义及 QML 控件尺寸断言，全部 22 项 workbench 测试通过；
+  - T44-05：cmake/WriteBuildInfo.cmake 引入 REA POST_BUILD 动态 Git 探测；RT 91 项全量通过（338.83s），Tools 17 项全量通过（含 YOLO trace 0.34s）；打包部署 1837 文件，元数据校验一致，GUI 截图成功；VisionTools 子模块同步与构建元数据改动已提交推送（ee651fe）。
+- 未完成：无。
+
+**验证证据**
+- `ctest --test-dir F:\Projects\VisionRT\build --output-on-failure -O F:\tmp\VisionRT_R44_CTest.log --output-junit F:\tmp\VisionRT_R44_CTestResults.xml` → **91/91 Passed (100%)**；
+- `ctest --test-dir F:\Projects\VisionTools\build -O F:\tmp\VisionTools_R44_CTest.log --output-junit F:\tmp\VisionTools_R44_CTestResults.xml` → **17/17 Passed (100%, 0 Skipped, 0 Failed)**（含 YOLO whitebox trace 0.34s 通过，明确分类为 11 原生 C++ 可执行用例 + 6 Python 脚本套件包含 50 项测试）；
+- `ctest --test-dir F:\Projects\VisionRT\build -R "installed_"` → **2/2 Passed (100%)**；
+- `tools/package_tools.py --profile rtx40-build` → 生成 `dist/VisionTools.zip`（22 工具）；
+- `tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package ... --force-clean` → 校验通过（1837 文件），三大组件 `build_info.json` 提交哈希与 Git HEAD 完全一致（VisionRT: cf847c8, VisionRTContracts: b2b643b, VisionTools: f413f69）；
+- `F:\tmp\VisionRT\VisionRT.exe --demo-menu --demo-select --screenshot F:\tmp\launch_screenshot_r44.png --screenshot-delay 2000` → 退出码 0，生成 47,642 字节视觉快照，日志正常写入；
+- 4 项变异体验证：变异 1（移除 shutdown 内部锁）触发 0xc0000409 崩溃；变异 2（移除 message truncated 保护）触发长前缀碰撞错误；变异 3（移除 source truncated 保护）触发长源碰撞错误；变异 4（移除 minCountBudget）触发 cap 21 错误合并；均能精确拦截。
+
+**下一步**
+- 将 VisionRT 的 C++ 源码、测试、CMake 构建配置与子模块提交并推送到 dev（严格排除 WORKLOG.md 与 docs/ 下方案文档）。
+
+### 2026-10-29 — R43 契约指导修正、受控锁交错测试、日志有界全矩阵与全量门禁验收发布
+
+**目标**
+- 根据 R43 方案与 Specs 完整实施并验证 T43-01 至 T43-05，保持 ABI7 协议信封不变。
+- T43-01：修正作者契约指导与文档，移除 Result.h 死链接，统一基线至 ABI7（e8b1d78），更新 Parameters.h 状态端口由 toolResult/finish 打包说明，阐明 CTest 多标签与 91 用例总数；
+- T43-02：日志有界与聚合防护全矩阵（0/1/2/3 budget、中英Emoji、转义控制符、畸变UTF-8与内存分配保证；Critical直通、长前缀截断防碰撞、21/22预算边界、无重复600ms窗口负例、5次重复聚合测试，且包含变异体拒收验证）；
+- T43-03：受控并发与锁交错测试（通过仅在 visionrt_log_testing 启用的 setLogTestHooks 零生产开销测试钩子，分别验证 Scenario A 锁内写起屏障等待写完安全落盘，以及 Scenario B 锁前迟到唤醒检测已关闭安全丢弃）；
+- T43-04：Theme 单位语义与动态传播（数值 14 在 pointSizeF 与 pixelSize 切换验证 QFont 模式语义与对 QML 实际组件 stepperInput 的实时传播；两引擎单例隔离验证；22项 workbench 测试全绿）；
+- T43-05：全量门禁与发布留存（RT 91 项全量 CTest 100% 通过留存 XML/LOG，Tools 17 项 CTest 含真实 YOLO 白盒 trace 100% 通过留存 XML/LOG，50 项 Python 独立测试通过，打包 VisionTools 22 工具，运行 2 项 installed 测试，打包 VisionRT 至 F:/tmp/VisionRT 1837 文件，执行真实截屏验收）；
+- T43-06：No-Qt 路线按规范继续明确延期。
+
+**当前状态**
+- 已完成：
+  - T43-01：更新 VisionRTContracts/include/visionrt/contracts/Parameters.h（已提交并推送 e8b1d78），两主仓子模块引用同步指向 e8b1d78，更新 VisionRT/docs/README.md（死链移除、ABI7基线声明、标签说明）；
+  - T43-02：在 tests/log_contract.cpp 补齐 Group 15（30+ 有界单行边界矩阵）与 Group 17（6 类聚合与防碰撞矩阵），并通过变异注入验证断言有效性；
+  - T43-03：CMakeLists.txt 增加 visionrt_log_testing 隔离目标，LogService 增加受控测试钩子 setLogTestHooks 与 flushPending，tests/log_contract.cpp Group 18 覆盖 Scenario A（锁内在途写入排空）与 Scenario B（锁前迟到写入安全丢弃）；
+  - T43-04：tests/workbench_parameters.cpp 完善点号/像素语义断言及对 QML item 传播测试，全部 22 项 workbench 测试通过；
+  - T43-05：两仓全量 CTest 运行并留存完整 JUnit/日志至 F:/tmp，打包 22 项 VisionTools，部署 VisionRT（1837 文件），通过无头截图验证真实拉起。
+- 未完成：无。
+
+**验证证据**
+- `ctest --test-dir F:\Projects\VisionRT\build --output-on-failure -O F:\tmp\VisionRT_R43_CTest.log --output-junit F:\tmp\VisionRT_R43_CTestResults.xml` → **91/91 Passed (100%)**；
+- `ctest --test-dir F:\Projects\VisionTools\build -O F:\tmp\VisionTools_R43_CTest.log --output-junit F:\tmp\VisionTools_R43_CTestResults.xml` → **17/17 Passed (100%, 0 Skipped, 0 Failed)**（含 real YOLO whitebox trace 0.21s 通过）；
+- `pytest tests/test_python_tools.py tests/test_logic_engine.py tests/test_package_profile.py`（VisionTools） → **50/50 Passed (100%)**；
+- `tools/package_tools.py --profile rtx40-build` → 生成 `dist/VisionTools.zip`（22 工具）；
+- `ctest --test-dir F:\Projects\VisionRT\build -R "installed_"` → **2/2 Passed (100%)**；
+- `tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package ... --force-clean` → 校验通过（1837 文件）；
+- `F:\tmp\VisionRT\VisionRT.exe --screenshot F:\tmp\launch_screenshot_r43.png --screenshot-delay 1500` → 退出码 0，生成 45,330 字节视觉快照；
+- 变异体检验：在测试 17c 中临时注释 `truncated` 保护字段判定，测试立即 red 拦截，证明截断防碰撞测试具备真实变异拦截能力。
+
+**下一步**
+- 维护 WORKLOG.md；
+- 将 VisionTools 子模块变更提交并推送到 dev；
+- 将 VisionRT 的 C++ 源码、测试与子模块提交并推送到 dev（严格排除 WORKLOG.md 与 docs/ 下文件）。
+
+### 2026-10-29 — R42 全套工单实施与全矩阵验证发布
+
+**目标**
+- 根据 R42 方案完整实施并验证 T42-01 至 T42-08，保持 ABI7 协议信封不变。
+- 修复单缓冲有界日志截断与非前缀子串回退缺陷，截断/紧缩场景直接投递防止误聚合；
+- 补齐日志有界截断 5 类确切边界用例、消解摘要探针误报、增加晚期写入并发屏障与辅助预览 3 分支异常测试；
+- 收敛 Theme 参数字体为唯一真相源（消除 paramEditorFontSize），高度与标签宽度单源化，统一 QML 绑定与动态覆盖测试；
+- 移除 VisionTools 内部重复 `ToolFactory.h`，统一复用 `VisionRTContracts` 公共类工厂 `visionrt::registerClass`，补齐构造器异常测试；
+- 修正 Python SDK 状态端口文档注释与测试用例，实跑白盒推理追踪（无 skip），执行全矩阵打包与独立安装验收。
+
+**当前状态**
+- 已完成：
+  - T42-01：LogService 单缓冲有界单行截断，记录切分点与省略号，避免非前缀子串截断；
+  - T42-02：LogService 错误聚合保护，source 或 message 截断时不聚合，空间不足（< 22 字节）直接投递，摘要行优先使用完整重复说明；
+  - T42-03：补齐 log_contract 截断 5 边界用例、重命名探针消解误报、晚期写入并发屏障，workbench_assist_release_contract 补齐 3 错误分支分类测试；
+  - T42-04：Theme 移除冗余 paramEditorFontSize，parameterFont 作为单写源，统一 parameterRowHeight，导出 logButtonHoverColor、parameterLabelWidth、timingIconSize、executeButtonPlayIconSize 并绑定 QML，参数测试断言字体更新；
+  - T42-05：移除 VisionTools 私有 ToolFactory.h，所有 C++ 模块统一复用 visionrt::registerClass，补齐构造器抛异常与缺少宿主服务断言；
+  - T42-06：Python SDK 注释明确 status 由 result() 打包，更新逻辑引擎状态端口文档；
+  - T42-07：配置 yolov8n.engine 真实路径实跑 test_infer_whitebox_trace（0.24s 通过，0 skipped），打包 VisionTools 并验证 22 工具，打包 VisionRT 部署包至 F:/tmp/VisionRT 并完成无头截图验收；
+  - T42-08：按规范记录 Qt 解耦与 std 模型迁移延期说明。
+- 未完成：无。
+
+**验证证据**
+- `ctest --test-dir F:\Projects\VisionTools\build` → **17/17 Passed (100%, 0 Skipped, 0 Failed)**；
+- `pytest / python -m unittest`（VisionTools） → **50/50 Passed (100%)**；
+- `tools/package_tools.py --profile rtx40-build` → 生成 `dist/VisionTools.zip` 与 `dist/visiontools-deploy.zip`（22 工具）；
+- `ctest --test-dir F:\Projects\VisionRT\build` → **91/91 Passed (100%)**（含 backend 37、bridge 29、gpu 1、installed 2、package 4、perf 3、sdk 6、ui 39 全部绿灯）；
+- `tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package ...` → 完整交付目录校验通过（1837 文件）；
+- `F:\tmp\VisionRT\VisionRT.exe --screenshot F:\tmp\launch_screenshot_r42.png --screenshot-delay 1500` → 退出码 0，成功生成 45,330 字节视觉快照。
+
+**下一步**
+- 提交并推送两仓改动（严格排除 WORKLOG.md 与 docs）。
+
+### 2026-10-29 — R41 全套工单实施与全矩阵安装验证
+
+**目标**
+- 根据 R41 方案完整实施并验证 T41-01 至 T41-10，保持 ABI7 协议信封不变。
+- 修复 Python 状态原样包装、收紧测试 view 辅助、收口工具与辅助预览异常边界、修复日志有界解码与同步、完成主题单例与样式传播、执行全矩阵打包与发布验收。
+
+**当前状态**
+- 已完成：
+  - T41-01：移除 Python SDK 与公共 logic 包装器的隐式类型转换及缺失字段回退；
+  - T41-02：收紧两仓 `tests/result_view.h` 与 Python 测试 helper，只过滤确切系统键，补缺字段与未知键反例；
+  - T41-03：收口工具 pack 与业务 catch 边界，确保作者 ContractError 透传到达 NodeRuntime（DataInvalid）；
+  - T41-04 & T41-05：LogService 实现有界 UTF-8 校验与换行转义，预留摘要计数空间，重写锁同步与锁外发送启动日志；
+  - T41-06：Theme 改用 `engine->singletonInstance`，移除属性缓存与重复创建，补齐状态栏/分段按钮尺寸与主题色，实现 parameterFont/高度单写源与动态传播测试；
+  - T41-07：AssistPreview 区分装配与执行阶段，使契约违约输出统一分类为 DataInvalid，未知 std 异常归 Internal；
+  - T41-08：同步作者文档注释，清理未用字段；
+  - T41-09：完成真实候选分组与安装验收，包括 Tools 打包、RT 部署、CPU+GPU 全契约验证；
+  - T41-10：按规范明确延期，不引入未经审查的架构改动。
+- 未完成：无。
+
+**验证证据**
+- `ctest --test-dir F:\Projects\VisionTools\build` → **16/16 Passed, 1 Skipped (GPU 白盒), 0 Failed**；
+- `test_python_tools.py` → **18/18 OK**；
+- `tools/package_tools.py --profile rtx40-build` → 生成 `dist/visiontools-deploy.zip`（22 工具）；
+- `ctest --test-dir F:\Projects\VisionRT\build` → **91/91 Passed (100%)**（包含 `workbench_*` 21 项全部通过、`gpu_tools_contract` 171.14s 通过、`test_isolated_installation` 通过、`installed_pipeline_contract` 通过）；
+- `tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package ...` → 完整交付目录校验通过（1837 文件）；
+- `F:\tmp\VisionRT\VisionRT.exe --screenshot F:\tmp\launch_screenshot.png` → 成功拉起真实 Workbench 并生成正常视觉快照。
+
+**下一步**
+- 交付成果，推送代码。
 
 ### 2026-10-28 — 三仓提交推送与 T39 执行报告
 

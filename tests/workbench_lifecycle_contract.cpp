@@ -31,6 +31,9 @@ void require(bool condition, const std::string &message)
 }
 }
 
+// The fixture declares 值 on output 2 and 图像 on output 3.
+constexpr PortId kImageOutput = 3;
+
 int main(int argc, char **argv)
 try
 {
@@ -60,10 +63,11 @@ try
     gate.nameZh = "Lifecycle gate";
     gate.kind        = ToolKind::PythonClass;
     gate.entry       = {"lifecycle", "tool.py", "Gate"};
-    gate.outputs     = {
-        {"value", "Value", {Type::Int}},
-        {"image", "Image", {Type::Image}}
+    gate.outputs = {
+        {2, "Value", {Type::Int}},
+        {3, "Image", {Type::Image}}
     };
+    gate.nextOutputPortId = 4;
     write(root + "/tools-package/tools/custom/lifecycle.json",
           QByteArray::fromStdString(emitNormalizedToolJson(gate)));
     write(script, R"py(from pathlib import Path
@@ -97,7 +101,7 @@ class Gate:
             time.sleep(0.001)
         record(f'return:{self.serial}')
         img = np.zeros((10, 10), dtype=np.uint8)
-        return {'outputs': {'value': 1, 'image': [img], '__status_code': 0, '__status_message': ''}, 'detail': ''}
+        return {'outputs': {2: 1, 3: [img], 0: 0, 1: ''}, 'detail': ''}
 
 
     def release(self):
@@ -178,7 +182,7 @@ class Gate:
     app.selectNode(nodeId);
     auto *outputModel = qobject_cast<OutputModel *>(app.outputModel());
     require(outputModel != nullptr, "lifecycle outputModel is null");
-    auto captured = outputModel->capture(QStringLiteral("image"));
+    auto captured = outputModel->capture(kImageOutput);
     require(captured.has_value(), "lifecycle image output was not captured");
     require(std::holds_alternative<DataRef<Image>>(captured->value), "captured value is not DataRef<Image>");
 

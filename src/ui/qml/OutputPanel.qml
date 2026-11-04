@@ -117,7 +117,7 @@ Rectangle {
                     row: row,
                     column: column,
                     display: data.display === undefined ? "" : String(data.display),
-                    portId: data.portId || "",
+                    portId: data.portId || 0,
                     name: data.name || "",
                     type: data.typeDisplay || data.type || "",
                     typeMachine: data.type || "",
@@ -174,7 +174,7 @@ Rectangle {
                 visible: cellPointer.containsMouse && text.length > 0
                 text: {
                     if (cell.options.column === 0) {
-                        let n = cell.options.name || cell.options.portId || ""
+                        let n = cell.options.name || String(cell.options.portId)
                         let t = cell.options.type || ""
                         return t.length > 0 ? (n + "（" + t + "）") : n
                     }
@@ -224,7 +224,7 @@ Rectangle {
                 let matchedInputs = []
                 for (let input of tool.inputs) {
                     let inputName = (input.title || input.name || "").toLowerCase()
-                    let portName = (input.port || "").toLowerCase()
+                    let portName = String(input.port)
                     if (toolMatch || inputName.indexOf(q) >= 0 || portName.indexOf(q) >= 0) {
                         matchedInputs.push(input)
                     }

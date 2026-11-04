@@ -23,7 +23,7 @@ public:
     visionrt::ToolResult execute(const visionrt::Values &) override
     {
         visionrt::Values out;
-        out.emplace("val", static_cast<std::int64_t>(dep_b_val()));
+        out.emplace(2, static_cast<std::int64_t>(dep_b_val()));
         return visionrt::toolResult(std::move(out), {0, "ok"});
     }
 
