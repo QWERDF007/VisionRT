@@ -1,0 +1,55 @@
+{
+  "schema_version": 6,
+  "name_en": "custom.image.threshold",
+  "name_zh": "图像阈值处理",
+  "version": "1.0.0",
+  "implementation": {
+    "kind": "python_function",
+    "package": "custom/image/threshold",
+    "file": "tool.py",
+    "symbol": "execute"
+  },
+  "ui": {
+    "category": [
+      "自定义",
+      "示例"
+    ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 5,
+    "outputs": 3
+  },
+  "ports": {
+    "inputs": [
+      {
+        "id": 1,
+        "name_zh": "阈值",
+        "type": "int",
+        "default": 128,
+        "constraints": {
+          "min": 0,
+          "max": 255
+        }
+      },
+      {
+        "id": 2,
+        "name_zh": "输入图像",
+        "type": "image"
+      },
+      {
+        "id": 4,
+        "name_zh": "附加系数",
+        "type": "float",
+        "default": 1.0
+      }
+    ],
+    "outputs": [
+      {
+        "id": 2,
+        "name_zh": "输出图像",
+        "type": "image"
+      }
+    ]
+  }
+}

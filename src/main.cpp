@@ -25,6 +25,12 @@
 
 int main(int argc, char *argv[])
 {
+    // Qt keeps shader and pipeline caches in the per-user cache directory by default. This
+    // installation writes everything it creates under the software directory, so the disk caches
+    // are disabled instead of being redirected; they are rebuilt on demand.
+    qputenv("QSG_RHI_DISABLE_DISK_CACHE", "1");
+    qputenv("QT_DISABLE_SHADER_DISK_CACHE", "1");
+
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName("VisionRT");
     QCoreApplication::setOrganizationName("VisionRT");

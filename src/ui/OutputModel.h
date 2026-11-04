@@ -31,7 +31,7 @@ public:
         PortValue                             value;
         TypeSpec                              type;
         std::uint64_t                         publication = 0;
-        QString                               port;
+        PortId                                port = 0;
         std::optional<NodeDiagnostic>         diagnostic;
         std::shared_ptr<const NodeDiagnostic> lifecycle;
     };
@@ -42,11 +42,11 @@ public:
     // It comes from the same candidate/validate rule the binding menu uses, so the name highlight
     // can never promise a connection the backend would refuse.
     void                    setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
-                                      const std::map<std::string, std::size_t, std::less<>> &references,
-                                      const std::map<std::string, bool, std::less<>> *connectable = nullptr,
+                                      const std::map<PortId, std::size_t> &references,
+                                      const std::map<PortId, bool> *connectable = nullptr,
                                       const TypeMap *nodeOutputs = nullptr, std::shared_ptr<const NodeDiagnostic> lifecycle = {});
     std::optional<Captured> capture(int row) const;
-    std::optional<Captured> capture(const QString &port) const;
+    std::optional<Captured> capture(PortId port) const;
     static QString          fullText(const Captured &captured);
     static QString          diagnosticText(const Captured &captured);
     static std::size_t      estimatedTextBytes(const Captured &captured);
@@ -60,7 +60,8 @@ public:
 private:
     struct Row
     {
-        QString     id, name, type, preview, tooltip;
+        PortId      id = 0;
+        QString     name, type, preview, tooltip;
         std::size_t count  = 0;
         bool        system = false;
         bool        connectable = false;

@@ -29,10 +29,27 @@ void require(bool condition, const std::string &message)
         throw std::runtime_error(message);
 }
 
-QVariantMap rowOf(const QVariantList &rows, const QString &id)
+// visionrt.image.read: 图像路径 1, 图像数量 5, 图像 2.
+// visiontools.measure.circle: 图像 1, 测量区域 2, 参考变换 3, 卡尺数量 4, 径向半搜索宽度 5,
+// 边缘极性 9; 测得圆 7.
+// visiontools.measure.row_spacing: 合格宽度上限 8.
+constexpr PortId kPathInput            = 1;
+constexpr PortId kImagesInput          = 1;
+constexpr PortId kRoisInput            = 2;
+constexpr PortId kAlignmentInput       = 3;
+constexpr PortId kNumCalipersInput     = 4;
+constexpr PortId kSearchHalfWidthInput = 5;
+constexpr PortId kWidthMaxInput        = 8;
+constexpr PortId kPolarityInput        = 9;
+constexpr PortId kImagesOutput         = 2;
+constexpr PortId kCountInput           = 5;
+constexpr PortId kCirclesOutput        = 7;
+
+
+QVariantMap rowOf(const QVariantList &rows, PortId id)
 {
     for (const auto &value : rows)
-        if (value.toMap().value("id").toString() == id)
+        if (value.toMap().value("id").toUInt() == id)
             return value.toMap();
     return {};
 }
@@ -72,7 +89,13 @@ QJsonArray roiGroups(const QString &project, const QString &node)
             const auto object = candidate.toObject();
             if (object.value("node_seq").toString() != node)
                 continue;
-            return object.value("inputs").toObject().value("rois").toObject().value("literal").toArray();
+            for (const auto &binding : object.value("inputs").toArray())
+            {
+                const auto entry = binding.toObject();
+                if (entry.value("port_id").toInt() == static_cast<int>(kRoisInput))
+                    return entry.value("literal").toArray();
+            }
+            return {};
         }
     throw std::runtime_error("assist node is missing from the saved project");
 }
@@ -127,15 +150,15 @@ try
     const auto reader = app.selectedNode();
     if (reader.isEmpty())
         throw std::runtime_error("assist reader node is missing: " + app.diagnostic().toStdString());
-    require(app.setParameter("count", false, "3"), "assist count was rejected");
-    require(app.setParameterPath("path", false, QUrl::fromLocalFile(images)), "assist image path was rejected");
+    require(app.setParameter(kCountInput, false, "3"), "assist count was rejected");
+    require(app.setParameterPath(kPathInput, false, QUrl::fromLocalFile(images)), "assist image path was rejected");
     settle();
 
     app.addNode("visiontools.measure.circle", 0, 4);
     settle();
     const auto circle = app.selectedNode();
     require(!circle.isEmpty(), "assist circle node is missing");
-    require(app.bindInput(app.portContext("images"), reader, "images"), "circle image input could not be bound");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "circle image input could not be bound");
     settle();
     if (!app.save(root + "/assist.json"))
         throw std::runtime_error("assist project could not be saved: " + app.diagnostic().toStdString());
@@ -171,16 +194,16 @@ try
     stable();
     require(projectChanges.count() == 1, "a proposal must raise exactly one project transaction");
     auto       rows = app.parameters();
-    const auto rois = rowOf(rows, "rois");
+    const auto rois = rowOf(rows, kRoisInput);
     require(rois.value("hasRois").toBool() && rois.value("roiCount").toInt() == 1,
             "the committed ROI was not written back");
-    const auto polarity = rowOf(rows, "polarity").value("valueText").toString();
+    const auto polarity = rowOf(rows, kPolarityInput).value("valueText").toString();
     require(polarity == "dark_to_light" || polarity == "light_to_dark",
             "the recommended polarity was not applied");
-    const double halfWidth = numericValue(rowOf(rows, "search_half_width").value("literal").toString());
+    const double halfWidth = numericValue(rowOf(rows, kSearchHalfWidthInput).value("literal").toString());
     require(std::abs(halfWidth - 8.0) > 1e-9, "the recommended search half width was not applied");
-    require(rowOf(rows, "num_calipers").value("literal").toString()
-                == rowOf(parametersBefore, "num_calipers").value("literal").toString(),
+    require(rowOf(rows, kNumCalipersInput).value("literal").toString()
+                == rowOf(parametersBefore, kNumCalipersInput).value("literal").toString(),
             "an unmapped parameter changed during the proposal");
     require(QTest::qWaitFor(
                 [&]
@@ -200,11 +223,11 @@ try
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate for the second circle: " + app.assistHint().toStdString());
     require(app.assistClick(60.0, 60.0, true), "append click was rejected: " + app.assistHint().toStdString());
-    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), "rois").value("roiCount").toInt() == 2; }, 10000),
+    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 2; }, 10000),
             "Ctrl+click did not append the second candidate");
     stable();
-    require(rowOf(app.parameters(), "search_half_width").value("literal").toString()
-                == rowOf(beforeAppend, "search_half_width").value("literal").toString(),
+    require(rowOf(app.parameters(), kSearchHalfWidthInput).value("literal").toString()
+                == rowOf(beforeAppend, kSearchHalfWidthInput).value("literal").toString(),
             "Ctrl+click must keep the current global parameters");
 
     // The selected image index owns the proposal: image 1 keeps image 0's group untouched.
@@ -214,7 +237,7 @@ try
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate on the second image: " + app.assistHint().toStdString());
     require(app.assistClick(200.0, 80.0, false), "second image click was rejected: " + app.assistHint().toStdString());
-    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), "rois").value("roiCount").toInt() == 3; }, 10000),
+    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 3; }, 10000),
             "the second image proposal was not committed");
     stable();
     require(app.save(root + "/assist.json"), "assist project could not be saved after the batch commit");
@@ -230,8 +253,8 @@ try
     // A non-identity alignment is forwarded to the helper and its inverse is what gets committed:
     // the preview stays in current-image coordinates, the literal stays in reference coordinates.
     app.setImageIndex(0);
-    require(app.clearRoi("rois"), "assist ROI could not be cleared");
-    require(app.setParameter("alignment", false, "[[[1,0,10],[0,1,5],[0,0,1]]]", true),
+    require(app.clearRoi(kRoisInput), "assist ROI could not be cleared");
+    require(app.setParameter(kAlignmentInput, false, "[[[1,0,10],[0,1,5],[0,0,1]]]", true),
             "assist alignment literal was rejected");
     stable();
     require(app.assistHover(160.0, 120.0), "hover with alignment was rejected: " + app.assistHint().toStdString());
@@ -257,7 +280,7 @@ try
             ("hover for the staleness check was rejected: " + app.assistHint()).toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate for the staleness check");
-    require(app.setParameter("search_half_width", false, "6"), "parameter edit was rejected");
+    require(app.setParameter(kSearchHalfWidthInput, false, "6"), "parameter edit was rejected");
     settle();
     require(app.assistPreview().isEmpty(), "a preview learned from an older configuration must be discarded");
 
@@ -276,7 +299,7 @@ try
     settle();
     const auto rowsNode = app.selectedNode();
     require(!rowsNode.isEmpty(), "row spacing node is missing");
-    require(app.bindInput(app.portContext("images"), reader, "images"), "row spacing image input could not be bound");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "row spacing image input could not be bound");
     settle();
     app.runNode();
     settle();
@@ -288,11 +311,11 @@ try
     const bool rowPreview = QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000);
     require(rowPreview, "row spacing hover produced no candidate: " + app.assistHint().toStdString());
     require(app.assistClick(160.0, 120.0, false), "row spacing click was rejected: " + app.assistHint().toStdString());
-    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), "rois").value("roiCount").toInt() == 1; }, 10000),
+    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 1; }, 10000),
             "row spacing proposal was not committed: " + app.assistHint().toStdString());
     stable();
     const auto rowWidths = app.parameters();
-    require(numericValue(rowOf(rowWidths, "width_max").value("literal").toString()) < 1000000.0,
+    require(numericValue(rowOf(rowWidths, kWidthMaxInput).value("literal").toString()) < 1000000.0,
             "row spacing width range was not applied");
     require(app.save(root + "/assist.json"), "row spacing project could not be saved");
     const auto rowGroups = roiGroups(root + "/assist.json", rowsNode);
@@ -308,9 +331,9 @@ try
     settle();
     const auto downstream = app.selectedNode();
     require(!downstream.isEmpty(), "downstream circle node is missing");
-    require(app.bindInput(app.portContext("images"), reader, "images"), "downstream image input could not be bound");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "downstream image input could not be bound");
     settle();
-    require(app.bindInput(app.portContext("rois"), circle, "circles"), "downstream upstream ROI could not be bound");
+    require(app.bindInput(app.portContext(kRoisInput), circle, kCirclesOutput), "downstream upstream ROI could not be bound");
     settle();
     require(!app.assistClick(160.0, 120.0, false), "an upstream ROI click must be refused");
     require(app.assistHint().contains(QStringLiteral("上游")), "the upstream refusal must explain itself");

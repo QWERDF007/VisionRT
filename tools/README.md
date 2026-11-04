@@ -33,10 +33,14 @@ build\bin\visionrt_validate_tool.exe --package <工具包目录> --load
 将工具包部署到既有安装目录：
 
 ```cmd
-python tools\package_app.py --deploy-tools-only --install-dir install\VisionRT --tools-package <VisionTools.zip> --tools-index <VisionTools.module_index.json> --validator build\bin\visionrt_validate_tool.exe
+python tools\package_app.py --deploy-tools-only --install-dir F:\tmp\VisionRT --tools-package <VisionTools.zip> --tools-index <VisionTools.module_index.json> --validator build\bin\visionrt_validate_tool.exe
 ```
 
 部署先在暂存包执行严格 JSON lint 和真实宿主校验，通过后才替换工具目录；不加载模型。依赖默认值只在清单维护，部署 Python 环境来自构建缓存的 `VISIONRT_PYTHON_HOME`。参数与目录保护规则以脚本为准。
+
+本机交付部署目录约定为 `F:\tmp\VisionRT`，不使用用户目录或系统盘；用户工具、偏好与日志都在软件目录内，`--force-clean` 只替换程序文件并保留 `custom-tools`、`logs`、`ui-preferences.json`。
+
+工具包必须是 schema 6：旧构建目录里的 `tools-package` 可能仍是 schema 5/4，宿主校验器会拒绝；当前可用来源是 `F:\Projects\VisionTools\dist\visiontools-deploy.zip` 与其 `.module_index.json`。
 
 定向验证：
 

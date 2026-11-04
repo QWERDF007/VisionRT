@@ -24,6 +24,9 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// The fixture declares 数据 on output 2 and 图像 on output 3.
+constexpr PortId kValuesOutput = 2;
 }
 
 int main(int argc, char **argv)
@@ -46,25 +49,26 @@ try
     definition.nameZh = "完成顺序";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"completion", "tool.py", "source"};
-    definition.outputs     = {
-        {"values", "数据", {Type::Array, DType::Int64, 1}},
-        {"images", "图像",                  {Type::Image}}
+    definition.outputs = {
+        {2, "数据", {Type::Array, DType::Int64, 1}},
+        {3, "图像", {Type::Image}}
     };
+    definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
     const auto declaration               = package + "tools/custom/completion/source.json";
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(package + "python/custom/completion/tool.py", R"py(import numpy as np
 
 def source(inputs):
-    return {'outputs': {'values': [9007199254740993] * 1000000,
-                        'images': [np.full((80, 120, 3), 17, dtype=np.uint8)],
-                        '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: [9007199254740993] * 1000000,
+                        3: [np.full((80, 120, 3), 17, dtype=np.uint8)],
+                        0: 0, 1: ''},
             'detail': ''}
 
 def refreshed(inputs):
-    return {'outputs': {'values': 'catalog-ready',
-                        'images': [np.full((80, 120, 3), 37, dtype=np.uint8)],
-                        '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: 'catalog-ready',
+                        3: [np.full((80, 120, 3), 37, dtype=np.uint8)],
+                        0: 0, 1: ''},
             'detail': ''}
 )py");
     bool           monitor         = false;
@@ -103,7 +107,7 @@ def refreshed(inputs):
                          {
                              ++idleTransitions;
                              events.push_back("idle");
-                             const auto value = outputs->capture("values");
+                             const auto value = outputs->capture(kValuesOutput);
                              staleAtIdle      = staleAtIdle || !value || value->type.type != Type::String
                                         || !isMissing(value->value) || viewport.hasImage();
                          }
@@ -132,7 +136,7 @@ def refreshed(inputs):
     // second confirmation or truncated into something that looks complete.
     const auto exportLarge = [&]
     {
-        app.requestOutputText(app.portContext("values", true));
+        app.requestOutputText(app.portContext(kValuesOutput, true));
     };
     const auto verifyText = [&](const QString &text)
     {
@@ -181,7 +185,7 @@ def refreshed(inputs):
     monitor = false;
     app.runNode();
     idle();
-    const auto refreshed = outputs->capture("values");
+    const auto refreshed = outputs->capture(kValuesOutput);
     require(
         refreshed && refreshed->type.type == Type::String && std::get<std::string>(refreshed->value) == "catalog-ready",
         "final Idle did not permit execution of the refreshed implementation");

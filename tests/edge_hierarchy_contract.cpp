@@ -43,10 +43,10 @@ ToolDefinition makeTool(std::string id)
     tool.nameZh = "测试工具";
     tool.kind        = ToolKind::Cpp;
     tool.inputs      = {
-        {"in_val", "输入", {Type::Int}, std::int64_t{0}}
+        {1, "输入", {Type::Int}, std::int64_t{0}}
     };
     tool.outputs = {
-        {"out_val", "输出", {Type::Int}}
+        {2, "输出", {Type::Int}}
     };
     return tool;
 }
@@ -87,40 +87,40 @@ int main()
 
     // E01: Same row A and B cannot connect
     {
-        auto sourcesForB = editor.compatibleSources("flow_1", nodeB, "in_val");
+        auto sourcesForB = editor.compatibleSources("flow_1", nodeB, 1);
         assert(std::none_of(sourcesForB.begin(), sourcesForB.end(), [&](const auto &s) { return s.node == nodeA; }));
 
-        auto inputsForA = editor.compatibleInputs("flow_1", {nodeA, "out_val"});
+        auto inputsForA = editor.compatibleInputs("flow_1", {nodeA, 2});
         assert(std::none_of(inputsForA.begin(), inputsForA.end(), [&](const auto &i) { return i.node == nodeB; }));
 
         rejects([&] {
-            editor.setBinding("flow_1", nodeB, "in_val", {BindingMode::Upstream, Missing{}, SourcePort{nodeA, "out_val"}});
+            editor.setBinding("flow_1", nodeB, 1, {BindingMode::Upstream, Missing{}, SourcePort{nodeA, 2}});
         }, "只能连接上级节点的输出");
 
         rejects([&] {
-            editor.bindFreeInput("flow_1", {nodeA, "out_val"}, {nodeB, "in_val"});
+            editor.bindFreeInput("flow_1", {nodeA, 2}, {nodeB, 1});
         }, "只能连接上级节点的输出");
     }
 
     // E02 & E04: A -> C (upstream to downstream across rows) is allowed
     {
-        auto sourcesForC = editor.compatibleSources("flow_1", nodeC, "in_val");
+        auto sourcesForC = editor.compatibleSources("flow_1", nodeC, 1);
         assert(std::any_of(sourcesForC.begin(), sourcesForC.end(), [&](const auto &s) { return s.node == nodeA; }));
 
-        auto inputsForA = editor.compatibleInputs("flow_1", {nodeA, "out_val"});
+        auto inputsForA = editor.compatibleInputs("flow_1", {nodeA, 2});
         assert(std::any_of(inputsForA.begin(), inputsForA.end(), [&](const auto &i) { return i.node == nodeC; }));
 
-        bool bound = editor.setBinding("flow_1", nodeC, "in_val", {BindingMode::Upstream, Missing{}, SourcePort{nodeA, "out_val"}});
+        bool bound = editor.setBinding("flow_1", nodeC, 1, {BindingMode::Upstream, Missing{}, SourcePort{nodeA, 2}});
         assert(bound);
     }
 
     // E03: Reverse connection C -> A is rejected
     {
-        auto sourcesForA = editor.compatibleSources("flow_1", nodeA, "in_val");
+        auto sourcesForA = editor.compatibleSources("flow_1", nodeA, 1);
         assert(std::none_of(sourcesForA.begin(), sourcesForA.end(), [&](const auto &s) { return s.node == nodeC; }));
 
         rejects([&] {
-            editor.setBinding("flow_1", nodeA, "in_val", {BindingMode::Upstream, Missing{}, SourcePort{nodeC, "out_val"}});
+            editor.setBinding("flow_1", nodeA, 1, {BindingMode::Upstream, Missing{}, SourcePort{nodeC, 2}});
         }, "只能连接上级节点的输出");
     }
 
@@ -168,7 +168,7 @@ int main()
         ProjectEditor validEditor;
         const auto n1 = validEditor.addNode("flow_1", toolA, {0, 0});
         const auto n2 = validEditor.addNode("flow_1", toolB, {5, 2});
-        validEditor.setBinding("flow_1", n2, "in_val", {BindingMode::Upstream, Missing{}, SourcePort{n1, "out_val"}});
+        validEditor.setBinding("flow_1", n2, 1, {BindingMode::Upstream, Missing{}, SourcePort{n1, 2}});
 
         auto projectToSave = validEditor.project();
         ProjectStorage storage(registry);
@@ -208,8 +208,8 @@ int main()
         // 2. Binding must be PRESERVED for repair (not quietly removed)
         const auto &loadedFlow = loadResult.project.flows.front();
         const auto &loadedNode2 = *std::find_if(loadedFlow.nodes.begin(), loadedFlow.nodes.end(), [&](const auto &n) { return n.id == n2; });
-        assert(loadedNode2.inputs.at("in_val").source.has_value());
-        assert(loadedNode2.inputs.at("in_val").source->node == n1);
+        assert(loadedNode2.inputs.at(1).source.has_value());
+        assert(loadedNode2.inputs.at(1).source->node == n1);
 
         // 3. portRelations has error, dependencyEdges throws
         const auto relations = portRelations(loadedFlow);

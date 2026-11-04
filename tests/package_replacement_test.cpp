@@ -2,6 +2,7 @@
 // package group so a pipeline change does not have to run it and a deployment change does not have
 // to run the tool examples. The fixture builds its own tools package under a temporary root.
 
+#include "core/NodeContracts.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
 #include "plugins/PluginLoader.h"
@@ -55,17 +56,18 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "func.json");
         ofs << R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "Plugin Function",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
+  "next_port_id": {"init": 0, "inputs": 2, "outputs": 3},
   "ports": {
     "inputs": [
       {
-        "name_en": "x",
+        "id": 1,
         "name_zh": "X",
         "type": "int",
         "default": 10
@@ -73,7 +75,7 @@ void runPackageReplacement(PythonRuntime &python)
     ],
     "outputs": [
       {
-        "name_en": "y",
+        "id": 2,
         "name_zh": "Y",
         "type": "int"
       }
@@ -87,11 +89,11 @@ void runPackageReplacement(PythonRuntime &python)
         std::filesystem::create_directories(toolsPackageDir / "python" / "builtin" / "calc");
         std::ofstream py(toolsPackageDir / "python" / "builtin" / "calc" / "calc.py");
         py << "def execute(inputs):\n"
-           << "    return {'outputs': {'res': int(inputs['val']) + 5, '__status_code': 0, '__status_message': 'ok'}, 'detail': ''}\n";
+           << "    return {'outputs': {2: int(inputs[1]) + 5, 0: 0, 1: 'ok'}, 'detail': ''}\n";
 
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "calc.json");
         ofs << R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "custom.py_math",
   "name_zh": "Python Calc",
   "version": "1.0.0",
@@ -101,17 +103,18 @@ void runPackageReplacement(PythonRuntime &python)
     "file": "calc.py",
     "symbol": "execute"
   },
+  "next_port_id": {"init": 0, "inputs": 2, "outputs": 3},
   "ports": {
     "inputs": [
       {
-        "name_en": "val",
+        "id": 1,
         "name_zh": "Val",
         "type": "int"
       }
     ],
     "outputs": [
       {
-        "name_en": "res",
+        "id": 2,
         "name_zh": "Res",
         "type": "int"
       }
@@ -124,7 +127,7 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "platform.test_recv",
   "name_zh": "Test Receiver",
   "version": "1.0.0",
@@ -132,25 +135,26 @@ void runPackageReplacement(PythonRuntime &python)
     "kind": "host",
     "binding": "visionrt.receiver"
   },
+  "next_port_id": {"init": 4, "inputs": 1, "outputs": 5},
   "ports": {
     "init": [
       {
-        "name_en": "source_flow_id",
+        "id": 0,
         "name_zh": "Source Flow",
         "type": "string"
       },
       {
-        "name_en": "source_node_seq",
+        "id": 1,
         "name_zh": "Source Node",
         "type": "string"
       },
       {
-        "name_en": "source_port_id",
+        "id": 2,
         "name_zh": "Source Port",
-        "type": "string"
+        "type": "int"
       },
       {
-        "name_en": "timeout_ms",
+        "id": 3,
         "name_zh": "Timeout",
         "type": "int",
         "default": 1000
@@ -158,17 +162,17 @@ void runPackageReplacement(PythonRuntime &python)
     ],
     "outputs": [
       {
-        "name_en": "value",
+        "id": 2,
         "name_zh": "Value",
         "type": "int"
       },
       {
-        "name_en": "source_status_code",
+        "id": 3,
         "name_zh": "Source Status Code",
         "type": "int"
       },
       {
-        "name_en": "source_status_message",
+        "id": 4,
         "name_zh": "Source Status Message",
         "type": "string"
       }
@@ -239,9 +243,9 @@ void runPackageReplacement(PythonRuntime &python)
         InputBinding b1;
         b1.mode    = BindingMode::Literal;
         b1.literal = std::int64_t{10};
-        n1.inputs.emplace("x", b1);
-        n1.signatures.inputs["x"]  = {Type::Int};
-        n1.signatures.outputs["y"] = {Type::Int};
+        n1.inputs.emplace(1, b1);
+        n1.signatures.inputs[1]  = {Type::Int};
+        n1.signatures.outputs[2] = {Type::Int};
         f1.nodes.push_back(n1);
 
         NodeDefinition n2;
@@ -252,10 +256,10 @@ void runPackageReplacement(PythonRuntime &python)
         InputBinding b2;
         b2.mode    = BindingMode::Upstream;
         b2.literal = std::int64_t{0};
-        b2.source  = SourcePort{1, "y"};
-        n2.inputs.emplace("val", b2);
-        n2.signatures.inputs["val"]  = {Type::Int};
-        n2.signatures.outputs["res"] = {Type::Int};
+        b2.source  = SourcePort{1, 2};
+        n2.inputs.emplace(1, b2);
+        n2.signatures.inputs[1]  = {Type::Int};
+        n2.signatures.outputs[2] = {Type::Int};
         f1.nodes.push_back(n2);
         project.flows.push_back(f1);
 
@@ -269,19 +273,20 @@ void runPackageReplacement(PythonRuntime &python)
         n3.toolId           = "platform.test_recv";
         n3.toolNameSnapshot = "Test Receiver";
         n3.position         = {100, 250};
-        n3.initParams       = {
-            { "source_flow_id",         std::string("sender_flow")},
-            {"source_node_seq", std::string(std::to_string(n2.id))},
-            { "source_port_id",                 std::string("res")},
-            {     "timeout_ms",                 std::int64_t{1000}}
+        // Receiver init ports keep the declaration order 0..3; the source port travels as a number.
+        n3.initParams = {
+            {ReceiveInitPorts::SourceFlow, std::string("sender_flow")},
+            {ReceiveInitPorts::SourceNode, std::string(std::to_string(n2.id))},
+            {ReceiveInitPorts::SourcePort, std::int64_t{2}},
+            {        ReceiveInitPorts::Timeout, std::int64_t{1000}}
         };
-        n3.signatures.initParams["source_flow_id"]   = {Type::String};
-        n3.signatures.initParams["source_node_seq"]   = {Type::String};
-        n3.signatures.initParams["source_port_id"]     = {Type::String};
-        n3.signatures.initParams["timeout_ms"]         = {Type::Int};
-        n3.signatures.outputs["value"]                 = {Type::Int};
-        n3.signatures.outputs["source_status_code"]    = {Type::Int};
-        n3.signatures.outputs["source_status_message"] = {Type::String};
+        n3.signatures.initParams[ReceiveInitPorts::SourceFlow] = {Type::String};
+        n3.signatures.initParams[ReceiveInitPorts::SourceNode] = {Type::String};
+        n3.signatures.initParams[ReceiveInitPorts::SourcePort] = {Type::Int};
+        n3.signatures.initParams[ReceiveInitPorts::Timeout]    = {Type::Int};
+        n3.signatures.outputs[ReceivePorts::Value]               = {Type::Int};
+        n3.signatures.outputs[ReceivePorts::SourceStatus]        = {Type::Int};
+        n3.signatures.outputs[ReceivePorts::SourceStatusMessage] = {Type::String};
         f2.nodes.push_back(n3);
         project.flows.push_back(f2);
         project.nextNodeId = 4;
@@ -292,7 +297,7 @@ void runPackageReplacement(PythonRuntime &python)
 
         auto s1 = snapshot(update1, 1);
         assert((s1 && s1->status.code == 0));
-        assert((std::get<std::int64_t>(s1->outputs.at("y")) == 20));
+        assert((std::get<std::int64_t>(s1->outputs.at(2)) == 20));
 
         auto s2 = snapshot(update1, 2);
         if (!s2 || s2->status.code != 0)
@@ -301,7 +306,7 @@ void runPackageReplacement(PythonRuntime &python)
                       << " msg=" << (s2 ? s2->status.message : "null") << std::endl;
         }
         assert((s2 && s2->status.code == 0));
-        assert((std::get<std::int64_t>(s2->outputs.at("res")) == 25));
+        assert((std::get<std::int64_t>(s2->outputs.at(2)) == 25));
 
         auto s3 = snapshot(update1, 3);
         if (!s3 || s3->status.code != 0)
@@ -310,7 +315,7 @@ void runPackageReplacement(PythonRuntime &python)
                       << " msg=" << (s3 ? s3->status.message : "null") << std::endl;
         }
         assert((s3 && s3->status.code == 0));
-        assert((std::get<std::int64_t>(s3->outputs.at("value")) == 25));
+        assert((std::get<std::int64_t>(s3->outputs.at(ReceivePorts::Value)) == 25));
         std::cout << "[Evidence T-08] Pipeline with C++ domain DLL, Python tool, and Receiver node executed with exact "
                      "numerical value (25) in unicode path.\n";
 
@@ -332,7 +337,7 @@ void runPackageReplacement(PythonRuntime &python)
         assert((engineReload.start(reloaded1.project, registry1, RunMode::Once).code == 0));
         auto updateReload = finish(engineReload);
         auto r_s3         = snapshot(updateReload, 3);
-        assert((r_s3 && std::get<std::int64_t>(r_s3->outputs.at("value")) == 25));
+        assert((r_s3 && std::get<std::int64_t>(r_s3->outputs.at(ReceivePorts::Value)) == 25));
         std::cout << "[Evidence T-08] Save / reopen consistency and numerical equality verified.\n";
     }
 
@@ -399,24 +404,25 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "counter.json");
         ofs << R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "Plugin Counter",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
+  "next_port_id": {"init": 1, "inputs": 1, "outputs": 3},
   "ports": {
     "init": [
       {
-        "name_en": "initial",
+        "id": 0,
         "name_zh": "Initial",
         "type": "int"
       }
     ],
     "outputs": [
       {
-        "name_en": "count",
+        "id": 2,
         "name_zh": "Count",
         "type": "int"
       }
@@ -428,7 +434,7 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "platform.test_recv",
   "name_zh": "Test Receiver",
   "version": "1.0.0",
@@ -436,25 +442,26 @@ void runPackageReplacement(PythonRuntime &python)
     "kind": "host",
     "binding": "visionrt.receiver"
   },
+  "next_port_id": {"init": 4, "inputs": 1, "outputs": 5},
   "ports": {
     "init": [
       {
-        "name_en": "source_flow_id",
+        "id": 0,
         "name_zh": "Source Flow",
         "type": "string"
       },
       {
-        "name_en": "source_node_seq",
+        "id": 1,
         "name_zh": "Source Node",
         "type": "string"
       },
       {
-        "name_en": "source_port_id",
+        "id": 2,
         "name_zh": "Source Port",
-        "type": "string"
+        "type": "int"
       },
       {
-        "name_en": "timeout_ms",
+        "id": 3,
         "name_zh": "Timeout",
         "type": "int",
         "default": 1000
@@ -462,17 +469,17 @@ void runPackageReplacement(PythonRuntime &python)
     ],
     "outputs": [
       {
-        "name_en": "value",
+        "id": 2,
         "name_zh": "Value",
         "type": "int"
       },
       {
-        "name_en": "source_status_code",
+        "id": 3,
         "name_zh": "Source Status Code",
         "type": "int"
       },
       {
-        "name_en": "source_status_message",
+        "id": 4,
         "name_zh": "Source Status Message",
         "type": "string"
       }

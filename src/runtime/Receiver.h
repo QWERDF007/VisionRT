@@ -10,7 +10,7 @@ struct ReceiveRequest
 {
     std::string               flowId;
     std::string               nodeSequence;
-    std::string               port;
+    PortId                    port = 0;
     TypeSpec                  type;
     std::chrono::milliseconds timeout{1000};
 };

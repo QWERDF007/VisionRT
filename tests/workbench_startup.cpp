@@ -142,7 +142,7 @@ void startupProjectContract()
             const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
             QFile      badProject(badPath);
             require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
-            require(badProject.write(R"json({"format_version":4,"project":{},"flows":{}})json") > 0,
+            require(badProject.write(R"json({"format_version":7,"project":{},"flows":{}})json") > 0,
                     "cannot populate malformed project fixture");
             badProject.close();
             const auto oldNodes   = app.nodes();
@@ -177,10 +177,16 @@ void startupProjectContract()
             auto projectNodes = projectFlow.value("nodes").toArray();
             auto configured   = projectNodes.at(3).toObject();
             require(configured.value("node_seq").toString() == "4", "project warning node identity changed");
-            auto inputs = configured.value("inputs").toObject();
-            auto kernel = inputs.value("kernel").toObject();
-            kernel.insert("literal", 0);
-            inputs.insert("kernel", kernel);
+            // Ports are numeric: 高斯核大小 is input 3 of visionrt.image.preprocess.
+            auto inputs = configured.value("inputs").toArray();
+            for (qsizetype index = 0; index < inputs.size(); ++index)
+            {
+                auto binding = inputs[index].toObject();
+                if (binding.value("port_id").toInt() != 3)
+                    continue;
+                binding.insert("literal", 0);
+                inputs[index] = binding;
+            }
             configured.insert("inputs", inputs);
             projectNodes[3] = configured;
             projectFlow.insert("nodes", projectNodes);
@@ -206,7 +212,7 @@ void startupProjectContract()
                     "project warning load did not complete");
             const auto rangeWarning = warningDiagnostic();
             require(rangeWarning.value("flow_id") == "flow_1" && rangeWarning.value("node") == "4"
-                        && rangeWarning.value("field") == "kernel"
+                        && rangeWarning.value("field") == QStringLiteral("端口 3")
                         && rangeWarning.value("message").toString().contains(QStringLiteral("已按声明收敛"))
                         && !rangeWarning.contains("code"),
                     "project warning lost its typed context or invented an execution status");
@@ -215,7 +221,7 @@ void startupProjectContract()
             // instead of a number the declaration rejects.
             bool clamped = false;
             for (const auto &parameter : app.parameters())
-                if (parameter.toMap().value("id") == "kernel")
+                if (parameter.toMap().value("id").toUInt() == 3u)
                     clamped = parameter.toMap().value("valueText") == "1";
             require(clamped, "loading a range warning did not write back the clamped value");
             const auto previous = app.diagnostics().size();
@@ -286,7 +292,7 @@ void startupProjectContract()
                     "cannot write native decode failure fixture");
             oversizedFile.close();
             app.selectNode("1");
-            require(app.setParameterPath("path", false, QUrl::fromLocalFile(imagePath)),
+            require(app.setParameterPath(1, false, QUrl::fromLocalFile(imagePath)),
                     "cannot select native decode failure input");
             auto *outputModel = qobject_cast<visionrt::OutputModel *>(app.outputModel());
             require(outputModel != nullptr, "main-window output model is missing");
@@ -294,13 +300,13 @@ void startupProjectContract()
             require(QTest::qWaitFor(
                         [&]
                         {
-                            const auto status = outputModel->capture(QStringLiteral("__status_message"));
+                            const auto status = outputModel->capture(1);
                             return !app.busy() && status && status->diagnostic && status->diagnostic->status.code != 0;
                         },
                         3000),
                     "native decode failure did not reach the main window");
             const auto decodeJson
-                = visionrt::OutputModel::diagnosticText(*outputModel->capture(QStringLiteral("__status_message")));
+                = visionrt::OutputModel::diagnosticText(*outputModel->capture(1));
             const auto decode = QJsonDocument::fromJson(decodeJson.toUtf8()).object();
             // The image reader owns its business codes: 101004 is "decode failed" in the tool's own
             // error domain. The host forwards it unchanged instead of inventing a generic 1.

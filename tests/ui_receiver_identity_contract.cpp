@@ -1,4 +1,5 @@
 #include "WorkbenchFixtures.h"
+#include "core/NodeContracts.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
@@ -35,6 +36,12 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// 来源夹具：业务输入 1、业务输出 2。接收端口编号见 NodeContracts.h。
+constexpr PortId kSourceValueInput  = 1;
+constexpr PortId kSourceValueOutput = 2;
+// 当前接收声明之外的编号：用于构造“声明已变更、需重新选择”的旧工程残留。
+constexpr PortId kRetiredInitPort = 9;
 }
 
 int main(int argc, char **argv)
@@ -52,14 +59,14 @@ try
         require(file.open(QIODevice::WriteOnly) && file.write(content) == content.size(),
                 "cannot write identity fixture");
     };
-    write("tools/custom/identity/source.json", R"({"schema_version":5,"name_en":"test.identity.source","name_zh":"来源","version":"1.0","implementation":{"kind":"python_function","package":"identity","file":"source.py","symbol":"run"},"ports":{"inputs":[{"name_en":"value","name_zh":"值","type":"int"}],"outputs":[{"name_en":"value","name_zh":"值","type":"int"}]}})");
+    write("tools/custom/identity/source.json", R"({"schema_version":6,"name_en":"test.identity.source","name_zh":"来源","version":"1.0","implementation":{"kind":"python_function","package":"identity","file":"source.py","symbol":"run"},"next_port_id":{"init":0,"inputs":2,"outputs":3},"ports":{"inputs":[{"id":1,"name_zh":"值","type":"int"}],"outputs":[{"id":2,"name_zh":"值","type":"int"}]}})");
     write("python/custom/identity/source.py",
           "import threading\n"
           "calls_lock = threading.Lock()\n"
           "def run(inputs):\n"
           "    with calls_lock, open(__file__ + '.calls', 'a') as calls:\n"
-          "        calls.write(str(inputs['value']) + '\\n')\n"
-          "    return {'outputs': {'value': inputs['value'], '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
+          "        calls.write(str(inputs[1]) + '\\n')\n"
+          "    return {'outputs': {2: inputs[1], 0: 0, 1: ''}, 'detail': ''}\n");
     const auto   tools = std::filesystem::path(root.toStdU16String()) / "tools-package";
     ToolRegistry registry;
     registry.registerPackage(readToolsPackage(tools));
@@ -75,12 +82,12 @@ try
     const auto    target     = editor.addNode("flow_1", *receiver, {});
     editor.setAlias(sourceFlow, first, "同名来源");
     editor.setAlias(sourceFlow, second, "同名来源");
-    editor.setLiteral(sourceFlow, first, "value", std::int64_t{17});
-    editor.setLiteral(sourceFlow, second, "value", std::int64_t{29});
-    editor.setInitParam("flow_1", target, "source_flow_id", sourceFlow);
-    editor.setInitParam("flow_1", target, "source_node_seq", std::to_string(first));
-    editor.setInitParam("flow_1", target, "source_port_id", std::string("value"));
-    editor.setInitParam("flow_1", target, "timeout_ms", std::int64_t{5000});
+    editor.setLiteral(sourceFlow, first, kSourceValueInput, std::int64_t{17});
+    editor.setLiteral(sourceFlow, second, kSourceValueInput, std::int64_t{29});
+    editor.setInitParam("flow_1", target, ReceiveInitPorts::SourceFlow, sourceFlow);
+    editor.setInitParam("flow_1", target, ReceiveInitPorts::SourceNode, std::to_string(first));
+    editor.setInitParam("flow_1", target, ReceiveInitPorts::SourcePort, std::int64_t{kSourceValueOutput});
+    editor.setInitParam("flow_1", target, ReceiveInitPorts::Timeout, std::int64_t{5000});
     ProjectStorage storage(registry);
     auto           project = editor.project();
     const auto     input   = root + "/宽 ID 工程.vrt.json";
@@ -122,11 +129,15 @@ try
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQmlComponent component(&engine);
-    component.setData(
+    // 参数行按数字编号定位，QML 侧不再用中文名/字符串标识查找。
+    const auto editorSnippet = QStringLiteral(
         "import QtQuick\nimport \".\"\n"
         "ParameterEditor { width: 600; height: 36; "
-        "parameter: app.parameters.find(function(row) { return row.id === 'source_node_seq' })"
-        " || { id: '', name: '', type: 'String', literal: '', init: false } }",
+        "parameter: app.parameters.find(function(row) { return row.id === %1 })"
+        " || { id: 0, name: '', type: 'String', literal: '', init: false } }")
+        .arg(ReceiveInitPorts::SourceNode);
+    component.setData(
+        editorSnippet.toUtf8(),
         QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/IdentityContract.qml")));
     std::unique_ptr<QObject> owner(component.create());
     if (!owner)
@@ -167,8 +178,8 @@ try
     {
         app.runOnce();
         idle();
-        const auto status = outputs->capture("__status_code");
-        const auto value  = outputs->capture("value");
+        const auto status = outputs->capture(kStatusCodePort);
+        const auto value  = outputs->capture(ReceivePorts::Value);
         require(status && value, "receiver result ports are missing");
         if (OutputModel::fullText(*status) != "0" || OutputModel::fullText(*value) != expected)
             throw std::runtime_error("receiver expected=" + expected.toStdString()
@@ -191,7 +202,7 @@ try
     require(app.save(output), "wide-ID project save failed");
     const auto restored = storage.load(std::filesystem::path(output.toStdU16String()));
     require(restored.diagnostics.empty() && restored.project.flows[0].nodes[0].id == target
-                && std::get<std::string>(restored.project.flows[0].nodes[0].initParams.at("source_node_seq"))
+                && std::get<std::string>(restored.project.flows[0].nodes[0].initParams.at(ReceiveInitPorts::SourceNode))
                        == std::to_string(second),
             "saved receiver identity changed");
     app.requestOpen(output);
@@ -216,21 +227,28 @@ try
     auto flow       = flows[0].toObject();
     auto nodes      = flow["nodes"].toArray();
     auto node       = nodes[0].toObject();
-    auto parameters = node["init_params"].toObject();
-    parameters.remove("source_flow_id");
-    parameters.remove("source_node_seq");
-    parameters.insert("source_flow_name", "来源流程");
-    parameters.insert("source_node_name", "同名来源");
+    // 旧工程只有“按名引用”可写：这里模拟它的等价残留——源流程/源节点参数已不在声明中，
+    // 值以 retired_init_params 保留，必须由用户重新选择来源，宿主不得猜号。
+    const auto withoutPorts = [](QJsonArray items, std::initializer_list<int> dropped)
+    {
+        QJsonArray kept;
+        for (const auto &item : items)
+        {
+            const int id = item.toObject().value("port_id").toInt();
+            bool      drop = false;
+            for (const int candidate : dropped)
+                drop = drop || candidate == id;
+            if (!drop)
+                kept.append(item);
+        }
+        return kept;
+    };
+    const std::initializer_list<int> references{ReceiveInitPorts::SourceFlow, ReceiveInitPorts::SourceNode};
+    auto parameters = withoutPorts(node["init_params"].toArray(), references);
+    parameters.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"value", "旧来源"}});
     auto types     = node["type_snapshot"].toObject();
-    auto initTypes = types["init_params"].toObject();
-    initTypes.remove("source_flow_id");
-    initTypes.remove("source_node_seq");
-    initTypes.insert("source_flow_name", QJsonObject{
-                                             {"type", "String"}
-    });
-    initTypes.insert("source_node_name", QJsonObject{
-                                             {"type", "String"}
-    });
+    auto initTypes = withoutPorts(types["init_params"].toArray(), references);
+    initTypes.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"type", QJsonObject{{"type", "String"}}}});
     types.insert("init_params", initTypes);
     node.insert("init_params", parameters);
     node.insert("type_snapshot", types);
@@ -253,10 +271,10 @@ try
     idle();
     require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 8,
             "an unresolved name-based reference started the graph");
-    require(app.setParameter("source_flow_id", true, QString::fromStdString(sourceFlow)),
+    require(app.setParameter(ReceiveInitPorts::SourceFlow, true, QString::fromStdString(sourceFlow)),
             "cannot repair source flow identity");
     idle();
-    require(app.setParameter("source_node_seq", true, QString::number(first)), "cannot repair source node identity");
+    require(app.setParameter(ReceiveInitPorts::SourceNode, true, QString::number(first)), "cannot repair source node identity");
     idle();
     run("17");
     require(calls.seek(0), "cannot reread Python execution evidence");
@@ -272,11 +290,19 @@ try
                                   .toObject()["nodes"]
                                   .toArray()[0]
                                   .toObject();
-    const auto repairedParameters = repairedNode["init_params"].toObject();
-    require(repairedParameters["source_flow_name"] == "来源流程" && repairedParameters["source_node_name"] == "同名来源"
-                && repairedParameters["source_flow_id"].toString() == QString::fromStdString(sourceFlow)
-                && repairedParameters["source_node_seq"].toString() == QString::number(first),
-            "repair/save replaced the original names or changed the selected stable IDs");
+    const auto repairedValue = [&](PortId id)
+    {
+        for (const auto &item : repairedNode["init_params"].toArray())
+            if (item.toObject().value("port_id").toInt() == static_cast<int>(id))
+                return item.toObject().value("value");
+        return QJsonValue{};
+    };
+    const auto retired = repairedNode["retired_init_params"].toArray();
+    require(repairedValue(ReceiveInitPorts::SourceFlow).toString() == QString::fromStdString(sourceFlow)
+                && repairedValue(ReceiveInitPorts::SourceNode).toString() == QString::number(first)
+                && retired.size() == 1
+                && retired[0].toObject().value("port_id").toInt() == static_cast<int>(kRetiredInitPort),
+            "repair/save dropped a retained value or changed the selected stable IDs");
     std::cout << "RECEIVER_IDENTITY_PASS first=" << first << " second=" << second << " target=" << target
               << " keyboard=3 source_executions=10 restored=29 repaired=17 rejected_execution=0\n";
     app.renameFlow(QString::fromStdString(sourceFlow), "已改名的流程");
@@ -298,9 +324,9 @@ try
     const auto &renamedReceiver = renamed.flows[0].nodes[0];
     require(renamed.flows[1].id == sourceFlow && renamed.flows[1].name == "已改名的流程"
                 && renamed.flows[1].nodes[0].alias == "已改名的来源"
-                && std::get<std::string>(renamedReceiver.initParams.at("source_flow_id")) == sourceFlow
-                && std::get<std::string>(renamedReceiver.initParams.at("source_node_seq")) == std::to_string(first)
-                && renamedReceiver.signatures.outputs.at("value").type == Type::Int,
+                && std::get<std::string>(renamedReceiver.initParams.at(ReceiveInitPorts::SourceFlow)) == sourceFlow
+                && std::get<std::string>(renamedReceiver.initParams.at(ReceiveInitPorts::SourceNode)) == std::to_string(first)
+                && renamedReceiver.signatures.outputs.at(ReceivePorts::Value).type == Type::Int,
             "rename/save changed stable receiver references or their resolved type");
     require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 12,
             "renamed reference did not execute exactly one graph");
@@ -325,7 +351,7 @@ try
     idle();
     const auto replacement = app.selectedNode();
     require(!replacement.isEmpty() && replacement != QString::number(first), "replacement source reused the deleted ID");
-    require(app.setParameter("value", false, "41"), "replacement source value could not be configured");
+    require(app.setParameter(kSourceValueInput, false, "41"), "replacement source value could not be configured");
     idle();
     app.renameNode(replacement, "已改名的来源");
     idle();
@@ -336,7 +362,7 @@ try
     require(calls.seek(0) && calls.readAll().trimmed().split('\n').size() == 12
                 && field->property("valueText").toString() == QString::number(first),
             "same-name replacement guessed or executed the missing source relationship");
-    require(app.setParameter("source_node_seq", true, replacement), "replacement source identity could not be selected");
+    require(app.setParameter(ReceiveInitPorts::SourceNode, true, replacement), "replacement source identity could not be selected");
     idle();
     run("41");
     require(calls.seek(0), "cannot read repaired reference execution evidence");

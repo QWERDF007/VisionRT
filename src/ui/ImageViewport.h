@@ -7,6 +7,8 @@
 #include <QSize>
 #include <QTransform>
 #include <optional>
+#include "core/ToolDefinition.h"
+
 #include <string>
 #include <vector>
 
@@ -15,7 +17,7 @@ namespace visionrt {
 struct RoiEditTarget
 {
     std::uint64_t nodeSeq = 0;
-    std::string   inputPortId;
+    PortId        inputPortId = 0;
     int           imageIndex = 0;
     int           roiIndex   = -1; // -1 appends a new ROI; existing edits/deletion use an index.
     std::uint64_t session = 0;

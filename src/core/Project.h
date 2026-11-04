@@ -21,9 +21,9 @@ enum class BindingMode
 
 struct SourcePort
 {
-    NodeId      node;
-    std::string port;
-    bool        operator==(const SourcePort &) const = default;
+    NodeId node = 0;
+    PortId port = 0;
+    bool   operator==(const SourcePort &) const = default;
 };
 
 struct InputBinding
@@ -40,14 +40,14 @@ struct GridPoint
     bool operator==(const GridPoint &) const = default;
 };
 
-using TypeMap = std::map<std::string, TypeSpec, std::less<>>;
+using TypeMap = std::map<PortId, TypeSpec>;
 
-// Node-owned dynamic port configuration. port_id values are stable node-local
-// identifiers allocated from nextPortSeq; symbols are the formula identifiers and
+// Node-owned dynamic port configuration. portId values are stable node-local
+// identifiers allocated from nextPortId; symbols are the formula identifiers and
 // names are free-form UI text.
 struct ExpressionVariable
 {
-    std::string portId;
+    PortId      portId = 0;
     std::string name;
     std::string symbol;
     TypeSpec    type;
@@ -57,7 +57,7 @@ struct ExpressionVariable
 
 struct ExpressionResult
 {
-    std::string portId;
+    PortId      portId = 0;
     std::string name;
     std::string symbol;
     std::string expression;
@@ -68,7 +68,8 @@ struct ExpressionResult
 
 struct ExpressionConfig
 {
-    std::uint64_t                   nextPortSeq = 1;
+    // Expression results are business outputs, so 0 and 1 stay reserved for the host status pair.
+    std::uint64_t                   nextPortId = 2;
     std::vector<ExpressionVariable> variables;
     std::vector<ExpressionResult>   program;
     bool operator==(const ExpressionConfig &) const = default;
@@ -99,10 +100,10 @@ struct NodeDefinition
     std::string                                      alias;
     GridPoint                                        position;
     Values                                           initParams;
-    std::map<std::string, InputBinding, std::less<>> inputs;
+    std::map<PortId, InputBinding>                   inputs;
     TypeSnapshot                                     signatures;
-    std::map<std::string, PortTypeReference, std::less<>> outputTypeSources;
-    std::map<std::string, std::string, std::less<>> outputTypeErrors;
+    std::map<PortId, PortTypeReference>              outputTypeSources;
+    std::map<PortId, std::string>                    outputTypeErrors;
     std::optional<ExpressionConfig>                  expression;
     std::optional<ExecutionGuard>                    executionGuard;
     std::optional<TypeSpec>                          selectType;

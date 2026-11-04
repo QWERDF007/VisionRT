@@ -1,5 +1,6 @@
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
+#include "core/NodeContracts.h"
 #include "ui/AppController.h"
 #include "ui/Theme.h"
 #include <quickui/Color.h>
@@ -29,6 +30,11 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// 夹具声明的端口编号。
+constexpr PortId kModeInput         = 1;
+constexpr PortId kFlagOutput        = 3;
+constexpr PortId kSourceValueOutput = 2;
 
 QQuickItem *findItem(QQuickItem *parent, const QString &name)
 {
@@ -66,12 +72,14 @@ try
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"status", "tool.py", "run"};
     definition.inputs      = {
-        { "mode", "模式", {Type::String}, std::string("success")}
+        {1, "模式", {Type::String}, std::string("success")}
     };
+    definition.nextInputPortId = 2;
     definition.outputs = {
-        {  "value",  "值", {Type::Int}},
-        { "flag", "标志", {Type::Bool}}
+        {2, "值", {Type::Int}},
+        {3, "标志", {Type::Bool}}
     };
+    definition.nextOutputPortId = 4;
     write(package + "tools/custom/status/source.json", QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(script, R"py(import time
 from pathlib import Path
@@ -79,15 +87,15 @@ from pathlib import Path
 root = Path(__file__).parent
 
 def run(inputs):
-    mode = inputs.get('mode', 'success')
+    mode = inputs.get(1, 'success')
     if mode == 'wait':
         (root / 'entered').write_text('1', encoding='utf-8')
         while not (root / 'allow').exists():
             time.sleep(0.002)
     if mode == 'fail':
-        return {'outputs': {'value': None, 'flag': None, '__status_code': 1, '__status_message': '受控失败'},
+        return {'outputs': {2: None, 3: None, 0: 1, 1: '受控失败'},
                 'detail': ''}
-    return {'outputs': {'value': 7, 'flag': mode != 'gate_false', '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: 7, 3: mode != 'gate_false', 0: 0, 1: ''},
             'detail': ''}
 )py");
     AppController app(2, root);
@@ -140,7 +148,7 @@ def run(inputs):
     const auto neighbour = app.selectedNode();
     require(!neighbour.isEmpty() && neighbour != source, "status neighbour node is missing");
     app.selectNode(source);
-    require(app.setParameter("mode", false, "wait"), "status source could not enter wait mode");
+    require(app.setParameter(kModeInput, false, "wait"), "status source could not enter wait mode");
     idle();
     app.runNode();
     require(QTest::qWaitFor([&] { return stateOf(source).value("state").toString() == "running"; }, 5000),
@@ -175,7 +183,7 @@ def run(inputs):
             "succeeded node has no timing");
     require(QFile::remove(permission), "status permission file could not be removed");
     app.selectNode(source);
-    require(app.setParameter("mode", false, "fail"), "status source could not enter failure mode");
+    require(app.setParameter(kModeInput, false, "fail"), "status source could not enter failure mode");
     idle();
     app.runNode();
     idle();
@@ -184,7 +192,7 @@ def run(inputs):
     requireColor(sourceItem, "statusDotColor", theme->nodeStateRed(), "failed status dot is not red");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderRed(), "failed header is not red");
     requireColor(sourceItem, "headerText", theme->nodeHeaderTextRed(), "failed header text is not red");
-    require(app.setParameter("mode", false, "wait"), "status source could not return to wait mode");
+    require(app.setParameter(kModeInput, false, "wait"), "status source could not return to wait mode");
     idle();
     app.addFlow("接收流程");
     idle();
@@ -194,21 +202,23 @@ def run(inputs):
     idle();
     const auto receiver = app.selectedNode();
     require(!receiver.isEmpty(), "status receiver node is missing");
-    require(app.setParameter("source_flow_id", true, sourceFlow), "receiver source flow could not be set");
+    require(app.setParameter(ReceiveInitPorts::SourceFlow, true, sourceFlow), "receiver source flow could not be set");
     idle();
-    require(app.setParameter("source_node_seq", true, source), "receiver source node could not be set");
+    require(app.setParameter(ReceiveInitPorts::SourceNode, true, source), "receiver source node could not be set");
     idle();
-    require(app.setParameter("source_port_id", true, "value"), "receiver source port could not be set");
+    require(app.setParameter(ReceiveInitPorts::SourcePort, true, QString::number(kSourceValueOutput)), "receiver source port could not be set");
     idle();
-    require(app.setParameter("timeout_ms", true, "10000"), "receiver timeout could not be set");
+    require(app.setParameter(ReceiveInitPorts::Timeout, true, "10000"), "receiver timeout could not be set");
     idle();
     idle();
     app.selectFlow(receiverFlow);
     app.selectNode(receiver);
     idle();
     app.toggleLoop();
-    require(QTest::qWaitFor([&] { return stateOf(receiver).value("state").toString() == "running"; }, 5000),
-            "status receiver did not enter its waiting state");
+    if (!QTest::qWaitFor([&] { return stateOf(receiver).value("state").toString() == "running"; }, 5000))
+        throw std::runtime_error("status receiver did not enter its waiting state: "
+                                 + stateOf(receiver).value("state").toString().toStdString()
+                                 + " diag=" + app.diagnostic().toStdString());
     auto *receiverItem = findItem(canvas, "flowNode_" + receiver);
     require(receiverItem, "status receiver delegate is missing");
     requireColor(receiverItem, "statusDotColor", theme->nodeStateGreen(), "waiting receiver is not green");
@@ -230,13 +240,13 @@ def run(inputs):
     idle();
     const auto gate = app.selectedNode();
     require(!gate.isEmpty(), "gate node is missing");
-    require(app.setParameter("mode", false, "gate_false"), "gate node could not produce a false flag");
+    require(app.setParameter(kModeInput, false, "gate_false"), "gate node could not produce a false flag");
     idle();
     // Execution conditions belong to the logical node models only.
     app.addNode("visiontools.logic.expression", 4, 8);
     idle();
     const auto gated = app.selectedNode();
-    require(!gated.isEmpty() && app.applyExecutionGuard(gated, gate, "flag"), "gate guard could not be applied");
+    require(!gated.isEmpty() && app.applyExecutionGuard(gated, gate, kFlagOutput), "gate guard could not be applied");
     idle();
     app.runOnce();
     idle();
@@ -260,7 +270,7 @@ def run(inputs):
 
     // A failing upstream blocks the guarded node instead of running it.
     app.selectNode(gate);
-    require(app.setParameter("mode", false, "fail"), "gate node could not enter failure mode");
+    require(app.setParameter(kModeInput, false, "fail"), "gate node could not enter failure mode");
     idle();
     app.runOnce();
     idle();

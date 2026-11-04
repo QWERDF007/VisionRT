@@ -1,0 +1,19 @@
+﻿编号,领域,标题,Specs,位置,工作,依赖,完成条件
+T45-01,基础,定稿编号表与升级基线,S45-01/02/04,Contracts Tool.h/Module.h；两产品子模块与工具声明,发布 PortId/公共编号；整理现有工具及 Host/helper 编号映射；目标 ABI9/schema6/project7，main 子模块保持同一提交。,无,数字号分配表可审；工具ID未误改；版本号未与其他用途冲突。
+T45-02,Contracts,参数容器与读写基类,S45-05,Tool.h/Tool.cpp/Parameters.h/Issue.h、公共测试,Values 键改 PortId，Reader/Writer/pack 接受数字，保留 ReadResult 与 toolResult；PortIssue 非端口上下文不机械改整数。,T45-01,typed 参数子类可读写数字 ID；函数/类工厂 RAII 仍正常；可写与 owner 不变。
+T45-03,工具,native 全工具与工厂夹具适配,S45-02/05/11,Tools src/preprocess/metrology/infer/common、tests、assets/tools,手写枚举/常量，全部 execute/initialize/输出映射按已定编号；正式工具与 assist 都迁移；无构建生成器。,T45-02,各已发布工具的声明/代码编号一致；状态0/1、输入0策略由工具处理；算法数值回归不退化。
+T45-04,工具,Python SDK 与所有工具适配,S45-06/11,Tools python/author_sdk、builtin/custom、package_payload、tests,int 键输入输出；统一 result/参数类；去 boolean/real 隐式字符串强转；函数类/模板/示例/helper全部同步。,T45-01,"合法工具不变；""1""、True 键和错误作者值识别；类状态隔离，输出键齐全。"
+T45-05,宿主核心,schema6 与 PortRef 编解码,S45-01/02/03/07/08,RT ToolDefinition.h/.cpp、DefinitionJson、ToolPaths、ValueJson,id/next_port_id、可选端口name_en、数字 PortRef/interaction；固定规范化与有序写回；仍使用原类型验证。,T45-01,全部34类型读写；公共端口不落JSON；重复ID、错误阶段、悬空关系失败；排序不重编号。
+T45-06,宿主执行,运行时与 Python 桥接数字化,S45-05/06/07,RT NodeRuntime、ToolValueValidation、ToolRegistry、PythonRuntime/Interop,按数字map组装与校验；不把 int 转 str；outputs/detail严格解包；保留完整 Array capsule 与动态工厂解析。,T45-02/04/05,C++→Python→C++ 数字取参/状态/所有权链可运行；无按名称兜底；非零上层状态仍传入。
+T45-07,工程,format7 与工程绑定,S45-08/14,RT Project.h、ProjectStorage、ProjectEditor、SourcePort/TypeMap,所有端口引用改PortId；存储条目用port_id；值/签名/类型来源/复制重映射及单源validateBinding同步；预览对账。,T45-05,旧引用只经明确迁移转换；新工程排序/改名后稳定；取消有损变更零写入。
+T45-08,逻辑工具,动态端口与跨流程控制,S45-08/09,RT nodeContract/ExpressionConfig、Receiver/Select/ExecutionGuard；Tools logic engine,port_id数字化，symbol保持；方向计数统一；固定宿主端口号清单；动态契约传入resolver，不退回静态声明。,T45-06/07,表达式/条件/合流/Receiver真实管线；动态删除重建不复用ID，跨流程引用按ID解析。
+T45-09,UI桥接,端口上下文、输出与智能点选,S45-08/17,AppControllerBindings/Readback/Assist、Parameter/OutputPanel、模型,所有请求参数与信箱上下文用PortId；helper映射数字化；单值复制保持旧用户行为，整体JSON文本用条目。,T45-06/07/08,上层输入高亮按模式；输出空候选不高亮；重排后preview/ROI提交/读回不串参；无废弃菜单。
+T45-10,编辑器,参数列表模型与统一类型目录,S45-03/07/10,ToolPortListModel（新增）、TypeSpec、Theme,编号角色、稳定选中stage+id、业务行移动、高水位分配；统一34类型；QString传递精确数值。,T45-05,delete-max/save/reopen/add不复用；C++后端拒绝固定行修改；不以rowIndex识别参数。
+T45-11,编辑器,完整自定义工具 Dialog,S45-10/11/17,ToolEditorController、CustomToolDialog、ToolPortProperties（新增）、Main.qml,落实新建/复制/删除/属性/排序/当前草稿Apply；可选别名；统一主题；代码路径与一次性模板入口。,T45-09/10,工具与参数增删可达；删除最后工具合法；只提交当前草稿；基础交互一次实测。
+T45-12,存储,自有工具目录与合并发现,S45-12/13,CustomToolStore（新增）、ToolPackage/Paths、设置,安装包与用户根共同发现；复用扫描函数，避免 customRoots 替换丢示例；QSaveFile、JSON-last、next持久化、资源归属。,T45-05,升级不丢用户工具；冲突/越界/写失败可判别；未完成工具不被扫描；复制保留参数号。
+T45-13,生命周期,应用、删除、刷新失败恢复,S45-13/14/15,AppController、Readback/Assist、ProjectOperations、ToolEditorController,复用异步排空和协调器；有损对账确认；普通失败恢复旧声明；删除保留缺工具节点并正确处理共享代码。,T45-11/12,Loop/close冲突、显示/文本/Assist在途、外部owner、失败恢复用受控事件证明；无GUI阻塞。
+T45-14,迁移,转换旧声明和工程资产,S45-16,一次性转换脚本、assets、examples、项目fixture、作者说明,按批准的旧键→ID表转换，动态节点按旧配置构造本地映射；输出新目录；不自动替换任意AST/Python源码文本。,T45-03～09,原资产保留；缺映射明确中止该文件；关系/绑定/状态端口全部对上；真实工具代码已改造。
+T45-15,整改,测试入口和受控并发,S45-18,RT test_build_metadata_integration.py、display_reader_drain_test、ui_notifications_contract,补shutil；去未用import；小输入+worker gate证取消/ACK/完成；长静默放extended；保留所有真实行为断言。,可与基础并行,独立入口进入测试；常规不固定等10秒，不要求大图足够慢或beats>=3。
+T45-16,整改,测试可定位性与成本,S45-18,Tools test_distribution/CMake；RT performance_contract/WorkbenchFixtures,宿主集成独立条目；skip显式；性能指标改准确名称；按职责渐拆聚合测试，按profile夹具先测成本。,T45-15,日志区分真正执行/跳过；不把busy布尔值报队列数量；不为统一后缀机械改所有文件。
+T45-17,集成,新协议安装态验收,S45-04/07/15/18,三仓 tests/build/packaging、安装态管线,按层增量验证后候选一次全CPU；新建函数/类→排序→运行→重启→删除；新旧模块边界；GPU按所选profile。,T45-01～16,新候选三SHA、版本、依赖列表、通过/失败/跳过真实记录；无R44日志冒充新通过。
+T45-18,收口,文档、交互回归与追踪,S45-17/18,两仓README/docs、SDK注释、主题/交互测试,当前文档对齐新协议，清死链和“状态由宿主发布”误述；保持时钟/Loop/EasyTouch/菜单/日志等；更新工单状态。,T45-17,全部要求可追溯，未完成项真实标注；不引入HALCON或额外框架，产品代码职责明确。

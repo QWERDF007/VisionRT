@@ -1,5 +1,6 @@
 #include "runtime/RuntimeInternal.h"
 #include "core/Sequence.h"
+#include "core/NodeContracts.h"
 
 #include <algorithm>
 #include <array>
@@ -13,9 +14,9 @@ namespace {
 ToolResult receiveResult(const ReceiveOutcome &outcome)
 {
     Values outputs;
-    outputs["source_status_code"]    = outcome.sourceStatus.code;
-    outputs["source_status_message"] = std::string(outcome.sourceStatus.message);
-    outputs["value"]                 = outcome.value;
+    outputs[ReceivePorts::SourceStatus]        = outcome.sourceStatus.code;
+    outputs[ReceivePorts::SourceStatusMessage] = std::string(outcome.sourceStatus.message);
+    outputs[ReceivePorts::Value]               = outcome.value;
     ToolStatus status;
     switch (outcome.disposition)
     {
@@ -54,17 +55,17 @@ public:
     {
         if (!reader_)
             return {1, "结果读取通道不可用"};
-        const auto flow = parameters.find("source_flow_id");
-        const auto node = parameters.find("source_node_seq");
-        const auto port = parameters.find("source_port_id");
+        const auto flow = parameters.find(ReceiveInitPorts::SourceFlow);
+        const auto node = parameters.find(ReceiveInitPorts::SourceNode);
+        const auto port = parameters.find(ReceiveInitPorts::SourcePort);
         if (flow == parameters.end() || node == parameters.end() || port == parameters.end())
         {
             return {1, "接收声明需要 source_flow_id、source_node_seq 与 source_port_id"};
         }
         request_.flowId       = std::get<std::string>(flow->second);
         request_.nodeSequence = std::get<std::string>(node->second);
-        request_.port         = std::get<std::string>(port->second);
-        const auto timeout    = std::get<std::int64_t>(parameters.at("timeout_ms"));
+        request_.port         = static_cast<PortId>(std::get<std::int64_t>(port->second));
+        const auto timeout    = std::get<std::int64_t>(parameters.at(ReceiveInitPorts::Timeout));
         if (timeout < 0)
             return {1, "timeout_ms 必须为非负整数"};
         request_.timeout = std::chrono::milliseconds(timeout);
@@ -97,7 +98,7 @@ void registerReceiveTools(ToolRegistry &registry)
                                  {
                                      const auto output
                                          = std::find_if(definition.outputs.begin(), definition.outputs.end(),
-                                                        [](const auto &port) { return port.nameEn == "value"; });
+                                                        [](const auto &port) { return port.id == ReceivePorts::Value; });
                                      if (output == definition.outputs.end())
                                      {
                                          throw ContractError("接收工具缺少 value 输出端口：" + definition.nameEn);
@@ -110,10 +111,16 @@ namespace runtime_detail {
 namespace {
 constexpr std::string_view kReceiverBinding = "visionrt.receiver";
 
-const std::string *stringParameter(const NodeDefinition &node, const char *id)
+const std::string *stringParameter(const NodeDefinition &node, PortId id)
 {
     const auto found = node.initParams.find(id);
     return found == node.initParams.end() ? nullptr : std::get_if<std::string>(&found->second);
+}
+
+const std::int64_t *numberParameter(const NodeDefinition &node, PortId id)
+{
+    const auto found = node.initParams.find(id);
+    return found == node.initParams.end() ? nullptr : std::get_if<std::int64_t>(&found->second);
 }
 
 std::string receiverLabel(const FlowDefinition &flow, const NodeDefinition &node)
@@ -146,9 +153,9 @@ std::optional<ToolStatus> validateReceiverPlan(const FrozenRun &frozen)
             continue;
         const auto *node   = nodeIt->second;
         const auto *flow   = flowIt->second;
-        const auto *flowId = stringParameter(*node, "source_flow_id");
-        const auto *nodeId = stringParameter(*node, "source_node_seq");
-        const auto *portId = stringParameter(*node, "source_port_id");
+        const auto *flowId  = stringParameter(*node, ReceiveInitPorts::SourceFlow);
+        const auto *nodeId  = stringParameter(*node, ReceiveInitPorts::SourceNode);
+        const auto *portId  = numberParameter(*node, ReceiveInitPorts::SourcePort);
         if (!flowId || !nodeId || !portId)
             continue;
         NodeId sourceId = 0;
@@ -178,8 +185,8 @@ std::optional<ToolStatus> validateReceiverPlan(const FrozenRun &frozen)
             }
         if (!source)
             continue;
-        const auto sourcePort = source->signatures.outputs.find(*portId);
-        const auto valuePort  = node->signatures.outputs.find("value");
+        const auto sourcePort = source->signatures.outputs.find(static_cast<PortId>(*portId));
+        const auto valuePort  = node->signatures.outputs.find(ReceivePorts::Value);
         if (sourcePort == source->signatures.outputs.end() || valuePort == node->signatures.outputs.end()
             || sourcePort->second != valuePort->second)
             continue;

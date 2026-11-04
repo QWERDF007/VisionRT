@@ -94,24 +94,26 @@ void outputContract()
             "scalar rectangle output must retain floating geometry in full text");
     ToolDefinition tool;
     PortDefinition port;
-    port.nameEn   = "value";
+    port.id     = 2;
+    port.nameEn = "value";
     port.nameZh = "值";
-    port.type = {Type::String};
+    port.type   = {Type::String};
     tool.outputs.push_back(port);
+    tool.nextOutputPortId = 3;
     auto snapshot    = std::make_shared<NodeSnapshot>();
     snapshot->node   = 18446744073709551614ULL;
     snapshot->toolId = "test.output";
     snapshot->phase  = NodePhase::Convert;
     snapshot->status = {-2, "输出合同错误", "third-party \"detail\"\n完整详情"};
     snapshot->toolResultPublished = true;
-    snapshot->outputs.emplace("value", std::string(std::string(10000, 'x')));
+    snapshot->outputs.emplace(2, std::string(std::string(10000, 'x')));
     OutputModel model;
     model.setResult(&tool, snapshot,
                     {
-                        {"value", 2}
+                        {2, 2}
     });
-    require(model.get(0).value("portId").toString() == "__status_code", "status code is not first");
-    require(model.get(1).value("portId").toString() == "__status_message", "status message is not second");
+    require(model.get(0).value("portId").toUInt() == 0, "status code is not first");
+    require(model.get(1).value("portId").toUInt() == 1, "status message is not second");
     require(model.get(0).value("preview").toString() == "-2", "status not taken from completed snapshot");
     require(model.get(1).value("preview").toString() == "输出合同错误", "status preview must contain only summary");
     require(model.get(1).value("tooltip").toString() == "输出合同错误", "status tooltip must contain only raw message");
@@ -129,14 +131,14 @@ void outputContract()
     model.clear();
     require(frozen && OutputModel::fullText(*frozen).size() >= 10000,
             "captured output follows current selection or truncates");
-    tool.outputs.front().typeFrom = PortTypeReference{{PortStage::Init, "flow"},
-                                                      {PortStage::Init, "node"},
-                                                      {PortStage::Init, "port"}};
+    tool.outputs.front().typeFrom = PortTypeReference{{PortStage::Init, 1},
+                                                      {PortStage::Init, 2},
+                                                      {PortStage::Init, 3}};
     model.setResult(&tool, {}, {});
     require(model.get(2).value("type").toString() == QStringLiteral("未绑定"), "unbound output pretends to have a concrete type");
     require(!model.capture(2), "unbound output can be captured as a typed value");
     const TypeSpec resolved{Type::Array, DType::Float32, 2};
-    const TypeMap outputs{{"value", resolved}};
+    const TypeMap outputs{{2, resolved}};
     model.setResult(&tool, {}, {}, nullptr, &outputs);
     require(model.get(2).value("type").toString() == typeText(resolved), "resolved dtype/rank/layout not displayed");
     const auto lifecycle = std::make_shared<const NodeDiagnostic>(NodeDiagnostic{
@@ -155,21 +157,22 @@ void outputContract()
     typed.nameEn          = "test.typed";
     typed.nameZh = "类型展示";
     typed.version     = "1";
-    typed.outputs     = {
-        {  "zero",  "零", {Type::Int}},
-        {  "flag", "标志", {Type::Bool}},
-        {"list", "列表", {Type::Array, DType::Int64, 1}},
-        {  "text", "文本", {Type::String}}
+    typed.outputs = {
+        {2, "零", {Type::Int}},
+        {3, "标志", {Type::Bool}},
+        {4, "列表", {Type::Array, DType::Int64, 1}},
+        {5, "文本", {Type::String}}
     };
+    typed.nextOutputPortId = 6;
     auto typedSnapshot    = std::make_shared<NodeSnapshot>();
     typedSnapshot->node   = 2;
     typedSnapshot->toolId = typed.nameEn;
     typedSnapshot->status = {0, "运行成功"};
     typedSnapshot->outputs = {
-        {  "zero", std::int64_t{0}},
-        {  "flag",              false},
-        {  "list", Array::empty(DType::Int64, 1)},
-        {  "text",    std::string{}},
+        {2, std::int64_t{0}},
+        {3, false},
+        {4, Array::empty(DType::Int64, 1)},
+        {5, std::string{}},
     };
     OutputModel typedModel;
     typedModel.setResult(&typed, typedSnapshot, {});
@@ -375,7 +378,7 @@ void nodeDiagnosticsContract()
     require(QDir().mkpath(QFileInfo(pyFile).absolutePath()), "cannot create Python fixture directory");
     if (pyFile.open(QIODevice::WriteOnly))
     {
-        pyFile.write("def run(inputs):\n    return {'outputs': {'value': 42, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
+        pyFile.write("def run(inputs):\n    return {'outputs': {2: 42, 0: 0, 1: ''}, 'detail': ''}\n");
         pyFile.close();
     }
     QFile failPyFile(directory.path() + "/tools-package/python/custom/test_category/test_diag/test_diag_fail.py");
@@ -390,7 +393,7 @@ void nodeDiagnosticsContract()
     {
         jsonFile.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.diag.python",
   "name_zh": "诊断测试",
   "version": "1.0.0",
@@ -403,7 +406,6 @@ void nodeDiagnosticsContract()
   "ports": {
     "inputs": [
       {
-        "name_en": "x",
         "name_zh": "输入",
         "type": "int",
         "default": 1,
@@ -413,16 +415,22 @@ void nodeDiagnosticsContract()
         },
         "ui": {
           "step": 1
-        }
+        },
+        "id": 1
       }
     ],
     "outputs": [
       {
-        "name_en": "value",
         "name_zh": "输出",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json");
         jsonFile.close();
@@ -432,7 +440,7 @@ void nodeDiagnosticsContract()
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.diag.fail",
   "name_zh": "诊断失败",
   "version": "1.0.0",
@@ -445,11 +453,16 @@ void nodeDiagnosticsContract()
   "ports": {
     "outputs": [
       {
-        "name_en": "value",
         "name_zh": "输出",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
         failJsonFile.close();
@@ -459,13 +472,18 @@ void nodeDiagnosticsContract()
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.diag.unfulfilled",
   "name_zh": "未提供实现测试",
   "version": "1.0.0",
   "implementation": {
     "kind": "host",
     "binding": "nonexistent.binding"
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 2
   }
 })json");
         unfulfilledJson.close();
@@ -499,7 +517,7 @@ void nodeDiagnosticsContract()
     {
         projectFile.write(
             R"json({
-  "format_version": 4,
+  "format_version": 7,
   "project": {"name": "诊断工程", "next_node_seq": "4", "next_flow_seq": "2"},
   "flows": [
     {
@@ -513,15 +531,15 @@ void nodeDiagnosticsContract()
           "tool_name_snapshot": "诊断测试",
           "alias": "",
           "pos": [100, 100],
-          "init_params": {},
+          "init_params": [],
           "type_snapshot": {
-            "init_params": {},
-            "inputs": {"x": {"type": "Int"}},
-            "outputs": {"value": {"type": "Int"}}
+            "init_params": [],
+            "inputs": [{"port_id": 1, "type": {"type": "Int"}}],
+            "outputs": [{"port_id": 2, "type": {"type": "Int"}}]
           },
-          "inputs": {
-            "x": {"mode": "literal", "literal": 1}
-          }
+          "inputs": [
+            {"port_id": 1, "mode": "literal", "literal": 1}
+          ]
         },
         {
           "node_seq": "2",
@@ -529,13 +547,13 @@ void nodeDiagnosticsContract()
           "tool_name_snapshot": "未提供实现测试",
           "alias": "",
           "pos": [200, 200],
-          "init_params": {},
+          "init_params": [],
           "type_snapshot": {
-            "init_params": {},
-            "inputs": {},
-            "outputs": {}
+            "init_params": [],
+            "inputs": [],
+            "outputs": []
           },
-          "inputs": {}
+          "inputs": []
         },
         {
           "node_seq": "3",
@@ -543,13 +561,13 @@ void nodeDiagnosticsContract()
           "tool_name_snapshot": "诊断失败",
           "alias": "",
           "pos": [300, 200],
-          "init_params": {},
+          "init_params": [],
           "type_snapshot": {
-            "init_params": {},
-            "inputs": {},
-            "outputs": {"value": {"type": "Int"}}
+            "init_params": [],
+            "inputs": [],
+            "outputs": [{"port_id": 2, "type": {"type": "Int"}}]
           },
-          "inputs": {}
+          "inputs": []
         }
       ]
     }
@@ -648,7 +666,7 @@ void nodeDiagnosticsContract()
 
     const QString pythonId = map0.value("id").toString();
     app.selectNode(pythonId);
-    require(app.setParameter("x", false, "2"), "valid integer parameter change was rejected");
+    require(app.setParameter(1, false, "2"), "valid integer parameter change was rejected");
     const auto staleMap = app.nodes().first().toMap();
     require(staleMap.value("state").toString() == "succeeded",
             "parameter change discarded the last successful display state");
@@ -711,7 +729,7 @@ void mainQmlContract(double scale)
     {
         sleepJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.sleep",
   "name_zh": "Plugin Sleep",
   "version": "1.0.0",
@@ -721,11 +739,16 @@ void mainQmlContract(double scale)
   "ports": {
     "outputs": [
       {
-        "name_en": "y",
         "name_zh": "Y",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
         sleepJson.close();
@@ -736,7 +759,7 @@ void mainQmlContract(double scale)
     {
         counterJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "Plugin Counter",
   "version": "1.0.0",
@@ -746,19 +769,24 @@ void mainQmlContract(double scale)
   "ports": {
     "inputs": [
       {
-        "name_en": "step",
         "name_zh": "Step",
         "type": "int",
-        "default": 1
+        "default": 1,
+        "id": 1
       }
     ],
     "outputs": [
       {
-        "name_en": "count",
         "name_zh": "Count",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json");
         counterJson.close();
@@ -769,12 +797,17 @@ void mainQmlContract(double scale)
     {
         failJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.fail_init",
   "name_zh": "Fail Init Tool",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 2
   }
 })json");
         failJson.close();
@@ -985,7 +1018,7 @@ void mainQmlContract(double scale)
         visionrt::ImageViewport roiViewport;
         roiViewport.setWidth(500);
         roiViewport.setHeight(400);
-        roiViewport.beginRoiEdit({1, "rois", 0, -1}, {});
+        roiViewport.beginRoiEdit({1, 2, 0, -1}, {});
         roiViewport.setDrawShape(2); // Rectangle
         QMouseEvent pressEv(QEvent::MouseButtonPress, roiViewport.imageToItem({20, 20}), Qt::LeftButton, Qt::LeftButton,
                             Qt::NoModifier);
@@ -1016,7 +1049,7 @@ void mainQmlContract(double scale)
     }
     require(!counterNodeId.isEmpty(), "missing counter node");
     app.selectNode(counterNodeId);
-    app.setParameter("step", false, "99");
+    app.setParameter(1, false, "99");
     require(app.dirty() == true, "setting parameter did not mark project dirty");
     QMetaObject::invokeMethod(window, "toggleLeft");
     for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
@@ -1027,7 +1060,7 @@ void mainQmlContract(double scale)
     for (const auto &paramVar : app.parameters())
     {
         const auto pMap = paramVar.toMap();
-        if (pMap.value("id").toString() == "step")
+        if (pMap.value("id").toUInt() == 1)
         {
             paramPreserved = (pMap.value("literal").toString() == "99" || pMap.value("valueText").toString() == "99");
         }
@@ -1087,12 +1120,17 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.legacy.func",
   "name_zh": "遗留函数",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 2
   }
 })json");
             legacyJson.close();
@@ -1109,7 +1147,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.legacy.python",
   "name_zh": "遗留脚本",
   "version": "1.0.0",
@@ -1117,6 +1155,11 @@ void packageDrivenCatalogAndRefreshContract()
     "kind": "python_function",
     "file": "legacy.py",
     "symbol": "run"
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 2
   }
 })json");
             legacyPyJson.close();
@@ -1149,7 +1192,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "计数器插件",
   "version": "1.0.0",
@@ -1159,19 +1202,24 @@ void packageDrivenCatalogAndRefreshContract()
   "ports": {
     "init": [
       {
-        "name_en": "initial",
         "name_zh": "初始值",
         "type": "int",
-        "default": 10
+        "default": 10,
+        "id": 1
       }
     ],
     "outputs": [
       {
-        "name_en": "count",
         "name_zh": "计数值",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 2,
+    "inputs": 1,
+    "outputs": 3
   }
 })json");
         rootCounterJson.close();
@@ -1184,7 +1232,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "函数插件",
   "version": "1.0.0",
@@ -1194,19 +1242,24 @@ void packageDrivenCatalogAndRefreshContract()
   "ports": {
     "inputs": [
       {
-        "name_en": "x",
         "name_zh": "输入",
         "type": "int",
-        "default": 5
+        "default": 5,
+        "id": 1
       }
     ],
     "outputs": [
       {
-        "name_en": "y",
         "name_zh": "输出",
-        "type": "int"
+        "type": "int",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 2,
+    "outputs": 3
   }
 })json");
         rootFunctionJson.close();
@@ -1220,7 +1273,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         pyScriptA.write(
             "def run(inputs):\n"
-            "    return {'outputs': {'result': 111, 'image': [], '__status_code': 0, '__status_message': 'ok'}, 'detail': ''}\n");
+            "    return {'outputs': {2: 111, 3: [], 0: 0, 1: 'ok'}, 'detail': ''}\n");
         pyScriptA.close();
     }
     QFile root3JsonA(dirPath + "/tools-package/tools/custom/user/py/user_node_a.json");
@@ -1228,7 +1281,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.user.pythonA",
   "name_zh": "用户脚本A",
   "version": "1.0.0",
@@ -1241,16 +1294,21 @@ void packageDrivenCatalogAndRefreshContract()
   "ports": {
     "outputs": [
       {
-        "name_en": "result",
         "name_zh": "结果",
-        "type": "int"
+        "type": "int",
+        "id": 2
       },
       {
-        "name_en": "image",
         "name_zh": "图像",
-        "type": "image"
+        "type": "image",
+        "id": 3
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 4
   }
 })json");
         root3JsonA.close();
@@ -1263,7 +1321,7 @@ void packageDrivenCatalogAndRefreshContract()
     {
         recvJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.custom.receiver",
   "name_zh": "动态接收器",
   "version": "1.0.0",
@@ -1274,48 +1332,53 @@ void packageDrivenCatalogAndRefreshContract()
   "ports": {
     "init": [
       {
-        "name_en": "source_flow_id",
         "name_zh": "源流程",
-        "type": "string"
+        "type": "string",
+        "id": 0
       },
       {
-        "name_en": "source_node_seq",
         "name_zh": "源节点",
-        "type": "string"
+        "type": "string",
+        "id": 1
       },
       {
-        "name_en": "source_port_id",
         "name_zh": "源端口",
-        "type": "string"
+        "type": "int",
+        "id": 2
       },
       {
-        "name_en": "timeout_ms",
         "name_zh": "超时时间(ms)",
         "type": "int",
-        "default": 500
+        "default": 500,
+        "id": 3
       }
     ],
     "outputs": [
       {
-        "name_en": "value",
         "name_zh": "接收值",
         "type_from": {
-          "flow": "init.source_flow_id",
-          "node": "init.source_node_seq",
-          "port": "init.source_port_id"
-        }
+          "flow": {"stage": "init", "id": 0},
+          "node": {"stage": "init", "id": 1},
+          "port": {"stage": "init", "id": 2}
+        },
+        "id": 2
       },
       {
-        "name_en": "source_status_code",
         "name_zh": "源状态码",
-        "type": "int"
+        "type": "int",
+        "id": 3
       },
       {
-        "name_en": "source_status_message",
         "name_zh": "源状态消息",
-        "type": "string"
+        "type": "string",
+        "id": 4
       }
     ]
+  },
+  "next_port_id": {
+    "init": 4,
+    "inputs": 1,
+    "outputs": 5
   }
 })json");
         recvJson.close();
@@ -1328,12 +1391,17 @@ void packageDrivenCatalogAndRefreshContract()
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.unindexed.tool",
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 1,
+    "outputs": 2
   }
 })json");
         unindexedJson.close();
@@ -1465,40 +1533,40 @@ void packageDrivenCatalogAndRefreshContract()
         app.selectNode(recvNodeId);
         auto *receiverOutputs = qobject_cast<OutputModel *>(app.outputModel());
         require(receiverOutputs->get(2).value("type").toString() == QStringLiteral("未绑定"), "receiver is typed before source selection");
-        auto choices = [&](const QString &parameter, const QString &field)
+        auto choices = [&](PortId parameter, const QString &field)
         {
             QVariantList result;
             for (const auto &item : app.parameters())
             {
                 const auto row = item.toMap();
-                if (row.value("id").toString() != parameter)
+                if (row.value("id").toUInt() != parameter)
                     continue;
                 for (const auto &option : row.value("options").toList())
                     result.push_back(option.toMap().value(field));
             }
             return result;
         };
-        require(choices("source_flow_id", "label").contains(flow1Name), "source flow choices are missing");
-        require(choices("source_flow_id", "value").contains(flow1Id), "source flow identity is missing");
-        app.setParameter("source_flow_id", true, flow1Id);
+        require(choices(0, "label").contains(flow1Name), "source flow choices are missing");
+        require(choices(0, "value").contains(flow1Id), "source flow identity is missing");
+        app.setParameter(0, true, flow1Id);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(!pythonNodeTitle.isEmpty(), "missing Python image source");
-        app.setParameter("source_node_seq", true, pythonNodeId);
+        app.setParameter(1, true, pythonNodeId);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-        app.setParameter("source_port_id", true, "image");
+        app.setParameter(2, true, "3");
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.imageOutputs().size() == 1
-                    && app.imageOutputs().first().toMap().value("id").toString() == "value",
+                    && app.imageOutputs().first().toMap().value("id").toString() == "2",
                 "source-derived image output is missing from the viewport selector");
-        require(choices("source_node_seq", "label").contains(funcNodeTitle), "source node choices are missing");
-        app.setParameter("source_node_seq", true, funcNodeId);
+        require(choices(1, "label").contains(funcNodeTitle), "source node choices are missing");
+        app.setParameter(1, true, funcNodeId);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-        require(choices("source_port_id", "value").contains(QStringLiteral("y")), "source output choices are missing");
-        app.setParameter("source_port_id", true, "y");
+        require(choices(2, "value").contains(QStringLiteral("2")), "source output choices are missing");
+        app.setParameter(2, true, "2");
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(receiverOutputs->get(2).value("type").toString() == typeText({Type::Int}),
                 "receiver output not resolved after source selection");
-        app.setParameter("timeout_ms", true, "1000");
+        app.setParameter(3, true, "1000");
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
 
         // Run once
@@ -1515,7 +1583,16 @@ void packageDrivenCatalogAndRefreshContract()
         // Receiver result
         app.selectNode(recvNodeId);
         const auto recvPreview = outModel->get(2).value("preview").toString();
-        require(recvPreview == "10", "unexpected receiver output: " + recvPreview.toStdString());
+        if (recvPreview != "10")
+        {
+            QStringList rows;
+            for (int row = 0; row < outModel->rowCount(); ++row)
+                rows << QStringLiteral("%1=%2").arg(outModel->get(row).value("portId").toUInt()).arg(
+                    outModel->get(row).value("preview").toString());
+            throw std::runtime_error("unexpected receiver output: " + recvPreview.toStdString()
+                                     + " rows=" + rows.join(',').toStdString()
+                                     + " diag=" + app.diagnostic().toStdString());
+        }
         std::cout << "[Evidence T-05] Cross-flow receive of dynamic host_binding node verified, value="
                   << recvPreview.toStdString() << "\n";
 
@@ -1524,23 +1601,23 @@ void packageDrivenCatalogAndRefreshContract()
 
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         const auto relationTarget = app.selectedNode();
-        require(app.bindInput(app.portContext("x"), recvNodeId, "value"), "cannot bind source-derived receiver output");
+        require(app.bindInput(app.portContext(1), recvNodeId, 2), "cannot bind source-derived receiver output");
         require(app.wires().size() == 1, "valid receiver relation is missing");
         const auto relationPorts = app.wires().front().toMap().value("ports").toList();
-        require(relationPorts.size() == 1 && relationPorts.front().toMap().value("output").toString() == "value"
-                    && relationPorts.front().toMap().value("input").toString() == "x",
+        require(relationPorts.size() == 1 && relationPorts.front().toMap().value("output").toString() == "2"
+                    && relationPorts.front().toMap().value("input").toString() == "1",
                 "grouped wire discarded the source and target port identity");
         app.selectNode(recvNodeId);
-        app.setParameter("source_node_seq", true, pythonNodeId);
+        app.setParameter(1, true, pythonNodeId);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-        app.setParameter("source_port_id", true, "image");
+        app.setParameter(2, true, "3");
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.wires().isEmpty(), "incompatible or unresolved receiver binding is still drawn as an active wire");
         require(outModel->get(2).value("count").toInt() == 0,
                 "invalid receiver relation is still counted as an active output reference");
-        app.setParameter("source_node_seq", true, funcNodeId);
+        app.setParameter(1, true, funcNodeId);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-        app.setParameter("source_port_id", true, "y");
+        app.setParameter(2, true, "2");
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.wires().size() == 1 && outModel->get(2).value("count").toInt() == 1,
                 "restoring the source type did not restore the same input relation");
@@ -1600,7 +1677,7 @@ void packageDrivenCatalogAndRefreshContract()
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.custom.renamed_recv",
   "name_zh": "改名接收器",
   "version": "1.0.0",
@@ -1611,48 +1688,53 @@ void packageDrivenCatalogAndRefreshContract()
   "ports": {
     "init": [
       {
-        "name_en": "source_flow_id",
         "name_zh": "源流程",
-        "type": "string"
+        "type": "string",
+        "id": 0
       },
       {
-        "name_en": "source_node_seq",
         "name_zh": "源节点",
-        "type": "string"
+        "type": "string",
+        "id": 1
       },
       {
-        "name_en": "source_port_id",
         "name_zh": "源端口",
-        "type": "string"
+        "type": "int",
+        "id": 2
       },
       {
-        "name_en": "timeout_ms",
         "name_zh": "超时时间(ms)",
         "type": "int",
-        "default": 500
+        "default": 500,
+        "id": 3
       }
     ],
     "outputs": [
       {
-        "name_en": "value",
         "name_zh": "接收值",
         "type_from": {
-          "flow": "init.source_flow_id",
-          "node": "init.source_node_seq",
-          "port": "init.source_port_id"
-        }
+          "flow": {"stage": "init", "id": 0},
+          "node": {"stage": "init", "id": 1},
+          "port": {"stage": "init", "id": 2}
+        },
+        "id": 2
       },
       {
-        "name_en": "source_status_code",
         "name_zh": "源状态码",
-        "type": "int"
+        "type": "int",
+        "id": 3
       },
       {
-        "name_en": "source_status_message",
         "name_zh": "源状态消息",
-        "type": "string"
+        "type": "string",
+        "id": 4
       }
     ]
+  },
+  "next_port_id": {
+    "init": 4,
+    "inputs": 1,
+    "outputs": 5
   }
 })json");
             renamedJson.close();

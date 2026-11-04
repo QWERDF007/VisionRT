@@ -1,0 +1,41 @@
+{
+  "schema_version": 6,
+  "name_en": "custom.counter",
+  "name_zh": "调用计数器",
+  "version": "1.0.0",
+  "implementation": {
+    "kind": "python_class",
+    "package": "custom/counter",
+    "file": "tool.py",
+    "symbol": "Tool"
+  },
+  "ui": {
+    "category": [
+      "自定义",
+      "示例"
+    ]
+  },
+  "next_port_id": {
+    "init": 1,
+    "inputs": 1,
+    "outputs": 3
+  },
+  "ports": {
+    "inputs": [],
+    "outputs": [
+      {
+        "id": 2,
+        "name_zh": "次数",
+        "type": "int"
+      }
+    ],
+    "init": [
+      {
+        "id": 0,
+        "name_zh": "起始值",
+        "type": "int",
+        "default": 0
+      }
+    ]
+  }
+}

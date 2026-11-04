@@ -86,13 +86,13 @@ try
     ProjectEditor editor;
     const auto    flow = editor.project().flows.front().id;
     const auto    reader = editor.addNode(flow, *read, {0, 0});
-    editor.setLiteral(flow, reader, "path", std::string(imagePath.string()));
-    editor.setLiteral(flow, reader, "reload", true);
+    editor.setLiteral(flow, reader, 1, std::string(imagePath.string()));
+    editor.setLiteral(flow, reader, 6, true);
     const auto roiNode = editor.addNode(flow, *roi, {0, 10});
-    editor.bindFreeInput(flow, {reader, "images"}, {roiNode, "images"});
+    editor.bindFreeInput(flow, {reader, 2}, {roiNode, 1});
     const auto addNode = editor.addNode(flow, *add, {0, 20});
-    editor.bindFreeInput(flow, {reader, "images"}, {addNode, "images"});
-    editor.setLiteral(flow, addNode, "mode", std::string("inplace"));
+    editor.bindFreeInput(flow, {reader, 2}, {addNode, 1});
+    editor.setLiteral(flow, addNode, 2, std::string("inplace"));
 
     auto project  = editor.project();
     project.path  = std::filesystem::path(temporary.path().toStdWString()) / "author.vrt.json";
@@ -113,12 +113,12 @@ try
         assert(readResult && roiResult && addResult);
         assert(readResult->status.code == 0 && roiResult->status.code == 0 && addResult->status.code == 0);
 
-        const auto &rois = std::get<DataRef<ROI>>(roiResult->outputs.at("rois")).get();
+        const auto &rois = std::get<DataRef<ROI>>(roiResult->outputs.at(2)).get();
         assert(rois.size() == 1 && rois.front().size() == 1);
         assert((rois.front().front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
-        const auto &added = std::get<DataRef<Image>>(addResult->outputs.at("images")).get();
+        const auto &added = std::get<DataRef<Image>>(addResult->outputs.at(2)).get();
         assert(added.size() == 1 && added.front().at<std::uint8_t>(0, 0) == 11);
-        const auto &readImages = std::get<DataRef<Image>>(readResult->outputs.at("images")).get();
+        const auto &readImages = std::get<DataRef<Image>>(readResult->outputs.at(2)).get();
         assert(readImages.size() == 1 && readImages.front().at<std::uint8_t>(0, 0) == 11);
     }
 

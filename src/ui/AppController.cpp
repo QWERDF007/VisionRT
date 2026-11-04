@@ -50,10 +50,10 @@ NodeId nodeId(const QString &text)
     return parseSequence(text.toUtf8().toStdString(), "节点标识");
 }
 
-const PortDefinition *port(const std::vector<PortDefinition> &ports, std::string_view id)
+const PortDefinition *port(const std::vector<PortDefinition> &ports, PortId id)
 {
     for (const auto &value : ports)
-        if (value.nameEn == id)
+        if (value.id == id)
             return &value;
     return nullptr;
 }
@@ -225,6 +225,8 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                              finishDrain();
                      });
     tools.setRegistry(registry);
+    toolEditor.setAppController(owner);
+    toolEditor.setCustomStore(&customStore);
     if (!editor.project().flows.empty())
         flow = workbench::q(editor.project().flows.front().id);
     if (std::any_of(registry.definitions().begin(), registry.definitions().end(), [](const auto &tool)
@@ -265,12 +267,12 @@ ResultSlot::Snapshot AppController::Impl::displaySnapshot(const NodeDefinition &
     return presentation.displaySnapshot(node);
 }
 
-const PortValue *AppController::Impl::resolvedInputRef(const NodeDefinition &node, const std::string &input) const
+const PortValue *AppController::Impl::resolvedInputRef(const NodeDefinition &node, PortId input) const
 {
     return presentation.resolvedInput(node, input);
 }
 
-PortValue AppController::Impl::resolvedInput(const NodeDefinition &node, const std::string &input) const
+PortValue AppController::Impl::resolvedInput(const NodeDefinition &node, PortId input) const
 {
     const auto *value = presentation.resolvedInput(node, input);
     return value ? *value : PortValue{Missing{}};
@@ -339,7 +341,7 @@ const ToolDefinition *AppController::Impl::effectiveTool() const
     return contractCache.contract.get();
 }
 
-const std::map<std::string, bool, std::less<>> *
+const std::map<PortId, bool> *
 AppController::Impl::refreshConnectable(const FlowDefinition &flow, const NodeDefinition &node) const
 {
     if (connectable.valid && connectable.node == node.id && connectable.epoch == projectEpoch
@@ -368,7 +370,7 @@ AppController::Impl::refreshConnectable(const FlowDefinition &flow, const NodeDe
     return &connectable.connectable;
 }
 
-const PortDefinition *AppController::Impl::parameter(const std::string &id, bool initialization) const
+const PortDefinition *AppController::Impl::parameter(PortId id, bool initialization) const
 {
     const auto *tool = effectiveTool();
     return tool ? workbench::port(initialization ? tool->initParams : tool->inputs, id) : nullptr;
@@ -435,8 +437,8 @@ void AppController::Impl::publishWiresChanged()
     QString signature;
     if (const auto *flow = currentFlow())
         for (const auto &relation : portRelations(*flow).active)
-            signature += QString::number(relation.source.node) + u':' + workbench::q(relation.source.port) + u'>'
-                       + QString::number(relation.target.node) + u':' + workbench::q(relation.target.port) + u';';
+            signature += QString::number(relation.source.node) + u':' + QString::number(relation.source.port) + u'>'
+                       + QString::number(relation.target.node) + u':' + QString::number(relation.target.port) + u';';
     if (signature == wireState)
         return;
     wireState = std::move(signature);
@@ -1110,6 +1112,20 @@ void AppController::Impl::loadToolsPackage()
     try
     {
         registry.registerPackage(readToolsPackage(candidate));
+        for (const auto &userTool : customStore.discoverCustomTools())
+        {
+            // Duplicate ids are reported instead of silently dropped: the packaged tool keeps its
+            // published identity, and the user needs both paths to find the conflicting file.
+            if (const auto *existing = registry.find(userTool.definition.nameEn))
+            {
+                report(QStringLiteral("自定义工具与已发布工具同名，已保留原工具：%1（%2 / %3）")
+                           .arg(QString::fromStdString(userTool.definition.nameEn),
+                                workbench::pathText(existing->definitionPath),
+                                workbench::pathText(userTool.definition.definitionPath)));
+                continue;
+            }
+            registry.addDefinition(userTool.definition);
+        }
         toolsPackageRoot = candidate;
     }
     catch (const std::exception &error)
@@ -1145,6 +1161,21 @@ AppController::AppController(std::size_t workers, const QString &applicationDire
 }
 
 AppController::~AppController() = default;
+
+ToolEditorController *AppController::toolEditor() const noexcept
+{
+    return &impl_->toolEditor;
+}
+
+const ProjectDefinition &AppController::project() const noexcept
+{
+    return impl_->editor.project();
+}
+
+const std::vector<ToolDefinition> &AppController::toolCatalog() const noexcept
+{
+    return impl_->registry.definitions();
+}
 
 QString AppController::title() const
 {
@@ -1410,8 +1441,8 @@ QVariantList AppController::wires() const
         std::map<std::pair<NodeId, NodeId>, QVariantList> groups;
         for (const auto &relation : portRelations(*flow).active)
             groups[{relation.source.node, relation.target.node}].push_back(QVariantMap{
-                {"output", q(relation.source.port)},
-                {"input", q(relation.target.port)}
+                {"output", relation.source.port},
+                {"input", relation.target.port}
             });
         for (const auto &[edge, ports] : groups)
             result.push_back(QVariantMap{
@@ -1645,8 +1676,9 @@ void AppController::setFlowSelected(const QString &id, bool selected)
 }
 
 
-bool AppController::setParameterMode(const QString &id, bool upstream)
+bool AppController::setParameterMode(int port, bool upstream)
 {
+    const auto id = static_cast<PortId>(port);
     return impl_->command(
         [&]
         {
@@ -1656,14 +1688,14 @@ bool AppController::setParameterMode(const QString &id, bool upstream)
             const auto *tool = impl_->currentTool();
             if (tool)
             {
-                if (const auto *port = workbench::port(tool->inputs, id.toStdString()))
+                if (const auto *declaration = workbench::port(tool->inputs, id))
                 {
-                    if (port->type.type == Type::Image && !upstream)
+                    if (declaration->type.type == Type::Image && !upstream)
                         return false;
                 }
             }
             impl_->finishRoi();
-            return impl_->editor.setMode(impl_->flow.toStdString(), node->id, id.toStdString(),
+            return impl_->editor.setMode(impl_->flow.toStdString(), node->id, id,
                                          upstream ? BindingMode::Upstream : BindingMode::Literal);
         });
 }

@@ -1,3 +1,4 @@
+#include "ParameterFixturePorts.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
@@ -24,7 +25,7 @@ void parameterStatesContract(visionrt::AppController &app)
     };
     require(
         app.setParameter(
-            "labels", false,
+            testing::parameters::Labels, false,
             R"json(["用于验证窄字段省略显示的超长中文标签内容用于验证窄字段省略显示的超长中文标签内容用于验证窄字段省略显示的超长中文标签内容", "b"])json"),
         "cannot set the long structure field fixture");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "long structure field synchronization did not finish");
@@ -52,7 +53,7 @@ void parameterStatesContract(visionrt::AppController &app)
         }
         return nullptr;
     };
-    QQuickItem *panel = findItem(findItem, window->contentItem(), "parameter_ratio");
+    QQuickItem *panel = findItem(findItem, window->contentItem(), "parameter_" + QString::number(testing::parameters::Ratio));
     require(panel != nullptr, "actual main window has no parameter rows");
     while (panel && !panel->property("parameterGroups").isValid()) panel = panel->parentItem();
     require(panel != nullptr, "parameter rows do not belong to a parameter panel");
@@ -68,7 +69,7 @@ void parameterStatesContract(visionrt::AppController &app)
         require(row && row->isVisible() && row->mapToItem(panel, QPointF(0, row->height())).y() < panel->height(),
                 "parameter state evidence leaves a field outside the visible panel");
     }
-    auto *labelsRow = findItem(findItem, panel, "parameter_labels");
+    auto *labelsRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Labels));
     require(labelsRow != nullptr, "structure row is missing from actual field state review");
     QQuickItem *arrayInput = nullptr;
     for (auto *candidate : labelsRow->findChildren<QQuickItem *>())
@@ -84,16 +85,16 @@ void parameterStatesContract(visionrt::AppController &app)
         require(window->grabWindow().save("build/evidence/workbench_parameters_" + state + ".png"),
                 "cannot capture actual parameter field states");
     };
-    const auto inputControl = [&](const QString &id) -> QQuickItem *
+    const auto inputControl = [&](PortId id) -> QQuickItem *
     {
-        auto *row = findItem(findItem, panel, "parameter_" + id);
+        auto *row = findItem(findItem, panel, "parameter_" + QString::number(id));
         require(row != nullptr, "parameter state row is missing");
         for (auto *candidate : row->findChildren<QQuickItem *>())
             if (candidate->property("inputItem").isValid() && candidate->property("readOnly").isValid()) return candidate;
         return nullptr;
     };
-    auto *ratio = inputControl("ratio");
-    auto *path = inputControl("path");
+    auto *ratio = inputControl(testing::parameters::Ratio);
+    auto *path = inputControl(testing::parameters::Path);
     require(ratio && path, "parameter text and numerical controls are unavailable");
     auto *ratioInput = qobject_cast<QQuickItem *>(ratio->property("inputItem").value<QObject *>());
     auto *pathInput = qobject_cast<QQuickItem *>(path->property("inputItem").value<QObject *>());
@@ -114,7 +115,7 @@ void parameterStatesContract(visionrt::AppController &app)
             "a rejected numeric draft still paints the field as invalid");
     capture("rejected_draft");
     QTest::keyClick(window, Qt::Key_Escape);
-    auto *choiceRow = findItem(findItem, panel, "parameter_mode");
+    auto *choiceRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Mode));
     QQuickItem *choice = nullptr;
     require(choiceRow != nullptr, "actual enum row is missing");
     for (auto *candidate : choiceRow->findChildren<QQuickItem *>())

@@ -14,12 +14,12 @@
 namespace visionrt {
 namespace {
 constexpr int kHoverDelayMs = 40;
-// Fixed helper protocol fields (S-ASSIST-01/05). They are not declaration mappings: the host
-// always supplies the cursor, the phase and the bounded search budget.
-constexpr std::string_view kPreview  = "preview_rois";
-constexpr std::string_view kProposal = "proposal_rois";
-constexpr std::string_view kValid    = "candidate_valid";
-constexpr std::string_view kQuality  = "quality";
+// The helper protocol is fixed by number, like every other tool contract: the probe answers on
+// outputs 2..5 and the host never looks a port up by its spelling.
+constexpr PortId kPreview  = 2;
+constexpr PortId kProposal = 3;
+constexpr PortId kValid    = 4;
+constexpr PortId kQuality  = 5;
 
 QString helperMessage(const std::string &message)
 {

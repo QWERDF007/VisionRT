@@ -1,0 +1,27 @@
+{
+  "format_version": 7,
+  "node_fragment": {
+    "tool_id": "custom.image.threshold",
+    "inputs": [
+      {
+        "port_id": 0,
+        "mode": "literal",
+        "value": 0
+      },
+      {
+        "port_id": 1,
+        "mode": "literal",
+        "value": 128
+      },
+      {
+        "port_id": 2,
+        "mode": "upstream",
+        "source": {
+          "flow_id": "flow_1",
+          "node_id": 10,
+          "port_id": 2
+        }
+      }
+    ]
+  }
+}

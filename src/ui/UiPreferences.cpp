@@ -1,19 +1,21 @@
 #include "ui/UiPreferences.h"
 
+#include "core/ToolPaths.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
-#include <QStandardPaths>
 
 namespace visionrt {
 namespace {
 QString resolvePreferencesPath()
 {
-    const auto directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    return directory.isEmpty() ? QString{} : QDir(directory).filePath(QStringLiteral("ui-preferences.json"));
+    // Interaction settings are part of the installation, exactly like the user tools: the software
+    // directory is the only writable root this application uses.
+    return QString::fromStdWString((softwareDataDir() / "ui-preferences.json").wstring());
 }
 
 QJsonObject readRoot()

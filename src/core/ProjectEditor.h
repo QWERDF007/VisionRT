@@ -15,8 +15,8 @@ bool                        hasDependencyCycle(const FlowDefinition &flow);
 
 struct InputPort
 {
-    NodeId      node;
-    std::string port;
+    NodeId node = 0;
+    PortId port = 0;
     bool        operator==(const InputPort &) const = default;
 };
 
@@ -47,8 +47,8 @@ struct BindingCheck
 
 using PositionLookup = std::function<std::optional<GridPoint>(NodeId)>;
 
-BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, const std::string &sourcePort,
-                            NodeId targetNodeId, const std::string &targetInputPort,
+BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, PortId sourcePort,
+                            NodeId targetNodeId, PortId targetInputPort,
                             const PositionLookup &positions = {});
 
 // A guard is a Bool control dependency with the same row/ownership rules as data
@@ -58,8 +58,8 @@ BindingCheck validateGuard(const FlowDefinition &flow, const SourcePort &source,
 
 struct CandidateInput
 {
-    NodeId      node{};
-    std::string port;
+    NodeId node{};
+    PortId port = 0;
     bool        connected = false;
     bool        occupied  = false;
 };
@@ -129,18 +129,18 @@ public:
     bool                     setAlias(std::string_view flowId, NodeId node, std::string alias);
 
     bool bindFreeInput(std::string_view flowId, const SourcePort &source, const InputPort &target);
-    bool setBinding(std::string_view flowId, NodeId node, std::string_view input, InputBinding binding);
-    bool setMode(std::string_view flowId, NodeId node, std::string_view input, BindingMode mode);
-    bool setSource(std::string_view flowId, NodeId node, std::string_view input, std::optional<SourcePort> source);
-    bool unbind(std::string_view flowId, NodeId node, std::string_view input);
-    bool setLiteral(std::string_view flowId, NodeId node, std::string_view input, PortValue value);
+    bool setBinding(std::string_view flowId, NodeId node, PortId input, InputBinding binding);
+    bool setMode(std::string_view flowId, NodeId node, PortId input, BindingMode mode);
+    bool setSource(std::string_view flowId, NodeId node, PortId input, std::optional<SourcePort> source);
+    bool unbind(std::string_view flowId, NodeId node, PortId input);
+    bool setLiteral(std::string_view flowId, NodeId node, PortId input, PortValue value);
     // One transaction for a proposal that touches several literal inputs (ROI plus recommended
     // parameters). Every port is validated before anything is written, inputs currently fed from
     // upstream are refused instead of being silently disconnected, and the whole proposal raises
     // exactly one node execution revision.
     bool setLiteralBindings(std::string_view flowId, NodeId node,
-                            std::span<const std::pair<std::string, PortValue>> values);
-    bool setInitParam(std::string_view flowId, NodeId node, std::string_view parameter, PortValue value);
+                            std::span<const std::pair<PortId, PortValue>> values);
+    bool setInitParam(std::string_view flowId, NodeId node, PortId parameter, PortValue value);
     // One transaction: validate the candidate configuration, materialise its
     // contract, verify bindings, then commit exactly one revision.
     bool setExpressionConfig(std::string_view flowId, NodeId node, ExpressionConfig config,
@@ -154,7 +154,7 @@ public:
     bool setSelectType(std::string_view flowId, NodeId node, TypeSpec type, const ToolDefinition &tool);
 
     std::size_t             referenceCount(std::string_view flowId, const SourcePort &source) const;
-    std::vector<SourcePort> compatibleSources(std::string_view flowId, NodeId node, std::string_view input) const;
+    std::vector<SourcePort> compatibleSources(std::string_view flowId, NodeId node, PortId input) const;
     std::vector<InputPort>  compatibleInputs(std::string_view flowId, const SourcePort &source) const;
 
 private:

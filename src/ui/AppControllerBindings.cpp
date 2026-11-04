@@ -7,7 +7,7 @@ namespace visionrt {
 using workbench::nodeId;
 using workbench::q;
 
-QVariantMap AppController::portDeclarationContext(const QString &port, bool output) const
+QVariantMap AppController::portDeclarationContext(PortId port, bool output) const
 {
     const auto *flow = impl_->currentFlow();
     const auto *node = impl_->currentNode();
@@ -15,28 +15,28 @@ QVariantMap AppController::portDeclarationContext(const QString &port, bool outp
         return {};
     if (output)
     {
-        if (!node->signatures.outputs.contains(port.toStdString()))
+        if (!node->signatures.outputs.contains(port))
             return {};
     }
-    else if (!node->inputs.contains(port.toStdString()))
+    else if (!node->inputs.contains(port))
         return {};
     return QVariantMap{{"project", QString::number(impl_->projectEpoch)},
                        {"flow", impl_->flow},
                        {"node", QString::number(node->id)},
-                       {"port", port},
+                       {"port", static_cast<uint>(port)},
                        {"output", output},
                        {"kind", QStringLiteral("declaration")},
                        {"interaction", QString::number(impl_->roiSession.id())},
                        {"structure", QString::number(flow->structureRevision)}};
 }
 
-QVariantMap AppController::portResultContext(const QString &port) const
+QVariantMap AppController::portResultContext(PortId port) const
 {
     const auto *flow = impl_->currentFlow();
     const auto *node = impl_->currentNode();
     if (!flow || !node)
         return {};
-    if (!node->signatures.outputs.contains(port.toStdString()))
+    if (!node->signatures.outputs.contains(port))
         return {};
     const auto captured = impl_->outputs.capture(port);
     if (!captured)
@@ -44,7 +44,7 @@ QVariantMap AppController::portResultContext(const QString &port) const
     return QVariantMap{{"project", QString::number(impl_->projectEpoch)},
                        {"flow", impl_->flow},
                        {"node", QString::number(node->id)},
-                       {"port", port},
+                       {"port", static_cast<uint>(port)},
                        {"output", true},
                        {"kind", QStringLiteral("result")},
                        {"interaction", QString::number(impl_->roiSession.id())},
@@ -56,7 +56,7 @@ QVariantMap AppController::portResultContext(const QString &port) const
                        {"publication", QString::number(captured->publication)}};
 }
 
-QVariantMap AppController::portContext(const QString &port, bool output) const
+QVariantMap AppController::portContext(PortId port, bool output) const
 {
     if (output)
     {
@@ -82,7 +82,7 @@ bool AppController::portContextCurrent(const QVariantMap &context) const
     {
         return false;
     }
-    const auto port = context.value("port").toString().toStdString();
+    const auto port = static_cast<PortId>(context.value("port").toUInt());
     const bool output = context.value("output").toBool();
     if (output)
     {
@@ -96,7 +96,7 @@ bool AppController::portContextCurrent(const QVariantMap &context) const
     }
     if (context.value("kind").toString() == QStringLiteral("result") || context.contains("publication"))
     {
-        const auto captured = impl_->outputs.capture(QString::fromStdString(port));
+        const auto captured = impl_->outputs.capture(port);
         if (!captured || QString::number(captured->publication) != context.value("publication").toString())
             return false;
     }
@@ -118,7 +118,7 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
     try
     {
         for (const auto &source : impl_->editor.compatibleSources(
-                 impl_->flow.toStdString(), node->id, context.value("port").toString().toStdString()))
+                 impl_->flow.toStdString(), node->id, static_cast<PortId>(context.value("port").toUInt())))
         {
             const auto *parent = impl_->findNode(source.node);
             if (!parent)
@@ -128,8 +128,8 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
             result.push_back(QVariantMap{
                 { "node",            QString::number(source.node)},
                 {"title",                      q(parent->title())},
-                { "port",                          q(source.port)},
-                { "name",   port ? q(port->nameZh) : q(source.port)},
+                { "port",                          static_cast<uint>(source.port)},
+                { "name",   port ? q(port->nameZh) : q(portLabel(source.port))},
                 { "type", displayTypeName(parent->signatures.outputs.at(source.port))}
             });
         }
@@ -141,27 +141,27 @@ QVariantList AppController::bindingCandidates(const QVariantMap &context) const
     return result;
 }
 
-bool AppController::bindInput(const QVariantMap &context, const QString &node, const QString &output)
+bool AppController::bindInput(const QVariantMap &context, const QString &node, int output)
 {
     if (context.value("output").toBool() || !portContextCurrent(context))
         return false;
-    const auto input  = context.value("port").toString();
+    const auto input  = static_cast<PortId>(context.value("port").toUInt());
     const auto result = impl_->command(
         [&]
         {
             const auto *target = impl_->currentNode();
             if (!target)
                 throw ContractError("未选择节点");
-            auto binding   = target->inputs.at(input.toStdString());
+            auto binding   = target->inputs.at(input);
             binding.mode   = BindingMode::Upstream;
-            binding.source = SourcePort{nodeId(node), output.toStdString()};
+            binding.source = SourcePort{nodeId(node), static_cast<PortId>(output)};
             impl_->finishRoi();
-            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input.toStdString(),
-                                            std::move(binding));
+            return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input, std::move(binding));
         });
     if (result)
         LogService::write(LogLevel::Info, QStringLiteral("连接"),
-                          QStringLiteral("绑定 %1.%2 ← %3.%4").arg(impl_->selected, input, node, output));
+                          QStringLiteral("绑定 %1.%2 ← %3.%4")
+                              .arg(impl_->selected, q(portLabel(input)), node, q(portLabel(output))));
     return result;
 }
 
@@ -169,7 +169,7 @@ bool AppController::unbindInput(const QVariantMap &context)
 {
     if (context.value("output").toBool() || !portContextCurrent(context))
         return false;
-    const auto input  = context.value("port").toString();
+    const auto input  = static_cast<PortId>(context.value("port").toUInt());
     const auto result = impl_->command(
         [&]
         {
@@ -177,11 +177,11 @@ bool AppController::unbindInput(const QVariantMap &context)
             if (!node)
                 throw ContractError("未选择节点");
             impl_->finishRoi();
-            return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input.toStdString());
+            return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input);
         });
     if (result)
         LogService::write(LogLevel::Info, QStringLiteral("连接"),
-                          QStringLiteral("解除绑定 %1.%2").arg(impl_->selected, input));
+                          QStringLiteral("解除绑定 %1.%2").arg(impl_->selected, q(portLabel(input))));
     return result;
 }
 
@@ -194,7 +194,7 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
     if (!sourceNode || !flow)
         return {};
 
-    const auto outputPortId = context.value("port").toString().toStdString();
+    const auto outputPortId = static_cast<PortId>(context.value("port").toUInt());
     if (!sourceNode->signatures.outputs.contains(outputPortId))
         return {};
     // The menu and the name highlight share one candidate query per project/flow/revision/node.
@@ -231,9 +231,9 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
         const auto &inputType = typeFound->second;
 
         nodeInputsMap[candidate.node].push_back(QVariantMap{
-            {"port", q(candidate.port)},
-            {"name", portDef ? q(portDef->nameZh) : q(candidate.port)},
-            {"title", portDef ? q(portDef->nameZh) : q(candidate.port)},
+            {"port", static_cast<uint>(candidate.port)},
+            {"name", portDef ? q(portDef->nameZh) : q(portLabel(candidate.port))},
+            {"title", portDef ? q(portDef->nameZh) : q(portLabel(candidate.port))},
             {"type", displayTypeName(inputType)},
             {"typeText", displayTypeName(inputType)},
             {"connected", candidate.connected},
@@ -276,23 +276,23 @@ QVariantList AppController::cascadeOutputCandidates(const QVariantMap &context) 
     return result;
 }
 
-bool AppController::bindOutputTo(const QVariantMap &context, const QString &node, const QString &input)
+bool AppController::bindOutputTo(const QVariantMap &context, const QString &node, int input)
 {
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return false;
-    const auto output = context.value("port").toString();
+    const auto output = static_cast<PortId>(context.value("port").toUInt());
     return impl_->command(
         [&]
         {
             const auto *source = impl_->currentNode();
             if (!source)
                 throw ContractError("未选择节点");
-            return impl_->editor.bindFreeInput(impl_->flow.toStdString(), {source->id, output.toStdString()},
-                                               {nodeId(node), input.toStdString()});
+            return impl_->editor.bindFreeInput(impl_->flow.toStdString(), {source->id, output},
+                                               {nodeId(node), static_cast<PortId>(input)});
         });
 }
 
-bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &node, const QString &input)
+bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &node, int input)
 {
     if (!context.value("output").toBool() || !portContextCurrent(context))
         return false;
@@ -305,11 +305,13 @@ bool AppController::unbindOutputFrom(const QVariantMap &context, const QString &
                 throw ContractError("未选择节点");
             if (!target)
                 throw ContractError("找不到节点：" + node.toStdString());
-            const auto binding = target->inputs.find(input.toStdString());
+            const auto binding = target->inputs.find(static_cast<PortId>(input));
             if (binding == target->inputs.end() || binding->second.mode != BindingMode::Upstream
-                || binding->second.source != SourcePort{source->id, context.value("port").toString().toStdString()})
-                throw ContractError("输入端口未连接到当前输出：" + node.toStdString() + "." + input.toStdString());
-            return impl_->editor.unbind(impl_->flow.toStdString(), target->id, input.toStdString());
+                || binding->second.source
+                       != SourcePort{source->id, static_cast<PortId>(context.value("port").toUInt())})
+                throw ContractError("输入端口未连接到当前输出：" + node.toStdString() + "."
+                                    + portLabel(static_cast<PortId>(input)));
+            return impl_->editor.unbind(impl_->flow.toStdString(), target->id, static_cast<PortId>(input));
         });
 }
 

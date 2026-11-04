@@ -29,7 +29,7 @@ Values businessOutputs(const Values &inputs)
 {
     Values outputs;
     for (const auto &[id, value] : inputs)
-        if (!isHostOwnedPort(id))
+        if (!isReservedPort(PortStage::Inputs, id))
             outputs.emplace(id, value);
     return outputs;
 }
@@ -93,10 +93,11 @@ void nativeGraphSharing(std::size_t batchSize)
     Image   initialImages;
     for (std::size_t batch = 0; batch < batchSize; ++batch)
         initialImages.push_back(parent(cv::Rect(1, static_cast<int>(batch) * 4 + 1, 3, 2)));
+    // 输出编号 2..4：图像、数值、区域，与声明顺序一致。
     Values values{
-        {"images", DataRef<Image>(std::move(initialImages))},
-        {"numbers", Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
-        {"regions", DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
+        {2, DataRef<Image>(std::move(initialImages))},
+        {3, Array::fromNested(NestedVector<std::int64_t, 2>{{9007199254740993LL}, {}})},
+        {4, DataRef<ROI>(ROI{{{3., 1., 2., 3.}}})}
     };
     ToolDefinition source;
     source.nameEn          = "test.shared.source";
@@ -104,9 +105,9 @@ void nativeGraphSharing(std::size_t batchSize)
     source.version     = "1";
     source.kind        = ToolKind::Cpp;
     source.outputs     = {
-        { "images", "图像",                  {Type::Image}},
-        {"numbers", "数值", {Type::Array, DType::Int64, 2}},
-        {"regions", "区域",                    {Type::ROI}}
+        {2, "图像",                  {Type::Image}},
+        {3, "数值", {Type::Array, DType::Int64, 2}},
+        {4, "区域",                    {Type::ROI}}
     };
     auto mutator        = source;
     mutator.nameEn          = "test.shared.mutator";
@@ -125,18 +126,18 @@ void nativeGraphSharing(std::size_t batchSize)
             return std::make_unique<Function>(
                 [&](const Values &inputs)
                 {
-                    auto &images  = std::get<DataRef<Image>>(inputs.at("images")).get();
-                    auto  numbers = std::get<Array>(inputs.at("numbers"));
-                    auto &regions = std::get<DataRef<ROI>>(inputs.at("regions")).get();
-                    require(&images == &std::get<DataRef<Image>>(values.at("images")).get(),
+                    auto &images  = std::get<DataRef<Image>>(inputs.at(2)).get();
+                    auto  numbers = std::get<Array>(inputs.at(3));
+                    auto &regions = std::get<DataRef<ROI>>(inputs.at(4)).get();
+                    require(&images == &std::get<DataRef<Image>>(values.at(2)).get(),
                             "runtime copied Image collection");
                     for (std::size_t batch = 0; batch < batchSize; ++batch)
                         require(images[batch].data == parent.ptr(static_cast<int>(batch) * 4 + 1) + 1
                                     && images[batch].step[0] == parent.step[0],
                                 "runtime copied padded pixels");
-                    require(numbers.data() == std::get<Array>(values.at("numbers")).data(),
+                    require(numbers.data() == std::get<Array>(values.at(3)).data(),
                             "runtime copied Array buffer");
-                    require(&regions == &std::get<DataRef<ROI>>(values.at("regions")).get(),
+                    require(&regions == &std::get<DataRef<ROI>>(values.at(4)).get(),
                             "runtime copied ROI container");
                     ++images[0].at<std::uint8_t>(0, 0);
                     images.push_back(cv::Mat::ones(1, 1, CV_8UC1));
@@ -151,10 +152,10 @@ void nativeGraphSharing(std::size_t batchSize)
     const auto    producer = editor.addNode("flow_1", *registry.find(source.nameEn), {});
     const auto    consumer = editor.addNode("flow_1", *registry.find(mutator.nameEn), {0, 1});
     for (const auto &port : mutator.inputs)
-        editor.setBinding("flow_1", consumer, port.nameEn,
+        editor.setBinding("flow_1", consumer, port.id,
                           {
                               BindingMode::Upstream, Missing{},
-                               SourcePort{producer, port.nameEn}
+                               SourcePort{producer, port.id}
         });
     RuntimeEngine engine(2);
     require(engine.start(editor.project(), registry, RunMode::Once).code == 0, "shared graph rejected");
@@ -162,10 +163,10 @@ void nativeGraphSharing(std::size_t batchSize)
     const auto oldSource   = snapshot(first, producer);
     const auto firstResult = snapshot(first, consumer);
     require(parent.at<std::uint8_t>(1, 1) == 8, "tool mutation did not reach producer storage");
-    require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == batchSize + 1,
+    require(std::get<DataRef<Image>>(oldSource->outputs.at(2)).get().size() == batchSize + 1,
             "source publication froze mutable Image collection");
-    require(std::get<Array>(oldSource->outputs.at("numbers")).offsets().at(0).size() == 3
-                && std::get<Array>(oldSource->outputs.at("numbers")).elements<std::int64_t>()[0] == 42,
+    require(std::get<Array>(oldSource->outputs.at(3)).offsets().at(0).size() == 3
+                && std::get<Array>(oldSource->outputs.at(3)).elements<std::int64_t>()[0] == 42,
             "source publication did not share the mutated Array elements");
     require(firstResult->inputUses.size() == 3, "input provenance lost");
     require(std::all_of(firstResult->inputUses.begin(), firstResult->inputUses.end(), [&](const auto &input)
@@ -178,9 +179,9 @@ void nativeGraphSharing(std::size_t batchSize)
     require(next->publication != firstResult->publication, "new execution did not publish a fresh result");
     require(snapshot(second, producer)->publication == oldSource->publication, "manual consumer reran its source");
     require(parent.at<std::uint8_t>(1, 1) == 9, "second tool mutation did not share producer storage");
-    require(std::get<DataRef<Image>>(oldSource->outputs.at("images")).get().size() == batchSize + 2,
+    require(std::get<DataRef<Image>>(oldSource->outputs.at(2)).get().size() == batchSize + 2,
             "old publication incorrectly claims frozen payloads");
-    require(std::get<DataRef<ROI>>(oldSource->outputs.at("regions")).get().size() == 3, "ROI shared mutation lost");
+    require(std::get<DataRef<ROI>>(oldSource->outputs.at(4)).get().size() == 3, "ROI shared mutation lost");
     std::cout << "Runtime forwards " << batchSize
               << " writable images, Array/ROI storage, padded pixels and publication provenance\n";
 }
@@ -194,14 +195,14 @@ void explicitToolStoragePolicies()
     source.nameZh = "存储策略数据源";
     source.version     = "1";
     source.outputs     = {
-        {"images", "图像", {Type::Image}}
+        {2, "图像", {Type::Image}}
     };
     ToolRegistry registry;
     registry.addDefinition(source);
     registry.registerCpp(source,
                          [images](const ToolServices &) {
                              return std::make_unique<Function>([images](const Values &)
-                                                               { return toolResult({{"images", images}}, {}); });
+                                                               { return toolResult({{2, images}}, {}); });
                          });
     ProjectEditor       editor;
     const auto          producer = editor.addNode("flow_1", *registry.find(source.nameEn), {});
@@ -219,7 +220,7 @@ void explicitToolStoragePolicies()
                 return std::make_unique<Function>(
                     [images, policy](const Values &inputs)
                     {
-                        const auto &input = std::get<DataRef<Image>>(inputs.at("images"));
+                        const auto &input = std::get<DataRef<Image>>(inputs.at(2));
                         require(&input.get() == &images.get() && input.get()[0].data == images.get()[0].data,
                                 "host chose a storage policy instead of forwarding the shared input");
                         require(input.get()[0].step[0] == 16, "host discarded padded image layout");
@@ -232,14 +233,14 @@ void explicitToolStoragePolicies()
                             = policy == "clone" ? input.get()[0].clone() : cv::Mat(3, 4, CV_16UC1, cv::Scalar(42));
                         if (policy == "clone")
                             output.at<std::uint16_t>(0, 0) += 10;
-                        return toolResult({{"images", DataRef<Image>(Image{std::move(output)})}}, {});
+                        return toolResult({{2, DataRef<Image>(Image{std::move(output)})}}, {});
                     });
             });
         const auto node = editor.addNode("flow_1", *registry.find(definition.nameEn), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
-        editor.setBinding("flow_1", node, "images",
+        editor.setBinding("flow_1", node, 2,
                           {
                               BindingMode::Upstream, Missing{},
-                              SourcePort{branches.empty() ? producer : branches.front(), "images"}
+                              SourcePort{branches.empty() ? producer : branches.front(), 2}
         });
         branches.push_back(node);
     }
@@ -250,9 +251,9 @@ void explicitToolStoragePolicies()
     const auto  inPlace     = snapshot(result, branches[0]);
     const auto  cloned      = snapshot(result, branches[1]);
     const auto  fresh       = snapshot(result, branches[2]);
-    const auto &shared      = std::get<DataRef<Image>>(inPlace->outputs.at("images"));
-    const auto &copied      = std::get<DataRef<Image>>(cloned->outputs.at("images"));
-    const auto &created     = std::get<DataRef<Image>>(fresh->outputs.at("images"));
+    const auto &shared      = std::get<DataRef<Image>>(inPlace->outputs.at(2));
+    const auto &copied      = std::get<DataRef<Image>>(cloned->outputs.at(2));
+    const auto &created     = std::get<DataRef<Image>>(fresh->outputs.at(2));
     require(&shared.get() == &images.get() && shared.get()[0].data == images.get()[0].data,
             "in-place tool output lost shared storage");
     require(&copied.get() != &images.get() && copied.get()[0].data != images.get()[0].data
@@ -263,7 +264,7 @@ void explicitToolStoragePolicies()
                 && created.get()[0].at<std::uint16_t>(0, 0) == 42,
             "tool-selected storage policies produced incorrect pixels");
     require(copied.get()[0].at<std::uint16_t>(2, 3) == 7
-                && std::get<DataRef<Image>>(publication->outputs.at("images")).get()[0].at<std::uint16_t>(0, 0) == 8,
+                && std::get<DataRef<Image>>(publication->outputs.at(2)).get()[0].at<std::uint16_t>(0, 0) == 8,
             "explicit clone changed unrelated pixels or froze the old source result");
     std::cout << "Storage policies: shared=" << static_cast<const void *>(images.get()[0].data)
               << " clone=" << static_cast<const void *>(copied.get()[0].data)
@@ -289,14 +290,14 @@ void toolCoordinatedBranches()
     source.nameZh = "工具共同协调";
     source.version     = "1";
     source.outputs     = {
-        {"images", "图像", {Type::Image}}
+        {2, "图像", {Type::Image}}
     };
     ToolRegistry registry;
     registry.addDefinition(source);
     registry.registerCpp(source,
                          [images](const ToolServices &) {
                              return std::make_unique<Function>([images](const Values &)
-                                                               { return toolResult({{"images", images}}, {}); });
+                                                               { return toolResult({{2, images}}, {}); });
                          });
     ProjectEditor       editor;
     const auto          producer = editor.addNode("flow_1", *registry.find(source.nameEn), {});
@@ -314,7 +315,7 @@ void toolCoordinatedBranches()
                 return std::make_unique<Function>(
                     [images, coordination, policy](const Values &inputs)
                     {
-                        const auto &input = std::get<DataRef<Image>>(inputs.at("images"));
+                        const auto &input = std::get<DataRef<Image>>(inputs.at(2));
                         require(&input.get() == &images.get() && input.get()[0].data == images.get()[0].data,
                                 "host isolated shared branches instead of forwarding their handles");
                         {
@@ -334,17 +335,17 @@ void toolCoordinatedBranches()
                                         "host serialized independent ready branches before tool-owned coordination");
                         }
                         if (policy == "independent")
-                            return toolResult({{"images", DataRef<Image>(Image{cv::Mat(3, 4, CV_16UC1, cv::Scalar(50000))})}}, {});
+                            return toolResult({{2, DataRef<Image>(Image{cv::Mat(3, 4, CV_16UC1, cv::Scalar(50000))})}}, {});
                         std::lock_guard lock(coordination->pixels);
                         for (int increment = 0; increment < 100; ++increment) ++input.get()[0].at<std::uint16_t>(0, 0);
                         return toolResult(businessOutputs(inputs), {});
                     });
             });
         const auto node = editor.addNode("flow_1", *registry.find(definition.nameEn), {static_cast<int>(branches.size() * 10), static_cast<int>((branches.size() + 1) * 10)});
-        editor.setBinding("flow_1", node, "images",
+        editor.setBinding("flow_1", node, 2,
                           {
                               BindingMode::Upstream, Missing{},
-                               SourcePort{producer, "images"}
+                               SourcePort{producer, 2}
         });
         branches.push_back(node);
     }
@@ -360,7 +361,7 @@ void toolCoordinatedBranches()
         for (std::size_t branch = 0; branch < branches.size(); ++branch)
         {
             const auto  outcome = snapshot(result, branches[branch]);
-            const auto &output  = std::get<DataRef<Image>>(outcome->outputs.at("images"));
+            const auto &output  = std::get<DataRef<Image>>(outcome->outputs.at(2));
             require(outcome->inputUses.size() == 1 && outcome->inputUses[0].sourceNode == producer
                         && outcome->inputUses[0].sourcePublication == publication->publication,
                     "tool coordination changed upstream publication provenance");
@@ -377,7 +378,7 @@ void toolCoordinatedBranches()
                 "a graph round did not rendezvous all three tool branches");
     }
     require(storage.at<std::uint16_t>(1, 2) == 12807 && storage.at<std::uint16_t>(1, 3) == 7
-                && std::get<DataRef<Image>>(firstPublication->outputs.at("images")).get()[0].at<std::uint16_t>(0, 0)
+                && std::get<DataRef<Image>>(firstPublication->outputs.at(2)).get()[0].at<std::uint16_t>(0, 0)
                        == 12807,
             "old shared publication did not observe tool-controlled writes");
     std::cout << "Tool-owned coordination: rounds=64 parallel_workers=3 common_pixel_mutex=1"

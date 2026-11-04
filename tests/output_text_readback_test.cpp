@@ -27,6 +27,9 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// The fixture declares 值 on output 2 and 图像 on output 3.
+constexpr PortId kValuesOutput = 2;
 }
 
 int main(int argc, char **argv)
@@ -51,10 +54,11 @@ try
     definition.nameZh = "读取阶段";
     definition.kind        = ToolKind::PythonFunction;
     definition.entry       = {"readback", "tool.py", "run"};
-    definition.outputs     = {
-        { "values",   "值", {Type::Array, DType::Int64, 1}},
-        {"images", "图像",                          {Type::Image}}
+    definition.outputs = {
+        {2, "值", {Type::Array, DType::Int64, 1}},
+        {3, "图像", {Type::Image}}
     };
+    definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
     write(package + "tools/custom/readback/source.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
@@ -79,8 +83,8 @@ def run(inputs):
             time.sleep(0.002)
     image0.fill(17 if calls == 1 else 37)
     image1.fill(18 if calls == 1 else 38)
-    return {'outputs': {'values': [calls] * 100000, 'images': [image0, image1],
-                        '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: [calls] * 100000, 3: [image0, image1],
+                        0: 0, 1: ''},
             'detail': ''}
 )py");
     QQuickWindow window;
@@ -120,7 +124,7 @@ def run(inputs):
             "readback initial frame was not presented");
     frame(17);
     require(app.imageCount() == 2, "readback image batch is incomplete");
-    const auto valuesContext = app.portContext("values", true);
+    const auto valuesContext = app.portContext(kValuesOutput, true);
     require(!valuesContext.isEmpty(), "readback values context unavailable");
     QSignalSpy text(&app, &AppController::outputTextReady);
     const auto shown = presented.count();
@@ -162,7 +166,7 @@ def run(inputs):
                 app.resetRuntime();
             });
         text.clear();
-        const auto currentContext = app.portContext("values", true);
+        const auto currentContext = app.portContext(kValuesOutput, true);
         app.requestOutputText(currentContext);
         // Immediately invoke management to initiate an outer drainReaders while textTask is active
         app.resetRuntime();

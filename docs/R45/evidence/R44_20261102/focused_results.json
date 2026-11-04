@@ -1,0 +1,22 @@
+[
+  {
+    "name": "python_tools",
+    "exit": 0,
+    "tail": "..................\n----------------------------------------------------------------------\nRan 18 tests in 0.052s\n\nOK\n"
+  },
+  {
+    "name": "logic_engine",
+    "exit": 0,
+    "tail": "........................\n----------------------------------------------------------------------\nRan 24 tests in 0.117s\n\nOK\n"
+  },
+  {
+    "name": "package_profile",
+    "exit": 0,
+    "tail": "...............\n----------------------------------------------------------------------\nRan 15 tests in 0.002s\n\nOK\n"
+  },
+  {
+    "name": "build_metadata_entry",
+    "exit": 5,
+    "tail": "E\n======================================================================\nERROR: setUpClass (__main__.BuildMetadataIntegrationContract)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/6f61e2075d26/review44/source/VisionRT/tests/test_build_metadata_integration.py\", line 30, in setUpClass\n    cls.cmake = os.environ.get(\"CMAKE_COMMAND\") or shutil.which(\"cmake\")\n                                                   ^^^^^^\nNameError: name 'shutil' is not defined. Did you forget to import 'shutil'\n\n----------------------------------------------------------------------\nRan 0 tests in 0.001s\n\nFAILED (errors=1)\n"
+  }
+]

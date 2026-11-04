@@ -1,0 +1,19 @@
+﻿当前文件,真实目的,处置
+tests/result_readback_barrier_test.cpp,读者 ACK 前 Stop/Reset/新会话屏障,保留，名称明确；backend/bridge
+tests/display_reader_drain_test.cpp,显示读者取消、GUI 继续响应、一次完成,名称已改善，改受控时序
+tests/output_text_readback_test.cpp,文本读回信箱/请求终态,保留；不要与复制菜单纯 UI 混成一个名称
+tests/logic_node_execution_test.cpp,逻辑节点执行和分支契约,保留
+tests/node_list_model_test.cpp,无窗口模型角色与更新,保留，不占桌面锁
+tests/tool_definition_validation_test.cpp,声明语义合法性,保留，区别于 JSON 编解码
+tests/port_value_validation_test.cpp,值与端口类型/范围契约,保留
+tests/package_replacement_test.cpp,工具包替换/失败回滚,保留
+tests/workbench_contract.cpp,focused 场景 runner/共享装配,仅装配，不再注册聚合重跑；后续可改 workbench_test_main.cpp
+tests/workbench_parameters.cpp,真实参数 UI 操作,保留真实行为，不追逐像素/极端文案造景
+tests/ui_value_contract.cpp,多种控制器值/显示行为,按下一次修改的真实职责渐拆，不能只改成 ui_value_test 假装清晰
+tests/runtime_contract.cpp,多类运行时场景,优先归属到输入规范、结果发布、业务状态等现有测试，runner 保留公共 setup
+tests/performance_contract.cpp,多个不同性能问题,已有 perf 组；按需拆 input_conversion_benchmark/runtime_session_benchmark/gui_submission_benchmark；不重复装载大夹具
+tests/WorkbenchFixtures.h,工作台安装夹具,可改 WorkbenchInstallationFixture.h；先核实复制成本并复用 profile
+tests/test_distribution.py（Tools）,包结构验证+真实宿主执行,拆选择入口：python_package_validation / installed_python_package_execution
+tests/image_read_cache_test.cpp（Tools）,读图缓存身份/重复解码,小图功能保留；--perf 单列 image_read_cache_benchmark
+tests/infer_trace_test.cpp（Tools）,trace geometry/未初始化/GPU初始化,一个 runner 多 case 合理，CTest 名已明确，不再按文件数批评
+tests/tool_registration_test.cpp（Contracts）,类/函数工厂、实例隔离、销毁,保留，真实边界；模板错用是编译失败断言

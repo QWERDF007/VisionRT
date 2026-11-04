@@ -23,6 +23,12 @@
 #include <memory>
 #include <stdexcept>
 
+namespace {
+// test.plugin.counter declares 步长 as input 1 and 计数 as output 2.
+constexpr visionrt::PortId kCounterStepInput   = 1;
+constexpr visionrt::PortId kCounterCountOutput = 2;
+} // namespace
+
 
 void flowCanvasContract()
 {
@@ -711,7 +717,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     app.selectNode(remainingId);
     require(app.selectedNode() == remainingId, "hover revision fixture node was not selected");
     hoverNode(nodeItem(remainingId));
-    require(app.setParameter("step", false, "100"),
+    require(app.setParameter(kCounterStepInput, false, "100"),
             "hover revision fixture parameter could not be edited: " + app.diagnostic().toStdString());
     require(QTest::qWaitFor([&]
     {
@@ -740,7 +746,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     const auto sourceId = app.nodes().first().toMap().value("id").toString();
     const auto targetId = app.nodes().last().toMap().value("id").toString();
     app.selectNode(targetId);
-    require(app.bindInput(app.portContext("step"), sourceId, "count"), "canvas fixture binding failed");
+    require(app.bindInput(app.portContext(kCounterStepInput), sourceId, kCounterCountOutput), "canvas fixture binding failed");
     QTest::qWait(100);
     for (const bool fitted : {false, true})
     {
@@ -805,10 +811,10 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         require(selected.contains(sourceId) && selected.contains(targetId) && selected.size() == 2,
                 "box selection does not follow the minimum/fit coordinate transform");
         app.selectNode(targetId);
-        app.unbindInput(app.portContext("step"));
+        app.unbindInput(app.portContext(kCounterStepInput));
         QTest::qWait(50);
         require(app.wires().isEmpty(), "unbinding did not remove the zoomed wire");
-        require(app.bindInput(app.portContext("step"), sourceId, "count"), "reconnecting the zoomed nodes failed");
+        require(app.bindInput(app.portContext(kCounterStepInput), sourceId, kCounterCountOutput), "reconnecting the zoomed nodes failed");
         QTest::qWait(50);
         require(app.wires().size() == 1, "reconnecting did not restore the wire");
     }

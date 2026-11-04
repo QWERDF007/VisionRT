@@ -71,9 +71,9 @@ struct Sources
         tool.definitionPath = declarations / (id + ".json");
         tool.source         = source();
         tool.entry          = {"math", "entry.py", symbol};
-        tool.outputs.push_back({"value", "Value", {Type::Int}});
+        tool.outputs.push_back({2, "Value", {Type::Int}});
         if (secondOutput)
-            tool.outputs.push_back({"other", "Other", {Type::Float}});
+            tool.outputs.push_back({3, "Other", {Type::Float}});
         write(tool.definitionPath, emitNormalizedToolJson(tool));
         return parseToolDefinitionFile(tool.definitionPath, source());
     }
@@ -87,14 +87,14 @@ void adaptersAndRefresh(PythonRuntime &runtime)
 from . import helper
 import numpy
 def execute(inputs):
-    return {'outputs': {'value': helper.value, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: helper.value, 0: 0, 1: ''}, 'detail': ''}
 class Counter:
     def initialize(self, inputs):
         self.count = 0
         return {'code': 0, 'message': '', 'detail': ''}
     def execute(self, inputs):
         self.count += 1
-        return {'outputs': {'value': self.count, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+        return {'outputs': {2: self.count, 0: 0, 1: ''}, 'detail': ''}
     def release(self):
         return {'code': 0, 'message': '', 'detail': ''}
 class Broken:
@@ -110,15 +110,15 @@ class BadConstructor(Counter):
 def missing(inputs):
     return {'code': 0, 'message': '', 'detail': ''}
 def extra(inputs):
-    return {'outputs': {'value': 1, 'typo': 2, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: 1, 9: 2, 0: 0, 1: ''}, 'detail': ''}
 def wrong(inputs):
-    return {'outputs': {'value': True, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: True, 0: 0, 1: ''}, 'detail': ''}
 def business(inputs):
-    return {'outputs': {'value': 7, '__status_code': 5, '__status_message': 'expected failure'}, 'detail': ''}
+    return {'outputs': {2: 7, 0: 5, 1: 'expected failure'}, 'detail': ''}
 def partial(inputs):
-    return {'outputs': {'value': 9, 'other': True, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: 9, 3: True, 0: 0, 1: ''}, 'detail': ''}
 def absent(inputs):
-    return {'outputs': {'value': None, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: None, 0: 0, 1: ''}, 'detail': ''}
 )");
     auto function    = sources.definition("python.function", ToolKind::PythonFunction, "execute");
     auto counter     = sources.definition("python.counter", ToolKind::PythonClass, "Counter");
@@ -131,7 +131,7 @@ def absent(inputs):
     auto partial     = sources.definition("python.partial", ToolKind::PythonFunction, "partial", true);
     auto optional    = sources.definition("python.optional", ToolKind::PythonFunction, "absent");
     for (auto &port : optional.outputs)
-        if (port.nameEn == "value")
+        if (port.id == 2)
             sources.put("python.optional.json", emitNormalizedToolJson(optional));
     std::vector<ToolDefinition> definitions{function, counter, broken,   constructor, missing,
                                             extra,    wrong,   business, partial,     optional};
@@ -148,7 +148,7 @@ def absent(inputs):
     {
         auto       instance = runtime.factory(optional)(services);
         const auto result   = instance->execute({});
-        assert(testview::status(result).code == 0 && isMissing(result.outputs.at("value")));
+        assert(testview::status(result).code == 0 && isMissing(result.outputs.at(2)));
         assert(instance->release());
     }
     {
@@ -161,9 +161,9 @@ def absent(inputs):
     auto first  = runtime.factory(counter)(services);
     auto second = runtime.factory(counter)(services);
     assert(first->initialize({}).code == 0 && second->initialize({}).code == 0);
-    assert(std::get<std::int64_t>(first->execute({}).outputs.at("value")) == 1);
-    assert(std::get<std::int64_t>(first->execute({}).outputs.at("value")) == 2);
-    assert(std::get<std::int64_t>(second->execute({}).outputs.at("value")) == 1);
+    assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 1);
+    assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 2);
+    assert(std::get<std::int64_t>(second->execute({}).outputs.at(2)) == 1);
     rejects([&] { runtime.refresh(definitions); });
     assert(first->release().code == 0 && second->release().code == 0);
     first.reset();
@@ -200,18 +200,18 @@ def absent(inputs):
     {
         auto       instance = runtime.factory(business)(services);
         const auto result   = instance->execute({});
-        assert(testview::status(result).code == 5 && std::get<std::int64_t>(result.outputs.at("value")) == 7);
+        assert(testview::status(result).code == 5 && std::get<std::int64_t>(result.outputs.at(2)) == 7);
     }
     {
         // A declared port the tool answered with the wrong type is a broken answer, not a value.
         auto       instance = runtime.factory(partial)(services);
         const auto failed   = testview::executionFailure(*instance);
-        assert(failed.find("other") != std::string::npos);
+        assert(failed.find("端口 3") != std::string::npos);
     }
     const auto oldFactory = runtime.factory(function);
     {
         auto instance = oldFactory(services);
-        assert(std::get<std::int64_t>(instance->execute({}).outputs.at("value")) == 11);
+        assert(std::get<std::int64_t>(instance->execute({}).outputs.at(2)) == 11);
     }
     const auto timestamp = std::filesystem::last_write_time(sources.directory / "helper.py");
     sources.put("helper.py", "value = 22\nobsolete = True\n");
@@ -219,19 +219,19 @@ def absent(inputs):
     runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     {
         auto instance = runtime.factory(function)(services);
-        assert(std::get<std::int64_t>(instance->execute({}).outputs.at("value")) == 22);
+        assert(std::get<std::int64_t>(instance->execute({}).outputs.at(2)) == 22);
     }
     sources.put("helper.py", "value = 33\n");
     sources.put("entry.py", R"(
 from . import helper
 def execute(inputs):
     assert not hasattr(helper, 'obsolete')
-    return {'outputs': {'value': helper.value, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: helper.value, 0: 0, 1: ''}, 'detail': ''}
 )");
     runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     {
         auto instance = runtime.factory(function)(services);
-        assert(std::get<std::int64_t>(instance->execute({}).outputs.at("value")) == 33);
+        assert(std::get<std::int64_t>(instance->execute({}).outputs.at(2)) == 33);
         py::gil_scoped_acquire gil;
         assert(reinterpret_cast<std::uintptr_t>(py::module_::import("numpy").ptr()) == numpyIdentity);
     }
@@ -267,16 +267,16 @@ void pathInputs(PythonRuntime &runtime)
     sources.put("entry.py", R"(
 class PathProbe:
     def initialize(self, params):
-        self.base = params['base_dir']
+        self.base = params[1]
         return {'code': 0, 'message': 'ok', 'detail': ''}
     def execute(self, inputs):
-        return {'outputs': {'resolved': self.base + '|' + inputs['input_path'], '__status_code': 0, '__status_message': 'ok'},
+        return {'outputs': {2: self.base + '|' + inputs[2], 0: 0, 1: 'ok'},
                 'detail': ''}
     def release(self):
         return {'code': 0, 'message': 'ok', 'detail': ''}
 )");
     Sources::write(sources.declarations / "paths.json", R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "python.paths",
   "name_zh": "Path probe",
   "version": "1.0.0",
@@ -286,9 +286,11 @@ class PathProbe:
     "file": "entry.py",
     "symbol": "PathProbe"
   },
+  "next_port_id": {"init": 2, "inputs": 3, "outputs": 3},
   "ports": {
     "init": [
       {
+        "id": 0,
         "name_en": "init_mode",
         "name_zh": "Mode",
         "type": "string",
@@ -297,6 +299,7 @@ class PathProbe:
         }
       },
       {
+        "id": 1,
         "name_en": "base_dir",
         "name_zh": "Base",
         "type": "string",
@@ -304,12 +307,13 @@ class PathProbe:
           "editor": "path"
         },
         "relations": {
-          "path_mode": "init.init_mode"
+          "path_mode": {"stage": "init", "id": 0}
         }
       }
     ],
     "inputs": [
       {
+        "id": 1,
         "name_en": "input_mode",
         "name_zh": "Mode",
         "type": "string",
@@ -318,6 +322,7 @@ class PathProbe:
         }
       },
       {
+        "id": 2,
         "name_en": "input_path",
         "name_zh": "Input",
         "type": "string",
@@ -325,12 +330,13 @@ class PathProbe:
           "editor": "path"
         },
         "relations": {
-          "path_mode": "inputs.input_mode"
+          "path_mode": {"stage": "inputs", "id": 1}
         }
       }
     ],
     "outputs": [
       {
+        "id": 2,
         "name_en": "resolved",
         "name_zh": "Resolved",
         "type": "string"
@@ -355,24 +361,24 @@ class PathProbe:
     auto               instance = runtime.factory(definition)(services);
     assert(instance
                ->initialize({
-                   {"init_mode",              std::string("file")},
-                   { "base_dir", std::string("数据/模型.bin")}
+                   {0, std::string("file")},
+                   {1, std::string("数据/模型.bin")}
     })
                .code
            == 0);
     const auto result = instance->execute({
-        {"input_mode",              std::string("file")},
-        {"input_path", std::string("图像/输入.png")}
+        {1, std::string("file")},
+        {2, std::string("图像/输入.png")}
     });
     assert(testview::status(result).code == 0);
-    assert(std::get<std::string>(result.outputs.at("resolved")) == expectedBase + "|" + expectedInput);
+    assert(std::get<std::string>(result.outputs.at(2)) == expectedBase + "|" + expectedInput);
 
     const auto empty = instance->execute({
-        {"input_mode", std::string("file")},
-        {"input_path",     std::string("")}
+        {1, std::string("file")},
+        {2, std::string("")}
     });
     assert(testview::status(empty).code == 0);
-    assert(std::get<std::string>(empty.outputs.at("resolved")) == expectedBase + "|");
+    assert(std::get<std::string>(empty.outputs.at(2)) == expectedBase + "|");
     instance.reset();
     runtime.refresh({});
 }

@@ -1,4 +1,8 @@
+#include "ParameterFixturePorts.h"
+
+#include <array>
 #include <iostream>
+#include <utility>
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
@@ -53,10 +57,11 @@ void parameterEditorsContract()
   "runtime_files": []
 })json");
     write("python/custom/Test/Parameters/run.py",
-          "def run(inputs):\n    return {'outputs': {'ratio': inputs['ratio'], 'count': inputs['count'], '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
+          "def run(inputs):\n"
+          "    return {'outputs': {2: inputs[1], 3: inputs[2], 0: 0, 1: ''}, 'detail': ''}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.parameters",
   "name_zh": "参数测试",
   "version": "1.0.0",
@@ -66,10 +71,15 @@ void parameterEditorsContract()
     "file": "run.py",
     "symbol": "run"
   },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 12,
+    "outputs": 4
+  },
   "ports": {
     "inputs": [
       {
-        "name_en": "ratio",
+        "id": 1,
         "name_zh": "比例",
         "type": "float",
         "default": 0.15,
@@ -83,13 +93,13 @@ void parameterEditorsContract()
         }
       },
       {
-        "name_en": "count",
+        "id": 2,
         "name_zh": "整数",
         "type": "int",
         "default": 9007199254740993
       },
       {
-        "name_en": "path",
+        "id": 3,
         "name_zh": "路径",
         "type": "string",
         "default": "原始路径",
@@ -98,13 +108,13 @@ void parameterEditorsContract()
         }
       },
       {
-        "name_en": "enabled",
+        "id": 4,
         "name_zh": "启用",
         "type": "bool",
         "default": true
       },
       {
-        "name_en": "mode",
+        "id": 5,
         "name_zh": "色彩",
         "type": "string",
         "default": "bgr",
@@ -116,7 +126,7 @@ void parameterEditorsContract()
         }
       },
       {
-        "name_en": "labels",
+        "id": 6,
         "name_zh": "标签列表",
         "type": "vec_string",
         "default": [
@@ -125,13 +135,13 @@ void parameterEditorsContract()
         ]
       },
       {
-        "name_en": "note",
+        "id": 7,
         "name_zh": "备注",
         "type": "string",
         "default": "中文备注"
       },
       {
-        "name_en": "directory",
+        "id": 8,
         "name_zh": "数据目录",
         "type": "string",
         "default": "F:/tmp",
@@ -140,7 +150,7 @@ void parameterEditorsContract()
         }
       },
       {
-        "name_en": "weights",
+        "id": 9,
         "name_zh": "数值数组",
         "type": "vec_float",
         "default": [
@@ -149,29 +159,32 @@ void parameterEditorsContract()
         ]
       },
       {
-        "name_en": "images",
+        "id": 10,
         "name_zh": "图像",
         "type": "image",
         "default": []
       },
       {
-        "name_en": "rois",
+        "id": 11,
         "name_zh": "区域",
         "type": "roi",
         "default": [],
         "relations": {
-          "image": "inputs.images"
+          "image": {
+            "stage": "inputs",
+            "id": 10
+          }
         }
       }
     ],
     "outputs": [
       {
-        "name_en": "ratio",
+        "id": 2,
         "name_zh": "比例",
         "type": "float"
       },
       {
-        "name_en": "count",
+        "id": 3,
         "name_zh": "整数",
         "type": "int"
       }
@@ -188,9 +201,9 @@ void parameterEditorsContract()
     if (app.nodes().size() != 1)
         throw std::runtime_error("parameter fixture tool was not discovered: " + app.diagnostic().toStdString());
     app.selectNode(app.nodes().front().toMap().value("id").toString());
-    require(!app.setParameter("count", false, "-9223372036854775809"), "overflowing negative integer was rounded");
-    require(!app.setParameter("ratio", false, ".nan"), "YAML numeric syntax must not be accepted");
-    require(!app.setParameter("weights", false, "{shape: [2], data: [0, 1]}"), "YAML arrays must not be accepted");
+    require(!app.setParameter(testing::parameters::Count, false, "-9223372036854775809"), "overflowing negative integer was rounded");
+    require(!app.setParameter(testing::parameters::Ratio, false, ".nan"), "YAML numeric syntax must not be accepted");
+    require(!app.setParameter(testing::parameters::Weights, false, "{shape: [2], data: [0, 1]}"), "YAML arrays must not be accepted");
     QQmlEngine engine;
     auto *theme = themeForEngine(&engine);
     require(theme != nullptr, "Theme must be available for engine");
@@ -199,7 +212,7 @@ void parameterEditorsContract()
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"
-        "ParameterEditor { property string fieldId: 'ratio'; width: 600; height: 36; "
+        "ParameterEditor { property int fieldId: 1; width: 600; height: 36; "
         "parameter: app.parameters.find(function(row) { return row.id === fieldId }) }",
         QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ParameterContract.qml")));
     std::unique_ptr<QObject> owner(component.create());
@@ -292,64 +305,64 @@ void parameterEditorsContract()
     }
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
-    const auto value = [&](const QString &id)
+    const auto value = [&](PortId id)
     {
         for (const auto &item : app.parameters())
         {
             const auto row = item.toMap();
-            if (row.value("id").toString() == id)
+            if (row.value("id").toUInt() == id)
                 return row.value("valueText").toString();
         }
         return QString{};
     };
-    require(!app.setParameter("missing_port", false, "1"), "unknown parameter was accepted");
-    require(app.diagnostic() == QStringLiteral("参数不存在：missing_port"),
+    require(!app.setParameter(99, false, "1"), "unknown parameter was accepted");
+    require(app.diagnostic() == QStringLiteral("参数不存在：端口 99"),
             "parameter rejection lost its precise Chinese reason and stable port ID");
     for (const auto &raw : {QString{}, QStringLiteral("null"), QStringLiteral("~"), QStringLiteral("[1]"),
                             QStringLiteral("\"原始引号\"\n中文")})
     {
-        require(app.setParameter("note", false, raw), "raw string parameter was rejected");
-        require(value("note") == raw, "raw strings were parsed as JSON or YAML literals");
+        require(app.setParameter(testing::parameters::Note, false, raw), "raw string parameter was rejected");
+        require(value(testing::parameters::Note) == raw, "raw strings were parsed as JSON or YAML literals");
     }
-    require(app.setParameter("note", false, "\"JSON 文本\"", true) && value("note") == QStringLiteral("JSON 文本"),
+    require(app.setParameter(testing::parameters::Note, false, "\"JSON 文本\"", true) && value(testing::parameters::Note) == QStringLiteral("JSON 文本"),
             "explicit JSON string entry failed");
-    require(!app.setParameter("note", false, "unquoted", true), "raw JSON mode accepted an unquoted string");
-    require(value("ratio") == "0.2", "Float keyboard step was not committed to the real parameter");
+    require(!app.setParameter(testing::parameters::Note, false, "unquoted", true), "raw JSON mode accepted an unquoted string");
+    require(value(testing::parameters::Ratio) == "0.2", "Float keyboard step was not committed to the real parameter");
     input->setProperty("text", "0.4");
     QTest::keyClick(&window, Qt::Key_Escape);
-    require(value("ratio") == "0.2", "Escape committed an unfinished Float draft");
+    require(value(testing::parameters::Ratio) == "0.2", "Escape committed an unfinished Float draft");
     require(input->property("text").toString() == "0.2", "Escape did not restore the committed Float value");
-    editor->setProperty("fieldId", "count");
+    editor->setProperty("fieldId", static_cast<uint>(testing::parameters::Count));
     QTest::qWait(20);
     input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "integer parameter lost the shared field shell");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
-    require(value("count") == "9007199254740994", "integer keyboard step lost precision or did not commit");
+    require(value(testing::parameters::Count) == "9007199254740994", "integer keyboard step lost precision or did not commit");
     input->setProperty("text", "9007199254740996");
     QTest::keyClick(&window, Qt::Key_Up);
-    require(value("count") == "9007199254740997", "integer step ignored the uncommitted draft");
+    require(value(testing::parameters::Count) == "9007199254740997", "integer step ignored the uncommitted draft");
     input->setProperty("text", "-9223372036854775809");
     QTest::keyClick(&window, Qt::Key_Up);
-    require(value("count") == "9007199254740997"
+    require(value(testing::parameters::Count) == "9007199254740997"
                 && input->property("text").toString() == "-9223372036854775809",
             "invalid integer draft was rounded, discarded or stepped from the old value");
     QTest::keyClick(&window, Qt::Key_Escape);
-    require(app.setParameter("count", false, "9223372036854775807"), "Int64 maximum was rejected");
+    require(app.setParameter(testing::parameters::Count, false, "9223372036854775807"), "Int64 maximum was rejected");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
-    require(value("count") == "9223372036854775807", "integer increment overflowed at the maximum");
+    require(value(testing::parameters::Count) == "9223372036854775807", "integer increment overflowed at the maximum");
     input->setProperty("text", "9223372036854775808");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value("count") == "9223372036854775807", "out-of-range integer replaced the valid parameter");
+    require(value(testing::parameters::Count) == "9223372036854775807", "out-of-range integer replaced the valid parameter");
     QTest::keyClick(&window, Qt::Key_Escape);
     require(input->property("text").toString() == "9223372036854775807", "Escape lost the full Int64 value");
-    require(app.setParameter("count", false, "-9223372036854775808"), "Int64 minimum was rejected");
+    require(app.setParameter(testing::parameters::Count, false, "-9223372036854775808"), "Int64 minimum was rejected");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Down);
-    require(value("count") == "-9223372036854775808", "integer decrement overflowed at the minimum");
-    require(app.setParameter("count", false, "9007199254740994"), "integer restore failed");
-    editor->setProperty("fieldId", "path");
+    require(value(testing::parameters::Count) == "-9223372036854775808", "integer decrement overflowed at the minimum");
+    require(app.setParameter(testing::parameters::Count, false, "9007199254740994"), "integer restore failed");
+    editor->setProperty("fieldId", static_cast<uint>(testing::parameters::Path));
     QTest::qWait(20);
     const auto textInput = [](QQuickItem *row) -> QQuickItem *
     {
@@ -368,7 +381,7 @@ void parameterEditorsContract()
     for (const auto &item : app.parameters())
     {
         const auto row = item.toMap();
-        if (row.value("id").toString() == "path")
+        if (row.value("id").toUInt() == testing::parameters::Path)
             pathSaved = row.value("valueText").toString() == path;
     }
     require(pathSaved, "text parameter did not preserve Unicode, whitespace and quotes");
@@ -382,26 +395,26 @@ void parameterEditorsContract()
         QTest::qWait(10);
     require(!app.busy(), "parameter project did not finish reopening");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
-    require(value("count") == "9007199254740994", "integer parameter lost precision after reopening");
+    require(value(testing::parameters::Count) == "9007199254740994", "integer parameter lost precision after reopening");
     app.runNode();
     for (int attempt = 0; app.busy() && attempt < 500; ++attempt)
         QTest::qWait(10);
     require(!app.busy(), "parameter execution did not finish");
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs != nullptr, "parameter execution output model is unavailable");
-    QMap<QString, QString> results;
+    QMap<PortId, QString> results;
     for (int row = 0; row < outputs->rowCount(); ++row)
     {
         const auto output = outputs->get(row);
-        results.insert(output.value("portId").toString(), output.value("preview").toString());
+        results.insert(output.value("portId").toUInt(), output.value("preview").toString());
     }
-    if (results.value("__status_code") != "0")
-        throw std::runtime_error("parameter execution failed: " + results.value("__status_message").toStdString()
+    if (results.value(kStatusCodePort) != "0")
+        throw std::runtime_error("parameter execution failed: " + results.value(kStatusMessagePort).toStdString()
                                  + " diagnostic=" + app.diagnostic().toStdString()
                                  + " selected=" + app.selectedNode().toStdString()
                                  + " rows=" + std::to_string(outputs->rowCount()));
-    require(results.value("ratio").toDouble() == 0.2, "Float parameter changed during save/reopen/execution");
-    require(results.value("count") == "9007199254740994", "integer parameter lost precision during Python execution");
+    require(results.value(testing::parameters::RatioOutput).toDouble() == 0.2, "Float parameter changed during save/reopen/execution");
+    require(results.value(testing::parameters::CountOutput) == "9007199254740994", "integer parameter lost precision during Python execution");
     QQmlComponent panelComponent(&engine,
         QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ParameterPanel.qml")));
     std::unique_ptr<QObject> panelOwner(panelComponent.create());
@@ -425,32 +438,32 @@ void parameterEditorsContract()
         }
         return nullptr;
     };
-    auto *ratioRow = findItem(findItem, panel, "parameter_ratio");
+    auto *ratioRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Ratio));
     require(ratioRow != nullptr, "parameter panel did not render the Float row");
     input = findItem(findItem, ratioRow, "stepperInput");
     require(input != nullptr, "parameter panel did not render the Float input");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     QTest::keyClick(&window, Qt::Key_Up);
-    require(value("ratio") == "0.3", "parameter panel lost keyboard focus after the first committed step");
+    require(value(testing::parameters::Ratio) == "0.3", "parameter panel lost keyboard focus after the first committed step");
     require(input->hasActiveFocus(), "parameter refresh recreated the focused field");
     QSignalSpy parameterChanges(&app, &AppController::parametersChanged);
     input->setProperty("text", "0.35");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value("ratio") == "0.35", "panel Float Enter did not commit");
+    require(value(testing::parameters::Ratio) == "0.35", "panel Float Enter did not commit");
     panel->forceActiveFocus();
     require(parameterChanges.count() == 1, "Enter followed by blur committed the parameter more than once");
     input->forceActiveFocus();
     input->setProperty("text", "0.35garbage");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value("ratio") == "0.35", "invalid Float draft replaced the committed value");
+    require(value(testing::parameters::Ratio) == "0.35", "invalid Float draft replaced the committed value");
     QTest::keyClick(&window, Qt::Key_Escape);
     require(input->property("text").toString() == "0.35", "Escape did not restore the panel Float");
     input->setProperty("text", "0.4");
     panel->setEnabled(false);
     window.contentItem()->forceActiveFocus();
     QTest::qWait(20);
-    require(value("ratio") == "0.35", "disabling the parameter panel committed a Float draft");
+    require(value(testing::parameters::Ratio) == "0.35", "disabling the parameter panel committed a Float draft");
     panel->setEnabled(true);
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Escape);
@@ -458,7 +471,7 @@ void parameterEditorsContract()
     QGuiApplication::sendEvent(&window, &composing);
     require(input->property("inputMethodComposing").toBool(), "numeric input did not receive IME composition");
     QTest::keyClick(&window, Qt::Key_Up);
-    require(value("ratio") == "0.35", "numeric step submitted a value during IME composition");
+    require(value(testing::parameters::Ratio) == "0.35", "numeric step submitted a value during IME composition");
     QInputMethodEvent cancelComposition;
     QGuiApplication::sendEvent(&window, &cancelComposition);
     const auto firstNode = app.selectedNode();
@@ -468,26 +481,26 @@ void parameterEditorsContract()
     require(firstNode != secondNode, "second parameter test node was not selected");
     app.selectNode(firstNode);
     QTest::qWait(20);
-    ratioRow = findItem(findItem, panel, "parameter_ratio");
+    ratioRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Ratio));
     input = findItem(findItem, ratioRow, "stepperInput");
     input->forceActiveFocus();
     input->setProperty("text", "0.9");
     app.selectNode(secondNode);
     QTest::qWait(20);
-    require(value("ratio") == "0.15", "node switching committed the previous node draft to the new node");
+    require(value(testing::parameters::Ratio) == "0.15", "node switching committed the previous node draft to the new node");
     app.selectNode(firstNode);
     QTest::qWait(20);
-    require(value("ratio") == "0.35", "node switching silently committed an unfinished draft");
-    auto *pathRow = findItem(findItem, panel, "parameter_path");
+    require(value(testing::parameters::Ratio) == "0.35", "node switching silently committed an unfinished draft");
+    auto *pathRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Path));
     require(pathRow != nullptr, "parameter panel did not render the path row");
     pathInput = textInput(pathRow);
     require(pathInput != nullptr, "parameter panel path input is unavailable");
     pathInput->forceActiveFocus();
-    require(app.setParameter("path", false, "external path"), "external path update failed");
+    require(app.setParameter(testing::parameters::Path, false, "external path"), "external path update failed");
     require(pathInput->property("text").toString() == "external path",
             "focused clean text field did not follow an external parameter update");
     pathInput->setProperty("text", "unfinished path");
-    require(app.setParameter("path", false, "new external path"), "second external path update failed");
+    require(app.setParameter(testing::parameters::Path, false, "new external path"), "second external path update failed");
     require(pathInput->property("text").toString() == "unfinished path", "external update erased the active draft");
     QTest::keyClick(&window, Qt::Key_Escape);
     require(pathInput->property("text").toString() == "new external path", "Escape did not use the latest model value");
@@ -495,7 +508,7 @@ void parameterEditorsContract()
     panel->setEnabled(false);
     window.contentItem()->forceActiveFocus();
     QTest::qWait(20);
-    require(value("path") == "new external path", "disabling the parameter panel committed a text draft");
+    require(value(testing::parameters::Path) == "new external path", "disabling the parameter panel committed a text draft");
     panel->setEnabled(true);
     pathInput->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Escape);
@@ -507,7 +520,7 @@ void parameterEditorsContract()
     QTest::keyClick(&window, Qt::Key_Escape);
     require(pathInput->property("text").toString() == "unfinished IME draft",
             "Escape discarded the text draft while the IME was composing");
-    require(value("path") == "new external path", "IME cancellation committed an unfinished text draft");
+    require(value(testing::parameters::Path) == "new external path", "IME cancellation committed an unfinished text draft");
     QInputMethodEvent endTextComposition;
     QGuiApplication::sendEvent(&window, &endTextComposition);
     QTest::keyClick(&window, Qt::Key_Escape);
@@ -531,7 +544,7 @@ void parameterEditorsContract()
             && item->metaObject()->indexOfSignal("clicked()") >= 0) pathAction = item;
     }
     require(pathField && pathAction, "path field public controls are missing");
-    const auto savedPath = value("path");
+    const auto savedPath = value(testing::parameters::Path);
     const auto pathChanges = parameterChanges.count();
     require(pathField->setProperty("readOnly", true), "text field read-only state is not writable");
     pathInput->forceActiveFocus();
@@ -542,18 +555,18 @@ void parameterEditorsContract()
     QTest::qWait(20);
     require(pathInput->property("text").toString() == savedPath && !pathAction->isEnabled(),
             "read-only text field accepted keyboard input or enabled its chooser");
-    require(value("path") == savedPath && parameterChanges.count() == pathChanges,
+    require(value(testing::parameters::Path) == savedPath && parameterChanges.count() == pathChanges,
             "read-only text field submitted a parameter");
     require(pathField->setProperty("readOnly", false), "text field read-only state could not be restored");
     pathInput->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
     QTest::keyClick(&window, Qt::Key_X);
     panel->forceActiveFocus();
-    require(QTest::qWaitFor([&] { return value("path") == "x"; }, 1000),
+    require(QTest::qWaitFor([&] { return value(testing::parameters::Path) == "x"; }, 1000),
             "editable text field did not commit real keyboard input on blur");
     require(parameterChanges.count() == pathChanges + 1 && pathAction->isEnabled(),
             "text blur submitted twice or the re-enabled chooser stayed disabled");
-    require(app.setParameter("path", false, savedPath), "text state fixture could not restore its path");
+    require(app.setParameter(testing::parameters::Path, false, savedPath), "text state fixture could not restore its path");
     const auto comboBox = [](QQuickItem *row) -> QQuickItem *
     {
         for (auto *item : row->findChildren<QQuickItem *>())
@@ -561,9 +574,11 @@ void parameterEditorsContract()
                 return item;
         return nullptr;
     };
-    for (const auto &id : {QStringLiteral("enabled"), QStringLiteral("mode")})
+    const std::array<std::pair<const char *, PortId>, 2> dropdowns{{{"enabled", testing::parameters::Enabled},
+                                                                    {"mode", testing::parameters::Mode}}};
+    for (const auto &[name, id] : dropdowns)
     {
-        auto *row = findItem(findItem, panel, "parameter_" + id);
+        auto *row = findItem(findItem, panel, "parameter_" + QString::number(id));
         require(row != nullptr, "parameter panel did not render a dropdown row");
         auto *combo = comboBox(row);
         require(combo != nullptr, "Bool/enum parameter did not use a dropdown");
@@ -581,43 +596,43 @@ void parameterEditorsContract()
                 "parameter actions are not column aligned");
         combo->forceActiveFocus();
         QTest::keyClick(&window, Qt::Key_Down);
-        require(value(id) == (id == "enabled" ? "false" : "gray"), "dropdown keyboard selection did not commit its type");
+        require(value(id) == (id == testing::parameters::Enabled ? "false" : "gray"), "dropdown keyboard selection did not commit its type");
         panel->setEnabled(false);
         QTest::keyClick(&window, Qt::Key_Up);
-        require(value(id) == (id == "enabled" ? "false" : "gray"), "disabled dropdown changed its parameter");
+        require(value(id) == (id == testing::parameters::Enabled ? "false" : "gray"), "disabled dropdown changed its parameter");
         panel->setEnabled(true);
     }
-    auto *labelsRow = findItem(findItem, panel, "parameter_labels");
+    auto *labelsRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Labels));
     require(labelsRow != nullptr, "parameter panel did not render the structure row");
     auto *labelsInput = textInput(labelsRow);
     require(labelsInput != nullptr, "array parameter does not expose its editable input");
     labelsInput->forceActiveFocus();
     require(labelsInput->property("text").toString() == "[\"a\",\"b\"]", "array parameter initial text mismatch");
-    const auto originalLabels = value("labels");
+    const auto originalLabels = value(testing::parameters::Labels);
     require(app.save(project) && !app.dirty(), "cannot save array baseline");
     panel->setEnabled(false);
     labelsInput->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
     QTest::keyClick(&window, Qt::Key_X);
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value("labels") == originalLabels, "disabled array field still allowed editing");
+    require(value(testing::parameters::Labels) == originalLabels, "disabled array field still allowed editing");
     panel->setEnabled(true);
     labelsInput->forceActiveFocus();
     labelsInput->setProperty("text", "invalid structure");
     QTest::keyClick(&window, Qt::Key_Return);
-    require(value("labels") == originalLabels, "invalid structure replaced a typed parameter");
+    require(value(testing::parameters::Labels) == originalLabels, "invalid structure replaced a typed parameter");
     QTest::keyClick(&window, Qt::Key_Escape);
     require(labelsInput->property("text").toString() == originalLabels, "Escape did not restore array value");
     labelsInput->setProperty("text", "[\"中文\", \"with spaces\"]");
     QTest::keyClick(&window, Qt::Key_Return);
-    const auto committedLabels = value("labels");
+    const auto committedLabels = value(testing::parameters::Labels);
     require(committedLabels.contains(QStringLiteral("中文")) && committedLabels.contains("with spaces"),
             "array text input did not preserve typed string values");
     labelsInput->forceActiveFocus();
     labelsInput->setProperty("text", "unfinished structure");
     QTest::keyClick(&window, Qt::Key_Escape);
     require(labelsInput->property("text").toString() == committedLabels, "Escape did not restore array draft");
-    require(value("labels") == committedLabels, "Escape committed an unfinished array draft");
+    require(value(testing::parameters::Labels) == committedLabels, "Escape committed an unfinished array draft");
     const auto click = [&](QQuickItem *item)
     {
         require(item && item->isVisible() && item->isEnabled(), "parameter action is unavailable");
@@ -637,12 +652,12 @@ void parameterEditorsContract()
         }
         return nullptr;
     };
-    require(app.setParameterMode("ratio", true), "parameter could not enter upstream mode");
+    require(app.setParameterMode(testing::parameters::Ratio, true), "parameter could not enter upstream mode");
     QTest::qWait(50);
-    ratioRow = findItem(findItem, panel, "parameter_ratio");
+    ratioRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Ratio));
     auto *upstream = findItem(findItem, ratioRow, "parameterUpstream");
     require(upstream != nullptr, "upstream parameter did not use the grouped dropdown");
-    const auto candidates = app.bindingCandidates(app.portContext("ratio"));
+    const auto candidates = app.bindingCandidates(app.portContext(testing::parameters::Ratio));
     require(candidates.size() == 1, "upstream fixture should expose one compatible source");
     const auto candidate = candidates.first().toMap();
     click(upstream);
@@ -665,15 +680,15 @@ void parameterEditorsContract()
     click(upstream);
     click(visibleText(QStringLiteral("解除绑定")));
     require(app.wires().isEmpty(), "grouped dropdown did not remove the binding");
-    require(value("ratio") == "0.35", "unbinding replaced the retained literal value");
+    require(value(testing::parameters::Ratio) == "0.35", "unbinding replaced the retained literal value");
     app.deleteNodes(QVariantList{secondNode});
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     app.selectNode(firstNode);
-    require(app.setParameterMode("ratio", true), "parameter could not return to upstream mode");
+    require(app.setParameterMode(testing::parameters::Ratio, true), "parameter could not return to upstream mode");
     QTest::qWait(30);
-    ratioRow = findItem(findItem, panel, "parameter_ratio");
+    ratioRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Ratio));
     upstream = findItem(findItem, ratioRow, "parameterUpstream");
-    require(upstream != nullptr && app.bindingCandidates(app.portContext("ratio")).isEmpty(), "removed binding source remains available");
+    require(upstream != nullptr && app.bindingCandidates(app.portContext(testing::parameters::Ratio)).isEmpty(), "removed binding source remains available");
     require(app.save(project), "cannot save missing-source baseline");
     QSignalSpy missingSourceChanges(&app, &AppController::parametersChanged);
     click(upstream);
@@ -685,9 +700,9 @@ void parameterEditorsContract()
     auto *missingPopup = upstream->property("popup").value<QObject *>();
     require(missingPopup && QMetaObject::invokeMethod(missingPopup, "close", Qt::DirectConnection),
             "cannot close the empty candidate group");
-    require(app.wires().isEmpty() && value("ratio") == "0.35" && !app.dirty() && missingSourceChanges.isEmpty(),
+    require(app.wires().isEmpty() && value(testing::parameters::Ratio) == "0.35" && !app.dirty() && missingSourceChanges.isEmpty(),
             "opening an unavailable candidate list changed the project");
-    require(app.setParameterMode("ratio", false), "integer round-trip fixture could not restore literal inputs");
+    require(app.setParameterMode(testing::parameters::Ratio, false), "integer round-trip fixture could not restore literal inputs");
     const auto parameterGroup = [&]() -> QQuickItem *
     {
         QList<QQuickItem *> pending{panel};
@@ -728,28 +743,28 @@ void parameterEditorsContract()
                                 QStringLiteral("-9223372036854775808")})
     {
         QTest::qWait(30);
-        auto *countRow = findItem(findItem, panel, "parameter_count");
+        auto *countRow = findItem(findItem, panel, "parameter_" + QString::number(testing::parameters::Count));
         require(countRow != nullptr, "integer round-trip input is unavailable");
         auto *countInput = findItem(findItem, countRow, "stepperInput");
         require(countInput != nullptr, "integer round-trip field is missing");
         countInput->forceActiveFocus();
         countInput->setProperty("text", integer);
         QTest::keyClick(&window, Qt::Key_Return);
-        require(value("count") == integer, "integer text commit lost precision");
+        require(value(testing::parameters::Count) == integer, "integer text commit lost precision");
         require(app.save(project), "cannot save integer boundary fixture");
         app.requestOpen(project);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "integer boundary project did not reopen");
         app.selectNode(firstNode);
-        require(value("count") == integer, "integer boundary changed during save/reopen");
+        require(value(testing::parameters::Count) == integer, "integer boundary changed during save/reopen");
         app.runNode();
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "integer boundary execution did not finish");
-        QMap<QString, QString> boundaryResults;
+        QMap<PortId, QString> boundaryResults;
         for (int row = 0; row < outputs->rowCount(); ++row)
         {
             const auto result = outputs->get(row);
-            boundaryResults.insert(result.value("portId").toString(), result.value("preview").toString());
+            boundaryResults.insert(result.value("portId").toUInt(), result.value("preview").toString());
         }
-        require(boundaryResults.value("__status_code") == "0" && boundaryResults.value("count") == integer,
+        require(boundaryResults.value(kStatusCodePort) == "0" && boundaryResults.value(testing::parameters::CountOutput) == integer,
                 "integer boundary changed during Python execution");
     }
     window.hide();

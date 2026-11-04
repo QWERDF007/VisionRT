@@ -35,10 +35,11 @@ ToolDefinition expressionTool()
     tool.kind           = ToolKind::PythonClass;
     tool.nodeModel      = NodeModel::Expression;
     tool.entry          = PythonEntry{"logic", "expression/tool.py", "ExpressionTool"};
-    tool.initParams     = {{"variables", "变量", {Type::Array, DType::String, 2}},
-                           {"program", "公式", {Type::Array, DType::String, 2}}};
-    tool.outputs        = {{"__status_code", "状态码", {Type::Int}},
-                           {"__status_message", "状态消息", {Type::String}}};
+    // 派生初始化端口由节点模型固定：0 变量表、1 公式表，参数表按同一编号写入。
+    tool.initParams     = {{kVariablesInitPort, "变量", {Type::Array, DType::String, 2}},
+                           {kProgramInitPort, "公式", {Type::Array, DType::String, 2}}};
+    tool.outputs        = {{kStatusCodePort, "状态码", {Type::Int}},
+                           {kStatusMessagePort, "状态消息", {Type::String}}};
     return tool;
 }
 
@@ -49,18 +50,19 @@ ToolDefinition conditionTool()
     tool.nameZh = "条件分支";
     tool.nodeModel   = NodeModel::Condition;
     PortDefinition mode;
-    mode.nameEn           = "condition_mode";
+    mode.id               = kConditionModePort;
     mode.nameZh         = "条件来源";
     mode.type         = {Type::String};
     mode.defaultValue = std::string{"formula"};
     mode.options      = {std::string{"formula"}, std::string{"upstream"}};
     tool.initParams.push_back(std::move(mode));
-    tool.outputs     = {{"__status_code", "状态码", {Type::Int}},
-                        {"__status_message", "状态消息", {Type::String}},
-                        {"on_true", "成立", {Type::Bool}},
-                        {"on_false", "否则", {Type::Bool}},
-                        {"on_true_status", "成立分支状态", {Type::Int}},
-                        {"on_false_status", "否则分支状态", {Type::Int}}};
+    // 条件分支的派生输出编号固定：成立 2、否则 3，两路状态 4、5。
+    tool.outputs     = {{kStatusCodePort, "状态码", {Type::Int}},
+                        {kStatusMessagePort, "状态消息", {Type::String}},
+                        {2, "成立", {Type::Bool}},
+                        {3, "否则", {Type::Bool}},
+                        {4, "成立分支状态", {Type::Int}},
+                        {5, "否则分支状态", {Type::Int}}};
     return tool;
 }
 
@@ -72,8 +74,8 @@ ToolDefinition selectTool()
     tool.kind          = ToolKind::Host;
     tool.nodeModel     = NodeModel::Select;
     tool.hostBinding   = "visionrt.select";
-    tool.outputs       = {{"__status_code", "状态码", {Type::Int}},
-                          {"__status_message", "状态消息", {Type::String}}};
+    tool.outputs       = {{kStatusCodePort, "状态码", {Type::Int}},
+                          {kStatusMessagePort, "状态消息", {Type::String}}};
     return tool;
 }
 
@@ -114,8 +116,10 @@ ToolDefinition intTool(std::string id, std::vector<std::string> inputs = {})
     tool.nameZh   = tool.nameEn;
     tool.version       = "1";
     tool.kind          = ToolKind::Cpp;
-    for (auto &input : inputs) tool.inputs.push_back({input, input, {Type::Int}});
-    tool.outputs = {{"value", "值", {Type::Int}}};
+    // 业务输入按声明顺序从 1 编号，业务输出固定 2。
+    PortId next = 1;
+    for (auto &input : inputs) tool.inputs.push_back({next++, input, {Type::Int}});
+    tool.outputs = {{2, "值", {Type::Int}}};
     return tool;
 }
 
@@ -126,7 +130,7 @@ ToolDefinition boolTool()
     tool.nameZh   = "布尔来源";
     tool.version       = "1";
     tool.kind          = ToolKind::Cpp;
-    tool.outputs       = {{"value", "条件", {Type::Bool}}};
+    tool.outputs       = {{2, "条件", {Type::Bool}}};
     return tool;
 }
 
@@ -142,9 +146,9 @@ NodeDefinition node(NodeId id, const ToolDefinition &tool, int y)
     if (tool.nodeModel == NodeModel::Select)
         n.selectType = TypeSpec{Type::Int};
     const auto contract = tool.derivesPorts() ? nodeContract(n, tool) : tool;
-    for (const auto &port : contract.initParams) n.signatures.initParams.emplace(port.nameEn, port.type);
-    for (const auto &port : contract.inputs) n.signatures.inputs.emplace(port.nameEn, port.type);
-    for (const auto &port : contract.outputs) n.signatures.outputs.emplace(port.nameEn, port.type);
+    for (const auto &port : contract.initParams) n.signatures.initParams.emplace(port.id, port.type);
+    for (const auto &port : contract.inputs) n.signatures.inputs.emplace(port.id, port.type);
+    for (const auto &port : contract.outputs) n.signatures.outputs.emplace(port.id, port.type);
     return n;
 }
 
@@ -176,25 +180,25 @@ ExpressionConfig sampleExpression()
 {
     ExpressionConfig config;
     ExpressionVariable input;
-    input.portId = "p1";
+    input.portId = 2;
     input.name   = "半径列表";
     input.symbol = "radii";
     input.type   = {Type::Array, DType::Float64, 1};
     ExpressionResult first;
-    first.portId    = "p2";
+    first.portId    = 3;
     first.name      = "数量";
     first.symbol    = "count";
     first.expression = "len(radii)";
     first.type      = {Type::Int};
     first.exposed   = true;
     ExpressionResult hidden;
-    hidden.portId     = "p3";
+    hidden.portId     = 4;
     hidden.name       = "有效";
     hidden.symbol     = "ok";
     hidden.expression = "all_nonempty(v_gt(radii, 5.0))";
     hidden.type       = {Type::Bool};
     hidden.exposed    = false;
-    config.nextPortSeq = 4;
+    config.nextPortId = 5;
     config.variables   = {input};
     config.program     = {first, hidden};
     return config;
@@ -211,18 +215,18 @@ void materialisationAndTransactions()
     const auto config = sampleExpression();
     require(editor.setExpressionConfig("flow_1", id, config, expression), "expression transaction did not commit");
     auto contract = nodeContract(editor.project().flows.front().nodes.front(), expression);
-    require(contract.inputs.size() == 1 && contract.inputs.front().nameEn == "p1"
+    require(contract.inputs.size() == 1 && contract.inputs.front().id == 2
                 && contract.inputs.front().nameZh == "半径列表",
             "variable port was not materialised");
-    require(contract.outputs.size() == 3 && contract.outputs[0].nameEn == "__status_code"
-                && contract.outputs[1].nameEn == "__status_message" && contract.outputs[2].nameEn == "p2",
+    require(contract.outputs.size() == 3 && contract.outputs[0].id == kStatusCodePort
+                && contract.outputs[1].id == kStatusMessagePort && contract.outputs[2].id == 3,
             "only exposed results become business outputs");
 
     // Deleting a bound output and changing a bound input type are rejected as one
     // transaction; the stored configuration must stay untouched.
     const auto consumerTool = intTool("test.consumer", {"input"});
     const auto consumer     = editor.addNode("flow_1", consumerTool, {0, 1});
-    require(editor.setBinding("flow_1", consumer, "input", {BindingMode::Upstream, Missing{}, SourcePort{id, "p2"}}),
+    require(editor.setBinding("flow_1", consumer, 1, {BindingMode::Upstream, Missing{}, SourcePort{id, 3}}),
             "binding the exposed expression result failed");
     const auto revision = editor.project().flows.front().nodes.front().executionRevision;
     auto       narrowed = config;
@@ -256,7 +260,7 @@ void materialisationAndTransactions()
     // Port identifiers are retired once issued: a later transaction can raise the sequence but a
     // lower value must be rejected so stale contexts can not point at a recycled port.
     auto narrowedSequence     = retyped;
-    narrowedSequence.nextPortSeq = retyped.nextPortSeq - 1;
+    narrowedSequence.nextPortId = retyped.nextPortId - 1;
     bool sequenceRejected     = false;
     try
     {
@@ -267,7 +271,7 @@ void materialisationAndTransactions()
         sequenceRejected = true;
     }
     require(sequenceRejected, "a decreasing port sequence must be rejected");
-    require(editor.project().flows.front().nodes.front().expression->nextPortSeq == retyped.nextPortSeq,
+    require(editor.project().flows.front().nodes.front().expression->nextPortId == retyped.nextPortId,
             "a rejected sequence must not change the stored allocator");
 
     // Forward references and duplicate symbols are rejected before commit.
@@ -306,10 +310,10 @@ void materialisationAndTransactions()
     require(editor.setExpressionConfig("flow_1", conditionId, validCondition, condition),
             "a single hidden Bool condition must commit");
     const auto conditionContract = nodeContract(editor.project().flows.front().nodes.at(2), condition);
-    require(conditionContract.outputs.size() == 6 && conditionContract.outputs[2].nameEn == "on_true"
+    require(conditionContract.outputs.size() == 6 && conditionContract.outputs[2].nameZh == "成立"
                 && conditionContract.outputs[3].type == TypeSpec{Type::Bool}
-                && conditionContract.outputs[4].nameEn == "on_true_status"
-                && conditionContract.outputs[5].nameEn == "on_false_status",
+                && conditionContract.outputs[4].nameZh == "成立分支状态"
+                && conditionContract.outputs[5].nameZh == "否则分支状态",
             "condition outputs are fixed regardless of the formula list");
 }
 
@@ -325,8 +329,8 @@ void guardAndSelect()
     const auto       flagRun = [&](const Values &) -> ToolResult
     {
         if (flagMode.load() == 2)
-            return toolResult({{"value", Missing{}}}, {3, "条件失败"});
-        return toolResult({{"value", flagMode.load() == 1}}, {});
+            return toolResult({{2, Missing{}}}, {3, "条件失败"});
+        return toolResult({{2, flagMode.load() == 1}}, {});
     };
     ToolRegistry registry;
     install(registry, flag, flagRun);
@@ -334,19 +338,19 @@ void guardAndSelect()
             [&](const Values &inputs)
             {
                 ++executions;
-                return toolResult({{"value", std::get<std::int64_t>(inputs.at("input"))}}, {});
+                return toolResult({{2, std::get<std::int64_t>(inputs.at(1))}}, {});
             });
-    install(registry, provider, [](const Values &) { return toolResult({{"value", std::int64_t{7}}}, {}); });
+    install(registry, provider, [](const Values &) { return toolResult({{2, std::int64_t{7}}}, {}); });
     registerSelectTools(registry);
     registry.addDefinition(select);
 
     auto source       = node(1, flag, 0);
     auto providerNode = node(3, provider, 0);
     auto work         = node(2, counter, 1);
-    work.inputs["input"] = {BindingMode::Upstream, Missing{}, SourcePort{3, "value"}};
+    work.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{3, 2}};
     // A guard left on a fixed tool is a legacy configuration: preserved, but the tool
     // still runs and decides on its own.
-    work.executionGuard = ExecutionGuard{SourcePort{1, "value"}};
+    work.executionGuard = ExecutionGuard{SourcePort{1, 2}};
     ProjectDefinition project;
     project.flows.front().nodes = {source, providerNode, work};
 
@@ -361,7 +365,7 @@ void guardAndSelect()
     require(executions.load() == 1, "a legacy fixed guard must not suppress the tool");
     require(snapshot(result, 2)->disposition == NodeDisposition::Succeeded,
             "a fixed tool decides its own business status regardless of a stored guard");
-    require(std::get<std::int64_t>(snapshot(result, 2)->outputs.at("value")) == 7,
+    require(std::get<std::int64_t>(snapshot(result, 2)->outputs.at(2)) == 7,
             "the fixed tool did not receive its normalized upstream value");
 
     // Merge: an unselected branch without a usable value must not stop the chosen one.
@@ -369,9 +373,9 @@ void guardAndSelect()
     ToolRegistry  mergeRegistry;
     const auto    failing = intTool("test.failing");
     install(mergeRegistry, flag, flagRun);
-    install(mergeRegistry, provider, [](const Values &) { return toolResult({{"value", std::int64_t{7}}}, {}); });
+    install(mergeRegistry, provider, [](const Values &) { return toolResult({{2, std::int64_t{7}}}, {}); });
     install(mergeRegistry, failing,
-            [](const Values &) { return toolResult({{"value", Missing{}}}, {1, "分支无结果"}); });
+            [](const Values &) { return toolResult({{2, Missing{}}}, {1, "分支无结果"}); });
     registerSelectTools(mergeRegistry);
     mergeRegistry.addDefinition(select);
     flagMode.store(0);
@@ -380,9 +384,9 @@ void guardAndSelect()
     auto branchB  = node(3, provider, 1);
     auto merge_   = node(4, select, 2);
     merge_.selectType         = TypeSpec{Type::Int};
-    merge_.inputs["selector"] = {BindingMode::Upstream, Missing{}, SourcePort{1, "value"}};
-    merge_.inputs["if_true"]  = {BindingMode::Upstream, Missing{}, SourcePort{2, "value"}};
-    merge_.inputs["if_false"] = {BindingMode::Upstream, Missing{}, SourcePort{3, "value"}};
+    merge_.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{1, 2}};
+    merge_.inputs[2] = {BindingMode::Upstream, Missing{}, SourcePort{2, 2}};
+    merge_.inputs[3] = {BindingMode::Upstream, Missing{}, SourcePort{3, 2}};
     ProjectDefinition mergeProject;
     mergeProject.flows.front().nodes = {selector, branchA, branchB, merge_};
     started(merge, mergeProject, mergeRegistry);
@@ -394,7 +398,7 @@ void guardAndSelect()
             "a failed business status stays a tool-reported terminal state, not a host block");
     require(snapshot(merged, 4)->disposition == NodeDisposition::Succeeded,
             "select must accept a branch without a value on the unselected side");
-    require(std::get<std::int64_t>(snapshot(merged, 4)->outputs.at("value")) == 7,
+    require(std::get<std::int64_t>(snapshot(merged, 4)->outputs.at(2)) == 7,
             "select forwards the chosen branch value");
 }
 
@@ -424,14 +428,14 @@ void projectRoundtrip()
     bool guardRejected = false;
     try
     {
-        editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, "p2"}}, condition);
+        editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, 3}}, condition);
     }
     catch (const ContractError &)
     {
         guardRejected = true;
     }
     require(guardRejected, "an Int output cannot act as an execution guard");
-    require(editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, "p3"}}, condition),
+    require(editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, 4}}, condition),
             "Boolean guard binding failed");
     const auto selectId = editor.addNode("flow_1", select, {0, 2});
     require(editor.setSelectType("flow_1", selectId, {Type::Float}, select), "select type commit failed");
@@ -443,13 +447,13 @@ void projectRoundtrip()
     const auto loaded = storage.load(path);
     for (const auto &diagnostic : loaded.diagnostics)
         require(diagnostic.code != ProjectStorageCode::SchemaChanged,
-                "roundtrip introduced a schema diagnostic: " + diagnostic.message);
+                "roundtrip introduced a schema diagnostic: " + diagnostic.field + " — " + diagnostic.message);
     const auto &nodes = loaded.project.flows.front().nodes;
     require(nodes.at(0).expression && nodes.at(0).expression->program.size() == 2,
             "expression program did not survive the roundtrip");
-    require(nodes.at(0).expression->nextPortSeq == 4, "port sequence lost");
+    require(nodes.at(0).expression->nextPortId == 5, "port sequence lost");
     require(nodes.at(1).executionGuard && nodes.at(1).executionGuard->source
-                && nodes.at(1).executionGuard->source->port == "p3",
+                && nodes.at(1).executionGuard->source->port == 4,
             "execution guard did not survive the roundtrip");
     require(nodes.at(2).selectType && *nodes.at(2).selectType == TypeSpec{Type::Float},
             "select type did not survive the roundtrip");

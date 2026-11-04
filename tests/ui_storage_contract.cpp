@@ -22,6 +22,14 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// 夹具声明的端口编号。
+constexpr PortId kGateInput       = 1;  // test.storage.source 输入
+constexpr PortId kImagesOutput    = 2;  // test.storage.source 输出
+constexpr PortId kTokenOutput     = 3;
+constexpr PortId kAllocatedOutput = 2;  // test.storage.probe 输出
+constexpr PortId kReleasedOutput  = 3;
+constexpr PortId kLiveOutput      = 4;
 }
 
 int main(int argc, char **argv)
@@ -41,8 +49,8 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.storage.source","definition":"tools/custom/storage/source.json"},
         {"tool_id":"test.storage.probe","definition":"tools/custom/storage/probe.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/storage/source.json", R"({"schema_version":5,"name_en":"test.storage.source","name_zh":"大图存储","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"source"},"ports":{"inputs":[{"name_en":"gate","name_zh":"执行闸门","type":"string"}],"outputs":[{"name_en":"images","name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"name_en":"token","name_zh":"对象编号","type":"int"}]}})");
-    write("tools/custom/storage/probe.json", R"({"schema_version":5,"name_en":"test.storage.probe","name_zh":"存储计数","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"probe"},"ports":{"outputs":[{"name_en":"allocated","name_zh":"分配","type":"int"},{"name_en":"released","name_zh":"释放","type":"int"},{"name_en":"live","name_zh":"存活","type":"vec_int"}]}})");
+    write("tools/custom/storage/source.json", R"({"schema_version":6,"name_en":"test.storage.source","name_zh":"大图存储","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"source"},"next_port_id":{"init":0,"inputs":2,"outputs":4},"ports":{"inputs":[{"id":1,"name_zh":"执行闸门","type":"string"}],"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"id":3,"name_zh":"对象编号","type":"int"}]}})");
+    write("tools/custom/storage/probe.json", R"({"schema_version":6,"name_en":"test.storage.probe","name_zh":"存储计数","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"probe"},"next_port_id":{"init":0,"inputs":1,"outputs":5},"ports":{"outputs":[{"id":2,"name_zh":"分配","type":"int"},{"id":3,"name_zh":"释放","type":"int"},{"id":4,"name_zh":"存活","type":"vec_int"}]}})");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref
 import time
@@ -59,7 +67,7 @@ def source(inputs):
     pixels = np.full((2160, 3840, 3), 33, dtype=np.uint8)
     references[token] = weakref.ref(pixels)
     weakref.finalize(pixels, retired, token)
-    gate = inputs['gate']
+    gate = inputs[1]
     if gate:
         Path(gate + '.entered').write_text(str(token))
         deadline = time.monotonic() + 10
@@ -68,12 +76,11 @@ def source(inputs):
                 raise RuntimeError('storage gate timed out')
             time.sleep(0.001)
         Path(gate + '.returned').write_text(str(token))
-    return {'outputs': {'images': [pixels], 'token': token, '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: [pixels], 3: token, 0: 0, 1: ''},
             'detail': ''}
 def probe(inputs):
     live = [token for token, reference in references.items() if reference() is not None]
-    return {'outputs': {'allocated': allocated, 'released': len(released), 'live': live,
-                        '__status_code': 0, '__status_message': ''},
+    return {'outputs': {2: allocated, 3: len(released), 4: live, 0: 0, 1: ''},
             'detail': ''}
 )py");
     ImageViewport viewport;
@@ -95,9 +102,9 @@ def probe(inputs):
         app.selectNode(monitor);
         app.runNode();
         idle();
-        const auto allocations = outputs->capture("allocated");
-        const auto releases    = outputs->capture("released");
-        const auto live        = outputs->capture("live");
+        const auto allocations = outputs->capture(kAllocatedOutput);
+        const auto releases    = outputs->capture(kReleasedOutput);
+        const auto live        = outputs->capture(kLiveOutput);
         require(allocations && releases && live, "storage counters missing");
         require(std::get<std::int64_t>(allocations->value) == allocated
                     && std::get<std::int64_t>(releases->value) == released,
@@ -129,8 +136,8 @@ def probe(inputs):
         checkCounts(cycle + 1, cycle, true);
         app.selectNode(keeper);
         {
-            const auto token = outputs->capture("token");
-            const auto image = outputs->capture("images");
+            const auto token = outputs->capture(kTokenOutput);
+            const auto image = outputs->capture(kImagesOutput);
             require(token && std::get<std::int64_t>(token->value) == 1 && image,
                     "deleting another node cleared the retained publication");
             const auto &pixels = std::get<DataRef<Image>>(image->value).get()[0];
@@ -169,7 +176,7 @@ def probe(inputs):
     idle();
     const auto lateNode = app.selectedNode();
     const auto gate     = directory.path() + "/late-execution";
-    require(app.setParameter("gate", false, gate), "late execution gate was rejected");
+    require(app.setParameter(kGateInput, false, gate), "late execution gate was rejected");
     idle();
     const auto releaseGate = [&]
     {

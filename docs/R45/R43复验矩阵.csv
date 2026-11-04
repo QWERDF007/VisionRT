@@ -1,0 +1,23 @@
+﻿原问题,主题,结论,依据与限制
+F43-01,Dense ndarray → 表达式/分支,源码已修；24 项逻辑用例通过,engine._check_numpy 先检查预算再转换；完整 RuntimeEngine 链路本次未跑
+F43-02,NumPy 丢失 Array 模块保活,源码已修；头文件探针通过,capsule 持完整 Array；新增 python_array_lifetime_contract，真实插件用例待 Windows 执行
+F43-03,elements 接受错误模板类型,Contracts main 已修,requires 约束；bool/嵌套容器/指针拒绝；Tools gitlink 尚未跟进
+F43-04,工作台总入口重复执行,源码通过,CTest 只保留 focused 场景，REQUIRES 校验真实 target
+F43-05,长名称/DPI 截图矩阵,源码通过,不再检出长名称造景；视觉项受默认关闭开关控制，非本次视觉实测
+F43-06,测试分组/默认构建,主要完成,模型和 perf 显式分组；Tools EXCLUDE_FROM_ALL、visiontools_tests；仍需保持按变更运行
+F43-07,固定等待与大图制造时序,未完成,通知两次 qWait(5000)；display_reader_drain_test 仍 4×1800² 图与 beats>=3
+F43-08,日志双消费者,源码已修,观测方式分离；本次未执行完整 Qt sink 用例
+F43-09,测试异常汇总竞争,源码已修,首个 exception_ptr 写入受 mutex 保护
+F43-10,废弃诊断复制接口,源码通过,旧 copyDiagnostics 入口清理；输出文本仍服务复制功能
+F43-11,当前文档过期,未完成,docs/README 仍称当前 ABI7、链接已删除 log_contract/ToolFactory
+F43-12,测试泛名,部分完成,已有 result_readback_barrier_test 等清晰名称；几个巨型聚合文件仍宜渐进拆分
+F43-13,安装夹具前缀排除,仍可改进，P3,WorkbenchFixtures 仍按 nvinfer 前缀过滤；未实测复制成本，不能断言浪费 GB
+F43-14,数组观察类型约定,作者 SDK 说明已跟进,Dense 数值 ndarray；ragged/string list；与早期纯 list 约定有差异；建议明确沿用当前 ABI8
+F43-15,性能用例仍拒绝 ndarray,源码通过,旧拒绝预期已调整
+F43-16,分发旧信封/隐藏宿主缺测,部分完成,信封已修；宿主执行独立 unittest 方法，但还在同一 CTest 条目中，可隐藏 method skip
+F43-17,恒真断言与结果缺失假通过,主要修复,结果缺失检查和检索断言加强；布尔 busy 指标仍不能叫数值队列高水位
+F43-18,性能场景名称/计时含义,部分完成,RepeatedOnce 与 round_minus_slowest 已明确；lastEventSerial 未与对应帧绑定
+F43-19,读图缓存功能与性能混合,源码通过,小图功能与 --perf 独立 CTest；本次未跑原生缓存用例
+F43-20,打包测试隐藏真实构建,拆分成立但有新缺陷,独立 test_build_metadata_integration.py；缺 import shutil 导致独立入口 NameError
+F43-21,SDK 释放/状态/Owner 弱测试,源码通过,OwnedInstance RAII、两实例隔离及原 Owner 释放后延寿检查
+F43-22,GPU trace 跳过含糊,源码通过,geometry/uninitialized/initialized 分项，GPU 用 SKIP_RETURN_CODE 77；无 GPU 实跑

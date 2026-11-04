@@ -96,7 +96,7 @@ try
         assert(createCalls() == before + 1);
         const auto result = instance->execute({});
         assert(testview::status(result));
-        assert(std::get<std::int64_t>(result.outputs.at("value")) == expected);
+        assert(std::get<std::int64_t>(result.outputs.at(2)) == expected);
         // An instance that is already initialised is in the wrong lifecycle state, not holding a
         // bad argument: FailedPrecondition is what a caller can act on.
         assert(instance->initialize({}).code == hostCode(ErrorCode::FailedPrecondition));
@@ -129,7 +129,7 @@ try
     }
     auto surviving = loader->createAdapter("test.registration.first", {});
     assert(surviving->initialize({}));
-    assert(std::get<std::int64_t>(surviving->execute({}).outputs.at("value")) == 11);
+    assert(std::get<std::int64_t>(surviving->execute({}).outputs.at(2)) == 11);
     assert(surviving->release());
     auto                              retained  = catalog.create("test.registration.first", {});
     std::weak_ptr<const LoadedModule> ownership = module;
@@ -139,10 +139,10 @@ try
     loader.reset();
     assert(!ownership.expired());
     assert(retained->initialize({}));
-    assert(std::get<std::int64_t>(retained->execute({}).outputs.at("value")) == 11);
+    assert(std::get<std::int64_t>(retained->execute({}).outputs.at(2)) == 11);
     assert(retained->release());
     assert(ownership.expired());
-    std::cout << "ABI5 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
+    std::cout << "ABI9 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
 }
 catch (const std::exception &error)
 {

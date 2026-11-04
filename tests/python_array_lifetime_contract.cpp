@@ -40,11 +40,11 @@ int main(int argc, char **argv)
             {
                 DomainToolAdapter adapter(module, "test.value.lifetime", PlatformToolServices{});
                 assert(adapter.initialize({
-                    {"marker", marker}
+                    {0, marker}
                 }));
                 auto result = adapter.execute({});
                 assert(testview::status(result) && testview::businessCount(result) == 4);
-                PortValue value = result.outputs.at("grid");
+                PortValue value = result.outputs.at(4);   // 输出编号 4 是二维网格
                 {
                     auto view = toPython(value);
                     assert(py::isinstance<py::array>(view));

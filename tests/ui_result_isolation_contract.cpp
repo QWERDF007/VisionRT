@@ -29,6 +29,11 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// 夹具声明的端口编号：隔离工具只有一个业务输出 2，两个业务输入 1/2。
+constexpr PortId kLevelInput   = 1;
+constexpr PortId kMarkerInput  = 2;
+constexpr PortId kImagesOutput = 2;
 }
 
 int main(int argc, char **argv)
@@ -52,12 +57,14 @@ try
     image.kind        = ToolKind::PythonFunction;
     image.entry       = {"isolation", "tool.py", "source"};
     image.inputs      = {
-        { "level",          "像素值",    {Type::Int}, std::int64_t{1}},
-        {"marker", "存储释放标记", {Type::String},   std::string{}}
+        {     1,    "像素值",    {Type::Int}, std::int64_t{1}},
+        {     2, "存储释放标记", {Type::String},   std::string{}}
     };
+    image.nextInputPortId = 3;
     image.outputs = {
-        {"images", "图像", {Type::Image}}
+        {2, "图像", {Type::Image}}
     };
+    image.nextOutputPortId = 3;
     image.outputs.front().colorOrder = "BGR";
     const auto declaration           = package + "tools/custom/isolation/image.json";
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(image)));
@@ -67,8 +74,9 @@ try
     scalar.entry.symbol = "scalar";
     scalar.inputs.clear();
     scalar.outputs = {
-        {"images", "同名数值", {Type::Int}}
+        {2, "同名数值", {Type::Int}}
     };
+    scalar.nextOutputPortId = 3;
     write(package + "tools/custom/isolation/scalar.json", QByteArray::fromStdString(emitNormalizedToolJson(scalar)));
     write(package + "python/custom/isolation/tool.py", R"py(import numpy as np
 import weakref
@@ -79,14 +87,14 @@ def retired(marker):
         Path(marker).write_text('released')
 
 def source(inputs):
-    level = inputs['level']
+    level = inputs[1]
     first = np.full((120, 160, 3), (0, 0, level), dtype=np.uint8)
     second = np.full((120, 160, 3), (0, level, 0), dtype=np.uint8)
-    weakref.finalize(first, retired, inputs['marker'])
-    return {'outputs': {'images': [first, second], '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    weakref.finalize(first, retired, inputs[2])
+    return {'outputs': {2: [first, second], 0: 0, 1: ''}, 'detail': ''}
 
 def scalar(inputs):
-    return {'outputs': {'images': 84, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: 84, 0: 0, 1: ''}, 'detail': ''}
 )py");
     ToolRegistry definitions;
     definitions.registerPackage(readToolsPackage(std::filesystem::path(package.toStdU16String())));
@@ -103,8 +111,8 @@ def scalar(inputs):
         require(!imageId || *imageId == parent, "saved projects do not reuse the same image NodeId");
         imageId  = parent;
         scalarId = other;
-        editor.setLiteral(flow, parent, "level", level);
-        editor.setLiteral(flow, parent, "marker", (root + "/" + name + ".released").toStdString());
+        editor.setLiteral(flow, parent, kLevelInput, level);
+        editor.setLiteral(flow, parent, kMarkerInput, (root + "/" + name + ".released").toStdString());
         auto project = editor.project();
         project.path = std::filesystem::path((root + "/" + name + ".vrt.json").toStdU16String());
         require(ProjectStorage(definitions).save(project).empty(), "cannot save isolation project");
@@ -161,10 +169,10 @@ def scalar(inputs):
     app.runNode();
     idle();
     frame(QColor(201, 0, 0), QColor(0, 201, 0));
-    const auto oldContext = app.portContext("images", true);
+    const auto oldContext = app.portContext(kImagesOutput, true);
     require(!oldContext.isEmpty(), "first output context unavailable");
     open("second");
-    const auto fresh = outputs->capture("images");
+    const auto fresh = outputs->capture(kImagesOutput);
     require(fresh && isMissing(fresh->value) && fresh->type.type == Type::Image,
             "new project reused another project's cached Image output");
     require(!mainView.hasImage() && !thumbnail.hasImage() && !app.portContextCurrent(oldContext),
@@ -212,10 +220,10 @@ def scalar(inputs):
         app.selectNode(imageNode);
         require(QTest::qWaitFor([&] { return !presented.isEmpty() && mainView.hasImage(); }, 5000),
                 "fresh display request did not reach the main viewport");
-        const auto publication = outputs->capture("images");
+        const auto publication = outputs->capture(kImagesOutput);
         require(publication && std::holds_alternative<DataRef<Image>>(publication->value),
                 "late-frame source publication unavailable");
-        const auto context = app.portContext("images", true);
+        const auto context = app.portContext(kImagesOutput, true);
         app.selectNode(scalarNode);
         frame(QColor(17, 23, 31), QColor(17, 23, 31));
         forbidImages = true;
@@ -236,13 +244,13 @@ def scalar(inputs):
         else if (transition == Transition::Project)
         {
             open("first");
-            const auto replacement = outputs->capture("images");
+            const auto replacement = outputs->capture(kImagesOutput);
             require(replacement && isMissing(replacement->value), "late completion populated a reused NodeId");
         }
         else
         {
             app.selectNode(scalarNode);
-            const auto replacement = outputs->capture("images");
+            const auto replacement = outputs->capture(kImagesOutput);
             require(replacement && replacement->type.type == Type::Int && isMissing(replacement->value),
                     "late completion populated the newly selected scalar node");
         }
@@ -262,7 +270,7 @@ def scalar(inputs):
     app.runNode();
     idle();
     frame(QColor(201, 0, 0), QColor(0, 201, 0));
-    const auto previousImageContext = app.portContext("images", true);
+    const auto previousImageContext = app.portContext(kImagesOutput, true);
     image.entry.symbol              = "scalar";
     image.outputs.front().type      = {Type::Int};
     image.outputs.front().colorOrder.clear();
@@ -271,7 +279,7 @@ def scalar(inputs):
     idle();
     app.selectNode(imageNode);
     {
-        const auto changed = outputs->capture("images");
+        const auto changed = outputs->capture(kImagesOutput);
         require(changed && changed->type.type == Type::Int && isMissing(changed->value),
                 "same-tool output schema change kept an incompatible Image publication");
     }
@@ -282,13 +290,13 @@ def scalar(inputs):
     app.runNode();
     idle();
     {
-        const auto changed = outputs->capture("images");
+        const auto changed = outputs->capture(kImagesOutput);
         require(changed && std::get<std::int64_t>(changed->value) == 84,
                 "changed same-tool implementation did not publish its declared Int value");
     }
     open("first");
     {
-        const auto reopened = outputs->capture("images");
+        const auto reopened = outputs->capture(kImagesOutput);
         require(reopened && reopened->type.type == Type::Int && isMissing(reopened->value),
                 "opening an old Image type_snapshot reused a cached Int result or stale schema");
     }
@@ -296,7 +304,7 @@ def scalar(inputs):
     app.runNode();
     idle();
     {
-        const auto reopened = outputs->capture("images");
+        const auto reopened = outputs->capture(kImagesOutput);
         require(reopened && std::get<std::int64_t>(reopened->value) == 84,
                 "reconciled project could not execute the changed output schema");
     }

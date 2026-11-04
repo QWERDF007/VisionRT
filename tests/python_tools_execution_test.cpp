@@ -34,7 +34,7 @@ int main(int argc, char **argv)
                 std::filesystem::create_directories(externalDeclarations);
                 {
                     std::ofstream declaration(externalDeclarations / "external.json");
-                    declaration << R"({"schema_version":5,"name_en":"test.external.roots","name_zh":"外部根工具","version":"1","implementation":{"kind":"python_function","package":"external","file":"tool.py","symbol":"execute"}})";
+                    declaration << R"({"schema_version":6,"name_en":"test.external.roots","name_zh":"外部根工具","version":"1","implementation":{"kind":"python_function","package":"external","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":2}})";
                 }
                 const auto overridden = readToolsPackage(
                     root, ToolRoots{externalDeclarations,
@@ -58,7 +58,7 @@ int main(int argc, char **argv)
                     auto instance = registry.create("test.add", {});
                     assert(instance->initialize({}).code == 0);
                     const auto result = instance->execute({});
-                    assert(testview::status(result).code == 0 && std::get<std::int64_t>(result.outputs.at("value")) == 42);
+                    assert(testview::status(result).code == 0 && std::get<std::int64_t>(result.outputs.at(2)) == 42);
                     assert(instance->release().code == 0);
                     std::cout << "Pure Python ZIP result: 42\n";
                     return;
@@ -74,34 +74,34 @@ int main(int argc, char **argv)
                     auto mean = registry.create("custom.image.mean", {});
                     assert(mean->initialize({}).code == 0);
                     const auto result = mean->execute({
-                        {"images", images}
+                        {1, images}
                     });
                     assert(testview::status(result).code == 0 && testview::businessCount(result) == 1);
-                    assert((nestedOf<NestedVector<double, 1>>(std::get<Array>(result.outputs.at("means")))
+                    assert((nestedOf<NestedVector<double, 1>>(std::get<Array>(result.outputs.at(2)))
                             == NestedVector<double, 1>{8.0, 2.0}));
                     // A wrong input type never reaches the Python function; the bridge reports it.
-                    const auto wrongInput = testview::executionFailure(*mean, {{"images", std::int64_t{7}}});
+                    const auto wrongInput = testview::executionFailure(*mean, {{1, std::int64_t{7}}});
                     assert(!wrongInput.empty());
                     const auto missing = mean->execute({
-                        {"images", Missing{}}
+                        {1, Missing{}}
                     });
                     // A declared port with no value is a business failure; the tool omits the value it
                     // never produced and the host materialises the declared default afterwards.
-                    assert(testview::status(missing).code == 1001 && !missing.outputs.contains("means"));
+                    assert(testview::status(missing).code == 1001 && !missing.outputs.contains(2));
                     const auto empty = mean->execute({
-                        {"images", DataRef<Image>(Image{})}
+                        {1, DataRef<Image>(Image{})}
                     });
                     assert(testview::status(empty).code == 0);
-                    assert((nestedOf<NestedVector<double, 1>>(std::get<Array>(empty.outputs.at("means"))).empty()));
+                    assert((nestedOf<NestedVector<double, 1>>(std::get<Array>(empty.outputs.at(2))).empty()));
                     assert(mean->release().code == 0);
                 }
                 {
                     auto       function = registry.create("visiontools.python.image_sizes", {});
                     const auto result   = function->execute({
-                        {"images", images}
+                        {1, images}
                     });
                     assert(testview::status(result).code == 0);
-                    assert((nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(result.outputs.at("sizes")))
+                    assert((nestedOf<NestedVector<std::int64_t, 2>>(std::get<Array>(result.outputs.at(2)))
                             == NestedVector<std::int64_t, 2>{
                                 {2, 3},
                                 {4, 5}
@@ -119,16 +119,17 @@ int main(int argc, char **argv)
                     node.toolNameSnapshot = declaration->nameZh;
                     node.expression       = ExpressionConfig{};
                     node.expression->variables.push_back(
-                        {"p1", "数值", "values", {Type::Array, DType::Float64, 1}, false});
+                        {2, "数值", "values", {Type::Array, DType::Float64, 1}, false});
                     node.expression->program.push_back(
-                        {"p2", "平均", "average", "mean(values)", {Type::Float}, true});
+                        {3, "平均", "average", "mean(values)", {Type::Float}, true});
+                    node.expression->nextPortId = 4;
                     auto expression = registry.create(nodeContract(node, *declaration), {});
                     assert(expression->initialize(nodeParameters(node, *declaration)).code == 0);
                     const auto result = expression->execute({
-                        {"p1", Array::fromNested(NestedVector<double, 1>{2.0, 4.0})}
+                        {2, Array::fromNested(NestedVector<double, 1>{2.0, 4.0})}
                     });
                     assert(testview::status(result).code == 0);
-                    assert(std::get<double>(result.outputs.at("p2")) == 3.0);
+                    assert(std::get<double>(result.outputs.at(3)) == 3.0);
                     assert(expression->release().code == 0);
                 }
                 {
@@ -140,34 +141,35 @@ int main(int argc, char **argv)
                     node.toolNameSnapshot = declaration->nameZh;
                     node.expression       = ExpressionConfig{};
                     node.expression->variables.push_back(
-                        {"p1", "数值", "values", {Type::Array, DType::Float64, 1}, false});
+                        {2, "数值", "values", {Type::Array, DType::Float64, 1}, false});
                     node.expression->program.push_back(
-                        {"p2", "成立", "ok", "mean(values) > 2", {Type::Bool}, false});
+                        {3, "成立", "ok", "mean(values) > 2", {Type::Bool}, false});
+                    node.expression->nextPortId = 4;
                     auto branch = registry.create(nodeContract(node, *declaration), {});
                     assert(branch->initialize(nodeParameters(node, *declaration)).code == 0);
                     const auto result = branch->execute({
-                        {"p1", Array::fromNested(NestedVector<double, 1>{2.0, 4.0})}
+                        {2, Array::fromNested(NestedVector<double, 1>{2.0, 4.0})}
                     });
                     assert(testview::status(result).code == 0);
-                    assert(std::get<bool>(result.outputs.at("on_true")));
-                    assert(!std::get<bool>(result.outputs.at("on_false")));
+                    assert(std::get<bool>(result.outputs.at(2)));
+                    assert(!std::get<bool>(result.outputs.at(3)));
                     assert(branch->release().code == 0);
                 }
                 {
                     auto roi = registry.create("custom.python.roi", {});
                     assert(roi->initialize({}).code == 0);
                     const auto result = roi->execute({
-                        {"images", images}
+                        {1, images}
                     });
                     assert(testview::status(result).code == 0 && testview::businessCount(result) == 1);
-                    const auto &groups = std::get<DataRef<ROI>>(result.outputs.at("rois")).get();
+                    const auto &groups = std::get<DataRef<ROI>>(result.outputs.at(2)).get();
                     assert(groups.size() == 2);
                     assert((groups[0].front() == std::vector<double>{2, 0, 0, 3, 2, 0}));
                     assert((groups[1].front() == std::vector<double>{2, 0, 0, 5, 4, 0}));
                     const auto empty = roi->execute({
-                        {"images", DataRef<Image>(Image{})}
+                        {1, DataRef<Image>(Image{})}
                     });
-                    assert(testview::status(empty).code == 0 && std::get<DataRef<ROI>>(empty.outputs.at("rois")).get().empty());
+                    assert(testview::status(empty).code == 0 && std::get<DataRef<ROI>>(empty.outputs.at(2)).get().empty());
                     assert(roi->release().code == 0);
                 }
                 {
@@ -176,12 +178,12 @@ int main(int argc, char **argv)
                     auto copyInput = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(10)),
                                                           cv::Mat(2, 3, CV_8UC3, cv::Scalar(20, 20, 20))});
                     const auto copied = add->execute({
-                        {"images", copyInput},
-                        {"mode", std::string("copy")}
+                        {1, copyInput},
+                        {2, std::string("copy")}
                     });
                     assert(testview::status(copied).code == 0);
                     assert(copyInput.get()[0].at<std::uint8_t>(0, 0) == 10);
-                    const auto &copiedImages = std::get<DataRef<Image>>(copied.outputs.at("images")).get();
+                    const auto &copiedImages = std::get<DataRef<Image>>(copied.outputs.at(2)).get();
                     assert(copiedImages.size() == 2);
                     assert(copiedImages[0].at<std::uint8_t>(0, 0) == 11);
                     assert(copiedImages[1].at<cv::Vec3b>(0, 0) == cv::Vec3b(21, 21, 21));
@@ -189,29 +191,29 @@ int main(int argc, char **argv)
 
                     auto inplaceInput = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(30))});
                     const auto inplace = add->execute({
-                        {"images", inplaceInput},
-                        {"mode", std::string("inplace")}
+                        {1, inplaceInput},
+                        {2, std::string("inplace")}
                     });
                     assert(testview::status(inplace).code == 0);
                     assert(inplaceInput.get()[0].at<std::uint8_t>(0, 0) == 31);
-                    const auto &inplaceImages = std::get<DataRef<Image>>(inplace.outputs.at("images")).get();
+                    const auto &inplaceImages = std::get<DataRef<Image>>(inplace.outputs.at(2)).get();
                     assert(inplaceImages[0].data == inplaceInput.get()[0].data);
                     assert(inplaceImages[0].at<std::uint8_t>(0, 0) == 31);
 
                     const auto invalid = add->execute({
-                        {"images", copyInput},
-                        {"mode", std::string("other")}
+                        {1, copyInput},
+                        {2, std::string("other")}
                     });
-                    assert(testview::status(invalid).code == 1003 && !invalid.outputs.contains("images"));
+                    assert(testview::status(invalid).code == 1003 && !invalid.outputs.contains(2));
                     assert(add->release().code == 0);
                 }
                 {
                     auto first  = registry.create("custom.call.counter", {});
                     auto second = registry.create("custom.call.counter", {});
                     assert(first->initialize({}).code == 0 && second->initialize({}).code == 0);
-                    assert(std::get<std::int64_t>(first->execute({}).outputs.at("count")) == 1);
-                    assert(std::get<std::int64_t>(first->execute({}).outputs.at("count")) == 2);
-                    assert(std::get<std::int64_t>(second->execute({}).outputs.at("count")) == 1);
+                    assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 1);
+                    assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 2);
+                    assert(std::get<std::int64_t>(second->execute({}).outputs.at(2)) == 1);
                     assert(first->release().code == 0 && second->release().code == 0);
                 }
             });

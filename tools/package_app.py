@@ -92,6 +92,11 @@ def default_install_dir() -> Path:
     return REPO_ROOT / "install" / f"{PROJECT_NAME_LONG}-{project_version()}"
 
 
+# Everything the application creates inside its own directory. A clean install replaces program
+# files only: user tools, logs and interaction preferences are data, not build output.
+PRESERVED_INSTALL_ENTRIES = frozenset({"custom-tools", "logs", "ui-preferences.json"})
+
+
 def build_release(build_dir: Path, config: str, parallel: int) -> None:
     """Build configured CMake tree."""
     if parallel < 1:
@@ -178,6 +183,8 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
 
     if path.exists():
         for child in path.iterdir():
+            if child.name in PRESERVED_INSTALL_ENTRIES:
+                continue
             if child.is_dir() and not child.is_symlink():
                 shutil.rmtree(child)
             else:

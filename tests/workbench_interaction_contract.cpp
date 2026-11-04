@@ -73,9 +73,10 @@ try
     gate.nameZh = "交互门控工具";
     gate.kind        = ToolKind::PythonFunction;
     gate.entry       = {"interaction", "tool.py", "run"};
-    gate.outputs     = {
-        {"value", "值", {Type::Int}}
+    gate.outputs = {
+        {2, "值", {Type::Int}}
     };
+    gate.nextOutputPortId = 3;
     write(package + "tools/custom/interaction/source.json", QByteArray::fromStdString(emitNormalizedToolJson(gate)));
     write(script, R"py(import time
 from pathlib import Path
@@ -89,7 +90,7 @@ def run(inputs):
         if time.monotonic() >= deadline:
             raise RuntimeError('interaction gate deadline exceeded')
         time.sleep(0.002)
-    return {'outputs': {'value': 1, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: 1, 0: 0, 1: ''}, 'detail': ''}
 )py");
 
     AppController app(2, root);

@@ -40,14 +40,12 @@ ToolDefinition configuredTool()
     tool.nameZh = "配置值";
     tool.version     = "1";
     tool.kind        = ToolKind::Cpp;
-    tool.inputs.push_back({
-        "numbers",
-        "数值",
+    tool.inputs.push_back({1, "数值",
         {Type::Array, DType::Int64,   2},
         Array::fromNested(NestedVector<std::int64_t, 2>{     {2, 9},           {}, {7}}
         )
     });
-    tool.initParams.push_back({"regions", "区域", {Type::ROI}, DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}})});
+    tool.initParams.push_back({0, "区域", {Type::ROI}, DataRef<ROI>(ROI{{{2., 1., 2., 3., 4., 0.}}})});
     return tool;
 }
 
@@ -57,14 +55,14 @@ void defaultsBelongToEachNode()
     ProjectEditor editor;
     const auto    first                                             = editor.addNode("flow_1", tool, {});
     const auto    second                                            = editor.addNode("flow_1", tool, {1, 0});
-    numberAt(node(editor, first).inputs.at("numbers").literal, 0) = 83;
+    numberAt(node(editor, first).inputs.at(1).literal, 0) = 83;
     require(numberAt(tool.inputs.front().defaultValue, 0) == 2, "node edit changed declaration default");
-    require(numberAt(node(editor, second).inputs.at("numbers").literal, 0) == 2,
+    require(numberAt(node(editor, second).inputs.at(1).literal, 0) == 2,
             "node defaults share Array storage");
-    std::get<DataRef<ROI>>(node(editor, first).initParams.at("regions")).get()[0][0][1] = 91.;
+    std::get<DataRef<ROI>>(node(editor, first).initParams.at(0)).get()[0][0][1] = 91.;
     require(std::get<DataRef<ROI>>(tool.initParams.front().defaultValue).get()[0][0][1] == 1.,
             "node edit changed ROI default");
-    require(std::get<DataRef<ROI>>(node(editor, second).initParams.at("regions")).get()[0][0][1] == 1.,
+    require(std::get<DataRef<ROI>>(node(editor, second).initParams.at(0)).get()[0][0][1] == 1.,
             "node defaults share ROI storage");
 }
 
@@ -73,25 +71,25 @@ void copiedConfigurationIsIndependent()
     ProjectEditor editor;
     const auto    source = editor.addNode("flow_1", configuredTool(), {});
     const auto    copied = editor.copySelection("flow_1", std::array{source});
-    numberAt(node(editor, source).inputs.at("numbers").literal, 0) = 83;
-    require(numberAt(copied.nodes.front().inputs.at("numbers").literal, 0) == 2,
+    numberAt(node(editor, source).inputs.at(1).literal, 0) = 83;
+    require(numberAt(copied.nodes.front().inputs.at(1).literal, 0) == 2,
             "clipboard changed after editing source configuration");
     const auto pasted = editor.pasteSelection("flow_1", copied, {1, 0}).at(source);
-    numberAt(copied.nodes.front().inputs.at("numbers").literal, 0) = 54;
-    require(numberAt(node(editor, pasted).inputs.at("numbers").literal, 0) == 2,
+    numberAt(copied.nodes.front().inputs.at(1).literal, 0) = 54;
+    require(numberAt(node(editor, pasted).inputs.at(1).literal, 0) == 2,
             "pasted node shares clipboard configuration storage");
     const auto repeated = editor.pasteSelection("flow_1", copied, {2, 0}).at(source);
-    numberAt(node(editor, repeated).inputs.at("numbers").literal, 0) = 76;
-    require(numberAt(copied.nodes.front().inputs.at("numbers").literal, 0) == 54,
+    numberAt(node(editor, repeated).inputs.at(1).literal, 0) = 76;
+    require(numberAt(copied.nodes.front().inputs.at(1).literal, 0) == 54,
             "repeated paste changed clipboard configuration");
     const auto  flowId = editor.copyFlow("flow_1");
     const auto &flows  = editor.project().flows;
     const auto &flow = *std::find_if(flows.begin(), flows.end(), [&](const auto &value) { return value.id == flowId; });
-    numberAt(flow.nodes.front().inputs.at("numbers").literal, 0) = 68;
-    require(numberAt(node(editor, source).inputs.at("numbers").literal, 0) == 83,
+    numberAt(flow.nodes.front().inputs.at(1).literal, 0) = 68;
+    require(numberAt(node(editor, source).inputs.at(1).literal, 0) == 83,
             "flow copy shares source configuration storage");
-    std::get<DataRef<ROI>>(flow.nodes.front().initParams.at("regions")).get()[0][0][1] = 95.;
-    require(std::get<DataRef<ROI>>(node(editor, source).initParams.at("regions")).get()[0][0][1] == 1.,
+    std::get<DataRef<ROI>>(flow.nodes.front().initParams.at(0)).get()[0][0][1] = 95.;
+    require(std::get<DataRef<ROI>>(node(editor, source).initParams.at(0)).get()[0][0][1] == 1.,
             "flow copy shares source ROI configuration storage");
 }
 
@@ -100,20 +98,20 @@ void submittedDraftsDoNotRemainLive()
     ProjectEditor editor;
     const auto    id    = editor.addNode("flow_1", configuredTool(), {});
     PortValue     draft = Array::fromNested(NestedVector<std::int64_t, 2>{{31}, {}});
-    require(editor.setLiteral("flow_1", id, "numbers", draft), "changed draft not submitted");
+    require(editor.setLiteral("flow_1", id, 1, draft), "changed draft not submitted");
     numberAt(draft, 0) = 84;
-    require(numberAt(node(editor, id).inputs.at("numbers").literal, 0) == 31,
+    require(numberAt(node(editor, id).inputs.at(1).literal, 0) == 31,
             "later draft edit changed committed literal");
     PortValue regions = DataRef<ROI>(ROI{{{3., 2., 4., 7.}}});
-    require(editor.setInitParam("flow_1", id, "regions", regions), "changed ROI draft not submitted");
+    require(editor.setInitParam("flow_1", id, 0, regions), "changed ROI draft not submitted");
     std::get<DataRef<ROI>>(regions).get()[0][0][1] = 97.;
-    require(std::get<DataRef<ROI>>(node(editor, id).initParams.at("regions")).get()[0][0][1] == 2.,
+    require(std::get<DataRef<ROI>>(node(editor, id).initParams.at(0)).get()[0][0][1] == 2.,
             "later ROI draft edit changed committed initialization");
     editor.markSaved();
     const auto revision = node(editor, id).executionRevision;
     try
     {
-        editor.setLiteral("flow_1", id, "numbers", Array::fromNested(NestedVector<bool, 2>{{true}}));
+        editor.setLiteral("flow_1", id, 1, Array::fromNested(NestedVector<bool, 2>{{true}}));
         throw std::runtime_error("incompatible draft accepted");
     }
     catch (const ContractError &)
@@ -121,7 +119,7 @@ void submittedDraftsDoNotRemainLive()
     }
     require(!editor.project().dirty && node(editor, id).executionRevision == revision,
             "rejected candidate changed project identity");
-    require(numberAt(node(editor, id).inputs.at("numbers").literal, 0) == 31,
+    require(numberAt(node(editor, id).inputs.at(1).literal, 0) == 31,
             "rejected candidate changed committed container");
 }
 
@@ -143,15 +141,15 @@ void reconciledDefaultsAreIndependent()
     }
     const auto  restored                                 = ProjectStorage(registry).reconcile(missing);
     const auto &nodes                                    = restored.project.flows.front().nodes;
-    numberAt(nodes[0].inputs.at("numbers").literal, 0) = 94;
+    numberAt(nodes[0].inputs.at(1).literal, 0) = 94;
     const auto *registered = registry.find(tool.nameEn);
     const auto  declared   = std::find_if(registered->inputs.begin(), registered->inputs.end(),
-                                          [](const auto &port) { return port.nameEn == "numbers"; });
+                                          [](const auto &port) { return port.id == 1; });
     require(declared != registered->inputs.end() && numberAt(declared->defaultValue, 0) == 2,
             "reconciliation changed registry defaults");
-    require(numberAt(nodes[1].inputs.at("numbers").literal, 0) == 2, "reconciled nodes share Array defaults");
-    std::get<DataRef<ROI>>(nodes[0].initParams.at("regions")).get()[0][0][1] = 79.;
-    require(std::get<DataRef<ROI>>(nodes[1].initParams.at("regions")).get()[0][0][1] == 1.,
+    require(numberAt(nodes[1].inputs.at(1).literal, 0) == 2, "reconciled nodes share Array defaults");
+    std::get<DataRef<ROI>>(nodes[0].initParams.at(0)).get()[0][0][1] = 79.;
+    require(std::get<DataRef<ROI>>(nodes[1].initParams.at(0)).get()[0][0][1] == 1.,
             "reconciled nodes share ROI defaults");
 }
 
@@ -222,24 +220,24 @@ void allValuesSurviveRealProjectFiles()
     tool.version     = "1";
     tool.kind        = ToolKind::Cpp;
     require(Array::supportedTypes().size() == 28, "incomplete Array signature matrix");
+    // The matrix tool numbers its inputs in declaration order; the note keeps the type visible.
+    PortId nextInput = 1;
     for (const auto &type : Array::supportedTypes())
     {
-        const auto id = "array_" + std::to_string(tool.inputs.size());
-        tool.inputs.push_back({id, id, type, sampleArray(type)});
+        tool.inputs.push_back({nextInput, std::string(typeName(type.type)) + " 数组", type, sampleArray(type)});
+        ++nextInput;
     }
-    tool.inputs.push_back({
-        "regions",
-        "区域",
+    tool.inputs.push_back({nextInput++, "区域",
         {Type::ROI},
         DataRef<ROI>(ROI{{{0., 1.5, 2.5}, {1., 1., 2., 3., 4.}, {2., 1., 2., 3., 4., 0.}},
           {},
           {{3., 2., 4., 7.}, {4., 0., 0., 3., 0., 3., 2.}, {5., 1., 2., 3., 4.}}}
         )
     });
-    tool.inputs.push_back({"images", "图像", {Type::Image}, DataRef<Image>(Image{})});
+    tool.inputs.push_back({nextInput++, "图像", {Type::Image}, DataRef<Image>(Image{})});
     // A declaration without an explicit value is normalised to the type default before a node
     // ever stores it, so the saved project states 0 rather than a null placeholder.
-    tool.inputs.push_back({"empty_value", "空值", {Type::Int}, Missing{}});
+    tool.inputs.push_back({nextInput++, "空值", {Type::Int}, Missing{}});
     ToolRegistry registry;
     registry.addDefinition(tool);
     ProjectEditor editor;
@@ -252,27 +250,35 @@ void allValuesSurviveRealProjectFiles()
     QFile file(filename);
     require(file.open(QIODevice::ReadOnly), "saved project unavailable");
     const auto root = QJsonDocument::fromJson(file.readAll()).object();
-    require(root["format_version"].toInt() == 6, "saved project does not use format6");
+    require(root["format_version"].toInt() == 7, "saved project does not use format7");
     const auto saved    = root["flows"].toArray()[0].toObject()["nodes"].toArray()[0].toObject();
-    const auto literals = saved["inputs"].toObject();
-    const auto literal  = literals["array_0"].toObject()["literal"].toObject();
+    // Inputs are an entry list keyed by port number, not an object keyed by a name.
+    const auto literals = saved["inputs"].toArray();
+    const auto entry    = [&](PortId port) -> QJsonObject
+    {
+        for (const auto &item : literals)
+            if (item.toObject().value("port_id").toInt() == static_cast<int>(port))
+                return item.toObject();
+        return {};
+    };
+    const auto literal = entry(1)["literal"].toObject();
     require(literal.contains("values") && (literal.contains("shape") || literal.contains("offsets")),
             "saved Array must state its own shape or ragged offsets");
-    require(literals["regions"].toObject()["literal"].toArray().size() == 3, "saved ROI groups lost");
-    require(literals["images"].toObject()["literal"].toArray().isEmpty(), "empty Image value lost");
-    require(literals["empty_value"].toObject()["literal"].toInt() == 0, "type default not saved");
+    require(entry(29)["literal"].toArray().size() == 3, "saved ROI groups lost");
+    require(entry(30)["literal"].toArray().isEmpty(), "empty Image value lost");
+    require(entry(31)["literal"].toInt() == 0, "type default not saved");
     const auto  reopened = storage.load(project.path);
     const auto &restored = reopened.project.flows.front().nodes.front();
     for (const auto &port : registry.find(tool.nameEn)->inputs)
     {
-        require(restored.signatures.inputs.at(port.nameEn) == port.type, "project type signature changed");
-        require(equalValues(restored.inputs.at(port.nameEn).literal, port.defaultValue), "project nested literal changed");
+        require(restored.signatures.inputs.at(port.id) == port.type, "project type signature changed");
+        require(equalValues(restored.inputs.at(port.id).literal, port.defaultValue), "project nested literal changed");
     }
     const auto selected = std::find_if(tool.inputs.begin(), tool.inputs.end(), [](const auto &port)
                                        { return port.type == TypeSpec{Type::Array, DType::Int64, 2}; });
     require(selected != tool.inputs.end(), "Int64 rank2 fixture missing");
-    numberAt(restored.inputs.at(selected->nameEn).literal, 0) = 77;
-    require(numberAt(project.flows.front().nodes.front().inputs.at(selected->nameEn).literal, 0)
+    numberAt(restored.inputs.at(selected->id).literal, 0) = 77;
+    require(numberAt(project.flows.front().nodes.front().inputs.at(selected->id).literal, 0)
                 == std::numeric_limits<std::int64_t>::min(),
             "reopened project shares source containers");
 }

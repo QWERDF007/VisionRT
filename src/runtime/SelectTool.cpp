@@ -1,4 +1,5 @@
 #include "runtime/SelectTool.h"
+#include "core/NodeContracts.h"
 
 #include <algorithm>
 #include <memory>
@@ -25,13 +26,13 @@ public:
     ToolResult execute(const Values &inputs) override
     {
         const auto missingValue = [this](ToolStatus status) {
-            return toolResult({{"value", Missing{}}}, std::move(status));
+            return toolResult({{SelectPorts::Value, Missing{}}}, std::move(status));
         };
-        const auto selector = inputs.find("selector");
+        const auto selector = inputs.find(SelectPorts::Selector);
         const auto *flag    = selector == inputs.end() ? nullptr : std::get_if<bool>(&selector->second);
         if (!flag)
             return missingValue({1, "合流节点缺少布尔选择条件"});
-        const auto &chosen = inputs.find(*flag ? "if_true" : "if_false");
+        const auto &chosen = inputs.find(*flag ? SelectPorts::IfTrue : SelectPorts::IfFalse);
         if (chosen == inputs.end() || isMissing(chosen->second))
             return missingValue({1, *flag ? "成立分支没有可用值" : "否则分支没有可用值"});
         try
@@ -42,7 +43,7 @@ public:
         {
             return missingValue({1, error.what()});
         }
-        return toolResult({{"value", chosen->second}}, executionSuccess());
+        return toolResult({{SelectPorts::Value, chosen->second}}, executionSuccess());
     }
 
     ToolStatus release() override
@@ -62,7 +63,7 @@ void registerSelectTools(ToolRegistry &registry)
                                  {
                                      const auto output
                                          = std::find_if(definition.outputs.begin(), definition.outputs.end(),
-                                                        [](const auto &port) { return port.nameEn == "value"; });
+                                                        [](const auto &port) { return port.id == SelectPorts::Value; });
                                      if (output == definition.outputs.end())
                                          throw ContractError("合流工具缺少 value 输出端口：" + definition.nameEn);
                                      return std::make_unique<SelectTool>(output->type);

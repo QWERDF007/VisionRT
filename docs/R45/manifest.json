@@ -1,0 +1,26 @@
+{
+  "revision": "R45",
+  "date": "2026-11-03",
+  "timezone": "Asia/Shanghai",
+  "scope": "R44整合及数字参数编号设计修订；未实施产品代码",
+  "baseline_review_date": "2026-11-02",
+  "baseline_heads": {
+    "VisionRT": "b0de29cedc4b18cb0e3fffa01548631e7da6961b",
+    "VisionTools": "e69a2ed23c15005b634591131fd0f9a11d40967a",
+    "VisionRTContracts": "f9b669a77d6658006ef4ee908a1ed82292a03807"
+  },
+  "proposed_protocol": {
+    "module_abi": 9,
+    "tool_schema": 6,
+    "project_format": 7
+  },
+  "documents": 13,
+  "specs": 18,
+  "tickets": 18,
+  "concrete_types": 34,
+  "reference_checks_passed": 16,
+  "product_tests_run_in_this_revision": false,
+  "browser_visual_validation": false,
+  "entry": "完整方案.html",
+  "prototype": "自定义工具_数字编号原型.html"
+}

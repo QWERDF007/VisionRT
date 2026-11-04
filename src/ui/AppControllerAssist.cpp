@@ -12,6 +12,21 @@
 namespace visionrt {
 namespace {
 
+// Ports of the bundled point-and-click assistants. The interaction mapping already names them by
+// number; these constants only let the host recognise the three inputs and three suggestions it has
+// dedicated presentation for.
+namespace assist_ports {
+inline constexpr PortId Images            = 1;
+inline constexpr PortId Cursor            = 2;
+inline constexpr PortId Phase             = 3;
+inline constexpr PortId SeedRois          = 4;
+inline constexpr PortId Alignment         = 5;
+inline constexpr PortId SearchExtent      = 6;
+inline constexpr PortId SuggestedPolarity = 6;
+inline constexpr PortId SuggestedWidthMin = 7;
+inline constexpr PortId SuggestedWidthMax = 8;
+} // namespace assist_ports
+
 const PortDefinition *firstRoiInput(const ToolDefinition &tool)
 {
     for (const auto &port : tool.inputs)
@@ -62,14 +77,13 @@ std::array<double, 9> alignmentFor(std::span<const double> matrices, int index)
             matrices[offset + 6], matrices[offset + 7], matrices[offset + 8]};
 }
 
-const PortDefinition *mappedTarget(const ToolDefinition &tool, const InteractionMapping &mapping,
-                                   std::string_view helperOutput)
+const PortDefinition *mappedTarget(const ToolDefinition &tool, const InteractionMapping &mapping, PortId helperOutput)
 {
     const auto found = mapping.proposals.find(helperOutput);
-    return found == mapping.proposals.end() ? nullptr : workbench::port(tool.inputs, found->second.port);
+    return found == mapping.proposals.end() ? nullptr : workbench::port(tool.inputs, found->second.id);
 }
 
-const std::string *stringLiteral(const NodeDefinition &node, std::string_view input)
+const std::string *stringLiteral(const NodeDefinition &node, PortId input)
 {
     const auto found = node.inputs.find(input);
     if (found == node.inputs.end() || found->second.mode != BindingMode::Literal)
@@ -77,7 +91,7 @@ const std::string *stringLiteral(const NodeDefinition &node, std::string_view in
     return std::get_if<std::string>(&found->second.literal);
 }
 
-std::optional<double> numberLiteral(const NodeDefinition &node, std::string_view input)
+std::optional<double> numberLiteral(const NodeDefinition &node, PortId input)
 {
     const auto found = node.inputs.find(input);
     if (found == node.inputs.end() || found->second.mode != BindingMode::Literal)
@@ -89,13 +103,13 @@ std::optional<double> numberLiteral(const NodeDefinition &node, std::string_view
     return std::nullopt;
 }
 
-const std::string *stringOutput(const Values &outputs, std::string_view port)
+const std::string *stringOutput(const Values &outputs, PortId port)
 {
     const auto found = outputs.find(port);
     return found == outputs.end() ? nullptr : std::get_if<std::string>(&found->second);
 }
 
-std::optional<double> numberOutput(const Values &outputs, std::string_view port)
+std::optional<double> numberOutput(const Values &outputs, PortId port)
 {
     const auto found = outputs.find(port);
     if (found == outputs.end())
@@ -115,17 +129,17 @@ bool allowedKind(const InteractionMapping &mapping, RoiKind kind)
 void requireCompatible(const ToolDefinition &tool, const InteractionMapping &mapping, const NodeDefinition &node,
                        const Values &outputs)
 {
-    if (const auto *suggested = stringOutput(outputs, "suggested_polarity"))
-        if (const auto *target = mappedTarget(tool, mapping, "suggested_polarity"))
-            if (const auto *current = stringLiteral(node, target->nameEn))
+    if (const auto *suggested = stringOutput(outputs, assist_ports::SuggestedPolarity))
+        if (const auto *target = mappedTarget(tool, mapping, assist_ports::SuggestedPolarity))
+            if (const auto *current = stringLiteral(node, target->id))
                 if (*current != "any" && *suggested != "any" && *current != *suggested)
                     throw ContractError("候选极性与当前参数不兼容");
-    const auto minPort = mappedTarget(tool, mapping, "suggested_width_min");
-    const auto maxPort = mappedTarget(tool, mapping, "suggested_width_max");
-    const auto low     = numberOutput(outputs, "suggested_width_min");
-    const auto high    = numberOutput(outputs, "suggested_width_max");
-    const auto currentMin = minPort ? numberLiteral(node, minPort->nameEn) : std::nullopt;
-    const auto currentMax = maxPort ? numberLiteral(node, maxPort->nameEn) : std::nullopt;
+    const auto minPort = mappedTarget(tool, mapping, assist_ports::SuggestedWidthMin);
+    const auto maxPort = mappedTarget(tool, mapping, assist_ports::SuggestedWidthMax);
+    const auto low     = numberOutput(outputs, assist_ports::SuggestedWidthMin);
+    const auto high    = numberOutput(outputs, assist_ports::SuggestedWidthMax);
+    const auto currentMin = minPort ? numberLiteral(node, minPort->id) : std::nullopt;
+    const auto currentMax = maxPort ? numberLiteral(node, maxPort->id) : std::nullopt;
     if (low && high && currentMin && currentMax && (*currentMin > *high || *currentMax < *low))
         throw ContractError("候选宽度范围与当前参数不兼容");
 }
@@ -156,8 +170,8 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     if (!roiPort)
         return reject(QStringLiteral("该工具没有可点选的 ROI 输入"));
     if (!roiPort->image)
-        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(roiPort->nameEn));
-    const auto binding = node->inputs.find(roiPort->image->port);
+        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(portLabel(roiPort->id)));
+    const auto binding = node->inputs.find(roiPort->image->id);
     if (binding == node->inputs.end() || binding->second.mode != BindingMode::Upstream || !binding->second.source)
         return reject(QStringLiteral("请先把图像输入连接到上游"));
     const auto snapshot = presentation.sharedSnapshot(binding->second.source->node);
@@ -204,8 +218,8 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         return reject(QStringLiteral("辅助工具缺失：") + workbench::q(mapping.helperNameEn));
 
     if (!roiPort->image)
-        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(roiPort->nameEn));
-    const auto binding = node->inputs.find(roiPort->image->port);
+        return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(portLabel(roiPort->id)));
+    const auto binding = node->inputs.find(roiPort->image->id);
     const auto source = presentation.sharedSnapshot(binding->second.source->node);
     if (!source)
         return reject(QStringLiteral("上游结果已更新，请先运行"));
@@ -217,7 +231,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
 
     if (learn)
     {
-        const auto roiBinding = node->inputs.find(roiPort->nameEn);
+        const auto roiBinding = node->inputs.find(roiPort->id);
         if (roiBinding == node->inputs.end() || roiBinding->second.mode == BindingMode::Upstream
             || effectiveSource(roiBinding->second))
             return reject(QStringLiteral("该参数由上游提供"));
@@ -229,7 +243,7 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     {
         if (!roiPort->alignment)
             return kNoAlignment;
-        const auto alignment = resolvedInput(*node, roiPort->alignment->port);
+        const auto alignment = resolvedInput(*node, roiPort->alignment->id);
         const auto *array    = std::get_if<Array>(&alignment);
         if (!array || array->type() != TypeSpec{Type::Array, DType::Float64, 3})
             return kNoAlignment;
@@ -243,13 +257,13 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     Values inputs;
     for (const auto &[helperPort, nodeInput] : mapping.inputs)
     {
-        if (helperPort == "images")
+        if (helperPort == assist_ports::Images)
             inputs.emplace(helperPort, DataRef<Image>(Image{batch->get()[static_cast<std::size_t>(index)]},
                                                       {batch->owner()}));
-        else if (helperPort == "seed_rois")
+        else if (helperPort == assist_ports::SeedRois)
         {
             RegionGroup seeds;
-            const auto      seedValue = resolvedInput(*node, nodeInput.port);
+            const auto      seedValue = resolvedInput(*node, nodeInput.id);
             if (const auto *groups = std::get_if<DataRef<ROI>>(&seedValue))
                 if (index < static_cast<int>(groups->get().size()))
                     for (const auto &record : groups->get()[static_cast<std::size_t>(index)])
@@ -257,9 +271,9 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
                             seeds.push_back(record);
             inputs.emplace(helperPort, DataRef<ROI>(ROI{std::move(seeds)}));
         }
-        else if (helperPort == "alignment")
+        else if (helperPort == assist_ports::Alignment)
         {
-            const auto alignment = resolvedInput(*node, nodeInput.port);
+            const auto alignment = resolvedInput(*node, nodeInput.id);
             if (isMissing(alignment))
                 inputs.emplace(helperPort, Array::empty(DType::Float64, 3));
             else
@@ -283,16 +297,17 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
             }
         }
         else
-            inputs.emplace(helperPort, resolvedInput(*node, nodeInput.port));
+            inputs.emplace(helperPort, resolvedInput(*node, nodeInput.id));
     }
 
-    inputs.emplace("cursor", Array::dense(DType::Float64, {2}, std::vector<double>{cursor.x(), cursor.y()}));
-    inputs.emplace("phase", std::string(learn ? "learn" : "hover"));
+    inputs.emplace(assist_ports::Cursor,
+                   Array::dense(DType::Float64, {2}, std::vector<double>{cursor.x(), cursor.y()}));
+    inputs.emplace(assist_ports::Phase, std::string(learn ? "learn" : "hover"));
     std::int64_t extent = 256;
-    if (const auto *port = workbench::port(helper->inputs, "search_extent"))
+    if (const auto *port = workbench::port(helper->inputs, assist_ports::SearchExtent))
         if (const auto *declared = std::get_if<std::int64_t>(&port->defaultValue))
             extent = *declared;
-    inputs.emplace("search_extent", extent);
+    inputs.emplace(assist_ports::SearchExtent, extent);
     // System inputs with a legal default (currently upstream_status=0) are never required in
     // each tool's interaction map, but the helper must still receive a legal value.
     inputs = normalizeInputs(helper->inputs, std::move(inputs));
@@ -327,7 +342,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                                                 : QStringLiteral("未找到有效目标：") + outcome.quality);
         return;
     }
-    const auto binding = node->inputs.find(roiPort->nameEn);
+    const auto binding = node->inputs.find(roiPort->id);
     if (binding == node->inputs.end())
         return;
     if (binding->second.mode == BindingMode::Upstream || effectiveSource(binding->second))
@@ -353,7 +368,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
         groups.resize(std::max(groups.size(), static_cast<std::size_t>(index) + 1));
         auto &group = groups[static_cast<std::size_t>(index)];
 
-        std::vector<std::pair<std::string, PortValue>> edits;
+        std::vector<std::pair<PortId, PortValue>> edits;
         if (outcome.append)
         {
             requireCompatible(*tool, mapping, *node, outcome.outputs);
@@ -364,13 +379,13 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
             group = outcome.proposal.front();
             for (const auto &[helperOutput, nodeInput] : mapping.proposals)
             {
-                if (nodeInput.port == roiPort->nameEn)
+                if (nodeInput.id == roiPort->id)
                     continue;
-                const auto *target     = workbench::port(tool->inputs, nodeInput.port);
+                const auto *target     = workbench::port(tool->inputs, nodeInput.id);
                 const auto  suggestion = outcome.outputs.find(helperOutput);
                 if (!target || suggestion == outcome.outputs.end() || isMissing(suggestion->second))
                     continue;
-                const auto current = node->inputs.find(nodeInput.port);
+                const auto current = node->inputs.find(nodeInput.id);
                 if (current == node->inputs.end() || current->second.mode == BindingMode::Upstream
                     || effectiveSource(current->second))
                     continue;
@@ -379,10 +394,10 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                 const auto normalized = normalizeInput(*target, suggestion->second);
                 if (equalValues(current->second.literal, normalized.value))
                     continue;
-                edits.emplace_back(nodeInput.port, normalized.value);
+                edits.emplace_back(nodeInput.id, normalized.value);
             }
         }
-        edits.insert(edits.begin(), {roiPort->nameEn, DataRef<ROI>(std::move(groups))});
+        edits.insert(edits.begin(), {roiPort->id, DataRef<ROI>(std::move(groups))});
         clearAssistPreview();
         if (!editor.setLiteralBindings(flow.toStdString(), node->id, edits))
             return;
@@ -442,16 +457,17 @@ void AppController::Impl::refreshAssist()
         else
         {
             QString missing;
-            if (mapping.inputs.contains("cursor") || mapping.inputs.contains("phase")
-                || mapping.inputs.contains("search_extent"))
+            if (mapping.inputs.contains(assist_ports::Cursor) || mapping.inputs.contains(assist_ports::Phase)
+                || mapping.inputs.contains(assist_ports::SearchExtent))
                 missing = QStringLiteral("协议端口 cursor/phase/search_extent");
             for (const auto &port : helper->inputs)
-                if (port.nameEn != "cursor" && port.nameEn != "phase" && port.nameEn != "search_extent"
-                    && !mapping.inputs.contains(port.nameEn) && isMissing(port.defaultValue))
-                    missing = workbench::q(port.nameEn);
+                if (port.id != assist_ports::Cursor && port.id != assist_ports::Phase
+                    && port.id != assist_ports::SearchExtent && !mapping.inputs.contains(port.id)
+                    && isMissing(port.defaultValue))
+                    missing = workbench::q(portLabel(port.id));
             for (const auto &[helperOutput, target] : mapping.proposals)
                 if (!workbench::port(helper->outputs, helperOutput))
-                    missing = workbench::q(helperOutput);
+                    missing = workbench::q(portLabel(helperOutput));
             if (!missing.isEmpty())
                 hint = QStringLiteral("辅助工具映射缺少端口：") + missing;
             else

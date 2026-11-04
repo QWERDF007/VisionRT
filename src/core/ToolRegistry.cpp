@@ -18,11 +18,11 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
 {
     if (definition.kind != contract.kind || definition.nameEn != contract.nameEn)
         throw ContractError("C++ 工具种类或名称与注册合同不一致：" + definition.nameEn);
-    const auto portsMatch = [](const auto &actual, const auto &expected, const char *direction)
+    const auto portsMatch = [](const auto &actual, const auto &expected, PortStage stage, const char *direction)
     {
-        const auto business = [](const auto &port)
+        const auto business = [stage](const auto &port)
         {
-            return !port.nameEn.starts_with("__");
+            return !isReservedPort(stage, port.id);
         };
         if (std::count_if(actual.begin(), actual.end(), business)
             != std::count_if(expected.begin(), expected.end(), business))
@@ -32,14 +32,14 @@ void align(const ToolDefinition &definition, const ToolDefinition &contract)
             if (!business(port))
                 continue;
             const auto other
-                = std::find_if(expected.begin(), expected.end(), [&](const auto &item) { return item.nameEn == port.nameEn; });
+                = std::find_if(expected.begin(), expected.end(), [&](const auto &item) { return item.id == port.id; });
             if (other == expected.end() || !compatible(port.type, other->type))
-                throw ContractError(std::string("C++ 合同端口不一致：") + direction + "." + port.nameEn);
+                throw ContractError(std::string("C++ 合同端口不一致：") + direction + "." + portLabel(port.id));
         }
     };
-    portsMatch(definition.initParams, contract.initParams, "init_params");
-    portsMatch(definition.inputs, contract.inputs, "inputs");
-    portsMatch(definition.outputs, contract.outputs, "outputs");
+    portsMatch(definition.initParams, contract.initParams, PortStage::Init, "init_params");
+    portsMatch(definition.inputs, contract.inputs, PortStage::Inputs, "inputs");
+    portsMatch(definition.outputs, contract.outputs, PortStage::Outputs, "outputs");
 }
 
 } // namespace
@@ -273,7 +273,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
         throw RegistryError(state.state, state.status);
     for (const auto &port : definition.outputs)
         if (port.typeFrom)
-            throw ContractError("工具输出类型尚未解析：" + definition.nameEn + "." + port.nameEn);
+            throw ContractError("工具输出类型尚未解析：" + definition.nameEn + "." + portLabel(port.id));
     if (definition.kind == ToolKind::Host)
     {
         const auto execIt = hostBindingExecutors_.find(definition.hostBinding);

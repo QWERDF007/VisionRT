@@ -85,7 +85,7 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
     for (const auto &[id, value] : values)
     {
         const auto definition = std::find_if(declarations.begin(), declarations.end(),
-                                             [&](const PortDefinition &port) { return port.nameEn == id; });
+                                             [&](const PortDefinition &port) { return port.id == id; });
         if (definition != declarations.end())
         {
             validateValue(definition->type, value);
@@ -96,11 +96,11 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
                 if (!resolution)
                     throw ContractError(resolution.issue().describe());
                 const auto resolved = resolution.value().u8string();
-                result[py::str(id)] = py::str(reinterpret_cast<const char *>(resolved.data()), resolved.size());
+                result[py::int_(id)] = py::str(reinterpret_cast<const char *>(resolved.data()), resolved.size());
                 continue;
             }
         }
-        result[py::str(id)] = toPython(value);
+        result[py::int_(id)] = toPython(value);
     }
     return result;
 }
@@ -394,32 +394,34 @@ public:
                 detail = envelope["detail"].cast<std::string>();
                 // Only what the tool actually returned is converted: the host's completion entry owns
                 // the declared defaults, so an omitted business port is not an author error here.
-                std::set<std::string, std::less<>> declared;
+                // Keys are port numbers; a string, a bool or a float key is an author error, never a
+                // value to coerce back into an identity.
+                std::set<PortId> declared;
                 for (const auto &output : definition_.outputs)
                 {
-                    declared.insert(output.nameEn);
-                    const auto key = py::str(output.nameEn);
+                    declared.insert(output.id);
+                    const auto key = py::int_(output.id);
                     if (!outputsDictionary.contains(key))
                         continue;
                     PortValue value;
                     try
                     {
-                        value = fromPython(output.type, outputsDictionary[key], state_->storage, output.nameEn);
+                        value = fromPython(output.type, outputsDictionary[key], state_->storage, portLabel(output.id));
                     }
                     catch (const std::exception &error)
                     {
-                        throw ContractError("输出端口 " + output.nameEn + "：" + error.what());
+                        throw ContractError(portLabel(output.id) + "：" + error.what());
                     }
-                    outputs.emplace(output.nameEn, std::move(value));
+                    outputs.emplace(output.id, std::move(value));
                 }
                 for (auto item : outputsDictionary)
                 {
                     const auto key = py::reinterpret_borrow<py::object>(item.first);
-                    if (!py::isinstance<py::str>(key))
-                        throw ContractError("输出键必须是字符串");
-                    const auto name = key.cast<std::string>();
-                    if (!declared.contains(name))
-                        throw ContractError("输出键不在声明中：" + name);
+                    if (!py::isinstance<py::int_>(key) || py::isinstance<py::bool_>(key))
+                        throw ContractError("输出键必须是整数端口编号");
+                    const auto id = static_cast<PortId>(key.cast<std::uint64_t>());
+                    if (!declared.contains(id))
+                        throw ContractError("输出键不在声明中：" + portLabel(id));
                 }
                 outputTimer.stop();
             }

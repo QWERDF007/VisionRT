@@ -11,7 +11,6 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QStandardPaths>
 #include <QTemporaryDir>
 
 #include <cassert>
@@ -49,13 +48,15 @@ QStringList texts(const QVector<RecentProjectEntry> &entries)
 }
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
+    QCoreApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("VisionRT"));
     QCoreApplication::setApplicationName(QStringLiteral("recent-projects-contract"));
-    QStandardPaths::setTestModeEnabled(true);
-    const auto configDirectory = QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation));
-    QDir(configDirectory.absolutePath()).removeRecursively();
+    // Preferences live in the software directory; the fixture removes only its own file so a test
+    // run can never wipe the build tree it was launched from.
+    const auto preferencesPath = UiPreferences::path();
+    QFile::remove(preferencesPath);
 
     QTemporaryDir root;
     require(root.isValid(), "temporary directory is unavailable");
@@ -101,7 +102,7 @@ int main()
 
     // MRU-05: same-named projects in different folders are told apart by the shortest parent suffix
     // they need, and the tooltip keeps the full path.
-    QDir(configDirectory.absolutePath()).removeRecursively();
+    QFile::remove(preferencesPath);
     const auto left  = makeProject(root.path() + QStringLiteral("/left"), QStringLiteral("same.vrproj"));
     const auto right = makeProject(root.path() + QStringLiteral("/right"), QStringLiteral("same.vrproj"));
     RecentProjects::record(left);
@@ -154,6 +155,8 @@ int main()
     const auto kept    = RecentProjects::record(missing);
     require(!kept.isEmpty() && kept.front().path == QDir::cleanPath(missing),
             "a missing project was dropped from the recent list");
+
+    QFile::remove(preferencesPath);
 
     std::cout << "Recent projects keep ten entries, de-duplicate by path identity and never erase the "
                  "interaction settings stored beside them\n";

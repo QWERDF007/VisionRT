@@ -1,5 +1,5 @@
 {
-  "format_version": 4,
+  "format_version": 7,
   "project": {
     "name": "GPU-YOLO与缺陷过滤全链工程",
     "next_node_seq": "4",
@@ -20,81 +20,126 @@
             0,
             0
           ],
-          "init_params": {},
+          "init_params": [],
           "type_snapshot": {
-            "init_params": {},
-            "inputs": {
-              "count": {
-                "type": "Int"
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
               },
-              "order": {
-                "type": "String"
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "String"
+                }
               },
-              "path": {
-                "type": "String"
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
               },
-              "recursive": {
-                "type": "Bool"
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Bool"
+                }
               },
-              "reload": {
-                "type": "Bool"
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
               },
-              "traversal": {
-                "type": "String"
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "String"
+                }
               }
-            },
-            "outputs": {
-              "__status_code": {
-                "type": "Int"
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
               },
-              "__status_message": {
-                "type": "String"
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
               },
-              "current_index": {
-                "type": "Int"
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
               },
-              "end_reached": {
-                "type": "Bool"
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
               },
-              "images": {
-                "type": "Image"
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
               },
-              "paths": {
-                "dtype": "string",
-                "rank": 1,
-                "type": "Array"
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 1
+                }
               },
-              "total_count": {
-                "type": "Int"
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
               }
-            }
+            ]
           },
-          "inputs": {
-            "count": {
+          "inputs": [
+            {
+              "port_id": 5,
               "mode": "literal",
               "literal": 1
             },
-            "order": {
+            {
+              "port_id": 4,
               "mode": "literal",
               "literal": "顺序（下一张）"
             },
-            "path": {
+            {
+              "port_id": 1,
               "mode": "literal",
               "literal": "images"
             },
-            "recursive": {
+            {
+              "port_id": 2,
               "mode": "literal",
               "literal": false
             },
-            "reload": {
+            {
+              "port_id": 6,
               "mode": "literal",
               "literal": false
             },
-            "traversal": {
+            {
+              "port_id": 3,
               "mode": "literal",
               "literal": "循环"
             }
-          }
+          ]
         },
         {
           "node_seq": "2",
@@ -105,117 +150,214 @@
             2,
             1
           ],
-          "init_params": {
-            "model_name": "yolov8n",
-            "load_mode": "build_wts",
-            "model_path": "models/yolov8n.wts",
-            "engine_output_path": "models/yolov8n.engine",
-            "labels_path": "",
-            "precision": "fp16",
-            "gpu_index": 0,
-            "input_width": 640,
-            "input_height": 640,
-            "num_classes": 80
-          },
-          "type_snapshot": {
-            "init_params": {
-              "model_name": {
-                "type": "String"
-              },
-              "load_mode": {
-                "type": "String"
-              },
-              "model_path": {
-                "type": "String"
-              },
-              "engine_output_path": {
-                "type": "String"
-              },
-              "labels_path": {
-                "type": "String"
-              },
-              "precision": {
-                "type": "String"
-              },
-              "gpu_index": {
-                "type": "Int"
-              },
-              "input_width": {
-                "type": "Int"
-              },
-              "input_height": {
-                "type": "Int"
-              },
-              "num_classes": {
-                "type": "Int"
-              }
+          "init_params": [
+            {
+              "port_id": 0,
+              "value": "yolov8n"
             },
-            "inputs": {
-              "images": {
-                "type": "Image"
-              },
-              "conf_threshold": {
-                "type": "Float"
-              },
-              "nms_threshold": {
-                "type": "Float"
-              },
-              "max_detections": {
-                "type": "Int"
-              }
+            {
+              "port_id": 1,
+              "value": "build_wts"
             },
-            "outputs": {
-              "__status_code": {
-                "type": "Int"
-              },
-              "__status_message": {
-                "type": "String"
-              },
-              "images": {
-                "type": "Image"
-              },
-              "rois": {
-                "type": "ROI"
-              },
-              "scores": {
-                "type": "Array",
-                "dtype": "float32",
-                "rank": 2
-              },
-              "classes": {
-                "type": "Array",
-                "dtype": "int64",
-                "rank": 2
-              },
-              "class_names": {
-                "type": "Array",
-                "rank": 2,
-                "dtype": "string"
-              }
+            {
+              "port_id": 2,
+              "value": "models/yolov8n.wts"
+            },
+            {
+              "port_id": 3,
+              "value": "models/yolov8n.engine"
+            },
+            {
+              "port_id": 4,
+              "value": ""
+            },
+            {
+              "port_id": 5,
+              "value": "fp16"
+            },
+            {
+              "port_id": 6,
+              "value": 0
+            },
+            {
+              "port_id": 7,
+              "value": 640
+            },
+            {
+              "port_id": 8,
+              "value": 640
+            },
+            {
+              "port_id": 9,
+              "value": 80
             }
+          ],
+          "type_snapshot": {
+            "init_params": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 8,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 9,
+                "type": {
+                  "type": "Int"
+                }
+              }
+            ],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              }
+            ]
           },
-          "inputs": {
-            "images": {
+          "inputs": [
+            {
+              "port_id": 1,
               "mode": "upstream",
               "literal": null,
               "source": {
                 "node_seq": "1",
-                "port_id": "images"
+                "port_id": 2
               }
             },
-            "conf_threshold": {
+            {
+              "port_id": 2,
               "mode": "literal",
               "literal": 0.25
             },
-            "nms_threshold": {
+            {
+              "port_id": 3,
               "mode": "literal",
               "literal": 0.45
             },
-            "max_detections": {
+            {
+              "port_id": 4,
               "mode": "literal",
               "literal": 300
             }
-          }
+          ]
         },
         {
           "node_seq": "3",
@@ -226,132 +368,188 @@
             2,
             2
           ],
-          "init_params": {},
+          "init_params": [],
           "type_snapshot": {
-            "init_params": {},
-            "inputs": {
-              "images": {
-                "type": "Image"
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
               },
-              "rois": {
-                "type": "ROI"
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "ROI"
+                }
               },
-              "scores": {
-                "type": "Array",
-                "dtype": "float32",
-                "rank": 2
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
               },
-              "classes": {
-                "type": "Array",
-                "dtype": "int64",
-                "rank": 2
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 2
+                }
               },
-              "class_names": {
-                "type": "Array",
-                "rank": 2,
-                "dtype": "string"
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
               },
-              "min_score": {
-                "type": "Float"
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Float"
+                }
               },
-              "min_area": {
-                "type": "Float"
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "Float"
+                }
               },
-              "allowed_classes": {
-                "type": "Array",
-                "dtype": "int64",
-                "rank": 1
+              {
+                "port_id": 8,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 1
+                }
               }
-            },
-            "outputs": {
-              "__status_code": {
-                "type": "Int"
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
               },
-              "__status_message": {
-                "type": "String"
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
               },
-              "images": {
-                "type": "Image"
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
               },
-              "rois": {
-                "type": "ROI"
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "ROI"
+                }
               },
-              "scores": {
-                "type": "Array",
-                "dtype": "float32",
-                "rank": 2
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
               },
-              "classes": {
-                "type": "Array",
-                "dtype": "int64",
-                "rank": 2
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 2
+                }
               },
-              "class_names": {
-                "type": "Array",
-                "rank": 2,
-                "dtype": "string"
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
               },
-              "counts": {
-                "type": "Array",
-                "dtype": "int64",
-                "rank": 1
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 1
+                }
               }
-            }
+            ]
           },
-          "inputs": {
-            "images": {
+          "inputs": [
+            {
+              "port_id": 1,
               "mode": "upstream",
               "literal": null,
               "source": {
                 "node_seq": "2",
-                "port_id": "images"
+                "port_id": 2
               }
             },
-            "rois": {
+            {
+              "port_id": 2,
               "mode": "upstream",
               "literal": null,
               "source": {
                 "node_seq": "2",
-                "port_id": "rois"
+                "port_id": 3
               }
             },
-            "scores": {
+            {
+              "port_id": 3,
               "mode": "upstream",
               "literal": null,
               "source": {
                 "node_seq": "2",
-                "port_id": "scores"
+                "port_id": 4
               }
             },
-            "classes": {
+            {
+              "port_id": 4,
               "mode": "upstream",
               "literal": null,
               "source": {
                 "node_seq": "2",
-                "port_id": "classes"
+                "port_id": 5
               }
             },
-            "class_names": {
+            {
+              "port_id": 5,
               "mode": "upstream",
               "literal": null,
               "source": {
                 "node_seq": "2",
-                "port_id": "class_names"
+                "port_id": 6
               }
             },
-            "min_score": {
+            {
+              "port_id": 6,
               "mode": "literal",
               "literal": 0.5
             },
-            "min_area": {
+            {
+              "port_id": 7,
               "mode": "literal",
               "literal": 10
             },
-            "allowed_classes": {
+            {
+              "port_id": 8,
               "mode": "literal",
               "literal": []
             }
-          }
+          ]
         }
       ]
     }

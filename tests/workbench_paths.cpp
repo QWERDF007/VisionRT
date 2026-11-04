@@ -19,7 +19,22 @@
 #include <QUrl>
 #include <iostream>
 #include <memory>
+#include <array>
 #include <stdexcept>
+#include <string_view>
+#include <utility>
+
+using namespace visionrt;
+
+// test.paths declares 文件 1, 目录 2, 模式 3, 动态路径 4 and answers 模式输出 2.
+// visionrt.image.read declares 图像路径 1 and 图像数量 5.
+constexpr PortId kFilePath         = 1;
+constexpr PortId kFolderInput      = 2;
+constexpr PortId kModeInput        = 3;
+constexpr PortId kDynamicPath      = 4;
+constexpr PortId kModeValueOutput  = 2;
+constexpr PortId kImagePathInput   = 1;
+constexpr PortId kImageCountInput  = 5;
 
 void readImageToolUiContract();
 
@@ -55,10 +70,10 @@ void pathEditorsContract()
   "runtime_files": []
 })json");
     write("tools-package/python/custom/Test/run.py",
-          "def run(inputs):\n    return {'outputs': {'mode_value': 'directory', '__status_code': 0, '__status_message': ''}, 'detail': ''}\n");
+          "def run(inputs):\n    return {'outputs': {2: 'directory', 0: 0, 1: ''}, 'detail': ''}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 5,
+  "schema_version": 6,
   "name_en": "test.paths",
   "name_zh": "路径测试",
   "version": "1.0.0",
@@ -71,25 +86,24 @@ void pathEditorsContract()
   "ports": {
     "inputs": [
       {
-        "name_en": "file",
         "name_zh": "文件",
         "type": "string",
         "default": "original file",
         "ui": {
           "editor": "file"
-        }
+        },
+        "id": 1
       },
       {
-        "name_en": "folder",
         "name_zh": "目录",
         "type": "string",
         "default": "original folder",
         "ui": {
           "editor": "directory"
-        }
+        },
+        "id": 2
       },
       {
-        "name_en": "mode",
         "name_zh": "模式",
         "type": "string",
         "default": "file",
@@ -98,10 +112,10 @@ void pathEditorsContract()
             "file",
             "directory"
           ]
-        }
+        },
+        "id": 3
       },
       {
-        "name_en": "path",
         "name_zh": "动态路径",
         "type": "string",
         "default": "original path",
@@ -109,17 +123,23 @@ void pathEditorsContract()
           "editor": "path"
         },
         "relations": {
-          "path_mode": "inputs.mode"
-        }
+          "path_mode": {"stage": "inputs", "id": 3}
+        },
+        "id": 4
       }
     ],
     "outputs": [
       {
-        "name_en": "mode_value",
         "name_zh": "模式输出",
-        "type": "string"
+        "type": "string",
+        "id": 2
       }
     ]
+  },
+  "next_port_id": {
+    "init": 0,
+    "inputs": 5,
+    "outputs": 3
   }
 })json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
@@ -140,7 +160,7 @@ void pathEditorsContract()
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"
-        "Item { id: root; property string fieldId: 'file'; width: 700; height: 36; "
+        "Item { id: root; property int fieldId: 1; width: 700; height: 36; "
         "readonly property var currentParameter: app.parameters.find(function(row) { return row.id === root.fieldId }); "
         "Loader { anchors.fill: parent; active: root.currentParameter !== undefined; "
         "sourceComponent: ParameterEditor { parameter: root.currentParameter } } }",
@@ -188,22 +208,22 @@ void pathEditorsContract()
                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
         QTest::qWait(50);
     };
-    const auto value = [&](const QString &id)
+    const auto value = [&](PortId id)
     {
         for (const auto &entry : app.parameters())
-            if (entry.toMap().value("id").toString() == id)
+            if (entry.toMap().value("id").toUInt() == id)
                 return entry.toMap().value("valueText").toString();
         return QString{};
     };
     const auto project = root.filePath("paths.vrt.json");
-    for (const auto &id : {QStringLiteral("file"), QStringLiteral("folder"), QStringLiteral("path")})
+    for (const auto &[name, field] : std::array<std::pair<const char *, PortId>, 3>{{{"file", kFilePath}, {"folder", kFolderInput}, {"path", kDynamicPath}}})
     {
-        if (id == "path") require(app.setParameter("mode", false, "directory"), "dynamic path mode did not change");
-        editor->setProperty("fieldId", id);
+        if (field == kDynamicPath) require(app.setParameter(kModeInput, false, "directory"), "dynamic path mode did not change");
+        editor->setProperty("fieldId", static_cast<uint>(field));
         QTest::qWait(30);
         QObject *picker = nullptr;
         for (auto *object : editor->findChildren<QObject *>())
-            if (object->property(id == "file" ? "selectedFile" : "selectedFolder").isValid())
+            if (object->property(std::string_view(name) == "file" ? "selectedFile" : "selectedFolder").isValid())
                 picker = object;
         require(picker != nullptr, "path chooser is missing");
         require(picker->setProperty("acceptLabel", QStringLiteral("确认选择")), "path chooser has no accept label");
@@ -214,7 +234,7 @@ void pathEditorsContract()
             picker->setProperty("currentFolder", QUrl::fromLocalFile(root.filePath(nested)));
             click(findVisible([&](QQuickItem *item)
             {
-                return item->property("text").toString() == (id == "file" ? QStringLiteral("选择文件") : QStringLiteral("选择文件夹"))
+                return item->property("text").toString() == (std::string_view(name) == "file" ? QStringLiteral("选择文件") : QStringLiteral("选择文件夹"))
                     && item->metaObject()->indexOfSignal("clicked()") >= 0;
             }));
             require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),
@@ -223,7 +243,7 @@ void pathEditorsContract()
         app.save(project);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(!app.dirty(), "path baseline could not be saved");
-        const auto original = value(id);
+        const auto original = value(field);
         QSignalSpy changes(&app, &visionrt::AppController::parametersChanged);
         openPicker();
         std::cerr << "AFTER OPEN PICKER: visible=" << picker->property("visible").toBool() << std::endl;
@@ -237,9 +257,9 @@ void pathEditorsContract()
             }
         }
         require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500), "Escape did not cancel the chooser");
-        require(value(id) == original && !app.dirty() && changes.isEmpty(), "cancelled path selection changed the project");
+        require(value(field) == original && !app.dirty() && changes.isEmpty(), "cancelled path selection changed the project");
         openPicker();
-        const auto label = id == "file" ? fileName : folderName;
+        const auto label = std::string_view(name) == "file" ? fileName : folderName;
         require(QTest::qWaitFor([&] { return findVisible([&](QQuickItem *item) { return item->property("text").toString() == label; }) != nullptr; }, 3000),
                 "path chooser did not display the unicode fixture");
         click(findVisible([&](QQuickItem *item) { return item->property("text").toString() == label; }));
@@ -250,22 +270,22 @@ void pathEditorsContract()
         }));
         require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500), "path confirmation did not close the chooser");
         const auto expected = QDir::cleanPath(root.filePath(nested + "/" + label));
-        require(value(id) == expected, "path selection damaged unicode, spaces, percent or hash characters");
+        require(value(field) == expected, "path selection damaged unicode, spaces, percent or hash characters");
         require(app.dirty() && changes.count() == 1, "path selection did not submit exactly once");
         app.save(project);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         app.requestOpen(project);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "path project did not finish reopening");
         app.selectNode(app.nodes().front().toMap().value("id").toString());
-        require(value(id) == expected, "selected path did not survive save/reopen");
+        require(value(field) == expected, "selected path did not survive save/reopen");
     }
     const auto editorKind = [&]
     {
         for (const auto &entry : app.parameters())
-            if (entry.toMap().value("id").toString() == "path") return entry.toMap().value("editor").toString();
+            if (entry.toMap().value("id").toUInt() == kDynamicPath) return entry.toMap().value("editor").toString();
         return QString{};
     };
-    require(app.setParameter("mode", false, "file") && editorKind() == "file", "file mode did not select a file editor");
+    require(app.setParameter(kModeInput, false, "file") && editorKind() == "file", "file mode did not select a file editor");
     QObject *filePicker = nullptr;
     for (auto *object : editor->findChildren<QObject *>())
         if (object->property("selectedFile").isValid()) filePicker = object;
@@ -277,24 +297,24 @@ void pathEditorsContract()
     }));
     require(QTest::qWaitFor([&] { return filePicker->property("visible").toBool(); }, 1500),
             "metadata-driven file picker did not open");
-    const auto selectedPath = value("path");
-    require(app.setParameter("mode", false, "directory") && editorKind() == "directory", "directory mode did not update");
+    const auto selectedPath = value(kDynamicPath);
+    require(app.setParameter(kModeInput, false, "directory") && editorKind() == "directory", "directory mode did not update");
     require(QTest::qWaitFor([&] { return !filePicker->property("visible").toBool(); }, 1500)
-                && value("path") == selectedPath,
+                && value(kDynamicPath) == selectedPath,
             "changing path mode left the old picker alive or submitted its selection");
-    require(app.setParameter("mode", false, "null", true) && editorKind().isEmpty(),
+    require(app.setParameter(kModeInput, false, "null", true) && editorKind().isEmpty(),
             "Missing path mode must not silently select the file picker");
     const auto localPath = root.filePath(QStringLiteral("文本 %2f # 路径.txt"));
-    require(app.setParameterPath("path", false, QUrl::fromLocalFile(localPath)) && value("path") == localPath,
+    require(app.setParameterPath(kDynamicPath, false, QUrl::fromLocalFile(localPath)) && value(kDynamicPath) == localPath,
             "local URL conversion reinterpreted a literal percent escape");
-    require(!app.setParameterPath("path", false, QUrl("https://example.invalid/image.png")) && value("path") == localPath,
+    require(!app.setParameterPath(kDynamicPath, false, QUrl("https://example.invalid/image.png")) && value(kDynamicPath) == localPath,
             "a remote URL was submitted as a local path");
     const auto targetNode = app.selectedNode();
     app.addNode("test.paths", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto modeSource = app.selectedNode();
     app.selectNode(targetNode);
-    require(app.bindInput(app.portContext("mode"), modeSource, "mode_value") && editorKind().isEmpty(),
+    require(app.bindInput(app.portContext(kModeInput), modeSource, kModeValueOutput) && editorKind().isEmpty(),
             "an unresolved upstream mode must not select a picker");
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "upstream path mode did not finish execution");
@@ -313,13 +333,13 @@ void pathEditorsContract()
     require(app.nodes().size() == 1, "Unsaved project could not create its path parameter tool");
     QSignalSpy saveRequested(&app, &visionrt::AppController::savePathRequired);
     const auto unsavedPath = root.filePath(nested + "/" + fileName);
-    require(app.setParameterPath("file", false, QUrl::fromLocalFile(unsavedPath))
-                && value("file") == unsavedPath && app.dirty() && saveRequested.isEmpty(),
+    require(app.setParameterPath(kFilePath, false, QUrl::fromLocalFile(unsavedPath))
+                && value(kFilePath) == unsavedPath && app.dirty() && saveRequested.isEmpty(),
             "Selecting a local path in an unsaved project required saving or damaged the path");
     const auto relativePath = nested + "/" + fileName;
-    require(app.setParameter("file", false, relativePath) && value("file") == relativePath,
+    require(app.setParameter(kFilePath, false, relativePath) && value(kFilePath) == relativePath,
             "Text editing implicitly resolved a relative path instead of preserving its value");
-    require(app.setParameterPath("file", false, unsavedPath) && value("file") == unsavedPath,
+    require(app.setParameterPath(kFilePath, false, unsavedPath) && value(kFilePath) == unsavedPath,
             "AppController::setParameterPath QString overload rejected valid local path");
     const auto testLocal = root.filePath(QStringLiteral("测试 目录 # 1/文件 %20.png"));
     const auto testUrl = QUrl::fromLocalFile(testLocal);
@@ -333,7 +353,7 @@ void pathEditorsContract()
     app.requestOpen(unsavedProject);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "Relative path project did not reopen");
     app.selectNode(app.nodes().front().toMap().value("id").toString());
-    require(value("file") == unsavedPath && !app.dirty(),
+    require(value(kFilePath) == unsavedPath && !app.dirty(),
             "Selected unicode path changed during first save and reopen");
     std::cout << "[Path project state] Unsaved projects accept local URLs without saving; relative Unicode paths retain their text after save/reopen.\n";
     std::cout << "[Evidence T-05] QuickUI QuiFileFolderDialog and QuiNativeFileDialog single-button path contracts verified.\n";
@@ -374,7 +394,7 @@ void readImageToolUiContract()
     QQmlComponent component(&engine);
     component.setData(
         "import QtQuick\nimport \".\"\n"
-        "Item { id: root; property string fieldId: 'path'; width: 700; height: 36; "
+        "Item { id: root; property int fieldId: 1; width: 700; height: 36; "
         "readonly property var currentParameter: app.parameters.find(function(row) { return row.id === root.fieldId }); "
         "Loader { anchors.fill: parent; active: root.currentParameter !== undefined; "
         "sourceComponent: ParameterEditor { parameter: root.currentParameter } } }",
@@ -422,10 +442,10 @@ void readImageToolUiContract()
         QTest::qWait(50);
     };
 
-    const auto value = [&](const QString &id)
+    const auto value = [&](PortId id)
     {
         for (const auto &entry : app.parameters())
-            if (entry.toMap().value("id").toString() == id)
+            if (entry.toMap().value("id").toUInt() == id)
                 return entry.toMap().value("valueText").toString();
         return QString{};
     };
@@ -458,7 +478,7 @@ void readImageToolUiContract()
     }
     require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500),
             "Escape did not cancel the path picker");
-    require(value("path").isEmpty() && !app.dirty(), "cancelled picker changed parameter or marked project dirty");
+    require(value(kImagePathInput).isEmpty() && !app.dirty(), "cancelled picker changed parameter or marked project dirty");
 
     // 3. Test File selection: bus.jpg
     QString imageDir = QStringLiteral("D:/Project/InferRT/assets/pics");
@@ -473,7 +493,7 @@ void readImageToolUiContract()
     QMetaObject::invokeMethod(picker, "close");
     require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500),
             "accepting path did not close picker");
-    require(value("path") == imageFile, "path parameter was not set to selected image file");
+    require(value(kImagePathInput) == imageFile, "path parameter was not set to selected image file");
     require(app.dirty(), "selecting image file did not mark project dirty");
 
     // Run pipeline once with the selected image file
@@ -495,9 +515,9 @@ void readImageToolUiContract()
     QMetaObject::invokeMethod(picker, "close");
     require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500),
             "accepting directory path did not close picker");
-    require(value("path") == imageDir, "path parameter was not set to selected directory");
+    require(value(kImagePathInput) == imageDir, "path parameter was not set to selected directory");
 
-    require(app.setParameter("count", false, "6"), "failed to set count parameter to 6");
+    require(app.setParameter(kImageCountInput, false, "6"), "failed to set count parameter to 6");
 
     // Run pipeline once with the selected image directory
     app.runOnce();
@@ -527,7 +547,7 @@ void readImageToolUiContract()
     app.selectNode(app.nodes().front().toMap().value("id").toString());
     // A same-drive resource is stored relative to the project, so what has to survive is the
     // resource the stored value points at, not the spelling that happened to be typed before saving.
-    const auto reopenedPath = value("path");
+    const auto reopenedPath = value(kImagePathInput);
     const auto reopenedAbsolute
         = QFileInfo(reopenedPath).isAbsolute()
               ? reopenedPath

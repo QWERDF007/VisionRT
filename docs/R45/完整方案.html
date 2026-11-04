@@ -1,0 +1,1516 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VisionRT R45 · 完整整合方案</title><style>:root{--accent:#1677ff;--text:#262626;--muted:#57606a;--line:#d8dee4}*{box-sizing:border-box}body{margin:0;font:15px/1.8 system-ui,'Microsoft YaHei',sans-serif;color:var(--text);background:#f6f8fa}aside{position:fixed;inset:0 auto 0 0;width:264px;padding:25px 18px;background:white;border-right:1px solid var(--line);overflow:auto}aside strong{font-size:20px}aside a{display:block;padding:7px 8px;color:#394656;font-size:13px;text-decoration:none;border-radius:4px}aside a:hover{background:#e6f1fe;color:var(--accent)}main{margin-left:264px;padding:30px;max-width:1490px}section{background:white;padding:35px;margin:0 0 24px;border:1px solid var(--line);border-radius:8px}h1{font-size:27px;line-height:1.4;margin:10px 0 25px}h2{font-size:21px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-top:34px}h3{font-size:18px}a{color:var(--accent);overflow-wrap:anywhere}p,li{overflow-wrap:anywhere}.eyebrow{font-size:12px;letter-spacing:2px;color:var(--muted)}table{border-collapse:collapse;width:100%;font-size:13px;margin:20px 0;display:block;overflow:auto}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top;min-width:95px}th{background:#f0f4f8}tr:nth-child(even){background:#fafbfc}pre{background:#f3f5f8;border:1px solid var(--line);border-radius:5px;padding:16px;overflow:auto;font:12px/1.7 Consolas,monospace}code{font-family:Consolas,monospace}blockquote{margin:0;border-left:3px solid var(--accent);padding-left:15px;color:var(--muted)}.launch{background:var(--accent);color:white;display:block;padding:12px;text-align:center;margin:18px 0;text-decoration:none;border-radius:5px}@media(max-width:900px){aside{position:static;width:auto}main{margin:0;padding:10px}section{padding:22px}}@media print{aside{display:none}main{margin:0;padding:0}section{border:0;break-before:page}pre{white-space:pre-wrap}table{display:table}}</style><aside><strong>VisionRT · R45</strong><p>验收整改 / 自定义工具 / 数字参数</p><a class="launch" href="自定义工具_数字编号原型.html">打开交互原型</a><a href="#c0">00_阅读入口</a><a href="#c1">01_R44基线验收报告</a><a href="#c2">02_问题证据与差距</a><a href="#c3">03_自定义工具完整方案</a><a href="#c4">04_JSON与数字编号规范</a><a href="#c5">05_实现架构与生命周期</a><a href="#c6">06_Specs</a><a href="#c7">07_Tickets</a><a href="#c8">08_伪代码</a><a href="#c9">09_测试命名与参考</a><a href="#c10">10_架构收敛与实施边界</a><a href="#c11">11_迁移与兼容方案</a><a href="#c12">12_整合追踪与验证</a></aside><main><section id="c0"><div class="eyebrow">R45 · 00</div><h1>R45 完整整合方案：三仓验收整改 + 自定义工具 + 数字参数编号</h1>
+<p>日期：2026-11-03（Asia/Shanghai）。本包整合 R44 全部验收问题、改进方案与最新已确定的数字编号方案；设计正文、Specs、Tickets、伪代码、示例和原型已统一，旧字符串访问方案不再作为并行目标。</p>
+<h2>已确定的接口</h2>
+<ul>
+<li>端口以稳定数字 <code>id</code> 为身份；Python 使用 <code>inputs[1]</code>、<code>outputs[2]</code>，C++ 参数 Reader/Writer 接受 PortId。</li>
+<li>端口数组排列只控制 UI 显示顺序。拖动不重编号，新增分配新 ID，已提交删除的 ID 不复用。</li>
+<li>输入 0 为“上层工具状态”；输出 0/1 为“状态码/状态信息”。固定声明由公共规范化入口注入，不写进工具 JSON；仍在普通参数接口中，由工具解析和包装值。</li>
+<li>Fixed 工具输入业务编号从 1 起；逻辑模型同样保留输入 0，但不因此新增上层状态。输出业务从 2 起；init 独立从 0 起，无固定端口。</li>
+<li>工具顶层 name_en 继续标识注册工厂；端口 name_en 改为可选说明，不用于取参、绑定、排序或兜底查找。</li>
+<li>当前载荷、34 种具体类型、所有权、零拷贝、合法性规范、主题、Loop 渲染及已有交互要求继续保留。</li>
+</ul>
+<h2>版本与事实边界</h2>
+<p>R44 审核的是 RT dev <code>b0de29c</code>、Tools dev <code>e69a2ed</code>、Contracts main <code>f9b669a</code>，实际接口为 ABI8/schema5/project6。R45 提议接口落地时统一升级到 <strong>ABI9/schema6/project7</strong>：因为参数键类型和工程引用真正改变，不再沿用 R44“仅排序无需升级”的结论。若实施时这些版本号已被其他提交使用，应分配下一可用版本号，禁止复用同号表示两种格式。</p>
+<p>本轮是方案整合与设计产物验证，未再执行三仓代码验收。保留的 57 项 Python 通过等日志属于 R44，不能代表新 ABI9 已通过。没有修改、提交或推送产品代码。</p>
+<h2>文件导航</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>01_R44基线验收报告.md</td>
+<td>原验收结论、三 SHA、22 项复验与执行范围</td>
+</tr>
+<tr>
+<td>02_问题证据与差距.md</td>
+<td>8 项问题/改进点 + 数字编号完整影响面</td>
+</tr>
+<tr>
+<td>03_自定义工具完整方案.md</td>
+<td>CRUD、固定行、34 类型、排序、主题、保存删除</td>
+</tr>
+<tr>
+<td>04_JSON与数字编号规范.md</td>
+<td>schema6、next_port_id、公共编号、全部引用格式</td>
+</tr>
+<tr>
+<td>05_实现架构与生命周期.md</td>
+<td>三仓职责、C++/Python 参数接口、原子保存/排空刷新</td>
+</tr>
+<tr>
+<td>06_Specs.md / 07_Tickets.md</td>
+<td>可验收规范、实施任务、依赖与完成条件</td>
+</tr>
+<tr>
+<td>08_伪代码.md</td>
+<td>端口读取包装、分配移动、桥接、刷新与迁移</td>
+</tr>
+<tr>
+<td>09_测试命名与参考.md</td>
+<td>保留 R44 全部测试审查，补数字 ID 定向验证</td>
+</tr>
+<tr>
+<td>10_架构收敛与实施边界.md</td>
+<td>历史交互要求、KISS 边界、无需重写的部分</td>
+</tr>
+<tr>
+<td>11_迁移与兼容方案.md</td>
+<td>旧声明/工程/代码/动态端口的一次性迁移</td>
+</tr>
+<tr>
+<td>12_整合追踪与验证.md</td>
+<td>R44 工单去向、最新修改覆盖与本包验证结果</td>
+</tr>
+<tr>
+<td>完整方案.html</td>
+<td>离线合并阅读入口</td>
+</tr>
+<tr>
+<td>自定义工具_数字编号原型.html</td>
+<td>可交互设计稿：编号、排序、新增删除、JSON 预览</td>
+</tr>
+<tr>
+<td>examples / reference / evidence</td>
+<td>新协议示例、轻量参考模型、验证与历史日志</td>
+</tr>
+</tbody></table>
+<p>默认看本包新正文；历史证据明确标日期。本包不再附一套未更新的 R44 活动方案让实施者自行选择。</p>
+</section>
+<section id="c1"><div class="eyebrow">R45 · 01</div><h1>基线验收记录：2026-11-02</h1>
+<p>本章完整承接 R44 的代码验收结论与测试证据。<strong>R45 是 2026-11-03 的方案整合；本轮未重新获取远端代码或重跑三仓产品测试。</strong> 以下“本次/当前”均指 R44 的固定提交，不能作为 ABI9 或数字参数接口已实现的证据。新协议目标见第 04、06、11 章；R44 的 ABI8 观察仍是历史事实。</p>
+<h1>当前代码验收报告</h1>
+<p><strong>建议：接受已完成修复的源码整改，暂缓“完整发布通过”。</strong> 本次没有发现足以重复判定旧 F43-01/02 仍未修的证据；有明确的新测试入口错误和尚未结束的测试收尾。自定义工具编辑器属于下一阶段新增能力，不能算当前缺陷修复已经完成。</p>
+<table>
+<thead>
+<tr>
+<th>仓库</th>
+<th>分支</th>
+<th>本次固定提交</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>VisionRT</td>
+<td>dev</td>
+<td><a href="https://github.com/QWERDF007/VisionRT/commit/b0de29cedc4b18cb0e3fffa01548631e7da6961b">b0de29cedc4b18cb0e3fffa01548631e7da6961b</a></td>
+</tr>
+<tr>
+<td>VisionTools</td>
+<td>dev</td>
+<td><a href="https://github.com/QWERDF007/VisionTools/commit/e69a2ed23c15005b634591131fd0f9a11d40967a">e69a2ed23c15005b634591131fd0f9a11d40967a</a></td>
+</tr>
+<tr>
+<td>VisionRTContracts</td>
+<td>main</td>
+<td><a href="https://github.com/QWERDF007/VisionRTContracts/commit/f9b669a77d6658006ef4ee908a1ed82292a03807">f9b669a77d6658006ef4ee908a1ed82292a03807</a></td>
+</tr>
+</tbody></table>
+<h2>独立验证</h2>
+<table>
+<thead>
+<tr>
+<th>验证</th>
+<th>结果</th>
+<th>证明边界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>VisionTools test_python_tools.py</td>
+<td>18/18，0.052 s</td>
+<td>现有 Python 工具与 SDK 场景</td>
+</tr>
+<tr>
+<td>VisionTools test_logic_engine.py</td>
+<td>24/24，0.117 s</td>
+<td>含 ndarray/list 一致性及预算场景</td>
+</tr>
+<tr>
+<td>VisionTools test_package_profile.py</td>
+<td>15/15，0.002 s</td>
+<td>profile 选择逻辑；不是 GPU DLL 实际部署</td>
+</tr>
+<tr>
+<td>当前 Contracts Array 头文件探针</td>
+<td>编译、运行退出 0</td>
+<td>合法元素约束、完整 Array 持有依赖及可写性；不是插件卸载集成</td>
+</tr>
+<tr>
+<td>RT 独立构建元数据测试入口</td>
+<td>失败：NameError，Ran 0 tests</td>
+<td>无 CMAKE_COMMAND 环境时触发 shutil 未导入；不是六项业务断言失败</td>
+</tr>
+<tr>
+<td>SDK 输出转换探针</td>
+<td>boolean(&quot;false&quot;) → True；real(&quot;2.5&quot;) → 2.5</td>
+<td>说明隐式转换行为，未声称当前正式工具产生了业务事故</td>
+</tr>
+<tr>
+<td>HTML 原型</td>
+<td>JavaScript 语法检查通过</td>
+<td>本环境无 Chromium；未完成浏览器视觉/交互自动验证</td>
+</tr>
+</tbody></table>
+<p>57 项是本次三个 Python 测试文件合计。耗时为本容器 unittest 报告值，不与 Windows 历史结果比较。探针和原型不计入产品 CTest 通过率。未执行 Windows 全构建、Qt/QML 工作台、真实插件卸载、安装包与 RTX GPU 验收；没有把旧 91/91 或部署哈希当作当前提交证据。</p>
+<h2>R43 逐项复验</h2>
+<table>
+<thead>
+<tr>
+<th>原问题</th>
+<th>主题</th>
+<th>本次结论</th>
+<th>依据/限制</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>F43-01</td>
+<td>Dense ndarray → 表达式/分支</td>
+<td>源码已修；24 项逻辑用例通过</td>
+<td>engine._check_numpy 先检查预算再转换；完整 RuntimeEngine 链路本次未跑</td>
+</tr>
+<tr>
+<td>F43-02</td>
+<td>NumPy 丢失 Array 模块保活</td>
+<td>源码已修；头文件探针通过</td>
+<td>capsule 持完整 Array；新增 python_array_lifetime_contract，真实插件用例待 Windows 执行</td>
+</tr>
+<tr>
+<td>F43-03</td>
+<td>elements 接受错误模板类型</td>
+<td>Contracts main 已修</td>
+<td>requires 约束；bool/嵌套容器/指针拒绝；Tools gitlink 尚未跟进</td>
+</tr>
+<tr>
+<td>F43-04</td>
+<td>工作台总入口重复执行</td>
+<td>源码通过</td>
+<td>CTest 只保留 focused 场景，REQUIRES 校验真实 target</td>
+</tr>
+<tr>
+<td>F43-05</td>
+<td>长名称/DPI 截图矩阵</td>
+<td>源码通过</td>
+<td>不再检出长名称造景；视觉项受默认关闭开关控制，非本次视觉实测</td>
+</tr>
+<tr>
+<td>F43-06</td>
+<td>测试分组/默认构建</td>
+<td>主要完成</td>
+<td>模型和 perf 显式分组；Tools EXCLUDE_FROM_ALL、visiontools_tests；仍需保持按变更运行</td>
+</tr>
+<tr>
+<td>F43-07</td>
+<td>固定等待与大图制造时序</td>
+<td>未完成</td>
+<td>通知两次 qWait(5000)；display_reader_drain_test 仍 4×1800² 图与 beats&gt;=3</td>
+</tr>
+<tr>
+<td>F43-08</td>
+<td>日志双消费者</td>
+<td>源码已修</td>
+<td>观测方式分离；本次未执行完整 Qt sink 用例</td>
+</tr>
+<tr>
+<td>F43-09</td>
+<td>测试异常汇总竞争</td>
+<td>源码已修</td>
+<td>首个 exception_ptr 写入受 mutex 保护</td>
+</tr>
+<tr>
+<td>F43-10</td>
+<td>废弃诊断复制接口</td>
+<td>源码通过</td>
+<td>旧 copyDiagnostics 入口清理；输出文本仍服务复制功能</td>
+</tr>
+<tr>
+<td>F43-11</td>
+<td>当前文档过期</td>
+<td>未完成</td>
+<td>docs/README 仍称当前 ABI7、链接已删除 log_contract/ToolFactory</td>
+</tr>
+<tr>
+<td>F43-12</td>
+<td>测试泛名</td>
+<td>部分完成</td>
+<td>已有 result_readback_barrier_test 等清晰名称；几个巨型聚合文件仍宜渐进拆分</td>
+</tr>
+<tr>
+<td>F43-13</td>
+<td>安装夹具前缀排除</td>
+<td>仍可改进，P3</td>
+<td>WorkbenchFixtures 仍按 nvinfer 前缀过滤；未实测复制成本，不能断言浪费 GB</td>
+</tr>
+<tr>
+<td>F43-14</td>
+<td>数组观察类型约定</td>
+<td>作者 SDK 说明已跟进，早期约定存在差异</td>
+<td>Dense 数值 ndarray；ragged/string list；本方案明确建议沿用当前 ABI8，非宣称早期纯 list 要求已满足</td>
+</tr>
+<tr>
+<td>F43-15</td>
+<td>性能用例仍拒绝 ndarray</td>
+<td>源码通过</td>
+<td>旧拒绝预期已调整</td>
+</tr>
+<tr>
+<td>F43-16</td>
+<td>分发旧信封/隐藏宿主缺测</td>
+<td>部分完成</td>
+<td>信封已修；宿主执行独立 unittest 方法，但还在同一 CTest 条目中，可隐藏 method skip</td>
+</tr>
+<tr>
+<td>F43-17</td>
+<td>恒真断言与结果缺失假通过</td>
+<td>主要修复</td>
+<td>结果缺失检查和检索断言加强；布尔 busy 指标仍不能叫数值队列高水位</td>
+</tr>
+<tr>
+<td>F43-18</td>
+<td>性能场景名称/计时含义</td>
+<td>部分完成</td>
+<td>RepeatedOnce 与 round_minus_slowest 已明确；lastEventSerial 未与对应帧绑定</td>
+</tr>
+<tr>
+<td>F43-19</td>
+<td>读图缓存功能与性能混合</td>
+<td>源码通过</td>
+<td>小图功能与 --perf 独立 CTest；本次未跑原生缓存用例</td>
+</tr>
+<tr>
+<td>F43-20</td>
+<td>打包测试隐藏真实构建</td>
+<td>拆分成立但有新缺陷</td>
+<td>独立 test_build_metadata_integration.py；缺 import shutil 导致独立入口 NameError</td>
+</tr>
+<tr>
+<td>F43-21</td>
+<td>SDK 释放/状态/Owner 弱测试</td>
+<td>源码通过</td>
+<td>OwnedInstance RAII、两实例隔离及原 Owner 释放后延寿检查</td>
+</tr>
+<tr>
+<td>F43-22</td>
+<td>GPU trace 跳过含糊</td>
+<td>源码通过</td>
+<td>geometry/uninitialized/initialized 分项，GPU 用 SKIP_RETURN_CODE 77；无 GPU 实跑</td>
+</tr>
+</tbody></table>
+<h2>三仓依赖基线</h2>
+<p>VisionRT 的 Contracts gitlink 已为 <code>f9b669a77d6658006ef4ee908a1ed82292a03807</code>；VisionTools 仍为 <code>16549888eda0f3585905ef6cf380db4504101ac9</code>。两者 ABI 主版本均为 8，因此不能据此断言 ABI 不兼容或一定崩溃。但 VisionTools 构建尚未消费本次 main 的模板约束改进，不能写“三仓已使用同一最新基线”。下一候选固定同一 SHA，并在 build_info 中记录；保留 git submodule，不在构建时自动追 main。</p>
+<h2>通过下一关口所需证据</h2>
+<p>修复确定入口错误、统一 gitlink、收口读回测试时序；按改变范围运行测试。自定义工具功能完成后，用一次真实安装态流程验证：创建 Python 函数和类、全部类型声明通过生产解析器、排序后绑定保持、保存重启仍在、外部 owner 未归还时不提前卸载、故障保存不破坏旧文件。发布候选才做一次 CPU 全回归；GPU 依所选 profile 实跑并独立列出跳过项。</p>
+</section>
+<section id="c2"><div class="eyebrow">R45 · 02</div><h1>R44 遗留问题与 R45 实施差距</h1>
+<p>下列 F44 问题继承 2026-11-02 的审查，不声称 11 月 3 日仍未被远端修复；实施前按实际分支复核。旧问题的具体证据与新编号功能的需求差距分别列出。</p>
+<h1>当前问题、风险和新功能缺口</h1>
+<p>P2 表示本轮应处理的正确性/可信度或交付问题；P3 表示可渐进优化。源码观察、实测缺陷与设计建议分别标注。</p>
+<h2>F44-01 · P2 · 确定缺陷 · 独立构建测试缺 import shutil</h2>
+<p>证据：无 CMAKE_COMMAND 时 setUpClass 直接 NameError，0 个测试进入；CTest 注入变量可能掩盖该错误。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionRT/blob/b0de29cedc4b18cb0e3fffa01548631e7da6961b/tests/test_build_metadata_integration.py#L30">VisionRT/tests/test_build_metadata_integration.py:30</a>。</p>
+<p>处理：补 import shutil，删除未使用 find_cmake；保留外部工具链复用，验证注入环境/独立入口两条路径。</p>
+<h2>F44-02 · P2 · 基线不一致 · VisionTools Contracts 子模块落后</h2>
+<p>证据：git 树记录旧 16549888，而 RT/main 为 f9b669a；不是通过文本 .gitmodules 判断 SHA。</p>
+<p>直接证据是 <code>evidence/R44_20261102/remote.json</code> 的 gitlink 记录；分支配置参考：<a href="https://github.com/QWERDF007/VisionTools/blob/e69a2ed23c15005b634591131fd0f9a11d40967a/.gitmodules#L1">VisionTools/.gitmodules:1</a>。</p>
+<p>处理：单独更新 gitlink，明确 main 是维护分支、SHA 是构建依据；重编影响模板/API 的目标。</p>
+<h2>F44-03 · P2 · 测试可信度 · 读回时序仍依赖机器速度</h2>
+<p>证据：4 张 1800×1800 double 图、invalidate&lt;50ms、beats&gt;=3 混合功能与速度；快机器可更早完成。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionRT/blob/b0de29cedc4b18cb0e3fffa01548631e7da6961b/tests/display_reader_drain_test.cpp#L28">VisionRT/tests/display_reader_drain_test.cpp:28</a>。</p>
+<p>处理：窄 test-only 栅栏保持读者在途，再检查 GUI queued 任务可运行、取消不发布、完成一次；真实大图耗时另放 perf。</p>
+<h2>F44-04 · P2 · 测试成本 · 通知静默观察固定等待 10 秒</h2>
+<p>证据：observeQuiet 在 Idle/Loop 分别 qWait(5000)。这是静态可确认的等待下界，不是本次整套耗时实测。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionRT/blob/b0de29cedc4b18cb0e3fffa01548631e7da6961b/tests/ui_notifications_contract.cpp#L92">VisionRT/tests/ui_notifications_contract.cpp:92</a>。</p>
+<p>处理：常规保留事件推进与稳定通知断言；长静默窗口移 extended；不简单缩短 sleep 伪装提速。</p>
+<h2>F44-05 · P2 · 报告可信度 · 宿主集成的 skip 仍藏在 Python 方法中</h2>
+<p>证据：test_python_package_executes_in_real_host 缺环境可 skip；CMake 仍注册整文件 test_distribution。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionTools/blob/e69a2ed23c15005b634591131fd0f9a11d40967a/tests/test_distribution.py#L147">VisionTools/tests/test_distribution.py:147</a>。</p>
+<p>处理：分包内容与真实宿主执行为可定位 CTest；候选要求宿主时缺配置失败，普通环境显式 skip。</p>
+<h2>F44-06 · P3 · 性能指标 · 事件到对应帧的声明证据不足</h2>
+<p>证据：lastEventSerial 只写未消费；afterSynchronizing+frameSwapped 未证明对应更新已经进入该帧。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionRT/blob/b0de29cedc4b18cb0e3fffa01548631e7da6961b/tests/performance_contract.cpp#L1256">VisionRT/tests/performance_contract.cpp:1256</a>。</p>
+<p>处理：简单重命名为事件后下一次提交的观测延迟；确需对应帧则加入真实呈现标识；不为指标另造调度框架。</p>
+<h2>F44-07 · P2 · 设计收敛建议 · Python OutputWriter 隐式转换掩盖作者类型错误</h2>
+<p>证据：实测 boolean(&quot;false&quot;) 返回 True，real(&quot;2.5&quot;) 接受字符串；text 当前原样保留，不能误报 str 强转仍存在。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionTools/blob/e69a2ed23c15005b634591131fd0f9a11d40967a/python/author_sdk/visiontools_sdk/__init__.py#L194">VisionTools/python/author_sdk/visiontools_sdk/<strong>init</strong>.py:194</a>。</p>
+<p>处理：优先各 writer 原样收集，复用现有宿主严格校验；确需转换由工具显式 bool/float。兼容 NumPy 标量按现有桥接规则，不再多建验证体系。</p>
+<h2>F44-08 · P3 · 当前文档 · 公开说明/注释仍有旧语义</h2>
+<p>证据：仍称当前 ABI7，log_contract 死链；Tools docs 指向已删除 ToolFactory.h；SDK 注释“状态由宿主发布”与 result() 实现相反。</p>
+<p>来源：<a href="https://github.com/QWERDF007/VisionRT/blob/b0de29cedc4b18cb0e3fffa01548631e7da6961b/docs/README.md#L10">VisionRT/docs/README.md:10</a>。</p>
+<p>处理：改当前入口与作者注释；历史报告注明历史而不重写历史记录。</p>
+<h2>数字编号改造必须覆盖的缺口</h2>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>R44 基线实现</th>
+<th>R45 目标</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Contracts Values</td>
+<td>map&lt;string, PortValue&gt;</td>
+<td>map&lt;PortId, PortValue&gt;，不分配 max(id)+1 个槽位</td>
+</tr>
+<tr>
+<td>参数定义</td>
+<td>PortDefinition.nameEn 承担身份</td>
+<td>PortDefinition.id 承担身份；nameEn 可选说明</td>
+</tr>
+<tr>
+<td>参数读写辅助</td>
+<td>InputReader/OutputWriter 按字符串</td>
+<td>参数基类、ReadResult 和工具子类按数字 ID；业务仍在工具</td>
+</tr>
+<tr>
+<td>Python 边界</td>
+<td>py::dict 字符串端口键</td>
+<td>输入/输出 dict 整数端口键，信封 outputs/detail 不变</td>
+</tr>
+<tr>
+<td>工程引用</td>
+<td>sourcePort、签名和值以端口字符串标识</td>
+<td>PortId + 既有 flow/node/stage 上下文；持久化为带 port_id 的条目</td>
+</tr>
+<tr>
+<td>关系/智能点选</td>
+<td>PortRef 字符串及字符串 helper 键</td>
+<td>PortRef(stage,id)，输入与 proposal 映射全部数字化</td>
+</tr>
+<tr>
+<td>动态逻辑端口</td>
+<td>字符串 portId、独立 symbol、nextPortSeq</td>
+<td>数字 portId；保留 symbol 用于 AST，方向分别分配 ID</td>
+</tr>
+<tr>
+<td>UI 模型</td>
+<td>行号/字符串上下文</td>
+<td>参数编号列与稳定选中 ID；排序只移动定义，按 ID 提交</td>
+</tr>
+<tr>
+<td>迁移/部署</td>
+<td>ABI8/schema5/project6</td>
+<td>提议 ABI9/schema6/project7，一次性转换旧资产并统一发布</td>
+</tr>
+</tbody></table>
+<p>这些差距说明不能只在 JSON 中加 id 后继续隐藏按 name_en 运行。保留 R44 已修的动态 PythonFactoryResolver 与完整 Array owner，避免迁移时回退。两产品依然通过子模块引用 Contracts/main。</p>
+</section>
+<section id="c3"><div class="eyebrow">R45 · 03</div><h1>自定义工具界面与行为</h1>
+<h2>入口与整体布局</h2>
+<p>“工具 → 自定义工具…”打开工作台内可调整大小的 Dialog，复用现有窗口、Theme、标准参数行和图标资源。左侧为工具列表，支持搜索、新建、复制、删除；中间为当前工具信息与“输入参数 / 输出参数 / 初始化参数 / 代码”页；右侧为选中参数的属性（用 stage + id 保持选中）；底部为当前工具的“撤销修改 / 应用 / 关闭”。只保留一个编辑器实例。未应用修改仅存在草稿中，运行仍使用已发布定义。</p>
+<p>工具列表展示名称和实现类别；Python 类与函数明确区分。有状态读图等继续使用类，纯处理优先函数。新建 Python 工具要求名称、稳定工具标识、实现类别；应用前可修改新标识，第一次提交后锁定。工具名称、分类可改。原型采用项目当前浅色主题，而非另建视觉语言。原型代码页为草稿演示；生产首期显示入口文件并提供“打开代码文件”，代码在外部编辑器保存后由同一刷新入口加载，不把算法编辑器扩成 IDE。</p>
+<p>“导入工具包…”复用当前包验证和依赖安装流程，支持已注册 C++ 函数/类以及 Python 工具；不是让用户在声明编辑器编译 C++。已安装内建/Host/Assist 工具可查看，定义不可直接覆盖。用户自有 Python 工具可编辑，复制时同时复制其代码与声明列出的资源、配置新 ID/目录；只改 ID 的空壳复制不能算成功。C++ 工具的函数/类由注册工厂决定，JSON 继续 <code>kind: cpp</code>；界面不提供伪造新工厂的复制入口。</p>
+<h2>参数列表</h2>
+<p>列表列为拖动柄、参数编号、名称、类型；不再放重复的“显示序号/英文标识”两列。输入第一行为“上层工具状态”；输出前两行为“状态码”“状态信息”。固定行显示锁定标记，可选中查看，删除、拖动、改名、改类型、改默认值按钮禁用；后端同样拒绝绕过 QML 的修改。固定行不进入 JSON。初始化页没有这些固定行。</p>
+<p>业务行通过“添加参数”创建并自动分配新编号；名称、类型、默认值可编辑，编号只显示不可手工改写。可选英文别名放在属性区，不是必填项。上移、下移和拖动移动的是整个 PortDefinition，关联、约束和默认值一起移动。不能移动到固定前缀内，也不能跨输入/输出/初始化页拖动。编号按方向固定：inputs 0、outputs 0/1 为系统保留；业务输入从 1、业务输出从 2、init 从 0 分配。界面显示实际 id，不用 rowIndex+1 冒充编号。按参数页过滤时，仍以同一声明数组的相对顺序为准；变更页面用 <code>ui.tab</code>，不引入第二个排序表。</p>
+<p>同一方向内 id 唯一，init/inputs/outputs 各有独立编号空间，允许不同方向同号。显示名和可选 name_en 改名不影响任何绑定；名称不是身份，不再按名称拒绝两个独立端口。编号提交后不可改，不复用已提交删除编号；需要新的参数就分配新 id。复制整个工具保留参数 id 和各 next_port_id，另分配工具顶层 name_en，因此复制后的代码仍可直接使用原编号。拖动只移动整条定义，不改编号、默认值、关系或取参代码。</p>
+<h2>参数属性</h2>
+<p>基本属性：名称、参数编号（只显示）、类型；输入/初始化显示默认值。类型是整数、浮点数、布尔、字符串、图像、ROI、数组；数组进一步选择元素类型与一至四维。名称显示中文；新建工具顶层 name_en 仍按现有标识规则校验，端口 id 按无符号整数及保留号规则校验。</p>
+<p>“更多属性”仅按现有声明能力展开：标量数值 min/max/step/decimals、合法 options、参数页/group、文本/文件/目录/path 编辑器、ROI/数组编辑器、图像关联、alignment、same_geometry_as、颜色次序。候选项来自后端和当前草稿的真实端口，禁止手填悬空引用。输出页只暴露现有输出允许的类型/关系/显示属性，不出现输出默认值、数值范围或输入编辑器。<code>type_from</code> 是 Host 工具特性，不是自定义 Python 类型选项。</p>
+<p>Int64 和数组/ROI 原始值作为 QString 文本提交给 C++ ValueJson 解析；不要经过 QML Number 再 stringify。图像没有像素默认值编辑框；运行时图像照旧由上层输入、手工入口或工具生成。ROI 编辑器沿用已有定义，不再独立发明 ROI 编码。</p>
+<p>类型修改时先在草稿计算默认值、关系和范围是否仍合法。能保留就保留，不能保留时在当前属性区清晰列出将清除的具体字段，确认后变更，不在每个参数框里写“不可用/null/始终执行”之类占位说明。输入框字体、字号、颜色、行高统一绑定 Theme；设计器的必要保存错误放底部或错误对话框，普通运行参数框不额外变红。</p>
+<h2>固定参数与运行值的边界</h2>
+<p>“不可修改”只指工具定义。节点运行时输入 <code>0</code>（上层工具状态）仍为普通 Int 输入，默认 0，用户可以手输或切换上层输入；切到上层模式按钮即高亮，和是否已绑定无关。宿主规范类型/范围，传给工具；不能因其非零提前跳过普通工具。工具自行决定继续、降级或返回失败。</p>
+<p>输出状态同样包含在 outputs 参数集合中，由 C++ toolResult/OutputParametersBase 或 Python result/pack 填入。宿主验证结果契约，不能替工具覆盖成功码或错误文字。编辑器锁定的元数据不意味着载荷只读，不新增 writable/readonly 属性。</p>
+<p>首期创建工具固定为 <code>node_model: fixed</code>（可省略默认）；既有 expression/condition/select 保留各自节点配置编辑器。不会把所有工具升级成带执行条件的动态节点模型。</p>
+<h2>应用、删除与工程影响</h2>
+<p>应用只提交当前工具。取消/关闭可丢弃当前草稿；多个工具草稿不偷偷合并成跨文件事务。仅调整顺序/中文名时，现有工程绑定、值及代码取参 id 不变，不重建 Python 入口代码。改变类型、删端口、收窄范围时，用现有项目对账规则在副本上产生精确影响：哪些绑定将清除、哪些字面值将规范、哪些节点成为不可解析；有实际影响才集中确认一次。</p>
+<p>删除工具显示当前工程的引用节点和数量，确认后删除自有声明，保留引用节点为“工具缺失”以便用户修复；不连带删工程节点。未打开的工程不全盘扫描，不承诺自动迁移。工程改动标 dirty，不静默覆盖工程文件。删除最后一个用户工具合法，列表为空仍可新建。</p>
+<p>运行期间允许编辑草稿；应用/删除/安装/切换目录等待既有运行与管理操作空闲。不能在 Loop 每轮重载，不因编辑器打开而停用正常图像显示。应用触发的实例释放、读者排空、Assist 结束、Python refresh 复用现有管理链，GUI 不持锁同步等待。</p>
+<h2>首期能力与后续范围</h2>
+<p>本轮交付：Python 函数/类新建编辑删除复制、所有具体类型、参数排序、固定行、schema 6 保存、持久目录、项目影响预览、安全刷新、现有 C++ 包导入可达。后续有实际需求再做 C++ 工程向导、内嵌代码编辑和多工具批处理。编辑已编译 C++ 的端口契约需要作者同步代码并重新打包，不把这一限制隐藏成 UI 自动完成。</p>
+<h2>原型行为范围</h2>
+<p>新版原型直接显示编号 0、1、2 等；可观察删除编号后新增不会填回旧号，拖动后编号保留；JSON 预览写出 id 和 next_port_id，省略固定端口。代码示例使用数字访问。它不是安装态产品，也不执行 Python/C++ 算法；原生包导入、高级关系编辑、文件系统失败恢复和 Qt 类型合法性仍按 Specs 实现，不由浏览器演示冒充验收。</p>
+</section>
+<section id="c4"><div class="eyebrow">R45 · 04</div><h1>JSON、PortId 与全部参数类型</h1>
+<p>这是目标协议规范，基线 schema5 不接受这些新增字段；实施后使用 schema6。没有把设计示例假称当前版本可直接加载。</p>
+<h2>一、参数身份与显示顺序</h2>
+<p><code>PortId</code> 为 uint32，取值 0～4294967295。身份由“工具/节点 + 参数方向 + id”共同确定；同一方向不能重复。参数数组位置只控制显示，排序不得改 id。Python inputs[1] 按字典键 1 读取，不是读数组第二项。C++ 按数字 ID 查询，同样不按 UI 行号。</p>
+<p>新建工具示例：</p>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: 6,
+  &quot;name_en&quot;: &quot;custom.image.threshold&quot;,
+  &quot;name_zh&quot;: &quot;图像阈值处理&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;implementation&quot;: {
+    &quot;kind&quot;: &quot;python_function&quot;,
+    &quot;package&quot;: &quot;custom/image/threshold&quot;,
+    &quot;file&quot;: &quot;tool.py&quot;,
+    &quot;symbol&quot;: &quot;execute&quot;
+  },
+  &quot;ui&quot;: {&quot;category&quot;: [&quot;自定义&quot;, &quot;图像处理&quot;]},
+  &quot;next_port_id&quot;: {&quot;init&quot;: 0, &quot;inputs&quot;: 4, &quot;outputs&quot;: 3},
+  &quot;ports&quot;: {
+    &quot;inputs&quot;: [
+      {&quot;id&quot;: 1, &quot;name_zh&quot;: &quot;阈值&quot;, &quot;type&quot;: &quot;int&quot;, &quot;default&quot;: 128,
+       &quot;constraints&quot;: {&quot;min&quot;: 0, &quot;max&quot;: 255}},
+      {&quot;id&quot;: 2, &quot;name_zh&quot;: &quot;输入图像&quot;, &quot;type&quot;: &quot;image&quot;},
+      {&quot;id&quot;: 3, &quot;name_zh&quot;: &quot;检测区域&quot;, &quot;type&quot;: &quot;roi&quot;, &quot;default&quot;: [],
+       &quot;relations&quot;: {&quot;image&quot;: {&quot;stage&quot;: &quot;inputs&quot;, &quot;id&quot;: 2}}}
+    ],
+    &quot;outputs&quot;: [{&quot;id&quot;: 2, &quot;name_zh&quot;: &quot;输出图像&quot;, &quot;type&quot;: &quot;image&quot;}]
+  }
+}
+</code></pre>
+<p>这里 inputs[1] 永远是阈值，inputs[2] 是图像。把图像行移到阈值前，JSON 数组改为 id=2、1、3，工具与工程仍按原 id 访问。不添加 order、UUID 或名称到编号的运行期回退表。</p>
+<h2>二、固定编号与分配</h2>
+<table>
+<thead>
+<tr>
+<th>方向</th>
+<th>系统编号</th>
+<th align="right">业务起点</th>
+<th>分配规则</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>init</td>
+<td>无</td>
+<td align="right">0</td>
+<td>独立空间；函数工具不声明 init</td>
+</tr>
+<tr>
+<td>inputs</td>
+<td>0：上层工具状态，仅 Fixed 注入</td>
+<td align="right">1</td>
+<td>所有模型保留 0；逻辑工具不因升级多出上层状态</td>
+</tr>
+<tr>
+<td>outputs</td>
+<td>0：状态码；1：状态信息</td>
+<td align="right">2</td>
+<td>所有工具通过普通 outputs 返回这两项</td>
+</tr>
+</tbody></table>
+<p>公共字段不在 JSON 中声明。固定行的中文名、类型、编号、位置不可在编辑器修改；其运行值由工具正常处理。“上层工具状态”默认 0，宿主按契约传入，非零不触发普通工具的框架跳过。</p>
+<p>每方向一个 <code>next_port_id</code> 高水位，值是下一次分配编号，不是当前参数数量。必填三个方向值；空函数工具通常为 init=0、inputs=1、outputs=2。它必须大于该方向所有业务 id，且不小于业务起点。允许保留空洞，删除不回退计数；复制整工具保留计数。4294967296 是耗尽哨兵，只能出现在 next_port_id，不能成为 port id；用 uint64 存计数，分配时先检查再加一。无需同时保存 retiredIds/tombstone 列表。</p>
+<p>为了避免把新参数接到旧工程引用，新加参数使用高水位，已经发布的 id 不重新分配给另一个含义。关闭未提交草稿可以整体撤销草稿编号分配；提交后不能回收。外部编辑声明也必须遵守此作者契约，宿主仅凭删除后的 JSON 无法证明某个历史编号从未被复用；不为此建立历史数据库或哈希链。</p>
+<p>id 是整数，拒绝字符串 &quot;1&quot;、布尔、负数、超范围或非整数。Python 键用 <code>type(key) is int</code> 检查，不能把 True 当 1。SDK应在写入dict之前拒绝bool键；宿主对作者直接返回的裸dict只能检查现存键，无法恢复Python构造字典时已经合并覆盖的历史键。名字可改，编号不可通过普通属性编辑器改写。</p>
+<h2>三、名称与参数定义</h2>
+<p>PortDefinition 仍是宿主的一条参数元数据：新增 id，保留 nameZh/type/default/constraints/ui/relations。端口 name_en 可省略，填写时只用于作者阅读和迁移说明；不参与身份、绑定、取值或别名兜底，也不要求依赖它保持唯一。</p>
+<p>工具顶层 name_en 仍是全局唯一工具 ID，与 native 工厂、module_index、Python 装配关联，继续必填，不能因为端口编号化就删掉。代码中的枚举/常量由工具作者手写，不启用构建时代码生成器。</p>
+<h2>四、关系与交互映射</h2>
+<p>所有端口关系统一结构为 <code>{&quot;stage&quot;:&quot;inputs|outputs|init&quot;,&quot;id&quot;:整数}</code>，使用现有 PortRef 概念，禁止一部分仍写 inputs.images 或另一部分写 inputs.2。包含 image、alignment、same_geometry_as、path_mode，以及 Host 的 type_from.flow/node/port。类型合法性规则继续使用现有验证器；只替换引用的身份部分。</p>
+<p>智能点选（目标格式片段）：</p>
+<pre><code class="language-json">&quot;interaction&quot;: {
+  &quot;helper&quot;: &quot;visiontools.assist.circle&quot;,
+  &quot;inputs&quot;: [
+    {&quot;helper_port_id&quot;: 1, &quot;source&quot;: {&quot;stage&quot;: &quot;inputs&quot;, &quot;id&quot;: 2}}
+  ],
+  &quot;proposals&quot;: [
+    {&quot;helper_port_id&quot;: 2, &quot;target&quot;: {&quot;stage&quot;: &quot;inputs&quot;, &quot;id&quot;: 3}}
+  ],
+  &quot;roi_kinds&quot;: [&quot;circle&quot;]
+}
+</code></pre>
+<p>以上 helper 名称和编号仅为结构示例，落地必须取实际 helper 声明映射；不是对当前端口号的事实断言。输入映射左侧查 helper.inputs，proposal 左侧查 helper.outputs；右侧查当前工具的 PortRef。不要把数字键塞进 JSON 对象后再靠字符串转数字恢复。helper 公共状态输入/输出同样按公共编号处理。</p>
+<p>动态表达式的 AST 变量继续使用 symbol，例如 <code>mean(values)</code>；symbol 不等于端口 id。表达式配置保存 port_id=数字，运行时按变量配置把 inputs[id] 放进符号环境。修改显示名、显示顺序不改 symbol；显式改 symbol 才涉及公式校验。不将公式全文替换成数字，也不恢复 name_en 作为取参键。</p>
+<h2>五、完整具体类型</h2>
+<table>
+<thead>
+<tr>
+<th>token</th>
+<th>显示</th>
+<th>C++</th>
+<th>Python</th>
+<th>声明默认</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>int</td>
+<td>整数</td>
+<td>std::int64_t</td>
+<td>int</td>
+<td>0</td>
+</tr>
+<tr>
+<td>float</td>
+<td>浮点数</td>
+<td>double</td>
+<td>float</td>
+<td>0.0</td>
+</tr>
+<tr>
+<td>bool</td>
+<td>布尔</td>
+<td>bool</td>
+<td>bool</td>
+<td>false</td>
+</tr>
+<tr>
+<td>string</td>
+<td>字符串</td>
+<td>std::string</td>
+<td>str</td>
+<td>&quot;&quot;</td>
+</tr>
+<tr>
+<td>image</td>
+<td>图像</td>
+<td>DataRef&lt;Image&gt;；Image 载荷 vector&lt;cv::Mat&gt;</td>
+<td>list[numpy.ndarray]</td>
+<td>不存像素默认值</td>
+</tr>
+<tr>
+<td>roi</td>
+<td>ROI</td>
+<td>DataRef&lt;ROI&gt;；载荷 vector&lt;vector&lt;vector&lt;double&gt;&gt;&gt;</td>
+<td>list[list[list[float]]]</td>
+<td>[]</td>
+</tr>
+</tbody></table>
+<p>数组元素 token 为 <code>uint8/int32/int/float32/float/bool/string</code>，在前面加 1～4 个 <code>vec_</code>。例如二维 float32 是 <code>vec_vec_float32</code>，四维字符串是 <code>vec_vec_vec_vec_string</code>。全量 34 项见 <code>类型矩阵.csv</code>；不是仅做界面选项，全部须经生产 TypeSpec/ValueJson 和真实工具边界验证。</p>
+<p>ABI8 当前 Array 是带存储/形状/Owner 的运行时载体，作者辅助允许嵌套 vector；不能在新文档中把所有运行值写成裸 vector。Python Dense 数值数组可能是 ndarray，ragged 和字符串是嵌套 list。图像始终是一个 Image 类型（C++ vector&lt;cv::Mat&gt; / Python list[ndarray]），不另起“图像批次”类型。ROI 使用既有三层 double/float 结构和类型码，含义与 Contracts/ROI 一致。</p>
+<p>**与早期约定的差异：**此前要求 Python 数组统一为嵌套 list，当前 ABI8 已采用 Dense 数值 ndarray / ragged 与字符串 list。本方案建议沿用当前 ABI8 并明确作者观察类型，不把它写成已字面满足早期纯 list 约定。确需纯 list 的算法可以在工具边界显式转换并承担分配成本；不要在所有宿主端口无条件复制。</p>
+<p>Missing/null 表示没有值，不是新的可选类型。标量没有 uint8/int32/float32 独立端口类型，它们只在数组元素选择中出现。路径是 string + ui.editor，不另加 Path 类型；矩形是 ROI 编辑器，不另加 Rect 数据类型。</p>
+<p>本轮 ABI9 只改变参数身份/接口键，不改变 ABI8 已有 Array 的载荷布局和作者观察类型。上述纯 list 与 Dense ndarray 的历史差异仍明确保留，不偷偷改变图像/ROI 的表达。</p>
+<h2>六、默认值与约束</h2>
+<p>输入和 init 默认值、标量 min/max、合法 options、ui.step/decimals/参数页、图像关系继续复用当前能力。输出不写 default/constraints/ui。图像不保存像素默认值；Missing 是值状态，不是新类型。Int64 和嵌套数组默认值通过 QString 原始 JSON 文本传给 ValueJson，禁止先转 QML double。PortId 自身 32 位可被 JavaScript Number 精确表示，这不能推出 Int64 载荷也可以如此处理。</p>
+<p>只做契约合法性/范围规范，不增加业务状态拦截；错误消息仍由工具决定。fixed 是 UI 定义角色，不是数据权限；不增加 readonly/writable/COW 标记。</p>
+<h2>七、工程与输出文本的 JSON</h2>
+<p>工程 format7 的输入绑定、初始化值、类型签名按带 <code>port_id</code> 的条目数组序列化。数组顺序不作为身份。图像/Array/ROI 值编码沿用 ValueJson Stored，不把实际像素直接塞进端口定义。</p>
+<pre><code class="language-json">{
+  &quot;format_version&quot;: 7,
+  &quot;node_fragment&quot;: {
+    &quot;tool_id&quot;: &quot;custom.image.threshold&quot;,
+    &quot;inputs&quot;: [
+      {&quot;port_id&quot;: 0, &quot;mode&quot;: &quot;literal&quot;, &quot;value&quot;: 0},
+      {&quot;port_id&quot;: 1, &quot;mode&quot;: &quot;literal&quot;, &quot;value&quot;: 128},
+      {&quot;port_id&quot;: 2, &quot;mode&quot;: &quot;upstream&quot;,
+       &quot;source&quot;: {&quot;flow_id&quot;: &quot;flow_1&quot;, &quot;node_id&quot;: 10, &quot;port_id&quot;: 2}}
+    ]
+  }
+}
+</code></pre>
+<p>这是字段结构片段，node_fragment 是说明容器，不是完整工程文件。执行条件 source、跨流程 Receiver/Select、输出类型来源、节点复制重映射和所有结果上下文也全部使用数值 port_id。复制节点只重映射 node/flow 身份，不能给同一工具的端口重新编号。</p>
+<p>Python 执行信封为 <code>{&quot;outputs&quot;: {0: code, 1: message, 2: image}, &quot;detail&quot;: &quot;&quot;}</code>，这是 Python 对象而不是 JSON 字符串。输出文本整体导出用 <code>{&quot;outputs&quot;:[{&quot;port_id&quot;:0,&quot;value&quot;:0},…],&quot;detail&quot;:&quot;&quot;}</code>；单个端口的“复制”仍只导出该参数值，按现有 ValueJson 规则，不能借此恢复诊断菜单。</p>
+</section>
+<section id="c5"><div class="eyebrow">R45 · 05</div><h1>实现架构与管理生命周期</h1>
+<h2>最小新增职责</h2>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>负责</th>
+<th>复用/限制</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ToolEditorController（QObject）</td>
+<td>当前草稿、脏状态、应用/删除请求、影响摘要</td>
+<td>调用现有 AppController 管理链，不持有第二个 RuntimeEngine</td>
+</tr>
+<tr>
+<td>ToolPortListModel（QAbstractListModel）</td>
+<td>业务行与固定前缀投影、选中标识、增删移动</td>
+<td>数据存 ToolDefinition 的 vector；fixed 为派生角色，portId 是真实编号；displayIndex 不作身份</td>
+</tr>
+<tr>
+<td>CustomToolStore（普通 C++ 类）</td>
+<td>用户根路径、JSON 原子写、新工具目录发布、删除/恢复</td>
+<td>复用 DefinitionJson、ToolPaths；不参与业务执行</td>
+</tr>
+<tr>
+<td>CustomToolDialog/PortProperties QML</td>
+<td>列表、属性、交互和主题绑定</td>
+<td>不解析 schema、不直接写磁盘、不维护另一套类型校验</td>
+</tr>
+<tr>
+<td>已有 ToolPackage/Registry/PythonRuntime/ProjectStorage</td>
+<td>合并发现、工厂解析、刷新、项目对账</td>
+<td>保留载荷类型与所有权语义；参数键升级为 PortId，无额外插件服务框架</td>
+</tr>
+</tbody></table>
+<p>类型目录由 C++ 根据 TypeSpec/已有 supportedTypes 能力生成给 QML；不要在三个新文件里手写三份 token 表。普通 helper 优先函数/组合，不让每种类型派生一个 UI 类；继承仅用于 QObject 模型和现有工具接口；模板仅用于已存在的类型映射。参数列表模型不是工具参数解析基类的替代品，工具继续使用 Contracts/SDK。</p>
+<pre><code class="language-mermaid">flowchart TD
+  A[自定义工具 Dialog] --&gt; B[草稿与参数列表模型]
+  B --&gt; C[现有声明解析与规范化]
+  C --&gt; D{当前工程有受影响数据}
+  D --&gt;|有| E[影响确认]
+  D --&gt;|无| F[管理操作入口]
+  E --&gt; F
+  F --&gt; G[排空读者与 Assist]
+  G --&gt; H[协调器释放旧实例]
+  H --&gt; I[提交文件与刷新工厂]
+  I --&gt; J[发布目录和工程对账]
+</code></pre>
+<h2>持久目录与扫描</h2>
+<p>默认用户根可取 QStandardPaths::AppLocalDataLocation/custom-tools，并允许选择明确的 D 盘目录，尊重已有部署环境配置，不硬编码 E:/Softwares 或 C:/Temp。布局为 <code>tools/</code> 声明、<code>python/</code> 代码和其资源；与 ToolRoots 两个根一一对应。安装包升级/force-clean 仅替换安装目录，不接触用户根。</p>
+<p>当前 readToolsPackage(root, customRoots) 是<strong>替换</strong>随包 custom 的语义。实现新增合并时应抽取其内部已有“扫描一对 ToolRoots”的小函数：先按现有流程验证安装包及 module_index，再扫描用户根，把结果合并至候选目录，统一检测工具 ID 重复。保持已有替换接口语义或同步改所有调用/测试，不能不加说明就把参数当追加根。</p>
+<p>同 ID 不做优先级覆盖，不引入目录优先级策略链。复制工具生成新工具 ID 与独立目录；若外部新增文件冲突，保留旧已发布目录，报告两个来源路径。用户根首期直接新建 Python；C++ 仍必须有发行模块索引与工厂，走已验证包导入，不扫描任意 DLL。</p>
+<p>来源权限由“是否用户根内的自有文件”决定；ToolOrigin::Custom 本身不足以表示可修改，因为随包 custom 示例也属于 Custom。可在编辑器推导 editableSource；不把访问权限塞进数据载荷或工具 JSON。</p>
+<h2>保存的事务边界</h2>
+<p>元数据修改只写一个声明文件，使用 QSaveFile(QString) 并禁用直接写回退；write 完整成功后 commit。写前保存原始字节与文件摘要，在应用时发现外部改动则要求重新载入/明确覆盖；一个轻量内容比较即可，不建立数据库版本系统。应用单个当前工具；失败时保留草稿。</p>
+<p>创建新工具：先在扫描根外准备代码/资源/声明；校验路径、声明和所需文件，再把代码目录发布到最终位置，最后以原子写发布 JSON。JSON 是发现入口，写出它之前扫描器不能看到半成品。失败清理本次新建目录，绝不能删已有用户目录。无声明的孤立代码目录不能被自动当工具加载。</p>
+<p>已有代码首期由外部编辑器保存，“刷新工具”通过既有 Python 重新加载链生效；参数移动/改名不重新生成或重写代码。新建 Python 模板仅创建一次，不能每次构建跑生成器。不要宣称 QSaveFile 能原子更新 JSON 与多个代码文件；本轮不实现跨文件事务平台。后续若支持内嵌编辑，代码保存与声明提交分开命名并保留备份。</p>
+<p>删除时先撤销/移走声明使其不可被发现，协调器释放实例后处理自有代码目录；若目录仍被其他自定义声明引用则保留。不强制释放其他消费者持有的图像/Array owner。逻辑删除与实际磁盘清理失败分别记录，不能删到一半却继续显示“删除成功”。无需实现全盘垃圾收集。</p>
+<h2>应用重载顺序</h2>
+<ol>
+<li>草稿经现有 parser/normalizer/validator；检查路径和工厂存在性属于合法性，不执行算法试跑。</li>
+<li>在工程副本上使用现有 reconcile 规则算差异，需确认时只确认具体破坏性变更。草稿打开版本与当前文件不一致时重新预览。</li>
+<li>通过既有管理入口禁止并发 Apply/Run/Reset/Close 重叠；有运行时等其结束，不在 GUI 同步 stop-and-wait。</li>
+<li>beginDrain 排空显示、文本和 Assist；协调器释放将替换实例。现有 Owner/模块保活继续生效，不另立只读或复制策略。</li>
+<li>提交单文件声明，扫描候选合并目录，调用既有 requestRefresh/refreshFinished 更新工厂。只有成功完成才替换可见目录、应用工程对账并清脏状态。</li>
+<li>普通写入/装配失败：恢复旧声明字节，重新加载旧目录；显示失败，草稿仍在。若旧目录恢复也失败，保持运行禁用并提供具体错误/重试，不能把半失败说成“旧实例仍正常”。</li>
+</ol>
+<p>该协议保证普通失败的可恢复性，不声称断电时多目录全事务。元数据单文件替换是原子的；新建 JSON-last 保证不发现未完成条目。管理状态尽量复用 ProjectOperations/已有 refresh 命令，避免另建平行状态机。</p>
+<h2>工程兼容与资源寿命</h2>
+<p>纯排序/显示名变更应无损。类型变更/删端口按 ProjectStorage 既有规则处理 current project，提示准确内容后生效，项目 dirty 不静默保存。项目中的缺失工具节点保留，便于用户恢复声明。旧结果与正在读取的 Image/ROI/Array 清理仍遵守现有读回 ACK 与跨语言 owner 生命周期；若外部持有 view，它延长资源寿命，不强制卸载底层模块。</p>
+<p>自定义工具保存不会重置底部“已运行”时钟；未实际运行则不写运行指标。双击单工具运行不累计底部流程时间等原有规则保持；工具代码返回错误文字不额外拼节点前缀。日志只记录一次保存/删除/重载结果和必要错误，不对每个拖动像素、每个列表行刷日志。</p>
+<h2>Contracts 与工具参数接口</h2>
+<p>目标 C++ 以 <code>using PortId = std::uint32_t; using Values = std::map&lt;PortId, PortValue&gt;;</code> 替换字符串 map。复用现有容器、参数基类和注册机制，不为按编号取值新建通用参数框架。保留稀疏编号，因此内存随实际端口数增长；不能用最大编号扩一个巨大 vector。元数据 vector 用于显示顺序，Values map 用于执行取值，这两个职责不同。</p>
+<p>C++ 推荐 InputReader::integer(id)/image(id)/array(id) 等返回已有 ReadResult，OutputWriter 接受 PortId；合法读写路径不拷贝像素。const Values 使用 find/at，避免 <code>operator[]</code> 插入空值；不为追求一模一样的 <code>[]</code> 语法再套一层容器。Python dict 使用 int 键，按 <code>inputs[1]</code> 和 <code>outputs[2]</code> 访问。数字写错仍可能错误，工具可用手写 enum/constexpr/IntEnum，测试以业务结果识别；数字编号消除英文拼写依赖，不宣称消除所有取参错误。</p>
+<p>ToolResult 保持 outputs/detail 信封，输出 0/1 由工具侧 toolResult()/pack()/result() 写入。InputParametersBase 解析固定输入 0，具体子类解析业务编号；OutputParametersBase 负责统一包装，不让宿主补状态。SDK writer 不把字符串强转 Bool/Float 掩盖作者错误。initialize/release 的 ToolStatus 字段 code/message/detail 不属于端口 map，生命周期返回结构不用改成数字键。</p>
+<p>PortIssue.field 当前还被路径错误等非端口上下文使用，不能全仓机械改成整数。可保持 field 作为显示上下文字符串，端口 helper 用编号生成文字；如确需机器可读端口位置，加 optional&lt;PortId&gt;，无端口的路径错误保持空。以实际使用选择最小变更，不建立泛化诊断树。</p>
+<h2>三仓的完整改动面</h2>
+<ul>
+<li>Contracts：Tool.h 的 Values/公共端口常量、Parameters.h 读写、Tool.cpp 包装、ABI major=9、公共作者说明。DataRef/Array 生命周期保留。</li>
+<li>VisionTools：全部 native 工具、Python SDK/工具、helper、模块 fixture 按 ID；函数/类注册继续同一路径。模板和示例只创建一次；支持固定输出全部存在，即使业务失败也是显式 Missing。</li>
+<li>VisionRT：ToolDefinition/PortRef/DefinitionJson、ToolRegistry、节点物化、输入规范和结果验证、PythonRuntime/Interop、Project/Storage/Editor、SourcePort/TypeMap、UI 参数与输出模型、所有上下文引用、跨流程与 Assist 映射同步改数字。</li>
+<li>打包：随包声明/示例工程/校验器/模块 ABI 一致；依赖 profile 与按需 DLL 规则保留。Contracts 作为 main 分支的子模块引入，两个产品对同一发布提交构建，不额外把 VisionTools 变成宿主源码依赖。</li>
+</ul>
+<p>纯重排和改名只影响显示；新字段 next_port_id 必须保存，发布重启仍单调。任何协议迁移都不能绕过现有读回/关闭生命周期。原子文件与刷新失败恢复仍按前文执行；本次不新增数据库、后台自动升级平台或长期双协议适配器。</p>
+<h3>初始化参数的方向边界</h3>
+<p>init0是合法业务参数，不是上层状态。只让普通Fixed工具的执行输入参数类使用会解析状态0的InputParametersBase；初始化参数类、没有该公共输入的逻辑参数类直接复用已有IInputParameters和InputReader实现parse，不把init0/逻辑输入误当状态。无需再增加通用策略层。Python Counter示例中initialize(params)[0]和execute(inputs)[0]含义不同且明确。</p>
+</section>
+<section id="c6"><div class="eyebrow">R45 · 06</div><h1>R45 完整 Specs</h1>
+<p>以下是目标实现规范，数字接口尚未在产品中落地。固定定义不可修改与数据可写是两件事。</p>
+<h2>S45-01 · 参数身份</h2>
+<p>要求：PortId uint32，唯一性在方向内；端口 name_en 可选且不参与取参；工具 name_en 仍唯一必填。</p>
+<p>验收：相同显示名/别名不会误接；跨阶段同 id 合法，同阶段重复/非法值拒绝；Python bool 键拒绝。</p>
+<h2>S45-02 · 公共端口</h2>
+<p>要求：输入 0（仅 Fixed 注入），输出 0/1；逻辑输入 0 保留；固定元数据不写 JSON，普通接口返回状态。</p>
+<p>验收：固定行置顶且前后端拒绝增删改排；非零上层状态仍进入普通工具；宿主不伪造或覆盖状态。</p>
+<h2>S45-03 · 排序与高水位</h2>
+<p>要求：数组只控制显示；每方向持久化 next_port_id，删除不回退，已发布 id 不复用。</p>
+<p>验收：重排后工具值/绑定/上下文不变；删除最大编号→保存重启→新建得到更大编号；高 id 不分配巨大数组。</p>
+<h2>S45-04 · 协议格式</h2>
+<p>要求：目标 schema6/ABI9/project7；TypeSpec/载荷结构保持当前语义。</p>
+<p>验收：旧号版本不承载新格式；两产品同 Contracts main 子模块提交构建；旧模块在 ABI 边界明确拒绝。</p>
+<h2>S45-05 · C++ 读写接口</h2>
+<p>要求：Values 改 PortId map；Reader/Writer/参数基类按 ID；函数/类继续统一工厂。</p>
+<p>验收：初始化与 execute 两集合按方向区分；合法读写无数据复制；读取失败返回已有 ReadResult，工具决定业务码。</p>
+<h2>S45-06 · Python 读写接口</h2>
+<p>要求：inputs/outputs 为 int 键 dict；outputs/detail 信封与生命周期 ToolStatus 保留。</p>
+<p>验收：返回状态位于 0/1；数字字符串键/True 键被拒；SDK 不把 &quot;false&quot; 转 True；缺失声明业务输出不被偷偷补齐。</p>
+<h2>S45-07 · 完整类型</h2>
+<p>要求：34 个具体 token 均可定义；ValueJson 精确解析 Int64/数组文本；输出不含输入专属属性。</p>
+<p>验收：所有 token 声明往返；Int64 边界、Dense/ragged/string、Image/ROI 代表性实际桥接；无 readonly/COW 属性。</p>
+<h2>S45-08 · 所有引用路径</h2>
+<p>要求：PortRef(stage,id) 贯穿关系、helper映射、工程 source、签名、读回与 UI 上下文。</p>
+<p>验收：跨流程、Receiver、Select、Assist预览/提交、节点复制、ROI关系在重排后全部保持指向；无名称 fallback。</p>
+<h2>S45-09 · 动态逻辑节点</h2>
+<p>要求：数值 port_id 与 AST symbol 分离；变量/输出分别单调分配；保留 nodeContract 与 PythonFactoryResolver。</p>
+<p>验收：公式按 symbol 运算、值按 ID 装配；复制重映射节点不改端口号；新增/删除/排序动态端口不会复用旧 ID。</p>
+<h2>S45-10 · 自定义工具 UI</h2>
+<p>要求：列表、当前草稿、编号列、属性区、全部类型、上下移动/拖动、单工具应用；统一 Theme。</p>
+<p>验收：新建复制删除最后一个工具可用；固定项可见不可编辑；改名排序不重写代码；参数框无额外占位说明。</p>
+<h2>S45-11 · 工具创建与作者边界</h2>
+<p>要求：Python 函数/类一次性模板；C++ 注册编译后导入；工具级 ID 与参数 ID 分离。</p>
+<p>验收：新模板返回全部业务输出 Missing 与未实现状态；函数无 init，类状态按节点隔离；原生无工厂不假装创建成功。</p>
+<h2>S45-12 · 目录与扫描</h2>
+<p>要求：持久用户根与安装根合并发现；保留随包 custom；重复工具 ID 不静默覆盖。</p>
+<p>验收：force-clean 不删用户工具；坏 JSON/冲突不清空已发布目录；只允许修改自有来源；路径保持选定根内。</p>
+<h2>S45-13 · 保存与删除</h2>
+<p>要求：QSaveFile 单文件；新建 JSON-last；保留 next_port_id；删除按实际资源归属。</p>
+<p>验收：写失败旧文件不变；孤立半成品不被发现；共享代码不误删；取消不改文件；不宣称多文件断电原子性。</p>
+<h2>S45-14 · 工程影响</h2>
+<p>要求：用同一 reconcile 规则预览当前工程副本；纯排序/名称变更无损。</p>
+<p>验收：删端口/变型/范围规范影响精确列出；确认后 dirty，取消零修改；工具删除保留缺失节点，不静默改其它工程。</p>
+<h2>S45-15 · 安全刷新</h2>
+<p>要求：复用 beginDrain/coordinator/refresh；Loop 运行期不热替换，closing 不接新应用。</p>
+<p>验收：显示/文本/Assist 在途时不提前释放；外部 owner 延寿成立；完成一次；失败恢复或明确暂停运行；GUI 无同步等锁。</p>
+<h2>S45-16 · 一次性迁移</h2>
+<p>要求：旧名称→ID 显式映射，复制转换声明/工程；代码人工或辅助改造审核；无长期双键运行。</p>
+<p>验收：原文件保留；所有 source、relations、动态逻辑和 helper被转换；缺工具/无法映射报告而非猜号；不按新数组位置重建绑定。</p>
+<h2>S45-17 · 已有行为与架构</h2>
+<p>要求：延续 R44 时钟、Loop、EasyTouch、右键简化、日志、主题、近期工程和按需依赖方案。</p>
+<p>验收：新功能不恢复废弃交互；no HALCON；无通用生成器/宏平台/双运行时；功能命名可读。</p>
+<h2>S45-18 · 验收与测试成本</h2>
+<p>要求：修复 R44 测试入口、时序、skip和指标，按 backend/bridge/ui/installed/perf/gpu 分组。</p>
+<p>验收：独立入口不 NameError；受控屏障代替大图必须慢；功能不固定等10秒；候选一次全 CPU，GPU按profile；历史日志与新验证分开。</p>
+</section>
+<section id="c7"><div class="eyebrow">R45 · 07</div><h1>R45 完整工单</h1>
+<p>工单是同一套迁移的工作分解，不要求一单一个仓库/一个 PR。优先小步可编译；提交发布时三仓统一切换，避免同时维护两套运行时键。R44 遗留修复已纳入 T45-15/16/18，不遗漏。</p>
+<h2>T45-01 · 定稿编号表与升级基线（基础）</h2>
+<ul>
+<li>Specs：S45-01/02/04</li>
+<li>位置：Contracts Tool.h/Module.h；两产品子模块与工具声明</li>
+<li>工作：发布 PortId/公共编号；整理现有工具及 Host/helper 编号映射；目标 ABI9/schema6/project7，main 子模块保持同一提交。</li>
+<li>依赖：无</li>
+<li>完成条件：数字号分配表可审；工具ID未误改；版本号未与其他用途冲突。</li>
+</ul>
+<h2>T45-02 · 参数容器与读写基类（Contracts）</h2>
+<ul>
+<li>Specs：S45-05</li>
+<li>位置：Tool.h/Tool.cpp/Parameters.h/Issue.h、公共测试</li>
+<li>工作：Values 键改 PortId，Reader/Writer/pack 接受数字，保留 ReadResult 与 toolResult；PortIssue 非端口上下文不机械改整数。</li>
+<li>依赖：T45-01</li>
+<li>完成条件：typed 参数子类可读写数字 ID；函数/类工厂 RAII 仍正常；可写与 owner 不变。</li>
+</ul>
+<h2>T45-03 · native 全工具与工厂夹具适配（工具）</h2>
+<ul>
+<li>Specs：S45-02/05/11</li>
+<li>位置：Tools src/preprocess/metrology/infer/common、tests、assets/tools</li>
+<li>工作：手写枚举/常量，全部 execute/initialize/输出映射按已定编号；正式工具与 assist 都迁移；无构建生成器。</li>
+<li>依赖：T45-02</li>
+<li>完成条件：各已发布工具的声明/代码编号一致；状态0/1、输入0策略由工具处理；算法数值回归不退化。</li>
+</ul>
+<h2>T45-04 · Python SDK 与所有工具适配（工具）</h2>
+<ul>
+<li>Specs：S45-06/11</li>
+<li>位置：Tools python/author_sdk、builtin/custom、package_payload、tests</li>
+<li>工作：int 键输入输出；统一 result/参数类；去 boolean/real 隐式字符串强转；函数类/模板/示例/helper全部同步。</li>
+<li>依赖：T45-01</li>
+<li>完成条件：合法工具不变；&quot;1&quot;、True 键和错误作者值识别；类状态隔离，输出键齐全。</li>
+</ul>
+<h2>T45-05 · schema6 与 PortRef 编解码（宿主核心）</h2>
+<ul>
+<li>Specs：S45-01/02/03/07/08</li>
+<li>位置：RT ToolDefinition.h/.cpp、DefinitionJson、ToolPaths、ValueJson</li>
+<li>工作：id/next_port_id、可选端口name_en、数字 PortRef/interaction；固定规范化与有序写回；仍使用原类型验证。</li>
+<li>依赖：T45-01</li>
+<li>完成条件：全部34类型读写；公共端口不落JSON；重复ID、错误阶段、悬空关系失败；排序不重编号。</li>
+</ul>
+<h2>T45-06 · 运行时与 Python 桥接数字化（宿主执行）</h2>
+<ul>
+<li>Specs：S45-05/06/07</li>
+<li>位置：RT NodeRuntime、ToolValueValidation、ToolRegistry、PythonRuntime/Interop</li>
+<li>工作：按数字map组装与校验；不把 int 转 str；outputs/detail严格解包；保留完整 Array capsule 与动态工厂解析。</li>
+<li>依赖：T45-02/04/05</li>
+<li>完成条件：C++→Python→C++ 数字取参/状态/所有权链可运行；无按名称兜底；非零上层状态仍传入。</li>
+</ul>
+<h2>T45-07 · format7 与工程绑定（工程）</h2>
+<ul>
+<li>Specs：S45-08/14</li>
+<li>位置：RT Project.h、ProjectStorage、ProjectEditor、SourcePort/TypeMap</li>
+<li>工作：所有端口引用改PortId；存储条目用port_id；值/签名/类型来源/复制重映射及单源validateBinding同步；预览对账。</li>
+<li>依赖：T45-05</li>
+<li>完成条件：旧引用只经明确迁移转换；新工程排序/改名后稳定；取消有损变更零写入。</li>
+</ul>
+<h2>T45-08 · 动态端口与跨流程控制（逻辑工具）</h2>
+<ul>
+<li>Specs：S45-08/09</li>
+<li>位置：RT nodeContract/ExpressionConfig、Receiver/Select/ExecutionGuard；Tools logic engine</li>
+<li>工作：port_id数字化，symbol保持；方向计数统一；固定宿主端口号清单；动态契约传入resolver，不退回静态声明。</li>
+<li>依赖：T45-06/07</li>
+<li>完成条件：表达式/条件/合流/Receiver真实管线；动态删除重建不复用ID，跨流程引用按ID解析。</li>
+</ul>
+<h2>T45-09 · 端口上下文、输出与智能点选（UI桥接）</h2>
+<ul>
+<li>Specs：S45-08/17</li>
+<li>位置：AppControllerBindings/Readback/Assist、Parameter/OutputPanel、模型</li>
+<li>工作：所有请求参数与信箱上下文用PortId；helper映射数字化；单值复制保持旧用户行为，整体JSON文本用条目。</li>
+<li>依赖：T45-06/07/08</li>
+<li>完成条件：上层输入高亮按模式；输出空候选不高亮；重排后preview/ROI提交/读回不串参；无废弃菜单。</li>
+</ul>
+<h2>T45-10 · 参数列表模型与统一类型目录（编辑器）</h2>
+<ul>
+<li>Specs：S45-03/07/10</li>
+<li>位置：ToolPortListModel（新增）、TypeSpec、Theme</li>
+<li>工作：编号角色、稳定选中stage+id、业务行移动、高水位分配；统一34类型；QString传递精确数值。</li>
+<li>依赖：T45-05</li>
+<li>完成条件：delete-max/save/reopen/add不复用；C++后端拒绝固定行修改；不以rowIndex识别参数。</li>
+</ul>
+<h2>T45-11 · 完整自定义工具 Dialog（编辑器）</h2>
+<ul>
+<li>Specs：S45-10/11/17</li>
+<li>位置：ToolEditorController、CustomToolDialog、ToolPortProperties（新增）、Main.qml</li>
+<li>工作：落实新建/复制/删除/属性/排序/当前草稿Apply；可选别名；统一主题；代码路径与一次性模板入口。</li>
+<li>依赖：T45-09/10</li>
+<li>完成条件：工具与参数增删可达；删除最后工具合法；只提交当前草稿；基础交互一次实测。</li>
+</ul>
+<h2>T45-12 · 自有工具目录与合并发现（存储）</h2>
+<ul>
+<li>Specs：S45-12/13</li>
+<li>位置：CustomToolStore（新增）、ToolPackage/Paths、设置</li>
+<li>工作：安装包与用户根共同发现；复用扫描函数，避免 customRoots 替换丢示例；QSaveFile、JSON-last、next持久化、资源归属。</li>
+<li>依赖：T45-05</li>
+<li>完成条件：升级不丢用户工具；冲突/越界/写失败可判别；未完成工具不被扫描；复制保留参数号。</li>
+</ul>
+<h2>T45-13 · 应用、删除、刷新失败恢复（生命周期）</h2>
+<ul>
+<li>Specs：S45-13/14/15</li>
+<li>位置：AppController、Readback/Assist、ProjectOperations、ToolEditorController</li>
+<li>工作：复用异步排空和协调器；有损对账确认；普通失败恢复旧声明；删除保留缺工具节点并正确处理共享代码。</li>
+<li>依赖：T45-11/12</li>
+<li>完成条件：Loop/close冲突、显示/文本/Assist在途、外部owner、失败恢复用受控事件证明；无GUI阻塞。</li>
+</ul>
+<h2>T45-14 · 转换旧声明和工程资产（迁移）</h2>
+<ul>
+<li>Specs：S45-16</li>
+<li>位置：一次性转换脚本、assets、examples、项目fixture、作者说明</li>
+<li>工作：按批准的旧键→ID表转换，动态节点按旧配置构造本地映射；输出新目录；不自动替换任意AST/Python源码文本。</li>
+<li>依赖：T45-03～09</li>
+<li>完成条件：原资产保留；缺映射明确中止该文件；关系/绑定/状态端口全部对上；真实工具代码已改造。</li>
+</ul>
+<h2>T45-15 · 测试入口和受控并发（整改）</h2>
+<ul>
+<li>Specs：S45-18</li>
+<li>位置：RT test_build_metadata_integration.py、display_reader_drain_test、ui_notifications_contract</li>
+<li>工作：补shutil；去未用import；小输入+worker gate证取消/ACK/完成；长静默放extended；保留所有真实行为断言。</li>
+<li>依赖：可与基础并行</li>
+<li>完成条件：独立入口进入测试；常规不固定等10秒，不要求大图足够慢或beats&gt;=3。</li>
+</ul>
+<h2>T45-16 · 测试可定位性与成本（整改）</h2>
+<ul>
+<li>Specs：S45-18</li>
+<li>位置：Tools test_distribution/CMake；RT performance_contract/WorkbenchFixtures</li>
+<li>工作：宿主集成独立条目；skip显式；性能指标改准确名称；按职责渐拆聚合测试，按profile夹具先测成本。</li>
+<li>依赖：T45-15</li>
+<li>完成条件：日志区分真正执行/跳过；不把busy布尔值报队列数量；不为统一后缀机械改所有文件。</li>
+</ul>
+<h2>T45-17 · 新协议安装态验收（集成）</h2>
+<ul>
+<li>Specs：S45-04/07/15/18</li>
+<li>位置：三仓 tests/build/packaging、安装态管线</li>
+<li>工作：按层增量验证后候选一次全CPU；新建函数/类→排序→运行→重启→删除；新旧模块边界；GPU按所选profile。</li>
+<li>依赖：T45-01～16</li>
+<li>完成条件：新候选三SHA、版本、依赖列表、通过/失败/跳过真实记录；无R44日志冒充新通过。</li>
+</ul>
+<h2>T45-18 · 文档、交互回归与追踪（收口）</h2>
+<ul>
+<li>Specs：S45-17/18</li>
+<li>位置：两仓README/docs、SDK注释、主题/交互测试</li>
+<li>工作：当前文档对齐新协议，清死链和“状态由宿主发布”误述；保持时钟/Loop/EasyTouch/菜单/日志等；更新工单状态。</li>
+<li>依赖：T45-17</li>
+<li>完成条件：全部要求可追溯，未完成项真实标注；不引入HALCON或额外框架，产品代码职责明确。</li>
+</ul>
+<h2>推荐实施顺序</h2>
+<p>先确定公共编号及现有工具映射，再合入 Contracts 与两侧 SDK；宿主声明、运行时、工程、动态逻辑与 UI 引用并行开发但一次集成。然后完成编辑器与存储重载，最后转换资产并安装态验收。每个提交只跑受影响测试组，协议集成候选再全量 CPU 验证。跨仓宏统一、无 Qt 重写等仍延期。</p>
+</section>
+<section id="c8"><div class="eyebrow">R45 · 08</div><h1>数字参数与编辑器关键伪代码</h1>
+<p>目标接口示意，非已经合入仓库的实现。异常/错误沿用现有契约边界和 ReadResult；业务返回 ToolStatus，不另建错误框架。</p>
+<h2>1. 公共类型与状态编号</h2>
+<pre><code class="language-cpp">using PortId = std::uint32_t;
+using Values = std::map&lt;PortId, PortValue&gt;;
+namespace InputPorts { inline constexpr PortId UpstreamStatus = 0; }
+namespace OutputPorts {
+    inline constexpr PortId StatusCode = 0;
+    inline constexpr PortId StatusMessage = 1;
+}
+struct PortRef { PortStage stage; PortId id; };
+struct PortDefinition {
+    PortId id;
+    std::string nameZh;
+    std::string nameEn; // 可空，仅描述；其余 type/default/ui/relations 字段沿用
+    TypeSpec type;
+};
+
+bool reserved(PortStage stage, PortId id) {
+    if (stage == PortStage::Inputs) return id == 0;
+    if (stage == PortStage::Outputs) return id &lt; 2;
+    return false; // init 的 0/1 都是普通业务参数
+}
+// reserved 与 injected 不同：逻辑模型 inputs 0 保留，但不注入上层状态。
+</code></pre>
+<h2>2. C++ 工具参数子类</h2>
+<pre><code class="language-cpp">namespace In { constexpr PortId Threshold = 1, Images = 2; }
+namespace Out { constexpr PortId Images = 2; }
+
+struct ThresholdInputs : InputParametersBase {
+    std::int64_t threshold;
+    DataRef&lt;Image&gt; images;
+    // 以下回调签名需与现有 Parameters.h 对齐，不新增第二套基类。
+    ToolStatus readFields(InputReader&amp; reader) override {
+        auto t = reader.integer(In::Threshold);
+        if (!t) return {kContractViolationStatus, &quot;阈值输入不合法&quot;, t.issue().describe()};
+        auto im = reader.image(In::Images);
+        if (!im) return {kContractViolationStatus, &quot;图像输入不合法&quot;, im.issue().describe()};
+        threshold = t.value(); images = im.value();
+        return {};
+    }
+};
+
+ToolResult execute(const Values&amp; values, const ToolServices&amp;) {
+    ThresholdInputs in;
+    auto parsed = in.parse(values); // Fixed 基类解析输入 0，子类解析业务编号
+    if (!parsed) return toolResult({{Out::Images, Missing{}}}, parsed);
+    if (in.upstreamStatus != 0) // 本工具的业务选择，宿主不提前阻断
+        return toolResult({{Out::Images, Missing{}}}, {in.upstreamStatus, &quot;上层工具未正常完成&quot;});
+    auto image = thresholdAlgorithm(in.images, in.threshold);
+    return toolResult({{Out::Images, std::move(image)}}, {0, &quot;&quot;});
+}
+// 工具工厂仍 registerFunction&lt;&amp;execute&gt;(registry, &quot;custom.image.threshold&quot;)。
+</code></pre>
+<p>readFields/parse 返回已有 ToolStatus；参数读取失败如何形成业务消息由工具确定。const Values 的底层读取用 find/at；写输出用 outputs[id] 或既有 OutputWriter，错误键不能因为 [] 被自动插入成“默认成功”。</p>
+<h2>3. Python 工具与状态封装</h2>
+<pre><code class="language-python">UPSTREAM_STATUS = 0
+STATUS_CODE, STATUS_MESSAGE = 0, 1
+THRESHOLD, IMAGES = 1, 2
+OUT_IMAGES = 2
+
+def result(business_outputs, code=0, message=&quot;&quot;, detail=&quot;&quot;):
+    # 作者SDK实际实现还要沿用现有重复/保留键错误接口。
+    outputs = dict(business_outputs)   # 浅拷贝小字典，不复制图像/数组载荷
+    outputs[STATUS_CODE] = code
+    outputs[STATUS_MESSAGE] = message
+    return {&quot;outputs&quot;: outputs, &quot;detail&quot;: detail}
+
+def execute(inputs):
+    if inputs[UPSTREAM_STATUS] != 0:
+        return result({OUT_IMAGES: None}, inputs[UPSTREAM_STATUS], &quot;上层工具未正常完成&quot;)
+    return result({OUT_IMAGES: algorithm(inputs[IMAGES], inputs[THRESHOLD])})
+</code></pre>
+<p>参数子类继续提供 parse/read_fields/write_fields；只把键改为数字。逻辑工具没有注入 input0，其参数类不能无条件读取这个键。生命周期 initialize/release 仍返回 code/message/detail 字段，不是上面的执行信封。</p>
+<p>桥接遍历声明端口，逐项以整数构造 py::dict 的键；返回时严格校验 int 键，不能调用 str(key) / int(&quot;1&quot;) / int(True) 修饰坏输出。Image/Array 转换函数及 owner capsule 沿用。</p>
+<h2>4. ID 分配和排序</h2>
+<pre><code class="language-cpp">ReadResult&lt;PortId&gt; allocateId(Draft&amp; draft, PortStage stage) {
+    auto&amp; next = draft.nextPortId(stage); // uint64
+    if (next &gt; UINT32_MAX) return allocationExhaustedIssue();
+    return static_cast&lt;PortId&gt;(next++);
+}
+removePort(id):
+    rejectIfFixed(stage, id)
+    previewRelationsAndProjectReferences(stage, id)
+    eraseWholeDefinitionById(id)
+    // 不降低 next_port_id，不给其他参数重编号
+
+moveRow(from, to):
+    rejectMovesThroughFixedPrefix()
+    beginMoveRows(parent, from, from, parent, to &gt; from ? to + 1 : to)
+    moveWholePortDefinitionInVector(from, to)
+    endMoveRows()
+    // port.id / selectionId / Values / 工程SourcePort均不改变
+</code></pre>
+<p>持久化计数是保证删除最大 id 后重启仍不复用的必要信息。不能每次打开文件都用 <code>max(现存id)+1</code> 替代原高水位。</p>
+<h2>5. 元数据、运行值和输出文本</h2>
+<pre><code class="language-cpp">for (const auto&amp; definition : currentTool.inputs) {
+    showRow(definition.id, definition.nameZh, displayTypeName(definition.type));
+    auto value = inputs.find(definition.id);
+    // 显示顺序取定义vector；值查找取id
+}
+
+candidate = currentDraft;
+normalizeToolDefinition(candidate);  // 公共编号按 stage/model 注入
+validateToolDefinition(candidate);   // 类型、范围、关系、id、next
+bytes = emitNormalizedToolJson(candidate); // 不写公共端口；业务数组顺序保留
+QSaveFile file(path);
+file.setDirectWriteFallback(false);
+if (!file.open(WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+    reportSaveFailure();
+</code></pre>
+<p>值的 JSON 用既有 ValueJson；整张 outputs 转 JSON 时明确发出 <code>{port_id,value}</code> 数组，不能直接 json.dumps(int-key dict) 后把变成字符串的键当原协议。单参数复制只发值。</p>
+<h2>6. 应用与异步生命周期</h2>
+<pre><code class="language-text">Apply当前工具
+  → 用正式解析器构造候选（schema6）
+  → 在当前工程副本执行同一 reconcile 得出影响
+  → 必要时一次确认；版本/文件已变化则重算
+  → 既有管理入口：运行中/closing/另一管理操作时不提交
+  → beginDrain：显示、文本、Assist 收尾
+  → 协调器释放将替换的实例
+  → 原子提交声明，合并扫描候选工具目录
+  → requestRefresh / refreshFinished
+      成功：一次发布定义与工程对账，标dirty，清当前草稿脏状态
+      失败：恢复旧声明并加载旧目录；恢复失败明确保持运行不可用
+</code></pre>
+<p>先后关系沿用当前管理对象，不按此伪代码新造另一套 coordinator。GUI 不持控制锁同步等待。外部保活的图像/Array 仍延长底层 owner/模块，不强制释放。</p>
+<h2>7. 一次性迁移</h2>
+<pre><code class="language-python">for old_tool in selected_old_catalog:
+    mapping = approved_port_mapping[old_tool.tool_id]
+    new = copy(old_tool)
+    for stage in (&quot;init&quot;, &quot;inputs&quot;, &quot;outputs&quot;):
+        for port in new.ports[stage]:
+            port[&quot;id&quot;] = mapping[stage][port[&quot;name_en&quot;]]
+        new.next_port_id[stage] = first_unused_after_assigned_high_water(stage)
+    convert_all_port_refs(new, mapping, helper_mappings)
+    validate_new_declaration(new)
+    write_to_new_output_tree(new)
+
+for node in old_project.nodes:
+    local_map = derive_or_load_map_for_exact_old_node_contract(node)
+    convert_node_values_signatures_and_config(node, local_map)
+    # source 引用查 source 节点的映射，不能查 destination 节点映射。
+    convert_sources_using_source_node_mapping(node)
+    preserve_expression_symbols_and_formula_text(node)
+validate_and_write_new_project_copy()
+</code></pre>
+<p>缺少工具、存在无法解析的动态端口或映射缺口时，报告具体项，保留原工程，不按新显示位置猜编号。用户自定义代码需作者修改，不能对任意 Python/C++ 文本全局替换名字。</p>
+<h2>8. 有效读回测试</h2>
+<pre><code class="language-text">小图真实worker进入测试gate → 发invalidate → GUI排队回调可执行
+→ gate未释放前不提前ACK/完成/发布旧图 → 放行worker
+→ 等待恰好一次readersIdle → 再请求新图成功
+</code></pre>
+<p>固定时长仅是失败超时上限，不以“机器必须慢到收到三个心跳”为成功标准。测试 hook 仅测试构建启用，发布路径不增加逐图开销。</p>
+</section>
+<section id="c9"><div class="eyebrow">R45 · 09</div><h1>测试审查、精简和参考依据</h1>
+<h2>R44 基线审查：不只审长名称</h2>
+<p>逐项复验了 R43 的 22 项问题，覆盖数据所有权、数组工具兼容、模板约束、异常释放、信封、排空、日志竞争、构建入口、安装夹具、GPU 跳过和性能指标。当前长名称/DPI 矩阵已处理，不再把它当本轮主要未完成项。F44-01/03/04/05/06 给出代码中仍实际存在的问题。</p>
+<table>
+<thead>
+<tr>
+<th>当前文件</th>
+<th>真实目的</th>
+<th>处置/命名建议</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>tests/result_readback_barrier_test.cpp</td>
+<td>读者 ACK 前 Stop/Reset/新会话屏障</td>
+<td>保留，名称明确；backend/bridge</td>
+</tr>
+<tr>
+<td>tests/display_reader_drain_test.cpp</td>
+<td>显示读者取消、GUI 继续响应、一次完成</td>
+<td>名称已改善，改受控时序</td>
+</tr>
+<tr>
+<td>tests/output_text_readback_test.cpp</td>
+<td>文本读回信箱/请求终态</td>
+<td>保留；不要与复制菜单纯 UI 混成一个名称</td>
+</tr>
+<tr>
+<td>tests/logic_node_execution_test.cpp</td>
+<td>逻辑节点执行和分支契约</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>tests/node_list_model_test.cpp</td>
+<td>无窗口模型角色与更新</td>
+<td>保留，不占桌面锁</td>
+</tr>
+<tr>
+<td>tests/tool_definition_validation_test.cpp</td>
+<td>声明语义合法性</td>
+<td>保留，区别于 JSON 编解码</td>
+</tr>
+<tr>
+<td>tests/port_value_validation_test.cpp</td>
+<td>值与端口类型/范围契约</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>tests/package_replacement_test.cpp</td>
+<td>工具包替换/失败回滚</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>tests/workbench_contract.cpp</td>
+<td>focused 场景 runner/共享装配</td>
+<td>仅装配，不再注册聚合重跑；后续可改 workbench_test_main.cpp</td>
+</tr>
+<tr>
+<td>tests/workbench_parameters.cpp</td>
+<td>真实参数 UI 操作</td>
+<td>保留真实行为，不追逐像素/极端文案造景</td>
+</tr>
+<tr>
+<td>tests/ui_value_contract.cpp</td>
+<td>多种控制器值/显示行为</td>
+<td>按下一次修改的真实职责渐拆，不能只改成 ui_value_test 假装清晰</td>
+</tr>
+<tr>
+<td>tests/runtime_contract.cpp</td>
+<td>多类运行时场景</td>
+<td>优先归属到输入规范、结果发布、业务状态等现有测试，runner 保留公共 setup</td>
+</tr>
+<tr>
+<td>tests/performance_contract.cpp</td>
+<td>多个不同性能问题</td>
+<td>已有 perf 组；按需拆 input_conversion_benchmark/runtime_session_benchmark/gui_submission_benchmark；不重复装载大夹具</td>
+</tr>
+<tr>
+<td>tests/WorkbenchFixtures.h</td>
+<td>工作台安装夹具</td>
+<td>可改 WorkbenchInstallationFixture.h；先核实复制成本并复用 profile</td>
+</tr>
+<tr>
+<td>tests/test_distribution.py（Tools）</td>
+<td>包结构验证+真实宿主执行</td>
+<td>拆选择入口：python_package_validation / installed_python_package_execution</td>
+</tr>
+<tr>
+<td>tests/image_read_cache_test.cpp（Tools）</td>
+<td>读图缓存身份/重复解码</td>
+<td>小图功能保留；--perf 单列 image_read_cache_benchmark</td>
+</tr>
+<tr>
+<td>tests/infer_trace_test.cpp（Tools）</td>
+<td>trace geometry/未初始化/GPU初始化</td>
+<td>一个 runner 多 case 合理，CTest 名已明确，不再按文件数批评</td>
+</tr>
+<tr>
+<td>tests/tool_registration_test.cpp（Contracts）</td>
+<td>类/函数工厂、实例隔离、销毁</td>
+<td>保留，真实边界；模板错用是编译失败断言</td>
+</tr>
+</tbody></table>
+<h2>新功能测试采用最小有意义集合</h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>重点</th>
+<th>不做</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>core/backend</td>
+<td>schema6 数字编号/顺序/next 往返、固定端口不入 JSON、34 类型 token、Int64 精确值、重复标识/悬空关系、保存失败原文件不变</td>
+<td>每种类型重复打开 34 次工作台</td>
+</tr>
+<tr>
+<td>bridge/model</td>
+<td>moveRows/固定行后端拒绝、选择 stage+id 稳定、工程 diff 准确、只应用当前草稿</td>
+<td>镜像复制实现细节的“自己测自己”断言</td>
+</tr>
+<tr>
+<td>QML 用户流程</td>
+<td>新建→参数→排序→保存→再次打开，固定行操作禁用、统一主题绑定，删除空列表</td>
+<td>极长工具名造景、全 DPI×缩放截图矩阵</td>
+</tr>
+<tr>
+<td>lifecycle</td>
+<td>读者/文本/Assist 在途时应用、close 冲突、失败恢复、外部 view 延寿</td>
+<td>靠大图必须慢/固定 sleep 判定正确性</td>
+</tr>
+<tr>
+<td>installed</td>
+<td>函数/类真实执行、持久目录跨升级、原生包导入、缺工具节点保留</td>
+<td>只解析 JSON 就宣布运行通过</td>
+</tr>
+<tr>
+<td>perf/extended/gpu</td>
+<td>明确数据规模、真实目标、独立触发；所选 GPU profile 推理与依赖</td>
+<td>把布尔 busy 当队列数量；把总耗时减最慢工具说成调度耗时</td>
+</tr>
+</tbody></table>
+<p>核心测试需能解释：什么错误会使它失败。删除低收益测试必须保留关键行为断言，不能仅以减少秒数为目标。算法数值、ROI 逆变换、Owner 延寿、模块销毁、真实打包失败回滚仍应保留。名称先体现领域/行为，再用 test/benchmark 等后缀；不强制全仓统一改名引起大量无效 diff。</p>
+<p>正常产品构建不自动跑全套。开发者先构建所需测试组并执行选定 labels；发布候选一次全 CPU；GPU/visual/perf 单列。CTest 的 Passed 必须结合方法级 skip 或拆独立入口解释。没有对应审核实测时不承诺“速度提升 80%”或具体秒数预算。</p>
+<h2>网上/GitHub 借鉴</h2>
+<p>以下均为R44 查阅的官方文档或项目源码；访问日期 2026-11-02。设计主体来自三仓当前实现，借鉴不构成引入这些项目的新依赖。</p>
+<table>
+<thead>
+<tr>
+<th>来源</th>
+<th>链接</th>
+<th>采用点与边界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Node-RED EditableList</td>
+<td><a href="https://nodered.org/docs/api/ui/editableList/">Node-RED EditableList</a></td>
+<td>添加/删除/拖动排序列表；借鉴行为，不引入其 jQuery 技术栈。</td>
+</tr>
+<tr>
+<td>Node-RED switch 节点源码</td>
+<td><a href="https://github.com/node-red/node-red/blob/main/packages/node_modules/@node-red/nodes/core/function/10-switch.html">Node-RED switch 节点源码</a></td>
+<td>排序保存时追踪原输出身份与新位置；借鉴身份与位置分离；R45 改用稳定数字id，不照搬随显示重排的输出索引。</td>
+</tr>
+<tr>
+<td>Blender 节点组手册</td>
+<td><a href="https://docs.blender.org/manual/en/latest/interface/controls/nodes/groups.html">Blender 节点组手册</a></td>
+<td>输入输出插口列表与调整顺序的编辑方式。</td>
+</tr>
+<tr>
+<td>Blender 接口类型源码</td>
+<td><a href="https://github.com/blender/blender/blob/main/source/blender/makesdna/DNA_node_tree_interface_types.h">Blender 接口类型源码</a></td>
+<td>identifier 字段与 move_item / input_index_by_identifier 分开；身份与位置独立。</td>
+</tr>
+<tr>
+<td>Qt QJsonArray</td>
+<td><a href="https://doc.qt.io/qt-6/qjsonarray.html">Qt QJsonArray</a></td>
+<td>有序元素容器，适合现有 ports 协议。</td>
+</tr>
+<tr>
+<td>Qt QAbstractItemModel</td>
+<td><a href="https://doc.qt.io/qt-6/qabstractitemmodel.html">Qt QAbstractItemModel</a></td>
+<td>beginMoveRows/endMoveRows 维护模型移动语义；向下 destinationChild 注意 +1。</td>
+</tr>
+<tr>
+<td>Qt QSaveFile</td>
+<td><a href="https://doc.qt.io/qt-6/qsavefile.html">Qt QSaveFile</a></td>
+<td>临时文件提交替换；不能推出多文件事务。使用 Qt6.5 已有 QString API，不采用新文档里的后续版本专有重载。</td>
+</tr>
+<tr>
+<td>Qt QStandardPaths</td>
+<td><a href="https://doc.qt.io/qt-6/qstandardpaths.html">Qt QStandardPaths</a></td>
+<td>用户持久目录；同时提供可配置路径以适应现有 D/E 盘环境。</td>
+</tr>
+</tbody></table>
+<h2>验证资料说明</h2>
+<p><code>evidence/R44_20261102/source_integrity.json</code> 记录 487 个文本 blob 与固定提交一致；<code>evidence/R44_20261102/remote.json</code> 记录三仓 heads/trees/compare 与 gitlink。Python 日志为实际执行输出。<code>array_leaf_owner_probe.cpp</code> 直接包含 Contracts 公共头验证类型约束与完整 Array 保活。<code>sdk_coercion_probe.json</code> 是当前 SDK 转换行为，不是当前算法错误事故证明。</p>
+<p>HTML 原型已做脚本语法检查；自动浏览器启动因本环境缺 Chromium 未完成，不能写“视觉验收通过”。示例 JSON 的 Python 结构检查不能替代 Qt 生产解析器。新协议产品验收由 T45-17 补齐。本轮新原型和参考模型的验证见第12章，不能复用旧原型验证结论。</p>
+<h2>R45 新增的最小定向用例</h2>
+<ul>
+<li>新建 → 删除最大已提交id → 保存再打开 → 新增，验证没有复用旧号。</li>
+<li>交换 id=1/2 的显示顺序，读值、工程 source 和整体输出文本仍按 id 对应。</li>
+<li>inputs0固定，outputs0/1固定，init0合法；逻辑模型不注入上层状态。</li>
+<li>所有34个token继续可声明；端口别名缺失/重复/更改不影响运行。</li>
+<li>Python {1:...}合法，{&quot;1&quot;:...}/True键非法；状态0/1不被宿主补造。</li>
+<li>id很大但仅两个参数时，内存不随最大id线性增长；只做小规模结构检查，无需巨量分配基准。</li>
+<li>expression symbol与id分离，Receiver/Select/helper映射来源正确，复制节点后引用不串参。</li>
+<li>有旧键映射的声明/工程可转换；缺映射明确报告，保留原文件。迁移仅改端口身份，不改数据载荷。</li>
+</ul>
+<p>以上优先放core/SDK/bridge已有测试文件；QML只跑一次完整用户操作链，不为34种类型建34个窗口。维护负例以证明不是“删测后更绿”。</p>
+</section>
+<section id="c10"><div class="eyebrow">R45 · 10</div><h1>整体架构复核与进一步收敛</h1>
+<h2>已有设计应保留</h2>
+<table>
+<thead>
+<tr>
+<th>仓库</th>
+<th>当前合理设计</th>
+<th>后续措施</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Contracts</td>
+<td>DataRef/Array 所有权句柄，类型契约，参数读写辅助，类/函数统一适配 IToolInstance</td>
+<td>保持可写数据、工具自身并发责任；收紧模板合法类型，不增加权限矩阵或 COW</td>
+</tr>
+<tr>
+<td>VisionTools</td>
+<td>正式内核与工具包装分开；手工取参/封装；Python 作者 SDK 单一源；函数/类均已有路径</td>
+<td>需要持状态用类，无状态用函数；复用现有 Input/OutputParameters，不再为界面生成算法类</td>
+</tr>
+<tr>
+<td>VisionRT</td>
+<td>JSON 声明与工厂分离，基线按稳定端口名绑定，R45目标改PortId；异步读回/管理刷新；Theme 单例</td>
+<td>新编辑器作为作者入口接入现有目录和刷新链，不成为第二套运行时</td>
+</tr>
+<tr>
+<td>三仓测试</td>
+<td>已改进 focused 入口、显式分组、真实 Owner 与工厂断言</td>
+<td>完成遗留时序/skip/指标收尾，按实际职责拆巨型文件，不按行数机械拆文件</td>
+</tr>
+</tbody></table>
+<h2>值得优化，但不作为本轮大重写</h2>
+<ol>
+<li>AppController 仍承担较多门面职责。已有 ProjectOperations/ResultPresentation 提取应继续使用；自定义编辑器草稿单独控制器，操作完成仍回现有管理链。不要把每个按钮拆成抽象服务。</li>
+<li>ToolDefinition 同时表达运行契约与 UI 元数据对当前体量是可接受的。新增id/next字段后复用，不为编辑器新造一套 schema AST/ORM。定义、节点配置、运行输出三者身份要明确。</li>
+<li>类型信息必须由 Contracts TypeSpec 和现有解析器决定，界面中文显示复用 displayTypeName；不能给 UI 一个静态 enum 表后另写不同 token 转换。</li>
+<li>继续依靠 RAII 管理 C++ 实例、Array 完整句柄和 Python owner。当前 numpyView 修复的重点是完整 Storage 依赖保活，不是额外复制数据。不会通过给数据加 readonly 规避跨语言寿命问题。</li>
+<li>新组件名应体现用途：ToolPortListModel、CustomToolStore。避免 Manager/Helper/Common/Context 的泛化堆叠。测试命名以结果读回、参数规范、安装替换等具体职责为准。</li>
+<li>跨仓公共宏统一、无 Qt 核心拆分、通用热插拔平台继续延期；除非有明确新消费者或测量收益，不纳入本轮。</li>
+</ol>
+<h2>与用户既有交互要求的兼容清单</h2>
+<p>这些是新增功能必须保持的回归边界，不表示本次逐像素复验全部已通过：</p>
+<ul>
+<li>普通参数行风格一致，上层输入按钮按模式高亮；没有多余占位解释、重建资源黄色说明或空候选提示行。</li>
+<li>输出数据列只保留既有复制；新增工具编辑器里的 JSON 预览不等于恢复运行输出的“查看诊断 JSON”菜单。</li>
+<li>工具和底部毫秒显示三位小数，不用 <code>&lt;0.001</code>；单节点运行不累计底部全流程时间。</li>
+<li>Loop 只发布轻量状态，停止后读回重资源；编辑器保存不增加逐轮图像/ROI 渲染。</li>
+<li>图像仍支持项目已有灰度/BGR/BGRA 显示路径；Image 是唯一图像数据类型。</li>
+<li>EasyTouch/Assist 沿用现有开关及排空机制，工具定义编辑不会永久开启预览。</li>
+<li>状态消息由工具输出，业务规则不由宿主补充；图像算法使用 OpenCV/其他开源实现，不引入 HALCON。</li>
+<li>日志沿用 spdlog 与当前 UI 桥接；新编辑行为只记录有意义的提交结果，避免高频输入/拖动刷日志。</li>
+</ul>
+<h2>本轮完成的定义</h2>
+<p>完成 T45-01～18、实际候选安装验收及证据绑定后，才把“设计已完成”升级为“功能已交付”。本报告和 HTML 原型是设计交付，不是已合入三仓的实现或生产发布。</p>
+<h2>不为数字编号增加的东西</h2>
+<p>不添加UUID/order双份顺序，不按最大id扩容，不新增每端口一个派生UI类，不建全局端口历史数据库，不保持长期双键兼容，不用生成器接管作者算法代码。数字ID与值合法性由一处规范；数据载体没有只读/读写属性。Contracts参数基类服务作者，PortDefinition服务宿主声明，二者不混成通用脚本对象框架。</p>
+</section>
+<section id="c11"><div class="eyebrow">R45 · 11</div><h1>一次性迁移与发布方案</h1>
+<h2>不只是 UI 排序改动</h2>
+<p>R44 只依赖名称和数组顺序，无需协议升级；本轮决定运行时/工程按数字参数编号，这是真正的接口变更。目标版本 ABI9、声明 schema6、工程 format7 是新协议标记，不代表已发布。ValueJson 的值布局及零拷贝所有权继续沿用，module_index 若结构未改就不无故升 schema，但其中的 ABI/声明引用必须对应新产物。</p>
+<p>发布后不同时支持 string/int 两套运行时端口键，也不永久保留 id→name→value 适配层。旧资产在工具入口之外一次性转换，输入文件保留，输出写到新目录。项目只做当前打开文件的明确转换/另存，不能后台批量覆盖用户全部工程。</p>
+<h2>迁移矩阵</h2>
+<table>
+<thead>
+<tr>
+<th>资产</th>
+<th>改造</th>
+<th>不能做</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>固定工具声明</td>
+<td>每方向旧 name_en→新 id；保留当前显示顺序；设置 next；可保留别名</td>
+<td>运行时按当前行号临时编号</td>
+</tr>
+<tr>
+<td>native 模块</td>
+<td>按同一映射更新参数子类、输出包装、工具常量，重新编译 ABI9</td>
+<td>只改声明就加载 ABI8 DLL</td>
+</tr>
+<tr>
+<td>Python 工具</td>
+<td>inputs/outputs改 int 键；SDK result/pack公共号；调整全部helper与工具</td>
+<td>将数字转换回name作为长期隐藏适配</td>
+</tr>
+<tr>
+<td>关系/interaction</td>
+<td>源工具和helper各用自身映射，写结构化PortRef</td>
+<td>helper/input/output编号跨方向混查</td>
+</tr>
+<tr>
+<td>工程字面值/绑定/签名</td>
+<td>目标输入查目标节点映射；source端口查源节点映射</td>
+<td>按目的节点的同号猜来源</td>
+</tr>
+<tr>
+<td>动态表达式/条件</td>
+<td>用旧节点具体契约生成本地映射；保留symbol/公式；方向独立高水位</td>
+<td>用打包静态声明覆盖动态端口；替换公式文本为数字</td>
+</tr>
+<tr>
+<td>ExecutionGuard/Receiver/Select</td>
+<td>只改其端口引用；已有模式、node/flow身份保留</td>
+<td>把整个执行条件配置当成普通端口id</td>
+</tr>
+<tr>
+<td>UI虚拟参数</td>
+<td>保留现有配置项语义，真实端口context才用PortId</td>
+<td>将“执行条件/合流类型”等编辑动作盲目编号</td>
+</tr>
+<tr>
+<td>输出文本</td>
+<td>对应参数id显式写条目；单值复制行为保持</td>
+<td>新增诊断JSON菜单或重新拼节点错误信息</td>
+</tr>
+<tr>
+<td>示例/fixtures/测试断言</td>
+<td>所有合法夹具对齐新协议，旧ABI/旧键反例保留用于拒绝测试</td>
+<td>把明确反例当成死代码删掉</td>
+</tr>
+</tbody></table>
+<h2>生成一次迁移映射</h2>
+<p>为每个工具建立一份可审阅映射，公共端口按固定规则转换。没有作者指定编号时，可按迁移前原始业务数组顺序分配输入1起/输出2起/init0起；映射一经批准，新代码与新工程必须都消费同一份结果。此转换工具是迁移辅助，不是每次构建或运行的生成器。</p>
+<p>若作者希望阈值为1、图像为2，而旧声明图像在前，则明确写映射 images→2、threshold→1，不能先自动编号后再人工只改声明。当前示例以新工具目标编号为准，不推断任何已安装工具的真实编号。</p>
+<p>动态节点的端口来自旧节点配置，要为每个节点生成本地映射。表达式 variables 与 program 各自对应输入/输出，保持符号表；既有宿主静态参数占号后，动态编号从剩余高水位继续。复制节点保留其端口id，只重映射node/flow引用。</p>
+<p>已缺失声明的工程无法从字符串可靠还原端口号。保持原文件，列出缺失工具及引用；等补齐旧声明/映射再转换。不要据当前排序猜号、丢端口后继续显示“转换成功”。迁移输出应附简短摘要：工具数、节点数、成功/未转换项、原文件位置；无需全量哈希链或历史数据库。</p>
+<h2>发布步骤</h2>
+<ol>
+<li>固定要迁移的三仓开发基线和编号表，先合并 Contracts main 的新接口。</li>
+<li>两产品更新同一 Contracts 子模块提交，完成工具/宿主全部调用改造；native、Python、自定义模板和helpers一起切换。</li>
+<li>生成 schema6 声明、format7 示例工程和新夹具，执行定向编解码、SDK、桥接、动态节点测试。</li>
+<li>创建独立候选安装目录，用户持久工具根不清空；旧自定义资产转换到新根，验证完成后再切配置。</li>
+<li>真实安装创建函数/类、手动输入/上层绑定、排序、执行、重启、删除；测试带外部owner的刷新/关闭。</li>
+<li>一次全CPU候选回归；GPU按选定依赖profile单独执行，报告实跑和跳过。</li>
+<li>保留旧安装/原项目用于回退；不用新程序写回旧格式，也不让旧模块以同ABI号混进新包。</li>
+</ol>
+<p>不要求提交全部仓库代码到一个仓库，也不把 Contracts main 改成普通复制目录；继续子模块工作流。</p>
+</section>
+<section id="c12"><div class="eyebrow">R45 · 12</div><h1>整合追踪与验证边界</h1>
+<h2>R44 全部工单去向</h2>
+<table>
+<thead>
+<tr>
+<th>原工单</th>
+<th>目标</th>
+<th>R45去向</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>T44-01</td>
+<td>子模块基线</td>
+<td>T45-01/17</td>
+<td>升级目标改ABI9；同main提交构建，历史f9b669仅作基线</td>
+</tr>
+<tr>
+<td>T44-02</td>
+<td>入口修复/文档</td>
+<td>T45-15/18</td>
+<td>shutil、死链、旧状态语义全部保留整改</td>
+</tr>
+<tr>
+<td>T44-03</td>
+<td>受控读回/通知测试</td>
+<td>T45-15</td>
+<td>保留取消/一次完成/GUI响应，去速度依赖</td>
+</tr>
+<tr>
+<td>T44-04</td>
+<td>宿主skip/指标</td>
+<td>T45-16</td>
+<td>独立宿主测试、测量含义与分组</td>
+</tr>
+<tr>
+<td>T44-05</td>
+<td>SDK输出语义</td>
+<td>T45-04</td>
+<td>在新数字SDK一起收敛，不维护两套</td>
+</tr>
+<tr>
+<td>T44-06</td>
+<td>顺序与公共端口</td>
+<td>T45-01/05</td>
+<td>用数字身份替代字符串；需要升协议</td>
+</tr>
+<tr>
+<td>T44-07</td>
+<td>列表模型/类型</td>
+<td>T45-10</td>
+<td>新增真实编号角色及持久next</td>
+</tr>
+<tr>
+<td>T44-08</td>
+<td>Dialog</td>
+<td>T45-11</td>
+<td>编号列替换英文身份列，其余完整行为保留</td>
+</tr>
+<tr>
+<td>T44-09</td>
+<td>用户目录/存储</td>
+<td>T45-12</td>
+<td>合并发现、原子单文件、JSON-last</td>
+</tr>
+<tr>
+<td>T44-10</td>
+<td>模板/复制</td>
+<td>T45-03/04/11/12</td>
+<td>保留参数号复制代码，函数/类均可用</td>
+</tr>
+<tr>
+<td>T44-11</td>
+<td>工程影响</td>
+<td>T45-07/13</td>
+<td>数字绑定与预览对账</td>
+</tr>
+<tr>
+<td>T44-12</td>
+<td>生命周期</td>
+<td>T45-13</td>
+<td>同一异步管理链，不放宽owner约束</td>
+</tr>
+<tr>
+<td>T44-13</td>
+<td>安装态闭环</td>
+<td>T45-17</td>
+<td>覆盖新协议全链路，R44日志不能冒充通过</td>
+</tr>
+<tr>
+<td>T44-14</td>
+<td>命名与夹具</td>
+<td>T45-16/18</td>
+<td>渐进拆职责，避免机械重命名</td>
+</tr>
+</tbody></table>
+<h2>最新讨论已落入正文</h2>
+<table>
+<thead>
+<tr>
+<th>用户修改</th>
+<th>落点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>按数字取参，避免name_en拼写错误</td>
+<td>Values/Reader/Writer/Python字典全部PortId，S45-01/05/06</td>
+</tr>
+<tr>
+<td>JSON一眼看到编号</td>
+<td>schema6每业务参数显式id，界面真实“参数编号”列</td>
+</tr>
+<tr>
+<td>排序仍可调整</td>
+<td>数组顺序显示、id保持稳定；原型上下移动/拖动不重号</td>
+</tr>
+<tr>
+<td>固定状态项显示锁定</td>
+<td>inputs0 / outputs0、1；仅定义锁定，普通接口仍可传值</td>
+</tr>
+<tr>
+<td>删参不破坏旧工程</td>
+<td>next_port_id持久化、已提交不复用、有损影响预览</td>
+</tr>
+<tr>
+<td>全部整合而非附录补丁</td>
+<td>新正文/Specs/Tickets/示例/原型全部数字化；旧验收仅以基线记录保留</td>
+</tr>
+</tbody></table>
+<h2>验证说明</h2>
+<p>历史产品证据在 evidence/R44_20261102。新参考模型、原型脚本与示例的一致性检查结果在 evidence/R45_design_checks.json；只证明设计产物内部一致和演示逻辑，不证明产品已实现ABI9。Qt生产解析器、Windows/native模块、安装态与GPU本轮未运行，后续按T45-17执行。</p>
+<p>HTML原型只提供浏览器本地设计演示，不执行算法、不修改用户工具目录。浏览器图形验收依运行环境可用性单独记录；不能将node语法检查称为QML/UI验收。</p>
+</section></main></html>

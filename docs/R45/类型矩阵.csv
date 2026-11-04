@@ -1,0 +1,35 @@
+﻿JSON token,显示类型,C++,Python,缺省表示
+int,整数,std::int64_t,int,0
+float,浮点数,double,float,0.0
+bool,布尔,bool,bool,false
+string,字符串,std::string,str,""""""
+image,图像,DataRef<Image>；Image 载荷 vector<cv::Mat>,list[numpy.ndarray],不存像素默认值
+roi,ROI,DataRef<ROI>；载荷 vector<vector<vector<double>>>,list[list[list[float]]],[]
+vec_uint8,1维 UInt8 数组,Array；作者可用 vector<uint8_t>,Dense ndarray(uint8) 或嵌套 list，rank=1,[]
+vec_int32,1维 Int32 数组,Array；作者可用 vector<int32_t>,Dense ndarray(int32) 或嵌套 list，rank=1,[]
+vec_int,1维 Int64 数组,Array；作者可用 vector<int64_t>,Dense ndarray(int64) 或嵌套 list，rank=1,[]
+vec_float32,1维 Float32 数组,Array；作者可用 vector<float>,Dense ndarray(float32) 或嵌套 list，rank=1,[]
+vec_float,1维 Float64 数组,Array；作者可用 vector<double>,Dense ndarray(float64) 或嵌套 list，rank=1,[]
+vec_bool,1维 Bool 数组,Array；作者可用 vector<bool>,Dense ndarray(bool) 或嵌套 list，rank=1,[]
+vec_string,1维 String 数组,Array；作者可用 vector<std::string>,嵌套 list[str]，rank=1,[]
+vec_vec_uint8,2维 UInt8 数组,Array；作者可用 vector<vector<uint8_t>>,Dense ndarray(uint8) 或嵌套 list，rank=2,[]
+vec_vec_int32,2维 Int32 数组,Array；作者可用 vector<vector<int32_t>>,Dense ndarray(int32) 或嵌套 list，rank=2,[]
+vec_vec_int,2维 Int64 数组,Array；作者可用 vector<vector<int64_t>>,Dense ndarray(int64) 或嵌套 list，rank=2,[]
+vec_vec_float32,2维 Float32 数组,Array；作者可用 vector<vector<float>>,Dense ndarray(float32) 或嵌套 list，rank=2,[]
+vec_vec_float,2维 Float64 数组,Array；作者可用 vector<vector<double>>,Dense ndarray(float64) 或嵌套 list，rank=2,[]
+vec_vec_bool,2维 Bool 数组,Array；作者可用 vector<vector<bool>>,Dense ndarray(bool) 或嵌套 list，rank=2,[]
+vec_vec_string,2维 String 数组,Array；作者可用 vector<vector<std::string>>,嵌套 list[str]，rank=2,[]
+vec_vec_vec_uint8,3维 UInt8 数组,Array；作者可用 vector<vector<vector<uint8_t>>>,Dense ndarray(uint8) 或嵌套 list，rank=3,[]
+vec_vec_vec_int32,3维 Int32 数组,Array；作者可用 vector<vector<vector<int32_t>>>,Dense ndarray(int32) 或嵌套 list，rank=3,[]
+vec_vec_vec_int,3维 Int64 数组,Array；作者可用 vector<vector<vector<int64_t>>>,Dense ndarray(int64) 或嵌套 list，rank=3,[]
+vec_vec_vec_float32,3维 Float32 数组,Array；作者可用 vector<vector<vector<float>>>,Dense ndarray(float32) 或嵌套 list，rank=3,[]
+vec_vec_vec_float,3维 Float64 数组,Array；作者可用 vector<vector<vector<double>>>,Dense ndarray(float64) 或嵌套 list，rank=3,[]
+vec_vec_vec_bool,3维 Bool 数组,Array；作者可用 vector<vector<vector<bool>>>,Dense ndarray(bool) 或嵌套 list，rank=3,[]
+vec_vec_vec_string,3维 String 数组,Array；作者可用 vector<vector<vector<std::string>>>,嵌套 list[str]，rank=3,[]
+vec_vec_vec_vec_uint8,4维 UInt8 数组,Array；作者可用 vector<vector<vector<vector<uint8_t>>>>,Dense ndarray(uint8) 或嵌套 list，rank=4,[]
+vec_vec_vec_vec_int32,4维 Int32 数组,Array；作者可用 vector<vector<vector<vector<int32_t>>>>,Dense ndarray(int32) 或嵌套 list，rank=4,[]
+vec_vec_vec_vec_int,4维 Int64 数组,Array；作者可用 vector<vector<vector<vector<int64_t>>>>,Dense ndarray(int64) 或嵌套 list，rank=4,[]
+vec_vec_vec_vec_float32,4维 Float32 数组,Array；作者可用 vector<vector<vector<vector<float>>>>,Dense ndarray(float32) 或嵌套 list，rank=4,[]
+vec_vec_vec_vec_float,4维 Float64 数组,Array；作者可用 vector<vector<vector<vector<double>>>>,Dense ndarray(float64) 或嵌套 list，rank=4,[]
+vec_vec_vec_vec_bool,4维 Bool 数组,Array；作者可用 vector<vector<vector<vector<bool>>>>,Dense ndarray(bool) 或嵌套 list，rank=4,[]
+vec_vec_vec_vec_string,4维 String 数组,Array；作者可用 vector<vector<vector<vector<std::string>>>>,嵌套 list[str]，rank=4,[]

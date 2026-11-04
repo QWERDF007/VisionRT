@@ -63,6 +63,7 @@ add_library(visionrt_core
     src/core/ProjectEditor.cpp
     src/core/ProjectValues.cpp
     src/core/ProjectStorage.cpp
+    src/core/CustomToolStore.cpp
     src/plugins/PluginLoader.cpp)
 target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core)
 
@@ -141,7 +142,11 @@ if(VISIONRT_BUILD_APP)
         src/ui/AppController.h
         src/ui/AppControllerDiagnostics.cpp
         src/ui/ToolTreeModel.cpp
-        src/ui/ToolTreeModel.h)
+        src/ui/ToolTreeModel.h
+        src/ui/ToolPortListModel.cpp
+        src/ui/ToolPortListModel.h
+        src/ui/ToolEditorController.cpp
+        src/ui/ToolEditorController.h)
     target_link_libraries(visionrt_ui PUBLIC
         visionrt_runtime visionrt_python visionrt_viewport visionrt_log
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)
@@ -221,6 +226,7 @@ if(BUILD_TESTING)
     visionrt_contract(definition_json_contract visionrt_core)
     visionrt_contract(tool_definition_validation_test visionrt_core)
     visionrt_contract(tools_package_contract visionrt_core)
+    visionrt_contract(custom_tool_store_contract visionrt_core)
     add_test(NAME validator_cli_contract COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_SOURCE_DIR}/tests/validator_cli_contract.py"
         --validator "$<TARGET_FILE:visionrt_validate_tool>" --opencv-bin "${VISIONRT_OPENCV_BIN}"
@@ -340,6 +346,10 @@ if(BUILD_TESTING)
         # The node list model has no window: it must not take the desktop lock or join the ui group.
         visionrt_contract(node_list_model_test visionrt_ui LABELS backend)
         target_link_libraries(node_list_model_test PRIVATE Qt6::Test)
+        visionrt_contract(tool_port_list_model_test visionrt_ui LABELS backend)
+        target_link_libraries(tool_port_list_model_test PRIVATE Qt6::Test)
+        visionrt_contract(tool_editor_controller_test visionrt_ui LABELS backend)
+        target_link_libraries(tool_editor_controller_test PRIVATE Qt6::Test)
         visionrt_contract(ui_project_paths_contract visionrt_ui)
         target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_project_paths_contract PRIVATE

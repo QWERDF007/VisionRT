@@ -44,10 +44,10 @@ QQuickItem *visibleText(QQuickItem *item, const QString &text)
 
 // Output cells are pooled delegates that carry the row/column they currently represent. Looking a
 // cell up by identity instead of by its visible text keeps this contract independent of formatting.
-QQuickItem *outputCell(QQuickItem *item, const QString &portId, int column)
+QQuickItem *outputCell(QQuickItem *item, visionrt::PortId portId, int column)
 {
     const auto options = item->property("options").toMap();
-    if (item->isVisible() && options.value("portId").toString() == portId
+    if (item->isVisible() && options.value("portId").toUInt() == portId
         && options.value("column").toInt() == column && options.contains("connectable"))
         return item;
     for (auto *child : item->childItems())
@@ -56,7 +56,7 @@ QQuickItem *outputCell(QQuickItem *item, const QString &portId, int column)
     return nullptr;
 }
 
-QQuickItem *waitForCell(QQuickItem *panel, const QString &portId, int column, int timeout = 3000)
+QQuickItem *waitForCell(QQuickItem *panel, visionrt::PortId portId, int column, int timeout = 3000)
 {
     QPointer<QQuickItem> found;
     QTest::qWaitFor([&] {
@@ -154,7 +154,7 @@ void popupSessionsContract()
     // and no connection menu that cannot do anything.
     // `paths` is an Array output and no downstream input accepts an Array, so this name has no
     // legal target at all.
-    auto *pathsName = waitForCell(panel, QStringLiteral("paths"), 0);
+    auto *pathsName = waitForCell(panel, 3, 0);
     require(pathsName != nullptr, "paths name cell is missing");
     rightClick(window, pathsName);
     QTest::qWait(200);
@@ -163,7 +163,7 @@ void popupSessionsContract()
 
     // The data column has exactly one action. Before execution the value does not exist, so copy is
     // visible but disabled instead of silently disappearing.
-    auto *statusData = waitForCell(panel, QStringLiteral("__status_code"), 2);
+    auto *statusData = waitForCell(panel, 0, 2);
     require(statusData != nullptr, "status code data cell is missing");
     rightClick(window, statusData);
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
@@ -184,18 +184,18 @@ void popupSessionsContract()
     QImage image(16, 12, QImage::Format_RGB888);
     image.fill(QColor(30, 90, 180));
     require(image.save(imagePath), "cannot write the real popup image fixture");
-    require(app.setParameter(QStringLiteral("count"), false, QStringLiteral("1"))
-                && app.setParameterPath(QStringLiteral("path"), false, QUrl::fromLocalFile(imagePath)),
+    require(app.setParameter(5, false, QStringLiteral("1"))
+                && app.setParameterPath(1, false, QUrl::fromLocalFile(imagePath)),
             "cannot select the real image for result publication");
     auto *model = qobject_cast<visionrt::OutputModel *>(app.outputModel());
     require(model != nullptr, "output model is unavailable");
     app.runNode();
-    require(QTest::qWaitFor([&] { return !app.busy() && model->capture(QStringLiteral("images"))
-            && model->capture(QStringLiteral("images"))->publication > 0; }, 5000),
+    require(QTest::qWaitFor([&] { return !app.busy() && model->capture(2)
+            && model->capture(2)->publication > 0; }, 5000),
             "real image execution did not publish a new result");
-    auto *imageData = waitForCell(panel, QStringLiteral("images"), 2);
+    auto *imageData = waitForCell(panel, 2, 2);
     require(imageData != nullptr, "image data cell is missing after publication");
-    const auto fullText = visionrt::OutputModel::fullText(*model->capture(QStringLiteral("images")));
+    const auto fullText = visionrt::OutputModel::fullText(*model->capture(2));
     QGuiApplication::clipboard()->clear();
     QSignalSpy textReady(&app, &visionrt::AppController::outputTextReady);
     rightClick(window, imageData);
@@ -218,7 +218,7 @@ void popupSessionsContract()
     const auto target = app.selectedNode();
     require(app.nodes().size() == 6 && !target.isEmpty(), "cannot create the connection target");
     app.selectNode(QStringLiteral("1"));
-    auto *imageName = waitForCell(panel, QStringLiteral("images"), 0);
+    auto *imageName = waitForCell(panel, 2, 0);
     require(imageName != nullptr, "image name cell is missing");
     rightClick(window, imageName);
     require(QTest::qWaitFor([&] { return nameMenu->property("opened").toBool(); }, 1000),
@@ -233,7 +233,7 @@ void popupSessionsContract()
             "the connection menu entry did not create the relation");
     require(QTest::qWaitFor([&] { return !nameMenu->property("visible").toBool(); }, 1000),
             "the connection menu stayed open after committing a relation");
-    rightClick(window, waitForCell(panel, QStringLiteral("images"), 0));
+    rightClick(window, waitForCell(panel, 2, 0));
     require(QTest::qWaitFor([&] { return nameMenu->property("opened").toBool(); }, 1000),
             "connection menu did not reopen for the connected output");
     targetMenu = findByProperty(nameMenu, "targetNode", target);
@@ -246,24 +246,24 @@ void popupSessionsContract()
             "triggering the connected entry did not disconnect it");
 
     // An output context stays bound to its node even when the same port id exists elsewhere.
-    const auto oldOutput = app.portContext(QStringLiteral("images"), true);
+    const auto oldOutput = app.portContext(2, true);
     app.selectNode(QStringLiteral("4"));
-    require(!app.bindOutputTo(oldOutput, target, QStringLiteral("images")),
+    require(!app.bindOutputTo(oldOutput, target, 1),
             "an obsolete output context connects the newly selected source");
     app.selectNode(QStringLiteral("1"));
-    const auto current = app.portContext(QStringLiteral("images"), true);
-    require(app.bindOutputTo(current, target, QStringLiteral("images")),
+    const auto current = app.portContext(2, true);
+    require(app.bindOutputTo(current, target, 1),
             "a current output context cannot connect a compatible input");
-    const auto occupied = app.portContext(QStringLiteral("images"), true);
-    require(!app.bindOutputTo(occupied, target, QStringLiteral("images")),
+    const auto occupied = app.portContext(2, true);
+    require(!app.bindOutputTo(occupied, target, 1),
             "output connection replaced an occupied input");
-    require(app.diagnostic() == QStringLiteral("输入端口已关联上游：%1.images").arg(target),
+    require(app.diagnostic() == QStringLiteral("输入端口已关联上游：%1.端口 1").arg(target),
             "occupied input rejection lost its precise reason or stable target identity");
-    require(!app.bindOutputTo(occupied, target, QStringLiteral("rect")),
+    require(!app.bindOutputTo(occupied, target, 2),
             "output connection accepted an incompatible input");
-    require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".rect"),
+    require(app.diagnostic().contains(QStringLiteral("类型不兼容")) && app.diagnostic().contains(target + ".端口 2"),
             "incompatible input rejection lost its precise reason or stable target identity");
-    require(!app.bindOutputTo(occupied, QStringLiteral("not-a-node"), QStringLiteral("images"))
+    require(!app.bindOutputTo(occupied, QStringLiteral("not-a-node"), 1)
                 && app.diagnostic() == QStringLiteral("节点标识 必须是无前导零的无符号十进制文本：not-a-node"),
             "invalid output target lost its original node identifier or concrete Chinese reason");
 
@@ -277,26 +277,26 @@ void popupSessionsContract()
         app.selectNode(QStringLiteral("1"));
     };
     openProject();
-    const auto previousProject = app.portContext(QStringLiteral("images"), true);
+    const auto previousProject = app.portContext(2, true);
     openProject();
     require(!app.portContextCurrent(previousProject),
             "reopening the same project leaves old output contexts authorized");
     const auto reopenedWires = app.wires();
-    require(!app.unbindOutputFrom(previousProject, QStringLiteral("3"), QStringLiteral("images"))
+    require(!app.unbindOutputFrom(previousProject, QStringLiteral("3"), 1)
                 && app.wires() == reopenedWires,
             "an obsolete project context disconnected the reopened project's matching input");
     QSignalSpy projectText(&app, &visionrt::AppController::outputTextReady);
     app.requestOutputText(previousProject);
     QTest::qWait(60);
     require(projectText.isEmpty(), "obsolete output context reads a new project's value");
-    app.requestOutputText(app.portContext(QStringLiteral("__status_message"), true));
+    app.requestOutputText(app.portContext(1, true));
     app.selectNode(QStringLiteral("3"));
     QTest::qWait(150);
     require(projectText.isEmpty(), "late output copy completes on a different selected node");
     app.selectNode(QStringLiteral("1"));
 
     // A model reset closes the open menu instead of leaving it bound to a destroyed row.
-    rightClick(window, waitForCell(panel, QStringLiteral("__status_code"), 2));
+    rightClick(window, waitForCell(panel, 0, 2));
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
             "status data menu did not open for the reset case");
     model->clear();
@@ -543,25 +543,26 @@ void outputCellReuseContract()
 })json");
     write("python/custom/outputs/outputs.py",
           "def run(inputs):\n"
-          "    values = {'value_' + str(index): index for index in range(64)}\n"
-          "    values['__status_code'] = 0\n"
-          "    values['__status_message'] = ''\n"
+          "    values = {2 + index: index for index in range(64)}\n"
+          "    values[0] = 0\n"
+          "    values[1] = ''\n"
           "    return {'outputs': values, 'detail': ''}\n");
     QJsonObject definition{
-        {"schema_version",                                                                              4},
-        {       "tool_id",                                                                 "test.outputs"},
-        {  "display_name",                                                                 "Many outputs"},
+        {"schema_version",                                                                              6},
+        {       "name_en",                                                                 "test.outputs"},
+        {       "name_zh",                                                                 "Many outputs"},
         {       "version",                                                                        "1.0.0"},
-        {          "kind",                                                              "python_function"},
-        {         "entry", QJsonObject{{"package", "outputs"}, {"file", "outputs.py"}, {"symbol", "run"}}},
-        {   "init_params",                                                                   QJsonArray{}},
-        {        "inputs",                                                                   QJsonArray{}}
+        {"implementation", QJsonObject{{"kind", "python_function"},
+                                        {"package", "outputs"},
+                                        {"file", "outputs.py"},
+                                        {"symbol", "run"}}},
+        {  "next_port_id", QJsonObject{{"init", 0}, {"inputs", 1}, {"outputs", 66}}}
     };
     QJsonArray ports;
     for (int number = 0; number < 64; ++number)
-        ports.append(QJsonObject{{"id", "value_" + QString::number(number)},
-            {"name", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "Int"}});
-    definition["outputs"] = ports;
+        ports.append(QJsonObject{{"id", 2 + number},
+            {"name_zh", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "int"}});
+    definition["ports"] = QJsonObject{{"outputs", ports}};
     write("tools/custom/outputs.json", QJsonDocument(definition).toJson());
     visionrt::AppController manyApp(1, manyDirectory.path());
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output catalog did not become ready");
@@ -572,11 +573,11 @@ void outputCellReuseContract()
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output tool did not finish");
     auto *manyModel = qobject_cast<visionrt::OutputModel *>(manyApp.outputModel());
     require(manyModel && manyModel->rowCount() >= 64, "many-output fixture did not expose its declared ports");
-    const auto manyStatus = manyModel->capture("__status_code");
+    const auto manyStatus = manyModel->capture(0);
     if (!manyStatus || visionrt::OutputModel::fullText(*manyStatus) != "0")
         throw std::runtime_error(("many-output execution failed: "
-            + visionrt::OutputModel::fullText(*manyModel->capture("__status_message"))).toStdString());
-    const auto firstValue = manyModel->capture("value_0");
+            + visionrt::OutputModel::fullText(*manyModel->capture(1))).toStdString());
+    const auto firstValue = manyModel->capture(2);
     const auto *firstInteger = firstValue ? std::get_if<std::int64_t>(&firstValue->value) : nullptr;
     require(firstInteger && *firstInteger == 0,
             "many-output fixture did not publish its real Python values");
@@ -605,8 +606,8 @@ void outputCellReuseContract()
     while (sourceCell && !sourceCell->property("currentTableView").isValid())
         sourceCell = sourceCell->parentItem();
     require(sourceCell != nullptr, "source output label has no TableView delegate");
-    const auto sourcePort = sourceCell->property("options").toMap().value("portId").toString();
-    require(sourcePort == "value_0", "source delegate does not identify the clicked output port");
+    const auto sourcePort = sourceCell->property("options").toMap().value("portId").toUInt();
+    require(sourcePort == 2u, "source delegate does not identify the clicked output port");
     QQmlComponent monitorComponent(&manyEngine);
     monitorComponent.setData(
         "import QtQuick\nQtObject { id: monitor; property Item cell; property int pooledCount: 0; property int reusedCount: 0; "
@@ -620,18 +621,18 @@ void outputCellReuseContract()
     auto *manyMenu  = manyPanel->findChild<QObject *>("outputMenu");
     auto *manyTable = manyPanel->findChild<QObject *>("outputTable");
     require(manyMenu && manyTable, "many-output menu or table is unavailable");
-    auto *valueData = waitForCell(manyPanel, "value_0", 2);
+    auto *valueData = waitForCell(manyPanel, 2, 2);
     require(valueData != nullptr, "many-output data cell is missing");
     rightClick(manyWindow, valueData);
     require(QTest::qWaitFor([&] { return manyMenu->property("opened").toBool(); }, 1000),
             "many-output source menu did not open");
     const auto sourceContext = manyPanel->property("selectedContext").toMap();
-    require(sourceContext == manyApp.portContext("value_0", true), "source menu did not capture the clicked port");
+    require(sourceContext == manyApp.portContext(2, true), "source menu did not capture the clicked port");
     const double lastOffset = manyTable->property("contentHeight").toDouble() - manyTable->property("viewportHeight").toDouble();
     require(lastOffset > 500, "many-output table is not large enough to exercise pooling");
     require(manyTable->setProperty("contentY", lastOffset), "cannot scroll the real output table");
     require(QTest::qWaitFor([&] {
-        return sourceCell && sourceCell->property("options").toMap().value("portId").toString() != sourcePort
+        return sourceCell && sourceCell->property("options").toMap().value("portId").toUInt() != sourcePort
             && monitor->property("pooledCount").toInt() > 0 && monitor->property("reusedCount").toInt() > 0;
     }, 1000), "the source cell was not demonstrably reused for another output port");
     require(manyMenu->property("opened").toBool()

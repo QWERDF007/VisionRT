@@ -1,0 +1,3 @@
+JavaScript node --check: passed
+Browser automation: not run; installed Playwright has no Chromium executable.
+No claim of production QML acceptance or visual verification.

@@ -36,7 +36,7 @@ try
                       "  self.identity = next_id\n"
                       "  next_id += 1\n"
                       " def initialize(self, params): return {'code': 0, 'message': '', 'detail': ''}\n"
-                      " def execute(self, inputs): return {'outputs': {'value':1, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n"
+                      " def execute(self, inputs): return {'outputs': {2:1, 0: 0, 1: ''}, 'detail': ''}\n"
                       " def release(self):\n"
                       "  directory = Path(__file__).parent\n"
                       "  first = directory / 'first.flag'\n"
@@ -49,7 +49,7 @@ try
                       "   stream.write(str(self.identity) + '\\n')\n"
                       "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
-        const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"audit.concurrent.shutdown","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
+        const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"audit.concurrent.shutdown","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>();
         runtime->refresh(std::span(&definition, 1));
@@ -98,7 +98,7 @@ try
                       "import time\n"
                       "class Tool:\n"
                       " def initialize(self, params): return {'code': 0, 'message': '', 'detail': ''}\n"
-                      " def execute(self, inputs): return {'outputs': {'value':1, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n"
+                      " def execute(self, inputs): return {'outputs': {2:1, 0: 0, 1: ''}, 'detail': ''}\n"
                       " def release(self):\n"
                       "  directory = Path(__file__).parent\n"
                       "  (directory / 'entered.flag').write_text('entered')\n"
@@ -106,7 +106,7 @@ try
                       "  (directory / 'finished.flag').write_text('finished')\n"
                       "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
-        const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"audit.release.inflight","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
+        const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"audit.release.inflight","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>();
         runtime->refresh(std::span(&definition, 1));
@@ -140,10 +140,10 @@ import numpy as np
 def execute(inputs):
     image = np.full((3,4), 71, dtype=np.uint16)
     weakref.finalize(image, lambda: Path(__file__).with_name('released.txt').write_text('released'))
-    return {'outputs': {'images':[image], 'namespace':__name__, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2:[image], 3:__name__, 0: 0, 1: ''}, 'detail': ''}
 )";
     }
-    const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"python.memory","name_zh":"Memory","version":"1","implementation":{"kind":"python_function","package":"memory","file":"tool.py","symbol":"execute"},"ports":{"outputs":[{"name_en":"images","name_zh":"Images","type":"image"},{"name_en":"namespace","name_zh":"Namespace","type":"string"}]}})",
+    const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"python.memory","name_zh":"Memory","version":"1","implementation":{"kind":"python_function","package":"memory","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":4},"ports":{"outputs":[{"id":2,"name_en":"images","name_zh":"Images","type":"image"},{"id":3,"name_en":"namespace","name_zh":"Namespace","type":"string"}]}})",
                                                     root / "tools/custom/memory.json",
                                                     {
                                                         ToolOrigin::Custom,
@@ -165,7 +165,7 @@ def execute(inputs):
     auto release = std::async(std::launch::async,
                               [value = std::move(output)]() mutable
                               {
-                                  const auto name     = std::get<std::string>(value.outputs.at("namespace"));
+                                  const auto name     = std::get<std::string>(value.outputs.at(3));
                                   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
                                   bool       cleared  = false;
                                   while (!cleared && std::chrono::steady_clock::now() < deadline)
@@ -181,7 +181,7 @@ def execute(inputs):
                                           std::this_thread::sleep_for(std::chrono::milliseconds(1));
                                   }
                                   assert(cleared);
-                                  auto &images = std::get<DataRef<Image>>(value.outputs.at("images")).get();
+                                  auto &images = std::get<DataRef<Image>>(value.outputs.at(2)).get();
                                   assert(images[0].at<std::uint16_t>(1, 2) == 71);
                                   images[0].at<std::uint16_t>(1, 2) = 91;
                                   value.outputs.clear();

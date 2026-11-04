@@ -37,11 +37,12 @@ def main():
             return result
 
         tool = {
-            "schema_version": 5, "name_en": "test.cli", "name_zh": "校验工具",
+            "schema_version": 6, "name_en": "test.cli", "name_zh": "校验工具",
             "version": "1", "implementation": {"kind": "cpp"},
+            "next_port_id": {"init": 0, "inputs": 2, "outputs": 3},
             "ports": {
-                "inputs": [{"name_en": "count", "name_zh": "数量", "type": "int", "default": 9007199254740993}],
-                "outputs": [{"name_en": "value", "name_zh": "值", "type": "int"}],
+                "inputs": [{"id": 1, "name_zh": "数量", "type": "int", "default": 9007199254740993}],
+                "outputs": [{"id": 2, "name_zh": "值", "type": "int"}],
             },
         }
         path = write("tools/builtin/工具.json", tool)
@@ -53,7 +54,7 @@ def main():
         bad["ports"]["inputs"][0]["required"] = "false"
         run(write("invalid.json", bad), valid=False)
         bad = copy.deepcopy(tool)
-        bad["ports"]["outputs"][0]["name_en"] = "__status_code"
+        bad["ports"]["outputs"][0]["id"] = 0
         run(write("invalid.json", bad), valid=False)
         run(write("legacy.yaml", tool), valid=False)
 

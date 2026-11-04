@@ -56,9 +56,10 @@ void cancellationWindowContract()
     gate.nameZh = "Uninterruptible Python gate";
     gate.kind        = ToolKind::PythonClass;
     gate.entry       = {"cancellation", "tool.py", "Gate"};
-    gate.outputs     = {
-        {"value", "Value", {Type::Int}}
+    gate.outputs = {
+        {2, "Value", {Type::Int}}
     };
+    gate.nextOutputPortId = 3;
     auto tail         = gate;
     tail.nameEn           = "test.cancellation.tail";
     tail.kind         = ToolKind::PythonFunction;
@@ -91,7 +92,7 @@ class Gate:
                 raise RuntimeError('Cancellation fixture gate deadline exceeded')
             time.sleep(0.001)
         record('return:' + str(self.calls))
-        return {'outputs': {'value': self.calls, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+        return {'outputs': {2: self.calls, 0: 0, 1: ''}, 'detail': ''}
     def release(self):
         record('release')
         return {'code': 0, 'message': '', 'detail': ''}
@@ -100,7 +101,7 @@ class Gate:
 
 def tail(inputs):
     record('tail')
-    return {'outputs': {'value': inputs['value'], '__status_code': 0, '__status_message': ''}, 'detail': ''}
+    return {'outputs': {2: inputs[2], 0: 0, 1: ''}, 'detail': ''}
 )");
     ToolRegistry definitions;
     definitions.registerPackage(readToolsPackage(std::filesystem::path(root.toStdU16String()) / "tools-package"));
@@ -108,7 +109,7 @@ def tail(inputs):
     const auto    flow   = editor.project().flows.front().id;
     const auto    parent = editor.addNode(flow, *definitions.find(gate.nameEn), {0, 0});
     const auto    child  = editor.addNode(flow, *definitions.find(tail.nameEn), {2, 2});
-    editor.bindFreeInput(flow, {parent, "value"}, {child, "value"});
+    editor.bindFreeInput(flow, {parent, 2}, {child, 2});
     auto project = editor.project();
     project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.vrt.json";
     require(ProjectStorage(definitions).save(project).empty(), "Cannot save cancellation project");

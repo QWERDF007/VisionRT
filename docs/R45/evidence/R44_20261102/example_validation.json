@@ -1,0 +1,6 @@
+{
+  "json_examples": 2,
+  "concrete_types": 34,
+  "python_syntax": "passed",
+  "validation_scope": "Python JSON structure and syntax only; production Qt parser not executed"
+}

@@ -39,7 +39,7 @@ void validateToolValue(const PortDefinition &port, const PortValue &value)
     }
     catch (const ContractError &error)
     {
-        throw ContractError("端口 " + port.nameEn + " 的值类型不匹配（期望 " + typeName(port.type.type) + "，实际 "
+        throw ContractError(portLabel(port.id) + " 的值类型不匹配（期望 " + typeName(port.type.type) + "，实际 "
                             + typeName(typeOf(value)->type) + "）：" + error.what());
     }
 
@@ -47,23 +47,23 @@ void validateToolValue(const PortDefinition &port, const PortValue &value)
         && std::none_of(port.options.begin(), port.options.end(),
                         [&](const auto &option) { return equalValues(option, value); }))
     {
-        throw ContractError("端口 " + port.nameEn + " 的值不在允许的选项内");
+        throw ContractError(portLabel(port.id) + " 的值不在允许的选项内");
     }
 
     if (port.minimum || port.maximum)
     {
         if (port.type.type == Type::Float && !std::isfinite(std::get<double>(value)))
         {
-            throw ContractError("端口 " + port.nameEn + " 的值必须为有限数值");
+            throw ContractError(portLabel(port.id) + " 的值必须为有限数值");
         }
         if (port.minimum && lessNumber(value, *port.minimum, port.type.type))
         {
-            throw ContractError("端口 " + port.nameEn + " 的值 " + numberText(value) + " 小于最小值 "
+            throw ContractError(portLabel(port.id) + " 的值 " + numberText(value) + " 小于最小值 "
                                 + numberText(*port.minimum));
         }
         if (port.maximum && lessNumber(*port.maximum, value, port.type.type))
         {
-            throw ContractError("端口 " + port.nameEn + " 的值 " + numberText(value) + " 大于最大值 "
+            throw ContractError(portLabel(port.id) + " 的值 " + numberText(value) + " 大于最大值 "
                                 + numberText(*port.maximum));
         }
     }
@@ -74,7 +74,7 @@ void validateToolValues(const std::vector<PortDefinition> &ports, const Values &
     const PortValue missing = Missing{};
     for (const auto &port : ports)
     {
-        const auto found = values.find(port.nameEn);
+        const auto found = values.find(port.id);
         validateToolValue(port, found == values.end() ? missing : found->second);
     }
 }
@@ -89,12 +89,12 @@ void validateToolOutput(const PortDefinition &port, const PortValue &value, cons
 ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Values &outputs,
                                  const std::string &detail)
 {
-    const auto codeIt = outputs.find(std::string(kStatusCodePort));
+    const auto codeIt = outputs.find(kStatusCodePort);
     if (codeIt == outputs.end())
-        throw ContractError("缺少状态码端口：" + std::string(kStatusCodePort));
-    const auto messageIt = outputs.find(std::string(kStatusMessagePort));
+        throw ContractError("缺少状态码端口：" + portLabel(kStatusCodePort));
+    const auto messageIt = outputs.find(kStatusMessagePort);
     if (messageIt == outputs.end())
-        throw ContractError("缺少状态消息端口：" + std::string(kStatusMessagePort));
+        throw ContractError("缺少状态消息端口：" + portLabel(kStatusMessagePort));
 
     if (!std::holds_alternative<std::int64_t>(codeIt->second))
         throw ContractError("状态码端口类型必须为整数");
@@ -110,29 +110,37 @@ ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Value
     ToolStatus status{code, message, detail};
 
     // The one completion point for a tool answer: a business output the tool omitted receives its
-    // declared default, a written value is checked against the declaration, and a name the
+    // declared default, a written value is checked against the declaration, and a number the
     // declaration never mentions stays a contract error instead of being silently dropped.
-    std::set<std::string> declared;
+    std::set<PortId> declared;
     for (const auto &port : ports)
     {
-        declared.insert(port.nameEn);
-        if (isHostOwnedPort(port.nameEn))
+        declared.insert(port.id);
+        if (isReservedPort(PortStage::Outputs, port.id))
             continue;
-        const auto found = outputs.find(port.nameEn);
+        const auto found = outputs.find(port.id);
         if (found == outputs.end() || isMissing(found->second))
         {
+            // A failing invocation may leave a business port empty. Keeping it empty — instead of
+            // substituting the declared default — is what lets a downstream gate tell "no value was
+            // produced" from a real false/zero value.
+            if (!status)
+            {
+                outputs.insert_or_assign(port.id, Missing{});
+                continue;
+            }
             // An omitted or emptied business port is the same state: the declaration's default is the
             // value, and the run status alone says whether the tool succeeded.
             if (isMissing(port.defaultValue))
-                throw ContractError("工具未发布输出端口：" + port.nameEn);
-            outputs.insert_or_assign(port.nameEn, portDefault(port));
+                throw ContractError("工具未发布输出端口：" + portLabel(port.id));
+            outputs.insert_or_assign(port.id, portDefault(port));
             continue;
         }
         validateToolOutput(port, found->second, status);
     }
-    for (const auto &[name, value] : outputs)
-        if (!declared.contains(name))
-            throw ContractError("工具发布了未声明的输出端口：" + name);
+    for (const auto &[id, value] : outputs)
+        if (!declared.contains(id))
+            throw ContractError("工具发布了未声明的输出端口：" + portLabel(id));
 
     return status;
 }

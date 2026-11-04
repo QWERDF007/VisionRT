@@ -57,12 +57,12 @@ try
         script << "from pathlib import Path\n"
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
                   "def execute(inputs):\n"
-                  "    return {'outputs': {'value': 7,\n"
-                  "                        'rois': [[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]],\n"
-                  "                        '__status_code': 0, '__status_message': '运行成功'},\n"
+                  "    return {'outputs': {2: 7,\n"
+                  "                        3: [[[2.0, 10.5, 20.5, 30.0, 40.0, 15.0]]],\n"
+                  "                        0: 0, 1: '运行成功'},\n"
                   "            'detail': ''}\n";
     }
-    const auto definition = parseToolDefinitionJson(R"({"schema_version":5,"name_en":"python.lazy.runtime","name_zh":"Lazy runtime","version":"1","implementation":{"kind":"python_function","package":"lazy","file":"tool.py","symbol":"execute"},"ports":{"outputs":[{"name_en":"value","name_zh":"Value","type":"int"},{"name_en":"rois","name_zh":"ROIs","type":"roi"}]}})",
+    const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"python.lazy.runtime","name_zh":"Lazy runtime","version":"1","implementation":{"kind":"python_function","package":"lazy","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":4},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"},{"id":3,"name_en":"rois","name_zh":"ROIs","type":"roi"}]}})",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {
                                                           ToolOrigin::Custom,
@@ -80,10 +80,10 @@ try
     node.toolId           = definition.nameEn;
     node.toolNameSnapshot = definition.nameZh;
     node.signatures.outputs = {
-        {"value",            {Type::Int}},
-        {"rois",             {Type::ROI}},
-        {"__status_code",    {Type::Int}},
-        {"__status_message", {Type::String}}
+        {2,                  {Type::Int}},
+        {3,                  {Type::ROI}},
+        {kStatusCodePort,    {Type::Int}},
+        {kStatusMessagePort, {Type::String}}
     };
     ProjectDefinition project;
     project.flows.front().nodes = {node};
@@ -103,8 +103,8 @@ try
                       << (value ? value->status.message : "missing") << " detail="
                       << (value ? value->status.detail : "") << '\n';
         assert(value && value->status.code == 0);
-        assert(std::get<std::int64_t>(value->outputs.at("value")) == 7);
-        const auto &rois = std::get<DataRef<ROI>>(value->outputs.at("rois")).get();
+        assert(std::get<std::int64_t>(value->outputs.at(2)) == 7);
+        const auto &rois = std::get<DataRef<ROI>>(value->outputs.at(3)).get();
         assert(rois.size() == 1 && rois.front().size() == 1);
         assert((rois.front().front() == std::vector<double>{2, 10.5, 20.5, 30.0, 40.0, 15.0}));
         assert(value->timing.initMs > 0.0);

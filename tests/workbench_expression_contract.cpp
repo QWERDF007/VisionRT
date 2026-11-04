@@ -28,6 +28,11 @@ void require(bool condition, const char *message)
     if (!condition)
         throw std::runtime_error(message);
 }
+
+// visionrt.image.read declares 图像数量 as input 5; an expression node allocates business
+// outputs after the reserved status pair, so the first one is 2.
+constexpr PortId kImageCountInput     = 5;
+constexpr PortId kFirstExpressionPort = 2;
 } // namespace
 
 int main(int argc, char **argv)
@@ -65,7 +70,7 @@ try
     };
     const auto programRows = [&] { return editor->property("program").toList(); };
     const auto portOf = [&](int index)
-    { return programRows().at(index).toMap().value("portId").toString(); };
+    { return programRows().at(index).toMap().value("portId").toUInt(); };
     const auto edit = [&](int index, const char *key, const QVariant &value)
     {
         QMetaObject::invokeMethod(editor.get(), "updateProgram", Q_ARG(QVariant, index), Q_ARG(QVariant, QString::fromLatin1(key)),
@@ -92,7 +97,7 @@ try
     // Switching a fresh row to Array must settle a valid shape in the same draft, otherwise the
     // displayed fallback and the committed configuration disagree.
     open();
-    require(editor->property("nextSeq").toInt() == 1, "a fresh expression node must start at p1");
+    require(editor->property("nextSeq").toInt() == 2, "a fresh expression node must start after the host status ports");
     add();
     QMetaObject::invokeMethod(editor.get(), "changeType", Q_ARG(QVariant, 0), Q_ARG(QVariant, true),
                               Q_ARG(QVariant, QStringLiteral("Array")));
@@ -109,7 +114,7 @@ try
     require(committedRow.value("type").toString() == "Array" && committedRow.value("dtype").toString() == "float64"
                 && committedRow.value("rank").toInt() == 1,
             "the committed configuration does not match the displayed type");
-    require(config.value("nextPortSeq").toULongLong() == 2, "nextPortSeq must advance after committing p1");
+    require(config.value("nextPortId").toULongLong() == 3, "nextPortId must advance after committing port 2");
 
     // An explicitly empty draft is the user clearing the field: editing must open empty instead of
     // reloading the committed formula. Opening without a draft still shows the committed value.
@@ -125,7 +130,7 @@ try
     // Monotonic identifiers: deleting the highest committed port must not recycle its identifier.
     open();
     add();
-    require(portOf(1) == QStringLiteral("p2"), "the second row did not allocate p2");
+    require(portOf(1) == 3u, "the second row did not allocate port 3");
     edit(1, "expression", QStringLiteral("[3.5]"));
     require(commit(), "the second row could not be committed");
     open();
@@ -133,11 +138,11 @@ try
     require(commit(), "removing the highest port could not be committed");
     config = app.expressionConfig(nodeId);
     require(config.value("program").toList().size() == 1, "the deleted port is still present");
-    require(config.value("nextPortSeq").toULongLong() == 3,
+    require(config.value("nextPortId").toULongLong() == 4,
             "committing after a deletion must keep the issued sequence");
     open();
     add();
-    require(portOf(1) == QStringLiteral("p3"), "a retired port identifier was recycled");
+    require(portOf(1) == 4u, "a retired port identifier was recycled");
     edit(1, "expression", QStringLiteral("[4.5]"));
     require(commit(), "the replacement row could not be committed");
 
@@ -170,7 +175,7 @@ try
     require(!guardSource.isEmpty(), "guard source node is missing");
     const auto guardProgram = [](const QString &name)
     {
-        return QVariantList{QVariantMap{{"portId", "p1"}, {"name", name}, {"symbol", "flag"},
+        return QVariantList{QVariantMap{{"portId", 2u}, {"name", name}, {"symbol", "flag"},
                                         {"expression", "True"}, {"type", "Bool"}, {"dtype", ""},
                                         {"rank", -1}, {"exposed", true}}};
     };
@@ -183,7 +188,7 @@ try
     settle();
     const auto guarded = app.selectedNode();
     require(!guarded.isEmpty(), "guarded node is missing");
-    require(app.applyExecutionGuard(guarded, guardSource, "p1"), "dynamic Bool guard could not be applied");
+    require(app.applyExecutionGuard(guarded, guardSource, 2), "dynamic Bool guard could not be applied");
     settle();
     for (int refresh = 0; refresh < 50; ++refresh)
     {
@@ -211,7 +216,7 @@ try
     const auto intSource = app.selectedNode();
     const auto intProgram = [](const QString &name)
     {
-        return QVariantList{QVariantMap{{"portId", "p1"}, {"name", name}, {"symbol", "n"},
+        return QVariantList{QVariantMap{{"portId", 2u}, {"name", name}, {"symbol", "n"},
                                         {"expression", "1"}, {"type", "Int"}, {"dtype", ""},
                                         {"rank", -1}, {"exposed", true}}};
     };
@@ -227,7 +232,7 @@ try
         for (int index = 0; index < outputs->rowCount(); ++index)
         {
             const auto item = outputs->get(index);
-            if (item.value("portId").toString() == QStringLiteral("p1"))
+            if (item.value("portId").toUInt() == 2u)
                 return item;
         }
         return QVariantMap{};
@@ -249,14 +254,14 @@ try
             "a free downstream input must mark the dynamic result as connectable");
     app.selectNode(consumer);
     settle();
-    require(app.bindInput(app.portContext("count"), intSource, "p1"),
+    require(app.bindInput(app.portContext(kImageCountInput), intSource, kFirstExpressionPort),
             "dynamic Int output could not be bound to an ordinary input");
     settle();
 
     const auto sourceRow = [&]()
     {
         for (const auto &value : app.parameters())
-            if (value.toMap().value("id").toString() == QStringLiteral("count"))
+            if (value.toMap().value("id").toUInt() == kImageCountInput)
                 return value.toMap();
         return QVariantMap{};
     };
@@ -276,7 +281,7 @@ try
     require(sourceRow().value("source").toString().contains(QStringLiteral("计数结果改")),
             "ordinary binding kept the old dynamic port name");
 
-    std::cout << "WORKBENCH_EXPRESSION_PASS array=atomic uint8=1 chinese=1 nextPortSeq=monotonic rows=20 scroll=1 guard=dynamic\n";
+    std::cout << "WORKBENCH_EXPRESSION_PASS array=atomic uint8=1 chinese=1 nextPortId=monotonic rows=20 scroll=1 guard=dynamic\n";
     return 0;
 }
 catch (const std::exception &error)

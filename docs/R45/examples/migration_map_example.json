@@ -1,0 +1,15 @@
+{
+  "tool_id": "custom.image.threshold",
+  "init": {},
+  "inputs": {
+    "upstream_status": 0,
+    "threshold": 1,
+    "images": 2,
+    "roi": 3
+  },
+  "outputs": {
+    "__status_code": 0,
+    "__status_message": 1,
+    "images": 2
+  }
+}
