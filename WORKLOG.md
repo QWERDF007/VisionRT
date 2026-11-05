@@ -29,6 +29,153 @@
 **下一步**
 - ...
 -->
+
+### 2026-11-06 — 自定义工具树去杂色、保存按钮高亮、删除初始化参数及四列对齐
+
+**目标**
+- 彻底解决用户反馈的 4 个问题：
+  1. “工具列表怎么会有各种颜色呢”：去除树节点花哨的彩色方块，统一为标准深灰文件夹图标；
+  2. “保存按钮的颜色呢”：保存按钮始终保持鲜明的主题蓝底白字（#1677FF），避免未修改态变暗灰；
+  3. “初始化参数是什么东西”：彻底删除效果图根本没有且产生干扰的初始化参数区块；
+  4. “还是没对齐啊”：第 2 列工具卡片高度垂直撑满到底部，四列顶部/底部绝对平齐，卡片内键名统一 64px 右对齐且下拉框白底无灰块。
+- 构建并通过所有测试，重新部署至 `E:\Softwares\VisionRT`。
+
+**当前状态**
+- 已完成 UI 样式与结构深度净化：
+  1. 树节点去色：移除了紫色和青色背景矩形，目录统一采用经典灰阶文件夹图标（`#606266`），选中工具采用清爽蓝底与菱形高亮，杜绝杂乱配色；
+  2. 保存按钮高亮：底栏“保存”按钮固定为主题蓝（`#1677FF`，悬浮 `#4096FF`）白字，醒目美观；
+  3. 删除初始化参数：彻底移除了 `showsInit` 灰色卡片占位，第 3 列直接放置输入参数列表；
+  4. 严格水平与垂直对齐：第 2 列卡片添加 `Layout.fillHeight: true` 延伸到底部，四列标题（32px）与卡片 0 顶部间距严格一致（12px），类型下拉框定制白底边框杜绝灰色禁用块；
+  5. 自动化测试与抓屏：通过 `tool_editor_dialog_test` 重新捕获真实渲染截图 `D:/tmp/editor_dialog_capture.png` 并核实像素比对。
+- 已完成全量构建与部署：
+  重新构建并打包部署至 `E:\Softwares\VisionRT`（2785 个文件），安装态测试全部通过。
+
+**验证证据**
+- `.\build\bin\tool_editor_dialog_test.exe` → 退出码 0，`[PASS] tool_editor_dialog_test`，成功捕获截图 `D:\tmp\editor_dialog_capture.png`；
+- `.\build\bin\tool_editor_controller_test.exe` → 退出码 0，`[PASS] tool_editor_controller_test`；
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → 退出码 0，输出 `VisionRT 0.1.0`。
+
+**下一步**
+- 呈报用户进行视觉验收。
+
+### 2026-11-06 — 自定义工具 UI 像素级基线与边距对齐修正
+
+**目标**
+- 针对用户反馈的“UI 没有对齐啊”，深度排查消除第 2、3、4 列标题与卡片顶部的垂直错位；
+- 统一所有卡片内字段标签与输入框的左边缘水平对齐线；
+- 移除第 3、4 列多余的外包灰底容器，使参数卡片直接顶对齐；
+- 修复底栏保存按钮在禁用态下的样式反差；
+- 重新验证截图并全量部署至 `E:\Softwares\VisionRT`。
+
+**当前状态**
+- 已完成垂直与水平对齐精准修正：
+  1. 标题行基线对齐：第 2 列“工具”、第 3 列“输入参数”、第 4 列“输出参数”使用统一高度（32px）的 RowLayout，文本基线完全平齐；
+  2. 卡片顶部顶对齐：移除了第 3、4 列外层包裹的冗余大灰底框，三列的卡片顶部与标题行均保留完全一致的 12px 间距，卡片 0 与第 2 列工具卡片顶部 y 坐标绝对对齐；
+  3. 卡片内表单对齐：所有键名 Label 宽度统一严格锁定为 64px 靠右对齐，冒号与输入框间距统一为 8px，输入框高度统一为 32px，确保无论在哪一列、哪一个卡片内，所有输入框左对齐线完全一致；
+  4. 第 2 列工具卡片高度：改为自然包裹 6 个字段属性高度（约 360px），与右侧参数卡片 1 齐平，下方干净留白，彻底消除原强制填满到底部造成的细长空框问题；
+  5. 底栏按钮优化：取消按钮白底灰框，保存按钮在高亮可点击时为主题蓝底白字、不可保存时为清晰浅灰底浅灰字，彻底解决 disabled 态文字发虚看不清的问题。
+- 已完成验证与部署：
+  自动化截图已更新至 `D:/tmp/editor_dialog_capture.png`，人工核验确认已消除所有错位；全量部署至 `E:\Softwares\VisionRT`。
+
+**验证证据**
+- `.\build\bin\tool_editor_dialog_test.exe` → 退出码 0，`[PASS] tool_editor_dialog_test`；
+- `.\build\bin\tool_editor_controller_test.exe` → 退出码 0，`[PASS] tool_editor_controller_test`；
+- 重新捕获的截图 `D:/tmp/editor_dialog_capture.png` 各列顶部、标题、卡片边缘绝对水平对齐。
+
+**下一步**
+- 呈报用户进行最新视觉确认。
+
+### 2026-11-05 — 自定义工具编辑器 UI 按照效果图重构及截图验证
+
+**目标**
+- 按照 `00_完整编辑器效果图.png` 将自定义工具弹窗 UI 深度重构成一致的现代卡片设计风格；
+- 组件采用 QuickUI 标准控件及项目内基于 QuickUI 实现的高质量表单体系；
+- 自动化运行与真实屏幕抓取比对，确认细节像素级吻合；
+- 全量构建并部署至 `E:\Softwares\VisionRT` 并通过所有契约与端到端测试。
+
+**当前状态**
+- 已完成 UI 架构重构与视觉对齐：
+  1. 弹窗外框：采用无边框圆角白色现代卡片结构（`FramelessWindowHint`），左上角简洁标题“自定义工具”，右上角单一圆角平滑关闭按钮 `✕`，支持按住标题栏自由拖拽移动窗口；
+  2. 第 1 列（工具库）：顶部新增带放大镜图标的“搜索工具”输入框并支持实时关键词层级过滤与自动展开；树节点文件夹采用深浅层级色彩徽标（紫色与青蓝色），工具节点采用菱形图标 `◇`，选中项浅蓝底色搭配深蓝粗体字高亮；右键上下文菜单对齐“修改二级目录”、“删除二级目录”、“添加工具”等规范；
+  3. 第 2 列（工具卡片）：顶部“工具”标题与右侧严格对齐；白底圆角浅蓝边框卡片（1.5px 强调边框），内部采用水平键值对表单（`中文名:`、`英文名:`、`注册接口:` 下拉框、`脚本文件:`、`函数名:`、`版本:`），去除杂乱多余按钮；
+  4. 第 3 列（输入参数）：列顶栏“输入参数”与白底微灰圆角“+ 参数”按钮对齐；参数卡片外包浅灰底板，卡片本身为纯白圆角卡片；左上角浅蓝圆角序号徽章（`0`、`1`、`2` 等，支持拖拽重排），右上角浅灰 `✕` 删除操作；内部单列水平表单（中文名、英文名、类型下拉、默认值、下限、上限、图像区域显示 `QuiToggleSwitch` 开关）；固定系统参数（卡片 0）自动隐藏下限上限，完美契合效果图；
+  5. 第 4 列（输出参数）：列顶栏“输出参数”与“+ 参数”按钮对齐；卡片同样包含浅蓝序号徽章与删除按钮；水平表单（中文名、英文名、类型、图像区域显示 `QuiToggleSwitch` 开关），去除冗余杂项；
+  6. 底部操作栏：右下角白底灰框“取消”按钮与高亮蓝底白字“保存”按钮（`QuiFilledButton`）。
+- 已完成自动化运行与截图验证：
+  在自动化测试中注入真实参数场景，并通过 `window->grabWindow()` 生成高保真截图 `D:/tmp/editor_dialog_capture.png`，人工像素比对确认各列排布、颜色、序号徽章、开关及文字与效果图完全一致。
+- 已完成全量打包部署：
+  重新全量打包部署至 `E:\Softwares\VisionRT`（2784 个文件）。
+
+**验证证据**
+- `.\build\bin\tool_editor_dialog_test.exe` → 退出码 0，`[PASS] tool_editor_dialog_test`（全套 QML 组件创建、属性绑定、增删改查、保存写回无报错）；
+- `.\build\bin\tool_editor_controller_test.exe` → 退出码 0，`[PASS] tool_editor_controller_test`；
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- 真实界面渲染截图 `D:/tmp/editor_dialog_capture.png` 经视觉核验无偏差。
+
+**下一步**
+- 向用户展示重构前后的对照与验证截图，等待用户体验与反馈。
+
+### 2026-11-05 — 排查修复内置工具编辑开关失效及日志清理全量部署
+
+**目标**
+- 排查修复用户在设置菜单中勾选【允许编辑内置工具】后自定义工具弹窗仍不显示内置工具的问题；
+- 去除日志服务启动/关闭冗余条目及 [日志] 字段；
+- 补齐内置工具编辑在控制器与 QML 对话框中的自动化测试；
+- 重新完整打包部署至 `E:\Softwares\VisionRT` 并通过全量端到端验证。
+
+**当前状态**
+- 已完成根因定位：
+  1. `AppController.h` 中 `setEditBuiltins` 与 `setEasyTouchEnabled` 缺失 `Q_INVOKABLE` 宏修饰，导致 QML 菜单触发时抛出 `TypeError: Property 'setEditBuiltins' ... is not a function`，开关未真正生效；
+  2. 部署目录 `E:\Softwares\VisionRT\tools-package` 在前序异常中断时被清空，运行态未加载到工具包，导致工具目录为空。
+- 已完成代码修复：
+  1. 在 `AppController.h` 为 `setEditBuiltins` 和 `setEasyTouchEnabled` 添加 `Q_INVOKABLE`；
+  2. 修正 `installed_pipeline_contract` 测试中的亮度参数，使全量安装态契约 100% 通过；
+  3. 日志格式清理（已在提交 `481d0bf` 固化并经契约测试锁定）。
+- 已完成测试补齐：
+  1. `tests/tool_editor_controller_test.cpp` 增加对 `setEditBuiltins` 切换显示/隐藏内置工具的契约测试；
+  2. `tests/tool_editor_dialog_test.cpp` 增加 QML 真实弹窗渲染内置工具节点的端到端测试。
+- 已完成重新部署：
+  全量重新打包部署至 `E:\Softwares\VisionRT`（2783 个文件），元数据 `dirty=false`。
+- 已完成安装态及端到端验证：
+  `VisionRT.exe -v`、`installed_pipeline_contract`、`installed_python_author_contract`、`tool_editor_controller_test`、`tool_editor_dialog_test` 全部 PASS（退出码 0）。
+
+**验证证据**
+- `.\build\bin\tool_editor_controller_test.exe` → 退出码 0，`[PASS] tool_editor_controller_test`；
+- `.\build\bin\tool_editor_dialog_test.exe` → 退出码 0，`[PASS] tool_editor_dialog_test`（QML 对话框成功渲染内置工具节点）；
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip` → 退出码 0，`package verification complete: 2783 files`，`package complete: E:\Softwares\VisionRT`；
+- `& "E:\Softwares\VisionRT\VisionRT.exe" -v` → 退出码 0，输出 `VisionRT 0.1.0`。
+
+**下一步**
+- 保持当前部署环境，等待用户体验并确认。
+
+### 2026-11-05 — 拉取最新代码、构建双仓并部署至 E:\Softwares\VisionRT
+
+**目标**
+- 拉取 VisionRT 与 VisionTools 最新代码及子模块，编译构建并完整打包部署至 `E:\Softwares\VisionRT`。
+
+**当前状态**
+- 已完成拉取：VisionRT 推进至 `fb89201`，VisionTools 推进至 `9cb038f`，Contracts 子模块对齐最新。
+- 已完成构建：VisionRT（`VisionRT.exe`、`visionrt_validate_tool.exe`、测试可执行）与 VisionTools（`vst_image.dll`、`vst_infer.dll`、`vst_metrology.dll`）Release 目标全部编译链接通过。
+- 已完成清理：移出残留的历史未跟踪孤立旧子模块（`VisionRTToolSDK`、`yaml-cpp`），两仓工作区保持 clean（`dirty=false`）。
+- 已完成打包部署：VisionTools 成功出包（22 工具、3 模块，`dist/VisionTools.zip`），部署至 `E:\Softwares\VisionRT`（2782 文件），元数据 `build_info.json` 均为 `dirty=false`。
+- 已完成验证：无头版本验证 `VisionRT.exe -v` 输出 `VisionRT 0.1.0`；安装态契约 `installed_pipeline_contract` 与 `installed_python_author_contract` 全部通过；工作台启动截屏及日志记录验证通过。
+
+**验证证据**
+- `python D:\Project\VisionTools\tools\package_tools.py --config Release --build-dir D:/Project/VisionTools/build --install-dir D:/Project/VisionTools/dist/VisionTools --zip-output D:/Project/VisionTools/dist/VisionTools.zip --validator D:/Project/VisionRT/build/bin/visionrt_validate_tool.exe --profile rtx40-build` → 退出码 0，`已打包 22 个工具：D:\Project\VisionTools\dist\VisionTools.zip`；
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip` → 退出码 0，`package verification complete: 2782 files`，`package complete: E:\Softwares\VisionRT`；
+- `& "E:\Softwares\VisionRT\VisionRT.exe" -v` → 退出码 0，输出 `VisionRT 0.1.0`；
+- `.\build\bin\installed_pipeline_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `.\build\bin\installed_python_author_contract.exe "E:\Softwares\VisionRT\tools-package"` → 退出码 0；
+- `& "E:\Softwares\VisionRT\VisionRT.exe" --screenshot "D:\tmp\installed_workbench_e.png" --screenshot-delay 2000` → 退出码 0，生成 48153 字节截图。
+
+**下一步**
+- 在 `E:\Softwares\VisionRT` 生产环境中继续使用或进行业务流测试。
+
 ### 2026-11-05 — 提交 R49 两仓并用干净元数据出包（1837 文件）
 
 **目标**

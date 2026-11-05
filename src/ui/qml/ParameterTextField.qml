@@ -113,6 +113,7 @@ Item {
                     clip: true
                     autoScroll: true
 
+                    onActiveFocusChanged: if (!activeFocus) cursorPosition = 0
                     onEditingFinished: {
                         if (activeFocus) root.finishEditing()
                         else blurCommit.restart()

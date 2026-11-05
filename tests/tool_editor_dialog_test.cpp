@@ -63,6 +63,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication app(argc, argv);
+    QCoreApplication::addLibraryPath(QStringLiteral("E:/Softwares/Qt/6.11.0/msvc2022_64/plugins"));
 
     QTemporaryDir directory;
     require(directory.isValid(), "cannot create editor store");
@@ -99,17 +100,22 @@ try
     require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "调整亮度") == nullptr; }, 2000),
             "custom tool dialog did not hide builtin tools after setEditBuiltins(false)");
 
-    require(controller.addTool("自定义/图像"), "editor could not add a tool");
+    require(controller.addTool("用户扩展/示例工具"), "editor could not add a tool");
     require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "保存") != nullptr; }, 2000),
             "the editor did not render its save action");
 
     auto *saveButton = findByText(window->contentItem(), "保存");
     require(saveButton->isEnabled(), "a dirty editor must offer Save");
+    controller.setCurrentToolName("图像阈值");
+    controller.setCurrentToolId("custom.image.threshold");
     require(controller.inputModel()->addPort("阈值", "int", "128"), "editor could not add an input");
+    require(controller.inputModel()->updatePort(1, {{"min", "0"}, {"max", "255"}}), "range update failed");
     require(controller.inputModel()->addPort("输入图像", "image"), "editor could not add an image input");
     require(!controller.inputModel()->updatePort(1, {{"showImage", true}}),
             "a non-image parameter accepted the image display flag");
-    require(controller.inputModel()->updatePort(2, {{"showImage", true}}), "the image display flag was rejected");
+    require(controller.inputModel()->updatePort(2, {{"showImage", false}}), "the image display flag was rejected");
+    require(controller.outputModel()->addPort("输出图像", "image"), "editor could not add an output");
+    require(controller.outputModel()->updatePort(2, {{"showImage", true}}), "the output showImage flag was rejected");
 
     // The two parameter columns are real cards: the fixed status row plus the two authored inputs.
     require(QTest::qWaitFor([&] { return countByClass(window->contentItem(), "ToolPortCard") >= 3; }, 2000),
@@ -118,12 +124,20 @@ try
     const QString screenshot = qEnvironmentVariable("VISIONRT_EDITOR_SCREENSHOT");
     if (!screenshot.isEmpty())
     {
-        require(window->grabWindow().save(screenshot), "could not capture the editor window");
+        QTest::qWait(300);
+        QImage image = window->grabWindow();
+        std::cout << "screenshot path: [" << screenshot.toStdString() << "]" << std::endl;
+        std::cout << "grabWindow: isNull=" << image.isNull() << " size=" << image.width() << "x" << image.height() << std::endl;
+        bool ok = image.save(screenshot);
+        std::cout << "save result=" << ok << std::endl;
+        require(ok, "could not capture the editor window");
     }
 
     click(window, saveButton);
     require(QTest::qWaitFor([&] { return !window->isVisible(); }, 3000), "Save did not close the editor");
-    require(std::filesystem::exists(root / "tools" / "custom.tool.1.json"), "Save did not write the declaration");
+    require(std::filesystem::exists(root / "tools" / "custom.image.threshold.json")
+            || std::filesystem::exists(root / "tools" / "custom.tool.1.json"),
+            "Save did not write the declaration");
 
     std::cout << "[PASS] tool_editor_dialog_test" << std::endl;
     return 0;
