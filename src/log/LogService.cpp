@@ -236,6 +236,8 @@ namespace {
 // %v carries the business source in brackets so the formatter owns time, level and thread only.
 std::string buildPayload(std::string_view source, std::string_view message)
 {
+    if (source.empty())
+        return std::string(message);
     std::string payload;
     payload.reserve(source.size() + message.size() + 3);
     payload.push_back('[');
@@ -284,7 +286,7 @@ public:
         std::size_t budget = maximum;
         if (dropped_ > 0)
         {
-            result.push_back(LogRecord{formatLine(spdlog::level::warn, "日志",
+            result.push_back(LogRecord{formatLine(spdlog::level::warn, "",
                                                   "队列已满，丢弃 " + std::to_string(dropped_) + " 条较早日志"),
                                        levelText(spdlog::level::warn)});
             dropped = dropped_;
@@ -512,13 +514,14 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
         impl_->running.store(true, std::memory_order_release);
         gRunning.store(true, std::memory_order_release);
     }
-    // Startup log lines are dispatched outside the exclusive writeMutex to avoid recursive lock acquisition
-    if (impl_->fileReady)
-        info("日志", ("日志服务已启动：" + impl_->path).toStdString());
-    else if (impl_->path.isEmpty())
-        warn("日志", "无法确定软件目录，文件日志不可用，仅窗口日志可用");
-    else
-        warn("日志", ("日志目录不可写，仅窗口日志可用：" + QFileInfo(impl_->path).absolutePath()).toStdString());
+    // Abnormal startup states are dispatched outside the exclusive writeMutex to avoid recursive lock acquisition
+    if (!impl_->fileReady)
+    {
+        if (impl_->path.isEmpty())
+            warn("", "无法确定软件目录，文件日志不可用，仅窗口日志可用");
+        else
+            warn("", ("日志目录不可写，仅窗口日志可用：" + QFileInfo(impl_->path).absolutePath()).toStdString());
+    }
     return true;
 }
 
@@ -526,7 +529,6 @@ void LogService::shutdown()
 {
     if (!impl_ || !impl_->running.load(std::memory_order_acquire))
         return;
-    info("日志", "日志服务正在关闭");
     impl_->running.store(false, std::memory_order_release);
     gRunning.store(false, std::memory_order_release);
 
