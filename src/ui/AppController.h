@@ -210,9 +210,9 @@ public:
     QString                  conditionMode() const;
     QString                  selectTypeText() const;
     bool                     easyTouchEnabled() const;
-    void                     setEasyTouchEnabled(bool enabled);
+    Q_INVOKABLE void         setEasyTouchEnabled(bool enabled);
     bool                     editBuiltins() const;
-    void                     setEditBuiltins(bool enabled);
+    Q_INVOKABLE void         setEditBuiltins(bool enabled);
     // Writes an installed declaration back to the file it came from. The compiled implementation
     // owns the ports, so a declaration that no longer matches it is refused instead of written.
     bool                     saveBuiltinTool(const ToolDefinition &definition, QString *error = nullptr);
