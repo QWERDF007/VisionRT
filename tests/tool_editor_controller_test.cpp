@@ -1,4 +1,5 @@
 #include "core/CustomToolStore.h"
+#include "ui/AppController.h"
 #include "ui/ToolEditorController.h"
 
 #include <QCoreApplication>
@@ -30,6 +31,20 @@ bool treeHasFolder(const QVariantList &nodes, const QString &path)
         if (map.value("path").toString() == path)
             return true;
         if (treeHasFolder(map.value("children").toList(), path))
+            return true;
+    }
+    return false;
+}
+
+bool treeHasTool(const QVariantList &nodes, const QString &name)
+{
+    for (const auto &item : nodes)
+    {
+        const auto map = item.toMap();
+        if (map.value("kind").toString() == QStringLiteral("tool")
+            && map.value("name").toString() == name)
+            return true;
+        if (treeHasTool(map.value("children").toList(), name))
             return true;
     }
     return false;
@@ -191,6 +206,25 @@ int main(int argc, char **argv)
         const QString declaration = readFile(root / "tools" / "custom.test.threshold.json");
         assert(declaration.contains("用户扩展"));
         assert(!declaration.contains("自定义"));
+    }
+
+    // 13. Built-in tools are visible only when editBuiltins is true.
+    {
+        AppController appController(1, "E:/Softwares/VisionRT");
+        ToolEditorController builtinEditor;
+        builtinEditor.setAppController(&appController);
+        builtinEditor.setCustomStore(&store);
+
+        assert(!builtinEditor.editBuiltins());
+        assert(!treeHasTool(builtinEditor.tree(), "调整亮度"));
+
+        builtinEditor.setEditBuiltins(true);
+        assert(builtinEditor.editBuiltins());
+        assert(treeHasFolder(builtinEditor.tree(), "预处理"));
+        assert(treeHasTool(builtinEditor.tree(), "调整亮度"));
+
+        builtinEditor.setEditBuiltins(false);
+        assert(!treeHasTool(builtinEditor.tree(), "调整亮度"));
     }
 
     std::cout << "[PASS] tool_editor_controller_test" << std::endl;

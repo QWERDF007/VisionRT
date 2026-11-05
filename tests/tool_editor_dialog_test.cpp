@@ -1,4 +1,5 @@
 #include "core/CustomToolStore.h"
+#include "ui/AppController.h"
 #include "ui/Theme.h"
 #include "ui/ToolEditorController.h"
 
@@ -59,6 +60,7 @@ void click(QQuickWindow *window, QQuickItem *item)
 } // namespace
 
 int main(int argc, char **argv)
+try
 {
     QGuiApplication app(argc, argv);
 
@@ -86,6 +88,16 @@ int main(int argc, char **argv)
     window->setProperty("controller", QVariant::fromValue(&controller));
     window->show();
     require(QTest::qWaitForWindowExposed(window), "custom tool editor was not exposed");
+
+    AppController appController(1, "E:/Softwares/VisionRT");
+    require(QTest::qWaitFor([&] { return !appController.busy(); }, 5000), "app controller busy timed out");
+    controller.setAppController(&appController);
+    controller.setEditBuiltins(true);
+    require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "调整亮度") != nullptr; }, 2000),
+            "custom tool dialog did not render builtin tools after setEditBuiltins(true)");
+    controller.setEditBuiltins(false);
+    require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "调整亮度") == nullptr; }, 2000),
+            "custom tool dialog did not hide builtin tools after setEditBuiltins(false)");
 
     require(controller.addTool("自定义/图像"), "editor could not add a tool");
     require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "保存") != nullptr; }, 2000),
@@ -115,4 +127,9 @@ int main(int argc, char **argv)
 
     std::cout << "[PASS] tool_editor_dialog_test" << std::endl;
     return 0;
+}
+catch (const std::exception &error)
+{
+    std::cerr << "FAIL: " << error.what() << std::endl;
+    return 1;
 }
