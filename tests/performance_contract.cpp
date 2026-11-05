@@ -1115,7 +1115,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         const auto &s2 = *u2.nodes[0].snapshot;
         require(testview::status(s2).code < 0, "Round 2 must fail in prepare");
         require(isMissing(s2.outputs.at("out")), "Round 2 failed outputs must be Missing");
-        require(s2.timing.executeMs == 0.0, "Round 2 executeMs must be strictly 0");
+        require(s2.timing.adapterExecuteMs == 0.0, "Round 2 adapterExecuteMs must be strictly 0");
         require(s2.timing.adapterExecuteMs == 0.0, "Round 2 adapterExecuteMs must be strictly 0");
         require(s2.timing.waitGilMs == 0.0, "Round 2 waitGilMs must be strictly 0");
         require(s2.timing.pythonInputMs == 0.0, "Round 2 pythonInputMs must be strictly 0");

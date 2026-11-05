@@ -15,9 +15,11 @@ namespace visionrt {
 inline std::filesystem::path softwareDataDir()
 {
     const auto directory = QCoreApplication::applicationDirPath();
-    return std::filesystem::weakly_canonical(directory.isEmpty()
-                                                 ? std::filesystem::current_path()
-                                                 : std::filesystem::path(directory.toStdWString()));
+    // There is no fallback root: writing relative to the process working directory would put user
+    // data outside the installation while claiming the installation owns it.
+    if (directory.isEmpty())
+        throw ContractError("无法确定软件目录，拒绝写入");
+    return std::filesystem::weakly_canonical(std::filesystem::path(directory.toStdWString()));
 }
 
 inline std::filesystem::path resolveToolPath(const std::filesystem::path &root, const std::filesystem::path &relative)

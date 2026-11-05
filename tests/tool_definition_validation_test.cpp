@@ -259,7 +259,7 @@ try
         invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 2};
         rejects([&] { validateToolDefinition(invalid); });
         invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 1};
-        invalid.inputs[2].editor       = "file";
+        invalid.inputs[2].editor       = "text";
         rejects([&] { validateToolDefinition(invalid); });
         invalid                        = pathEditor;
         invalid.inputs[1].type         = {Type::Int};

@@ -96,7 +96,7 @@ std::string CustomToolStore::pythonTemplate(const ToolDefinition &definition)
                     "        return {\"code\": 0, \"message\": \"\", \"detail\": \"\"}\n";
 }
 
-std::vector<PackageTool> CustomToolStore::discoverCustomTools() const
+std::vector<PackageTool> CustomToolStore::discoverCustomTools(std::vector<std::string> *problems) const
 {
     std::vector<PackageTool> result;
     const auto declDir = declarationsDir();
@@ -123,9 +123,12 @@ std::vector<PackageTool> CustomToolStore::discoverCustomTools() const
             tool.definition = parseToolDefinitionFile(entry.path(), source);
             result.push_back(std::move(tool));
         }
-        catch (const std::exception &)
+        catch (const std::exception &error)
         {
-            // Skip invalid files during discovery
+            const auto message = entry.path().string() + "：" + error.what();
+            if (!problems)
+                throw ContractError("自定义工具声明无法读取：" + message);
+            problems->push_back(message);
         }
     }
 
@@ -226,15 +229,9 @@ bool CustomToolStore::deleteCustomTool(const std::string &toolId)
 
     // The declaration owns the code directory, and its package is not necessarily the id spelled
     // with slashes, so read it before the declaration that names it is gone.
-    std::filesystem::path package;
-    try
-    {
-        package = parseToolDefinitionFile(jsonPath).entry.package;
-    }
-    catch (const std::exception &)
-    {
-        // An unreadable declaration still gets deleted; it makes no claim on a code directory.
-    }
+    // An unreadable declaration cannot name the code directory it owns, so it is not deleted: a
+    // guessed removal could take another tool's resources with it.
+    const auto package = parseToolDefinitionFile(jsonPath).entry.package;
 
     // The declaration goes first: once it is gone the tool cannot be discovered, so a leftover code
     // directory is an orphan a later pass can clean instead of a half-deleted tool that still runs.
@@ -260,8 +257,11 @@ bool CustomToolStore::deleteCustomTool(const std::string &toolId)
             if (parseToolDefinitionFile(entry.path()).entry.package == package)
                 return true;
         }
-        catch (const std::exception &)
+        catch (const std::exception &error)
         {
+            // Another declaration may point at the same package. Not knowing its answer means the
+            // directory is not provably ours, so it stays.
+            throw ContractError("无法确认工具包归属：" + entry.path().string() + "：" + error.what());
         }
     }
     std::filesystem::remove_all(scriptDir, error);

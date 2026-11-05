@@ -45,7 +45,7 @@ class AppController : public QObject
     Q_PROPERTY(int activeRoiShape READ activeRoiShape NOTIFY resultsChanged)
     Q_PROPERTY(int imageIndex READ imageIndex WRITE setImageIndex NOTIFY resultsChanged)
     Q_PROPERTY(int imageCount READ imageCount NOTIFY resultsChanged)
-    Q_PROPERTY(int selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
+    Q_PROPERTY(QString selectedImageOutput READ selectedImageOutput WRITE setImageOutput NOTIFY resultsChanged)
     Q_PROPERTY(QAbstractItemModel *toolModel READ toolModel CONSTANT)
     Q_PROPERTY(QAbstractItemModel *outputModel READ outputModel CONSTANT)
     // 日志窗口模型：服务未启动时为空，启动后按可见性批量追加
@@ -63,6 +63,8 @@ class AppController : public QObject
     Q_PROPERTY(QString conditionMode READ conditionMode NOTIFY parametersChanged)
     Q_PROPERTY(QString selectTypeText READ selectTypeText NOTIFY parametersChanged)
     Q_PROPERTY(bool easyTouchEnabled READ easyTouchEnabled WRITE setEasyTouchEnabled NOTIFY assistChanged)
+    // The tool editor lists the declarations shipped with the installation only when this is on.
+    Q_PROPERTY(bool editBuiltins READ editBuiltins WRITE setEditBuiltins NOTIFY editBuiltinsChanged)
     Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
     Q_PROPERTY(QString assistDisabledReason READ assistDisabledReason NOTIFY assistChanged)
@@ -97,7 +99,7 @@ public:
     int                 activeRoiShape() const;
     int                 imageIndex() const;
     int                 imageCount() const;
-    int                 selectedImageOutput() const;
+    QString             selectedImageOutput() const;
     QAbstractItemModel *toolModel() const;
     QAbstractItemModel *outputModel() const;
     QAbstractItemModel *logModel();
@@ -174,7 +176,7 @@ public:
     Q_INVOKABLE void         logParameterDraftRejected(const QString &detail);
     Q_INVOKABLE bool         save(const QString &path = {});
     Q_INVOKABLE void         setImageIndex(int index);
-    Q_INVOKABLE void         setImageOutput(int output);
+    Q_INVOKABLE void         setImageOutput(const QString &output);
     Q_INVOKABLE bool         editRoi(int parameter, bool copyUpstream);
     Q_INVOKABLE bool         startRoiDraw(int parameter, int shape = 2);
     Q_INVOKABLE bool         clearRoi(int parameter);
@@ -209,6 +211,11 @@ public:
     QString                  selectTypeText() const;
     bool                     easyTouchEnabled() const;
     void                     setEasyTouchEnabled(bool enabled);
+    bool                     editBuiltins() const;
+    void                     setEditBuiltins(bool enabled);
+    // Writes an installed declaration back to the file it came from. The compiled implementation
+    // owns the ports, so a declaration that no longer matches it is refused instead of written.
+    bool                     saveBuiltinTool(const ToolDefinition &definition, QString *error = nullptr);
     bool                     assistAvailable() const;
     bool                     assistActive() const;
     QString                  assistDisabledReason() const;
@@ -247,6 +254,7 @@ signals:
     void aboutTextChanged();
     void pasteChanged();
     void assistChanged();
+    void editBuiltinsChanged();
 
 private:
     struct Impl;

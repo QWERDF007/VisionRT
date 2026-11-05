@@ -233,11 +233,11 @@ void failureReplacesOldValueAndManualUsesCache()
     assert(snapshot(manual, 2)->session != snapshot(first, 2)->session);
     assert(engine.start(project, registry, RunMode::Once));
     auto defaults = finish(engine);
-    // The tool omitted its business port: the declaration supplies the value and the run stays a
-    // normal success, so the consumer receives 0 instead of an absent input.
-    assert(snapshot(defaults, 1)->status.code == 0 && snapshot(defaults, 1)->toolResultPublished);
-    assert(equalValues(snapshot(defaults, 1)->outputs.at(2), PortValue{std::int64_t{0}}));
-    assert(std::get<std::int64_t>(snapshot(defaults, 2)->outputs.at(2)) == 0);
+    // The tool omitted its business port: that is a contract failure, not a declaration default.
+    // The consumer still runs and sees the missing upstream value as Missing.
+    assert(snapshot(defaults, 1)->status.code != 0 && !snapshot(defaults, 1)->toolResultPublished);
+    assert(isMissing(snapshot(defaults, 1)->outputs.at(2)));
+    assert(std::get<std::int64_t>(snapshot(defaults, 2)->outputs.at(2)) == -99);
     assert(snapshot(defaults, 2)->disposition == NodeDisposition::Succeeded);
     assert(snapshot(defaults, 1)->round == snapshot(defaults, 2)->round);
     assert(snapshot(defaults, 1)->session == snapshot(defaults, 2)->session);
@@ -494,12 +494,14 @@ void receiverConsumesFailures()
                                  auto           failed = reader->receive(request, cursor);
                                  request.timeout       = 0ms;
                                  auto       next       = reader->receive(request, cursor);
-const bool consumed
-                                     = failed.disposition == ReceiveDisposition::Value
+                                 // The failed source published no value, so the receiver reports
+                                 // Missing with the source status instead of inventing a default.
+                                 const bool consumed
+                                     = failed.disposition == ReceiveDisposition::Missing
                                     && failed.sourceStatus.code == 12
                                     && failed.sourceStatus.message == "源执行失败"
                                     && failed.sourceStatus.detail == "source detail"
-                                    && equalValues(failed.value, PortValue{std::int64_t{0}})
+                                    && isMissing(failed.value)
                                     && next.disposition == ReceiveDisposition::Timeout;
                                  return toolResult({{2, std::int64_t{consumed ? 1 : 0}}}, {});
                              };
@@ -688,7 +690,7 @@ void executionMetricsAndTimingSeparation()
     auto snap      = snapshot(completed, 1);
     assert(snap != nullptr);
     assert(snap->timing.adapterExecuteMs >= 5.0);
-    assert(snap->timing.executeMs == snap->timing.adapterExecuteMs);
+    assert(snap->timing.adapterExecuteMs > 0.0);
     assert(snap->timing.waitGilMs == 3.5);
     assert(snap->timing.pythonInputMs == 1.2);
     assert(snap->timing.pythonCallMs == 5.0);
@@ -705,7 +707,7 @@ void executionMetricsAndTimingSeparation()
     assert(std::abs(completed.flows.front().milliseconds - *completed.roundMilliseconds) < 1e-3);
     // 节点总计覆盖从输入准备到最后一个阶段结束；各阶段之和不能大于它，差额只能是阶段之间的
     // 调度帧，不应达到毫秒级。
-    const auto phases = snap->timing.prepareMs + snap->timing.initMs + snap->timing.executeMs
+    const auto phases = snap->timing.prepareMs + snap->timing.initMs + snap->timing.adapterExecuteMs
                       + snap->timing.validateMs;
     assert(snap->timing.totalMs + 1e-3 >= phases);
     assert(snap->timing.totalMs - phases < 0.5);
@@ -843,7 +845,7 @@ void crossRoundPythonMetricIsolation()
     assert(snap2 != nullptr);
     assert(snap2->status.code == -2);
     assert(snap2->timing.prepareMs > 0);
-    assert(snap2->timing.executeMs == 0.0);
+    assert(snap2->timing.adapterExecuteMs == 0.0);
     assert(snap2->timing.adapterExecuteMs == 0.0);
     assert(snap2->timing.waitGilMs == 0.0);
     assert(snap2->timing.pythonInputMs == 0.0);
@@ -979,9 +981,9 @@ void hostBindingReceiverContract()
         const auto result = snapshot(finish(rejected), receiverNode.id);
         assert(result->status.code == 1);
         assert(result->status.message.find("source_node_seq") != std::string::npos);
-        // The run failed on its own declaration, so the business port carries the default of the
-        // resolved type and the status message names the offending parameter.
-        assert(equalValues(result->outputs.at(2), PortValue{std::int64_t{0}}));
+        // The run failed on its own declaration: the business port stays Missing and the status
+        // message names the offending parameter.
+        assert(isMissing(result->outputs.at(2)));
     }
 
     // Dynamic type: string
@@ -1446,27 +1448,30 @@ void managementDiagnosticsPreserveStatus()
 void optionalOutputsAndCachedMissing()
 {
     ToolRegistry registry;
-    auto         source        = definition("test.optional_output");
+    bool          publishValue = false;
+    auto          source        = definition("test.optional_output");
     source.kind                = ToolKind::Host;
     source.hostBinding         = "test.optional_output";
     registry.addDefinition(source);
     registry.registerHostBinding(source.hostBinding,
-                                 [](const ToolDefinition &, const PlatformToolServices &)
+                                 [&publishValue](const ToolDefinition &, const PlatformToolServices &)
                                  {
                                      auto instance = std::make_unique<Function>();
-                                     instance->run = [](const Values &)
+                                     instance->run  = [&publishValue](const Values &)
                                      {
-                                         return toolResult({{2, Missing{}}}, {});
+                                         return publishValue ? toolResult({{2, std::int64_t{0}}}, {})
+                                                             : toolResult({{2, Missing{}}}, {});
                                      };
                                      return instance;
                                  });
-    auto middle = definition("test.optional_input", {"input"});
+    int       middleCalls = 0;
+    PortValue lastInput   = Missing{};
+    auto      middle      = definition("test.optional_input", {"input"});
     install(registry, middle,
-            [](const Values &inputs)
+            [&middleCalls, &lastInput](const Values &inputs)
             {
-                // A business output the tool did not publish arrives as the declared default, never
-                // as an absent value the next tool has to interpret.
-                assert(equalValues(inputs.at(inputPort("input")), PortValue{std::int64_t{0}}));
+                ++middleCalls;
+                lastInput = inputs.at(inputPort("input"));
                 return toolResult({{2, std::int64_t{42}}}, {});
             });
     auto sink = definition("test.optional_sink", {"input"});
@@ -1476,13 +1481,29 @@ void optionalOutputsAndCachedMissing()
     bind(second, inputPort("input"), 1);
     bind(third, inputPort("input"), 2);
     project.flows.front().nodes = {first, second, third};
+
+    {
+        // A successful tool that omits a declared business output is a contract failure. The host no
+        // longer substitutes the declaration default, and no downstream node runs on invented data.
+        RuntimeEngine engine(1);
+        assert(engine.start(project, registry, RunMode::Once));
+        const auto failed = finish(engine);
+        assert(snapshot(failed, 1)->status.code != 0
+               && snapshot(failed, 1)->status.message.find("未发布输出端口") != std::string::npos);
+        // The downstream node still runs, but it receives Missing: the host did not invent the
+        // declaration default on the failed tool's behalf.
+        assert(isMissing(lastInput));
+    }
+
+    publishValue = true;
     RuntimeEngine engine(1);
     assert(engine.start(project, registry, RunMode::Once));
     auto full = finish(engine);
     assert(snapshot(full, 1)->status.code == 0
            && equalValues(snapshot(full, 1)->outputs.at(2), PortValue{std::int64_t{0}}));
     assert(snapshot(full, 1)->outputTypes == first.signatures.outputs);
-    assert(snapshot(full, 2)->status.code == 0 && snapshot(full, 3)->status.code == 0);
+    assert(snapshot(full, 2)->status.code == 0 && snapshot(full, 3)->status.code == 0
+           && equalValues(lastInput, PortValue{std::int64_t{0}}));
     assert(engine.start(project, registry, RunMode::Node, 3));
     auto cached = finish(engine);
     assert(snapshot(cached, 3)->status.code == 0);

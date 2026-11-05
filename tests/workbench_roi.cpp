@@ -48,6 +48,11 @@ constexpr PortId kCroppedImagesOutput     = 7;
 constexpr PortId kOriginsOutput           = 9;
 constexpr PortId kUnrelatedRegionsOutput  = 10;
 
+QString imageKey(PortId output)
+{
+    return QStringLiteral("outputs:%1").arg(output);
+}
+
 
 
 void roiParameterContract()
@@ -103,7 +108,8 @@ void roiParameterContract()
         "name_zh": "图像",
         "type": "image",
         "display": {
-          "color_order": "BGR"
+          "color_order": "BGR",
+          "visible": true
         },
         "id": 2
       },
@@ -243,7 +249,8 @@ void roiParameterContract()
           }
         },
         "display": {
-          "color_order": "BGR"
+          "color_order": "BGR",
+          "visible": true
         },
         "id": 3
       },
@@ -261,16 +268,25 @@ void roiParameterContract()
       {
         "name_zh": "其他坐标图像",
         "type": "image",
+        "display": {
+          "visible": true
+        },
         "id": 5
       },
       {
         "name_zh": "空图像输出",
         "type": "image",
+        "display": {
+          "visible": true
+        },
         "id": 6
       },
       {
         "name_zh": "裁剪坐标图像",
         "type": "image",
+        "display": {
+          "visible": true
+        },
         "id": 7
       },
       {
@@ -498,17 +514,17 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "ROI project did not reopen");
     app.selectNode(target);
     require(literal() == committed, "ROI parameter changed after save/reopen");
-    app.setImageOutput(kUnavailableImagesOutput);
+    app.setImageOutput(imageKey(kUnavailableImagesOutput));
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "ROI workflow did not finish");
     require(output(kStatusCodePort) == "0" && output(kCountOutput) == "2", "Python did not receive the saved typed ROI");
     QSignalSpy matchingPresented(&viewport, &ImageViewport::imagePresented);
-    app.setImageOutput(kImagesOutput);
+    app.setImageOutput(imageKey(kImagesOutput));
     app.setImageIndex(0);
     require(QTest::qWaitFor([&] { return !matchingPresented.isEmpty() && viewport.hasImage() && !viewport.editing(); }, 3000),
             "Normal result view did not present its requested image before overlay inspection");
     const auto matchingOutput = renderedFrame();
-    require(app.selectedImageOutput() == kImagesOutput && viewport.hasImage() && !viewport.editing(),
+    require(app.selectedImageOutput() == imageKey(kImagesOutput) && viewport.hasImage() && !viewport.editing(),
             "normal result view did not select the declared image output");
     const auto matchingRegion = colorAt(matchingOutput, {65, 75});
     require(matchingRegion.blue() - matchingRegion.red() > 100 && matchingRegion.green() - matchingRegion.red() > 50,
@@ -532,13 +548,13 @@ void roiParameterContract()
     require(app.imageCount() == 2 && app.imageIndex() == 1 && viewport.hasImage(),
             "normal result view could not select the second image in its current output");
     QSignalSpy unrelatedPresented(&viewport, &ImageViewport::imagePresented);
-    app.setImageOutput(kUnrelatedImagesOutput);
+    app.setImageOutput(imageKey(kUnrelatedImagesOutput));
     require(app.imageCount() == 1 && app.imageIndex() == 0,
             "switching image outputs retained another output's batch count or an invalid image index");
     require(QTest::qWaitFor([&] { return !unrelatedPresented.isEmpty() && viewport.hasImage(); }, 3000),
             "Normal result view did not present the newly selected output before region inspection");
     const auto unrelatedOutput = renderedFrame();
-    require(app.selectedImageOutput() == kUnrelatedImagesOutput && viewport.hasImage() && !viewport.editing(),
+    require(app.selectedImageOutput() == imageKey(kUnrelatedImagesOutput) && viewport.hasImage() && !viewport.editing(),
             "normal result view could not switch to another image output");
     const auto unrelatedRegion = colorAt(unrelatedOutput, {35, 75});
     require(unrelatedRegion.blue() - unrelatedRegion.red() > 100 && unrelatedRegion.green() - unrelatedRegion.red() > 50,
@@ -551,12 +567,12 @@ void roiParameterContract()
     require(output(kRegionsOutput) == savedRegions && output(kUnrelatedRegionsOutput) == savedUnrelatedRegions,
             "switching image outputs discarded undisplayed region values");
     std::cout << "[ROI image ownership] Normal output switching respects metadata, not equal pixels; undisplayed region values remain available.\n";
-    app.setImageOutput(kUnavailableImagesOutput);
+    app.setImageOutput(imageKey(kUnavailableImagesOutput));
     renderedFrame();
     require(app.imageCount() == 0 && app.imageIndex() == 0 && !viewport.hasImage()
                 && output(kRegionsOutput) == savedRegions && output(kUnrelatedRegionsOutput) == savedUnrelatedRegions,
             "an empty image output retained another output's preview, batch count or geometry state");
-    app.setImageOutput(kCroppedImagesOutput);
+    app.setImageOutput(imageKey(kCroppedImagesOutput));
     QSignalSpy cropPresented(&viewport, &ImageViewport::imagePresented);
     require(QTest::qWaitFor([&] { return !cropPresented.isEmpty() && viewport.hasImage(); }, 3000)
                 && app.imageCount() == 2 && app.imageIndex() == 0,
@@ -576,7 +592,7 @@ void roiParameterContract()
                 && output(kRegionsOutput) == savedRegions && output(kUnrelatedRegionsOutput) == savedUnrelatedRegions,
             "Cropped output preview discarded the original region values or origin coordinates");
     std::cout << "[ROI crop coordinates] Cropped outputs display their declared regions without inferring projection from origins.\n";
-    app.setImageOutput(kImagesOutput);
+    app.setImageOutput(imageKey(kImagesOutput));
     require(app.imageCount() == 2 && app.imageIndex() == 0,
             "switching back to an image output did not restore its own batch count");
     require(app.editRoi(kRoisInput, false), "Executed ROI could not reopen with its result context");

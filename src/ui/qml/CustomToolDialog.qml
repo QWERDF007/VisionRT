@@ -5,6 +5,9 @@ import QtQuick.Window
 import quickui
 import VisionRT.Style 1.0
 
+// Custom tool authoring: catalogue and tool card, then the declared inputs and outputs, each in its
+// own scrolling column. Every edit is a draft; the footer decides whether the window writes or
+// discards the whole set.
 Window {
     id: root
 
@@ -12,16 +15,17 @@ Window {
     flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
     modality: Qt.NonModal
     color: QuiColor.WindowBackground
-    width: 1120
-    height: 680
-    minimumWidth: 860
-    minimumHeight: 520
+    width: 1280
+    height: 760
+    minimumWidth: 1024
+    minimumHeight: 600
 
-    property var controller: app ? app.toolEditor : null
-    property int selectedPortRow: -1
-    // Rows the pointer is carrying and hovering over; -1 when no drag is in flight.
-    property int dragSourceRow: -1
-    property int dragTargetRow: -1
+    // Injected by the workbench so the window can also be exercised without the whole application.
+    property var controller: null
+    property var flatTree: []
+    // Folders start expanded; the map only remembers the ones the user closed.
+    property var collapsed: ({})
+    property var menuItem: null
 
     function openDialog() {
         if (root.visibility === Window.Minimized)
@@ -31,538 +35,513 @@ Window {
         root.requestActivate()
     }
 
-    // Top Layout
+    function rebuildTree() {
+        let rows = []
+        const nodes = root.controller ? root.controller.tree : []
+        function walk(list, depth) {
+            for (let i = 0; i < list.length; ++i) {
+                const node = list[i]
+                const isFolder = node.kind === "folder"
+                const hasChildren = (node.children || []).length > 0
+                rows.push({
+                    kind: node.kind,
+                    name: node.name,
+                    path: node.path || "",
+                    key: node.key || "",
+                    toolId: node.toolId || "",
+                    folder: node.folder || "",
+                    toolKind: node.toolKind || "",
+                    draft: node.draft === true,
+                    depth: depth,
+                    isFolder: isFolder,
+                    hasChildren: hasChildren,
+                    expanded: isFolder && !root.collapsed[node.path]
+                })
+                if (isFolder && !root.collapsed[node.path] && hasChildren)
+                    walk(node.children, depth + 1)
+            }
+        }
+        walk(nodes, 0)
+        root.flatTree = rows
+    }
+
+    function toggleFolder(path) {
+        if (root.collapsed[path])
+            delete root.collapsed[path]
+        else
+            root.collapsed[path] = true
+        root.rebuildTree()
+    }
+
+    function selectKey(key) {
+        if (root.controller)
+            root.controller.selectKey(key)
+    }
+
+    function openPrompt(mode, parentPath, path) {
+        promptDialog.mode = mode
+        promptDialog.parentPath = parentPath || ""
+        promptDialog.path = path || ""
+        promptField.text = mode === "rename" ? root.controller.folderName(path) : ""
+        promptDialog.title = mode === "rename" ? "重命名目录"
+                            : (mode === "addChild" ? "添加二级目录" : "添加一级目录")
+        promptDialog.open()
+    }
+
+    Component.onCompleted: rebuildTree()
+    onVisibleChanged: if (visible) rebuildTree()
+
+    Connections {
+        target: root.controller
+        function onTreeChanged() { root.rebuildTree() }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        // Main 3-column layout
-        Item {
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            spacing: 0
 
-            RowLayout {
-                anchors.fill: parent
-                spacing: 0
+            // ---------------------------------------------------------------- catalogue
+            Rectangle {
+                Layout.preferredWidth: 230
+                Layout.fillHeight: true
+                color: QuiColor.CardBackground
+                border.color: QuiColor.Border
+                border.width: 1
 
-                // ==========================================
-                // 1. LEFT PANE: Tools Catalog
-                // ==========================================
-                Rectangle {
-                    Layout.preferredWidth: 240
-                    Layout.fillHeight: true
-                    color: QuiColor.CardBackground
-                    border.color: QuiColor.Border
-                    border.width: 1
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 6
 
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 8
+                    Label {
+                        text: "工具库"
+                        font.bold: true
+                        font.pixelSize: Theme.fontSizeMedium
+                        color: QuiColor.FontPrimary
+                    }
 
-                        // Catalog Header
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label {
-                                text: "工具库"
-                                font.bold: true
-                                font.pixelSize: 14
-                                color: QuiColor.FontPrimary
-                            }
-                            Item { Layout.fillWidth: true }
-                            Button {
-                                text: "+ 新建"
-                                onClicked: newToolDialog.open()
-                            }
-                        }
+                    ListView {
+                        id: treeView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        model: root.flatTree
 
-                        // Search
-                        TextField {
-                            id: searchField
-                            Layout.fillWidth: true
-                            placeholderText: "搜索工具..."
-                        }
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
 
-                        // Tools List
-                        ListView {
-                            id: toolListView
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            clip: true
-                            model: {
-                                if (!root.controller) return []
-                                let all = root.controller.tools
-                                let filter = searchField.text.trim().toLowerCase()
-                                if (!filter) return all
-                                return all.filter(function(t) {
-                                    return (t.name && t.name.toLowerCase().includes(filter)) ||
-                                           (t.id && t.id.toLowerCase().includes(filter))
-                                })
+                            width: treeView.width
+                            height: Theme.treeRowHeight
+                            color: modelData.kind === "tool" && root.controller
+                                   && root.controller.currentKey === modelData.key
+                                   ? Theme.treeItemSelectedBg
+                                   : (rowMouse.containsMouse ? Theme.treeItemHoverBg : "transparent")
+
+                            MouseArea {
+                                id: rowMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: function(mouse) {
+                                    if (mouse.button === Qt.RightButton) {
+                                        root.menuItem = modelData
+                                        contextMenu.popup()
+                                        return
+                                    }
+                                    if (modelData.kind === "folder")
+                                        root.toggleFolder(modelData.path)
+                                    else
+                                        root.selectKey(modelData.key)
+                                }
                             }
 
-                            delegate: Rectangle {
-                                width: toolListView.width
-                                height: 42
-                                color: (root.controller && root.controller.currentToolId === modelData.id)
-                                       ? QuiColor.ItemCheck
-                                       : (mouseArea.containsMouse ? QuiColor.ItemHover : "transparent")
-                                radius: 4
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 6 + modelData.depth * Theme.treeIndent
+                                anchors.rightMargin: 6
+                                spacing: 5
 
-                                MouseArea {
-                                    id: mouseArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        if (root.controller) {
-                                            root.controller.selectTool(modelData.id)
-                                            root.selectedPortRow = -1
-                                        }
+                                Item {
+                                    Layout.preferredWidth: Theme.treeArrowWidth
+                                    Layout.fillHeight: true
+                                    visible: modelData.hasChildren
+                                    QuiTextIcon {
+                                        anchors.centerIn: parent
+                                        iconSource: modelData.expanded ? QuiFontIcon.ChevronDownSmall
+                                                                       : QuiFontIcon.ChevronRightSmall
+                                        iconSize: Theme.treeArrowSize
+                                        iconColor: Theme.treeArrowColor
                                     }
                                 }
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 6
-                                    spacing: 8
+                                QuiTextIcon {
+                                    visible: modelData.kind === "folder" || modelData.hasChildren
+                                    iconSource: modelData.expanded ? QuiFontIcon.FolderOpen : QuiFontIcon.Folder
+                                    iconSize: Theme.treeFolderIconSize
+                                    iconColor: Theme.treeFolderIconColor
+                                }
 
-                                    // Kind badge
-                                    Rectangle {
-                                        Layout.preferredWidth: 24
-                                        Layout.preferredHeight: 24
-                                        radius: 3
-                                        color: modelData.kind.includes("class") ? QuiColor.CardBackground : QuiColor.WindowBackground
-                                        border.color: modelData.kind.includes("class") ? QuiColor.Highlight : QuiColor.FontDark
-                                        Label {
-                                            anchors.centerIn: parent
-                                            text: modelData.kind.includes("class") ? "类" : "函"
-                                            font.pixelSize: 11
-                                            color: modelData.kind.includes("class") ? QuiColor.Highlight : QuiColor.FontDark
-                                        }
-                                    }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Theme.treeItemFontSize
+                                    color: modelData.editable === false && modelData.kind === "tool"
+                                           ? Theme.treeItemUnavailableText
+                                           : Theme.treeItemText
+                                }
 
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-                                        Label {
-                                            text: modelData.name || modelData.id
-                                            font.pixelSize: 13
-                                            elide: Text.ElideRight
-                                            color: QuiColor.FontPrimary
-                                        }
-                                        Label {
-                                            text: modelData.id
-                                            font.pixelSize: 10
-                                            color: QuiColor.FontCaption
-                                            elide: Text.ElideRight
-                                        }
-                                    }
+                                Label {
+                                    visible: modelData.draft
+                                    text: "草稿"
+                                    font.pixelSize: Theme.fontSizeCaption
+                                    color: QuiColor.FontCaption
                                 }
                             }
                         }
 
-                        // Tool actions
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Button {
-                                Layout.fillWidth: true
-                                text: "复制"
-                                // A Python tool carries a script that can live in the user root; a
-                                // native factory cannot be copied, only recompiled.
-                                enabled: root.controller && root.controller.canClone && root.controller.currentToolId !== ""
-                                onClicked: {
-                                    if (root.controller)
-                                        root.controller.cloneTool(root.controller.currentToolId)
-                                }
-                            }
-                            Button {
-                                Layout.fillWidth: true
-                                text: "删除"
-                                enabled: root.controller && root.controller.isEditable && root.controller.currentToolId !== ""
-                                onClicked: confirmDeleteDialog.open()
+                        // Empty space between rows still belongs to the catalogue. A row's own
+                        // mouse area consumes its click, so only the gaps reach this handler.
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            onTapped: {
+                                root.menuItem = null
+                                contextMenu.popup()
                             }
                         }
                     }
                 }
+            }
 
-                // ==========================================
-                // 2. MIDDLE PANE: Tool Info & Port Table
-                // ==========================================
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    color: QuiColor.CardBackground
+            // ---------------------------------------------------------------- tool card
+            Rectangle {
+                Layout.preferredWidth: 300
+                Layout.fillHeight: true
+                color: QuiColor.CardBackground
+                border.color: QuiColor.Border
+                border.width: 1
+                visible: root.controller && root.controller.hasTool
+
+                ScrollView {
+                    id: toolCardScroll
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    clip: true
+                    contentWidth: availableWidth
 
                     ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 12
+                        width: toolCardScroll.availableWidth
+                        spacing: 8
 
-                        // Tool Metadata Header
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 4
-                                Label { text: "工具名称"; font.pixelSize: 11; color: QuiColor.FontCaption }
-                                TextField {
-                                    Layout.fillWidth: true
-                                    text: root.controller ? root.controller.currentToolName : ""
-                                    enabled: root.controller && root.controller.isEditable
-                                    onEditingFinished: {
-                                        if (root.controller)
-                                            root.controller.currentToolName = text
-                                    }
-                                }
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 4
-                                Label {
-                                    text: root.controller && root.controller.isToolIdEditable
-                                          ? "工具标识 (ID，首次应用前可修改)"
-                                          : "工具标识 (ID)"
-                                    font.pixelSize: 11
-                                    color: QuiColor.FontCaption
-                                }
-                                TextField {
-                                    Layout.fillWidth: true
-                                    text: root.controller ? root.controller.currentToolId : ""
-                                    readOnly: !(root.controller && root.controller.isToolIdEditable)
-                                    onEditingFinished: {
-                                        if (!root.controller || !root.controller.isToolIdEditable)
-                                            return
-                                        root.controller.currentToolId = text
-                                        text = root.controller.currentToolId
-                                    }
-                                }
-                            }
-
-                            ColumnLayout {
-                                Layout.preferredWidth: 140
-                                spacing: 4
-                                Label { text: "类别"; font.pixelSize: 11; color: QuiColor.FontCaption }
-                                TextField {
-                                    Layout.fillWidth: true
-                                    text: root.controller ? root.controller.currentToolCategory : "自定义"
-                                    enabled: root.controller && root.controller.isEditable
-                                    onEditingFinished: {
-                                        if (root.controller)
-                                            root.controller.currentToolCategory = text
-                                    }
-                                }
-                            }
+                        Label {
+                            text: "工具定义"
+                            font.bold: true
+                            font.pixelSize: Theme.fontSizeMedium
+                            color: QuiColor.FontPrimary
                         }
 
-                        // Impact preview: what the pending declaration does to the open project.
-                        Label {
+                        Label { text: "中文名"; font.pixelSize: Theme.fontSizeCaption; color: QuiColor.FontCaption }
+                        ParameterTextField {
                             Layout.fillWidth: true
-                            visible: root.controller && root.controller.isDirty && root.controller.currentToolId !== ""
-                            text: root.controller ? root.controller.impactSummary : ""
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 11
+                            text: root.controller ? root.controller.currentToolName : ""
+                            readOnly: !(root.controller && root.controller.isEditable)
+                            onCommitRequested: if (root.controller) root.controller.currentToolName = text
+                            onCancelRequested: text = root.controller ? root.controller.currentToolName : ""
+                        }
+
+                        Label {
+                            text: (root.controller && root.controller.isToolIdEditable)
+                                  ? "英文注册标识（首次保存前可修改）"
+                                  : "英文注册标识"
+                            font.pixelSize: Theme.fontSizeCaption
                             color: QuiColor.FontCaption
                         }
+                        ParameterTextField {
+                            Layout.fillWidth: true
+                            text: root.controller ? root.controller.currentToolId : ""
+                            readOnly: !(root.controller && root.controller.isToolIdEditable)
+                            onCommitRequested: if (root.controller) root.controller.currentToolId = text
+                            onCancelRequested: text = root.controller ? root.controller.currentToolId : ""
+                        }
 
-                        // Installed tools open as definitions to read, never as drafts to publish.
+                        Label { text: "版本"; font.pixelSize: Theme.fontSizeCaption; color: QuiColor.FontCaption }
+                        ParameterTextField {
+                            Layout.fillWidth: true
+                            text: root.controller ? root.controller.currentToolVersion : ""
+                            readOnly: !(root.controller && root.controller.isEditable)
+                            onCommitRequested: if (root.controller) root.controller.currentToolVersion = text
+                            onCancelRequested: text = root.controller ? root.controller.currentToolVersion : ""
+                        }
+
+                        Label { text: "分类目录"; font.pixelSize: Theme.fontSizeCaption; color: QuiColor.FontCaption }
+                        ParameterTextField {
+                            Layout.fillWidth: true
+                            text: root.controller ? root.controller.currentToolCategory : ""
+                            readOnly: !(root.controller && root.controller.isEditable)
+                            onCommitRequested: if (root.controller) root.controller.currentToolCategory = text
+                            onCancelRequested: text = root.controller ? root.controller.currentToolCategory : ""
+                        }
+
+                        Label { text: "注册接口"; font.pixelSize: Theme.fontSizeCaption; color: QuiColor.FontCaption }
                         Label {
                             Layout.fillWidth: true
-                            visible: root.controller && root.controller.currentToolId !== "" && !root.controller.isEditable
-                            text: root.controller && root.controller.canClone
-                                  ? "内置工具：定义只读，可查看参数与声明 JSON；需要修改时先复制为自有工具，再在副本上编辑并应用。"
-                                  : "内置工具：定义只读，可查看参数与声明 JSON。该工具由原生代码注册，修改端口需改源码后重新打包。"
                             wrapMode: Text.WordWrap
-                            font.pixelSize: 11
-                            color: QuiColor.FontCaption
-                        }
-
-                        // Stage Tabs
-                        TabBar {
-                            id: stageTabs
-                            Layout.fillWidth: true
-                            currentIndex: 0
-                            onCurrentIndexChanged: {
-                                if (!root.controller) return
-                                if (currentIndex === 0) root.controller.currentStage = "inputs"
-                                else if (currentIndex === 1) root.controller.currentStage = "outputs"
-                                else if (currentIndex === 2) root.controller.currentStage = "init"
-                                root.selectedPortRow = -1
+                            font.pixelSize: Theme.fontSizeCaption
+                            color: QuiColor.FontPrimary
+                            text: {
+                                if (!root.controller) return ""
+                                if (root.controller.currentToolKind === "python_function") return "Python 函数"
+                                if (root.controller.currentToolKind === "python_class") return "Python 类"
+                                if (root.controller.currentToolKind === "cpp") return "C++ 注册工厂"
+                                return "宿主内置"
                             }
-
-                            TabButton { text: "输入参数" }
-                            TabButton { text: "输出参数" }
-                            TabButton { text: "初始化参数" }
-                            TabButton { text: "代码文件" }
                         }
 
-                        // Port table view (Tabs 0, 1, 2)
                         ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            visible: stageTabs.currentIndex !== 3
-                            spacing: 6
+                            spacing: 4
+                            visible: root.controller && root.controller.isPython
 
-                            // Port Table Toolbar
+                            Label { text: "Python 相对脚本"; font.pixelSize: Theme.fontSizeCaption; color: QuiColor.FontCaption }
+                            ParameterTextField {
+                                Layout.fillWidth: true
+                                text: root.controller ? root.controller.currentToolFile : ""
+                                readOnly: !(root.controller && root.controller.isEditable)
+                                onCommitRequested: if (root.controller) root.controller.currentToolFile = text
+                                onCancelRequested: text = root.controller ? root.controller.currentToolFile : ""
+                            }
+
+                            Label { text: "函数名或类名"; font.pixelSize: Theme.fontSizeCaption; color: QuiColor.FontCaption }
+                            ParameterTextField {
+                                Layout.fillWidth: true
+                                text: root.controller ? root.controller.currentToolSymbol : ""
+                                readOnly: !(root.controller && root.controller.isEditable)
+                                onCommitRequested: if (root.controller) root.controller.currentToolSymbol = text
+                                onCancelRequested: text = root.controller ? root.controller.currentToolSymbol : ""
+                            }
+
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 6
-
                                 Button {
-                                    text: "+ 添加参数"
-                                    enabled: root.controller && root.controller.isEditable
-                                    onClicked: {
-                                        if (root.controller && root.controller.portModel) {
-                                            root.controller.portModel.addPort("新参数", "int", "0")
-                                            root.selectedPortRow = portListView.count - 1
-                                        }
-                                    }
+                                    text: "打开脚本"
+                                    enabled: root.controller && root.controller.currentToolScript !== ""
+                                    onClicked: if (root.controller) root.controller.openCodeFile()
                                 }
                                 Button {
-                                    text: "↑ 上移"
-                                    enabled: root.controller && root.controller.isEditable &&
-                                             root.selectedPortRow > (root.controller.portModel ? root.controller.portModel.fixedRowCount() : 0)
-                                    onClicked: {
-                                        if (root.controller && root.controller.portModel) {
-                                            let target = root.selectedPortRow - 1
-                                            if (root.controller.portModel.movePort(root.selectedPortRow, target))
-                                                root.selectedPortRow = target
-                                        }
-                                    }
-                                }
-                                Button {
-                                    text: "↓ 下移"
-                                    enabled: root.controller && root.controller.isEditable && root.controller.portModel &&
-                                             root.selectedPortRow >= root.controller.portModel.fixedRowCount() &&
-                                             root.selectedPortRow < portListView.count - 1
-                                    onClicked: {
-                                        if (root.controller && root.controller.portModel) {
-                                            let target = root.selectedPortRow + 1
-                                            if (root.controller.portModel.movePort(root.selectedPortRow, target))
-                                                root.selectedPortRow = target
-                                        }
-                                    }
-                                }
-                                Button {
-                                    text: "× 删除"
-                                    enabled: root.controller && root.controller.isEditable && root.controller.portModel &&
-                                             root.selectedPortRow >= root.controller.portModel.fixedRowCount()
-                                    onClicked: {
-                                        if (root.controller && root.controller.portModel) {
-                                            root.controller.portModel.removePort(root.selectedPortRow)
-                                            root.selectedPortRow = -1
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Table Header
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 32
-                                color: QuiColor.Background
-                                border.color: QuiColor.Border
-                                radius: 3
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    // Keeps the header aligned with the rows, which carry a drag handle column.
-                                    Item { Layout.preferredWidth: 18 }
-                                    Label { text: "编号 (ID)"; Layout.preferredWidth: 80; font.bold: true; font.pixelSize: 12 }
-                                    Label { text: "参数名称"; Layout.preferredWidth: 140; font.bold: true; font.pixelSize: 12 }
-                                    Label { text: "类型"; Layout.preferredWidth: 120; font.bold: true; font.pixelSize: 12 }
-                                    Label { text: "默认值"; Layout.fillWidth: true; font.bold: true; font.pixelSize: 12 }
-                                    Label { text: "状态"; Layout.preferredWidth: 70; font.bold: true; font.pixelSize: 12 }
-                                }
-                            }
-
-                            // Table List
-                            ListView {
-                                id: portListView
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                clip: true
-                                model: root.controller ? root.controller.portModel : null
-
-                                delegate: Rectangle {
-                                    width: portListView.width
-                                    height: 36
-                                    color: (root.selectedPortRow === index)
-                                           ? QuiColor.ItemCheck
-                                           : (rowMouse.containsMouse ? QuiColor.ItemHover : "transparent")
-                                    border.color: (root.dragSourceRow === index || (root.dragSourceRow >= 0 && root.dragTargetRow === index))
-                                                  ? QuiColor.Highlight
-                                                  : (root.selectedPortRow === index ? QuiColor.Border : "transparent")
-                                    radius: 2
-
-                                    MouseArea {
-                                        id: rowMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        onClicked: root.selectedPortRow = index
-                                    }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-
-                                        // Drag handle. The gutter is always present so every column lines
-                                        // up with the header; only a business row can be carried, and the
-                                        // drop is clamped to the business area.
-                                        Item {
-                                            id: dragHandle
-                                            Layout.preferredWidth: 18
-                                            Layout.fillHeight: true
-
-                                            Label {
-                                                anchors.centerIn: parent
-                                                text: model.isFixed ? "" : "⋮⋮"
-                                                font.pixelSize: 12
-                                                color: rowDrag.active ? QuiColor.Highlight : QuiColor.FontCaption
-                                            }
-                                            HoverHandler {
-                                                enabled: rowDrag.enabled
-                                                cursorShape: rowDrag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                                            }
-                                            DragHandler {
-                                                id: rowDrag
-                                                target: null
-                                                xAxis.enabled: false
-                                                enabled: root.controller && root.controller.isEditable && !model.isFixed
-
-                                                // The drop row is resolved while the pointer moves, not on
-                                                // release: the handler's translation is cleared as soon as
-                                                // the grab ends.
-                                                function updateDropTarget() {
-                                                    if (!rowDrag.active || root.dragSourceRow < 0)
-                                                        return
-                                                    const portsModel = root.controller ? root.controller.portModel : null
-                                                    if (!portsModel)
-                                                        return
-                                                    // Content coordinates: indexAt() speaks the same system,
-                                                    // and contentY is frozen because flicking is off.
-                                                    const point = dragHandle.mapToItem(portListView.contentItem,
-                                                                                      dragHandle.width / 2,
-                                                                                      dragHandle.height / 2 + rowDrag.activeTranslation.y)
-                                                    let targetRow = portListView.indexAt(point.x, point.y)
-                                                    const firstBusiness = portsModel.fixedRowCount()
-                                                    if (targetRow < 0)
-                                                        targetRow = point.y < 0 ? firstBusiness : portListView.count - 1
-                                                    root.dragTargetRow = Math.max(targetRow, firstBusiness)
-                                                }
-
-                                                onActiveChanged: {
-                                                    if (active) {
-                                                        root.dragSourceRow = index
-                                                        root.dragTargetRow = index
-                                                        portListView.interactive = false
-                                                        updateDropTarget()
-                                                        return
-                                                    }
-                                                    portListView.interactive = true
-                                                    const source = root.dragSourceRow
-                                                    const target = root.dragTargetRow
-                                                    root.dragSourceRow = -1
-                                                    root.dragTargetRow = -1
-                                                    if (source < 0 || target < 0 || target === source)
-                                                        return
-                                                    const portsModel = root.controller ? root.controller.portModel : null
-                                                    if (portsModel && portsModel.movePort(source, target)
-                                                            && root.selectedPortRow === source)
-                                                        root.selectedPortRow = target
-                                                }
-                                                onActiveTranslationChanged: updateDropTarget()
-                                            }
-                                        }
-
-                                        Label {
-                                            text: String(model.portId)
-                                            Layout.preferredWidth: 80
-                                            font.bold: true
-                                            color: model.isFixed ? QuiColor.FontCaption : QuiColor.FontPrimary
-                                        }
-                                        Label {
-                                            text: model.nameZh
-                                            Layout.preferredWidth: 140
-                                            elide: Text.ElideRight
-                                            color: QuiColor.FontPrimary
-                                        }
-                                        Label {
-                                            text: model.displayType
-                                            Layout.preferredWidth: 120
-                                            elide: Text.ElideRight
-                                            color: QuiColor.FontCaption
-                                        }
-                                        Label {
-                                            text: model.defaultValue || "-"
-                                            Layout.fillWidth: true
-                                            elide: Text.ElideRight
-                                            color: QuiColor.FontCaption
-                                        }
-                                        Label {
-                                            text: model.isFixed ? "🔒 系统" : "业务"
-                                            Layout.preferredWidth: 70
-                                            font.pixelSize: 11
-                                            color: model.isFixed ? Theme.warning : QuiColor.FontCaption
-                                        }
-                                    }
+                                    text: "脚本目录"
+                                    enabled: root.controller && root.controller.currentToolScript !== ""
+                                    onClicked: if (root.controller) root.controller.openCodeDirectory()
                                 }
                             }
                         }
 
-                        // Code tab view (Tab 3)
-                        ColumnLayout {
+                        Label {
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            visible: stageTabs.currentIndex === 3
-                            spacing: 12
+                            visible: root.controller && !root.controller.isEditable
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: Theme.fontSizeCaption
+                            color: QuiColor.FontCaption
+                            text: "内置工具：定义只读，可查看并复制参数。需要修改时先在右键菜单复制为自有工具，再在副本上编辑并保存。"
+                        }
 
-                            Label {
-                                text: "Python 脚本文件："
-                                font.bold: true
-                                color: QuiColor.FontPrimary
-                            }
-                            TextField {
+                        Label {
+                            Layout.fillWidth: true
+                            visible: root.controller && root.controller.isDirty
+                            text: root.controller ? root.controller.impactSummary : ""
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: Theme.fontSizeCaption
+                            color: QuiColor.FontCaption
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            visible: root.controller && root.controller.isPython
+                            Button {
                                 Layout.fillWidth: true
-                                text: root.controller ? root.controller.currentToolScript : ""
-                                readOnly: true
+                                text: "复制为自有工具"
+                                enabled: root.controller && root.controller.canClone
+                                onClicked: if (root.controller) root.controller.cloneTool(root.controller.currentKey)
                             }
-                            RowLayout {
-                                spacing: 10
-                                Button {
-                                    text: "外部编辑器打开脚本"
-                                    onClicked: if (root.controller) root.controller.openCodeFile()
-                                }
-                                Button {
-                                    text: "在文件管理器中显示"
-                                    onClicked: if (root.controller) root.controller.openCodeDirectory()
-                                }
+                            Button {
+                                Layout.fillWidth: true
+                                text: "删除工具"
+                                enabled: root.controller && root.controller.isEditable
+                                onClicked: confirmDeleteDialog.open()
                             }
-                            Item { Layout.fillHeight: true }
+                        }
+
+                        Item { Layout.fillHeight: true }
+                    }
+                }
+            }
+
+            // ---------------------------------------------------------------- inputs
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumWidth: 280
+                spacing: 0
+                visible: root.controller && root.controller.hasTool
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    color: QuiColor.WindowBackground
+                    border.color: QuiColor.Border
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        Label {
+                            text: "输入参数"
+                            font.bold: true
+                            font.pixelSize: Theme.fontSizeBase
+                            color: QuiColor.FontPrimary
+                        }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            text: "＋ 参数"
+                            flat: true
+                            enabled: root.controller && root.controller.isEditable
+                            onClicked: {
+                                if (!root.controller) return
+                                root.controller.inputModel.addPort("新参数", "int", "0")
+                                inputView.positionViewAtEnd()
+                            }
                         }
                     }
                 }
 
-                // ==========================================
-                // 3. RIGHT PANE: Port Properties Editor
-                // ==========================================
-                ToolPortProperties {
-                    Layout.preferredWidth: 280
+                // Class tools initialise before they execute; those parameters are a separate stage
+                // and never appear among the execute inputs.
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: initColumn.implicitHeight + 12
+                    visible: root.controller && root.controller.showsInit
+                    color: QuiColor.CardBackground
+                    border.color: QuiColor.Border
+
+                    ColumnLayout {
+                        id: initColumn
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        spacing: 4
+                        Label {
+                            text: "初始化参数"
+                            font.pixelSize: Theme.fontSizeCaption
+                            color: QuiColor.FontCaption
+                        }
+                        ListView {
+                            id: initView
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(contentHeight, 180)
+                            interactive: contentHeight > height
+                            clip: true
+                            spacing: 6
+                            model: root.controller ? root.controller.initModel : null
+                            delegate: ToolPortCard {
+                                width: initView.width
+                                portsModel: root.controller ? root.controller.initModel : null
+                                listView: initView
+                                types: root.controller ? root.controller.supportedTypes : []
+                                editable: root.controller && root.controller.isEditable
+                                stage: "init"
+                            }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: inputView
+                    Layout.fillWidth: true
                     Layout.fillHeight: true
-                    controller: root.controller
-                    selectedRow: root.selectedPortRow
+                    clip: true
+                    spacing: 6
+                    topMargin: 6
+                    bottomMargin: 6
+                    leftMargin: 8
+                    rightMargin: 8
+                    model: root.controller ? root.controller.inputModel : null
+                    delegate: ToolPortCard {
+                        width: inputView.width - 16
+                        portsModel: root.controller ? root.controller.inputModel : null
+                        listView: inputView
+                        types: root.controller ? root.controller.supportedTypes : []
+                        editable: root.controller && root.controller.isEditable
+                        stage: "inputs"
+                    }
+                }
+            }
+
+            // ---------------------------------------------------------------- outputs
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumWidth: 280
+                spacing: 0
+                visible: root.controller && root.controller.hasTool
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    color: QuiColor.WindowBackground
+                    border.color: QuiColor.Border
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        Label {
+                            text: "输出参数"
+                            font.bold: true
+                            font.pixelSize: Theme.fontSizeBase
+                            color: QuiColor.FontPrimary
+                        }
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            text: "＋ 参数"
+                            flat: true
+                            enabled: root.controller && root.controller.isEditable
+                            onClicked: {
+                                if (!root.controller) return
+                                root.controller.outputModel.addPort("新参数", "int", "")
+                                outputView.positionViewAtEnd()
+                            }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: outputView
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6
+                    topMargin: 6
+                    bottomMargin: 6
+                    leftMargin: 8
+                    rightMargin: 8
+                    model: root.controller ? root.controller.outputModel : null
+                    delegate: ToolPortCard {
+                        width: outputView.width - 16
+                        portsModel: root.controller ? root.controller.outputModel : null
+                        listView: outputView
+                        types: root.controller ? root.controller.supportedTypes : []
+                        editable: root.controller && root.controller.isEditable
+                        stage: "outputs"
+                    }
                 }
             }
         }
 
-        // ==========================================
-        // 4. FOOTER: Status Bar & Action Buttons
-        // ==========================================
+        // ---------------------------------------------------------------- footer
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
@@ -576,130 +555,178 @@ Window {
                 spacing: 10
 
                 Label {
-                    text: root.controller ? root.controller.statusMessage : ""
-                    color: (root.controller && root.controller.isStatusError) ? QuiColor.Error : QuiColor.FontCaption
                     Layout.fillWidth: true
                     elide: Text.ElideRight
+                    text: root.controller ? root.controller.statusMessage : ""
+                    color: (root.controller && root.controller.isStatusError) ? QuiColor.Error : QuiColor.FontCaption
                 }
 
                 Button {
-                    text: "查看声明 JSON"
-                    enabled: root.controller && root.controller.currentToolId !== ""
-                    onClicked: jsonPreviewDialog.open()
-                }
-
-                Button {
-                    text: "撤销修改"
-                    enabled: root.controller && root.controller.isDirty
+                    text: "取消"
                     onClicked: {
-                        if (root.controller)
-                            root.controller.revert()
+                        if (root.controller && root.controller.isDirty)
+                            discardDialog.open()
+                        else
+                            root.close()
                     }
                 }
 
                 Button {
-                    text: "应用"
-                    enabled: root.controller && root.controller.canApply && root.controller.isDirty
+                    text: "保存"
+                    enabled: root.controller && root.controller.canSave
                     onClicked: {
-                        if (root.controller)
-                            root.controller.apply()
+                        if (root.controller && root.controller.saveAll()) {
+                            root.controller.cancelAll()
+                            root.close()
+                        }
                     }
-                }
-
-                Button {
-                    text: "关闭"
-                    onClicked: root.close()
                 }
             }
         }
     }
 
-    // ==========================================
-    // DIALOGS: New Tool, Confirm Delete, JSON Preview
-    // ==========================================
+    Menu {
+        id: contextMenu
+
+        MenuItem {
+            text: "添加一级目录"
+            visible: root.menuItem === null
+            onTriggered: root.openPrompt("addRoot", "", "")
+        }
+        MenuItem {
+            text: "添加工具"
+            visible: root.menuItem === null
+            onTriggered: if (root.controller) root.controller.addTool("")
+        }
+        MenuItem {
+            text: "添加二级目录"
+            visible: root.menuItem !== null && root.menuItem.kind === "folder" && root.menuItem.depth === 0
+            onTriggered: root.openPrompt("addChild", root.menuItem.path, "")
+        }
+        MenuItem {
+            text: "添加工具"
+            visible: root.menuItem !== null && root.menuItem.kind === "folder"
+            onTriggered: if (root.controller) root.controller.addTool(root.menuItem.path)
+        }
+        MenuItem {
+            text: "重命名目录"
+            visible: root.menuItem !== null && root.menuItem.kind === "folder"
+            onTriggered: root.openPrompt("rename", "", root.menuItem.path)
+        }
+        MenuItem {
+            text: "删除空目录"
+            visible: root.menuItem !== null && root.menuItem.kind === "folder"
+            onTriggered: if (root.controller) root.controller.removeFolder(root.menuItem.path)
+        }
+        MenuSeparator {
+            visible: root.menuItem !== null
+        }
+        MenuItem {
+            text: "同目录添加工具"
+            visible: root.menuItem !== null && root.menuItem.kind === "tool"
+            onTriggered: if (root.controller) root.controller.addTool(root.menuItem.folder)
+        }
+        MenuItem {
+            text: "复制工具"
+            visible: root.menuItem !== null && root.menuItem.kind === "tool"
+            onTriggered: if (root.controller) {
+                root.controller.selectKey(root.menuItem.key)
+                root.controller.cloneTool(root.menuItem.key)
+            }
+        }
+        MenuItem {
+            text: "删除工具"
+            visible: root.menuItem !== null && root.menuItem.kind === "tool"
+            onTriggered: {
+                if (!root.controller) return
+                root.controller.selectKey(root.menuItem.key)
+                confirmDeleteDialog.open()
+            }
+        }
+    }
+
     Dialog {
-        id: newToolDialog
-        title: "新建自定义工具"
+        id: promptDialog
+        property string mode: ""
+        property string parentPath: ""
+        property string path: ""
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
-        width: 420
+        width: 360
 
         ColumnLayout {
             anchors.fill: parent
             spacing: 8
-
-            Label { text: "工具名称 (中文)："; font.pixelSize: 12 }
-            TextField { id: newNameField; Layout.fillWidth: true; placeholderText: "例如：图像二值化" }
-
-            Label { text: "工具标识 (英文 name_en)："; font.pixelSize: 12 }
-            TextField { id: newIdField; Layout.fillWidth: true; placeholderText: "例如：custom.image.threshold" }
-
-            Label { text: "实现类型："; font.pixelSize: 12 }
-            ComboBox {
-                id: newKindCombo
+            Label { text: "目录名称"; font.pixelSize: Theme.fontSizeCaption }
+            TextField {
+                id: promptField
                 Layout.fillWidth: true
-                model: [
-                    { label: "Python 函数 (无状态)", value: "python_function" },
-                    { label: "Python 类 (可持有状态)", value: "python_class" }
-                ]
-                textRole: "label"
-                valueRole: "value"
+                onAccepted: promptDialog.accept()
             }
-
-            Label { text: "工具类别："; font.pixelSize: 12 }
-            TextField { id: newCategoryField; Layout.fillWidth: true; text: "自定义" }
         }
 
+        onOpened: {
+            promptField.forceActiveFocus()
+            promptField.selectAll()
+        }
         onAccepted: {
-            if (root.controller) {
-                root.controller.newTool(newNameField.text, newIdField.text, newKindCombo.currentValue, newCategoryField.text)
-                newNameField.text = ""
-                newIdField.text = ""
-            }
+            if (!root.controller) return
+            if (mode === "rename")
+                root.controller.renameFolder(path, promptField.text)
+            else
+                root.controller.addFolder(parentPath, promptField.text)
         }
     }
 
     Dialog {
         id: confirmDeleteDialog
-        title: "确认删除工具"
         modal: true
+        title: "确认删除工具"
         standardButtons: Dialog.Yes | Dialog.No
         width: 420
+
         Label {
-            width: 400
+            width: 380
             wrapMode: Text.WordWrap
             text: {
                 if (!root.controller) return ""
                 const count = root.controller.toolUsage(root.controller.currentToolId)
                 if (count > 0)
-                    return "当前工程有 " + count + " 个节点引用该工具。删除后这些节点保留为“工具缺失”，需要手动修复。确定删除？"
-                return "当前工程没有节点引用该工具。确定删除工具声明及其专属脚本目录？"
+                    return "当前工程有 " + count + " 个节点引用该工具。删除后这些节点保留为工具缺失，需要手动修复。确定删除？"
+                return "确定删除工具声明及其专属脚本目录？保存后才会从工具目录移除。"
             }
         }
-        onAccepted: {
-            if (root.controller)
-                root.controller.deleteTool(root.controller.currentToolId)
-        }
+
+        onAccepted: if (root.controller) root.controller.deleteTool(root.controller.currentKey)
     }
 
     Dialog {
-        id: jsonPreviewDialog
-        title: "工具声明 JSON (Schema 6)"
+        id: discardDialog
         modal: true
-        standardButtons: Dialog.Close
-        width: 600
-        height: 480
+        title: "放弃未保存的修改"
+        standardButtons: Dialog.Yes | Dialog.No
+        width: 420
 
-        ScrollView {
-            anchors.fill: parent
-            clip: true
-            TextArea {
-                text: root.controller ? root.controller.previewJson() : ""
-                readOnly: true
-                font.family: "Consolas, Courier, monospace"
-                font.pixelSize: 12
-                wrapMode: Text.NoWrap
-            }
+        Label {
+            width: 380
+            wrapMode: Text.WordWrap
+            text: "本窗口有尚未保存的工具与目录修改。放弃后这些修改会全部丢弃，工具目录不会变化。"
         }
+
+        onAccepted: {
+            if (root.controller)
+                root.controller.cancelAll()
+            root.close()
+        }
+    }
+
+    onClosing: function(close) {
+        if (root.controller && root.controller.isDirty && visible) {
+            close.accepted = false
+            discardDialog.open()
+            return
+        }
+        if (root.controller)
+            root.controller.cancelAll()
     }
 }

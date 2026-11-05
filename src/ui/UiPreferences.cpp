@@ -62,13 +62,28 @@ bool UiPreferences::easyTouchEnabled()
     return interaction.value(QStringLiteral("easyTouchEnabled")).toBool(true);
 }
 
-void UiPreferences::setEasyTouchEnabled(bool enabled)
+bool UiPreferences::setEasyTouchEnabled(bool enabled)
 {
     auto       root        = readRoot();
     auto       interaction = root.value(QStringLiteral("interaction")).toObject();
     interaction.insert(QStringLiteral("easyTouchEnabled"), enabled);
     root.insert(QStringLiteral("interaction"), interaction);
-    writeRoot(root);
+    return writeRoot(root);
+}
+
+bool UiPreferences::toolEditorEditBuiltins()
+{
+    const auto editor = readRoot().value(QStringLiteral("toolEditor")).toObject();
+    return editor.value(QStringLiteral("editBuiltins")).toBool(false);
+}
+
+bool UiPreferences::setToolEditorEditBuiltins(bool enabled)
+{
+    auto root   = readRoot();
+    auto editor = root.value(QStringLiteral("toolEditor")).toObject();
+    editor.insert(QStringLiteral("editBuiltins"), enabled);
+    root.insert(QStringLiteral("toolEditor"), editor);
+    return writeRoot(root);
 }
 
 QJsonArray UiPreferences::recentProjects()

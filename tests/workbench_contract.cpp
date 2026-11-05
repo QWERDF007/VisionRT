@@ -1301,6 +1301,9 @@ void packageDrivenCatalogAndRefreshContract()
       {
         "name_zh": "图像",
         "type": "image",
+        "display": {
+          "visible": true
+        },
         "id": 3
       }
     ]
@@ -1556,7 +1559,7 @@ void packageDrivenCatalogAndRefreshContract()
         app.setParameter(2, true, "3");
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
         require(app.imageOutputs().size() == 1
-                    && app.imageOutputs().first().toMap().value("id").toString() == "2",
+                    && app.imageOutputs().first().toMap().value("id").toString() == "outputs:2",
                 "source-derived image output is missing from the viewport selector");
         require(choices(1, "label").contains(funcNodeTitle), "source node choices are missing");
         app.setParameter(1, true, funcNodeId);

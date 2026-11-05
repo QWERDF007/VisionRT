@@ -68,11 +68,18 @@ void clampNumeric(const PortDefinition &port, PortValue &value, std::string &adj
 
 } // namespace
 
-NormalizedInput normalizeInput(const PortDefinition &port, PortValue value)
+NormalizedInput normalizeInput(const PortDefinition &port, PortValue value, InputOrigin origin)
 {
     NormalizedInput result;
     if (isMissing(value))
     {
+        // An upstream port that produced nothing stays empty: filling it with the declaration's
+        // manual default would present data the upstream never published.
+        if (origin == InputOrigin::Upstream)
+        {
+            result.value = Missing{};
+            return result;
+        }
         // Every value-carrying port already holds its explicit or type default; only a host status
         // port stays empty, and an empty status is a normal state rather than an author error.
         if (!isMissing(port.defaultValue))
@@ -102,28 +109,25 @@ NormalizedInput normalizeInput(const PortDefinition &port, PortValue value)
 
     clampNumeric(port, value, result.adjustment);
 
+    // An enumerated value is either one of the declared options or an error. Replacing it with the
+    // default would turn a rejected choice into a successful run that used another value.
     if (!port.options.empty() && !inOptions(port.options, value))
-    {
-        if (!isMissing(port.defaultValue) && inOptions(port.options, port.defaultValue))
-        {
-            result.value = portDefault(port);
-            result.adjustment += std::string(result.adjustment.empty() ? "" : "；") + "不在允许选项内，回退默认值";
-            return result;
-        }
         throw ContractError(portLabel(port.id) + " 的值不在允许的选项内");
-    }
 
     result.value = std::move(value);
     return result;
 }
 
-Values normalizeInputs(const std::vector<PortDefinition> &ports, Values values, std::vector<std::string> *adjustments)
+Values normalizeInputs(const std::vector<PortDefinition> &ports, Values values,
+                       std::vector<std::string> *adjustments, const std::set<PortId> *upstreamPorts)
 {
     Values normalized;
     for (const auto &port : ports)
     {
-        const auto found = values.find(port.id);
-        auto       result = normalizeInput(port, found == values.end() ? PortValue{Missing{}} : found->second);
+        const bool upstream = upstreamPorts && upstreamPorts->contains(port.id);
+        const auto found    = values.find(port.id);
+        auto       result   = normalizeInput(port, found == values.end() ? PortValue{Missing{}} : found->second,
+                                             upstream ? InputOrigin::Upstream : InputOrigin::Manual);
         if (!result.adjustment.empty() && adjustments)
             adjustments->push_back(port.nameZh.empty() ? portLabel(port.id) : port.nameZh + "：" + result.adjustment);
         normalized.emplace(port.id, std::move(result.value));

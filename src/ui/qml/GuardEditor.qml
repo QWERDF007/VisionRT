@@ -76,7 +76,7 @@ Dialog {
                 required property var modelData
                 width: ListView.view.width
                 highlighted: root.selectedNode === modelData.node && root.selectedPort === modelData.port
-                text: modelData.title + " · " + modelData.portName + (modelData.selected ? "（已应用）" : "")
+                text: modelData.title + "：" + modelData.portName + (modelData.selected ? "（已应用）" : "")
                 onClicked: {
                     root.selectedNode = modelData.node
                     root.selectedPort = modelData.port

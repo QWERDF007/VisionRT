@@ -226,12 +226,28 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         const auto signature = node.signatures.initParams.find(port.id);
         const bool retain    = old != node.initParams.end() && signature != node.signatures.initParams.end()
                          && compatible(signature->second, port.type);
-        auto value = retain ? old->second : defaultValue(port);
-        if (!retain)
+        if (retain)
+        {
+            auto value = old->second;
+            rangeWarning(result, flow, node, port, value);
+            parameters.emplace(port.id, std::move(value));
+            continue;
+        }
+        if (old != node.initParams.end())
+        {
+            // A saved value that no longer matches the declaration is kept as it is. Rewriting it
+            // would change what the node does without the user saying so; the mismatch is reported
+            // and the node fails its contract until the parameter is corrected.
+            parameters.emplace(port.id, old->second);
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
-                     "缺失或类型不兼容的初始化参数已替换为声明默认值", true);
-        rangeWarning(result, flow, node, port, value);
-        parameters.emplace(port.id, std::move(value));
+                     "初始化参数与当前声明类型不兼容，原值已保留，修正后才能执行");
+            continue;
+        }
+        // A port the declaration has now but the project never saved is materialised from the
+        // declaration; there is no saved value to preserve.
+        parameters.emplace(port.id, defaultValue(port));
+        diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
+                 "当前声明新增此初始化参数，已填入声明默认值", true);
     }
     std::map<PortId, InputBinding> inputs;
     for (const auto &port : contract.inputs)
@@ -250,18 +266,26 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
                          "未配置的字面量草稿已填入声明默认值", true);
             }
+            if (binding.mode == BindingMode::Literal || !binding.source)
+                rangeWarning(result, flow, node, port, binding.literal);
+        }
+        else if (old != node.inputs.end())
+        {
+            // Mode, literal and upstream reference all stay exactly as saved: a changed declaration
+            // is reported, never repaired on the user's behalf. The node reports the mismatch when
+            // it runs and the user decides what the value should become.
+            binding = old->second;
+            if (!isReservedPort(PortStage::Inputs, port.id))
+                diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
+                         "输入与当前声明类型不兼容，原值与上游绑定已保留，修正后才能执行");
         }
         else
         {
             binding.literal = defaultValue(port);
-            if (old != node.inputs.end())
-                binding.mode = old->second.mode;
             if (!isReservedPort(PortStage::Inputs, port.id))
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "缺失或类型不兼容的输入已重置，原上游引用已清除", true);
+                         "当前声明新增此输入，已填入声明默认值", true);
         }
-        if (binding.mode == BindingMode::Literal || !binding.source)
-            rangeWarning(result, flow, node, port, binding.literal);
         inputs.emplace(port.id, std::move(binding));
     }
     for (const auto &[id, binding] : node.inputs)
@@ -644,18 +668,19 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                     }
                     else
                     {
-                        binding.source.reset();
+                        // The binding is kept: clearing it would silently rewrite the project and hide
+                        // which upstream the user chose. The node is reported as not executable until
+                        // the reference is repaired.
                         diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
                                  "inputs." + portLabel(id),
-                                 "上游不存在、输出已变更、跨流程或类型不兼容，引用已清除", true);
+                                 "上游不存在、输出已变更、跨流程或类型不兼容，绑定已保留供修复，不可执行");
                     }
                 }
                 else if (source != nodes.end() && changedOutputs[source->second->id].contains(binding.source->port))
                 {
-                    binding.source.reset();
                     diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
                              "inputs." + portLabel(id),
-                             "上游不存在、输出已变更、跨流程或类型不兼容，引用已清除", true);
+                             "上游输出已变更，绑定已保留供修复，不可执行");
                 }
             }
         }

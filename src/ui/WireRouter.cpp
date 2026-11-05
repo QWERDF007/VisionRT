@@ -48,16 +48,6 @@ const std::vector<RoutedWire> &WireRouter::route(std::span<const NodeBounds> nod
         output->setExclusive(false);
         shapes.emplace(node.id, shape);
     }
-    const auto fallback = [&](NodeId source, NodeId target)
-    {
-        std::vector<QPointF> points;
-        const auto          sourceRectangle = rectangles.find(source);
-        const auto          targetRectangle = rectangles.find(target);
-        if (sourceRectangle != rectangles.end() && targetRectangle != rectangles.end())
-            points = {QPointF(sourceRectangle->second.center().x(), sourceRectangle->second.bottom()),
-                      QPointF(targetRectangle->second.center().x(), targetRectangle->second.top())};
-        return points;
-    };
     std::map<DependencyEdge, std::vector<PortRelation>> groups;
     std::vector<RoutedWire>                             failed;
     for (const auto &relation : relations)
@@ -69,8 +59,8 @@ const std::vector<RoutedWire> &WireRouter::route(std::span<const NodeBounds> nod
                                             [&](const auto &wire)
                                             { return wire.source == edge.first && wire.target == edge.second; });
             if (found == failed.end())
-                failed.push_back({edge.first, edge.second, {relation}, fallback(edge.first, edge.second),
-                                  "连线端点缺少可用节点几何，已保留简化连接"});
+                // The line keeps its logical edge and a reason, but no substitute route is drawn.
+                failed.push_back({edge.first, edge.second, {relation}, {}, "连线端点缺少可用节点几何"});
             else
                 found->ports.push_back(relation);
             continue;
@@ -91,8 +81,9 @@ const std::vector<RoutedWire> &WireRouter::route(std::span<const NodeBounds> nod
         const auto &path = connection->displayRoute().ps;
         if (path.size() < 2)
         {
-            wire.points = fallback(wire.source, wire.target);
-            wire.error  = "无法计算避障路径，已保留简化连接";
+            // A missing route is reported as a failed wire, not replaced by a straight line that
+            // would look like a routed path.
+            wire.error = "无法计算避障路径";
         }
         else
         {

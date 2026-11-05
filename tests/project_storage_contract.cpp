@@ -349,8 +349,13 @@ void reconciliationAndIdentities(const QString &directory)
     changedRegistry.addDefinition(changedTool);
     const auto  changed = ProjectStorage(changedRegistry).load(path(file));
     const auto &binding = changed.project.flows[0].nodes[0].inputs.at(1);
-    require(!binding.source && binding.mode == BindingMode::Upstream && std::get<double>(binding.literal) == 2.5,
-            "schema change retained stale binding");
+    // A changed declaration is reported, not repaired: the saved integer literal and the upstream
+    // reference both stay, and the node fails its input contract until the user corrects them.
+    require(binding.source && binding.source->node == 8 && binding.mode == BindingMode::Upstream
+                && std::get<std::int64_t>(binding.literal) == 9007199254740993LL,
+            "schema change rewrote the saved value or dropped the upstream reference");
+    require(has(changed.diagnostics, ProjectStorageCode::SchemaChanged),
+            "a type-incompatible input was kept without a diagnostic");
     source.insert("tool_id", "still_missing");
     auto snapshot = source.value("type_snapshot").toObject();
     snapshot.insert("outputs", QJsonArray{});
@@ -361,7 +366,10 @@ void reconciliationAndIdentities(const QString &directory)
                 && has(pending.diagnostics, ProjectStorageCode::PendingReference),
             "unknown source cleared");
     put(file, QJsonDocument(savedProject({target})).toJson());
-    require(!storage.load(path(file)).project.flows[0].nodes[0].inputs.at(1).source, "absent source retained");
+    const auto absentSource = storage.load(path(file));
+    require(absentSource.project.flows[0].nodes[0].inputs.at(1).source.has_value()
+                && has(absentSource.diagnostics, ProjectStorageCode::InvalidReference),
+            "an absent source was silently unbound instead of reported");
 }
 
 void typedArraysAndRanges(const QString &directory)
@@ -389,12 +397,13 @@ void typedArraysAndRanges(const QString &directory)
     put(file, QJsonDocument(savedProject({node})).toJson());
     const auto        changed = ProjectStorage(registry).load(path(file));
     const auto &retyped = changed.project.flows[0].nodes[0].inputs.at(1).literal;
-    // A dtype change replaces the stored value with the declaration's own empty array instead of
-    // reinterpreting float32 bytes as int64.
+    // A dtype change does not rewrite the saved array and never reinterprets float32 bytes as
+    // int64: the original value stays with its own dtype and the node reports the mismatch when it
+    // runs, so the user decides what the array should become.
     require(std::holds_alternative<Array>(retyped)
-                && std::get<Array>(retyped).type() == TypeSpec{Type::Array, DType::Int64, 2}
-                && std::get<Array>(retyped).elementCount() == 0 && changed.project.dirty,
-            "float32 empty array reinterpreted as int64");
+                && std::get<Array>(retyped).type() == TypeSpec{Type::Array, DType::Float32, 2}
+                && has(changed.diagnostics, ProjectStorageCode::SchemaChanged),
+            "a dtype change rewrote the saved array");
     tool.inputs[0].type.dtype = DType::Float32;
     ToolRegistry oldRegistry;
     oldRegistry.addDefinition(tool);
@@ -445,7 +454,7 @@ void saveAsPaths(const QString &directory)
         port.nameEn = id;
         port.nameZh = id;
         port.type   = {Type::String};
-        port.editor = std::string(id) == "text" ? "text" : "file";
+        port.editor = std::string(id) == "text" ? "text" : "path";
         tool.inputs.push_back(port);
     }
     PortDefinition mode;
@@ -465,7 +474,7 @@ void saveAsPaths(const QString &directory)
     PortDefinition folder = tool.inputs[0];
     folder.id             = 0;
     folder.nameEn         = "folder";
-    folder.editor         = "directory";
+    folder.editor         = "path";
     tool.initParams.push_back(folder);
     registry.addDefinition(tool);
     ProjectStorage    storage(registry);

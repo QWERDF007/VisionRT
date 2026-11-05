@@ -30,8 +30,9 @@ public:
     static QVector<RecentProjectEntry> load();
 
     // Moves a successfully opened or saved-as project to the front and persists the new order.
-    // Returns the new list whether or not the write succeeded; the caller only reports the failure.
-    static QVector<RecentProjectEntry> record(const QString &path);
+    // Returns the new list whether or not the write succeeded; `persisted` reports which happened so
+    // the caller can say the order will not survive a restart.
+    static QVector<RecentProjectEntry> record(const QString &path, bool *persisted = nullptr);
 
     // Canonical absolute path, or an empty string when the input cannot be a project path.
     static QString identity(const QString &path);

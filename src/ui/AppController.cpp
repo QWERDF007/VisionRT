@@ -1,13 +1,16 @@
 #include "common/Version.h"
 #include "log/LogService.h"
+#include "core/DefinitionJson.h"
 #include "core/NodeContracts.h"
 #include "core/Sequence.h"
+#include "core/ToolPaths.h"
 #include "runtime/Receiver.h"
 #include "runtime/SelectTool.h"
 #include "ui/AppController_p.h"
 #include "ui/AboutReport.h"
 #include "ui/DurationText.h"
 #include "ui/Diagnostics.h"
+#include "ui/UiPreferences.h"
 
 #include <core/ToolPackage.h>
 
@@ -227,6 +230,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     tools.setRegistry(registry);
     toolEditor.setAppController(owner);
     toolEditor.setCustomStore(&customStore);
+    toolEditor.setEditBuiltins(UiPreferences::toolEditorEditBuiltins());
     if (!editor.project().flows.empty())
         flow = workbench::q(editor.project().flows.front().id);
     if (std::any_of(registry.definitions().begin(), registry.definitions().end(), [](const auto &tool)
@@ -910,7 +914,10 @@ void AppController::Impl::advancePending()
 
 void AppController::Impl::recordRecent(const QString &path)
 {
-    auto updated = RecentProjects::record(path);
+    bool       persisted = true;
+    auto       updated   = RecentProjects::record(path, &persisted);
+    if (!persisted)
+        report(QStringLiteral("最近工程列表无法写入，只在本次运行可见：") + UiPreferences::path());
     if (updated == recentProjects)
         return;
     recentProjects = std::move(updated);
@@ -1112,7 +1119,8 @@ void AppController::Impl::loadToolsPackage()
     try
     {
         registry.registerPackage(readToolsPackage(candidate));
-        for (const auto &userTool : customStore.discoverCustomTools())
+        std::vector<std::string> customProblems;
+        for (const auto &userTool : customStore.discoverCustomTools(&customProblems))
         {
             // Duplicate ids are reported instead of silently dropped: the packaged tool keeps its
             // published identity, and the user needs both paths to find the conflicting file.
@@ -1126,6 +1134,8 @@ void AppController::Impl::loadToolsPackage()
             }
             registry.addDefinition(userTool.definition);
         }
+        for (const auto &problem : customProblems)
+            report(QStringLiteral("自定义工具声明已跳过：%1").arg(QString::fromStdString(problem)));
         toolsPackageRoot = candidate;
     }
     catch (const std::exception &error)
@@ -1165,6 +1175,57 @@ AppController::~AppController() = default;
 ToolEditorController *AppController::toolEditor() const noexcept
 {
     return &impl_->toolEditor;
+}
+
+bool AppController::editBuiltins() const
+{
+    return impl_->toolEditor.editBuiltins();
+}
+
+void AppController::setEditBuiltins(bool enabled)
+{
+    if (impl_->toolEditor.editBuiltins() == enabled)
+        return;
+    impl_->toolEditor.setEditBuiltins(enabled);
+    // A pending edit keeps the switch on; the preference follows what the editor accepted so a
+    // restart does not reopen a window the user was told to close.
+    if (impl_->toolEditor.editBuiltins() != enabled)
+        return;
+    if (!UiPreferences::setToolEditorEditBuiltins(enabled))
+        impl_->report(QStringLiteral("无法写入界面设置，内置工具编辑开关只在本次运行生效：") + UiPreferences::path());
+    emit editBuiltinsChanged();
+}
+
+bool AppController::saveBuiltinTool(const ToolDefinition &authored, QString *error)
+{
+    const auto fail = [error](const QString &message)
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
+    if (authored.definitionPath.empty())
+        return fail(QStringLiteral("内置工具没有声明文件路径，不能保存"));
+
+    try
+    {
+        const auto root = softwareDataDir();
+        // resolveToolPath refuses a declaration outside the software root, the only place this
+        // application writes. A relative lookup also throws across drives, which is the same answer.
+        (void)resolveToolPath(root, std::filesystem::relative(authored.definitionPath, root));
+        // The compiled implementation owns the ports: a declaration that no longer matches it would
+        // be rejected the next time the tool is registered, so it is refused before anything is
+        // written and the editor keeps the draft.
+        impl_->registry.validateContract(authored);
+        const auto stored = writeToolDefinitionFile(authored.definitionPath, authored);
+        impl_->registry.replaceDefinition(stored);
+        emit catalogChanged();
+        return true;
+    }
+    catch (const std::exception &failure)
+    {
+        return fail(QString::fromUtf8(failure.what()));
+    }
 }
 
 const ProjectDefinition &AppController::project() const noexcept

@@ -36,7 +36,9 @@ public:
         OptionsTextRole,
         TabRole,
         GroupRole,
-        EditorRole
+        EditorRole,
+        // The author's explicit choice to offer this Image port in the workbench image selector.
+        ShowImageRole
     };
     Q_ENUM(Roles)
 

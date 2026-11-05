@@ -3,6 +3,9 @@
 #include "core/JsonFields.h"
 #include "core/ValueJson.h"
 
+#include <QIODevice>
+#include <QSaveFile>
+
 #include <limits>
 #include <string_view>
 
@@ -165,9 +168,15 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
             if (item.contains("display"))
             {
                 const auto block = json::object(item.value("display"), context + ".display");
-                json::fields(block, {"color_order"}, context + ".display");
+                json::fields(block, {"color_order", "visible"}, context + ".display");
                 if (block.contains("color_order"))
                     port.colorOrder = json::text(block.value("color_order"), context + ".display.color_order");
+                if (block.contains("visible"))
+                {
+                    if (!block.value("visible").isBool())
+                        throw ContractError("display.visible 必须是布尔值");
+                    port.imageVisible = block.value("visible").toBool();
+                }
             }
             if (output)
             {
@@ -268,8 +277,13 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage
                 relations.insert(key, referenceJson(**value));
         if (!relations.isEmpty())
             item.insert("relations", relations);
+        QJsonObject display;
+        if (port.type.type == Type::Image)
+            display.insert("visible", port.imageVisible);
         if (!port.colorOrder.empty())
-            item.insert("display", QJsonObject{{"color_order", QString::fromStdString(port.colorOrder)}});
+            display.insert("color_order", QString::fromStdString(port.colorOrder));
+        if (!display.isEmpty())
+            item.insert("display", display);
         result.append(item);
     }
     return result;
@@ -594,5 +608,29 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
         root.insert("interaction", interaction);
     }
     return QJsonDocument(root).toJson(QJsonDocument::Indented).toStdString();
+}
+
+ToolDefinition writeToolDefinitionFile(const std::filesystem::path &path, const ToolDefinition &authored)
+{
+    if (path.empty())
+        throw ContractError("工具声明缺少写入路径");
+    ToolDefinition definition = authored;
+    normalizeToolDefinition(definition);
+    validateToolDefinition(definition);
+
+    const auto content = emitNormalizedToolJson(definition);
+    QSaveFile  file(QString::fromStdWString(path.wstring()));
+    file.setDirectWriteFallback(false);
+    if (!file.open(QIODevice::WriteOnly))
+        throw ContractError("无法写入工具声明：" + path.string());
+    if (file.write(content.data(), static_cast<qint64>(content.size())) != static_cast<qint64>(content.size()))
+    {
+        file.cancelWriting();
+        throw ContractError("写入工具声明内容失败：" + path.string());
+    }
+    if (!file.commit())
+        throw ContractError("提交工具声明失败：" + path.string());
+    definition.definitionPath = path;
+    return definition;
 }
 }

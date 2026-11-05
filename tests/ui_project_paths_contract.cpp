@@ -86,12 +86,9 @@ try
         port.nameEn = name;
         port.nameZh = name;
         port.type   = {Type::String};
-        port.editor = id == kDirectoryInput ? "directory" : "file";
+        port.editor = "path";
         if (id == kDynamicInput)
-        {
-            port.editor       = "path";
             port.pathModeFrom = PortRef{PortStage::Inputs, kModeInput};
-        }
         if (id == kModeInput || id == kNoteInput)
         {
             port.editor       = "text";

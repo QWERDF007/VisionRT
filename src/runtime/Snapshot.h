@@ -63,9 +63,6 @@ struct ExecutionMetrics
     double pythonInputMs  = 0; // Python 输入映射耗时
     double pythonCallMs   = 0; // Python 函数/类执行耗时
     double pythonOutputMs = 0; // Python 输出复制与转换耗时
-    // 兼容别名
-    double executeMs = 0;
-    double convertMs = 0;
 };
 
 using Timing = ExecutionMetrics;

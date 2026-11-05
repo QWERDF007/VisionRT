@@ -266,23 +266,10 @@ QVariantList AppController::parameters() const
         const bool  hasSource  = inputFound != node->inputs.end()
                                  && inputFound->second.mode == BindingMode::Upstream
                                  && inputFound->second.source.has_value();
+        // Every path parameter opens the same file-or-folder picker, so the editor kind is the
+        // declaration itself. A path mode parameter stays a tool-owned value and no longer selects
+        // a second picker.
         QString editorKind = declaration ? q(declaration->editor) : QString{};
-        if (declaration && declaration->editor == "path")
-        {
-            if (declaration->pathModeFrom)
-            {
-                PortValue modeValue = Missing{};
-                if (initialization)
-                {
-                    const auto found = node->initParams.find(declaration->pathModeFrom->id);
-                    if (found != node->initParams.end()) modeValue = found->second;
-                }
-                else
-                    modeValue = impl_->resolvedInput(*node, declaration->pathModeFrom->id);
-                const auto *pathMode = std::get_if<std::string>(&modeValue);
-                editorKind = pathMode && (*pathMode == "file" || *pathMode == "directory") ? q(*pathMode) : QString{};
-            }
-        }
 
         QVariant rectMap;
         bool hasRect = false;

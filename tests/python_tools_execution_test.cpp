@@ -86,7 +86,7 @@ int main(int argc, char **argv)
                         {1, Missing{}}
                     });
                     // A declared port with no value is a business failure; the tool omits the value it
-                    // never produced and the host materialises the declared default afterwards.
+                    // never produced, and a host accepting this answer reports the omission.
                     assert(testview::status(missing).code == 1001 && !missing.outputs.contains(2));
                     const auto empty = mean->execute({
                         {1, DataRef<Image>(Image{})}

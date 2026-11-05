@@ -40,7 +40,9 @@ public:
     static std::string pythonTemplate(const ToolDefinition &definition);
 
     // Scans all valid custom tools in the store
-    std::vector<PackageTool> discoverCustomTools() const;
+    // Every readable declaration is returned. A declaration that cannot be parsed is named in
+    // `problems` instead of disappearing; passing nullptr makes the first such file an error.
+    std::vector<PackageTool> discoverCustomTools(std::vector<std::string> *problems = nullptr) const;
 
     // One tool of this store by its tool id; nullopt when the declaration does not exist or cannot
     // be parsed. Used to pick a free clone id without rescanning the whole root at the call site.

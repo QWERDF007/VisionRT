@@ -350,6 +350,13 @@ if(BUILD_TESTING)
         target_link_libraries(tool_port_list_model_test PRIVATE Qt6::Test)
         visionrt_contract(tool_editor_controller_test visionrt_ui LABELS backend)
         target_link_libraries(tool_editor_controller_test PRIVATE Qt6::Test)
+        # One complete authoring flow through the real dialog: open, add a tool and a parameter,
+        # click Save, and read the declaration the window wrote.
+        visionrt_contract(tool_editor_dialog_test visionrt_ui)
+        target_link_libraries(tool_editor_dialog_test PRIVATE Qt6::Test)
+        target_compile_definitions(tool_editor_dialog_test PRIVATE
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(ui_project_paths_contract visionrt_ui)
         target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_project_paths_contract PRIVATE
