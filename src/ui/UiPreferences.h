@@ -19,7 +19,15 @@ public:
     // Smart point selection is on by default so the first installation keeps the
     // automatic behaviour; an explicit user choice survives nodes and restarts.
     static bool easyTouchEnabled();
-    static void setEasyTouchEnabled(bool enabled);
+    // Returns false when the preferences file could not be written; the caller reports it instead of
+    // claiming the choice will survive a restart.
+    static bool setEasyTouchEnabled(bool enabled);
+
+    // The tool editor only offers the declarations shipped with the installation when this switch is
+    // on. Off is the default: an installed declaration describes a compiled implementation, and
+    // editing it is an authoring task rather than everyday work.
+    static bool toolEditorEditBuiltins();
+    static bool setToolEditorEditBuiltins(bool enabled);
 
     // Stored recent-project records, exactly as persisted. Corrupt content is
     // reported as an empty list: a broken preferences file must never stop a

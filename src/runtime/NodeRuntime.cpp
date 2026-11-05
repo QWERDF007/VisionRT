@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <set>
 #include <stdexcept>
 
 namespace visionrt::runtime_detail {
@@ -341,7 +342,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     try
     {
-        Values inputs;
+        Values           inputs;
+        std::set<PortId> upstreamInputs;
         {
             windowStart = Clock::now();
             ScopeTimer prepareTimer(snapshot->timing.prepareMs, &snapshot->timing.prepareMeasured);
@@ -357,9 +359,13 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                     if (input.mode == BindingMode::Literal)
                         value = input.literal;
                     else if (!input.source)
+                    {
                         value = Missing{};
+                        upstreamInputs.insert(port.id);
+                    }
                     else
                     {
+                        upstreamInputs.insert(port.id);
                         const auto upstream = frozen.runtimes.at(input.source->node)->slot.latest();
                         snapshot->inputUses.push_back(
                             {port.id, input.source->node, input.source->port, upstream ? upstream->publication : 0});
@@ -384,7 +390,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
                 }
                 inputs.emplace(port.id, std::move(value));
             }
-            inputs = normalizeInputs(definition->inputs, std::move(inputs));
+            inputs = normalizeInputs(definition->inputs, std::move(inputs), nullptr, &upstreamInputs);
             prepareTimer.stop();
             windowEnd = Clock::now();
         }
@@ -457,12 +463,11 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             enteredExecute = true;
             snapshot->timing.toolCallMeasured = true;
             {
-                ScopeTimer execTimer(snapshot->timing.executeMs);
+                ScopeTimer execTimer(snapshot->timing.adapterExecuteMs);
                 result = instance->execute(inputs);
                 execTimer.stop();
                 windowEnd = Clock::now();
             }
-            snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
             applyPythonMetrics();
         }
         else
@@ -474,11 +479,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             phase                 = diagnostic->phase;
             frameworkFailure      = true;
         }
-        snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
         {
             const auto invocationPhase = phase;
             phase                      = NodePhase::Convert;
-            ScopeTimer convertTimer(snapshot->timing.convertMs, &snapshot->timing.validateMeasured);
+            ScopeTimer convertTimer(snapshot->timing.validateMs, &snapshot->timing.validateMeasured);
             if (!frameworkFailure)
             {
                 // The tool owns its declared business ports and its status. A non-zero business
@@ -500,7 +504,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             windowClosed = true;
             phase = invocationPhase;
         }
-        snapshot->timing.validateMs = snapshot->timing.convertMs;
     }
     catch (const RegistryError &error)
     {
@@ -527,8 +530,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         frameworkStatus  = {hostCode(ErrorCode::Internal), exceptionSummary(phase), "未知异常"};
         frameworkFailure = true;
     }
-    snapshot->timing.adapterExecuteMs = snapshot->timing.executeMs;
-    snapshot->timing.validateMs       = snapshot->timing.convertMs;
     if (enteredExecute && instance)
         applyPythonMetrics();
     if (frameworkFailure)

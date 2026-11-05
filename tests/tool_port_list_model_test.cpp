@@ -49,6 +49,15 @@ int main(int argc, char **argv)
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
     assert(def.nextInputPortId == 3);
 
+    // The workbench image selector is an author choice stored in the declaration, only for Image.
+    assert(!model.updatePort(1, {{"showImage", true}}));
+    assert(model.updatePort(2, {{"showImage", true}}));
+    assert(model.data(model.index(2, 0), ToolPortListModel::ShowImageRole).toBool());
+    assert(model.portAt(2).value("showImage").toBool());
+    // Retyping away from Image clears the display choice with the rest of the image fields.
+    assert(model.changeType(2, "int"));
+    assert(!def.inputs[1].imageVisible);
+
     // 3. Move row
     // Moving business row 2 to 1
     assert(model.movePort(2, 1));

@@ -118,6 +118,9 @@ struct PortDefinition {
     std::optional<PortRef>   pathModeFrom;
     std::optional<PortRef>   sameGeometryAs;
     std::string              colorOrder;
+    // Author's explicit choice to offer this Image port in the workbench image selector. Absent in
+    // the declaration means false: an image port never joins the selector without being named.
+    bool                     imageVisible = false;
     std::optional<PortTypeReference> typeFrom;
 };
 

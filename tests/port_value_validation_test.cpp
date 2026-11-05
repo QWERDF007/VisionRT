@@ -69,7 +69,7 @@ try
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 0, "inputs": 5, "outputs": 2},
+  "next_port_id": {"init": 0, "inputs": 4, "outputs": 2},
   "ports": {
     "inputs": [
       {
@@ -83,24 +83,15 @@ try
       },
       {
         "id": 2,
-        "name_en": "file",
-        "name_zh": "文件",
+        "name_en": "resource",
+        "name_zh": "文件或目录",
         "type": "string",
         "ui": {
-          "editor": "file"
+          "editor": "path"
         }
       },
       {
         "id": 3,
-        "name_en": "directory",
-        "name_zh": "目录",
-        "type": "string",
-        "ui": {
-          "editor": "directory"
-        }
-      },
-      {
-        "id": 4,
         "name_en": "dynamic",
         "name_zh": "动态路径",
         "type": "string",
@@ -116,13 +107,12 @@ try
 })json");
         assert(isPathPort(definition.inputs[2]));
         assert(isPathPort(definition.inputs[3]));
-        assert(isPathPort(definition.inputs[4]));
         assert(!isPathPort(definition.inputs[1]));
         auto plain   = port(8, {Type::String});
         plain.editor = "text";
         assert(!isPathPort(plain));
         auto wrongType   = port(12, {Type::Int});
-        wrongType.editor = "file";
+        wrongType.editor = "path";
         assert(!isPathPort(wrongType));
 
         rejects(
@@ -145,7 +135,7 @@ try
         "name_zh": "文件",
         "type": "int",
         "ui": {
-          "editor": "file"
+          "editor": "path"
         }
       }
     ]
@@ -160,7 +150,7 @@ try
   "schema_version": 6,
   "name_en": "runtime.paths.bad.directory",
   "next_port_id": {"init": 0, "inputs": 2, "outputs": 2},
-  "name_zh": "错误目录端口",
+  "name_zh": "旧目录编辑器",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
@@ -171,7 +161,7 @@ try
         "id": 3,
         "name_en": "directory",
         "name_zh": "目录",
-        "type": "bool",
+        "type": "string",
         "ui": {
           "editor": "directory"
         }
@@ -180,7 +170,7 @@ try
   }
 })json");
             },
-            "路径编辑器");
+            "Unknown editor");
     }
 
     // CT-02: one execution result shape. The tool writes both status keys and the host keeps the
@@ -348,14 +338,17 @@ try
     }
 
     // CT-04: one legalisation entry for manual edits, upstream values, declared defaults and loaded
-    // projects. It clamps declared ranges, falls back to a declared default outside the option set,
-    // keeps int64 precision and never coerces a wrong type.
+    // projects. It clamps declared ranges, rejects a value outside the option set, keeps int64
+    // precision and never coerces a wrong type.
     {
         auto choice         = port(6, {Type::Int});
         choice.options      = {PortValue{std::int64_t{1}}, PortValue{std::int64_t{2}}};
         choice.defaultValue = PortValue{std::int64_t{2}};
-        const auto fallback = normalizeInput(choice, std::int64_t{5});
-        assert(equalValues(fallback.value, PortValue{std::int64_t{2}}) && !fallback.adjustment.empty());
+        rejects([&] { normalizeInput(choice, std::int64_t{5}); }, "端口 6");
+        // A manual field that was never filled may use its declared default; an upstream result that
+        // produced nothing stays Missing instead of taking that default.
+        assert(equalValues(normalizeInput(choice, Missing{}).value, PortValue{std::int64_t{2}}));
+        assert(isMissing(normalizeInput(choice, Missing{}, InputOrigin::Upstream).value));
         auto ranged    = port(11, {Type::Int});
         ranged.minimum = PortValue{std::int64_t{0}};
         ranged.maximum = PortValue{std::int64_t{10}};

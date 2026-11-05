@@ -219,13 +219,14 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
 
     if (!roiPort->image)
         return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(portLabel(roiPort->id)));
+    // The context already resolved the ROI's declared image and checked that it came from an
+    // upstream result; reading it again could only disagree with what the proposal is stamped with.
     const auto binding = node->inputs.find(roiPort->image->id);
-    const auto source = presentation.sharedSnapshot(binding->second.source->node);
-    if (!source)
-        return reject(QStringLiteral("上游结果已更新，请先运行"));
-    const auto value = source->outputs.find(binding->second.source->port);
-    const auto *batch = value == source->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
-    const int   index = presentation.imageIndex();
+    if (binding == node->inputs.end() || binding->second.mode != BindingMode::Upstream || !binding->second.source)
+        return reject(QStringLiteral("请先把图像输入连接到上游"));
+    const auto value = context->source->outputs.find(binding->second.source->port);
+    const auto *batch = value == context->source->outputs.end() ? nullptr : std::get_if<DataRef<Image>>(&value->second);
+    const int   index = context->imageIndex;
     if (!batch || index < 0 || static_cast<std::size_t>(index) >= batch->get().size())
         return reject(QStringLiteral("上游结果已更新，请先运行"));
 
@@ -389,8 +390,8 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
                 if (current == node->inputs.end() || current->second.mode == BindingMode::Upstream
                     || effectiveSource(current->second))
                     continue;
-                // A recommendation is a manual commit like any other: declared ranges clamp it,
-                // options fall back to their declared default, and the stored value is the legal one.
+                // A recommendation is a manual commit like any other: declared ranges clamp it and
+                // a value outside the declared options is reported, never replaced by the default.
                 const auto normalized = normalizeInput(*target, suggestion->second);
                 if (equalValues(current->second.literal, normalized.value))
                     continue;
@@ -513,7 +514,9 @@ void AppController::setEasyTouchEnabled(bool enabled)
     if (impl_->easyTouchEnabled == enabled || impl_->operations.isClosing())
         return;
     impl_->easyTouchEnabled = enabled;
-    UiPreferences::setEasyTouchEnabled(enabled);
+    if (!UiPreferences::setEasyTouchEnabled(enabled))
+        impl_->report(QStringLiteral("无法写入界面设置，智能点选开关只在本次运行生效：")
+                      + UiPreferences::path());
     if (!enabled)
     {
         // Drop the preview and every queued/in-flight request, then release the persistent

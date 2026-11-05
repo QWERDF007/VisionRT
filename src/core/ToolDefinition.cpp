@@ -136,7 +136,8 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
                 throw ContractError("type_from requires a business output: " + portLabel(port.id));
             if (!isMissing(port.defaultValue) || !port.editor.empty() || port.minimum || port.maximum || port.step
                 || port.decimals || !port.options.empty() || !port.optionsProvider.empty() || port.image
-                || port.alignment || port.pathModeFrom || port.sameGeometryAs || !port.colorOrder.empty())
+                || port.alignment || port.pathModeFrom || port.sameGeometryAs || !port.colorOrder.empty()
+                || port.imageVisible)
                 throw ContractError("type_from cannot have concrete value or display attributes: " + portLabel(port.id));
             continue;
         }
@@ -158,15 +159,16 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
         }
 
         if (!port.editor.empty()) {
+            // A path field is one String editor: the value may name a file or a folder, and the
+            // picker offers both. Separate file/directory editors would only duplicate that choice.
             const std::set<std::string> validEditors
-                = {"number", "text", "bool", "switch", "recursive", "file", "directory", "path", "array", "roi",
-                   "rect"};
+                = {"number", "text", "bool", "switch", "recursive", "path", "array", "roi", "rect"};
             if (!validEditors.contains(port.editor)) {
                 throw ContractError("Unknown editor: " + port.editor + " on port " + portLabel(port.id));
             }
         }
 
-        const bool pathEditor = port.editor == "file" || port.editor == "directory" || port.editor == "path";
+        const bool pathEditor = port.editor == "path";
         if (port.editor == "rect" && port.type.type != Type::ROI)
             throw ContractError("矩形编辑器要求 ROI 类型端口：" + portLabel(port.id));
         if (pathEditor && port.type != TypeSpec{Type::String})
@@ -266,6 +268,9 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             }
         }
 
+        if (port.imageVisible && port.type.type != Type::Image)
+            throw ContractError("display.visible requires an Image port: " + portLabel(port.id));
+
         if (port.sameGeometryAs && port.type.type != Type::Image)
             throw ContractError("relations.same_geometry_as requires an Image output: " + portLabel(port.id));
     }
@@ -350,8 +355,7 @@ std::string categoryPath(const ToolDefinition& def)
 }
 
 bool isPathPort(const PortDefinition& port) {
-    return port.type == TypeSpec{Type::String} &&
-        (port.editor == "file" || port.editor == "directory" || port.editor == "path");
+    return port.type == TypeSpec{Type::String} && port.editor == "path";
 }
 
 std::vector<std::string_view> editorChoices(const TypeSpec &type)
@@ -364,7 +368,7 @@ std::vector<std::string_view> editorChoices(const TypeSpec &type)
     case Type::Bool:
         return {"bool", "switch"};
     case Type::String:
-        return {"text", "file", "directory", "path"};
+        return {"text", "path"};
     case Type::ROI:
         return {"roi", "rect", "array"};
     case Type::Array:
@@ -633,6 +637,11 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
     {
         port.colorOrder.clear();
         note("颜色次序");
+    }
+    if (port.imageVisible && newType.type != Type::Image)
+    {
+        port.imageVisible = false;
+        note("图像显示");
     }
 
     // References other ports make to this one stay valid only while it still satisfies them.

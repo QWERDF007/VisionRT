@@ -29,6 +29,130 @@
 **下一步**
 - ...
 -->
+### 2026-11-05 — 提交 R49 两仓并用干净元数据出包（1837 文件）
+
+**目标**
+- 把 R49 改动从工作区收进版本库，用 clean 元数据重新部署到 `F:\tmp\VisionRT`，让安装包真正包含四列编辑器与新图像选择。
+
+**当前状态**
+- 已完成提交：VisionRT 代码与规范改动（方案文档不入库，目录保留在本地并加入忽略规则）；VisionTools `9cb038f`（18 文件，17 份声明补 `display.visible`、YOLO 三处 `editor` 改 `path`）。
+- 已完成构建：Release 链接通过，`build/bin/build_info.json` 记录 `755e131`、`dirty=false`；VisionTools 元数据目标输出 `9cb038f`、`dirty=false`。
+- 已完成出包：以 `build/tools-package`（schema 6、22 工具、3 模块）压缩为 `F:\tmp\VisionTools-9cb038f.zip`，部署到 `F:\tmp\VisionRT` 共 1837 文件；打包输出 `tools package verification passed successfully` 与 `package verification complete: 1837 files`。
+- 已完成旧目录保留：`F:\tmp\VisionRT` 整体改名为 `F:\tmp\VisionRT_R49_prev`，避免批量删除触发环境安全策略；新目录全新部署，未复用任何旧文件。
+- 已完成启动验证：`VisionRT.exe -v` 输出 0.1.0；截图 `F:\tmp\r49_packaged.png` 工具树 8 个分类、画布与参数面板正常；日志写入 `F:\tmp\VisionRT\logs\visionrt_2026-11-05.log`，`%LOCALAPPDATA%\VisionRT` 未创建。
+
+**验证证据**
+- `cmake --build build --config Release` → 退出码 0，`[31/31] Linking CXX executable bin\VisionRT.exe`。
+- `cmake --build F:\Projects\VisionTools\build --target visiontools_build_info` → 退出码 0。
+- `python tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package F:/tmp/VisionTools-9cb038f.zip` → 退出码 0，1837 文件。
+- 安装目录 `build_info.json` 与 `tools-package/build_info.json` 均为 `dirty=false`。
+
+**未完成**
+- 未跑全量与 UI 场景测试（按约定）；`workbench_roi_contract`、`workbench_paths_contract` 在图像选择与路径迁移后未重跑。
+- 出包后的十项人工验收尚未进行，清单见本地方案文档 `06_阅读与人工验收.md`（不入库）。
+
+**下一步**
+- 在 `F:\tmp\VisionRT` 上完成人工验收：四列布局、树右键、范围校验、固定卡、图像显示开关、统一路径、取消无副作用、内置工具开关、重启一致性、只写安装目录。
+
+### 2026-11-05 — 图像选择归属、隐藏不跳项与智能点选取图
+
+**目标**
+- 完成 R49 S08/S09/S10 剩下的图像选择语义：隐藏项清空而不跳到下一项、节点 0 也能正确归属、EasyTouch 只读 ROI 声明的图像。
+
+**当前状态**
+- 已完成选择归属：`ResultPresentation` 用 `std::optional<NodeId>` 记录“当前选择属于哪个节点”，不再用 0 当“没有节点”（第一个节点编号就是 0）。节点第一次显示时选中它第一个可见图像；同一节点内所选端口被隐藏或删除时清空，不替换成另一个；节点完全没有可见图像时同时清空归属，避免把上一个节点的端口带过来。
+- 已完成选择恢复：ROI 会话结束时仍恢复原来的真实端口，端口已无效就保持清空；ROI 编辑期间选择器只呈现它声明的真实背景输入。
+- 已完成 EasyTouch 取图：`assistRequest` 改为复用 `assistContext` 已验证的 ROI 图像绑定与快照，不再对可选上游来源做无检查的解引用；无缓存时明确拒绝，不借其他图像。
+- 已完成说明与行为一致：智能点选提交注释不再声称“非法选项回退默认值”，与 S11 的“非法枚举报错”一致。
+- 测试夹具修正：`ui_result_isolation_contract` 的图像工具此前没有 `display.visible`，按 S07 选择器不会列出它，之前那次“通过”是不可信的旧二进制；现已显式声明可见，并在改成 Int 时同步清除该声明。
+- 未完成：S16 三仓 SHA/gitlink 与测试分层属于发布流程，未在仓库内落地。
+
+**验证证据**
+- `cmake --build build --target VisionRT` 与相关目标链接成功。
+- `ctest -R "^(ui_value_contract|definition_json_contract|project_storage_contract|log_lifecycle_contract|tool_port_list_model_test|tool_editor_controller_test)$"` → 6/6 通过。
+- `ui_result_isolation_contract` 单次运行通过：选择为 `outputs:2`、两张图像、主图与缩略图都有帧；该场景因选择语义改动必须核验一次。
+- 未验证：`workbench_roi_contract` 未在本次选择改动后重跑；未跑全量测试。
+
+**下一步**
+- 需要时手工核验“关闭图像显示后选择器清空且不跳到下一项”，以及 ROI 无背景时的矩形编辑。
+
+### 2026-11-05 — 加载不自动改值、内置工具编辑开关与迁移显式失败
+
+**目标**
+- 收口 S11 剩余的工程加载语义、S12 的日志写入根、S13 的内置工具编辑开关，并让历史迁移在无法映射时直接失败。
+
+**当前状态**
+- 已完成 S11 剩余（加载不自动修复）：`ProjectStorage` 对类型不兼容的初始化参数和输入不再替换成声明默认值，也不清除上游绑定；原值、模式与来源全部保留，只报告 `SchemaChanged` 并说明“修正后才能执行”。只有当前声明新增、工程从未保存过的端口才填入声明默认值（这是物化新端口，不是改写旧值）。数组 dtype 变化也不再换值，float32 数据不会再被当成 int64 数组解释。
+- 已完成 S12：`LogService` 默认文件路径在软件目录未知时不再回退 `QDir::currentPath()`，改为文件日志不可用并只走窗口通道；`UiPreferences`、最近工程、工具声明仍固定在软件根。
+- 已完成 S13：新增偏好 `toolEditor.editBuiltins`（缺省 false）与设置菜单“允许编辑内置工具”；关闭时工具树不列出随安装发行的声明，打开时同卡编辑。保存内置工具走 `AppController::saveBuiltinTool`：先要求声明在软件目录内，再按已注册的 C++ 工厂合同校验端口（`ToolRegistry::validateContract`），不一致直接报错、保留草稿，不写文件；一致时用 `writeToolDefinitionFile` 原子写回原声明并替换注册表定义。复制与删除仍拒绝内置工具；存在未保存的内置修改时不允许关闭开关。
+- 已完成 S15 剩余（迁移）：`migrate_r44_to_r45.py` 遇到无法识别的初始化参数、类型快照端口、输入端口或上游引用端口时直接抛错，该文件计为失败且不写输出，不再“丢字段后成功”。
+- 未完成：S10 的 EasyTouch helper 与 ROI 叠加细节未在本轮改动；S16 的三仓 SHA/gitlink 与 profile 分层属于发布流程，未在代码内落实。
+
+**验证证据**
+- `cmake --build build --target VisionRT` → 链接成功。
+- `ctest -R "^(definition_json_contract|project_storage_contract|log_lifecycle_contract|tool_port_list_model_test|tool_editor_controller_test)$"` → 5/5 通过。
+- `definition_json_contract` 新增写入用例：合法声明写回后可重新解析，非法声明被拒绝且原文件内容不变。
+- `project_storage_contract` 按新语义更新：类型变化后保留 int64 原值与上游引用并产生 `SchemaChanged`；float32 数组在 dtype 变化后仍是 float32。
+- 未验证：内置工具保存的真实窗口流程与安装态工具包；按要求未跑 UI 测试，也未跑全量测试。
+
+**下一步**
+- 需要时用真实安装包手工验证“允许编辑内置工具 → 改名称/默认值 → 保存 → 重启仍生效”，以及改端口类型被拒绝的提示。
+- 继续按 08 文档核对 EasyTouch 与 ROI 叠加的 S10 条目。
+
+### 2026-11-05 — 删除失败回退路径（IMG-02、DATA-01、CLEAN-01 部分）
+
+**目标**
+- 按“失败就失败、报错即可”的原则清理失败后自动换源、补默认值、改工程、简化连线、替代日志等行为，不保留可用性兜底。
+
+**当前状态**
+- 已完成图像选择（IMG-02）：`ResultPresentation` 的选择键改为真实 `{stage,id}`（QML 传 `inputs:1` / `outputs:2`）；`imageOutputs` 只枚举有效合同里 `display.visible=true` 的 Image 输入输出，删除 ROI 假 ID0“输入预览”、删除失败后借 `sameGeometryAs` 或“第一个非空输入”的整段逻辑；选中端口无值即清空，不跳转、不保留旧画面。ROI 会话只呈现它声明的真实背景输入。`ResultsPanel.qml` 去掉 `images` 名称特例。
+- 已完成结果默认值（DATA-01）：`validateToolExecution` 在成功状态缺少业务输出时直接报“工具未发布输出端口”，不再用声明默认值补齐；失败状态仍保持 Missing。`normalizeInput` 区分手动与上游来源，上游 Missing 不再替换成手动默认值；非法枚举改为报错，删除“回退默认值”。
+- 已完成工程加载（CLEAN-01 部分）：无效上游引用、被改动的上游输出、类型变化的输入都不再自动清除绑定；保留原引用并报“绑定已保留供修复，不可执行”。输入字面量仍会按新类型重置（尚未做到完全保留原值）。
+- 已完成其余失败回退：`softwareDataDir()` 在无法确定软件目录时抛错，不回退当前目录；日志文件打不开时不再挂 stderr 替代 sink，只保留窗口通道并记录失败；避障失败不再生成简化连线，保留空路径与错误；自定义工具声明损坏时按路径报告，删除时若无法确认包归属则拒绝删除。
+- 已完成发行资产迁移：`F:/Projects/VisionTools` 的 17 个声明、31 个 Image 端口补 `"display": {"visible": true}`（assets 与 dist 同步）；`YOLO目标检测.json` 三处 `editor: file` 改为 `path`。build/tools-package 已从 dist 刷新。
+- 已完成计时兼容清理：删除 `ExecutionMetrics::executeMs/convertMs` 别名，执行与验证直接写 `adapterExecuteMs/validateMs`，不再在收尾复制。
+- 已完成偏好写入失败上报：`UiPreferences::setEasyTouchEnabled` 返回写入结果，失败时报告“只在本次运行生效”；`RecentProjects::record` 通过可选 `persisted` 告知调用方，最近工程写失败会被报告。
+- 未完成：`ProjectStorage` 的类型不兼容输入仍会重置字面量；`toolEditor.editBuiltins` 尚未接入（内置工具保存到原声明的路径与合同校验未设计）。
+
+**验证证据**
+- `cmake --build build --target VisionRT` → 链接成功。
+- 必要回归 12 项全部通过：`port_value_validation_test`、`definition_json_contract`、`custom_tool_store_contract`、`log_lifecycle_contract`、`project_storage_contract`、`ui_value_contract`、`tool_port_list_model_test`、`tool_editor_controller_test`、`tool_editor_dialog_test`、`ui_result_isolation_contract`、`workbench_roi_contract`、`workbench_parameters_contract`。
+- 后端补充：`runtime_contract`、`cpu_tools_contract`、`python_tools_execution_test` 通过（按新语义更新了“缺输出补默认值”“失败源接收值”等断言）；计时清理后 `runtime_contract` 再次通过；`recent_projects_contract`、`tool_port_list_model_test` 通过。
+- 资产迁移后 `cpu_tools_contract` 再次通过，确认 17 个声明仍可解析。
+- 未通过/未计：`wire_router_contract` 测试源码本身因 `PortRelation` 初始化列表不匹配无法编译，使用旧二进制的结果不计为通过。
+- 未验证：`workbench_paths_contract` 未在资产迁移后重跑；安装态整包 UI 未验证；按要求未跑全量或额外 UI 测试。
+
+**下一步**
+- 需要时再复跑 `workbench_paths_contract`，确认图像读取的输出进入选择器。
+- 继续清理 `ProjectStorage` 的字面量重置；设计内置工具保存到原声明的合同校验后再接 `toolEditor.editBuiltins`。
+
+### 2026-11-05 — R49 四列工具编辑器、草稿模型、统一路径与图像显示声明
+
+**目标**
+- 按 R49 交付 `docs/VisionRT_R49_完整开发方案_统一组件与路径`：四列编辑界面（树/工具卡/输入/输出）、窗口级草稿（取消全丢、保存全提交）、唯一路径编辑器、`display.visible` 声明与文本规范。
+
+**当前状态**
+- 已完成四列界面：`CustomToolDialog.qml` 重写为工具树 + 工具卡 + 输入列 + 输出列，底部只保留取消与保存；参数卡提取为 `ToolPortCard.qml`（编号可拖动排序、删除 ×、中英文名、类型、默认值、Int/Float 上下限、Image 显示开关、更多设置里的编辑器/关联/候选值）；类工具的初始化参数作为输入列独立小组。
+- 已完成窗口级草稿：`ToolEditorController` 由单草稿改为多草稿 + 目录草稿 + 待删除集合；切换工具不再要求先保存，取消丢弃全部草稿，保存先整体校验再统一写盘；复制也改为草稿，保存时才复制脚本与资源。删除了 `ToolPortProperties.qml` 与旧单草稿接口（apply/revert/currentStage/tools/newTool）。
+- 已完成组件复用：卡片与运行面板同用 `ParameterTextField`、`IntegerParameterEditor`、`QuiSpinEditor`、`QuiToggleSwitch`、`QuiComboBox` 与 Theme 尺寸；`IntegerParameterEditor` 去掉对全局 app 的日志依赖，改由调用方处理 `rejected`。
+- 已完成统一路径（S18）：`editor` 只保留 `path`，删除 file/directory 的校验、`isPathPort`、QML 分支与元数据推导；路径按钮固定打开 `QuiFileFolderDialog.FileOrFolder`，取消不改字段。相关夹具与测试同步改为 path。
+- 已完成图像显示声明（S07）：`PortDefinition.imageVisible`，`DefinitionJson` 读写 `display.visible`（仅 Image、缺省 false、类型错误拒绝），端口模型新增 `showImage`，重定型清除；JSON 往返与拒绝用例已覆盖。
+- 已完成文本规范（S19）：自有代码与文档不再含 U+00B7（含 ResultPresentation 的预览拼接与端口候选标签）。
+- 未完成：图像结果面板仍只枚举输出端口，ROI 编辑仍构造 ID0 的“输入预览”项并保留失败借图分支（R49 S08-S10 / IMG-02）；内置工具编辑开关 `toolEditor.editBuiltins`（S13）；DATA-01 默认值语义、CLEAN-01 回退清理未动。
+- 未完成：`workbench_paths_contract` 与 `ui_project_paths_contract` 两个 UI 契约仍失败，见验证证据；未在真实安装态点完整编辑/取消流程（仅自动化窗口）。
+
+**验证证据**
+- `cmake --build build --target VisionRT` → 链接成功。`tools\build.cmd` 因沙箱禁用 reg.exe 无法初始化 MSVC，改用显式 INCLUDE/LIB（MSVC 14.29.30133 + Windows SDK 10.0.19041.0）构建。
+- `ctest -R "^(custom_tool_store_contract|tool_discovery_contract|tools_package_contract|definition_json_contract|port_value_validation_test|tool_definition_validation_test|project_storage_contract|tool_port_list_model_test|tool_editor_controller_test|tool_editor_dialog_test|ui_value_contract)$"` → 全部通过（最近一次 11/11）。
+- `tool_editor_dialog_test` 真实加载 `CustomToolDialog.qml`：添加工具与两个参数、点击保存后窗口关闭并写出 `custom.tool.1.json`；截图 `F:/tmp/tool-editor.png` 显示四列、卡片与浅色主题正常。
+- `ctest -R "^(workbench_paths_contract|ui_project_paths_contract)$"` → 仍失败：前者 “path chooser did not open from its embedded button”，后者 “path fixture node was not selected”。两者都在节点/选择器 UI 层；已修正 `ParameterEditor.qml` 残留的 `onPathKindChanged`，但仍需继续定位，未宣称通过。
+- 未验证：真实窗口中的拖动排序、右键目录菜单、保存失败保护、安装态 `F:/tmp/VisionRT` 回归。
+
+**下一步**
+- 先定位 `workbench_paths_contract` 的选择器可见性假设（统一 FileOrFolder 后测试仍等 `visible`）与 `ui_project_paths_contract` 的节点选择；必要时按新交互重写这两条 UI 断言，而不是放宽产品行为。
+- 再做 IMG-02：`imageOutputs` 改为按 `{stage,id}` 的真实端口列表（仅 `display.visible`），删除 ROI 假 ID0 与失败借图；与 VisionTools 资产同批发布，节奏见顶部待裁决。
+- 之后补 S13 内置编辑开关、S11 默认值语义、S15 回退清单。
+
 ### 2026-11-04 — 实际部署到 F:\tmp\VisionRT（schema 6 工具包，1837 文件）
 
 **目标**

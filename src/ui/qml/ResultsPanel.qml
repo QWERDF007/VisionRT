@@ -38,7 +38,7 @@ Rectangle {
                         model: app.imageOutputs; textRole: "name"; valueRole: "id"
                         enabled: app.workspaceEnabled
                         currentIndex: { for (let i = 0; i < app.imageOutputs.length; ++i) if (app.imageOutputs[i].id === app.selectedImageOutput) return i; return -1 }
-                        displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "图像输出" : "") : (currentText === "images" ? "图像输出" : currentText)
+                        displayText: currentIndex < 0 ? (app.imageOutputs.length > 0 ? "选择图像" : "") : currentText
                         onActivated: app.setImageOutput(currentValue)
                         Accessible.name: "图像输出"
                     }

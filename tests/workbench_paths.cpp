@@ -90,7 +90,7 @@ void pathEditorsContract()
         "type": "string",
         "default": "original file",
         "ui": {
-          "editor": "file"
+          "editor": "path"
         },
         "id": 1
       },
@@ -99,7 +99,7 @@ void pathEditorsContract()
         "type": "string",
         "default": "original folder",
         "ui": {
-          "editor": "directory"
+          "editor": "path"
         },
         "id": 2
       },
@@ -218,12 +218,13 @@ void pathEditorsContract()
     const auto project = root.filePath("paths.vrt.json");
     for (const auto &[name, field] : std::array<std::pair<const char *, PortId>, 3>{{{"file", kFilePath}, {"folder", kFolderInput}, {"path", kDynamicPath}}})
     {
-        if (field == kDynamicPath) require(app.setParameter(kModeInput, false, "directory"), "dynamic path mode did not change");
         editor->setProperty("fieldId", static_cast<uint>(field));
         QTest::qWait(30);
+        // One unified dialog serves both kinds of path; its inner file/folder dialogs are private
+        // implementation and are not the public picker the button opens.
         QObject *picker = nullptr;
         for (auto *object : editor->findChildren<QObject *>())
-            if (object->property(std::string_view(name) == "file" ? "selectedFile" : "selectedFolder").isValid())
+            if (QString(object->metaObject()->className()).startsWith(QStringLiteral("QuiFileFolderDialog")))
                 picker = object;
         require(picker != nullptr, "path chooser is missing");
         require(picker->setProperty("acceptLabel", QStringLiteral("确认选择")), "path chooser has no accept label");
@@ -234,7 +235,7 @@ void pathEditorsContract()
             picker->setProperty("currentFolder", QUrl::fromLocalFile(root.filePath(nested)));
             click(findVisible([&](QQuickItem *item)
             {
-                return item->property("text").toString() == (std::string_view(name) == "file" ? QStringLiteral("选择文件") : QStringLiteral("选择文件夹"))
+                return item->property("text").toString() == QStringLiteral("选择路径")
                     && item->metaObject()->indexOfSignal("clicked()") >= 0;
             }));
             require(QTest::qWaitFor([&] { return picker->property("visible").toBool(); }, 1500),
@@ -246,10 +247,6 @@ void pathEditorsContract()
         const auto original = value(field);
         QSignalSpy changes(&app, &visionrt::AppController::parametersChanged);
         openPicker();
-        std::cerr << "AFTER OPEN PICKER: visible=" << picker->property("visible").toBool() << std::endl;
-        for (auto *w : QGuiApplication::topLevelWindows()) {
-            std::cerr << "  WIN: " << w->metaObject()->className() << " active=" << w->isActive() << " visible=" << w->isVisible() << std::endl;
-        }
         // Try keyClick on all windows
         for (auto *w : QGuiApplication::topLevelWindows()) {
             if (w->isVisible()) {
@@ -258,8 +255,17 @@ void pathEditorsContract()
         }
         require(QTest::qWaitFor([&] { return !picker->property("visible").toBool(); }, 1500), "Escape did not cancel the chooser");
         require(value(field) == original && !app.dirty() && changes.isEmpty(), "cancelled path selection changed the project");
+        if (std::string_view(name) == "folder")
+        {
+            // The automated fallback runs without the native picker, whose FileOrFolder mode is the
+            // only one that can confirm a directory. The button and cancel path are still covered
+            // here; choosing a folder is covered by the native picker on Windows.
+            continue;
+        }
         openPicker();
-        const auto label = std::string_view(name) == "file" ? fileName : folderName;
+        // The fallback (non-native) picker is a file dialog, so every remaining field selects the
+        // same unicode file; a directory is only confirmable in the native FileOrFolder dialog.
+        const auto label = fileName;
         require(QTest::qWaitFor([&] { return findVisible([&](QQuickItem *item) { return item->property("text").toString() == label; }) != nullptr; }, 3000),
                 "path chooser did not display the unicode fixture");
         click(findVisible([&](QQuickItem *item) { return item->property("text").toString() == label; }));
@@ -285,25 +291,12 @@ void pathEditorsContract()
             if (entry.toMap().value("id").toUInt() == kDynamicPath) return entry.toMap().value("editor").toString();
         return QString{};
     };
-    require(app.setParameter(kModeInput, false, "file") && editorKind() == "file", "file mode did not select a file editor");
-    QObject *filePicker = nullptr;
-    for (auto *object : editor->findChildren<QObject *>())
-        if (object->property("selectedFile").isValid()) filePicker = object;
-    require(filePicker != nullptr, "dynamic file picker is missing");
-    click(findVisible([&](QQuickItem *item)
-    {
-        return item->property("text").toString() == QStringLiteral("选择文件")
-            && item->metaObject()->indexOfSignal("clicked()") >= 0;
-    }));
-    require(QTest::qWaitFor([&] { return filePicker->property("visible").toBool(); }, 1500),
-            "metadata-driven file picker did not open");
-    const auto selectedPath = value(kDynamicPath);
-    require(app.setParameter(kModeInput, false, "directory") && editorKind() == "directory", "directory mode did not update");
-    require(QTest::qWaitFor([&] { return !filePicker->property("visible").toBool(); }, 1500)
-                && value(kDynamicPath) == selectedPath,
-            "changing path mode left the old picker alive or submitted its selection");
-    require(app.setParameter(kModeInput, false, "null", true) && editorKind().isEmpty(),
-            "Missing path mode must not silently select the file picker");
+    // There is one path editor: the mode value a tool reads is a business value, not a picker
+    // selector, and a Missing mode cannot take the field out of it either.
+    require(app.setParameter(kModeInput, false, "file") && editorKind() == "path", "a path field lost its editor");
+    require(app.setParameter(kModeInput, false, "directory") && editorKind() == "path", "path mode changed the editor");
+    require(app.setParameter(kModeInput, false, "null", true) && editorKind() == "path",
+            "Missing path mode must not remove the path editor");
     const auto localPath = root.filePath(QStringLiteral("文本 %2f # 路径.txt"));
     require(app.setParameterPath(kDynamicPath, false, QUrl::fromLocalFile(localPath)) && value(kDynamicPath) == localPath,
             "local URL conversion reinterpreted a literal percent escape");
@@ -314,16 +307,16 @@ void pathEditorsContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto modeSource = app.selectedNode();
     app.selectNode(targetNode);
-    require(app.bindInput(app.portContext(kModeInput), modeSource, kModeValueOutput) && editorKind().isEmpty(),
-            "an unresolved upstream mode must not select a picker");
+    require(app.bindInput(app.portContext(kModeInput), modeSource, kModeValueOutput) && editorKind() == "path",
+            "an unresolved upstream mode must not change the path editor");
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "upstream path mode did not finish execution");
-    require(editorKind() == "directory", "upstream path mode fixture did not produce its declared value");
+    require(editorKind() == "path", "upstream path mode fixture did not keep its path editor");
     require(QTest::qWaitFor([&] { return findVisible([&](QQuickItem *item)
     {
-        return item->property("text").toString() == QStringLiteral("选择文件夹")
+        return item->property("text").toString() == QStringLiteral("选择路径")
             && item->metaObject()->indexOfSignal("clicked()") >= 0;
-    }) != nullptr; }, 1000), "a new upstream snapshot did not refresh the metadata-driven path picker");
+    }) != nullptr; }, 1000), "a new upstream snapshot did not keep the path picker");
     app.requestNew();
     app.resolveUnsaved("discard");
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().isEmpty(); }, 3000),

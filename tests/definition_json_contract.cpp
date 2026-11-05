@@ -80,6 +80,28 @@ int main()
     assert(equalValues(roundTrip.initParams[0].defaultValue, definition.initParams[0].defaultValue));
     assert(equalValues(roundTrip.inputs[1].defaultValue, definition.inputs[1].defaultValue));
 
+    // display.visible is the author's image-selector choice: Image only, absent means false, and it
+    // survives the emit/reparse round trip instead of being a UI-only flag.
+    auto imageDeclaration = emitted;
+    auto imagePorts       = imageDeclaration["ports"].toObject();
+    imagePorts["inputs"]  = QJsonArray{
+        QJsonObject{{"id", 1}, {"name_en", "source"}, {"name_zh", "源图"}, {"type", "image"}},
+        QJsonObject{{"id", 2},
+                    {"name_en", "mask"},
+                    {"name_zh", "掩模"},
+                    {"type", "image"},
+                    {"display", QJsonObject{{"visible", true}}}}
+    };
+    imageDeclaration["ports"] = imagePorts;
+    const auto imageParsed = parseToolDefinitionJson(QJsonDocument(imageDeclaration).toJson().toStdString());
+    assert(!imageParsed.inputs[1].imageVisible);
+    assert(imageParsed.inputs[2].imageVisible);
+    const auto imageEmitted
+        = QJsonDocument::fromJson(QByteArray::fromStdString(emitNormalizedToolJson(imageParsed))).object();
+    const auto imageEmittedInputs = imageEmitted["ports"].toObject()["inputs"].toArray();
+    assert(!imageEmittedInputs[0].toObject()["display"].toObject()["visible"].toBool());
+    assert(imageEmittedInputs[1].toObject()["display"].toObject()["visible"].toBool());
+
     const auto rejects = [](const std::string &text)
     {
         try
@@ -116,6 +138,31 @@ int main()
     assert(cropDefinition.inputs[2].type.type == Type::ROI && cropDefinition.inputs[2].editor == "rect");
     assert((cropDefinition.inputs[2].image == PortRef{PortStage::Inputs, 2}));
     assert(parseToolDefinitionJson(emitNormalizedToolJson(cropDefinition)).inputs[2].editor == "rect");
+
+    // display.visible belongs to Image ports and is a boolean, never a truthy string.
+    auto visibleOnInt = emitted;
+    auto visiblePorts = visibleOnInt["ports"].toObject();
+    visiblePorts["inputs"] = QJsonArray{
+        QJsonObject{{"id", 1},
+                    {"name_en", "value"},
+                    {"name_zh", "数值"},
+                    {"type", "int"},
+                    {"display", QJsonObject{{"visible", true}}}}
+    };
+    visibleOnInt["ports"] = visiblePorts;
+    rejectObject(visibleOnInt);
+
+    auto visibleText = imageDeclaration;
+    auto textPorts   = visibleText["ports"].toObject();
+    textPorts["inputs"] = QJsonArray{
+        QJsonObject{{"id", 1},
+                    {"name_en", "source"},
+                    {"name_zh", "源图"},
+                    {"type", "image"},
+                    {"display", QJsonObject{{"visible", "yes"}}}}
+    };
+    visibleText["ports"] = textPorts;
+    rejectObject(visibleText);
 
     auto badEditor     = crop;
     auto badPorts      = badEditor["ports"].toObject();
@@ -262,6 +309,30 @@ int main()
     hostPorts["outputs"] = QJsonArray{dynamic};
     host["ports"]        = hostPorts;
     rejectObject(host);
+
+    // The declaration writer replaces a file only after the whole document is written, and an
+    // invalid declaration never replaces what is already there.
+    {
+        const auto target = directory.path() + QStringLiteral("/写入.json");
+        auto       draft  = parseToolDefinitionJson(QJsonDocument(emitted).toJson().toStdString());
+        draft.nameZh      = "写入后的声明";
+        const auto stored = writeToolDefinitionFile(target.toStdWString(), draft);
+        assert(stored.definitionPath == std::filesystem::path(target.toStdWString()));
+        assert(parseToolDefinitionFile(target.toStdWString()).nameZh == "写入后的声明");
+
+        auto broken = draft;
+        broken.nameZh.clear();
+        bool refused = false;
+        try
+        {
+            (void)writeToolDefinitionFile(target.toStdWString(), broken);
+        }
+        catch (const std::exception &)
+        {
+            refused = true;
+        }
+        assert(refused && parseToolDefinitionFile(target.toStdWString()).nameZh == "写入后的声明");
+    }
 
     std::cout << "Qt JSON tool declarations preserve values and derive system outputs\n";
 }

@@ -152,7 +152,7 @@ QVector<RecentProjectEntry> RecentProjects::load()
     return fromJson(UiPreferences::recentProjects());
 }
 
-QVector<RecentProjectEntry> RecentProjects::record(const QString &path)
+QVector<RecentProjectEntry> RecentProjects::record(const QString &path, bool *persisted)
 {
     const auto identity = RecentProjects::identity(path);
     if (identity.isEmpty())
@@ -163,9 +163,11 @@ QVector<RecentProjectEntry> RecentProjects::record(const QString &path)
                   entries.end());
     entries.prepend({identity, {}, {}});
     auto normalised = normalise(entries);
-    // A failed write keeps the previous file and the in-memory order: the project already opened,
-    // and losing the order is a smaller harm than refusing the open.
-    UiPreferences::setRecentProjects(toJson(normalised));
+    // A failed write keeps the previous file and the in-memory order. The caller is told so it can
+    // report the loss instead of presenting the new order as saved.
+    const bool written = UiPreferences::setRecentProjects(toJson(normalised));
+    if (persisted)
+        *persisted = written;
     return normalised;
 }
 } // namespace visionrt

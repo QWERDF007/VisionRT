@@ -102,7 +102,7 @@ QString summary(const ProjectStorageDiagnostic &diagnostic)
     if (!diagnostic.field.empty())
         context.push_back(QStringLiteral("字段 %1").arg(QString::fromStdString(diagnostic.field)));
     const auto message = QString::fromStdString(diagnostic.message);
-    return context.empty() ? message : context.join(QStringLiteral(" · ")) + QStringLiteral("：") + message;
+    return context.empty() ? message : context.join(QStringLiteral("，")) + QStringLiteral("：") + message;
 }
 
 QString summary(const QString &message)

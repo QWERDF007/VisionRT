@@ -109,9 +109,9 @@ ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Value
 
     ToolStatus status{code, message, detail};
 
-    // The one completion point for a tool answer: a business output the tool omitted receives its
-    // declared default, a written value is checked against the declaration, and a number the
-    // declaration never mentions stays a contract error instead of being silently dropped.
+    // The one completion point for a tool answer: every declared business output must be published.
+    // The host never fills one from the declaration, so a successful status can never disguise a
+    // result the tool did not produce.
     std::set<PortId> declared;
     for (const auto &port : ports)
     {
@@ -129,12 +129,7 @@ ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Value
                 outputs.insert_or_assign(port.id, Missing{});
                 continue;
             }
-            // An omitted or emptied business port is the same state: the declaration's default is the
-            // value, and the run status alone says whether the tool succeeded.
-            if (isMissing(port.defaultValue))
-                throw ContractError("工具未发布输出端口：" + portLabel(port.id));
-            outputs.insert_or_assign(port.id, portDefault(port));
-            continue;
+            throw ContractError("工具未发布输出端口：" + portLabel(port.id));
         }
         validateToolOutput(port, found->second, status);
     }

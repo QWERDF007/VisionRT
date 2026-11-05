@@ -102,8 +102,8 @@ public:
 
     // Starts the service. `filePath` is the daily base name (`visionrt.log` produces
     // `visionrt_YYYY-MM-DD.log`); an empty path means `<executable directory>/logs/visionrt.log`.
-    // A directory or file that cannot be written falls back to stderr, is counted in
-    // writeFailures() and is reported as one diagnostic line - never silently relocated.
+    // A directory or file that cannot be written is counted in writeFailures() and reported as one
+    // diagnostic line; no substitute file or stream stands in for it.
     bool start(const LogConfig &config = {}, const QString &filePath = {});
     // Stops producers first (restores the previous Qt handler, including the default one), drains
     // the queue, then releases the logger and the thread pool. Safe to call when never started and
@@ -136,7 +136,8 @@ public:
     // Daily base name the service was started with, without the date suffix.
     QString baseFilePath() const;
 
-    // True when the file sink was created. False means the session logs to stderr only.
+    // True when the file sink was created. False means the file log is unavailable; the window
+    // channel still carries the reason.
     bool fileSinkReady() const;
 
 signals:

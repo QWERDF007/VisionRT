@@ -58,7 +58,7 @@ QuiSplitView {
         let result = [], byName = ({})
         for (let p of app.parameters) {
             if ((p.tab || "基本输入") !== tabs[currentTab]) continue
-            let name = p.init ? "初始化配置" + (p.group ? " · " + p.group : "") : p.group || "输入参数"
+            let name = p.init ? "初始化配置" + (p.group ? "：" + p.group : "") : p.group || "输入参数"
             if (byName[name] === undefined) { byName[name] = result.length; result.push({ nodeId: app.selectedNode, name: name, init: p.init, parameters: [] }) }
             result[byName[name]].parameters.push({ id: p.id, init: p.init })
         }

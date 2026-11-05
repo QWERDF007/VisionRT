@@ -110,9 +110,9 @@ public:
     QVariantList imageOutputs() const;
     int          imageIndex() const;
     int          imageCount() const;
-    int          selectedImageOutput() const;
+    QString      selectedImageOutput() const;
     bool         setImageIndex(int index);
-    bool         setImageOutput(int output);
+    bool         setImageOutput(const QString &output);
     // Restores the pre-edit index without the user-command guards; the ROI session owns that rule.
     void restoreImageIndex(int index);
 
@@ -156,6 +156,16 @@ private:
 
     void             consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
 
+    // One entry per real Image port the workbench may present. Visible ports come first; an ROI
+    // session also names its own background input so the session stays selectable when that port is
+    // not offered to the general selector.
+    struct ImageChoice
+    {
+        PortRef ref;
+        QString name;
+    };
+    std::vector<ImageChoice> imageChoices() const;
+
     PresentationHost &host_;
     OutputModel      &outputs_;
     RoiEditSession   &roi_;
@@ -167,10 +177,14 @@ private:
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> lifecycle_;
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> instances_;
 
-    PortId   imageOutput_ = 0;
+    std::optional<PortRef> imageSelection_;
+    // The node the current selection was made for. A node that has never been shown picks its first
+    // offered image; a node whose chosen port disappeared stays empty instead of picking another.
+    // Both are optional: node 0 is a real node, so 0 cannot mean "none".
+    std::optional<NodeId> selectionNode_;
     int      index_    = 0;
     int      count_    = 0;
-    NodeId   displayed_ = 0;
+    std::optional<NodeId> displayed_;
     quint64  displayRequest_ = 0;
     RegionGroup                  displayInputs_;
     RegionGroup                  displayOutputs_;

@@ -292,6 +292,17 @@ ApplicationWindow {
     }
     QuiMenu {
         id: settingsMenu
+        // The check mark is a mirror of the preference, not a second copy: it is re-read every time
+        // the menu opens, so a refused change cannot leave a tick behind.
+        onAboutToShow: editBuiltinsItem.checked = app.editBuiltins
+        QuiMenuItem {
+            id: editBuiltinsItem
+            text: "允许编辑内置工具"
+            checkable: true
+            checked: app.editBuiltins
+            onTriggered: app.setEditBuiltins(!app.editBuiltins)
+        }
+        MenuSeparator {}
         QuiMenuItem { text: "重置界面布局"; onTriggered: window.resetLayout() }
     }
     QuiMenu {
@@ -591,6 +602,7 @@ ApplicationWindow {
     }
     CustomToolDialog {
         id: customToolDialog
+        controller: app.toolEditor
         transientParent: window
     }
     LogDialog {

@@ -65,7 +65,9 @@ try
         {2, "图像", {Type::Image}}
     };
     image.nextOutputPortId = 3;
-    image.outputs.front().colorOrder = "BGR";
+    // The workbench only offers an Image port that asks to be displayed; the fixture shows it.
+    image.outputs.front().colorOrder  = "BGR";
+    image.outputs.front().imageVisible = true;
     const auto declaration           = package + "tools/custom/isolation/image.json";
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(image)));
     auto scalar         = image;
@@ -274,6 +276,8 @@ def scalar(inputs):
     image.entry.symbol              = "scalar";
     image.outputs.front().type      = {Type::Int};
     image.outputs.front().colorOrder.clear();
+    // A retyped port cannot keep an Image display request; the declaration would be rejected.
+    image.outputs.front().imageVisible = false;
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(image)));
     app.rescanTools();
     idle();

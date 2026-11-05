@@ -12,6 +12,9 @@ QuiStepperField {
     property var commitValue
     property var stepValue
 
+    // A rejected draft is reported to whoever owns the value; this control has no global dependency.
+    signal rejected(string text)
+
     property string _lastValue: ""
 
     implicitHeight: Theme.paramEditorHeight
@@ -36,12 +39,12 @@ QuiStepperField {
             return
         }
         // A rejected draft stays in the field for the user to correct; validation is reported to
-        // the log instead of painting the row red.
+        // the owner of the value instead of painting the row red.
         if (commitValue(text)) {
             _lastValue = text
             invalid = false
         } else {
-            app.logParameterDraftRejected(parameterId + "：" + text)
+            rejected(text)
             invalid = false
         }
     }

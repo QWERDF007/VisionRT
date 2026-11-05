@@ -189,6 +189,8 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         return QString::fromStdString(port.group);
     case EditorRole:
         return QString::fromStdString(port.editor);
+    case ShowImageRole:
+        return port.imageVisible;
     }
 
     return {};
@@ -215,7 +217,8 @@ QHash<int, QByteArray> ToolPortListModel::roleNames() const
         {OptionsTextRole,  "optionsText"},
         {TabRole,          "tabName"},
         {GroupRole,        "groupName"},
-        {EditorRole,       "editorType"}
+        {EditorRole,       "editorType"},
+        {ShowImageRole,    "showImage"}
     };
 }
 
@@ -479,6 +482,13 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
                 if (!line.trimmed().isEmpty())
                     candidate.options.push_back(parseEditorValue(line.trimmed(), candidate.type));
         }
+        if (properties.contains("showImage"))
+        {
+            const bool visible = properties.value("showImage").toBool();
+            if (visible && candidate.type.type != Type::Image)
+                throw ContractError("只有图像参数可以加入图像显示列表");
+            candidate.imageVisible = visible;
+        }
     }
     catch (const std::exception &error)
     {
@@ -661,7 +671,7 @@ QVariantList ToolPortListModel::relationCandidates(int row, const QString &kind)
             }
             QVariantMap item;
             item.insert("ref", QString::fromStdString(formatPortRef(reference)));
-            item.insert("label", QStringLiteral("%1 · %2").arg(QString::fromUtf8(stageLabel(stage)),
+            item.insert("label", QStringLiteral("%1：%2").arg(QString::fromUtf8(stageLabel(stage)),
                                                               QString::fromStdString(other.nameZh)));
             result.append(item);
         }
@@ -691,10 +701,6 @@ QVariantList ToolPortListModel::editorOptions(int row) const
             label = "数字";
         else if (token == "text")
             label = "文本";
-        else if (token == "file")
-            label = "文件";
-        else if (token == "directory")
-            label = "目录";
         else if (token == "path")
             label = "路径";
         else if (token == "bool" || token == "switch")
@@ -749,6 +755,7 @@ QVariantMap ToolPortListModel::portAt(int row) const
     map.insert("tabName", data(idx, TabRole));
     map.insert("groupName", data(idx, GroupRole));
     map.insert("editorType", data(idx, EditorRole));
+    map.insert("showImage", data(idx, ShowImageRole));
     return map;
 }
 

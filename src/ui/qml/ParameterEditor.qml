@@ -23,7 +23,6 @@ ColumnLayout {
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
-    readonly property string pathKind: parameter.editor || ""
     readonly property real numberValue: Number(root.valueText)
     readonly property real minimumValue: parameter.minimum === undefined || parameter.minimum === "" ? -Infinity : Number(parameter.minimum)
     readonly property real maximumValue: parameter.maximum === undefined || parameter.maximum === "" ? Infinity : Number(parameter.maximum)
@@ -45,7 +44,6 @@ ColumnLayout {
     }
 
     function commit(text) { return root.editable && app.setParameter(parameter.id, parameter.init, text) }
-    onPathKindChanged: { pathPicker.close() }
     onParameterKeyChanged: { pathPicker.close() }
 
     RowLayout {
@@ -203,17 +201,9 @@ ColumnLayout {
 
             QuiFileFolderDialog {
                 id: pathPicker
-                title: root.parameter.editor === "directory"
-                           ? "选择文件夹"
-                           : (root.parameter.editor === "file"
-                               ? "选择文件"
-                               : "选择文件或文件夹")
+                title: "选择文件或文件夹"
                 currentFolder: root.valueText
-                dialogMode: root.parameter.editor === "directory"
-                                ? QuiFileFolderDialog.DialogMode.Folder
-                                : (root.parameter.editor === "file"
-                                    ? QuiFileFolderDialog.DialogMode.File
-                                    : QuiFileFolderDialog.DialogMode.FileOrFolder)
+                dialogMode: QuiFileFolderDialog.DialogMode.FileOrFolder
                 onAccepted: (path) => {
                     if (root.editable)
                         app.setParameterPath(root.parameter.id, root.parameter.init, path)
@@ -324,6 +314,9 @@ ColumnLayout {
             canDecrement: root.parameter.canDecrement === true
             canIncrement: root.parameter.canIncrement === true
             commitValue: function(text) { return root.commit(text) }
+            onRejected: function(text) {
+                app.logParameterDraftRejected(root.parameter.id + "：" + text)
+            }
             stepValue: function(direction, text) {
                 return root.editable
                     && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text)
@@ -499,14 +492,9 @@ ColumnLayout {
             }
             Component.onCompleted: sync(true)
             // Path parameters use a unified picker dialog supporting both files and folders.
-            actionIcon: root.parameter.editor === "file"
-                            ? QuiFontIcon.Document
-                            : (root.parameter.editor === "directory" || root.parameter.editor === "path"
-                                ? QuiFontIcon.FolderOpen
-                                : 0)
-            actionText: root.parameter.editor === "directory" ? "选择文件夹"
-                      : (root.parameter.editor === "file" ? "选择文件"
-                      : (root.parameter.editor === "path" ? "选择路径" : ""))
+            // A path parameter has one picker: it selects a file or a folder in the same dialog.
+            actionIcon: root.parameter.editor === "path" ? QuiFontIcon.FolderOpen : 0
+            actionText: root.parameter.editor === "path" ? "选择路径" : ""
             secondaryActionIcon: 0
             secondaryActionText: ""
             onCommitRequested: {

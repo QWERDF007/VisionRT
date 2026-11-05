@@ -104,7 +104,7 @@ void parameterEditorsContract()
         "type": "string",
         "default": "原始路径",
         "ui": {
-          "editor": "file"
+          "editor": "path"
         }
       },
       {
@@ -146,7 +146,7 @@ void parameterEditorsContract()
         "type": "string",
         "default": "F:/tmp",
         "ui": {
-          "editor": "directory"
+          "editor": "path"
         }
       },
       {
@@ -162,6 +162,9 @@ void parameterEditorsContract()
         "id": 10,
         "name_zh": "图像",
         "type": "image",
+        "display": {
+          "visible": true
+        },
         "default": []
       },
       {
@@ -540,7 +543,7 @@ void parameterEditorsContract()
     {
         if (item->property("inputItem").value<QObject *>() == pathInput
             && item->property("readOnly").isValid()) pathField = item;
-        if (item->property("text").toString() == QStringLiteral("选择文件")
+        if (item->property("text").toString() == QStringLiteral("选择路径")
             && item->metaObject()->indexOfSignal("clicked()") >= 0) pathAction = item;
     }
     require(pathField && pathAction, "path field public controls are missing");

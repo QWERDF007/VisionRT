@@ -80,7 +80,7 @@ int AppController::imageCount() const
     return impl_->presentation.imageCount();
 }
 
-int AppController::selectedImageOutput() const
+QString AppController::selectedImageOutput() const
 {
     return impl_->presentation.selectedImageOutput();
 }
@@ -97,7 +97,7 @@ void AppController::setImageIndex(int index)
     emit resultsChanged();
 }
 
-void AppController::setImageOutput(int output)
+void AppController::setImageOutput(const QString &output)
 {
     if (impl_->operations.isClosing())
         return;

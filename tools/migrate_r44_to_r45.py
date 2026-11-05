@@ -367,10 +367,9 @@ def migrate_project_json(
                     elif param_name.isdigit():
                         port_id = int(param_name)
                     else:
-                        diagnostics.append(
-                            f"Flow '{flow_name}', Node {node_seq} ({tool_id}): 无法识别初始化参数 '{param_name}'"
+                        raise ValueError(
+                            f"Flow '{flow_name}', Node {node_seq} ({tool_id}): 无法识别初始化参数 '{param_name}'，拒绝迁移"
                         )
-                        continue
                     new_init_list.append({"port_id": port_id, "value": param_val})
             elif isinstance(old_init, list):
                 new_init_list = old_init
@@ -391,7 +390,9 @@ def migrate_project_json(
                             elif port_key.isdigit():
                                 pid = int(port_key)
                             else:
-                                continue
+                                raise ValueError(
+                                    f"Flow '{flow_name}', Node {node_seq} ({tool_id}): 无法识别 {stage_key} 端口 '{port_key}'，拒绝迁移"
+                                )
                             new_type_snapshot[stage_key].append({
                                 "port_id": pid,
                                 "type": normalize_type_token(type_val)
@@ -411,10 +412,9 @@ def migrate_project_json(
                     elif input_key.isdigit():
                         port_id = int(input_key)
                     else:
-                        diagnostics.append(
-                            f"Flow '{flow_name}', Node {node_seq} ({tool_id}): 无法识别输入端口 '{input_key}'"
+                        raise ValueError(
+                            f"Flow '{flow_name}', Node {node_seq} ({tool_id}): 无法识别输入端口 '{input_key}'，拒绝迁移"
                         )
-                        continue
 
                     mode = binding.get("mode", "literal")
                     literal_val = binding.get("literal")
@@ -440,15 +440,18 @@ def migrate_project_json(
                             elif src_t_map and src_port_raw in src_t_map.get("outputs", {}):
                                 src_port_id = src_t_map["outputs"][src_port_raw]
                             else:
-                                diagnostics.append(
-                                    f"Flow '{flow_name}', Node {node_seq}: 上游引用 Node {src_node} ({src_tool}) 的端口 '{src_port_raw}' 无法映射"
+                                raise ValueError(
+                                    f"Flow '{flow_name}', Node {node_seq}: 上游引用 Node {src_node} ({src_tool}) 的端口 '{src_port_raw}' 无法映射，拒绝迁移"
                                 )
 
-                        if src_port_id is not None:
-                            new_binding["source"] = {
-                                "node_seq": src_node,
-                                "port_id": src_port_id
-                            }
+                        if src_port_id is None:
+                            raise ValueError(
+                                f"Flow '{flow_name}', Node {node_seq}: 上游引用缺少端口编号，拒绝迁移"
+                            )
+                        new_binding["source"] = {
+                            "node_seq": src_node,
+                            "port_id": src_port_id
+                        }
                     new_input_list.append(new_binding)
             elif isinstance(old_inputs, list):
                 new_input_list = old_inputs

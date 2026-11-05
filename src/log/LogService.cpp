@@ -380,11 +380,12 @@ struct LogService::Impl
     std::uint64_t                   reportedDropped = 0;
 
     // The default location is the software directory, not a per-user data directory: the log has to
-    // sit next to the executable the user actually launched.
+    // sit next to the executable the user actually launched. An unknown directory is not replaced by
+    // the process working directory, which would put the log somewhere the installation never named.
     static QString defaultFile()
     {
         const auto directory = QCoreApplication::applicationDirPath();
-        return (directory.isEmpty() ? QDir::currentPath() : directory) + QStringLiteral("/logs/visionrt.log");
+        return directory.isEmpty() ? QString{} : directory + QStringLiteral("/logs/visionrt.log");
     }
 };
 
@@ -422,29 +423,36 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
         std::unique_lock<std::shared_mutex> lock(impl_->writeMutex);
         impl_->config = config;
         impl_->path   = filePath.isEmpty() ? Impl::defaultFile() : filePath;
-        QDir().mkpath(QFileInfo(impl_->path).absolutePath());
 
         std::vector<spdlog::sink_ptr> sinks;
-        try
+        if (impl_->path.isEmpty())
         {
-            // The base name keeps the date suffix implicit: spdlog writes today's local date into
-            // `visionrt_YYYY-MM-DD.log` and switches file by itself at local midnight.
-            auto file = std::make_shared<spdlog::sinks::daily_file_sink_mt>(impl_->path.toStdString(), 0, 0, false);
-            file->set_formatter(makeFormatter());
-            impl_->fileSink  = file;
-            impl_->fileReady = true;
-            sinks.push_back(file);
-        }
-        catch (const std::exception &)
-        {
-            // A log file that cannot be opened never blocks startup and never opens a dialog: the
-            // service keeps running on stderr, counts the failure and says so in one diagnostic line.
+            // No software directory means no file log; the window channel still reports why.
             gWriteFailures.fetch_add(1, std::memory_order_relaxed);
-            auto fallback = std::make_shared<spdlog::sinks::stderr_sink_mt>();
-            fallback->set_formatter(makeFormatter());
-            impl_->fileSink  = fallback;
+            impl_->fileSink.reset();
             impl_->fileReady = false;
-            sinks.push_back(fallback);
+        }
+        else
+        {
+            QDir().mkpath(QFileInfo(impl_->path).absolutePath());
+            try
+            {
+                // The base name keeps the date suffix implicit: spdlog writes today's local date into
+                // `visionrt_YYYY-MM-DD.log` and switches file by itself at local midnight.
+                auto file = std::make_shared<spdlog::sinks::daily_file_sink_mt>(impl_->path.toStdString(), 0, 0, false);
+                file->set_formatter(makeFormatter());
+                impl_->fileSink  = file;
+                impl_->fileReady = true;
+                sinks.push_back(file);
+            }
+            catch (const std::exception &)
+            {
+                // No substitute sink: the file log failed, the window channel below still reports it, and
+                // fileSinkReady() keeps saying the file is not being written.
+                gWriteFailures.fetch_add(1, std::memory_order_relaxed);
+                impl_->fileSink.reset();
+                impl_->fileReady = false;
+            }
         }
 
         impl_->uiSink = std::make_shared<BufferedSink>(impl_->config.uiCapacity,
@@ -507,8 +515,10 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
     // Startup log lines are dispatched outside the exclusive writeMutex to avoid recursive lock acquisition
     if (impl_->fileReady)
         info("日志", ("日志服务已启动：" + impl_->path).toStdString());
+    else if (impl_->path.isEmpty())
+        warn("日志", "无法确定软件目录，文件日志不可用，仅窗口日志可用");
     else
-        warn("日志", ("日志目录不可写，日志仅输出到标准错误：" + QFileInfo(impl_->path).absolutePath()).toStdString());
+        warn("日志", ("日志目录不可写，仅窗口日志可用：" + QFileInfo(impl_->path).absolutePath()).toStdString());
     return true;
 }
 
