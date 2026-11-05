@@ -197,6 +197,22 @@ try
     require(fileText(datedLog(directory.path())).contains(visibleLine),
             "the file does not contain the identical line the window displays");
 
+    // An empty source produces no empty brackets [] and no [日志] field.
+    LogService::write(LogLevel::Info, QStringLiteral(""), QStringLiteral("无来源直接消息"));
+    require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.endsWith(QStringLiteral("无来源直接消息")); }); },
+                            2000),
+            "the empty-source record did not reach the window");
+    QString emptyLine;
+    for (int r = 0; r < model.rowCount(); ++r)
+    {
+        const auto l = rowLine(model, r);
+        if (l.endsWith(QStringLiteral("无来源直接消息")))
+            emptyLine = l;
+    }
+    require(!emptyLine.isEmpty(), "empty source line not found");
+    require(!emptyLine.contains(QStringLiteral("[]")), "empty source produced empty brackets");
+    require(!emptyLine.contains(QStringLiteral("[日志]")), "empty source produced [日志] field");
+
     // 2. One record is one line: CR/LF and other line breaks are escaped, never written through.
     LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("第一行\r\n第二行\n第三行"));
     require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.contains(QStringLiteral("第一行")); }); },
