@@ -21,7 +21,7 @@ Window {
 
     property var controller: null
     property var flatTree: []
-    property var collapsed: ({})
+    property var expandedFolders: ({})
     property var menuItem: null
     property string searchKeyword: ""
 
@@ -32,18 +32,6 @@ Window {
         root.raise()
         root.requestActivate()
         root.rebuildTree()
-        root.autoSelectFirstTool()
-    }
-
-    function autoSelectFirstTool() {
-        if (!root.controller || root.controller.hasTool)
-            return
-        for (let i = 0; i < root.flatTree.length; ++i) {
-            if (root.flatTree[i].kind === "tool") {
-                root.selectKey(root.flatTree[i].key)
-                return
-            }
-        }
     }
 
     function rebuildTree() {
@@ -74,7 +62,8 @@ Window {
 
                 const isFolder = node.kind === "folder"
                 const hasChildren = (node.children || []).length > 0
-                const isExpanded = filter ? true : (isFolder && !root.collapsed[node.path])
+                // Default: folders are NOT expanded unless explicitly expanded by user or matching search keyword
+                const isExpanded = filter ? true : (isFolder && root.expandedFolders[node.path] === true)
                 rows.push({
                     kind: node.kind,
                     display: node.name,
@@ -100,15 +89,13 @@ Window {
         }
         walk(nodes, 0)
         root.flatTree = rows
-        if (root.controller && !root.controller.hasTool)
-            root.autoSelectFirstTool()
     }
 
     function toggleFolder(path) {
-        if (root.collapsed[path])
-            delete root.collapsed[path]
+        if (root.expandedFolders[path])
+            delete root.expandedFolders[path]
         else
-            root.collapsed[path] = true
+            root.expandedFolders[path] = true
         root.rebuildTree()
     }
 
@@ -129,18 +116,26 @@ Window {
 
     Component.onCompleted: {
         rebuildTree()
-        autoSelectFirstTool()
     }
     onVisibleChanged: {
         if (visible) {
             rebuildTree()
-            autoSelectFirstTool()
         }
     }
 
     Connections {
         target: root.controller
-        function onTreeChanged() { root.rebuildTree() }
+        function onTreeChanged() {
+            if (root.controller && root.controller.hasTool && root.controller.currentToolCategory) {
+                let parts = root.controller.currentToolCategory.split('/')
+                let prefix = ""
+                for (let p = 0; p < parts.length; ++p) {
+                    prefix = prefix ? prefix + '/' + parts[p] : parts[p]
+                    root.expandedFolders[prefix] = true
+                }
+            }
+            root.rebuildTree()
+        }
     }
 
     // Main window background card matching design with smooth 8px radius, 1px border
@@ -232,8 +227,8 @@ Window {
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
-                    anchors.topMargin: 12
-                    anchors.bottomMargin: 12
+                    anchors.topMargin: 0
+                    anchors.bottomMargin: 0
                     spacing: 16
 
                     // ========================== Column 1: Tool Catalogue ==========================
@@ -243,6 +238,8 @@ Window {
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.topMargin: 12
+                            anchors.bottomMargin: 12
                             spacing: 12
 
                             // Search box matching Theme editor input tokens
@@ -312,6 +309,17 @@ Window {
                                 cacheBuffer: 5000
                                 model: root.flatTree
 
+                                // Background click area to deselect when clicking on empty space
+                                MouseArea {
+                                    anchors.fill: parent
+                                    z: -1
+                                    acceptedButtons: Qt.LeftButton
+                                    onClicked: {
+                                        if (root.controller)
+                                            root.controller.selectKey("")
+                                    }
+                                }
+
                                 delegate: ToolTreeDelegate {
                                     required property int index
                                     required property var modelData
@@ -357,38 +365,15 @@ Window {
                         color: Theme.border
                     }
 
-                    // Empty placeholder when no tool is selected
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: !(root.controller && root.controller.hasTool)
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 12
-                            QuiTextIcon {
-                                Layout.alignment: Qt.AlignHCenter
-                                iconSource: QuiFontIcon.AllApps
-                                iconSize: 44
-                                iconColor: Theme.iconMuted
-                            }
-                            Label {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "请在左侧选择工具进行编辑，或右键添加新工具"
-                                font.pixelSize: 14
-                                color: Theme.textSecondary
-                            }
-                        }
-                    }
-
                     // ========================== Column 2: Tool Properties ==========================
                     Item {
                         Layout.preferredWidth: 260
                         Layout.fillHeight: true
-                        visible: root.controller && root.controller.hasTool
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.topMargin: 12
+                            anchors.bottomMargin: 12
                             spacing: 12
 
                             // Title bar matching design exactly in height & baseline
@@ -405,13 +390,13 @@ Window {
                                 Item { Layout.fillWidth: true }
                             }
 
-                            // Card with primary highlight border matching Theme.highlight
+                            // Card with primary highlight border when tool is selected
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 radius: 8
                                 color: Theme.surfaceBg
-                                border.color: Theme.highlight
+                                border.color: (root.controller && root.controller.hasTool) ? Theme.highlight : Theme.border
                                 border.width: 1.5
 
                                 ColumnLayout {
@@ -568,15 +553,23 @@ Window {
                         }
                     }
 
+                    // Vertical separator line strictly using Theme.border
+                    Rectangle {
+                        Layout.fillHeight: true
+                        width: 1
+                        color: Theme.border
+                    }
+
                     // ========================== Column 3: Input Parameters ==========================
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.minimumWidth: 260
-                        visible: root.controller && root.controller.hasTool
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.topMargin: 12
+                            anchors.bottomMargin: 12
                             spacing: 12
 
                             // Title bar with "+ 参数" button - strict baseline alignment
@@ -601,8 +594,8 @@ Window {
                                     radius: Theme.radiusSmall
                                     border.color: Theme.border
                                     border.width: 1
-                                    color: (root.controller && root.controller.isEditable && addInMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
-                                    opacity: (root.controller && root.controller.isEditable) ? 1 : 0.4
+                                    color: (root.controller && root.controller.hasTool && root.controller.isEditable && addInMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
+                                    opacity: (root.controller && root.controller.hasTool && root.controller.isEditable) ? 1 : 0.4
 
                                     RowLayout {
                                         anchors.centerIn: parent
@@ -615,8 +608,8 @@ Window {
                                         id: addInMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        enabled: root.controller && root.controller.isEditable
-                                        cursorShape: (root.controller && root.controller.isEditable) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        enabled: root.controller && root.controller.hasTool && root.controller.isEditable
+                                        cursorShape: (root.controller && root.controller.hasTool && root.controller.isEditable) ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         onClicked: {
                                             if (!root.controller) return
                                             root.controller.inputModel.addPort("新参数", "int", "0")
@@ -634,7 +627,7 @@ Window {
                                 clip: true
                                 spacing: 10
                                 topMargin: 0
-                                model: root.controller ? root.controller.inputModel : null
+                                model: (root.controller && root.controller.hasTool) ? root.controller.inputModel : null
                                 delegate: ToolPortCard {
                                     width: inputView.width
                                     portsModel: root.controller ? root.controller.inputModel : null
@@ -647,15 +640,23 @@ Window {
                         }
                     }
 
+                    // Vertical separator line strictly using Theme.border
+                    Rectangle {
+                        Layout.fillHeight: true
+                        width: 1
+                        color: Theme.border
+                    }
+
                     // ========================== Column 4: Output Parameters ==========================
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.minimumWidth: 260
-                        visible: root.controller && root.controller.hasTool
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.topMargin: 12
+                            anchors.bottomMargin: 12
                             spacing: 12
 
                             // Title bar with "+ 参数" button - strict baseline alignment
@@ -680,8 +681,8 @@ Window {
                                     radius: Theme.radiusSmall
                                     border.color: Theme.border
                                     border.width: 1
-                                    color: (root.controller && root.controller.isEditable && addOutMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
-                                    opacity: (root.controller && root.controller.isEditable) ? 1 : 0.4
+                                    color: (root.controller && root.controller.hasTool && root.controller.isEditable && addOutMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
+                                    opacity: (root.controller && root.controller.hasTool && root.controller.isEditable) ? 1 : 0.4
 
                                     RowLayout {
                                         anchors.centerIn: parent
@@ -694,8 +695,8 @@ Window {
                                         id: addOutMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        enabled: root.controller && root.controller.isEditable
-                                        cursorShape: (root.controller && root.controller.isEditable) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        enabled: root.controller && root.controller.hasTool && root.controller.isEditable
+                                        cursorShape: (root.controller && root.controller.hasTool && root.controller.isEditable) ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         onClicked: {
                                             if (!root.controller) return
                                             root.controller.outputModel.addPort("新参数", "int", "")
@@ -713,7 +714,7 @@ Window {
                                 clip: true
                                 spacing: 10
                                 topMargin: 0
-                                model: root.controller ? root.controller.outputModel : null
+                                model: (root.controller && root.controller.hasTool) ? root.controller.outputModel : null
                                 delegate: ToolPortCard {
                                     width: outputView.width
                                     portsModel: root.controller ? root.controller.outputModel : null
