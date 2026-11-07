@@ -5,7 +5,7 @@ import quickui
 import VisionRT.Style 1.0
 
 // Modern parameter card matching design specification.
-// Rigorous horizontal label/input alignment with port ID badge and QuickUI components.
+// Rigorous horizontal label/input alignment with port ID badge and Theme tokens.
 Rectangle {
     id: root
 
@@ -33,8 +33,8 @@ Rectangle {
     property bool advancedChecked: false
 
     implicitHeight: cardLayout.implicitHeight + 24
-    color: "#FFFFFF"
-    border.color: "#E5E6EB"
+    color: Theme.surfaceBg
+    border.color: Theme.border
     border.width: 1
     radius: 8
 
@@ -121,16 +121,16 @@ Rectangle {
                 id: numberChip
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 20
-                radius: 4
-                color: rowDrag.active ? QuiColor.Highlight : "#EBF5FF"
-                border.color: rowDrag.active ? QuiColor.Highlight : "transparent"
+                radius: Theme.radiusSmall
+                color: rowDrag.active ? Theme.highlight : Theme.treeItemSelectedBg
+                border.color: rowDrag.active ? Theme.highlight : "transparent"
 
                 Label {
                     anchors.centerIn: parent
                     text: String(model.portId)
                     font.pixelSize: 12
                     font.bold: true
-                    color: rowDrag.active ? "#FFFFFF" : "#1677FF"
+                    color: rowDrag.active ? "#FFFFFF" : Theme.highlight
                 }
 
                 HoverHandler {
@@ -181,14 +181,14 @@ Rectangle {
             Rectangle {
                 Layout.preferredWidth: 22
                 Layout.preferredHeight: 20
-                radius: 4
-                color: (root.editable && !root.fixed && delMouse.containsMouse) ? "#F2F3F5" : "transparent"
+                radius: Theme.radiusSmall
+                color: (root.editable && !root.fixed && delMouse.containsMouse) ? Theme.menuButtonHoverBg : "transparent"
 
                 Text {
                     anchors.centerIn: parent
                     text: "✕"
                     font.pixelSize: 11
-                    color: root.fixed ? "#C9CDD4" : (delMouse.containsMouse ? "#F53F3F" : "#86909C")
+                    color: root.fixed ? Theme.disabledText : (delMouse.containsMouse ? Theme.error : Theme.iconMuted)
                 }
 
                 MouseArea {
@@ -211,7 +211,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
@@ -236,7 +236,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
@@ -258,7 +258,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             QuiComboBox {
                 id: typeCombo
@@ -268,13 +268,13 @@ Rectangle {
                 model: root.types
                 textRole: "label"
                 currentIndex: root.typeIndex()
-                normalColor: "#FFFFFF"
-                disableColor: "#FFFFFF"
+                normalColor: Theme.surfaceBg
+                disableColor: Theme.surfaceBg
                 background: Rectangle {
-                    radius: 4
+                    radius: Theme.radiusSmall
                     border.width: 1
-                    border.color: typeCombo.activeFocus ? "#4096FF" : "#E5E6EB"
-                    color: "#FFFFFF"
+                    border.color: typeCombo.activeFocus ? Theme.paramEditorFocusBorder : Theme.border
+                    color: Theme.surfaceBg
                 }
                 onActivated: function(index) {
                     const token = root.types[index].token
@@ -302,7 +302,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
@@ -325,7 +325,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             QuiToggleSwitch {
                 enabled: root.editable && !root.fixed
@@ -348,7 +348,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
@@ -370,7 +370,7 @@ Rectangle {
                 Layout.preferredWidth: 64
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
@@ -393,7 +393,7 @@ Rectangle {
                 Layout.preferredWidth: 88
                 horizontalAlignment: Text.AlignRight
                 font.pixelSize: 13
-                color: "#4E5969"
+                color: Theme.textSecondary
             }
             QuiToggleSwitch {
                 enabled: root.editable && !root.fixed
@@ -414,7 +414,7 @@ Rectangle {
             Text {
                 text: root.advancedChecked ? "收起详情" : "更多设置"
                 font.pixelSize: 12
-                color: advMouse.containsMouse ? "#1677FF" : "#86909C"
+                color: advMouse.containsMouse ? Theme.highlight : Theme.textSecondary
 
                 MouseArea {
                     id: advMouse
@@ -436,7 +436,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.typeToken === "string"
-                Label { text: "编辑方式:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: "#4E5969" }
+                Label { text: "编辑方式:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -444,6 +444,12 @@ Rectangle {
                     model: root.editorOptions()
                     textRole: "label"
                     currentIndex: root.editorIndex()
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        border.width: 1
+                        border.color: Theme.border
+                        color: Theme.surfaceBg
+                    }
                     onActivated: function(index) {
                         root.commit({ editor: root.editorOptions()[index].token })
                     }
@@ -454,7 +460,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("image")
-                Label { text: "关联图像:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: "#4E5969" }
+                Label { text: "关联图像:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -462,6 +468,12 @@ Rectangle {
                     model: root.relationOptions("image")
                     textRole: "label"
                     currentIndex: root.relationIndex("image", model.imageRef)
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        border.width: 1
+                        border.color: Theme.border
+                        color: Theme.surfaceBg
+                    }
                     onActivated: function(index) {
                         root.commit({ image: root.relationOptions("image")[index].ref })
                     }
@@ -472,7 +484,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("alignment")
-                Label { text: "对齐关系:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: "#4E5969" }
+                Label { text: "对齐关系:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -480,6 +492,12 @@ Rectangle {
                     model: root.relationOptions("alignment")
                     textRole: "label"
                     currentIndex: root.relationIndex("alignment", model.alignmentRef)
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        border.width: 1
+                        border.color: Theme.border
+                        color: Theme.surfaceBg
+                    }
                     onActivated: function(index) {
                         root.commit({ alignment: root.relationOptions("alignment")[index].ref })
                     }
@@ -490,7 +508,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("same_geometry_as")
-                Label { text: "同几何:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: "#4E5969" }
+                Label { text: "同几何:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -498,6 +516,12 @@ Rectangle {
                     model: root.relationOptions("same_geometry_as")
                     textRole: "label"
                     currentIndex: root.relationIndex("same_geometry_as", model.sameGeometryRef)
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        border.width: 1
+                        border.color: Theme.border
+                        color: Theme.surfaceBg
+                    }
                     onActivated: function(index) {
                         root.commit({ same_geometry_as: root.relationOptions("same_geometry_as")[index].ref })
                     }
@@ -508,7 +532,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("path_mode")
-                Label { text: "路径模式:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: "#4E5969" }
+                Label { text: "路径模式:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -516,6 +540,12 @@ Rectangle {
                     model: root.relationOptions("path_mode")
                     textRole: "label"
                     currentIndex: root.relationIndex("path_mode", model.pathModeRef)
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        border.width: 1
+                        border.color: Theme.border
+                        color: Theme.surfaceBg
+                    }
                     onActivated: function(index) {
                         root.commit({ path_mode: root.relationOptions("path_mode")[index].ref })
                     }
@@ -527,13 +557,13 @@ Rectangle {
                 spacing: 8
                 visible: !root.output && (root.typeToken === "int" || root.typeToken === "float"
                                          || root.typeToken === "string" || root.typeToken === "bool")
-                Label { text: "候选值:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: "#4E5969" }
+                Label { text: "候选值:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 50
-                    color: "#FFFFFF"
-                    border.color: "#E5E6EB"
-                    radius: 4
+                    color: Theme.surfaceBg
+                    border.color: Theme.border
+                    radius: Theme.radiusSmall
 
                     TextArea {
                         id: optionsField
@@ -543,6 +573,7 @@ Rectangle {
                         text: model.optionsText
                         wrapMode: TextArea.Wrap
                         font.pixelSize: 12
+                        color: Theme.textPrimary
                         onActiveFocusChanged: {
                             if (!activeFocus && text !== model.optionsText)
                                 root.commit({ options: text })
@@ -564,6 +595,7 @@ Rectangle {
         Label {
             width: 380
             wrapMode: Text.WordWrap
+            color: Theme.textPrimary
             text: typeImpactDialog.impact.join("\n")
         }
         onAccepted: if (root.portsModel) root.portsModel.changeType(root.index, pendingToken)

@@ -30,6 +30,33 @@
 - ...
 -->
 
+### 2026-11-07 — 全面对齐 Theme 配色体系并强化清晰分割线与自动选中
+
+**目标**
+- 响应用户反馈：“分割线呢，都看不清，对齐它的效果啊，不要自定义颜色啊，整体是不是有一个统一配色、样式的地方，查看一下对应的配色，其他页面的配色方案，例如主界面的分割线的配色”；
+- 梳理主界面与全局 `Theme` 配色体系（`Theme.border`、`Theme.textPrimary`、`Theme.textSecondary`、`Theme.highlight` 等），全面替换弹窗内硬编码的自定义 hex 颜色；
+- 将竖向与横向分割线颜色由肉眼难辨的浅灰统一为与主界面一致的清晰 `Theme.border`（#D0D7DE）；
+- 增加弹窗打开时的首项工具自动选中逻辑，并补充空状态占位，杜绝打开后右侧大片空白。
+
+**当前状态**
+- 已完成全局 Theme 配色统一与视觉强化：
+  1. 统一分割线：标题栏下沿、目录树与内容列之间、操作底栏上沿的分割线全部统一采用与主界面 SplitView 完全一致的 `Theme.border`（#D0D7DE），1px 清晰可见；
+  2. 弹窗外框与底色：弹窗背景绑定 `Theme.surfaceBg`，外边框绑定 `Theme.border`；
+  3. 字体与标签色彩：文字统一绑定 `Theme.textPrimary`（深灰 #24292F），字段标签与提示文本绑定 `Theme.textSecondary`（中灰 #57606A），图标未激活态绑定 `Theme.iconMuted`，杜绝任何自定义硬编码颜色；
+  4. 树节点色彩对齐：目录图标使用 `Theme.treeFolderIconColor`，展开箭头与高亮完全沿用主界面 `ToolTreeDelegate` 规范；
+  5. 避免白屏：增加 `autoSelectFirstTool` 逻辑，在对话框显示或树加载时自动选中首个工具，同时对空数据提供居中指引占位。
+- 已完成自动化测试与部署：
+  测试通过，重新抓取了截图 `D:/tmp/editor_dialog_capture.png`，并全量打包部署至 `E:\Softwares\VisionRT`（2786 个文件）。
+
+**验证证据**
+- `ctest --test-dir build -R tool_editor` → 全部 PASS（`tool_editor_controller_test`、`tool_editor_dialog_test` 退出码 0）；
+- `tool_editor_dialog_test.exe` → 退出码 0，成功保存截图 `D:/tmp/editor_dialog_capture.png`，人工核验确认分割线与主题色对齐；
+- `installed_pipeline_contract.exe` 与 `installed_python_author_contract.exe` → 全部 PASS（退出码 0）；
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → 退出码 0。
+
+**下一步**
+- 呈报用户核验分割线及 Theme 统一配色效果。
+
 ### 2026-11-06 — 自定义工具树去杂色、保存按钮高亮、删除初始化参数及四列对齐
 
 **目标**
