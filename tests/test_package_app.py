@@ -273,6 +273,21 @@ class InstallationContract(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "visionrt_python_bridge"):
                 package_app.verify_package(root, require_qt=False, allow_dirty=True)
 
+    def test_project_runtime_ships_the_bridge(self) -> None:
+        """The bridge is product code: verification requires it, so packaging must copy it."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-bridge-copy-") as temporary:
+            root = Path(temporary)
+            build = root / "build"
+            (build / "bin").mkdir(parents=True)
+            (build / "bin" / "visionrt_python_bridge.dll").write_bytes(b"bridge")
+            install = root / "install"
+            install.mkdir()
+
+            package_app.copy_project_runtime(build, install, include_pdb=False, allow_dirty=True)
+
+            self.assertTrue((install / "visionrt_python_bridge.dll").is_file(),
+                            "packaging dropped the Python bridge")
+
 
 class BuildMetadataScriptContract(unittest.TestCase):
     """Integration test matrix for WriteBuildInfo.cmake and release gating (T46-01 / T46-02 / S46-02)."""

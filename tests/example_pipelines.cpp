@@ -524,14 +524,16 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     volatile std::uint8_t pxVal = *pxPtr;
     assert((pxVal == *pxPtr));
 
-    // Success-then-failure isolation: the 2nd run with an invalid path publishes the declared empty
-    // batch instead of the previous run's images, and its own status explains the failure.
+    // Success-then-failure isolation: the 2nd run with an invalid path never exposes the previous
+    // run's images. A failed read has no result to publish, so the business port is structurally
+    // Missing rather than an empty batch that downstream tools could mistake for "zero images".
     project1.flows[0].nodes[0].inputs[1] = {BindingMode::Literal, std::string{"nonexistent_images_dir"}, {}};
     assert((engine1.start(project1, registry, RunMode::Once).code == 0));
     auto u1_fail       = finish(engine1);
     auto s1_fail_node1 = snapshot(u1_fail, 1);
     assert((s1_fail_node1 && s1_fail_node1->status.code != 0));
-    assert((std::get<DataRef<Image>>(s1_fail_node1->outputs.at(2)).get().empty()));
+    assert((std::holds_alternative<Missing>(s1_fail_node1->outputs.at(2))));
+    assert((std::get_if<DataRef<Image>>(&s1_fail_node1->outputs.at(2)) == nullptr));
 }
 
 void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
@@ -593,7 +595,9 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     auto s2 = snapshot(update, 2);
     assert((s2));
     assert((!s2->status));
-    assert((std::get<DataRef<Image>>(s2->outputs.at(2)).get().empty()));
+    // The failed read publishes no batch at all: the port is Missing, so nothing downstream can
+    // mistake the failure for a valid empty result.
+    assert((std::holds_alternative<Missing>(s2->outputs.at(2))));
 
     // Node 3: yolo fails because nonexistent model weights
     if (inferenceIncluded)

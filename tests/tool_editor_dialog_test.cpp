@@ -1,3 +1,4 @@
+#include "WorkbenchFixtures.h"
 #include "core/CustomToolStore.h"
 #include "ui/AppController.h"
 #include "ui/Theme.h"
@@ -63,7 +64,6 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication app(argc, argv);
-    QCoreApplication::addLibraryPath(QStringLiteral("E:/Softwares/Qt/6.11.0/msvc2022_64/plugins"));
 
     QTemporaryDir directory;
     require(directory.isValid(), "cannot create editor store");
@@ -90,7 +90,10 @@ try
     window->show();
     require(QTest::qWaitForWindowExposed(window), "custom tool editor was not exposed");
 
-    AppController appController(1, "E:/Softwares/VisionRT");
+    // The editor lists what the installed catalog contains, so the fixture supplies the same
+    // package every other workbench test uses instead of a machine-specific install path.
+    const testing::WorkbenchInstallation installation;
+    AppController                     appController(1, installation.directory());
     require(QTest::qWaitFor([&] { return !appController.busy(); }, 5000), "app controller busy timed out");
     controller.setAppController(&appController);
     controller.setEditBuiltins(true);

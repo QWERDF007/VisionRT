@@ -315,6 +315,11 @@ if(BUILD_TESTING)
         --output "${CMAKE_BINARY_DIR}/evidence/roi-view-smoke.csv" LABELS perf)
     visionrt_contract(output_value_contract visionrt_presentation)
     visionrt_contract(python_value_contract visionrt_python_values)
+    # The probe is the only source of Python facts; its positive and negative samples run without a
+    # window so a rejected environment is a test result rather than a manual exercise.
+    visionrt_contract(python_probe_contract visionrt_python_host LABELS bridge)
+    target_compile_definitions(python_probe_contract PRIVATE
+        VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
     visionrt_contract(value_bridge_benchmark visionrt_presentation --output "${CMAKE_BINARY_DIR}/evidence/value_bridge-smoke.csv" LABELS perf)
     target_link_libraries(value_bridge_benchmark PRIVATE visionrt_python_values)
     if(WIN32)
@@ -395,6 +400,7 @@ if(BUILD_TESTING)
         visionrt_contract(tool_editor_dialog_test visionrt_ui)
         target_link_libraries(tool_editor_dialog_test PRIVATE Qt6::Test)
         target_compile_definitions(tool_editor_dialog_test PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(ui_project_paths_contract visionrt_ui)
@@ -437,7 +443,7 @@ if(BUILD_TESTING)
         # Reuse of the Python instance is a correctness property, not a measurement: keeping it out
         # of the perf group leaves that group as benchmarks only, which is what the docs promise.
         visionrt_contract(runtime_hotpath_contract visionrt_ui LABELS bridge)
-        target_link_libraries(runtime_hotpath_contract PRIVATE Qt6::Test)
+        target_link_libraries(runtime_hotpath_contract PRIVATE Qt6::Test visionrt_python_testing)
         target_compile_definitions(runtime_hotpath_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(workbench_flows_contract visionrt_ui)

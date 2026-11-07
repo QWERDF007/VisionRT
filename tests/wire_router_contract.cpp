@@ -12,9 +12,11 @@ int main()
     WireRouter router;
     std::vector<NodeBounds> nodes{{sourceId, QRectF(0, 0, 156, 52)},
                                    {2, QRectF(0, 160, 156, 52)}, {3, QRectF(0, 320, 156, 52)}};
-    std::vector<PortRelation> relations{{{sourceId, "images"}, {2, "images"}},
-                                        {{sourceId, "images"}, {3, "images"}},
-                                        {{sourceId, "paths"}, {3, "paths"}}};
+    // Port identity is the number: source 2 carries the image batch to both consumers, source 3
+    // carries the path list to node 3's second input.
+    std::vector<PortRelation> relations{{{sourceId, 2}, {2, 1}},
+                                        {{sourceId, 2}, {3, 1}},
+                                        {{sourceId, 3}, {3, 2}}};
     const auto verify = [&](const std::vector<RoutedWire> &routes)
     {
         for (const auto &wire : routes)
@@ -68,7 +70,7 @@ int main()
     assert(router.route(nodes, {}).empty());
     routes = router.route(nodes, relations);
     verify(routes);
-    relations.push_back({{sourceId, "value"}, {999, "value"}});
+    relations.push_back({{sourceId, 2}, {999, 1}});
     routes = router.route(nodes, relations);
     assert(routes.size() == 2);
     const auto broken = std::find_if(routes.begin(), routes.end(), [](const auto &wire) { return wire.target == 999; });

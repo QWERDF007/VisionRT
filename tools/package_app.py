@@ -1,8 +1,9 @@
 """VisionRT release packaging script.
 
 Packages release runtime into a standalone directory:
-Collects executable, project DLLs, QML modules, Python runtime,
+Collects executable, project DLLs (including the Python bridge), QML modules,
 third-party dependencies from dependencies.json, system runtimes, and Qt plugins.
+The CPython interpreter and its packages stay in the user's chosen environment.
 """
 
 from __future__ import annotations
@@ -93,8 +94,10 @@ def default_install_dir() -> Path:
 
 
 # Everything the application creates inside its own directory. A clean install replaces program
-# files only: user tools, logs and interaction preferences are data, not build output.
-PRESERVED_INSTALL_ENTRIES = frozenset({"custom-tools", "logs", "ui-preferences.json"})
+# files only: user tools, logs and interaction preferences are data, not build output. The marker
+# itself is preserved too — it is what authorises the next clean, so deleting it would strand a
+# failed package without protection.
+PRESERVED_INSTALL_ENTRIES = frozenset({"custom-tools", "logs", "ui-preferences.json", ".visionrt_package"})
 
 
 def build_release(build_dir: Path, config: str, parallel: int) -> None:
@@ -292,6 +295,17 @@ def copy_project_runtime(
             break
     if quickui_dll:
         copy_file(quickui_dll, install_dir / "quickui.dll")
+
+    # 1b. The Python bridge is a product component even though no interpreter ships with it: the
+    # host resolves it next to the executable only when a user-selected environment is started.
+    bridge_dll = None
+    for candidate in (bin_dir / "visionrt_python_bridge.dll", build_dir / "visionrt_python_bridge.dll"):
+        if candidate.is_file():
+            bridge_dll = candidate
+            break
+    if bridge_dll is None:
+        raise RuntimeError("package verification failed: visionrt_python_bridge.dll was not built")
+    copy_file(bridge_dll, install_dir / "visionrt_python_bridge.dll")
 
     # 2. 构建完成阶段生成的组件元数据：关于弹窗只从 exe 同目录读取它们
     for name, comp in (("build_info.json", "VisionRT"), ("contracts-build-info.json", "VisionRTContracts")):

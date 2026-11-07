@@ -117,16 +117,16 @@ int main(int argc, char **argv)
         auto &nodes = loaded.project.flows[0].nodes;
         auto &reader = nodes[0];
         auto &detector = nodes[1];
-        if (std::get<std::string>(detector.initParams.at("load_mode")) != "build_wts")
+        if (std::get<std::string>(detector.initParams.at(1)) != "build_wts")
             throw std::runtime_error("GPU example must build its native WTS model before loading the saved engine");
         QTemporaryDir temporary;
         if (!temporary.isValid())
             throw std::runtime_error("Cannot create the GPU project directory");
         loaded.project.path = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / "gpu.vrt.json";
-        reader.inputs.at("path").literal             = std::string(image.generic_string());
-        reader.inputs.at("count").literal            = std::int64_t{1}; // single-image detection reference
-        detector.initParams.at("model_path")         = std::string(weights.generic_string());
-        detector.initParams.at("engine_output_path") = std::string(enginePath.generic_string());
+        reader.inputs.at(1).literal             = std::string(image.generic_string());
+        reader.inputs.at(5).literal            = std::int64_t{1}; // single-image detection reference
+        detector.initParams.at(2)         = std::string(weights.generic_string());
+        detector.initParams.at(3) = std::string(enginePath.generic_string());
         struct Reference
         {
             cv::Rect2f rectangle;
@@ -146,8 +146,8 @@ int main(int argc, char **argv)
             {
                 if (!std::filesystem::is_regular_file(enginePath) || std::filesystem::file_size(enginePath) == 0)
                     throw std::runtime_error("Native model build did not save an engine");
-                detector.initParams.at("load_mode")  = std::string("engine");
-                detector.initParams.at("model_path") = std::string(enginePath.generic_string());
+                detector.initParams.at(1)  = std::string("engine");
+                detector.initParams.at(2) = std::string(enginePath.generic_string());
             }
             const auto phase = pass == 0 ? "build_wts" : "engine";
             std::cout << "[YOLO] " << phase << std::endl;
@@ -182,10 +182,10 @@ int main(int argc, char **argv)
                                              + (results.contains(node.id) ? results.at(node.id)->status.message
                                                                          : "missing result"));
             const auto &outputs = results.at(detector.id)->outputs;
-            const auto &regions = std::get<DataRef<ROI>>(outputs.at("rois")).get();
-            const auto &scores  = std::get<Array>(outputs.at("scores"));
-            const auto &classes = std::get<Array>(outputs.at("classes"));
-            const auto &names   = std::get<Array>(outputs.at("class_names"));
+            const auto &regions = std::get<DataRef<ROI>>(outputs.at(3)).get();
+            const auto &scores  = std::get<Array>(outputs.at(4));
+            const auto &classes = std::get<Array>(outputs.at(5));
+            const auto &names   = std::get<Array>(outputs.at(6));
             if (regions.size() != 1 || regions[0].size() != reference.size()
                 || scores.type() != TypeSpec{Type::Array, DType::Float32, 2}
                 || nestedOf<NestedVector<float, 2>>(scores).size() != 1
@@ -221,7 +221,7 @@ int main(int argc, char **argv)
                     throw std::runtime_error("YOLO result differs from independent PyTorch class/box/score reference");
             }
             const auto &filtered = results.at(nodes[2].id)->outputs;
-            if (std::get<DataRef<ROI>>(filtered.at("rois")).get()[0].size() != 4)
+            if (std::get<DataRef<ROI>>(filtered.at(3)).get()[0].size() != 4)
                 throw std::runtime_error("Downstream filter did not remove the low-confidence person");
             std::cout << "[PASS] Native YOLO matches five PyTorch detections; downstream filter retains four." << std::endl;
             std::cout << "[YOLO] " << phase << " completed in "

@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -32,6 +33,8 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();
     const auto                     write = [&](const QString &path, const QByteArray &bytes)
@@ -49,7 +52,7 @@ try
     definition.kind        = ToolKind::PythonClass;
     definition.entry       = {"hotpath", "tool.py", "Counter"};
     definition.outputs     = {
-        { "value", "值", {Type::Int}}
+        {2, "值", {Type::Int}}
     };
     write(json, QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(script, R"py(from pathlib import Path
@@ -71,7 +74,7 @@ class Counter:
     def execute(self, inputs):
         self.count += 1
         bump('exec')
-        return {'outputs': {'value': self.count, '__status_code': 0, '__status_message': ''}, 'detail': ''}
+        return {'outputs': {2: self.count, 0: 0, 1: 'ok'}, 'detail': ''}
 
     def release(self):
         return {'code': 0, 'message': '', 'detail': ''}
@@ -86,9 +89,16 @@ class Counter:
     require(outputs, "hot-path output model unavailable");
     app.addNode("test.hotpath", 0, 0);
     idle();
+    // The reload that follows the addition owns the workspace while it runs, so the node is
+    // selected once it is Idle again.
+    const auto nodes = app.nodes();
+    require(nodes.size() == 1, "the hot-path node is missing from the flow");
+    const auto nodeId = nodes.front().toMap().value(QStringLiteral("id")).toString();
+    app.selectNode(nodeId);
+    require(app.selectedNode() == nodeId, "the hot-path node could not be selected");
     app.runNode();
     idle();
-    const auto first = outputs->capture("value");
+    const auto first = outputs->capture(2);
     require(first && OutputModel::fullText(*first) == "1", "hot-path first execution failed");
     require(text(package + "python/custom/hotpath/init") == "1" && text(package + "python/custom/hotpath/exec") == "1",
             "hot-path first execution did not initialize once");
@@ -97,7 +107,7 @@ class Counter:
     require(!QFile::exists(json) && !QFile::exists(script), "hot-path declarations are still readable");
     app.runNode();
     idle();
-    const auto repeated = outputs->capture("value");
+    const auto repeated = outputs->capture(2);
     require(repeated && OutputModel::fullText(*repeated) == "2", "hot-path repeated execution failed");
     require(text(package + "python/custom/hotpath/init") == "1", "hot-path execution re-initialized the instance");
     require(text(package + "python/custom/hotpath/exec") == "2", "hot-path execution did not reuse the instance");
