@@ -30,6 +30,33 @@
 - ...
 -->
 
+### 2026-11-07 — 弹窗连贯分割线、四列全时架构、默认折叠与主界面目录顺序对齐
+
+**目标**
+- 响应用户反馈：“中间不要这个提示；分割线连接完整，不要空；对齐效果图，还有默认工具列表不要展开，点击工具列表的空白处取消选中；还有顺序也是一致的；复用组件怎么会工具顺序不一样呢”；
+- 移除占位提示并实现全时四列架构：彻底删除中间未选中状态下突兀居中的提示卡片，无论是否选中工具，界面恒定展现四列骨架（工具树、工具属性、输入参数、输出参数），未选中时显示空态/禁用态，与效果图完全统一；
+- 顶天立地完整分割线：消除 `RowLayout` 上下边距对分割线的截断，将各列内边距移至列内部容器，使三条垂直分割线完整连贯地连接顶部标题线与底部操作栏，绝不留空；
+- 默认工具列表折叠与空白处点击取消选中：重塑展开状态管理，默认所有工具目录折叠，点击工具列表空白区域自动清空当前选中项；
+- 目录与工具排列顺序与主界面 100% 对齐：重构 `ToolEditorController::buildTree()`，移除盲目拼音排序，严格继承主界面 `ToolRegistry` 的首次出现自然顺序（Python、处理、流程控制、测量、深度学习、逻辑、采集、预处理），并优先将用户自定义扩展放置在顶部，完全吻合设计图。
+
+**当前状态**
+- 已完成核心逻辑重构与布局优化：
+  1. 完整连贯分割线：外层 `RowLayout` 设置 `topMargin: 0; bottomMargin: 0`，分割线使用 `Layout.fillHeight: true` 顶天立地，列内部各带 12px 上下边距；
+  2. 全时四列布局：移除居中空提示，第二、三、四列始终呈现，未选中工具时卡片为细灰边框且输入框禁用，选中时高亮变蓝；
+  3. 默认折叠与空白处取消：改用 `expandedFolders`，目录默认收起，第一列底放置响应空白点击的 `MouseArea`，点击即触发 `selectKey("")`；
+  4. 顺序统一对齐：构建基于 `app_->toolCatalog()` 的顺序索引映射，内置工具目录与工具排序严格对齐主界面，用户扩展目录置顶。
+- 已完成验证与全量打包部署：
+  自动化测试全部通过，抓取最新渲染截图核验确认无瑕疵，重新全量打包部署至 `E:\Softwares\VisionRT`（2786 个文件）。
+
+**验证证据**
+- `ctest --test-dir build -R "tool_editor_dialog_test|workbench_tooltree_contract"` → 全部 PASS（退出码 0）；
+- `tool_editor_dialog_test.exe` → 退出码 0，成功捕获高保真截图 `editor_dialog_capture.png`，核验确认分割线完整连贯、四列全时架构、工具目录顺序完美对齐；
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --allow-dirty` → 退出码 0，`package verification complete: 2786 files`；
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → 退出码 0。
+
+**下一步**
+- 提交并推送代码至远端分支。
+
 ### 2026-11-07 — 恢复主界面工具树完整渲染并精简弹窗为清爽现代圆角卡片
 
 **目标**

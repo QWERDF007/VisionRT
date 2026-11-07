@@ -94,10 +94,10 @@ try
     require(QTest::qWaitFor([&] { return !appController.busy(); }, 5000), "app controller busy timed out");
     controller.setAppController(&appController);
     controller.setEditBuiltins(true);
-    require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "调整亮度") != nullptr; }, 2000),
+    require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "预处理") != nullptr; }, 2000),
             "custom tool dialog did not render builtin tools after setEditBuiltins(true)");
     controller.setEditBuiltins(false);
-    require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "调整亮度") == nullptr; }, 2000),
+    require(QTest::qWaitFor([&] { return findByText(window->contentItem(), "预处理") == nullptr; }, 2000),
             "custom tool dialog did not hide builtin tools after setEditBuiltins(false)");
 
     require(controller.addTool("用户扩展/示例工具"), "editor could not add a tool");

@@ -14,6 +14,7 @@
 #include <cctype>
 #include <functional>
 #include <set>
+#include <unordered_map>
 
 namespace visionrt {
 
@@ -303,12 +304,74 @@ QVariantList ToolEditorController::buildTree() const
         }
     }
 
-    const auto toolNodes = [&tools](const QString &folder) {
+    // Preserve the exact canonical ordering of categories and tools from the main window catalog.
+    std::unordered_map<std::string, int> toolOrder;
+    std::unordered_map<QString, int>     folderOrder;
+    int nextBuiltinFolderOrder = 0;
+    int nextBuiltinToolOrder = 0;
+    if (app_)
+    {
+        for (const auto &def : app_->toolCatalog())
+        {
+            if (toolOrder.find(def.nameEn) == toolOrder.end())
+                toolOrder[def.nameEn] = nextBuiltinToolOrder++;
+
+            QString prefix;
+            for (const auto &cat : def.categories)
+            {
+                const QString qcat = QString::fromStdString(cat);
+                prefix = prefix.isEmpty() ? qcat : prefix + QLatin1Char('/') + qcat;
+                if (folderOrder.find(prefix) == folderOrder.end())
+                    folderOrder[prefix] = nextBuiltinFolderOrder++;
+            }
+        }
+    }
+
+    // Custom tools and authored folders get top priority (negative order).
+    int nextCustomFolderOrder = -1000;
+    int nextCustomToolOrder = -1000;
+    if (store_)
+    {
+        std::vector<std::string> problems;
+        for (const auto &tool : store_->discoverCustomTools(&problems))
+        {
+            if (toolOrder.find(tool.definition.nameEn) == toolOrder.end())
+                toolOrder[tool.definition.nameEn] = nextCustomToolOrder++;
+
+            QString prefix;
+            for (const auto &cat : tool.definition.categories)
+            {
+                const QString qcat = QString::fromStdString(cat);
+                prefix = prefix.isEmpty() ? qcat : prefix + QLatin1Char('/') + qcat;
+                if (folderOrder.find(prefix) == folderOrder.end())
+                    folderOrder[prefix] = nextCustomFolderOrder++;
+            }
+        }
+    }
+    for (const auto &path : folders_)
+    {
+        QStringList parts = splitCategory(path);
+        QString prefix;
+        for (const auto &part : parts)
+        {
+            prefix = prefix.isEmpty() ? part : prefix + QLatin1Char('/') + part;
+            if (folderOrder.find(prefix) == folderOrder.end())
+                folderOrder[prefix] = nextCustomFolderOrder++;
+        }
+    }
+
+    const auto toolNodes = [&tools, &toolOrder](const QString &folder) {
         std::vector<const Entry *> matching;
         for (const auto &tool : tools)
             if (tool.folder == folder)
                 matching.push_back(&tool);
-        std::sort(matching.begin(), matching.end(), [](const Entry *left, const Entry *right) {
+        std::sort(matching.begin(), matching.end(), [&toolOrder](const Entry *left, const Entry *right) {
+            const auto itLeft = toolOrder.find(left->id);
+            const auto itRight = toolOrder.find(right->id);
+            const int orderLeft = (itLeft != toolOrder.end()) ? itLeft->second : 999999;
+            const int orderRight = (itRight != toolOrder.end()) ? itRight->second : 999999;
+            if (orderLeft != orderRight)
+                return orderLeft < orderRight;
             const int byName = QString::localeAwareCompare(left->name, right->name);
             return byName != 0 ? byName < 0 : left->id < right->id;
         });
@@ -340,7 +403,13 @@ QVariantList ToolEditorController::buildTree() const
             if (parentPath == parent)
                 children.append(path);
         }
-        std::sort(children.begin(), children.end(), [](const QString &left, const QString &right) {
+        std::sort(children.begin(), children.end(), [&folderOrder](const QString &left, const QString &right) {
+            const auto itLeft = folderOrder.find(left);
+            const auto itRight = folderOrder.find(right);
+            const int orderLeft = (itLeft != folderOrder.end()) ? itLeft->second : 999999;
+            const int orderRight = (itRight != folderOrder.end()) ? itRight->second : 999999;
+            if (orderLeft != orderRight)
+                return orderLeft < orderRight;
             return QString::localeAwareCompare(left, right) < 0;
         });
 
