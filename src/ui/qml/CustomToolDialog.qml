@@ -14,8 +14,8 @@ Window {
     flags: Qt.Dialog | Qt.FramelessWindowHint
     modality: Qt.NonModal
     color: "transparent"
-    width: 1312
-    height: 792
+    width: 1280
+    height: 760
     minimumWidth: 1056
     minimumHeight: 632
 
@@ -143,20 +143,14 @@ Window {
         function onTreeChanged() { root.rebuildTree() }
     }
 
-    // Main window background card with 16px shadow margin, smooth 4-corner radius, and continuous border
+    // Main window background card matching design with smooth 8px radius, 1px border
     Rectangle {
         id: windowCard
         anchors.fill: parent
-        anchors.margins: 16
-        radius: 10
+        radius: 8
         color: Theme.surfaceBg
         border.color: Theme.border
         border.width: 1
-
-        QuiShadow {
-            radius: 10
-            elevation: 16
-        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -319,13 +313,18 @@ Window {
                                 model: root.flatTree
 
                                 delegate: ToolTreeDelegate {
+                                    required property int index
+                                    required property var modelData
+
                                     width: ListView.view ? ListView.view.width : (treeView ? treeView.width : 200)
                                     isEditor: true
-                                    model: modelData
                                     row: index
+                                    column: 0
+                                    isTreeNode: true
                                     depth: modelData.depth
                                     hasChildren: modelData.hasChildren
                                     expanded: modelData.expanded
+                                    model: modelData
                                     selectedKey: root.controller ? root.controller.currentKey : ""
                                     onSelected: function(key) {
                                         root.selectKey(key)
@@ -729,24 +728,17 @@ Window {
                 }
             }
 
-            // Footer top separator line strictly using Theme.border
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: Theme.border
-            }
-
-            // ------------------------------------------------------------- Footer Actions (Item container preserves rounded corners)
+            // ------------------------------------------------------------- Footer Actions
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 56
+                Layout.preferredHeight: 48
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 20
-                    anchors.topMargin: 12
-                    anchors.bottomMargin: 12
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    anchors.topMargin: 8
+                    anchors.bottomMargin: 8
                     spacing: 12
 
                     Label {

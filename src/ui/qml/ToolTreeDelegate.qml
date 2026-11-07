@@ -10,13 +10,14 @@ import VisionRT.Style 1.0
 Item {
     id: root
 
-    property int row: 0
-    property int column: 0
-    property var model: null
-    property bool isTreeNode: true
-    property bool expanded: false
-    property bool hasChildren: false
-    property int depth: 0
+    required property int row
+    required property int column
+    required property var model
+    required property bool isTreeNode
+    required property bool expanded
+    required property bool hasChildren
+    required property int depth
+
     property var treeView: null
     property string selectedKey: ""
     property bool isEditor: false
@@ -129,6 +130,8 @@ Item {
                 if (d.indexOf("流程") >= 0 || d.indexOf("flow") >= 0) return QuiFontIcon.FolderOpen
                 if (d.indexOf("标") >= 0 || d.indexOf("基础") >= 0) return QuiFontIcon.AllApps
                 if (d.indexOf("检") >= 0 || d.indexOf("深") >= 0) return QuiFontIcon.Search
+                if (d.indexOf("扩") >= 0 || d.indexOf("应用") >= 0 || d.indexOf("app") >= 0) return QuiFontIcon.AllApps
+                if (d.indexOf("示例") >= 0 || d.indexOf("demo") >= 0 || d.indexOf("例") >= 0) return QuiFontIcon.FolderOpen
                 return QuiFontIcon.Settings
             }
             iconSize: Theme.treeFolderIconSize

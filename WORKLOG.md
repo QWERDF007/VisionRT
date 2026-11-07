@@ -30,6 +30,30 @@
 - ...
 -->
 
+### 2026-11-07 — 恢复主界面工具树完整渲染并精简弹窗为清爽现代圆角卡片
+
+**目标**
+- 响应用户反馈：“工具列表没了，不要加那么厚重的底部效果啊，看着很难看啊，效果图这种就行了啊”；
+- 根治主界面工具库文字消失问题：恢复 `ToolTreeDelegate.qml` 对 Qt TreeView 原生 `required property`（`row/column/model/isTreeNode/expanded/hasChildren/depth`）的声明，确保主界面 TreeView 与弹窗 ListView 两边组件完全复用且文字、层级、语义分类图标全部 100% 完整显示；
+- 消除厚重阴影与沉重底栏：彻底移除 `QuiShadow` 与 16px 扩边黑阴影，恢复 1280x760 精致标准规格，`windowCard` 采用 8px 清爽圆角与 1px 细线浅灰边框；精简底部操作栏至 48px，去掉横割线，使取消与保存按钮浑然一体、轻盈对齐效果图。
+
+**当前状态**
+- 已完成组件修复与界面重塑：
+  1. 修复 `ToolTreeDelegate.qml`：保留 Qt 6 TreeView 必需的 7 个 `required property`，并在 `CustomToolDialog.qml` 的 ListView 委托中显式声明并注入 `index` 与 `modelData`，保证主界面与弹窗完全无缝复用同一个组件，分类图标与菱形叶子完全一致；
+  2. 弹窗视觉精简：移除 `QuiShadow` 和外围 16px 边距，直接呈现 8px 平滑圆角卡片，边框为 1px Theme.border；
+  3. 紧凑美观底栏：去除底部横切线，高度调整为 48px，右下角优雅排列取消与高亮蓝色保存按钮，100% 对齐效果图。
+- 已完成验证与打包部署：
+  自动化测试全部通过，抓取最新 1280x760 截图核验确认无瑕疵，重新全量打包部署至 `E:\Softwares\VisionRT`（2786 个文件）。
+
+**验证证据**
+- `ctest --test-dir build -R "tool_editor_dialog_test|workbench_tooltree_contract"` → 全部 PASS（退出码 0）；
+- `tool_editor_dialog_test.exe` → 退出码 0，成功捕获截图并核验，左侧工具树完整层级渲染（`用户扩展/示例工具/图像阈值`，选中高亮），底栏紧凑清爽无厚重阴影；
+- `python tools/package_app.py --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --allow-dirty` → 退出码 0，`package verification complete: 2786 files`；
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → 退出码 0。
+
+**下一步**
+- 提交并推送代码至远端分支。
+
 ### 2026-11-07 — 弹窗底部圆角与边界重塑及复用主界面 ToolTreeDelegate
 
 **目标**
