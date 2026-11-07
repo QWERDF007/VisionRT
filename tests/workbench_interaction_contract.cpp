@@ -1,6 +1,7 @@
 // Real workbench contract for the runtime interaction rules (U02 / F01).
 // While a run owns the workspace every user entry is unavailable except stop and close; the run
 // itself keeps publishing results, and a save requested during a run neither writes nor queues.
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -49,6 +50,8 @@ bool waitFor(const std::function<bool()> &condition, int milliseconds = 10000)
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     registerStyleModule();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);

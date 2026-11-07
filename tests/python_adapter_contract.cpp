@@ -3,6 +3,7 @@
 #include "ToolResultAssertions.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include <pybind11/embed.h>
 
 #include "runtime/Snapshot.h"
@@ -386,7 +387,7 @@ class PathProbe:
 
 int main()
 {
-    PythonRuntime runtime;
+    PythonRuntime runtime(testsupport::pythonEnvironment());
     try
     {
         auto worker = std::async(std::launch::async,

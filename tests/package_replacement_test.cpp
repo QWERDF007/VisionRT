@@ -7,6 +7,7 @@
 #include "core/ToolPackage.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/Receiver.h"
 #include "runtime/RuntimeEngine.h"
 
@@ -567,7 +568,7 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     try
     {
-        PythonRuntime python;
+        PythonRuntime python(testsupport::pythonEnvironment());
         runPackageReplacement(python);
         std::cout << "[ALL TESTS PASSED] package replacement and protection passed." << std::endl;
         return 0;

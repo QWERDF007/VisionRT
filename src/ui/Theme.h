@@ -198,6 +198,9 @@ public:
     THEME_COLOR_PROP(tooltipBg)
     THEME_COLOR_PROP(tooltipText)
     THEME_COLOR_PROP(viewportBg)
+    // 设置窗口左导航：选中项浅蓝底与强调文字，与工具树的选中语义区分开
+    THEME_COLOR_PROP(navItemActiveBg)
+    THEME_COLOR_PROP(navItemActiveText)
     THEME_COLOR_PROP(assistHintText)
     THEME_COLOR_PROP(zoomText)
 
@@ -302,6 +305,8 @@ public:
 
     THEME_COLOR_PROP(logButtonHoverColor)
     THEME_INT_PROP(parameterLabelWidth)
+    // 工具编辑卡片内标签列的宽度：卡片比参数面板窄，标签列不跟随参数面板的宽度
+    THEME_INT_PROP(cardLabelWidth)
     THEME_INT_PROP(timingIconSize)
     THEME_INT_PROP(executeButtonPlayIconSize)
 

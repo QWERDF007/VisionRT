@@ -35,6 +35,7 @@ constexpr PortId kDynamicPath      = 4;
 constexpr PortId kModeValueOutput  = 2;
 constexpr PortId kImagePathInput   = 1;
 constexpr PortId kImageCountInput  = 5;
+constexpr PortId kImagesOutput     = 2;
 
 void readImageToolUiContract();
 
@@ -498,6 +499,10 @@ void readImageToolUiContract()
                 "pipeline execution with bus.jpg produced node errors");
     }
     require(!app.imageOutputs().isEmpty(), "image read produced no image outputs for bus.jpg");
+    // The viewport shows the port the user picked, so the image output is opened explicitly and the
+    // batch it carries stays the one the later assertions count.
+    app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+    require(!app.selectedImageOutput().isEmpty(), "the read image output could not be selected");
 
     // 4. Test Directory selection
     require(QDir(imageDir).exists(), "InferRT test asset dir pics is missing");

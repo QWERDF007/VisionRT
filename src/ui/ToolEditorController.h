@@ -104,6 +104,9 @@ public:
 
     bool isEditable() const noexcept;
     bool editBuiltins() const noexcept;
+    // True when the switch may change: turning it off is refused while a built-in draft holds an
+    // edit the user would no longer be able to see.
+    bool canSetEditBuiltins(bool enabled) const;
     void setEditBuiltins(bool enabled);
     bool canClone() const noexcept;
     bool isDirty() const noexcept;

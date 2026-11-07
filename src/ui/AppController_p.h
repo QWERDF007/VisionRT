@@ -3,7 +3,7 @@
 #include "log/LogModel.h"
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
-#include "python/PythonRuntime.h"
+#include "python/PythonBackend.h"
 #include "runtime/RuntimeEngine.h"
 #include "ui/AppController.h"
 #include "ui/AssistPreview.h"
@@ -60,6 +60,16 @@ struct AppController::Impl : PresentationHost
     // Newest-first history shown by the file menu; loaded once so a broken preferences file can
     // never delay the first project open.
     QVector<RecentProjectEntry> recentProjects;
+    // The three platform settings this process started with. Settings are a snapshot: an applied
+    // change replaces this value, and the interpreter is only replaced by the next start.
+    Settings                    settings;
+    // Interpreter a test process stated before the first controller existed. It is the only way a
+    // test supplies one; a shipped build leaves it empty and reads the saved choice instead.
+    static QString testPythonExecutable;
+    // Reason the last settings commit was refused; shown by the settings window and cleared by the
+    // next successful apply.
+    QString                     settingsError;
+    QString                     settingsErrorField;
     void requireAvailableTool(std::string_view toolId) const;
     // 读取随包发布的宿主与 Contracts 构建元数据；工具包的元数据在 loadToolsPackage 中读取。
     void loadComponentBuildInfo();
@@ -75,7 +85,7 @@ struct AppController::Impl : PresentationHost
     ToolRegistry                           registry;
     ProjectEditor                          editor;
     WireRouter                             wireRouter;
-    std::unique_ptr<PythonRuntime>         python;
+    std::unique_ptr<PythonBackend>         python;
     std::unique_ptr<RuntimeEngine>         runtime;
     ToolTreeModel                          tools;
     OutputModel                            outputs;

@@ -4,6 +4,7 @@
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
+#include "ui/UiPreferences.h"
 
 #include <quickui/Color.h>
 
@@ -41,12 +42,12 @@ int main(int argc, char *argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption({"workers", "Taskflow worker count (positive integer)", "count"});
-    parser.addOption({"python-home", "Matching CPython runtime directory", "directory"});
     parser.addOption({"project", "Project file to open on startup", "file"});
     parser.addOption({"select-node", "Node to select on startup", "nodeId"});
     parser.addOption({"screenshot", "Capture UI screenshot to file and exit", "path"});
     parser.addOption({"screenshot-delay", "Delay before screenshot in ms (default 1000)", "ms"});
     parser.addOption({"demo-menu", "Open tools menu on startup for verification"});
+    parser.addOption({"demo-settings", "Open the settings window on startup for verification"});
     parser.addOption({"demo-select", "Select first category on startup for verification"});
     parser.addOption({"run-once", "Execute pipeline once on startup"});
     parser.process(application);
@@ -61,13 +62,17 @@ int main(int argc, char *argv[])
             return 2;
         }
     }
-    if (parser.isSet("python-home"))
-        qputenv("VISIONRT_PYTHON_HOME", parser.value("python-home").toUtf8());
     try
     {
         // Logging covers every producer below it and is released only after the controller and the
-        // QML engine are gone, so a late Python owner still has a live logger.
-        visionrt::LogService::instance().start();
+        // QML engine are gone, so a late Python owner still has a live logger. The production
+        // threshold is part of the stored settings and is applied before the service starts, because
+        // a producer above this point must already obey the user's choice.
+        visionrt::Settings settings;
+        visionrt::UiPreferences::loadSettings(settings);
+        visionrt::LogConfig logConfig;
+        logConfig.minimumLevel = settings.loggingLevel;
+        visionrt::LogService::instance().start(logConfig);
         struct LogShutdown
         {
             ~LogShutdown() { visionrt::LogService::instance().shutdown(); }
@@ -114,6 +119,7 @@ int main(int argc, char *argv[])
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);
         engine.rootContext()->setContextProperty("demoMenu", parser.isSet("demo-menu"));
+        engine.rootContext()->setContextProperty("demoSettings", parser.isSet("demo-settings"));
         engine.rootContext()->setContextProperty("demoSelect", parser.isSet("demo-select"));
         QObject::connect(
             &engine, &QQmlApplicationEngine::objectCreationFailed, &application, [] { QCoreApplication::exit(1); },

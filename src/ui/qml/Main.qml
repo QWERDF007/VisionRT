@@ -102,6 +102,11 @@ ApplicationWindow {
         running: typeof demoMenu !== "undefined" && demoMenu === true
         onTriggered: toolsMenu.popup(toolsBtn, 0, toolsBtn.height)
     }
+    Timer {
+        interval: 600
+        running: typeof demoSettings !== "undefined" && demoSettings === true
+        onTriggered: settingsDialog.openDialog()
+    }
     onClosing: function(event) {
         if (!closingApproved) { event.accepted = false; app.requestClose() }
     }
@@ -155,16 +160,13 @@ ApplicationWindow {
                 id: settingsBtn
                 text: "设置"; iconSource: QuiFontIcon.Settings
                 implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
-                normalColor: settingsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: settingsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
+                normalColor: settingsDialog.opened ? Theme.menuButtonActiveBg : Theme.menuButtonBg
+                hoverColor: settingsDialog.opened ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
                 pressedColor: Theme.menuButtonPressedBg
-                textColor: settingsMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
-                iconColor: settingsMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
+                textColor: settingsDialog.opened ? Theme.menuButtonActiveText : Theme.menuButtonText
+                iconColor: settingsDialog.opened ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
                 enabled: app.workspaceEnabled
-                onClicked: {
-                    if (settingsMenu.visible) settingsMenu.dismiss()
-                    else settingsMenu.popup(settingsBtn, 0, settingsBtn.height)
-                }
+                onClicked: settingsDialog.openDialog()
             }
             QuiTextIconButton {
                 id: toolsBtn
@@ -289,21 +291,6 @@ ApplicationWindow {
         QuiMenuItem { action: saveAsAction }
         MenuSeparator {}
         QuiMenuItem { text: "退出"; onTriggered: app.requestClose() }
-    }
-    QuiMenu {
-        id: settingsMenu
-        // The check mark is a mirror of the preference, not a second copy: it is re-read every time
-        // the menu opens, so a refused change cannot leave a tick behind.
-        onAboutToShow: editBuiltinsItem.checked = app.editBuiltins
-        QuiMenuItem {
-            id: editBuiltinsItem
-            text: "允许编辑内置工具"
-            checkable: true
-            checked: app.editBuiltins
-            onTriggered: app.setEditBuiltins(!app.editBuiltins)
-        }
-        MenuSeparator {}
-        QuiMenuItem { text: "重置界面布局"; onTriggered: window.resetLayout() }
     }
     QuiMenu {
         id: toolsMenu
@@ -593,6 +580,9 @@ ApplicationWindow {
     WorkbenchDialog {
         id: resetDialog; title: "运行时复位"; message: "清除运行结果并释放实例？所有未保存的工程配置和当前布局将保留。"
         positiveText: "复位"; onPositiveClicked: app.resetRuntime()
+    }
+    SettingsDialog {
+        id: settingsDialog
     }
     AboutVisionRTDialog { id: about }
     WorkbenchDialog {

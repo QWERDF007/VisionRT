@@ -306,27 +306,22 @@ void ResultPresentation::updateResults()
             connectable = host_.refreshConnectable(*flow, *node);
         outputs_.setResult(tool, snapshot, references, connectable, &node->signatures.outputs,
                            lifecycleShared(node->id));
-        // A node's first view starts on its first offered image. After that the selection only
-        // survives while its real port is still offered; a hidden or removed port leaves the
-        // viewport empty instead of being replaced by another image on the user's behalf.
+        // The viewport starts empty and only ever shows a port the user chose: selecting the first
+        // offered image on the user's behalf would present a port they never asked for. A selection
+        // survives while its real port is still offered; a hidden or removed port leaves the view
+        // empty instead of being replaced by another image.
         const auto choices = imageChoices();
-        if (choices.empty())
+        if (!selectionNode_ || *selectionNode_ != node->id)
         {
-            // A node with nothing to show cannot hold a selection; a port that only exists on
-            // another node is not carried over to this one.
             imageSelection_.reset();
-            selectionNode_.reset();
+            selectionNode_ = node->id;
         }
-        else if (!selectionNode_ || *selectionNode_ != node->id)
-        {
-            // First view of this node: open on its first offered image.
-            imageSelection_ = choices.front().ref;
-            selectionNode_  = node->id;
-        }
-        else if (imageSelection_
+        else if (!choices.empty() && imageSelection_
                  && std::none_of(choices.begin(), choices.end(),
                                  [&](const ImageChoice &choice) { return choice.ref == *imageSelection_; }))
-            // The chosen port is no longer offered: clear it, never jump to another image.
+            // An empty candidate list means the catalog could not answer — a run in flight, a
+            // contract still resolving — and that is not a reason to drop the user's port. Only a
+            // list that answers without the chosen port withdraws it.
             imageSelection_.reset();
     }
     updateDisplay();
@@ -526,6 +521,11 @@ void ResultPresentation::updateDisplay()
         target->setGeneration(generation_);
         if (!batch || itemIndex < 0 || static_cast<std::size_t>(itemIndex) >= batch->get().size())
         {
+            // A run in flight has not published yet, and an empty viewport would throw away the
+            // frame the user is looking at. Nothing is invented: the previous picture stays until
+            // the run answers, and an idle node with no data still shows nothing.
+            if (!host_.runtimeIdle() && target->hasImage())
+                return;
             empty.push_back(target);
             return;
         }
@@ -586,9 +586,16 @@ std::vector<ResultPresentation::ImageChoice> ResultPresentation::imageChoices() 
     {
         for (const auto &port : ports)
         {
-            if (port.type.type != Type::Image || !signatures.contains(port.id))
+            // The resolved signature is the only truth about what a port carries: a type-derived
+            // port has no declared type of its own until its source is known.
+            const auto signature = signatures.find(port.id);
+            if (signature == signatures.end() || signature->second.type != Type::Image)
                 continue;
-            if (visibleOnly && !port.imageVisible)
+            // A port whose type comes from another node cannot declare display attributes at all —
+            // the declaration rejects type_from together with display — so it is offered whenever
+            // it resolves to an image. A plain port appears only when the author marked it visible.
+            const bool derived = port.typeFrom.has_value() || node->outputTypeSources.contains(port.id);
+            if (visibleOnly && !port.imageVisible && !derived)
                 continue;
             const PortRef ref{stage, port.id};
             if (std::any_of(choices.begin(), choices.end(), [&](const auto &choice) { return choice.ref == ref; }))
@@ -600,12 +607,9 @@ std::vector<ResultPresentation::ImageChoice> ResultPresentation::imageChoices() 
     add(tool->outputs, PortStage::Outputs, node->signatures.outputs, true);
     add(tool->inputs, PortStage::Inputs, node->signatures.inputs, true);
 
-    // The ROI session edits one declared input image. It stays selectable as that real port even
-    // when the author did not offer it to the general selector; no substitute image is listed.
-    if (roi_.active() && roi_.node() == node->id)
-        if (const auto *declaration = host_.parameter(roi_.input(), false);
-            declaration && declaration->image && declaration->image->stage == PortStage::Inputs)
-            add(tool->inputs, PortStage::Inputs, node->signatures.inputs, false);
+    // An ROI session edits its declared input image, which the visible-only pass above already
+    // listed when the author offers it. Nothing hidden is added here: the session owns the
+    // background it displays, and the selector must never expose another input.
     return choices;
 }
 

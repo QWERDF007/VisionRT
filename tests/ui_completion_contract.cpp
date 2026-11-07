@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -27,6 +28,7 @@ void require(bool condition, const char *message)
 
 // The fixture declares 数据 on output 2 and 图像 on output 3.
 constexpr PortId kValuesOutput = 2;
+constexpr PortId kImageOutput  = 3;
 }
 
 int main(int argc, char **argv)
@@ -34,6 +36,8 @@ try
 {
     QGuiApplication application(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+    // R50: Python runs only on an interpreter someone selected, so the test states the build one.
+    testsupport::useBuildInterpreter();
     testing::WorkbenchInstallation installation;
     const auto                     root    = installation.directory();
     const auto                     package = root + "/tools-package/";
@@ -55,6 +59,9 @@ try
     };
     definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
+    // The result view offers only ports the declaration marks visible, and the user picks one:
+    // this fixture is about completion order, so it selects the image the way a user would.
+    definition.outputs.back().imageVisible = true;
     const auto declaration               = package + "tools/custom/completion/source.json";
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(package + "python/custom/completion/tool.py", R"py(import numpy as np
@@ -88,6 +95,14 @@ def refreshed(inputs):
     const auto    idle = [&]
     {
         require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "completion operation did not finish");
+    };
+    const auto selectImage = [&]
+    {
+        const auto key = QStringLiteral("outputs:%1").arg(kImageOutput);
+        if (app.selectedImageOutput() == key)
+            return true;
+        app.setImageOutput(key);
+        return app.selectedImageOutput() == key;
     };
     idle();
     app.attachViewport(&viewport);
@@ -153,8 +168,19 @@ def refreshed(inputs):
     };
     app.addNode("test.completion", 0, 0);
     idle();
+    // The reload that follows the addition owns the workspace while it runs, so the node is
+    // selected once it is Idle again.
+    const auto nodes = app.nodes();
+    require(nodes.size() == 1, "the added node is missing from the flow");
+    const auto nodeId = nodes.front().toMap().value(QStringLiteral("id")).toString();
+    app.selectNode(nodeId);
+    require(app.selectedNode() == nodeId, "the added node could not be selected");
     app.runNode();
     idle();
+    // Nothing is shown until the user picks a port, and the port they can pick is the visible one
+    // the declaration offers.
+    require(!viewport.hasImage(), "a node opened on an image the user never chose");
+    require(selectImage(), "the declared visible image output could not be selected");
     frame(QColor(17, 17, 17));
     QSignalSpy stateChanges(&app, &AppController::runtimeChanged);
     exportLarge();
@@ -185,6 +211,8 @@ def refreshed(inputs):
     monitor = false;
     app.runNode();
     idle();
+    // A refresh may rebuild the node, so the choice is re-established exactly as a user makes it.
+    require(selectImage(), "the image output was lost after the refresh");
     const auto refreshed = outputs->capture(kValuesOutput);
     require(
         refreshed && refreshed->type.type == Type::String && std::get<std::string>(refreshed->value) == "catalog-ready",

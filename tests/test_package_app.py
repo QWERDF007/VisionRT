@@ -217,7 +217,7 @@ class InstallationContract(unittest.TestCase):
     def test_required_runtime_files_and_clean_target_protection(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-install-") as temporary:
             root = Path(temporary)
-            for name in ("VisionRT.exe", package_app.MARKER_FILE, "quickui.dll", "python312.dll"):
+            for name in ("VisionRT.exe", package_app.MARKER_FILE, "quickui.dll", "visionrt_python_bridge.dll"):
                 (root / name).touch()
             (root / "build_info.json").write_text(
                 '{"schema_version": 1, "component": "VisionRT", "version": "0.1.0", "commit": "abc", "dirty": false, "built_at_epoch": 1793082712}\n',
@@ -225,10 +225,8 @@ class InstallationContract(unittest.TestCase):
             (root / "contracts-build-info.json").write_text(
                 '{"schema_version": 1, "component": "VisionRTContracts", "version": "0.1.0", "commit": "def", "dirty": false, "built_at_epoch": 1793082712}\n',
                 encoding="utf-8")
-            (root / "python/Lib/site-packages/numpy").mkdir(parents=True)
-            (root / "python/DLLs").mkdir()
             package_app.verify_package(root, require_qt=False)
-            for name in ("quickui.dll", "python312.dll", "build_info.json", "contracts-build-info.json"):
+            for name in ("quickui.dll", "visionrt_python_bridge.dll", "build_info.json", "contracts-build-info.json"):
                 with self.subTest(name=name):
                     old_text = (root / name).read_text(encoding="utf-8") if name.endswith(".json") else None
                     (root / name).unlink()
@@ -238,9 +236,12 @@ class InstallationContract(unittest.TestCase):
                         (root / name).write_text(old_text, encoding="utf-8")
                     else:
                         (root / name).touch()
-            (root / "python/Lib/site-packages/numpy").rmdir()
-            with self.assertRaisesRegex(RuntimeError, "numpy"):
+            # A package that carries an interpreter is not deployable: the environment is the
+            # user's, and a second runtime would never be the one they selected.
+            (root / "python312.dll").touch()
+            with self.assertRaisesRegex(RuntimeError, "ships a Python runtime"):
                 package_app.verify_package(root, require_qt=False)
+            (root / "python312.dll").unlink()
             for protected in (package_app.REPO_ROOT, package_app.REPO_ROOT / "src"):
                 with self.subTest(path=protected), self.assertRaisesRegex(RuntimeError, "refusing to clean"):
                     package_app.clear_install_directory(protected, clean=True, force=True)
@@ -264,15 +265,13 @@ class InstallationContract(unittest.TestCase):
                 self.assertTrue((root / name).exists(), f"{name} must survive a clean install")
             self.assertEqual((root / "logs" / "visionrt.log").read_text(encoding="utf-8"), "log")
 
-    def test_python_runtime_uses_build_selected_installation(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="visionrt-python-") as temporary:
+    def test_package_without_bridge_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-bridge-") as temporary:
             root = Path(temporary)
-            selected = root / "python"
-            selected.mkdir()
-            (selected / "python.exe").touch()
-            (root / "CMakeCache.txt").write_text(
-                f"VISIONRT_PYTHON_HOME:PATH={selected.as_posix()}\n", encoding="utf-8")
-            self.assertEqual(package_app.resolve_python_home(root), selected)
+            for name in ("VisionRT.exe", package_app.MARKER_FILE, "quickui.dll"):
+                (root / name).touch()
+            with self.assertRaisesRegex(RuntimeError, "visionrt_python_bridge"):
+                package_app.verify_package(root, require_qt=False, allow_dirty=True)
 
 
 class BuildMetadataScriptContract(unittest.TestCase):
@@ -521,9 +520,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         (install_dir / "VisionRT.exe").touch()
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
-        (install_dir / "python312.dll").touch()
-        (install_dir / "python/Lib/site-packages/numpy").mkdir(parents=True)
-        (install_dir / "python/DLLs").mkdir()
+        (install_dir / "visionrt_python_bridge.dll").touch()
 
         # 1. Unknown commit -> rejected
         (install_dir / "build_info.json").write_text(
@@ -565,9 +562,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         (install_dir / "VisionRT.exe").touch()
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
-        (install_dir / "python312.dll").touch()
-        (install_dir / "python/Lib/site-packages/numpy").mkdir(parents=True)
-        (install_dir / "python/DLLs").mkdir()
+        (install_dir / "visionrt_python_bridge.dll").touch()
 
         # Missing host build_info.json
         (install_dir / "contracts-build-info.json").write_text(

@@ -13,7 +13,7 @@
 
 namespace visionrt {
 class ImageViewport;
-class PythonRuntime;
+class PythonBackend;
 class ToolEditorController;
 struct ProjectDefinition;
 
@@ -65,6 +65,12 @@ class AppController : public QObject
     Q_PROPERTY(bool easyTouchEnabled READ easyTouchEnabled WRITE setEasyTouchEnabled NOTIFY assistChanged)
     // The tool editor lists the declarations shipped with the installation only when this is on.
     Q_PROPERTY(bool editBuiltins READ editBuiltins WRITE setEditBuiltins NOTIFY editBuiltinsChanged)
+    // Why the last settings commit was refused. Empty after a successful apply; the settings window
+    // shows it next to the page that owns the field.
+    Q_PROPERTY(QString settingsError READ settingsError NOTIFY settingsChanged)
+    // Which page owns the refusal: "builtins", "runtime", "logging" or empty for a file-level
+    // failure. The window switches to that page instead of leaving the user on an unrelated one.
+    Q_PROPERTY(QString settingsErrorField READ settingsErrorField NOTIFY settingsChanged)
     Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
     Q_PROPERTY(QString assistDisabledReason READ assistDisabledReason NOTIFY assistChanged)
@@ -109,7 +115,12 @@ public:
     bool                canPaste() const;
     QString             aboutText() const;
     Q_INVOKABLE void    copyAboutText() const;
-    PythonRuntime      *pythonRuntime() const;
+    PythonBackend      *pythonBackend() const;
+    // Test seam: a test process states the interpreter once — the one its build was configured with
+    // — and every controller it constructs probes and starts it, exactly as a saved user choice
+    // would. The application never calls this: a shipped build reads the user's choice and nothing
+    // else, and an unset value leaves the backend unavailable.
+    static void         usePythonForTesting(const QString &executable);
     ToolEditorController *toolEditor() const noexcept;
     // The open project is the only source an impact preview reads; the tool editor never keeps a
     // second copy of it.
@@ -213,6 +224,13 @@ public:
     Q_INVOKABLE void         setEasyTouchEnabled(bool enabled);
     bool                     editBuiltins() const;
     Q_INVOKABLE void         setEditBuiltins(bool enabled);
+    // The settings window owns one draft for the three pages and commits it once. The snapshot is
+    // the applied state; `applySettings` validates the draft, writes the file and only then changes
+    // the running controller.
+    Q_INVOKABLE QVariantMap  settingsSnapshot() const;
+    Q_INVOKABLE bool         applySettings(const QVariantMap &values);
+    QString                  settingsError() const;
+    QString                  settingsErrorField() const;
     // Writes an installed declaration back to the file it came from. The compiled implementation
     // owns the ports, so a declaration that no longer matches it is refused instead of written.
     bool                     saveBuiltinTool(const ToolDefinition &definition, QString *error = nullptr);
@@ -255,6 +273,7 @@ signals:
     void pasteChanged();
     void assistChanged();
     void editBuiltinsChanged();
+    void settingsChanged();
 
 private:
     struct Impl;

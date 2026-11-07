@@ -5,6 +5,7 @@
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <QCoreApplication>
@@ -60,7 +61,7 @@ try
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 
-    PythonRuntime python;
+    PythonRuntime python(testsupport::pythonEnvironment());
     for (const auto &loaded : python.refresh(registry.definitions()))
     {
         assert(testview::status(loaded).code == 0);

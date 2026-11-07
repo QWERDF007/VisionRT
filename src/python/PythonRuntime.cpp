@@ -594,44 +594,57 @@ struct PythonRuntime::Impl
     std::shared_ptr<RuntimeState>           state;
     std::unique_ptr<py::gil_scoped_release> releaseMainGil;
 
-    explicit Impl(const std::filesystem::path &pythonHome)
+    explicit Impl(const PythonEnvironment &environment)
     {
         PyConfig config;
         PyConfig_InitIsolatedConfig(&config);
-        config.parse_argv                  = 0;
-        config.install_signal_handlers     = 0;
-        std::filesystem::path resolvedHome = pythonHome;
-        if (resolvedHome.empty())
+        config.parse_argv              = 0;
+        config.install_signal_handlers = 0;
+        // The selected environment is read-only for this product: no bytecode, no user site and no
+        // PYTHON* variable may change what the interpreter loads. The search paths below come from
+        // the interpreter's own answer to the probe, so prefix detection never runs again.
+        config.write_bytecode      = 0;
+        config.user_site_directory = 0;
+        config.use_environment     = 0;
+
+        const auto setText = [&config](wchar_t *&target, const std::filesystem::path &value)
         {
-            if (const char *env = std::getenv("VISIONRT_PYTHON_HOME"); env && *env)
-            {
-                resolvedHome = env;
-            }
-            else if (const char *envPy = std::getenv("PYTHONHOME"); envPy && *envPy)
-            {
-                resolvedHome = envPy;
-            }
-#ifdef VISIONRT_PYTHON_DEFAULT_HOME
-            else
-            {
-                resolvedHome = VISIONRT_PYTHON_DEFAULT_HOME;
-            }
-#endif
-        }
-        if (!resolvedHome.empty())
-        {
-            const auto home   = resolvedHome.wstring();
-            const auto status = PyConfig_SetString(&config, &config.home, home.c_str());
+            const auto text   = value.wstring();
+            const auto status = PyConfig_SetString(&config, &target, text.c_str());
             if (PyStatus_Exception(status))
             {
-                const std::string message = status.err_msg ? status.err_msg : "Cannot configure Python home";
+                const std::string message = status.err_msg ? status.err_msg : "Cannot configure Python path";
+                PyConfig_Clear(&config);
+                throw std::runtime_error(message);
+            }
+        };
+        setText(config.executable, environment.executable);
+        setText(config.base_executable, environment.executable);
+        setText(config.program_name, environment.executable);
+        setText(config.prefix, environment.prefix);
+        setText(config.base_prefix, environment.basePrefix);
+        setText(config.exec_prefix, environment.prefix);
+        setText(config.base_exec_prefix, environment.basePrefix);
+
+        config.module_search_paths_set = 1;
+        for (const auto &entry : environment.searchPaths)
+        {
+            const auto text   = entry.wstring();
+            const auto status = PyWideStringList_Append(&config.module_search_paths, text.c_str());
+            if (PyStatus_Exception(status))
+            {
+                const std::string message = status.err_msg ? status.err_msg : "Cannot configure Python search path";
                 PyConfig_Clear(&config);
                 throw std::runtime_error(message);
             }
         }
+
         interpreter = std::make_unique<py::scoped_interpreter>(&config, 0, nullptr, false);
         try
         {
+            // Start from the environment that was actually created, not from the one requested: a
+            // different executable, prefix or NumPy would mean the user's choice was not honoured.
+            verifyEnvironment(environment);
             state = std::make_shared<RuntimeState>();
             static std::atomic<std::uint64_t> nextRuntime{0};
             py::exec(python::loaderSource, state->loader);
@@ -652,11 +665,50 @@ struct PythonRuntime::Impl
         }
     }
 
+    static void verifyEnvironment(const PythonEnvironment &environment)
+    {
+        const auto text = [](const std::filesystem::path &path)
+        {
+            const auto utf8 = path.u8string();
+            return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+        };
+        // Windows paths are case-insensitive and the interpreter reports the canonical spelling of
+        // the file it was started from.
+        const auto same = [&text](const std::string &left, const std::filesystem::path &right)
+        {
+            const auto expected = text(right);
+            if (left.size() != expected.size())
+                return false;
+            for (std::size_t index = 0; index < left.size(); ++index)
+                if (std::tolower(static_cast<unsigned char>(left[index]))
+                    != std::tolower(static_cast<unsigned char>(expected[index])))
+                    return false;
+            return true;
+        };
+
+        auto sys = py::module_::import("sys");
+        const auto executable = sys.attr("executable").cast<std::string>();
+        if (!same(executable, environment.executable))
+            throw std::runtime_error("Python 解释器路径与所选环境不一致：" + executable);
+        const auto prefix = sys.attr("prefix").cast<std::string>();
+        if (!same(prefix, environment.prefix))
+            throw std::runtime_error("Python sys.prefix 与所选环境不一致：" + prefix);
+        const auto basePrefix = sys.attr("base_prefix").cast<std::string>();
+        if (!same(basePrefix, environment.basePrefix))
+            throw std::runtime_error("Python sys.base_prefix 与所选环境不一致：" + basePrefix);
+
+        // NumPy is not imported here on purpose. It is a single-phase extension module, so CPython
+        // cannot initialise it a second time in one process; importing it at startup would make an
+        // interpreter restart impossible. The probe already imports NumPy in the selected
+        // environment and records its version, and the first tool that uses it loads it in-process.
+    }
+
+
     bool                                     preparedShutdown = false;
 
     void prepareShutdown()
     {
-        if (preparedShutdown)
+        if (preparedShutdown || !state)
             return;
         preparedShutdown = true;
         py::gil_scoped_acquire gil;
@@ -687,19 +739,22 @@ struct PythonRuntime::Impl
         if (std::this_thread::get_id() != ownerThread)
             std::terminate();
         prepareShutdown();
+        if (state)
         {
-            py::gil_scoped_acquire gil;
-            state->loader.release();
+            {
+                py::gil_scoped_acquire gil;
+                state->loader.release();
+            }
+            state->storage.waitForRelease();
         }
-        state->storage.waitForRelease();
         releaseMainGil.reset();
         state.reset();
         interpreter.reset();
     }
 };
 
-PythonRuntime::PythonRuntime(const std::filesystem::path &pythonHome)
-    : impl_(std::make_unique<Impl>(pythonHome))
+PythonRuntime::PythonRuntime(const PythonEnvironment &environment)
+    : impl_(std::make_unique<Impl>(environment))
 {
 }
 

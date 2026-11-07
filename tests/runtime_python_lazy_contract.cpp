@@ -1,6 +1,7 @@
 #include "core/DefinitionJson.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <QCoreApplication>
@@ -70,7 +71,7 @@ try
     });
     ToolRegistry registry;
     registry.addDefinition(definition);
-    PythonRuntime python;
+    PythonRuntime python(testsupport::pythonEnvironment());
     const auto    refreshed = python.refresh(registry.definitions());
     assert(refreshed.size() == 1 && refreshed.front().status.code == 0);
     registry.setPythonImplementation(definition.nameEn, python.factory(definition));

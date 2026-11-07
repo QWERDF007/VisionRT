@@ -24,13 +24,16 @@ Rectangle {
     readonly property bool numeric: typeToken === "int" || typeToken === "float"
     readonly property bool isImage: typeToken === "image"
     readonly property bool isRoi: typeToken === "roi"
-    readonly property bool hasAdvanced: (showsRelation("image") && model.imageRef !== "") ||
+    readonly property bool hasAdvanced: root.typeToken === "string" ||
+                                       (showsRelation("image") && model.imageRef !== "") ||
                                        (showsRelation("alignment") && model.alignmentRef !== "") ||
                                        (showsRelation("same_geometry_as") && model.sameGeometryRef !== "") ||
                                        (showsRelation("path_mode") && model.pathModeRef !== "") ||
                                        (typeToken === "string" && model.editorType !== "") ||
                                        (model.optionsText && model.optionsText !== "")
     property bool advancedChecked: false
+    readonly property real lowerBound: model.minValue !== "" && !isNaN(Number(model.minValue)) ? Number(model.minValue) : -2147483648
+    readonly property real upperBound: model.maxValue !== "" && !isNaN(Number(model.maxValue)) ? Number(model.maxValue) : 2147483647
 
     implicitHeight: cardLayout.implicitHeight + 24
     color: Theme.surfaceBg
@@ -208,15 +211,15 @@ Rectangle {
             spacing: 8
             Label {
                 text: "中文名:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                implicitHeight: 32
+                implicitHeight: Theme.paramEditorHeight
                 text: model.nameZh
                 readOnly: !root.editable || root.fixed
                 onCommitRequested: {
@@ -233,15 +236,15 @@ Rectangle {
             spacing: 8
             Label {
                 text: "英文名:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                implicitHeight: 32
+                implicitHeight: Theme.paramEditorHeight
                 text: model.nameEn
                 readOnly: !root.editable || root.fixed
                 onCommitRequested: if (text !== model.nameEn) root.commit({ nameEn: text })
@@ -255,15 +258,15 @@ Rectangle {
             spacing: 8
             Label {
                 text: "类型:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             QuiComboBox {
                 id: typeCombo
                 Layout.fillWidth: true
-                implicitHeight: 32
+                implicitHeight: Theme.paramEditorHeight
                 enabled: root.editable && !root.fixed
                 model: root.types
                 textRole: "label"
@@ -292,26 +295,56 @@ Rectangle {
             }
         }
 
-        // Field: 默认值 (Input parameters only, non-image, non-bool)
+        // Field: 默认值。A business output can carry one as well: the declaration decides what a
+        // missing value means, so the editor offers the same field in both directions. A path string
+        // is edited in the same single picker the parameter panel uses, and a numeric default is
+        // bounded by the same limits the contract stores.
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: !root.output && !root.isImage && root.typeToken !== "bool"
+            visible: !root.isImage && root.typeToken !== "bool"
             Label {
                 text: "默认值:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             ParameterTextField {
+                id: defaultField
                 Layout.fillWidth: true
                 flat: false
-                implicitHeight: 32
+                implicitHeight: Theme.paramEditorHeight
                 text: model.defaultValue
                 readOnly: !root.editable || root.fixed
+                actionIcon: model.editorType === "path" ? QuiFontIcon.FolderOpen : 0
+                inputItem.validator: root.numeric
+                                     ? (root.typeToken === "int" ? intValidator : realValidator)
+                                     : null
+                onActionRequested: defaultPicker.open()
                 onCommitRequested: if (text !== model.defaultValue) root.commit({ defaultValue: text })
                 onCancelRequested: text = model.defaultValue
+            }
+        }
+
+        IntValidator {
+            id: intValidator
+            bottom: root.lowerBound
+            top: root.upperBound
+        }
+        DoubleValidator {
+            id: realValidator
+            bottom: root.lowerBound
+            top: root.upperBound
+            notation: DoubleValidator.StandardNotation
+        }
+        QuiFileFolderDialog {
+            id: defaultPicker
+            title: "选择路径"
+            dialogMode: QuiFileFolderDialog.DialogMode.FileOrFolder
+            onAccepted: function(path) {
+                defaultField.text = path
+                root.commit({ defaultValue: path })
             }
         }
 
@@ -322,9 +355,9 @@ Rectangle {
             visible: !root.output && root.typeToken === "bool"
             Label {
                 text: "默认值:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             QuiToggleSwitch {
@@ -342,18 +375,18 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: !root.output && root.numeric && (!root.fixed || model.minValue !== "" || model.maxValue !== "")
+            visible: root.numeric && (!root.fixed || model.minValue !== "" || model.maxValue !== "")
             Label {
                 text: "下限:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                implicitHeight: 32
+                implicitHeight: Theme.paramEditorHeight
                 text: model.minValue
                 readOnly: !root.editable || root.fixed
                 onCommitRequested: if (text !== model.minValue) root.commit({ min: text })
@@ -364,18 +397,18 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: !root.output && root.numeric && (!root.fixed || model.minValue !== "" || model.maxValue !== "")
+            visible: root.numeric && (!root.fixed || model.minValue !== "" || model.maxValue !== "")
             Label {
                 text: "上限:"
-                Layout.preferredWidth: 64
+                Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                implicitHeight: 32
+                implicitHeight: Theme.paramEditorHeight
                 text: model.maxValue
                 readOnly: !root.editable || root.fixed
                 onCommitRequested: if (text !== model.maxValue) root.commit({ max: text })
@@ -390,9 +423,9 @@ Rectangle {
             visible: root.isImage
             Label {
                 text: "图像区域显示:"
-                Layout.preferredWidth: 88
+                Layout.preferredWidth: Theme.cardLabelWidth + 24
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 13
+                font: Theme.parameterFont
                 color: Theme.textSecondary
             }
             QuiToggleSwitch {
@@ -413,7 +446,7 @@ Rectangle {
 
             Text {
                 text: root.advancedChecked ? "收起详情" : "更多设置"
-                font.pixelSize: 12
+                font: Theme.parameterFont
                 color: advMouse.containsMouse ? Theme.highlight : Theme.textSecondary
 
                 MouseArea {
@@ -436,10 +469,10 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.typeToken === "string"
-                Label { text: "编辑方式:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
+                Label { text: "编辑方式:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
-                    implicitHeight: 30
+                    implicitHeight: Theme.paramEditorHeight
                     enabled: root.editable
                     model: root.editorOptions()
                     textRole: "label"
@@ -460,10 +493,10 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("image")
-                Label { text: "关联图像:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
+                Label { text: "关联图像:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
-                    implicitHeight: 30
+                    implicitHeight: Theme.paramEditorHeight
                     enabled: root.editable
                     model: root.relationOptions("image")
                     textRole: "label"
@@ -484,10 +517,10 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("alignment")
-                Label { text: "对齐关系:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
+                Label { text: "对齐关系:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
-                    implicitHeight: 30
+                    implicitHeight: Theme.paramEditorHeight
                     enabled: root.editable
                     model: root.relationOptions("alignment")
                     textRole: "label"
@@ -508,10 +541,10 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("same_geometry_as")
-                Label { text: "同几何:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
+                Label { text: "同几何:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
-                    implicitHeight: 30
+                    implicitHeight: Theme.paramEditorHeight
                     enabled: root.editable
                     model: root.relationOptions("same_geometry_as")
                     textRole: "label"
@@ -532,10 +565,10 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("path_mode")
-                Label { text: "路径模式:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
+                Label { text: "路径模式:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
-                    implicitHeight: 30
+                    implicitHeight: Theme.paramEditorHeight
                     enabled: root.editable
                     model: root.relationOptions("path_mode")
                     textRole: "label"
@@ -557,7 +590,7 @@ Rectangle {
                 spacing: 8
                 visible: !root.output && (root.typeToken === "int" || root.typeToken === "float"
                                          || root.typeToken === "string" || root.typeToken === "bool")
-                Label { text: "候选值:"; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight; font.pixelSize: 12; color: Theme.textSecondary }
+                Label { text: "候选值:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 50
@@ -572,7 +605,7 @@ Rectangle {
                         enabled: root.editable
                         text: model.optionsText
                         wrapMode: TextArea.Wrap
-                        font.pixelSize: 12
+                        font: Theme.parameterFont
                         color: Theme.textPrimary
                         onActiveFocusChanged: {
                             if (!activeFocus && text !== model.optionsText)

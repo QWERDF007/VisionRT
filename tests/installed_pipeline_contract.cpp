@@ -8,6 +8,7 @@
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <QCoreApplication>
@@ -229,7 +230,7 @@ def execute(inputs):
               {reinterpret_cast<const char *>(bytes.data()), bytes.size()});
     }
 
-    PythonRuntime python;
+    PythonRuntime python(testsupport::pythonEnvironment());
     {
         py::gil_scoped_acquire gil;
         const auto             filename  = py::module_::import("_queue").attr("__file__").cast<std::string>();

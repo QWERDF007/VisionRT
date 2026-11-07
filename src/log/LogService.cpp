@@ -56,6 +56,7 @@ spdlog::level::level_enum toSpd(LogLevel level)
     case LogLevel::Warn: return spdlog::level::warn;
     case LogLevel::Error: return spdlog::level::err;
     case LogLevel::Critical: return spdlog::level::critical;
+    case LogLevel::Off: return spdlog::level::off;
     }
     return spdlog::level::info;
 }
@@ -380,6 +381,9 @@ struct LogService::Impl
     std::mutex                      coalesceMutex;
     std::map<std::string, PendingError, std::less<>> pendingErrors;
     std::uint64_t                   reportedDropped = 0;
+    // Read on every producer path before any formatting happens, written by start() and by the
+    // settings window. Independent of the logger: a filtered record never reaches the queue.
+    std::atomic<int>                minimum{static_cast<int>(LogLevel::Info)};
 
     // The default location is the software directory, not a per-user data directory: the log has to
     // sit next to the executable the user actually launched. An unknown directory is not replaced by
@@ -425,6 +429,7 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
         std::unique_lock<std::shared_mutex> lock(impl_->writeMutex);
         impl_->config = config;
         impl_->path   = filePath.isEmpty() ? Impl::defaultFile() : filePath;
+        impl_->minimum.store(static_cast<int>(config.minimumLevel), std::memory_order_relaxed);
 
         std::vector<spdlog::sink_ptr> sinks;
         if (impl_->path.isEmpty())
@@ -466,7 +471,7 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
         impl_->logger = std::make_shared<spdlog::async_logger>("visionrt", sinks.begin(), sinks.end(),
                                                                spdlog::thread_pool(),
                                                                spdlog::async_overflow_policy::overrun_oldest);
-        impl_->logger->set_level(spdlog::level::trace);
+        impl_->logger->set_level(toSpd(config.minimumLevel));
         impl_->logger->flush_on(spdlog::level::err);
         spdlog::set_default_logger(impl_->logger);
         spdlog::flush_every(std::chrono::seconds(std::max(1, impl_->config.flushSeconds)));
@@ -612,12 +617,44 @@ void LogService::write(LogLevel level, std::string_view source, std::string_view
 {
     if (!gRunning.load(std::memory_order_acquire))
         return;
-    instance().writeImpl(level, source, message);
+    auto &service = instance();
+    if (!service.admits(level))
+        return;
+    service.writeImpl(level, source, message);
+}
+
+bool LogService::admits(LogLevel level) const noexcept
+{
+    if (!impl_ || !impl_->running.load(std::memory_order_acquire))
+        return false;
+    return static_cast<int>(level) >= impl_->minimum.load(std::memory_order_relaxed);
+}
+
+void LogService::setMinimumLevel(LogLevel level)
+{
+    if (!impl_)
+        return;
+    std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
+    impl_->config.minimumLevel = level;
+    impl_->minimum.store(static_cast<int>(level), std::memory_order_relaxed);
+    // The service filters first; the logger level keeps spdlog from formatting a record that the
+    // service would reject anyway, which is what makes the threshold free at the producer side.
+    if (impl_->logger)
+        impl_->logger->set_level(toSpd(level));
+}
+
+LogLevel LogService::minimumLevel() const
+{
+    return impl_ ? static_cast<LogLevel>(impl_->minimum.load(std::memory_order_relaxed)) : LogLevel::Info;
 }
 
 void LogService::postLocked(LogLevel level, std::string_view source, std::string_view message,
                             std::chrono::system_clock::time_point when)
 {
+    // Coalesced summaries and drop reports come through here too: a threshold raised to Off must
+    // not manufacture a new summary line, and the check is the same single comparison.
+    if (!impl_->logger || static_cast<int>(level) < impl_->minimum.load(std::memory_order_relaxed))
+        return;
     const auto payload = buildPayload(source, message);
     impl_->logger->log(when, spdlog::source_loc{}, toSpd(level),
                        spdlog::string_view_t(payload.data(), payload.size()));
@@ -799,10 +836,16 @@ void LogService::flushPending()
 
 void LogService::write(LogLevel level, const QString &source, const QString &message)
 {
-    const auto sourceText = source.toUtf8();
+    if (!gRunning.load(std::memory_order_acquire))
+        return;
+    // The threshold is decided before the UTF-8 conversion: a filtered record must not allocate.
+    auto &service = instance();
+    if (!service.admits(level))
+        return;
+    const auto sourceText  = source.toUtf8();
     const auto messageText = message.toUtf8();
-    write(level, std::string_view(sourceText.constData(), static_cast<std::size_t>(sourceText.size())),
-          std::string_view(messageText.constData(), static_cast<std::size_t>(messageText.size())));
+    service.writeImpl(level, std::string_view(sourceText.constData(), static_cast<std::size_t>(sourceText.size())),
+                      std::string_view(messageText.constData(), static_cast<std::size_t>(messageText.size())));
 }
 
 void LogService::debug(std::string_view source, std::string_view message)

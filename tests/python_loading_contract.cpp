@@ -3,6 +3,7 @@
 #include "core/Error.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 
 #include <pybind11/embed.h>
 #include <QCoreApplication>
@@ -466,7 +467,7 @@ try
                                                         ToolOrigin::Custom,
                                                         {root / "tools/custom", root / "python/custom"}
     });
-    PythonRuntime runtime;
+    PythonRuntime runtime(testsupport::pythonEnvironment());
     auto          worker = std::async(std::launch::async,
                                       [&]
                                       {

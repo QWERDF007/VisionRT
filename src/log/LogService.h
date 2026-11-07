@@ -1,5 +1,7 @@
 #pragma once
 
+#include "log/LogLevel.h"
+
 #include <QMetaType>
 #include <QObject>
 #include <QString>
@@ -73,16 +75,9 @@ struct LogConfig
     int         flushSeconds     = 3;
     int         uiBatchIntervalMs = 50;
     int         uiBatchMaximum   = 200;
-};
-
-enum class LogLevel
-{
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-    Critical
+    // One production threshold for the file and the window channel. A record below it is rejected
+    // before it is formatted or queued, so lowering the volume never costs a rendered line.
+    LogLevel    minimumLevel     = LogLevel::Info;
 };
 
 // Process-wide logging service: one async spdlog logger (bounded queue, overrun_oldest), one
@@ -122,6 +117,11 @@ public:
     void warn(std::string_view source, std::string_view message);
     void error(std::string_view source, std::string_view message);
 
+    // Applies a new production threshold without touching the thread pool, the sinks or the
+    // records already accepted: queued lines still drain, only new ones are filtered.
+    void setMinimumLevel(LogLevel level);
+    LogLevel minimumLevel() const;
+
     // Called by the log window: while active the service drains the mailbox in batches; while
     // hidden nothing is copied to the GUI and the mailbox stays bounded.
     void setViewActive(bool active);
@@ -156,6 +156,8 @@ private:
     void drain();
     void scheduleDrain();
     void flushPending();
+    // True when the level passes the current production threshold and the service is running.
+    bool admits(LogLevel level) const noexcept;
 #if defined(VISIONRT_LOG_TEST_HOOKS) && VISIONRT_LOG_TEST_HOOKS
     friend void flushPendingForTesting();
 #endif

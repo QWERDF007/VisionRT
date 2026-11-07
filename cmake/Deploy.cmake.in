@@ -7,12 +7,15 @@ if(NOT DEFINED DESTINATION)
 endif()
 file(MAKE_DIRECTORY "${DESTINATION}")
 if(EXISTS "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRT.exe")
-    file(COPY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRT.exe" DESTINATION "${DESTINATION}")
+    set(host_executable "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRT.exe")
 elseif(EXISTS "@CMAKE_BINARY_DIR@/bin/VisionRT.exe")
-    file(COPY "@CMAKE_BINARY_DIR@/bin/VisionRT.exe" DESTINATION "${DESTINATION}")
+    set(host_executable "@CMAKE_BINARY_DIR@/bin/VisionRT.exe")
 else()
-    file(COPY "@CMAKE_BINARY_DIR@/VisionRT.exe" DESTINATION "${DESTINATION}")
+    set(host_executable "@CMAKE_BINARY_DIR@/VisionRT.exe")
 endif()
+file(COPY "${host_executable}" DESTINATION "${DESTINATION}")
+# Python 桥接模块不参与链接，随程序一起部署；解释器本身由用户环境提供，安装目录不携带运行时。
+file(COPY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/visionrt_python_bridge.dll" DESTINATION "${DESTINATION}")
 execute_process(COMMAND "@VISIONRT_WINDEPLOYQT@" --release --no-translations
     --qmldir "@CMAKE_SOURCE_DIR@/src/ui/qml"
     --qmlimport "@VISIONRT_QUICKUI_QML_ROOT@"
@@ -31,25 +34,10 @@ if(EXISTS "@CMAKE_SOURCE_DIR@/assets/examples")
         PATTERN "__pycache__" EXCLUDE)
 endif()
 
-set(python_home "@VISIONRT_PYTHON_HOME@")
-file(COPY "${python_home}/Lib/" DESTINATION "${DESTINATION}/python/Lib"
-    PATTERN "site-packages" EXCLUDE PATTERN "__pycache__" EXCLUDE PATTERN "test" EXCLUDE)
-file(COPY "${python_home}/DLLs/" DESTINATION "${DESTINATION}/python/DLLs"
-    FILES_MATCHING PATTERN "*.pyd" PATTERN "*.dll")
-file(COPY "${python_home}/Lib/site-packages/numpy" DESTINATION "${DESTINATION}/python/Lib/site-packages"
-    PATTERN "__pycache__" EXCLUDE PATTERN "tests" EXCLUDE PATTERN "*.lib" EXCLUDE)
-file(GLOB numpy_metadata "${python_home}/Lib/site-packages/numpy-*.dist-info")
-file(COPY ${numpy_metadata} DESTINATION "${DESTINATION}/python/Lib/site-packages")
-if(EXISTS "${python_home}/Lib/site-packages/numpy.libs")
-    file(COPY "${python_home}/Lib/site-packages/numpy.libs" DESTINATION "${DESTINATION}/python/Lib/site-packages")
-endif()
-file(GLOB python_dlls "${python_home}/python3*.dll" "${python_home}/zlib*.dll")
-file(COPY ${python_dlls} DESTINATION "${DESTINATION}")
-file(GLOB_RECURSE python_extensions "${DESTINATION}/python/*.pyd")
 file(GET_RUNTIME_DEPENDENCIES
     EXECUTABLES "${DESTINATION}/VisionRT.exe"
-    LIBRARIES ${python_extensions}
-    DIRECTORIES "${python_home}" "${python_home}/Library/bin" "${python_home}/Lib/site-packages/numpy.libs" "E:/Softwares/Anaconda3/Library/bin" "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
+    LIBRARIES "${DESTINATION}/visionrt_python_bridge.dll"
+    DIRECTORIES "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
     RESOLVED_DEPENDENCIES_VAR dependencies UNRESOLVED_DEPENDENCIES_VAR unresolved
     PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*" "[Pp][Yy][Tt][Hh][Oo][Nn]3.*" "[Vv][Cc][Rr][Uu][Nn][Tt][Ii][Mm][Ee]140.*" "[Mm][Ss][Vv][Cc][Pp]140.*" "[Uu][Cc][Rr][Tt][Bb][Aa][Ss][Ee].*"
     POST_EXCLUDE_REGEXES ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\\\][Ss][Yy][Ss][Tt][Ee][Mm]32.*")
@@ -57,22 +45,10 @@ if(unresolved)
     message(FATAL_ERROR "Unresolved portable runtime dependencies: ${unresolved}")
 endif()
 file(COPY ${dependencies} DESTINATION "${DESTINATION}")
-file(GLOB vc_dlls "${python_home}/vcruntime140*.dll" "${python_home}/msvcp140*.dll")
-if(vc_dlls)
-    file(COPY ${vc_dlls} DESTINATION "${DESTINATION}")
-endif()
 file(WRITE "${DESTINATION}/qt.conf" "[Paths]\nPrefix=.\nPlugins=.\nQmlImports=qml\n")
 file(MAKE_DIRECTORY "${DESTINATION}/licenses")
 file(COPY "@CMAKE_SOURCE_DIR@/LICENSE" DESTINATION "${DESTINATION}/licenses/VisionRT")
 file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/QuickUI/LICENSE" DESTINATION "${DESTINATION}/licenses/QuickUI")
 file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/pybind11/LICENSE" DESTINATION "${DESTINATION}/licenses/pybind11")
 file(COPY "@CMAKE_SOURCE_DIR@/3rdparty/taskflow/LICENSE" DESTINATION "${DESTINATION}/licenses/Taskflow")
-file(COPY "${python_home}/LICENSE_PYTHON.txt" DESTINATION "${DESTINATION}/licenses/Python")
-foreach(metadata IN LISTS numpy_metadata)
-    if(EXISTS "${metadata}/LICENSE.txt")
-        file(COPY "${metadata}/LICENSE.txt" DESTINATION "${DESTINATION}/licenses/NumPy")
-    elseif(EXISTS "${metadata}/licenses")
-        file(COPY "${metadata}/licenses/" DESTINATION "${DESTINATION}/licenses/NumPy")
-    endif()
-endforeach()
 message(STATUS "Portable directory: ${DESTINATION}")

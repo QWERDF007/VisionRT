@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -37,6 +38,8 @@ constexpr PortId kImageOutput = 3;
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     registerStyleModule();
     testing::WorkbenchInstallation installation;

@@ -404,69 +404,6 @@ def deploy_tools_package(
     print(f"deployed tools package from {package_zip} into {target_pkg}")
 
 
-def resolve_python_home(build_dir: Path) -> Path:
-    """Use the same interpreter installation selected by the host build."""
-    selected = read_cmake_cache_value(build_dir / "CMakeCache.txt", "VISIONRT_PYTHON_HOME")
-    if selected:
-        runtime = Path(selected).resolve()
-        if (runtime / "python.exe").is_file():
-            return runtime
-    raise RuntimeError("Built Python runtime not found; configure the VisionRT CMake tree first.")
-
-
-def copy_python_runtime(build_dir: Path, install_dir: Path) -> None:
-    """Deploy the matching embedded Python environment."""
-    python_home = resolve_python_home(build_dir)
-    print(f"deploying python runtime from {python_home}")
-
-    # Copy python3*.dll and zlib*.dll to install root
-    for dll in python_home.glob("python3*.dll"):
-        copy_file(dll, install_dir / dll.name)
-    for dll in python_home.glob("zlib*.dll"):
-        copy_file(dll, install_dir / dll.name)
-
-    # Copy Lib (excluding site-packages, test, __pycache__)
-    python_lib = python_home / "Lib"
-    if python_lib.is_dir():
-        target_lib = install_dir / "python" / "Lib"
-        shutil.copytree(
-            python_lib,
-            target_lib,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns("site-packages", "__pycache__", "test", "tests"),
-        )
-        print(f"copy {python_lib} -> {target_lib}")
-
-    # Copy DLLs (*.pyd, *.dll)
-    python_dlls = python_home / "DLLs"
-    if python_dlls.is_dir():
-        target_dlls = install_dir / "python" / "DLLs"
-        target_dlls.mkdir(parents=True, exist_ok=True)
-        for ext in ("*.pyd", "*.dll"):
-            for f in python_dlls.glob(ext):
-                copy_file(f, target_dlls / f.name)
-
-    # Copy numpy and numpy.libs
-    site_packages = python_lib / "site-packages"
-    if site_packages.is_dir():
-        target_site = install_dir / "python" / "Lib" / "site-packages"
-        target_site.mkdir(parents=True, exist_ok=True)
-        numpy_dir = site_packages / "numpy"
-        if numpy_dir.is_dir():
-            shutil.copytree(
-                numpy_dir,
-                target_site / "numpy",
-                dirs_exist_ok=True,
-                ignore=shutil.ignore_patterns("__pycache__", "tests", "*.lib"),
-            )
-            print(f"copy {numpy_dir} -> {target_site / 'numpy'}")
-        for dist_info in site_packages.glob("numpy-*.dist-info"):
-            shutil.copytree(dist_info, target_site / dist_info.name, dirs_exist_ok=True)
-        numpy_libs = site_packages / "numpy.libs"
-        if numpy_libs.is_dir():
-            shutil.copytree(numpy_libs, target_site / "numpy.libs", dirs_exist_ok=True)
-
-
 def copy_dependencies(
     build_dir: Path,
     install_dir: Path,
@@ -483,7 +420,8 @@ def copy_dependencies(
 
     for dep in load_dependencies(dependency_file):
         dep_name = str(dep.get("name", "<unnamed>")).lower()
-        # qt and python are handled specially by windeployqt and copy_python_runtime
+        # qt is deployed by windeployqt. The python entry only resolves the build interpreter, so no
+        # interpreter file is ever copied into the installation.
         if dep_name in {"qt", "qt6", "python"}:
             continue
         if not dependency_matches_config(dep, config):
@@ -782,19 +720,14 @@ def verify_package(
         install_dir / f"{PROJECT_NAME}.exe",
         install_dir / MARKER_FILE,
         install_dir / "quickui.dll",
+        # The bridge is a product component and ships with the host; the interpreter does not.
+        install_dir / "visionrt_python_bridge.dll",
     ]
     if not allow_dirty:
         required_files.extend([
             install_dir / "build_info.json",
             install_dir / "contracts-build-info.json",
         ])
-
-    # Verify Python DLL (python3*.dll must exist)
-    python_dlls = list(install_dir.glob("python3*.dll"))
-    if not python_dlls:
-        python_dlls = list((install_dir / "python").glob("python3*.dll"))
-    if not python_dlls:
-        raise RuntimeError(f"package verification failed: missing Python DLL (python3*.dll) in {install_dir}")
 
     if require_qt:
         required_files.extend([
@@ -805,21 +738,25 @@ def verify_package(
             install_dir / "platforms" / "qwindows.dll",
         ])
 
-    required_dirs = [
-        install_dir / "python" / "Lib",
-        install_dir / "python" / "DLLs",
-        install_dir / "python" / "Lib" / "site-packages" / "numpy",
+    # The interpreter, its standard library and NumPy are the user's environment. A package that
+    # carries them would run a second runtime nobody selected, so their presence is a failure.
+    bundled_runtime = [
+        str(p)
+        for p in list(install_dir.glob("python3*.dll"))
+        + list(install_dir.glob("python.exe"))
+        + list(install_dir.glob("pythonw.exe"))
+        + [install_dir / "python" / "Lib", install_dir / "python" / "DLLs"]
+        if p.exists()
     ]
 
     missing_files = [str(p) for p in required_files if not p.is_file()]
-    missing_dirs = [str(p) for p in required_dirs if not p.is_dir()]
     linked_paths = [str(p) for p in install_dir.rglob("*") if is_reparse_point(p)]
 
     problems = []
     if missing_files:
         problems.append("missing files: " + ", ".join(missing_files))
-    if missing_dirs:
-        problems.append("missing directories: " + ", ".join(missing_dirs))
+    if bundled_runtime:
+        problems.append("package ships a Python runtime: " + ", ".join(bundled_runtime))
     if linked_paths:
         problems.append("package contains links: " + ", ".join(linked_paths))
 
@@ -907,7 +844,6 @@ def main() -> int:
     packaged_exe = install_dir / source_exe.name
     copy_file(source_exe, packaged_exe)
     copy_project_runtime(build_dir, install_dir, args.include_pdb, allow_dirty=args.allow_dirty)
-    copy_python_runtime(build_dir, install_dir)
 
     if args.tools_package:
         ext_index = resolve_project_path(args.tools_index) if args.tools_index else None

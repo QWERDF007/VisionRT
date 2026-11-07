@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -30,11 +31,14 @@ void require(bool condition, const char *message)
 
 // The fixture declares 值 on output 2 and 图像 on output 3.
 constexpr PortId kValuesOutput = 2;
+constexpr PortId kImagesOutput = 3;
 }
 
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
@@ -60,6 +64,8 @@ try
     };
     definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
+    // The result view offers only ports the declaration marks visible.
+    definition.outputs.back().imageVisible = true;
     write(package + "tools/custom/readback/source.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(script, R"py(import mmap
@@ -105,6 +111,15 @@ def run(inputs):
     require(outputs, "readback output model unavailable");
     app.addNode("test.readback", 0, 0);
     idle();
+    // A run owns the workspace while it lasts, so the node is selected once it is Idle again, and
+    // the image port is picked the way a user picks it.
+    const auto nodes = app.nodes();
+    require(nodes.size() == 1, "the readback node is missing from the flow");
+    const auto nodeId = nodes.front().toMap().value(QStringLiteral("id")).toString();
+    app.selectNode(nodeId);
+    require(app.selectedNode() == nodeId, "the readback node could not be selected");
+    app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+    require(!app.selectedImageOutput().isEmpty(), "the visible image output could not be selected");
     QSignalSpy presented(&viewport, &ImageViewport::imagePresented);
     const auto frame    = [&](int pixel, int timeout = 5000)
     {

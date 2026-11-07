@@ -42,6 +42,8 @@ configure_version(visionrt_common VISIONRT visionrt/common ${PROJECT_VERSION})
 set(VISIONRT_LOG_SOURCES
     src/log/LogService.cpp
     src/log/LogService.h
+    src/log/LogLevel.cpp
+    src/log/LogLevel.h
     src/log/LogModel.cpp
     src/log/LogModel.h)
 add_library(visionrt_log ${VISIONRT_LOG_SOURCES})
@@ -71,18 +73,47 @@ add_executable(visionrt_validate_tool tools/visionrt_validate_tool.cpp)
 target_link_libraries(visionrt_validate_tool PRIVATE visionrt_core)
 
 
-# Python 运行时及交互桥接库
+# Python 运行时：值桥接（静态）与解释器运行时的宿主侧
+# 宿主只链接 visionrt_python_host；解释器实现被编进按需加载的桥接 DLL，主程序启动链不含
+# pybind11::embed 或任何 CPython 导入。
 add_library(visionrt_python_values src/python/PythonInterop.cpp src/python/PythonImages.cpp src/python/PythonStorage.cpp)
 target_link_libraries(visionrt_python_values PUBLIC visionrt_core pybind11::embed)
-add_library(visionrt_python src/python/PythonRuntime.cpp)
-target_link_libraries(visionrt_python PUBLIC visionrt_python_values)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/python/managed_packages.py")
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/python/managed_packages.py" VISIONRT_PYTHON_LOADER)
 configure_file(src/python/PythonLoader.h.in python/PythonLoader.h @ONLY)
-target_include_directories(visionrt_python PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/python")
-target_compile_definitions(visionrt_python PUBLIC
-    PYBIND11_DETAILED_ERROR_MESSAGES
-    VISIONRT_PYTHON_DEFAULT_HOME="${VISIONRT_PYTHON_HOME}")
+
+add_library(visionrt_python_runtime STATIC src/python/PythonRuntime.cpp src/python/PythonRuntime.h)
+target_link_libraries(visionrt_python_runtime PUBLIC visionrt_python_values)
+target_include_directories(visionrt_python_runtime PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/python")
+target_compile_definitions(visionrt_python_runtime PUBLIC PYBIND11_DETAILED_ERROR_MESSAGES)
+
+# 桥接模块：只由宿主在运行期按路径加载，绝不被主程序链接
+add_library(visionrt_python SHARED src/python/PythonBridge.cpp src/python/PythonBridgeApi.h)
+target_link_libraries(visionrt_python PRIVATE visionrt_python_runtime)
+target_compile_definitions(visionrt_python PRIVATE VISIONRT_PYTHON_BRIDGE_BUILD=1)
+set_target_properties(visionrt_python PROPERTIES OUTPUT_NAME visionrt_python_bridge)
+
+
+# 宿主侧环境探测与桥接调度：只依赖 Qt Core，不认识 pybind11
+add_library(visionrt_python_host STATIC
+    src/python/PythonBackend.cpp src/python/PythonBackend.h
+    src/python/PythonProbe.cpp src/python/PythonProbe.h
+    src/python/PythonEnvironment.h)
+target_link_libraries(visionrt_python_host PUBLIC visionrt_core Qt6::Core)
+target_compile_definitions(visionrt_python_host PRIVATE
+    VISIONRT_PYTHON_BUILD_MAJOR=${Python3_VERSION_MAJOR}
+    VISIONRT_PYTHON_BUILD_MINOR=${Python3_VERSION_MINOR})
+
+# 测试用组合：直接编入解释器实现，并用构建解释器做一次真实探测作为显式测试配置。
+add_library(visionrt_python_testing STATIC tests/TestPythonEnvironment.cpp tests/TestPythonEnvironment.h)
+target_link_libraries(visionrt_python_testing PUBLIC visionrt_python_runtime visionrt_python_host)
+target_include_directories(visionrt_python_testing PUBLIC "${CMAKE_SOURCE_DIR}/tests")
+target_compile_definitions(visionrt_python_testing PRIVATE
+    VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
+# The interpreter path is also the test-side configuration a controller receives before it exists;
+# consumers get the same value so the seam needs no probe of its own.
+target_compile_definitions(visionrt_python_testing INTERFACE
+    VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}")
 
 # DAG 执行调度引擎库
 add_library(visionrt_runtime
@@ -148,13 +179,14 @@ if(VISIONRT_BUILD_APP)
         src/ui/ToolEditorController.cpp
         src/ui/ToolEditorController.h)
     target_link_libraries(visionrt_ui PUBLIC
-        visionrt_runtime visionrt_python visionrt_viewport visionrt_log
+        visionrt_runtime visionrt_python_host visionrt_viewport visionrt_log
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)
-    target_compile_definitions(visionrt_ui PRIVATE VISIONRT_PYTHON_HOME="${VISIONRT_PYTHON_HOME}")
     target_link_libraries(visionrt_ui PRIVATE visionrt_avoid)
 
     qt_add_executable(VisionRT src/main.cpp)
     target_link_libraries(VisionRT PRIVATE visionrt_ui quickui::quickui)
+    # 桥接模块不参与链接，但必须随程序构建到同一目录，供运行期按名称加载。
+    add_dependencies(VisionRT visionrt_python)
 
     file(GLOB visionrt_qml CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/ui/qml/*.qml")
     foreach(qml_file IN LISTS visionrt_qml)
@@ -270,7 +302,7 @@ if(BUILD_TESTING)
     target_compile_definitions(visionrt_log_testing PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
     # The log contract is split by responsibility: text/allocation, aggregation and lifecycle.
     # All three share the production logging library and the same test hooks.
-    foreach(log_test log_text_contract log_aggregation_contract log_lifecycle_contract)
+    foreach(log_test log_text_contract log_aggregation_contract log_lifecycle_contract log_level_contract)
         visionrt_contract(${log_test} visionrt_log_testing LABELS backend)
         target_compile_definitions(${log_test} PRIVATE VISIONRT_LOG_TEST_HOOKS=1)
         target_link_libraries(${log_test} PRIVATE Qt6::Test)
@@ -288,9 +320,9 @@ if(BUILD_TESTING)
     if(WIN32)
         target_link_libraries(value_bridge_benchmark PRIVATE psapi)
     endif()
-    visionrt_contract(python_loading_contract visionrt_python)
-    visionrt_contract(python_adapter_contract visionrt_python)
-    visionrt_contract(python_shutdown_contract visionrt_python)
+    visionrt_contract(python_loading_contract visionrt_python_testing)
+    visionrt_contract(python_adapter_contract visionrt_python_testing)
+    visionrt_contract(python_shutdown_contract visionrt_python_testing)
     visionrt_contract(tool_discovery_contract visionrt_core "$<TARGET_FILE:visionrt_validate_tool>")
     add_dependencies(tool_discovery_contract visionrt_validate_tool)
     visionrt_contract(project_editor_contract visionrt_core)
@@ -304,14 +336,14 @@ if(BUILD_TESTING)
     visionrt_contract(example_metadata_contract visionrt_core "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples")
     add_executable(gpu_tools_contract tests/gpu_tools_contract.cpp)
     target_link_libraries(gpu_tools_contract PRIVATE visionrt_runtime)
-    visionrt_contract(python_tools_execution_test visionrt_python "${VISIONRT_TEST_TOOLS_PACKAGE}")
+    visionrt_contract(python_tools_execution_test visionrt_python_testing "${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(installed_pipeline_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}" LABELS installed)
-    target_link_libraries(installed_pipeline_contract PRIVATE visionrt_python)
+    target_link_libraries(installed_pipeline_contract PRIVATE visionrt_python_testing)
     visionrt_contract(installed_python_author_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}" LABELS installed)
-    target_link_libraries(installed_python_author_contract PRIVATE visionrt_python ${OpenCV_LIBS})
+    target_link_libraries(installed_python_author_contract PRIVATE visionrt_python_testing ${OpenCV_LIBS})
     visionrt_contract(runtime_contract visionrt_runtime "${VISIONRT_TEST_TOOLS_PACKAGE}")
     visionrt_contract(runtime_python_lazy_contract visionrt_runtime)
-    target_link_libraries(runtime_python_lazy_contract PRIVATE visionrt_python)
+    target_link_libraries(runtime_python_lazy_contract PRIVATE visionrt_python_testing)
     visionrt_contract(runtime_diagnostics_contract visionrt_runtime)
     visionrt_contract(runtime_value_contract visionrt_runtime)
     visionrt_contract(result_readback_barrier_test visionrt_runtime)
@@ -323,6 +355,8 @@ if(BUILD_TESTING)
         visionrt_apply_test_environment(libavoid_contract)
         visionrt_contract(wire_router_contract visionrt_ui)
         visionrt_contract(wire_routing_benchmark visionrt_ui --output "${CMAKE_BINARY_DIR}/evidence/routing-smoke.csv")
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(wire_routing_benchmark PRIVATE visionrt_python_testing)
         target_link_libraries(wire_routing_benchmark PRIVATE Qt6::Test)
         target_compile_definitions(wire_routing_benchmark PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
@@ -332,14 +366,20 @@ if(BUILD_TESTING)
         visionrt_contract(viewport_lifetime_contract visionrt_viewport)
         target_link_libraries(viewport_lifetime_contract PRIVATE Qt6::Test)
         visionrt_contract(ui_value_contract visionrt_ui)
+        # R50: this scenario executes Python, so the test states the build interpreter.
+        target_link_libraries(ui_value_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_value_contract PRIVATE Qt6::Test)
         visionrt_contract(ui_receiver_identity_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(ui_receiver_identity_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_receiver_identity_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_receiver_identity_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(ui_notifications_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(ui_notifications_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_notifications_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_notifications_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
@@ -358,20 +398,27 @@ if(BUILD_TESTING)
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(ui_project_paths_contract visionrt_ui)
+        # R50: this scenario executes Python, so the test states the build interpreter.
+        target_link_libraries(ui_project_paths_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_project_paths_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(ui_unc_paths_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(ui_unc_paths_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_unc_paths_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_unc_paths_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
         set_tests_properties(ui_unc_paths_contract PROPERTIES SKIP_RETURN_CODE 77)
         visionrt_contract(ui_completion_contract visionrt_ui)
+    target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_completion_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_completion_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(output_text_readback_test visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(output_text_readback_test PRIVATE visionrt_python_testing)
         target_link_libraries(output_text_readback_test PRIVATE Qt6::Test)
         target_compile_definitions(output_text_readback_test PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
@@ -380,6 +427,8 @@ if(BUILD_TESTING)
         visionrt_contract(assist_viewport_contract visionrt_ui)
         target_link_libraries(assist_viewport_contract PRIVATE Qt6::Test)
         visionrt_contract(workbench_expression_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_expression_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_expression_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_expression_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
@@ -398,18 +447,24 @@ if(BUILD_TESTING)
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(workbench_clipboard_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_clipboard_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_clipboard_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_clipboard_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(workbench_status_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_status_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_status_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_status_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(workbench_interaction_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_interaction_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_interaction_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_interaction_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
@@ -420,16 +475,22 @@ if(BUILD_TESTING)
         visionrt_contract(workbench_assist_release_contract visionrt_ui)
         target_link_libraries(workbench_assist_release_contract PRIVATE Qt6::Test)
         visionrt_contract(workbench_assist_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_assist_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_assist_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_assist_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(workbench_tooltree_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_tooltree_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_tooltree_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_tooltree_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(workbench_unavailable_tool_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_unavailable_tool_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_unavailable_tool_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_unavailable_tool_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
@@ -438,6 +499,8 @@ if(BUILD_TESTING)
         set_property(TEST workbench_unavailable_tool_contract APPEND PROPERTY
             ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
         visionrt_contract(workbench_publication_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_publication_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_publication_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_publication_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
@@ -450,6 +513,8 @@ if(BUILD_TESTING)
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(workbench_lifecycle_contract visionrt_ui)
+        # R50: these scenarios execute Python, so the test states the build interpreter.
+        target_link_libraries(workbench_lifecycle_contract PRIVATE visionrt_python_testing)
         target_link_libraries(workbench_lifecycle_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_lifecycle_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
@@ -460,7 +525,10 @@ if(BUILD_TESTING)
         target_compile_definitions(ui_result_isolation_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(recent_projects_contract visionrt_ui)
+        visionrt_contract(ui_preferences_contract visionrt_ui)
         visionrt_contract(ui_storage_contract visionrt_ui)
+        # R50: this scenario executes Python, so the test states the build interpreter.
+        target_link_libraries(ui_storage_contract PRIVATE visionrt_python_testing)
         target_link_libraries(ui_storage_contract PRIVATE Qt6::Test)
         if(WIN32)
             target_link_libraries(ui_storage_contract PRIVATE psapi)
@@ -478,7 +546,7 @@ if(BUILD_TESTING)
             tests/workbench_paths.cpp
             tests/workbench_popups.cpp
             tests/workbench_roi.cpp)
-        target_link_libraries(workbench_contract PRIVATE Qt6::Test)
+        target_link_libraries(workbench_contract PRIVATE Qt6::Test visionrt_python_testing)
         add_dependencies(workbench_contract test_plugin_module)
         set(VISIONRT_WORKBENCH_SCENARIOS core roi output parameters paths canvas startup catalog popups
             output-reuse cancellation short-window)
@@ -505,7 +573,7 @@ if(BUILD_TESTING)
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
 
         add_executable(performance_contract tests/performance_contract.cpp)
-        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_python opencv_core Qt6::Quick)
+        target_link_libraries(performance_contract PRIVATE visionrt_ui visionrt_runtime visionrt_python_testing opencv_core Qt6::Quick)
         target_compile_definitions(performance_contract PRIVATE
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
@@ -585,7 +653,7 @@ if(BUILD_TESTING)
         target_link_libraries(plugin_contract PRIVATE visionrt_ui)
         target_compile_definitions(plugin_contract PRIVATE VISIONRT_BUILD_APP=1)
     else()
-        target_link_libraries(plugin_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core Qt6::Gui)
+        target_link_libraries(plugin_contract PRIVATE visionrt_core visionrt_runtime visionrt_python_testing Qt6::Core Qt6::Gui)
     endif()
     add_dependencies(plugin_contract test_plugin_module test_plugin_a test_plugin_b test_dep_a test_dep_b test_plugin_legacy)
     add_test(NAME plugin_contract COMMAND plugin_contract
@@ -607,7 +675,7 @@ if(BUILD_TESTING)
     endif()
 
     add_executable(example_pipelines_contract tests/example_pipelines.cpp)
-    target_link_libraries(example_pipelines_contract PRIVATE visionrt_core visionrt_runtime visionrt_python Qt6::Core)
+    target_link_libraries(example_pipelines_contract PRIVATE visionrt_core visionrt_runtime visionrt_python_testing Qt6::Core)
     add_dependencies(example_pipelines_contract test_plugin_module test_plugin_a test_dep_a)
     target_compile_definitions(example_pipelines_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME example_pipelines_contract COMMAND example_pipelines_contract --tools-package "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}")
@@ -620,7 +688,7 @@ if(BUILD_TESTING)
     # with the package group and builds its own temporary tools package.
     visionrt_contract(package_replacement_test visionrt_runtime
         SOURCES tests/package_replacement_test.cpp LABELS package)
-    target_link_libraries(package_replacement_test PRIVATE visionrt_python Qt6::Core)
+    target_link_libraries(package_replacement_test PRIVATE visionrt_python_testing Qt6::Core)
     add_dependencies(package_replacement_test test_plugin_module)
 
     # Entries registered outside visionrt_contract go through the same table: one owning group per

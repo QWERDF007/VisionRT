@@ -1,6 +1,7 @@
 #include "core/DefinitionJson.h"
 #include "ToolResultAssertions.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 
 #include <pybind11/embed.h>
 #include <QTemporaryDir>
@@ -51,7 +52,7 @@ try
         }
         const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"audit.concurrent.shutdown","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
-        auto runtime = std::make_unique<PythonRuntime>();
+        auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
         runtime->refresh(std::span(&definition, 1));
         std::vector<std::unique_ptr<IToolInstance>> instances;
         for (int index = 0; index < 3; ++index)
@@ -108,7 +109,7 @@ try
         }
         const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"audit.release.inflight","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
-        auto runtime = std::make_unique<PythonRuntime>();
+        auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
         runtime->refresh(std::span(&definition, 1));
         auto instance = runtime->factory(definition)({});
         assert(instance->initialize({}).code == 0);
@@ -149,7 +150,7 @@ def execute(inputs):
                                                         ToolOrigin::Custom,
                                                         {root / "tools/custom", root / "python/custom"}
     });
-    auto       runtime    = std::make_unique<PythonRuntime>();
+    auto       runtime    = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
     auto       execution  = std::async(std::launch::async,
                                        [&]
                                        {

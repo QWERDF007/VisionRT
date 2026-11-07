@@ -171,6 +171,11 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
         return reject(QStringLiteral("该工具没有可点选的 ROI 输入"));
     if (!roiPort->image)
         return reject(QStringLiteral("ROI 输入未声明关联图像：") + workbench::q(portLabel(roiPort->id)));
+    // A hidden image is not on the result view, so there is nothing the user could be pointing at:
+    // its pixels never reach the helper.
+    const auto *imageDeclaration = workbench::port(tool->inputs, roiPort->image->id);
+    if (!imageDeclaration || !imageDeclaration->imageVisible)
+        return reject(QStringLiteral("ROI 图像未在结果视图中显示，不能进行智能点选"));
     const auto binding = node->inputs.find(roiPort->image->id);
     if (binding == node->inputs.end() || binding->second.mode != BindingMode::Upstream || !binding->second.source)
         return reject(QStringLiteral("请先把图像输入连接到上游"));

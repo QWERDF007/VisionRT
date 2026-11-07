@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
@@ -72,6 +73,8 @@ double percentile(std::vector<double> samples, double fraction)
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     visionrt::registerStyleModule();
     QGuiApplication    application(argc, argv);
     QCommandLineParser parser;

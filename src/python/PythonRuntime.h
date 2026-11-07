@@ -1,23 +1,22 @@
 #pragma once
 
-#include "core/Tool.h"
+#include "python/PythonEnvironment.h"
 
 #include <span>
 
-namespace visionrt {
-
-struct PythonImplementation
+namespace visionrt
 {
-    std::string toolId;
-    ToolStatus  status;
-};
 
-// Construct and destroy on the application main thread. The interpreter remains
-// alive across reset; its main-thread GIL is released until destruction.
+// Construct and destroy on the application main thread. The interpreter remains alive across
+// reset; its main-thread GIL is released until destruction.
+//
+// Every fact about the environment comes from the probe, never from this process's environment:
+// the interpreter is started with the exact executable, prefixes and search paths the selected
+// interpreter reported about itself.
 class PythonRuntime
 {
 public:
-    explicit PythonRuntime(const std::filesystem::path &pythonHome = {});
+    explicit PythonRuntime(const PythonEnvironment &environment);
     ~PythonRuntime();
     PythonRuntime(const PythonRuntime &)            = delete;
     PythonRuntime &operator=(const PythonRuntime &) = delete;

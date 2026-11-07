@@ -4,6 +4,7 @@
 // transaction, Ctrl+click appends, the selected image index is honoured, non-identity alignment is
 // forwarded and inverse-transformed, an upstream ROI refuses the click, and editing a parameter
 // makes the pending preview stale.
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
 
@@ -109,6 +110,8 @@ QPointF recordCenter(const QJsonArray &record)
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();
@@ -166,6 +169,12 @@ try
     app.runOnce();
     settle();
     require(!app.dirty(), "running the assist baseline must not dirty the saved project");
+    // The assist works on the image the user is looking at, so the test picks it the way a user
+    // does instead of relying on a port being opened for them.
+    app.setImageOutput(QStringLiteral("inputs:%1").arg(kImagesInput));
+    require(app.selectedImageOutput() == QStringLiteral("inputs:%1").arg(kImagesInput),
+            "the assist image could not be selected");
+    settle();
     require(app.imageCount() == 3, "assist batch did not expose all images");
 
     require(QTest::qWaitFor([&] { return app.assistActive(); }, 5000),
@@ -303,6 +312,10 @@ try
     settle();
     app.runNode();
     settle();
+    // The helper works on the image the user is looking at; the test opens that port explicitly.
+    app.setImageOutput(QStringLiteral("inputs:%1").arg(kImagesInput));
+    require(app.selectedImageOutput() == QStringLiteral("inputs:%1").arg(kImagesInput),
+            "the row spacing image could not be selected");
     app.setImageIndex(2);
     stable();
     require(QTest::qWaitFor([&] { return app.assistActive(); }, 5000),
@@ -334,6 +347,10 @@ try
     require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "downstream image input could not be bound");
     settle();
     require(app.bindInput(app.portContext(kRoisInput), circle, kCirclesOutput), "downstream upstream ROI could not be bound");
+    settle();
+    app.setImageOutput(QStringLiteral("inputs:%1").arg(kImagesInput));
+    require(app.selectedImageOutput() == QStringLiteral("inputs:%1").arg(kImagesInput),
+            "the downstream image could not be selected");
     settle();
     require(!app.assistClick(160.0, 120.0, false), "an upstream ROI click must be refused");
     require(app.assistHint().contains(QStringLiteral("上游")), "the upstream refusal must explain itself");

@@ -135,6 +135,8 @@ void Theme::initLightIndustrialPalette()
     tooltipBg_     = QColor("#ffffff");
     tooltipText_   = QColor("#24292f");
     viewportBg_    = QColor("#eaebef");
+    navItemActiveBg_   = QColor("#e7f5ff"); // 设置导航选中浅蓝底
+    navItemActiveText_ = QColor("#0875d9"); // 设置导航选中强调文字
     assistHintText_ = QColor("#0f6f6f");
     zoomText_      = QColor("#57606a");
 
@@ -192,6 +194,7 @@ void Theme::initLightIndustrialPalette()
     paramActionBtnWidth_      = 28;
     logButtonHoverColor_       = QColor("#eaf2fd");
     parameterLabelWidth_       = 96;
+    cardLabelWidth_            = 64;
     timingIconSize_            = 13;
     executeButtonPlayIconSize_ = 8;
     parameterRowSpacing_      = 6;

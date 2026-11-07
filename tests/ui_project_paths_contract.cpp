@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -42,6 +43,8 @@ void require(bool condition, const char *message)
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication                application(argc, argv);
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();

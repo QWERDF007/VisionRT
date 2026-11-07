@@ -9,6 +9,7 @@
 #include "ToolResultAssertions.h"
 #include <python/PythonInterop.h>
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 #include "runtime/Snapshot.h"
 #include "ui/AppController.h"
@@ -1420,14 +1421,13 @@ int main(int argc, char **argv)
 
     try
     {
-        require(app.pythonRuntime() != nullptr, "Performance contract requires the real Python runtime");
+        // The interpreter is a separate runtime from the workbench: the application starts Python
+        // in its own bridge, so the performance contract owns the instance it measures.
+        PythonRuntime python(testsupport::pythonEnvironment());
         test200NodesExecution();
         test10x4KZeroCopyAndPythonPassthrough();
-        if (app.pythonRuntime())
-        {
-            testRealPythonTimingPhasesAndFailureIsolation(*app.pythonRuntime());
-        }
-        testRepeatedOnceMemoryAndQueueStability(evidenceDir, maxRounds, maxSeconds, app.pythonRuntime());
+        testRealPythonTimingPhasesAndFailureIsolation(python);
+        testRepeatedOnceMemoryAndQueueStability(evidenceDir, maxRounds, maxSeconds, &python);
         testGuiEventToPresentationLatency(app, evidenceDir);
         testWorkbenchBrowsingLatency();
         std::cout << "\n>>> ALL RT-07 PERFORMANCE CONTRACT TESTS PASSED <<<\n";

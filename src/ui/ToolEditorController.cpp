@@ -252,6 +252,10 @@ QVariantList ToolEditorController::buildTree() const
     {
         if (deleted_.count(draft.def.nameEn))
             continue;
+        // A built-in that was already opened stays in drafts_; hiding it from the catalogue must
+        // hide its leaf as well, otherwise the tree keeps an entry the switch just removed.
+        if (draft.saved && !toolEditable(draft.def, true))
+            continue;
         visibleDrafts.insert(key);
         Entry entry;
         entry.id       = draft.def.nameEn;
@@ -779,22 +783,31 @@ bool ToolEditorController::editBuiltins() const noexcept
     return editBuiltins_;
 }
 
+bool ToolEditorController::canSetEditBuiltins(bool enabled) const
+{
+    if (enabled || !editBuiltins_)
+        return true;
+    for (const auto &[key, draft] : drafts_)
+        // Read the ownership, not toolEditable: while the switch is still on it would answer for the
+        // state being left, not the one being entered.
+        if (draft.saved && !(store_ && store_->isUserTool(draft.def)) && !sameTool(draft.def, *draft.saved))
+            return false;
+    return true;
+}
+
 void ToolEditorController::setEditBuiltins(bool enabled)
 {
     if (editBuiltins_ == enabled)
         return;
-    if (!enabled)
-        for (const auto &[key, draft] : drafts_)
-            // Read the ownership, not toolEditable: while the switch is still on it would answer for
-            // the state being left, not the one being entered.
-            if (draft.saved && !(store_ && store_->isUserTool(draft.def))
-                && !sameTool(draft.def, *draft.saved))
-            {
-                // Turning the switch off must not discard an edit the user can no longer see.
-                setStatus(QStringLiteral("内置工具还有未保存的修改，保存或取消后再关闭编辑"), true);
-                return;
-            }
+    if (!canSetEditBuiltins(enabled))
+    {
+        // Turning the switch off must not discard an edit the user can no longer see.
+        setStatus(QStringLiteral("内置工具还有未保存的修改，保存或取消后再关闭编辑"), true);
+        return;
+    }
     editBuiltins_ = enabled;
+    if (!enabled && current() && !isEditable())
+        selectKey({});
     emit editBuiltinsChanged();
     emit treeChanged();
 }
@@ -1410,27 +1423,35 @@ bool ToolEditorController::saveAll()
         }
     }
 
-    // Deletions run first: if one cannot be done, no draft has been written yet and the window still
-    // holds every edit.
-    for (const auto &id : deleted_)
+    // Deletions run first, one by one. Each success leaves the pending set immediately, so a later
+    // failure cannot keep an entry the file system already lost, and the message names the tool that
+    // failed instead of the batch. Cross-file atomicity is not claimed: what was written stays
+    // written, what was not stays pending.
+    int removed = 0;
+    while (!deleted_.empty())
     {
+        const auto id = *deleted_.begin();
         try
         {
             if (!store_->deleteCustomTool(id))
-            {
-                setStatus(QStringLiteral("删除失败：%1").arg(QString::fromStdString(id)), true);
-                return false;
-            }
+                throw ContractError("存储拒绝删除");
         }
         catch (const std::exception &error)
         {
-            setStatus(QStringLiteral("删除 %1 失败：%2")
+            updateDirty();
+            emit treeChanged();
+            emit currentToolChanged();
+            if (app_)
+                app_->rescanTools();
+            setStatus(QStringLiteral("已删除 %1 个工具；删除 %2 失败：%3")
+                          .arg(removed)
                           .arg(QString::fromStdString(id), QString::fromUtf8(error.what())),
                       true);
             return false;
         }
+        deleted_.erase(id);
+        ++removed;
     }
-    deleted_.clear();
 
     int saved = 0;
     for (auto &[key, draft] : drafts_)
@@ -1475,7 +1496,16 @@ bool ToolEditorController::saveAll()
         }
         catch (const std::exception &error)
         {
-            setStatus(QStringLiteral("保存 %1 失败：%2")
+            // The drafts saved before this one are already on disk and leave the pending set; the
+            // failed tool and everything after it stay editable, and the directory is refreshed so
+            // the tree shows exactly what was written.
+            updateDirty();
+            emit treeChanged();
+            emit currentToolChanged();
+            if (app_)
+                app_->rescanTools();
+            setStatus(QStringLiteral("已保存 %1 个工具；保存 %2 失败：%3")
+                          .arg(saved)
                           .arg(QString::fromStdString(draft.def.nameZh), QString::fromUtf8(error.what())),
                       true);
             return false;

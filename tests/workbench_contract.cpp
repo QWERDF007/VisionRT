@@ -1,4 +1,5 @@
 #include "ui/AppController.h"
+#include "TestPythonConfiguration.h"
 #include "ui/DurationText.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
@@ -1947,6 +1948,10 @@ void coreContracts()
 int main(int argc, char **argv)
 {
     visionrt::registerStyleModule();
+    // R50: Python runs only on an interpreter someone selected. This runner states the build
+    // interpreter once, before any controller exists, so every scenario sees the same catalog the
+    // application shows after the user saves that choice.
+    testsupport::useBuildInterpreter();
     if (argc >= 2
         && (std::string(argv[1]) == "--roi-child" || std::string(argv[1]) == "--output-child"
             || std::string(argv[1]) == "--parameters-child" || std::string(argv[1]) == "--paths-child"

@@ -2,6 +2,7 @@
 // The editor is driven through its own scripted entry points so the checked behaviour is exactly
 // what a user triggers: allocate rows, switch a row to Array, commit, delete the highest port and
 // allocate again.
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
@@ -38,6 +39,8 @@ constexpr PortId kFirstExpressionPort = 2;
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     registerStyleModule();
     testing::WorkbenchInstallation installation;

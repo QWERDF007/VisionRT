@@ -4,6 +4,7 @@
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/Receiver.h"
 #include "runtime/RuntimeEngine.h"
 
@@ -801,7 +802,7 @@ int main(int argc, char **argv)
         repoRoot = std::filesystem::current_path();
     }
 
-    PythonRuntime python;
+    PythonRuntime python(testsupport::pythonEnvironment());
 
     const auto toolsPkg = resolveToolsPackage(installRoot);
     if (toolsPkg.empty())

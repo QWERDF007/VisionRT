@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/NodeContracts.h"
 #include "core/ProjectEditor.h"
@@ -47,6 +48,8 @@ constexpr PortId kRetiredInitPort = 9;
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     visionrt::registerStyleModule();
     QGuiApplication                application(argc, argv);
     testing::WorkbenchInstallation installation;

@@ -3,6 +3,7 @@
 #include "core/NodeContracts.h"
 #include "core/ToolRegistry.h"
 #include "python/PythonRuntime.h"
+#include "TestPythonEnvironment.h"
 #include "runtime/Snapshot.h"
 
 #include <QTemporaryDir>
@@ -20,7 +21,7 @@ int main(int argc, char **argv)
     assert(argc == 2 || (argc == 3 && std::string_view(argv[1]) == "--package"));
     const auto argument = std::string(argv[argc - 1]);
     const auto root = std::filesystem::absolute(std::filesystem::path(std::u8string(argument.begin(), argument.end())));
-    PythonRuntime runtime;
+    PythonRuntime runtime(testsupport::pythonEnvironment());
     try
     {
         auto worker = std::async(

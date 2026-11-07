@@ -14,9 +14,14 @@
       "windows_root": "OpenCV_BIN_DIR",
       "windows_default": "D:/Software/dev/opencv-4.8.0/build/x64/vc16",
       "default": "D:/Software/dev/opencv-4.8.0/build/x64/vc16",
-      "destinations": ["build/bin"],
+      "destinations": [
+        "build/bin"
+      ],
       "runtime_manifest": "opencv_runtime_{config}.txt",
-      "windows": ["*.dll", "bin/*.dll"]
+      "windows": [
+        "*.dll",
+        "bin/*.dll"
+      ]
     },
     {
       "name": "python",
@@ -24,8 +29,7 @@
       "root": "Python3_ROOT_DIR",
       "windows_default": "D:/Software/anaconda3/envs/py312",
       "default": "D:/Software/anaconda3/envs/py312",
-      "destinations": ["build/bin"],
-      "windows": ["python3*.dll", "zlib*.dll"]
+      "note": "构建期开发头与导入库的来源；发行产物不携带解释器，运行期环境由用户选择。"
     }
   ]
 }

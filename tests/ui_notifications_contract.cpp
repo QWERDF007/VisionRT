@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
@@ -9,6 +10,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QScopeGuard>
@@ -117,6 +121,8 @@ void observeQuiet(AppController &app, ImageViewport &viewport, bool running)
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
@@ -143,6 +149,8 @@ try
     };
     definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
+    // The result view offers only ports the declaration marks visible.
+    definition.outputs.back().imageVisible = true;
     write(package + "tools/custom/notifications/source.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(script, R"py(import mmap
@@ -184,6 +192,15 @@ def source(inputs):
     require(outputs, "notification output model unavailable");
     app.addNode("test.notifications", 0, 0);
     idle();
+    // A run owns the workspace while it lasts, so the node is selected once it is Idle again, and
+    // the image port is picked the way a user picks it.
+    const auto nodes = app.nodes();
+    require(nodes.size() == 1, "the notification node is missing from the flow");
+    const auto nodeId = nodes.front().toMap().value(QStringLiteral("id")).toString();
+    app.selectNode(nodeId);
+    require(app.selectedNode() == nodeId, "the notification node could not be selected");
+    app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+    require(!app.selectedImageOutput().isEmpty(), "the visible image output could not be selected");
     QSignalSpy shown(&viewport, &ImageViewport::imagePresented);
     app.runNode();
     idle();

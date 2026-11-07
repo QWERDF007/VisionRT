@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
@@ -34,6 +35,8 @@ constexpr PortId kRegionsInput = 3;
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     QTemporaryDir   directory;
     require(directory.isValid(), "UI fixture directory unavailable");
@@ -48,7 +51,7 @@ try
         {"tool_id":"test.ui.source","definition":"tools/custom/fixture/source.json"},
         {"tool_id":"test.ui.editor","definition":"tools/custom/fixture/editor.json"}],"modules":[],"runtime_files":[]})");
     write("tools/custom/fixture/source.json", R"({"schema_version":6,"name_en":"test.ui.source","name_zh":"图像源","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"source"},"next_port_id":{"init":0,"inputs":1,"outputs":6},"ports":{"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"color_order":"BGR","visible":true}},{"id":3,"name_zh":"列表","type":"vec_vec_int"},{"id":4,"name_zh":"轮次","type":"int"},{"id":5,"name_zh":"区域","type":"roi","relations":{"image":{"stage":"outputs","id":2}}}]}})");
-    write("tools/custom/fixture/editor.json", R"({"schema_version":6,"name_en":"test.ui.editor","name_zh":"图像编辑","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"edit"},"next_port_id":{"init":0,"inputs":4,"outputs":3},"ports":{"inputs":[{"id":1,"name_zh":"图像","type":"image"},{"id":2,"name_zh":"裁剪区域","type":"roi","default":[],"ui":{"editor":"rect"},"relations":{"image":{"stage":"inputs","id":1}}},{"id":3,"name_zh":"区域","type":"roi","default":[],"ui":{"editor":"roi"},"relations":{"image":{"stage":"inputs","id":1}}}],"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"visible":true},"relations":{"same_geometry_as":{"stage":"inputs","id":1}}}]}})");
+    write("tools/custom/fixture/editor.json", R"({"schema_version":6,"name_en":"test.ui.editor","name_zh":"图像编辑","version":"1","implementation":{"kind":"python_function","package":"fixture","file":"tool.py","symbol":"edit"},"next_port_id":{"init":0,"inputs":4,"outputs":3},"ports":{"inputs":[{"id":1,"name_zh":"图像","type":"image","display":{"visible":true}},{"id":2,"name_zh":"裁剪区域","type":"roi","default":[],"ui":{"editor":"rect"},"relations":{"image":{"stage":"inputs","id":1}}},{"id":3,"name_zh":"区域","type":"roi","default":[],"ui":{"editor":"roi"},"relations":{"image":{"stage":"inputs","id":1}}}],"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"visible":true},"relations":{"same_geometry_as":{"stage":"inputs","id":1}}}]}})");
     write("python/custom/fixture/tool.py",
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"
           "def source(inputs):\n"
@@ -196,6 +199,9 @@ try
     require(cleared.isArray() && cleared.array().isEmpty(), "rectangle clearing did not produce empty ROI");
     require(app.bindInput(app.portContext(kImagesInput), source, kImagesOutput), "cannot bind writable source images");
     idle();
+    // The editor shows the image the user opened; the test opens that port explicitly.
+    app.setImageOutput(QStringLiteral("inputs:%1").arg(kImagesInput));
+    require(!app.selectedImageOutput().isEmpty(), "the editor image could not be selected");
     app.runNode();
     idle();
     require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 5000), "workbench did not convert cached image");
@@ -205,6 +211,11 @@ try
             "generic ROI editor became rectangle-only");
     app.endRoiPreview();
     app.selectNode(source);
+    // Returning to a node does not reopen a port for the user; the test opens the source image.
+    app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+    require(!app.selectedImageOutput().isEmpty(), "the source image could not be reopened");
+    require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 5000),
+            "the reopened source image was not presented");
     textReady.clear();
     QString lastPublication;
     const auto frameText = QObject::connect(&viewport, &ImageViewport::imagePresented, &app,

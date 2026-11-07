@@ -12,6 +12,8 @@
 #include "ui/Diagnostics.h"
 #include "ui/UiPreferences.h"
 
+#include "python/PythonProbe.h"
+
 #include <core/ToolPackage.h>
 
 #include <QClipboard>
@@ -66,20 +68,6 @@ using workbench::nodeId;
 using workbench::q;
 
 namespace {
-std::filesystem::path pythonHome(const std::filesystem::path &application)
-{
-    const auto override = qEnvironmentVariable("VISIONRT_PYTHON_HOME");
-    if (!override.isEmpty())
-        return workbench::localPath(override);
-    if (std::filesystem::is_directory(application / "python"))
-        return application / "python";
-#ifdef VISIONRT_PYTHON_HOME
-    return std::filesystem::u8path(VISIONRT_PYTHON_HOME);
-#else
-    return {};
-#endif
-}
-
 std::vector<NodeId> ids(const QVariantList &values)
 {
     std::vector<NodeId> result;
@@ -121,6 +109,9 @@ std::filesystem::path toolsPackageDirectory(const std::filesystem::path &applica
 }
 } // namespace
 
+// Empty in every shipped run: a test states its interpreter before the first controller is built.
+QString AppController::Impl::testPythonExecutable;
+
 AppController::Impl::Impl(AppController *owner, std::size_t workers, const QString &directory)
     : q(owner)
     , applicationDirectory(workbench::localPath(directory))
@@ -130,6 +121,10 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     // Read once, synchronously, while the window is still being built: a corrupt or slow
     // preferences file must not stand between the user and the first project.
     recentProjects = RecentProjects::load();
+    // The same read feeds the three platform settings. A damaged file keeps its bytes and is
+    // reported; this process still runs on the defaults so the window opens.
+    QString settingsFailure;
+    UiPreferences::loadSettings(settings, &settingsFailure);
 
     pluginLoader = std::make_shared<PluginLoader>();
     registry.setPluginLoader(pluginLoader);
@@ -137,14 +132,23 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     registerSelectTools(registry);
     loadComponentBuildInfo();
     loadToolsPackage();
-    // Interpreter lifetime encloses the worker pool and all Python instances.
-    try
+    // The interpreter is created only for an environment the user selected and the probe accepted.
+    // Without one the backend stays unavailable and every Python tool reports that reason; opening
+    // a project, the settings window and every native tool keep working. A test states the choice
+    // itself, through the one seam that never exists in a shipped run.
+    python = std::make_unique<PythonBackend>();
+    const auto &interpreter = testPythonExecutable.isEmpty() ? settings.pythonExecutable : testPythonExecutable;
+    if (!interpreter.isEmpty())
     {
-        python = std::make_unique<PythonRuntime>(pythonHome(applicationDirectory));
+        QString error;
+        const auto probed = probePythonEnvironment(interpreter, &error);
+        if (!probed || !python->start(probed->environment, &error))
+            report(error);
     }
-    catch (const std::exception &error)
+    if (!settingsFailure.isEmpty())
     {
-        report(error, QStringLiteral("Python 不可用"));
+        settingsError = settingsFailure;
+        report(settingsFailure);
     }
     runtime = std::make_unique<RuntimeEngine>(workers);
     presentation.setRuntime(runtime.get());
@@ -230,7 +234,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     tools.setRegistry(registry);
     toolEditor.setAppController(owner);
     toolEditor.setCustomStore(&customStore);
-    toolEditor.setEditBuiltins(UiPreferences::toolEditorEditBuiltins());
+    toolEditor.setEditBuiltins(settings.editBuiltins);
     if (!editor.project().flows.empty())
         flow = workbench::q(editor.project().flows.front().id);
     if (std::any_of(registry.definitions().begin(), registry.definitions().end(), [](const auto &tool)
@@ -986,31 +990,24 @@ void AppController::Impl::requestRefresh(bool rescan)
         return;
     auto        result        = std::make_shared<RefreshResult>();
     auto        definitions   = registry.definitions();
-    auto       *pythonRuntime = python.get();
+    auto       *pythonBackend = python.get();
     const auto *catalog       = &registry;
     const auto  accepted      = runtime->requestRefresh(
-        [result, definitions = std::move(definitions), pythonRuntime, catalog]
+        [result, definitions = std::move(definitions), pythonBackend, catalog]
         {
             catalog->loadNativeImplementations();
-            if (pythonRuntime)
+            if (pythonBackend)
             {
-                result->implementations = pythonRuntime->refresh(definitions);
+                result->implementations = pythonBackend->refresh(definitions);
                 for (const auto &tool : definitions)
                     if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
                     {
                         const auto status = std::find_if(result->implementations.begin(), result->implementations.end(),
                                                                [&](const auto &item) { return item.toolId == tool.nameEn; });
                         if (status != result->implementations.end() && status->status)
-                            result->factories.emplace_back(tool.nameEn, pythonRuntime->factory(tool));
+                            result->factories.emplace_back(tool.nameEn, pythonBackend->factory(tool));
                     }
             }
-            else
-                for (const auto &tool : definitions)
-                    if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
-                        result->implementations.push_back({
-                            tool.nameEn,
-                            makeStatus(ErrorCode::PythonUnavailable, "Python interpreter unavailable")
-                        });
             return ToolStatus{};
         });
     if (!accepted)
@@ -1179,21 +1176,85 @@ ToolEditorController *AppController::toolEditor() const noexcept
 
 bool AppController::editBuiltins() const
 {
-    return impl_->toolEditor.editBuiltins();
+    return impl_->settings.editBuiltins;
+}
+
+QString AppController::settingsError() const
+{
+    return impl_->settingsError;
+}
+
+QString AppController::settingsErrorField() const
+{
+    return impl_->settingsErrorField;
+}
+
+QVariantMap AppController::settingsSnapshot() const
+{
+    const auto level = logLevelKey(impl_->settings.loggingLevel);
+    return {{QStringLiteral("editBuiltins"), impl_->settings.editBuiltins},
+            {QStringLiteral("loggingLevel"), QString::fromLatin1(level.data(), static_cast<qsizetype>(level.size()))},
+            {QStringLiteral("pythonExecutable"), impl_->settings.pythonExecutable}};
+}
+
+bool AppController::applySettings(const QVariantMap &values)
+{
+    const auto fail = [this](const QString &field, const QString &reason)
+    {
+        impl_->settingsError      = reason;
+        impl_->settingsErrorField = field;
+        emit settingsChanged();
+        return false;
+    };
+
+    Settings next = impl_->settings;
+    next.editBuiltins = values.value(QStringLiteral("editBuiltins"), next.editBuiltins).toBool();
+
+    LogLevel level = next.loggingLevel;
+    if (!parseLogLevel(values.value(QStringLiteral("loggingLevel")).toString().toStdString(), level))
+        return fail(QStringLiteral("logging"), QStringLiteral("日志等级无效"));
+    next.loggingLevel = level;
+
+    // A chosen interpreter is resolved and probed before anything is written: an incompatible
+    // environment is reported on the field that produced it, and no other setting is committed
+    // either. An unchanged path is not probed again, so a temporarily unavailable environment does
+    // not block saving the log level.
+    QString    error;
+    const auto executable = resolvePythonExecutable(values.value(QStringLiteral("pythonExecutable")).toString(), &error);
+    if (!error.isEmpty())
+        return fail(QStringLiteral("runtime"), error);
+    if (!executable.isEmpty() && executable != impl_->settings.pythonExecutable)
+        if (!probePythonEnvironment(executable, &error))
+            return fail(QStringLiteral("runtime"), error);
+    next.pythonExecutable = executable;
+
+    if (next.editBuiltins != impl_->settings.editBuiltins && !impl_->toolEditor.canSetEditBuiltins(next.editBuiltins))
+        return fail(QStringLiteral("builtins"), QStringLiteral("内置工具还有未保存的修改，请先保存或取消"));
+
+    // Write first, then change what the process does: a failed save must leave both the file and
+    // the running behaviour exactly as they were.
+    if (!UiPreferences::saveSettings(next, &error))
+        return fail(QString(), error);
+
+    const bool builtinsChanged = next.editBuiltins != impl_->settings.editBuiltins;
+    impl_->settings = next;
+    if (builtinsChanged)
+    {
+        impl_->toolEditor.setEditBuiltins(next.editBuiltins);
+        emit editBuiltinsChanged();
+    }
+    LogService::instance().setMinimumLevel(next.loggingLevel);
+    impl_->settingsError.clear();
+    impl_->settingsErrorField.clear();
+    emit settingsChanged();
+    return true;
 }
 
 void AppController::setEditBuiltins(bool enabled)
 {
-    if (impl_->toolEditor.editBuiltins() == enabled)
-        return;
-    impl_->toolEditor.setEditBuiltins(enabled);
-    // A pending edit keeps the switch on; the preference follows what the editor accepted so a
-    // restart does not reopen a window the user was told to close.
-    if (impl_->toolEditor.editBuiltins() != enabled)
-        return;
-    if (!UiPreferences::setToolEditorEditBuiltins(enabled))
-        impl_->report(QStringLiteral("无法写入界面设置，内置工具编辑开关只在本次运行生效：") + UiPreferences::path());
-    emit editBuiltinsChanged();
+    auto values               = settingsSnapshot();
+    values[QStringLiteral("editBuiltins")] = enabled;
+    applySettings(values);
 }
 
 bool AppController::saveBuiltinTool(const ToolDefinition &authored, QString *error)
@@ -1336,9 +1397,16 @@ QAbstractItemModel *AppController::outputModel() const
     return &impl_->outputs;
 }
 
-PythonRuntime *AppController::pythonRuntime() const
+PythonBackend *AppController::pythonBackend() const
 {
     return impl_ ? impl_->python.get() : nullptr;
+}
+
+void AppController::usePythonForTesting(const QString &executable)
+{
+    // One string, set before the first controller is built. It is never exported to a model, never
+    // written to the preferences file and never consulted when it is empty.
+    Impl::testPythonExecutable = executable;
 }
 
 QVariantList AppController::flows() const

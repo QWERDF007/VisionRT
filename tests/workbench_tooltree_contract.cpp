@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
 #include "ui/Theme.h"
@@ -97,6 +98,8 @@ void clickItem(QQuickWindow &window, QQuickItem *item)
 int main(int argc, char **argv)
 try
 {
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     registerStyleModule();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);

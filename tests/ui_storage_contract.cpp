@@ -1,3 +1,4 @@
+#include "TestPythonConfiguration.h"
 #include "ToolResultAssertions.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
@@ -36,6 +37,8 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
+    // R50: the host runs Python only on an interpreter someone selected.
+    testsupport::useBuildInterpreter();
     QTemporaryDir   directory;
     require(directory.isValid(), "storage fixture directory unavailable");
     const auto root  = directory.path() + "/tools-package/";
@@ -49,7 +52,7 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.storage.source","definition":"tools/custom/storage/source.json"},
         {"tool_id":"test.storage.probe","definition":"tools/custom/storage/probe.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/storage/source.json", R"({"schema_version":6,"name_en":"test.storage.source","name_zh":"大图存储","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"source"},"next_port_id":{"init":0,"inputs":2,"outputs":4},"ports":{"inputs":[{"id":1,"name_zh":"执行闸门","type":"string"}],"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"color_order":"BGR"}},{"id":3,"name_zh":"对象编号","type":"int"}]}})");
+    write("tools/custom/storage/source.json", R"({"schema_version":6,"name_en":"test.storage.source","name_zh":"大图存储","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"source"},"next_port_id":{"init":0,"inputs":2,"outputs":4},"ports":{"inputs":[{"id":1,"name_zh":"执行闸门","type":"string"}],"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"color_order":"BGR","visible":true}},{"id":3,"name_zh":"对象编号","type":"int"}]}})");
     write("tools/custom/storage/probe.json", R"({"schema_version":6,"name_en":"test.storage.probe","name_zh":"存储计数","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"probe"},"next_port_id":{"init":0,"inputs":1,"outputs":5},"ports":{"outputs":[{"id":2,"name_zh":"分配","type":"int"},{"id":3,"name_zh":"释放","type":"int"},{"id":4,"name_zh":"存活","type":"vec_int"}]}})");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref
@@ -118,6 +121,9 @@ def probe(inputs):
     app.addNode("test.storage.source", 100, 0);
     idle();
     const auto keeper = app.selectedNode();
+    // The image the workbench retains is the one the user opened, so the test opens that port.
+    app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+    require(!app.selectedImageOutput().isEmpty(), "the retained image output could not be selected");
     app.runNode();
     idle();
     require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 5000), "retained 4K image was not displayed");
@@ -128,6 +134,9 @@ def probe(inputs):
         app.addNode("test.storage.source", 200, 0);
         idle();
         const auto transient = app.selectedNode();
+        // Each new node shows the port its user opens; the loop opens it before running.
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+        require(!app.selectedImageOutput().isEmpty(), "the transient image output could not be selected");
         app.runNode();
         idle();
         require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 5000), "transient 4K image was not displayed");
@@ -135,6 +144,9 @@ def probe(inputs):
         idle();
         checkCounts(cycle + 1, cycle, true);
         app.selectNode(keeper);
+        // Switching nodes does not open a port for the user: the test opens the retained image again.
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
+        require(!app.selectedImageOutput().isEmpty(), "the retained image output could not be reopened");
         {
             const auto token = outputs->capture(kTokenOutput);
             const auto image = outputs->capture(kImagesOutput);

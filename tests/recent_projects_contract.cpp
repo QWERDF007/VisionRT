@@ -131,7 +131,8 @@ int main(int argc, char **argv)
     UiPreferences::setEasyTouchEnabled(true);
     require(RecentProjects::load().size() == 3, "changing an interaction preference cleared the recent list");
 
-    // MRU-08: a corrupt preferences file reads as an empty list and never blocks a project open.
+    // MRU-08: a corrupt preferences file reads as an empty list, keeps the interaction default and is
+    // never overwritten by a later write.
     {
         QFile file(UiPreferences::path());
         require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "cannot corrupt the preferences file");
@@ -140,10 +141,19 @@ int main(int argc, char **argv)
     }
     require(RecentProjects::load().isEmpty(), "a corrupt preferences file must read as an empty list");
     require(UiPreferences::easyTouchEnabled(), "a corrupt preferences file must keep the interaction default");
+    require(!UiPreferences::setRecentProjects(QJsonArray{QStringLiteral("relative.vrproj"), first}),
+            "a corrupt preferences file was overwritten by a recent-project write");
+    {
+        QFile file(UiPreferences::path());
+        require(file.open(QIODevice::ReadOnly), "cannot read the corrupted preferences file");
+        require(file.readAll() == QByteArray("{ this is not json"), "a refused write changed the corrupt file");
+    }
 
     // MRU-09: illegal records inside an otherwise valid list are dropped, valid ones survive.
     {
-        UiPreferences::setRecentProjects(QJsonArray{QStringLiteral("relative.vrproj"), first, QJsonObject{}});
+        QFile::remove(preferencesPath);
+        require(UiPreferences::setRecentProjects(QJsonArray{QStringLiteral("relative.vrproj"), first, QJsonObject{}}),
+                "a first-run write was refused");
         const auto salvaged = RecentProjects::load();
         require(salvaged.size() == 1 && salvaged.front().path == RecentProjects::identity(first),
                 "an invalid record discarded the valid entries around it");
