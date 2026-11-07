@@ -30,6 +30,31 @@
 - ...
 -->
 
+### 2026-11-07 — 弹窗底部圆角与边界重塑及复用主界面 ToolTreeDelegate
+
+**目标**
+- 响应用户反馈：“底部边界呢，而且底部的怎么感觉是 Rectangle 的啊，直角的，window 的底部是是圆角的吗，没有对齐效果图的啊，而且自定义工具的工具列表怎么没有和主界面的工具列表采用一样的组件吗，怎么图标还不一样的，两个复用组件”；
+- 根治底部圆角被覆盖与直角生硬问题：消除底栏不透明矩形对圆角的遮挡，提供 16px 浮动边距与真实 `QuiShadow` 阴影，使四角（包括左下和右下）10px 圆角与完整 1px 底部边框完整清晰呈现；
+- 彻底复用组件：改造主界面的 `ToolTreeDelegate.qml` 使其成为单一真相源，让自定义工具目录树直接复用该组件，语义化分类图标（相机、设置、AllApps、Search等）、菱形、字体、缩进、交互体验与主界面 100% 一致。
+
+**当前状态**
+- 已完成组件复用与弹窗结构重塑：
+  1. 树列表组件复用：改造 `ToolTreeDelegate.qml` 支持 `isEditor` 模式，`CustomToolDialog.qml` 的目录树直接复用 `ToolTreeDelegate`，彻底消除了两套图标和重复代码；
+  2. 弹窗四角圆角与投影：`windowCard` 增加 16px 边距并嵌入 `QuiShadow`（elevation: 16），避免操作系统窗口边界裁切；
+  3. 底部边框与圆角恢复：底部操作栏改为透明 `Item` 容器，消除了原不透明直角矩形对底层卡片圆角和底边框的覆盖，四角圆角圆润光滑，底边框清晰分明；
+  4. 消除初始化属性读取警告：安全处理代理层宽度绑定，保证测试与运行日志 0 告警。
+- 已完成验证与部署：
+  测试通过，重新抓取高保真截图并像素核查，全量打包部署至 `E:\Softwares\VisionRT`（2786 个文件）。
+
+**验证证据**
+- `ctest --test-dir build -R tool_editor` → 全部 PASS（`tool_editor_controller_test`、`tool_editor_dialog_test` 退出码 0）；
+- `tool_editor_dialog_test.exe` → 退出码 0，成功捕获截图 `D:/tmp/editor_dialog_capture.png`，核验确认圆角完全呈现、底边清晰、树组件图标与主界面一致；
+- `installed_pipeline_contract.exe` 与 `installed_python_author_contract.exe` → 全部 PASS（退出码 0）；
+- `E:\Softwares\VisionRT\VisionRT.exe -v` → 退出码 0。
+
+**下一步**
+- 提交推送并呈报用户验收。
+
 ### 2026-11-07 — 全面对齐 Theme 配色体系并强化清晰分割线与自动选中
 
 **目标**

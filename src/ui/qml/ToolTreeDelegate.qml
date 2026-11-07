@@ -5,25 +5,60 @@ import QtQuick.Window
 import quickui
 import VisionRT.Style 1.0
 
+// Shared tool tree delegate used by both ToolLibrary and CustomToolDialog.
+// Provides identical semantic category icons, selection styling, and interaction.
 Item {
     id: root
-    required property int row
-    required property int column
-    required property var model
-    required property bool isTreeNode
-    required property bool expanded
-    required property bool hasChildren
-    required property int depth
-    property var treeView
+
+    property int row: 0
+    property int column: 0
+    property var model: null
+    property bool isTreeNode: true
+    property bool expanded: false
+    property bool hasChildren: false
+    property int depth: 0
+    property var treeView: null
     property string selectedKey: ""
-    readonly property string stableKey: model.stableKey || ""
-    readonly property string toolId: model.toolId || ""
-    readonly property bool leaf: model.leaf === true
-    readonly property bool available: model.available !== false
-    readonly property string status: model.status || ""
+    property bool isEditor: false
+
+    readonly property string displayName: {
+        if (!model) return ""
+        if (model.display !== undefined) return model.display
+        if (model.name !== undefined) return model.name
+        return ""
+    }
+    readonly property string stableKey: {
+        if (!model) return ""
+        if (model.stableKey !== undefined) return model.stableKey
+        if (model.key !== undefined) return model.key
+        return ""
+    }
+    readonly property string toolId: {
+        if (!model) return ""
+        if (model.toolId !== undefined) return model.toolId
+        return ""
+    }
+    readonly property bool leaf: {
+        if (!model) return !root.hasChildren
+        if (model.leaf !== undefined) return model.leaf === true
+        return !root.hasChildren
+    }
+    readonly property bool available: {
+        if (!model) return true
+        if (model.available !== undefined) return model.available !== false
+        return true
+    }
+    readonly property string status: {
+        if (!model) return ""
+        if (model.status !== undefined) return model.status
+        return ""
+    }
     readonly property bool isSelected: root.selectedKey.length > 0 && root.selectedKey === root.stableKey
+
     signal chosen(string toolId)
     signal selected(string key)
+    signal toggleExpandedRequested()
+    signal contextMenuRequested(var mouse, var itemModel)
 
     ToolTip {
         visible: hoverHandler.hovered && root.leaf && !root.available && root.status.length > 0
@@ -31,7 +66,7 @@ Item {
         delay: 300
     }
 
-    implicitWidth: treeView.width
+    implicitWidth: treeView ? treeView.width : 200
     implicitHeight: Theme.treeRowHeight
 
     HoverHandler {
@@ -77,16 +112,19 @@ Item {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
                 onClicked: function(mouse) {
-                    root.treeView.toggleExpanded(root.row)
+                    if (root.treeView && root.treeView.toggleExpanded)
+                        root.treeView.toggleExpanded(root.row)
+                    root.toggleExpandedRequested()
                     mouse.accepted = true
                 }
             }
         }
 
+        // Semantic category icon matching main interface tool library
         QuiTextIcon {
             visible: root.hasChildren
             iconSource: {
-                let d = (root.model.display || "").toLowerCase()
+                let d = (root.displayName || "").toLowerCase()
                 if (d.indexOf("图") >= 0 || d.indexOf("image") >= 0 || d.indexOf("采") >= 0) return QuiFontIcon.Camera
                 if (d.indexOf("流程") >= 0 || d.indexOf("flow") >= 0) return QuiFontIcon.FolderOpen
                 if (d.indexOf("标") >= 0 || d.indexOf("基础") >= 0) return QuiFontIcon.AllApps
@@ -107,13 +145,13 @@ Item {
         }
 
         QuiText {
-            text: root.model.display || ""
+            text: root.displayName
             Layout.fillWidth: true
             elide: Text.ElideRight
             font.pixelSize: Theme.treeItemFontSize
             color: root.isSelected
                    ? Theme.treeItemSelectedText
-                   : root.model.available === false && root.leaf
+                   : root.available === false && root.leaf
                      ? Theme.treeItemUnavailableText
                      : Theme.treeItemText
         }
@@ -125,7 +163,7 @@ Item {
         z: 1000
         width: 160; height: 32; visible: pointer.drag.active
         property string toolId: root.toolId
-        Drag.active: pointer.drag.active && root.leaf && root.available && app.workspaceEnabled
+        Drag.active: !root.isEditor && pointer.drag.active && root.leaf && root.available && (typeof app !== "undefined" && app.workspaceEnabled)
         Drag.keys: ["visionrt/tool"]
         Drag.source: dragPayload
         Drag.hotSpot.x: 12; Drag.hotSpot.y: 16
@@ -138,7 +176,7 @@ Item {
         }
         QuiText {
             anchors.centerIn: parent
-            text: root.model.display || ""
+            text: root.displayName
             font.pixelSize: Theme.treeItemFontSize
             color: Theme.treeItemSelectedText
         }
@@ -148,24 +186,36 @@ Item {
         id: pointer
         anchors.fill: parent
         hoverEnabled: false
-        acceptedButtons: Qt.LeftButton
-        preventStealing: root.leaf
-        drag.target: root.leaf && root.available && app.workspaceEnabled ? dragPayload : null
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        preventStealing: root.leaf && !root.isEditor
+        drag.target: !root.isEditor && root.leaf && root.available && (typeof app !== "undefined" && app.workspaceEnabled) ? dragPayload : null
         drag.threshold: Qt.styleHints.startDragDistance
         onPressed: function(mouse) {
-            let p = root.mapToItem(dragPayload.parent, mouse.x - 12, mouse.y - 16)
-            dragPayload.x = p.x; dragPayload.y = p.y
+            if (mouse.button === Qt.LeftButton && !root.isEditor) {
+                let p = root.mapToItem(dragPayload.parent, mouse.x - 12, mouse.y - 16)
+                dragPayload.x = p.x; dragPayload.y = p.y
+            }
         }
-        onReleased: { if (root.leaf) dragPayload.Drag.drop() }
-        onClicked: {
-            root.selected(root.stableKey)
+        onReleased: function(mouse) {
+            if (mouse.button === Qt.LeftButton && root.leaf && !root.isEditor)
+                dragPayload.Drag.drop()
+        }
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+                root.contextMenuRequested(mouse, root.model)
+                return
+            }
             if (root.hasChildren) {
-                root.treeView.toggleExpanded(root.row)
-            } else if (root.available) {
-                root.chosen(root.toolId)
+                if (root.treeView && root.treeView.toggleExpanded)
+                    root.treeView.toggleExpanded(root.row)
+                root.toggleExpandedRequested()
+            } else {
+                root.selected(root.stableKey)
+                if (root.available)
+                    root.chosen(root.toolId)
             }
         }
         onDoubleClicked: function(mouse) { mouse.accepted = true }
     }
-    Accessible.name: (model.display || "") + (leaf ? "，拖动到流程图添加" : "")
+    Accessible.name: root.displayName + (root.leaf ? "，拖动到流程图添加" : "")
 }

@@ -6,7 +6,7 @@ import quickui
 import VisionRT.Style 1.0
 
 // Custom tool dialog styled strictly with VisionRT Theme and QuickUI design system.
-// Dividers, surfaces, and text tokens strictly align with the main workbench interface.
+// Reuses ToolTreeDelegate for unified category icons, styling, and behavior.
 Window {
     id: root
 
@@ -14,10 +14,10 @@ Window {
     flags: Qt.Dialog | Qt.FramelessWindowHint
     modality: Qt.NonModal
     color: "transparent"
-    width: 1280
-    height: 760
-    minimumWidth: 1024
-    minimumHeight: 600
+    width: 1312
+    height: 792
+    minimumWidth: 1056
+    minimumHeight: 632
 
     property var controller: null
     property var flatTree: []
@@ -77,9 +77,11 @@ Window {
                 const isExpanded = filter ? true : (isFolder && !root.collapsed[node.path])
                 rows.push({
                     kind: node.kind,
+                    display: node.name,
                     name: node.name,
                     path: node.path || "",
                     key: node.key || "",
+                    stableKey: node.key || "",
                     toolId: node.toolId || "",
                     folder: node.folder || "",
                     toolKind: node.toolKind || "",
@@ -87,6 +89,9 @@ Window {
                     depth: depth,
                     isFolder: isFolder,
                     hasChildren: hasChildren,
+                    leaf: !isFolder,
+                    available: true,
+                    status: "",
                     expanded: isExpanded
                 })
                 if (isFolder && isExpanded && hasChildren)
@@ -138,15 +143,20 @@ Window {
         function onTreeChanged() { root.rebuildTree() }
     }
 
-    // Main window background card matching Theme surface and border
+    // Main window background card with 16px shadow margin, smooth 4-corner radius, and continuous border
     Rectangle {
         id: windowCard
         anchors.fill: parent
+        anchors.margins: 16
         radius: 10
         color: Theme.surfaceBg
         border.color: Theme.border
         border.width: 1
-        clip: true
+
+        QuiShadow {
+            radius: 10
+            elevation: 16
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -298,7 +308,7 @@ Window {
                                 }
                             }
 
-                            // Tree view strictly using Theme tokens (consistent with ToolTreeDelegate)
+                            // Reusing ToolTreeDelegate: identical category icons, diamond leaf icons, and Theme styling
                             ListView {
                                 id: treeView
                                 Layout.fillWidth: true
@@ -308,89 +318,25 @@ Window {
                                 cacheBuffer: 5000
                                 model: root.flatTree
 
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    required property int index
-
-                                    width: treeView.width
-                                    height: 32
-                                    radius: Theme.radiusSmall
-                                    readonly property bool isSelected: modelData.kind === "tool" && root.controller
-                                                                      && root.controller.currentKey === modelData.key
-                                    color: isSelected ? Theme.treeItemSelectedBg : (rowMouse.containsMouse ? Theme.treeItemHoverBg : "transparent")
-
-                                    MouseArea {
-                                        id: rowMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                        onClicked: function(mouse) {
-                                            if (mouse.button === Qt.RightButton) {
-                                                root.menuItem = modelData
-                                                contextMenu.popup()
-                                                return
-                                            }
-                                            if (modelData.kind === "folder")
-                                                root.toggleFolder(modelData.path)
-                                            else
-                                                root.selectKey(modelData.key)
-                                        }
+                                delegate: ToolTreeDelegate {
+                                    width: ListView.view ? ListView.view.width : (treeView ? treeView.width : 200)
+                                    isEditor: true
+                                    model: modelData
+                                    row: index
+                                    depth: modelData.depth
+                                    hasChildren: modelData.hasChildren
+                                    expanded: modelData.expanded
+                                    selectedKey: root.controller ? root.controller.currentKey : ""
+                                    onSelected: function(key) {
+                                        root.selectKey(key)
                                     }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 4 + modelData.depth * 14
-                                        anchors.rightMargin: 8
-                                        spacing: 6
-
-                                        // Expand/Collapse arrow
-                                        Item {
-                                            Layout.preferredWidth: 14
-                                            Layout.fillHeight: true
-                                            visible: modelData.hasChildren
-                                            QuiTextIcon {
-                                                anchors.centerIn: parent
-                                                iconSource: modelData.expanded ? QuiFontIcon.ChevronDownSmall
-                                                                               : QuiFontIcon.ChevronRightSmall
-                                                iconSize: 11
-                                                iconColor: rowMouse.containsMouse ? Theme.treeArrowHoverColor : Theme.treeArrowColor
-                                            }
-                                        }
-
-                                        // Placeholder spacing for tool rows or leaf folders to align
-                                        Item {
-                                            Layout.preferredWidth: 14
-                                            Layout.fillHeight: true
-                                            visible: !modelData.hasChildren
-                                        }
-
-                                        // Folder icon matching Theme.treeFolderIconColor
-                                        QuiTextIcon {
-                                            visible: modelData.isFolder
-                                            Layout.preferredWidth: 16
-                                            Layout.preferredHeight: 16
-                                            iconSource: modelData.expanded ? QuiFontIcon.FolderOpen : QuiFontIcon.Folder
-                                            iconSize: 13
-                                            iconColor: Theme.treeFolderIconColor
-                                        }
-
-                                        // Diamond icon for tools: '◇' matching Theme.treeLeafIconColor
-                                        Text {
-                                            visible: modelData.kind === "tool"
-                                            text: "◇"
-                                            font.pixelSize: 12
-                                            font.bold: isSelected
-                                            color: isSelected ? Theme.treeItemSelectedIcon : Theme.treeLeafIconColor
-                                        }
-
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: modelData.name
-                                            elide: Text.ElideRight
-                                            font.pixelSize: 13
-                                            font.bold: isSelected
-                                            color: isSelected ? Theme.treeItemSelectedText : Theme.textPrimary
-                                        }
+                                    onToggleExpandedRequested: {
+                                        if (modelData.isFolder)
+                                            root.toggleFolder(modelData.path)
+                                    }
+                                    onContextMenuRequested: function(mouse, itemModel) {
+                                        root.menuItem = itemModel
+                                        contextMenu.popup()
                                     }
                                 }
 
@@ -790,16 +736,17 @@ Window {
                 color: Theme.border
             }
 
-            // ------------------------------------------------------------- Footer Actions
-            Rectangle {
+            // ------------------------------------------------------------- Footer Actions (Item container preserves rounded corners)
+            Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 52
-                color: Theme.surfaceBg
+                Layout.preferredHeight: 56
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
+                    anchors.leftMargin: 20
+                    anchors.rightMargin: 20
+                    anchors.topMargin: 12
+                    anchors.bottomMargin: 12
                     spacing: 12
 
                     Label {
