@@ -5,8 +5,8 @@ import QtQuick.Window
 import quickui
 import VisionRT.Style 1.0
 
-// Custom tool dialog redesigned to match the modern card-based editor layout.
-// Strict baseline/top alignment across all columns without redundant wrappers.
+// Custom tool dialog styled strictly with VisionRT Theme and QuickUI design system.
+// Dividers, surfaces, and text tokens strictly align with the main workbench interface.
 Window {
     id: root
 
@@ -31,6 +31,19 @@ Window {
         root.show()
         root.raise()
         root.requestActivate()
+        root.rebuildTree()
+        root.autoSelectFirstTool()
+    }
+
+    function autoSelectFirstTool() {
+        if (!root.controller || root.controller.hasTool)
+            return
+        for (let i = 0; i < root.flatTree.length; ++i) {
+            if (root.flatTree[i].kind === "tool") {
+                root.selectKey(root.flatTree[i].key)
+                return
+            }
+        }
     }
 
     function rebuildTree() {
@@ -82,6 +95,8 @@ Window {
         }
         walk(nodes, 0)
         root.flatTree = rows
+        if (root.controller && !root.controller.hasTool)
+            root.autoSelectFirstTool()
     }
 
     function toggleFolder(path) {
@@ -107,21 +122,29 @@ Window {
         promptDialog.open()
     }
 
-    Component.onCompleted: rebuildTree()
-    onVisibleChanged: if (visible) rebuildTree()
+    Component.onCompleted: {
+        rebuildTree()
+        autoSelectFirstTool()
+    }
+    onVisibleChanged: {
+        if (visible) {
+            rebuildTree()
+            autoSelectFirstTool()
+        }
+    }
 
     Connections {
         target: root.controller
         function onTreeChanged() { root.rebuildTree() }
     }
 
-    // Main window background card with rounded corners and border
+    // Main window background card matching Theme surface and border
     Rectangle {
         id: windowCard
         anchors.fill: parent
         radius: 10
-        color: "#FFFFFF"
-        border.color: "#DCDFE6"
+        color: Theme.surfaceBg
+        border.color: Theme.border
         border.width: 1
         clip: true
 
@@ -153,7 +176,7 @@ Window {
                         text: "自定义工具"
                         font.bold: true
                         font.pixelSize: 16
-                        color: "#1D2129"
+                        color: Theme.textPrimary
                     }
 
                     Item { Layout.fillWidth: true }
@@ -163,14 +186,14 @@ Window {
                         id: closeBtn
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
-                        radius: 6
-                        color: closeMouse.containsMouse ? "#F2F3F5" : "transparent"
+                        radius: Theme.radiusSmall
+                        color: closeMouse.containsMouse ? Theme.menuButtonHoverBg : "transparent"
 
                         Text {
                             anchors.centerIn: parent
                             text: "✕"
                             font.pixelSize: 13
-                            color: closeMouse.containsMouse ? "#F53F3F" : "#86909C"
+                            color: closeMouse.containsMouse ? Theme.error : Theme.iconMuted
                         }
 
                         MouseArea {
@@ -189,6 +212,13 @@ Window {
                 }
             }
 
+            // Title bar divider line matching main window menu/toolbar border
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: Theme.border
+            }
+
             // ------------------------------------------------------------- 4-Column Layout Body
             Item {
                 Layout.fillWidth: true
@@ -198,6 +228,7 @@ Window {
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
+                    anchors.topMargin: 12
                     anchors.bottomMargin: 12
                     spacing: 16
 
@@ -210,13 +241,13 @@ Window {
                             anchors.fill: parent
                             spacing: 12
 
-                            // Search box matching design
+                            // Search box matching Theme editor input tokens
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 32
-                                radius: 4
-                                color: "#FFFFFF"
-                                border.color: searchInput.activeFocus ? "#4096FF" : "#E5E6EB"
+                                radius: Theme.radiusSmall
+                                color: Theme.paramEditorBg
+                                border.color: searchInput.activeFocus ? Theme.paramEditorFocusBorder : Theme.border
                                 border.width: 1
 
                                 RowLayout {
@@ -228,14 +259,14 @@ Window {
                                     QuiTextIcon {
                                         iconSource: QuiFontIcon.Search
                                         iconSize: 13
-                                        iconColor: "#86909C"
+                                        iconColor: Theme.iconMuted
                                     }
 
                                     TextInput {
                                         id: searchInput
                                         Layout.fillWidth: true
                                         font.pixelSize: 13
-                                        color: "#1D2129"
+                                        color: Theme.textPrimary
                                         selectByMouse: true
                                         verticalAlignment: TextInput.AlignVCenter
                                         onTextChanged: {
@@ -248,7 +279,7 @@ Window {
                                             verticalAlignment: Text.AlignVCenter
                                             text: "搜索工具"
                                             font.pixelSize: 13
-                                            color: "#C9CDD4"
+                                            color: Theme.disabledText
                                             visible: !searchInput.text && !searchInput.activeFocus
                                         }
                                     }
@@ -260,14 +291,14 @@ Window {
                                         iconSource: QuiFontIcon.Cancel
                                         iconSize: 9
                                         normalColor: "transparent"
-                                        hoverColor: "#F2F3F5"
-                                        iconColor: "#86909C"
+                                        hoverColor: Theme.menuButtonHoverBg
+                                        iconColor: Theme.iconMuted
                                         onClicked: searchInput.text = ""
                                     }
                                 }
                             }
 
-                            // Tree view with clean classic folder and diamond tool icons
+                            // Tree view strictly using Theme tokens (consistent with ToolTreeDelegate)
                             ListView {
                                 id: treeView
                                 Layout.fillWidth: true
@@ -283,10 +314,10 @@ Window {
 
                                     width: treeView.width
                                     height: 32
-                                    radius: 4
+                                    radius: Theme.radiusSmall
                                     readonly property bool isSelected: modelData.kind === "tool" && root.controller
                                                                       && root.controller.currentKey === modelData.key
-                                    color: isSelected ? "#EBF5FF" : (rowMouse.containsMouse ? "#F7F8FA" : "transparent")
+                                    color: isSelected ? Theme.treeItemSelectedBg : (rowMouse.containsMouse ? Theme.treeItemHoverBg : "transparent")
 
                                     MouseArea {
                                         id: rowMouse
@@ -322,7 +353,7 @@ Window {
                                                 iconSource: modelData.expanded ? QuiFontIcon.ChevronDownSmall
                                                                                : QuiFontIcon.ChevronRightSmall
                                                 iconSize: 11
-                                                iconColor: "#86909C"
+                                                iconColor: rowMouse.containsMouse ? Theme.treeArrowHoverColor : Theme.treeArrowColor
                                             }
                                         }
 
@@ -333,23 +364,23 @@ Window {
                                             visible: !modelData.hasChildren
                                         }
 
-                                        // Unified classic folder icon
+                                        // Folder icon matching Theme.treeFolderIconColor
                                         QuiTextIcon {
                                             visible: modelData.isFolder
                                             Layout.preferredWidth: 16
                                             Layout.preferredHeight: 16
                                             iconSource: modelData.expanded ? QuiFontIcon.FolderOpen : QuiFontIcon.Folder
                                             iconSize: 13
-                                            iconColor: "#606266"
+                                            iconColor: Theme.treeFolderIconColor
                                         }
 
-                                        // Diamond icon for tools: '◇'
+                                        // Diamond icon for tools: '◇' matching Theme.treeLeafIconColor
                                         Text {
                                             visible: modelData.kind === "tool"
                                             text: "◇"
                                             font.pixelSize: 12
                                             font.bold: isSelected
-                                            color: isSelected ? "#1677FF" : "#86909C"
+                                            color: isSelected ? Theme.treeItemSelectedIcon : Theme.treeLeafIconColor
                                         }
 
                                         Label {
@@ -358,7 +389,7 @@ Window {
                                             elide: Text.ElideRight
                                             font.pixelSize: 13
                                             font.bold: isSelected
-                                            color: isSelected ? "#1677FF" : "#1D2129"
+                                            color: isSelected ? Theme.treeItemSelectedText : Theme.textPrimary
                                         }
                                     }
                                 }
@@ -374,11 +405,35 @@ Window {
                         }
                     }
 
-                    // Vertical separator line
+                    // Vertical separator line strictly using Theme.border (consistent with main window splitters)
                     Rectangle {
                         Layout.fillHeight: true
                         width: 1
-                        color: "#F0F2F5"
+                        color: Theme.border
+                    }
+
+                    // Empty placeholder when no tool is selected
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: !(root.controller && root.controller.hasTool)
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 12
+                            QuiTextIcon {
+                                Layout.alignment: Qt.AlignHCenter
+                                iconSource: QuiFontIcon.AllApps
+                                iconSize: 44
+                                iconColor: Theme.iconMuted
+                            }
+                            Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "请在左侧选择工具进行编辑，或右键添加新工具"
+                                font.pixelSize: 14
+                                color: Theme.textSecondary
+                            }
+                        }
                     }
 
                     // ========================== Column 2: Tool Properties ==========================
@@ -399,19 +454,19 @@ Window {
                                     text: "工具"
                                     font.bold: true
                                     font.pixelSize: 15
-                                    color: "#1D2129"
+                                    color: Theme.textPrimary
                                     verticalAlignment: Text.AlignVCenter
                                 }
                                 Item { Layout.fillWidth: true }
                             }
 
-                            // Card with light-blue border matching design - stretches down to bottom line
+                            // Card with primary highlight border matching Theme.highlight
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 radius: 8
-                                color: "#FFFFFF"
-                                border.color: "#4096FF"
+                                color: Theme.surfaceBg
+                                border.color: Theme.highlight
                                 border.width: 1.5
 
                                 ColumnLayout {
@@ -428,7 +483,7 @@ Window {
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13
-                                            color: "#4E5969"
+                                            color: Theme.textSecondary
                                         }
                                         ParameterTextField {
                                             Layout.fillWidth: true
@@ -450,7 +505,7 @@ Window {
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13
-                                            color: "#4E5969"
+                                            color: Theme.textSecondary
                                         }
                                         ParameterTextField {
                                             Layout.fillWidth: true
@@ -472,19 +527,19 @@ Window {
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13
-                                            color: "#4E5969"
+                                            color: Theme.textSecondary
                                         }
                                         QuiComboBox {
                                             id: regKindCombo
                                             Layout.fillWidth: true
                                             implicitHeight: 32
-                                            normalColor: "#FFFFFF"
-                                            disableColor: "#FFFFFF"
+                                            normalColor: Theme.surfaceBg
+                                            disableColor: Theme.surfaceBg
                                             background: Rectangle {
-                                                radius: 4
+                                                radius: Theme.radiusSmall
                                                 border.width: 1
-                                                border.color: regKindCombo.activeFocus ? "#4096FF" : "#E5E6EB"
-                                                color: "#FFFFFF"
+                                                border.color: regKindCombo.activeFocus ? Theme.paramEditorFocusBorder : Theme.border
+                                                color: Theme.surfaceBg
                                             }
                                             model: ["Python 函数", "Python 类", "C++ 注册工厂"]
                                             currentIndex: {
@@ -505,7 +560,7 @@ Window {
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13
-                                            color: "#4E5969"
+                                            color: Theme.textSecondary
                                         }
                                         ParameterTextField {
                                             Layout.fillWidth: true
@@ -527,7 +582,7 @@ Window {
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13
-                                            color: "#4E5969"
+                                            color: Theme.textSecondary
                                         }
                                         ParameterTextField {
                                             Layout.fillWidth: true
@@ -549,7 +604,7 @@ Window {
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13
-                                            color: "#4E5969"
+                                            color: Theme.textSecondary
                                         }
                                         ParameterTextField {
                                             Layout.fillWidth: true
@@ -589,7 +644,7 @@ Window {
                                     text: "输入参数"
                                     font.bold: true
                                     font.pixelSize: 15
-                                    color: "#1D2129"
+                                    color: Theme.textPrimary
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -598,17 +653,17 @@ Window {
                                 Rectangle {
                                     Layout.preferredWidth: 60
                                     Layout.preferredHeight: 26
-                                    radius: 4
-                                    border.color: "#D9D9D9"
+                                    radius: Theme.radiusSmall
+                                    border.color: Theme.border
                                     border.width: 1
-                                    color: (root.controller && root.controller.isEditable && addInMouse.containsMouse) ? "#F2F3F5" : "#FFFFFF"
+                                    color: (root.controller && root.controller.isEditable && addInMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
                                     opacity: (root.controller && root.controller.isEditable) ? 1 : 0.4
 
                                     RowLayout {
                                         anchors.centerIn: parent
                                         spacing: 3
-                                        Text { text: "+"; font.pixelSize: 12; color: "#4E5969" }
-                                        Text { text: "参数"; font.pixelSize: 12; color: "#4E5969" }
+                                        Text { text: "+"; font.pixelSize: 12; color: Theme.textSecondary }
+                                        Text { text: "参数"; font.pixelSize: 12; color: Theme.textSecondary }
                                     }
 
                                     MouseArea {
@@ -668,7 +723,7 @@ Window {
                                     text: "输出参数"
                                     font.bold: true
                                     font.pixelSize: 15
-                                    color: "#1D2129"
+                                    color: Theme.textPrimary
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -677,17 +732,17 @@ Window {
                                 Rectangle {
                                     Layout.preferredWidth: 60
                                     Layout.preferredHeight: 26
-                                    radius: 4
-                                    border.color: "#D9D9D9"
+                                    radius: Theme.radiusSmall
+                                    border.color: Theme.border
                                     border.width: 1
-                                    color: (root.controller && root.controller.isEditable && addOutMouse.containsMouse) ? "#F2F3F5" : "#FFFFFF"
+                                    color: (root.controller && root.controller.isEditable && addOutMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
                                     opacity: (root.controller && root.controller.isEditable) ? 1 : 0.4
 
                                     RowLayout {
                                         anchors.centerIn: parent
                                         spacing: 3
-                                        Text { text: "+"; font.pixelSize: 12; color: "#4E5969" }
-                                        Text { text: "参数"; font.pixelSize: 12; color: "#4E5969" }
+                                        Text { text: "+"; font.pixelSize: 12; color: Theme.textSecondary }
+                                        Text { text: "参数"; font.pixelSize: 12; color: Theme.textSecondary }
                                     }
 
                                     MouseArea {
@@ -728,18 +783,18 @@ Window {
                 }
             }
 
+            // Footer top separator line strictly using Theme.border
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: Theme.border
+            }
+
             // ------------------------------------------------------------- Footer Actions
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 52
-                color: "#FFFFFF"
-
-                Rectangle {
-                    anchors.top: parent.top
-                    width: parent.width
-                    height: 1
-                    color: "#F0F2F5"
-                }
+                color: Theme.surfaceBg
 
                 RowLayout {
                     anchors.fill: parent
@@ -751,7 +806,7 @@ Window {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         text: (root.controller && root.controller.isStatusError) ? root.controller.statusMessage : ""
-                        color: QuiColor.Error
+                        color: Theme.error
                         font.pixelSize: 12
                     }
 
@@ -760,16 +815,16 @@ Window {
                         id: cancelBtn
                         Layout.preferredWidth: 72
                         Layout.preferredHeight: 32
-                        radius: 4
-                        border.color: "#D9D9D9"
+                        radius: Theme.radiusSmall
+                        border.color: Theme.border
                         border.width: 1
-                        color: cancelMouse.containsMouse ? "#F2F3F5" : "#FFFFFF"
+                        color: cancelMouse.containsMouse ? Theme.menuButtonHoverBg : Theme.surfaceBg
 
                         Text {
                             anchors.centerIn: parent
                             text: "取消"
                             font.pixelSize: 13
-                            color: "#4E5969"
+                            color: Theme.textPrimary
                         }
 
                         MouseArea {
@@ -786,13 +841,13 @@ Window {
                         }
                     }
 
-                    // 保存按钮 (始终保持主题蓝底白字，醒目美观)
+                    // 保存按钮 (始终保持主题高亮色 Theme.highlight)
                     Rectangle {
                         id: saveBtn
                         Layout.preferredWidth: 72
                         Layout.preferredHeight: 32
-                        radius: 4
-                        color: saveMouse.containsMouse ? "#4096FF" : "#1677FF"
+                        radius: Theme.radiusSmall
+                        color: saveMouse.containsMouse ? Qt.lighter(Theme.highlight, 1.1) : Theme.highlight
 
                         Text {
                             anchors.centerIn: parent
@@ -901,7 +956,7 @@ Window {
         ColumnLayout {
             anchors.fill: parent
             spacing: 8
-            Label { text: "目录名称"; font.pixelSize: 13 }
+            Label { text: "目录名称"; font.pixelSize: 13; color: Theme.textPrimary }
             TextField {
                 id: promptField
                 Layout.fillWidth: true
@@ -932,6 +987,7 @@ Window {
         Label {
             width: 380
             wrapMode: Text.WordWrap
+            color: Theme.textPrimary
             text: {
                 if (!root.controller) return ""
                 const count = root.controller.toolUsage(root.controller.currentToolId)
@@ -954,6 +1010,7 @@ Window {
         Label {
             width: 380
             wrapMode: Text.WordWrap
+            color: Theme.textPrimary
             text: "本窗口有尚未保存的工具与目录修改。放弃后这些修改会全部丢弃，工具目录不会变化。"
         }
 
