@@ -144,7 +144,7 @@ Window {
         anchors.fill: parent
         radius: 8
         color: Theme.surfaceBg
-        border.color: Theme.border
+        border.color: QuiColor.Border
         border.width: 1
 
         ColumnLayout {
@@ -186,7 +186,7 @@ Window {
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
                         radius: Theme.radiusSmall
-                        color: closeMouse.containsMouse ? Theme.menuButtonHoverBg : "transparent"
+                        color: closeMouse.containsMouse ? Theme.buttonHoverBg : "transparent"
 
                         Text {
                             anchors.centerIn: parent
@@ -214,8 +214,8 @@ Window {
             // Title bar divider line matching main window menu/toolbar border
             Rectangle {
                 Layout.fillWidth: true
-                height: 1
-                color: Theme.border
+                height: Theme.separatorWidth
+                color: QuiColor.Border
             }
 
             // ------------------------------------------------------------- 4-Column Layout Body
@@ -248,7 +248,7 @@ Window {
                                 Layout.preferredHeight: 32
                                 radius: Theme.radiusSmall
                                 color: Theme.paramEditorBg
-                                border.color: searchInput.activeFocus ? Theme.paramEditorFocusBorder : Theme.border
+                                border.color: searchInput.activeFocus ? Theme.paramEditorFocusBorder : QuiColor.Border
                                 border.width: 1
 
                                 RowLayout {
@@ -292,7 +292,7 @@ Window {
                                         iconSource: QuiFontIcon.Cancel
                                         iconSize: 9
                                         normalColor: "transparent"
-                                        hoverColor: Theme.menuButtonHoverBg
+                                        hoverColor: Theme.buttonHoverBg
                                         iconColor: Theme.iconMuted
                                         onClicked: searchInput.text = ""
                                     }
@@ -358,11 +358,11 @@ Window {
                         }
                     }
 
-                    // Vertical separator line strictly using Theme.border (consistent with main window splitters)
+                    // Vertical separator line strictly using QuiColor.Border (consistent with main window splitters)
                     Rectangle {
                         Layout.fillHeight: true
-                        width: 1
-                        color: Theme.border
+                        width: Theme.separatorWidth
+                        color: QuiColor.Border
                     }
 
                     // ========================== Column 2: Tool Properties ==========================
@@ -396,7 +396,7 @@ Window {
                                 Layout.fillHeight: true
                                 radius: 8
                                 color: Theme.surfaceBg
-                                border.color: (root.controller && root.controller.hasTool) ? Theme.highlight : Theme.border
+                                border.color: (root.controller && root.controller.hasTool) ? Theme.highlight : QuiColor.Border
                                 border.width: 1.5
 
                                 ColumnLayout {
@@ -468,7 +468,7 @@ Window {
                                             background: Rectangle {
                                                 radius: Theme.radiusSmall
                                                 border.width: 1
-                                                border.color: regKindCombo.activeFocus ? Theme.paramEditorFocusBorder : Theme.border
+                                                border.color: regKindCombo.activeFocus ? Theme.paramEditorFocusBorder : QuiColor.Border
                                                 color: Theme.surfaceBg
                                             }
                                             model: ["Python 函数", "Python 类", "C++ 注册工厂"]
@@ -553,11 +553,11 @@ Window {
                         }
                     }
 
-                    // Vertical separator line strictly using Theme.border
+                    // Vertical separator line strictly using QuiColor.Border
                     Rectangle {
                         Layout.fillHeight: true
-                        width: 1
-                        color: Theme.border
+                        width: Theme.separatorWidth
+                        color: QuiColor.Border
                     }
 
                     // ========================== Column 3: Input Parameters ==========================
@@ -592,9 +592,9 @@ Window {
                                     Layout.preferredWidth: 60
                                     Layout.preferredHeight: 26
                                     radius: Theme.radiusSmall
-                                    border.color: Theme.border
+                                    border.color: QuiColor.Border
                                     border.width: 1
-                                    color: (root.controller && root.controller.hasTool && root.controller.isEditable && addInMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
+                                    color: (root.controller && root.controller.hasTool && root.controller.isEditable && addInMouse.containsMouse) ? Theme.buttonHoverBg : Theme.surfaceBg
                                     opacity: (root.controller && root.controller.hasTool && root.controller.isEditable) ? 1 : 0.4
 
                                     RowLayout {
@@ -640,11 +640,11 @@ Window {
                         }
                     }
 
-                    // Vertical separator line strictly using Theme.border
+                    // Vertical separator line strictly using QuiColor.Border
                     Rectangle {
                         Layout.fillHeight: true
-                        width: 1
-                        color: Theme.border
+                        width: Theme.separatorWidth
+                        color: QuiColor.Border
                     }
 
                     // ========================== Column 4: Output Parameters ==========================
@@ -679,9 +679,9 @@ Window {
                                     Layout.preferredWidth: 60
                                     Layout.preferredHeight: 26
                                     radius: Theme.radiusSmall
-                                    border.color: Theme.border
+                                    border.color: QuiColor.Border
                                     border.width: 1
-                                    color: (root.controller && root.controller.hasTool && root.controller.isEditable && addOutMouse.containsMouse) ? Theme.menuButtonHoverBg : Theme.surfaceBg
+                                    color: (root.controller && root.controller.hasTool && root.controller.isEditable && addOutMouse.containsMouse) ? Theme.buttonHoverBg : Theme.surfaceBg
                                     opacity: (root.controller && root.controller.hasTool && root.controller.isEditable) ? 1 : 0.4
 
                                     RowLayout {
@@ -756,9 +756,9 @@ Window {
                         Layout.preferredWidth: 72
                         Layout.preferredHeight: 32
                         radius: Theme.radiusSmall
-                        border.color: Theme.border
+                        border.color: QuiColor.Border
                         border.width: 1
-                        color: cancelMouse.containsMouse ? Theme.menuButtonHoverBg : Theme.surfaceBg
+                        color: cancelMouse.containsMouse ? Theme.buttonHoverBg : Theme.surfaceBg
 
                         Text {
                             anchors.centerIn: parent

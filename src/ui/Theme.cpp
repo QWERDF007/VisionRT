@@ -42,11 +42,10 @@ void Theme::initLightIndustrialPalette()
     // 顶部菜单栏与工具栏按钮色彩（完全对齐 120200.png / 120239.png 标准）
     menuBarBg_     = QColor("#ffffff");
     menuBarBorder_ = QColor("#e8e8e8");
-    menuSeparator_ = QColor("#e8e8e8");
 
     menuButtonBg_         = QColor(0, 0, 0, 0); // 默认透明底色
-    menuButtonHoverBg_    = QColor("#f0f2f5");  // 悬浮浅灰底色（取消蓝色高亮）
-    menuButtonPressedBg_  = QColor("#e4e7eb");
+    buttonHoverBg_        = QColor("#f0f2f5");  // 悬浮浅灰底色（取消蓝色高亮）
+    buttonPressedBg_      = QColor("#e4e7eb");
     menuButtonActiveBg_   = QColor("#1677ff"); // 菜单展开激活态实心蓝底色（参考 123055.png）
     menuButtonBorder_     = QColor(0, 0, 0, 0);
     menuButtonText_       = QColor("#262626"); // 统一深灰文字
@@ -81,11 +80,9 @@ void Theme::initLightIndustrialPalette()
     tabBarBg_           = QColor("#f6f8fa");
     tabBg_              = QColor("#f6f8fa");
     tabActiveBg_        = QColor("#ffffff");
-    tabText_            = QColor("#57606a");
+    tabText_            = QColor("#24292f");
     tabHoverText_       = QColor("#1677ff");
-    tabActiveText_      = QColor("#1677ff");
-    tabActiveIndicator_ = QColor("#1677ff");
-    tabBorder_          = QColor("#d0d7de");
+    tabActiveText_      = QColor("#24292f");
 
     // 执行按钮
     executeButtonNormalBg_  = QColor("#ffffff");
@@ -100,7 +97,6 @@ void Theme::initLightIndustrialPalette()
     paramGroupHeaderBg_      = QColor("#f6f8fa");
     paramGroupHeaderHoverBg_ = QColor("#f0f2f5");
     paramGroupHeaderText_    = QColor("#24292f");
-    paramGroupHeaderBorder_  = QColor("#d0d7de");
     paramRowBorder_          = QColor("#eef0f3");
     paramRowHoverBg_         = QColor("#f8fafd");
     paramLabelText_          = QColor("#24292f");
@@ -122,7 +118,6 @@ void Theme::initLightIndustrialPalette()
     // 全局通用色彩
     windowBg_      = QColor("#f5f7fa");
     surfaceBg_     = QColor("#ffffff");
-    border_        = QColor("#d0d7de");
     highlight_     = QColor("#1677ff");
     textPrimary_   = QColor("#24292f");
     textSecondary_ = QColor("#57606a");
@@ -169,18 +164,20 @@ void Theme::initLightIndustrialPalette()
     actionIconSize_     = 14;
 
     // 工具列表尺寸与间距（箭头可调整为 10~12px，规范统一）
-    treeRowHeight_      = 26;
+    treeRowHeight_      = 30;
     treeIndent_         = 16;
     treeArrowSize_      = 10;
     treeArrowWidth_     = 14;
-    treeFolderIconSize_ = 13;
+    treeFolderIconSize_ = 14;
     treeLeafIconSize_   = 11;
-    treeItemFontSize_   = 12;
+
+    separatorWidth_     = 1;
+    separatorHeight_    = 32;
 
     // 底部参数面板与执行按钮尺寸
-    tabBarHeight_             = 30;
+    tabBarHeight_             = 34;
     tabFontSize_              = 12;
-    statusBarHeight_          = 26;
+    statusBarHeight_          = 32;
     segmentButtonWidth_       = 92;
     segmentButtonHeight_      = 22;
     executeButtonHeight_      = 24;
@@ -236,10 +233,6 @@ void Theme::initLightIndustrialPalette()
 
     // 字体默认值：家族、字号、字重的唯一来源
     const QString family = QStringLiteral("Microsoft YaHei UI");
-    bodyFont_    = QFont(family, -1, QFont::Normal);
-    bodyFont_.setPixelSize(fontSizeBase_);
-    captionFont_ = QFont(family, -1, QFont::Normal);
-    captionFont_.setPixelSize(fontSizeSmall_);
     titleFont_   = QFont(family, -1, QFont::DemiBold);
     titleFont_.setPixelSize(fontSizeMedium_);
     monoFont_    = QFont(QStringLiteral("Consolas"), -1, QFont::Normal);

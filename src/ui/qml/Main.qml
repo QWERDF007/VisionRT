@@ -84,7 +84,6 @@ ApplicationWindow {
         QuiColor.themeMode = QuiColor.Light
         QuiColor.Background = Theme.windowBg
         QuiColor.Primary = Theme.surfaceBg
-        QuiColor.Border = Theme.border
         QuiColor.Highlight = Theme.highlight
         QuiColor.Error = Theme.error
         QuiColor.FontPrimary = Theme.textPrimary
@@ -93,8 +92,6 @@ ApplicationWindow {
         QuiColor.CardBackground = Theme.paramEditorBg
         QuiColor.CardBorder = Theme.paramEditorBorder
         QuiColor.ItemHover = Theme.paramRowHoverBg
-        QuiFont.Body = Theme.bodyFont
-        QuiFont.Caption = Theme.captionFont
         Qt.callLater(resetLayout)
     }
     Timer {
@@ -144,10 +141,11 @@ ApplicationWindow {
             QuiTextIconButton {
                 id: fileBtn
                 text: "文件"; iconSource: QuiFontIcon.GlobalNavButton
+                font: QuiFont.Body
                 implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
                 normalColor: fileMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: fileMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
-                pressedColor: Theme.menuButtonPressedBg
+                hoverColor: fileMenu.visible ? Theme.menuButtonActiveBg : Theme.buttonHoverBg
+                pressedColor: Theme.buttonPressedBg
                 textColor: fileMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: fileMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
                 enabled: app.workspaceEnabled
@@ -159,10 +157,11 @@ ApplicationWindow {
             QuiTextIconButton {
                 id: settingsBtn
                 text: "设置"; iconSource: QuiFontIcon.Settings
+                font: QuiFont.Body
                 implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
                 normalColor: settingsDialog.opened ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: settingsDialog.opened ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
-                pressedColor: Theme.menuButtonPressedBg
+                hoverColor: settingsDialog.opened ? Theme.menuButtonActiveBg : Theme.buttonHoverBg
+                pressedColor: Theme.buttonPressedBg
                 textColor: settingsDialog.opened ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: settingsDialog.opened ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
                 enabled: app.workspaceEnabled
@@ -171,10 +170,11 @@ ApplicationWindow {
             QuiTextIconButton {
                 id: toolsBtn
                 text: "工具"; iconSource: QuiFontIcon.AllApps
+                font: QuiFont.Body
                 implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
                 normalColor: toolsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: toolsMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
-                pressedColor: Theme.menuButtonPressedBg
+                hoverColor: toolsMenu.visible ? Theme.menuButtonActiveBg : Theme.buttonHoverBg
+                pressedColor: Theme.buttonPressedBg
                 textColor: toolsMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: toolsMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
                 enabled: app.workspaceEnabled
@@ -186,10 +186,11 @@ ApplicationWindow {
             QuiTextIconButton {
                 id: helpBtn
                 text: "帮助"; iconSource: QuiFontIcon.Help
+                font: QuiFont.Body
                 implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
                 normalColor: helpMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: helpMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
-                pressedColor: Theme.menuButtonPressedBg
+                hoverColor: helpMenu.visible ? Theme.menuButtonActiveBg : Theme.buttonHoverBg
+                pressedColor: Theme.buttonPressedBg
                 textColor: helpMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: helpMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
                 onClicked: {
@@ -200,10 +201,11 @@ ApplicationWindow {
             QuiTextIconButton {
                 id: runBtn
                 text: "运行"; iconSource: QuiFontIcon.Play
+                font: QuiFont.Body
                 implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
                 normalColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonHoverBg
-                pressedColor: Theme.menuButtonPressedBg
+                hoverColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.buttonHoverBg
+                pressedColor: Theme.buttonPressedBg
                 textColor: runMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
                 iconColor: runMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
                 onClicked: {
@@ -212,32 +214,29 @@ ApplicationWindow {
                 }
             }
 
-            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: Theme.menuSeparator; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+            Rectangle { Layout.preferredWidth: Theme.separatorWidth; Layout.preferredHeight: Theme.separatorHeight; color: QuiColor.Border; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
             // Actions & Execution
             QuiTextIconButton {
-                action: saveAction; iconSource: QuiFontIcon.Save
+                action: saveAction; text: "保存 (Ctrl+S)"; iconSource: QuiFontIcon.Save
                 implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.buttonHoverBg; pressedColor: Theme.buttonPressedBg
                 iconColor: Theme.menuButtonIcon
-                ToolTip.visible: hovered; ToolTip.text: "保存 (Ctrl+S)"
             }
             QuiTextIconButton {
-                action: runAction; iconSource: QuiFontIcon.Play
+                action: runAction; text: "单次执行 (F5)"; iconSource: QuiFontIcon.Play
                 implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
                 normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.runButtonPressedBg
                 iconColor: Theme.runButtonIcon
-                ToolTip.visible: hovered; ToolTip.text: "单次执行 (F5)"
             }
             QuiTextIconButton {
-                action: loopAction; iconSource: app.stopEnabled || app.runState === "Stopping" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
+                action: loopAction; text: loopAction.text; iconSource: app.stopEnabled || app.runState === "Stopping" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
                 implicitHeight: Theme.actionButtonHeight; implicitWidth: Theme.actionButtonWidth
                 display: AbstractButton.IconOnly
                 normalColor: Theme.runButtonNormalBg; hoverColor: Theme.runButtonHoverBg; pressedColor: Theme.runButtonPressedBg
                 iconColor: app.stopEnabled || app.runState === "Stopping" ? Theme.loopRunningIcon : Theme.runButtonIcon
-                ToolTip.visible: hovered; ToolTip.text: loopAction.text
             }
 
             Item { Layout.fillWidth: true }
@@ -246,14 +245,15 @@ ApplicationWindow {
                 text: app.runState
                 visible: app.busy
                 color: Theme.highlight
-                font: QuiFont.Caption
+                font: QuiFont.Body
             }
 
             QuiTextIconButton {
                 iconSource: QuiFontIcon.Refresh
                 text: "复位"
+                font: QuiFont.Body
                 display: AbstractButton.TextBesideIcon
-                normalColor: Theme.menuButtonBg; hoverColor: Theme.menuButtonHoverBg; pressedColor: Theme.menuButtonPressedBg
+                normalColor: Theme.menuButtonBg; hoverColor: Theme.buttonHoverBg; pressedColor: Theme.buttonPressedBg
                 textColor: Theme.menuButtonText; iconColor: Theme.menuButtonIcon
                 implicitHeight: Theme.menuButtonHeight; enabled: app.workspaceEnabled
                 focusPolicy: Qt.TabFocus
@@ -315,8 +315,8 @@ ApplicationWindow {
         id: workbench
         anchors.fill: parent
         orientation: Qt.Horizontal
-        backgroundColor: Theme.border
-        handleColor: Theme.border
+        backgroundColor: QuiColor.Border
+        handleColor: QuiColor.Border
         onWidthChanged: {
             if (window.leftExpanded && !leftHost.SplitHandle.pressed && workbench.width > 200) {
                 leftHost.SplitView.preferredWidth = Math.round(workbench.width * window.leftRatio)
@@ -325,12 +325,12 @@ ApplicationWindow {
         handle: Rectangle {
             id: leftHandleItem
             objectName: "leftHandle"
-            implicitWidth: window.leftExpanded ? 1 : 0
-            width: window.leftExpanded ? 1 : 0
+            implicitWidth: window.leftExpanded ? Theme.separatorWidth : 0
+            width: window.leftExpanded ? Theme.separatorWidth : 0
             implicitHeight: workbench.height
             visible: window.leftExpanded
             enabled: window.leftExpanded
-            color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
+            color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : QuiColor.Border
             containmentMask: Item {
                 objectName: "leftHandleMask"
                 x: window.leftExpanded ? -3 : 0
@@ -366,12 +366,12 @@ ApplicationWindow {
                     id: leftSplit
                     anchors.fill: parent
                     orientation: Qt.Vertical
-                    backgroundColor: Theme.border
-                    handleColor: Theme.border
+                    backgroundColor: QuiColor.Border
+                    handleColor: QuiColor.Border
                     handle: Rectangle {
-                        implicitHeight: 1
+                        implicitHeight: Theme.separatorWidth
                         implicitWidth: leftSplit.width
-                        color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
+                        color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : QuiColor.Border
                         containmentMask: Item {
                             y: -3; height: 7; width: leftSplit.width
                         }
@@ -387,8 +387,8 @@ ApplicationWindow {
                         expanded: window.libraryExpanded
                         SplitView.fillHeight: false
                         SplitView.preferredHeight: Math.round(leftSplit.height * window.libraryRatio)
-                        SplitView.minimumHeight: expanded ? 160 : 34
-                        SplitView.maximumHeight: expanded ? Math.round(leftSplit.height * 0.60) : 34
+                        SplitView.minimumHeight: expanded ? 160 : Theme.tabBarHeight
+                        SplitView.maximumHeight: expanded ? Math.round(leftSplit.height * 0.60) : Theme.tabBarHeight
                         onHeightChanged: {
                             if (window.libraryExpanded && leftSplit.height > 200 && library.SplitHandle.pressed) {
                                 window.libraryRatio = Math.max(0.20, Math.min(0.60, library.height / leftSplit.height))
@@ -398,7 +398,7 @@ ApplicationWindow {
                             if (window.libraryExpanded) {
                                 window.savedLibraryHeight = height
                                 window.libraryExpanded = false
-                                SplitView.preferredHeight = 34
+                                SplitView.preferredHeight = Theme.tabBarHeight
                             } else {
                                 window.libraryExpanded = true
                                 SplitView.preferredHeight = Math.min(window.savedLibraryHeight || Math.round(leftSplit.height * window.libraryRatio),
@@ -421,7 +421,7 @@ ApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 14; height: 52
                 color: Theme.surfaceBg
-                border.color: Theme.border; border.width: 1
+                border.color: QuiColor.Border; border.width: 1
                 radius: Theme.radiusSmall
                 z: 20
                 QuiTextIconButton {
@@ -440,7 +440,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: !window.leftExpanded
                 color: Theme.paramGroupHeaderBg
-                border.color: Theme.border; border.width: 1
+                border.color: QuiColor.Border; border.width: 1
                 QuiTextIconButton {
                     id: drawerButton
                     objectName: "drawerToggle"
@@ -458,12 +458,12 @@ ApplicationWindow {
             orientation: Qt.Vertical
             SplitView.fillWidth: true
             SplitView.minimumWidth: 380
-            backgroundColor: Theme.border
-            handleColor: Theme.border
+            backgroundColor: QuiColor.Border
+            handleColor: QuiColor.Border
             handle: Rectangle {
-                implicitHeight: 1
+                implicitHeight: Theme.separatorWidth
                 implicitWidth: rightSplit.width
-                color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
+                color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : QuiColor.Border
                 containmentMask: Item {
                     y: -3; height: 7; width: rightSplit.width
                 }
@@ -498,7 +498,7 @@ ApplicationWindow {
         height: Theme.statusBarHeight; color: Theme.surfaceBg
         Rectangle {
             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-            height: 1; color: Theme.border
+            height: Theme.separatorWidth; color: QuiColor.Border
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 10
@@ -517,7 +517,7 @@ ApplicationWindow {
                 }
                 QuiText {
                     text: app.timingText
-                    font: Theme.captionFont
+                    font: QuiFont.Body
                     color: Theme.textSecondary
                 }
                 HoverHandler { id: timingHover }
@@ -531,18 +531,18 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
             QuiText {
                 text: "说明文档"
-                font: Theme.captionFont
+                font: QuiFont.Body
                 color: docMouse.containsMouse ? Theme.highlight : Theme.textSecondary
                 MouseArea { id: docMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: authorHelp.open() }
             }
             Rectangle {
-                Layout.preferredHeight: 20; Layout.preferredWidth: logRow.width + 12; radius: 3
+                Layout.preferredHeight: 24; Layout.preferredWidth: logRow.width + 12; radius: 3
                 color: logMouse.containsMouse ? Theme.logButtonHoverColor : "transparent"
                 RowLayout {
                     id: logRow; anchors.centerIn: parent; spacing: 4
                     width: implicitWidth
                     QuiTextIcon { iconSource: QuiFontIcon.Document; iconSize: Theme.iconSizeSmall; iconColor: Theme.textSecondary }
-                    QuiText { text: "日志"; font: Theme.captionFont; color: Theme.textSecondary }
+                    QuiText { text: "日志"; font: QuiFont.Body; color: Theme.textSecondary }
                 }
                 MouseArea {
                     id: logMouse; anchors.fill: parent; hoverEnabled: true

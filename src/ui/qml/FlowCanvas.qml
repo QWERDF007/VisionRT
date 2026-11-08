@@ -235,18 +235,18 @@ FocusScope {
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 1; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34; color: "#f6f8fa"
+            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.paramGroupHeaderBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: "#d0d7de"
+                height: Theme.separatorWidth; color: QuiColor.Border
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
                     objectName: "flowTitle"
                     text: "流程图绘制区"
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
-                    color: "#24292f"
+                    font: QuiFont.Body
+                    color: Theme.textPrimary
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
@@ -299,7 +299,7 @@ FocusScope {
                         anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 4
                         QuiText {
                             text: "选择流程:"
-                            font: QuiFont.Caption
+                            font: QuiFont.Body
                             color: QuiColor.FontPrimary
                         }
                         QuiText {
@@ -311,7 +311,7 @@ FocusScope {
                                 }
                                 return count + "/" + (app.flows.length || 0)
                             }
-                            font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 11, bold: true })
+                            font: QuiFont.Body
                             color: QuiColor.Highlight
                         }
                         QuiTextIcon {
@@ -384,7 +384,7 @@ FocusScope {
                                     QuiText {
                                         Layout.fillWidth: true
                                         text: modelData.name
-                                        font: QuiFont.Caption
+                                        font: QuiFont.Body
                                         color: QuiColor.FontPrimary
                                         elide: Text.ElideRight
                                     }
@@ -405,24 +405,30 @@ FocusScope {
                     objectName: "flowFitButton"
                     iconSource: QuiFontIcon.FullScreen
                     implicitWidth: 26; implicitHeight: 24
+                    radius: Theme.radiusSmall
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     text: "适应全部节点"
                     onClicked: root.fit()
                 }
             }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 28; color: "#f6f8fa"
+            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: "#d0d7de"
+                height: Theme.separatorWidth; color: QuiColor.Border
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
                 Rectangle {
                     objectName: "flowAddButton"
-                    Layout.preferredWidth: 22; Layout.preferredHeight: 22; radius: 3
-                    color: addMouse.containsMouse ? "#f0f2f5" : "#ffffff"
-                    border.color: "#d0d7de"; border.width: 1
+                    Layout.preferredWidth: 24; Layout.preferredHeight: 24; radius: Theme.radiusSmall
+                    Layout.alignment: Qt.AlignVCenter
+                    color: addMouse.containsMouse ? Theme.paramRowHoverBg : Theme.surfaceBg
+                    border.color: QuiColor.Border; border.width: 1
                     enabled: app.workspaceEnabled
                     QuiTextIcon {
                         anchors.centerIn: parent
@@ -448,16 +454,16 @@ FocusScope {
                                 objectName: "flowTab_" + modelData.id
                                 required property var modelData
                                 readonly property bool isActive: app.currentFlow === modelData.id
-                                height: 25; width: tabRow.width + 16
-                                anchors.bottom: parent.bottom
-                                radius: 3
-                                color: isActive ? "#ffffff" : "#f6f8fa"
-                                border.color: isActive ? "#d0d7de" : "#e1e4e8"
+                                anchors.top: parent.top; anchors.topMargin: 4; anchors.bottom: parent.bottom
+                                width: tabRow.width + 16
+                                radius: Theme.radiusSmall
+                                color: isActive ? Theme.tabActiveBg : Theme.tabBg
+                                border.color: isActive ? QuiColor.Border : "#e1e4e8"
                                 border.width: 1
                                 Rectangle {
                                     visible: flowTabItem.isActive
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                    height: 2; color: QuiColor.Highlight
+                                    height: 2; color: Theme.highlight
                                 }
                                 MouseArea {
                                     anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -482,7 +488,7 @@ FocusScope {
                                     }
                                     QuiText {
                                         text: flowTabItem.modelData.name
-                                        font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: flowTabItem.isActive })
+                                        font: QuiFont.Body
                                         color: flowTabItem.isActive ? QuiColor.Highlight : "#57606a"
                                     }
                                     QuiTextIcon {
@@ -677,7 +683,7 @@ FocusScope {
                 y: root.hoverCardY()
                 radius: Theme.radiusBase
                 color: Theme.tooltipBg
-                border.color: Theme.border
+                border.color: QuiColor.Border
                 border.width: 1
                 enabled: false
                 ColumnLayout {
@@ -697,13 +703,13 @@ FocusScope {
                             Layout.fillWidth: true
                             QuiText {
                                 text: modelData.label
-                                font: Theme.captionFont
+                                font: QuiFont.Body
                                 color: Theme.textSecondary
                             }
                             Item { Layout.fillWidth: true }
                             QuiText {
                                 text: modelData.value
-                                font: Theme.captionFont
+                                font: QuiFont.Body
                                 color: Theme.textPrimary
                             }
                         }
@@ -729,7 +735,7 @@ FocusScope {
     }
     Rectangle {
         visible: search.text.length > 0 && search.activeFocus
-        z: 20; x: 4; y: 34; width: parent.width - 8; height: Math.min(280, searchList.contentHeight + 8)
+        z: 20; x: 4; y: Theme.tabBarHeight; width: parent.width - 8; height: Math.min(280, searchList.contentHeight + 8)
         color: QuiColor.Primary; border.color: QuiColor.Border; radius: 4
         ListView {
             id: searchList; anchors.fill: parent; anchors.margins: 4; clip: true

@@ -151,7 +151,7 @@ Item {
             text: root.displayName
             Layout.fillWidth: true
             elide: Text.ElideRight
-            font.pixelSize: Theme.treeItemFontSize
+            font: QuiFont.Body
             color: root.isSelected
                    ? Theme.treeItemSelectedText
                    : root.available === false && root.leaf
@@ -180,7 +180,7 @@ Item {
         QuiText {
             anchors.centerIn: parent
             text: root.displayName
-            font.pixelSize: Theme.treeItemFontSize
+            font: QuiFont.Body
             color: Theme.treeItemSelectedText
         }
     }

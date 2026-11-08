@@ -37,7 +37,7 @@ Rectangle {
 
     implicitHeight: cardLayout.implicitHeight + 24
     color: Theme.surfaceBg
-    border.color: Theme.border
+    border.color: QuiColor.Border
     border.width: 1
     radius: 8
 
@@ -185,7 +185,7 @@ Rectangle {
                 Layout.preferredWidth: 22
                 Layout.preferredHeight: 20
                 radius: Theme.radiusSmall
-                color: (root.editable && !root.fixed && delMouse.containsMouse) ? Theme.menuButtonHoverBg : "transparent"
+                color: (root.editable && !root.fixed && delMouse.containsMouse) ? Theme.buttonHoverBg : "transparent"
 
                 Text {
                     anchors.centerIn: parent
@@ -276,7 +276,7 @@ Rectangle {
                 background: Rectangle {
                     radius: Theme.radiusSmall
                     border.width: 1
-                    border.color: typeCombo.activeFocus ? Theme.paramEditorFocusBorder : Theme.border
+                    border.color: typeCombo.activeFocus ? Theme.paramEditorFocusBorder : QuiColor.Border
                     color: Theme.surfaceBg
                 }
                 onActivated: function(index) {
@@ -480,7 +480,7 @@ Rectangle {
                     background: Rectangle {
                         radius: Theme.radiusSmall
                         border.width: 1
-                        border.color: Theme.border
+                        border.color: QuiColor.Border
                         color: Theme.surfaceBg
                     }
                     onActivated: function(index) {
@@ -504,7 +504,7 @@ Rectangle {
                     background: Rectangle {
                         radius: Theme.radiusSmall
                         border.width: 1
-                        border.color: Theme.border
+                        border.color: QuiColor.Border
                         color: Theme.surfaceBg
                     }
                     onActivated: function(index) {
@@ -528,7 +528,7 @@ Rectangle {
                     background: Rectangle {
                         radius: Theme.radiusSmall
                         border.width: 1
-                        border.color: Theme.border
+                        border.color: QuiColor.Border
                         color: Theme.surfaceBg
                     }
                     onActivated: function(index) {
@@ -552,7 +552,7 @@ Rectangle {
                     background: Rectangle {
                         radius: Theme.radiusSmall
                         border.width: 1
-                        border.color: Theme.border
+                        border.color: QuiColor.Border
                         color: Theme.surfaceBg
                     }
                     onActivated: function(index) {
@@ -576,7 +576,7 @@ Rectangle {
                     background: Rectangle {
                         radius: Theme.radiusSmall
                         border.width: 1
-                        border.color: Theme.border
+                        border.color: QuiColor.Border
                         color: Theme.surfaceBg
                     }
                     onActivated: function(index) {
@@ -595,7 +595,7 @@ Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 50
                     color: Theme.surfaceBg
-                    border.color: Theme.border
+                    border.color: QuiColor.Border
                     radius: Theme.radiusSmall
 
                     TextArea {

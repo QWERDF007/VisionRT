@@ -106,10 +106,9 @@ public:
     // 顶部菜单栏与工具栏按钮色彩
     THEME_COLOR_PROP(menuBarBg)
     THEME_COLOR_PROP(menuBarBorder)
-    THEME_COLOR_PROP(menuSeparator)
     THEME_COLOR_PROP(menuButtonBg)
-    THEME_COLOR_PROP(menuButtonHoverBg)
-    THEME_COLOR_PROP(menuButtonPressedBg)
+    THEME_COLOR_PROP(buttonHoverBg)
+    THEME_COLOR_PROP(buttonPressedBg)
     THEME_COLOR_PROP(menuButtonActiveBg)
     THEME_COLOR_PROP(menuButtonBorder)
     THEME_COLOR_PROP(menuButtonText)
@@ -147,8 +146,6 @@ public:
     THEME_COLOR_PROP(tabText)
     THEME_COLOR_PROP(tabHoverText)
     THEME_COLOR_PROP(tabActiveText)
-    THEME_COLOR_PROP(tabActiveIndicator)
-    THEME_COLOR_PROP(tabBorder)
 
     // 执行按钮
     THEME_COLOR_PROP(executeButtonNormalBg)
@@ -163,7 +160,6 @@ public:
     THEME_COLOR_PROP(paramGroupHeaderBg)
     THEME_COLOR_PROP(paramGroupHeaderHoverBg)
     THEME_COLOR_PROP(paramGroupHeaderText)
-    THEME_COLOR_PROP(paramGroupHeaderBorder)
     THEME_COLOR_PROP(paramRowBorder)
     THEME_COLOR_PROP(paramRowHoverBg)
     THEME_COLOR_PROP(paramLabelText)
@@ -185,7 +181,6 @@ public:
     // 全局通用色彩
     THEME_COLOR_PROP(windowBg)
     THEME_COLOR_PROP(surfaceBg)
-    THEME_COLOR_PROP(border)
     THEME_COLOR_PROP(highlight)
     THEME_COLOR_PROP(textPrimary)
     THEME_COLOR_PROP(textSecondary)
@@ -232,6 +227,8 @@ public:
     THEME_INT_PROP(actionButtonWidth)
     THEME_INT_PROP(actionButtonHeight)
     THEME_INT_PROP(actionIconSize)
+    THEME_INT_PROP(separatorWidth)
+    THEME_INT_PROP(separatorHeight)
 
     // 工具列表尺寸与间距
     THEME_INT_PROP(treeRowHeight)
@@ -240,7 +237,6 @@ public:
     THEME_INT_PROP(treeArrowWidth)
     THEME_INT_PROP(treeFolderIconSize)
     THEME_INT_PROP(treeLeafIconSize)
-    THEME_INT_PROP(treeItemFontSize)
 
     // 底部参数面板与执行按钮尺寸
     THEME_INT_PROP(tabBarHeight)
@@ -347,8 +343,6 @@ public:
     THEME_INT_PROP(radiusLarge)
 
     // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
-    THEME_FONT_PROP(bodyFont)
-    THEME_FONT_PROP(captionFont)
     THEME_FONT_PROP(titleFont)
     THEME_FONT_PROP(monoFont)
 

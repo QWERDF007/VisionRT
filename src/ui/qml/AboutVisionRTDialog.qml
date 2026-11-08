@@ -32,7 +32,7 @@ WorkbenchDialog {
                 width: parent.width - 32
                 height: parent.height - 32
                 color: Theme.surfaceBg
-                border.color: Theme.border
+                border.color: QuiColor.Border
                 border.width: 1
                 radius: Theme.radiusSmall
                 clip: true

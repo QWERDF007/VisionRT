@@ -98,8 +98,8 @@ QuiPopup {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: 1
-                color: Theme.border
+                height: Theme.separatorWidth
+                color: QuiColor.Border
             }
             RowLayout {
                 anchors.fill: parent
@@ -150,8 +150,8 @@ QuiPopup {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: 1
-                color: Theme.border
+                height: Theme.separatorWidth
+                color: QuiColor.Border
             }
             RowLayout {
                 anchors.fill: parent
@@ -173,7 +173,7 @@ QuiPopup {
                     objectName: "settingsApply"
                     text: "应用"
                     enabled: root.dirty
-                    normalColor: root.dirty ? Theme.highlight : Theme.border
+                    normalColor: root.dirty ? Theme.highlight : QuiColor.Border
                     textColor: root.dirty ? "#ffffff" : Theme.textSecondary
                     // The shared button fades to 0.3 when disabled, which erases white text on the
                     // accent colour; the apply button states its disabled look here instead.
@@ -197,9 +197,9 @@ QuiPopup {
 
                 Rectangle {
                     anchors.right: parent.right
-                    width: 1
+                    width: Theme.separatorWidth
                     height: parent.height
-                    color: Theme.border
+                    color: QuiColor.Border
                 }
                 Column {
                     anchors.fill: parent

@@ -70,7 +70,7 @@ Window {
                  : level === "警告" ? Theme.warning : Theme.textPrimary
             selectionColor: Theme.highlight
             selectedTextColor: "#ffffff"
-            font: Theme.monoFont
+            font: QuiFont.Body
             renderType: Text.QtRendering
         }
     }

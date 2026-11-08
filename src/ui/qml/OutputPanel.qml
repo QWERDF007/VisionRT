@@ -60,13 +60,13 @@ Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.paramGroupHeaderBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: Theme.paramGroupHeaderBorder
+                height: Theme.separatorWidth; color: QuiColor.Border
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
                     text: "输出参数"
-                    font: Theme.bodyFont
+                    font: QuiFont.Body
                     color: Theme.paramGroupHeaderText
                 }
                 Item { Layout.fillWidth: true }
@@ -81,7 +81,7 @@ Rectangle {
                             color: !root.relations ? Theme.highlight : "transparent"
                             QuiText {
                                 anchors.centerIn: parent; text: "数据"
-                                font: Theme.captionFont
+                                font: QuiFont.Body
                                 color: !root.relations ? Theme.surfaceBg : Theme.highlight
                             }
                             MouseArea {
@@ -94,7 +94,7 @@ Rectangle {
                             color: root.relations ? Theme.highlight : "transparent"
                             QuiText {
                                 anchors.centerIn: parent; text: "关系"
-                                font: Theme.captionFont
+                                font: QuiFont.Body
                                 color: root.relations ? Theme.surfaceBg : Theme.highlight
                             }
                             MouseArea {

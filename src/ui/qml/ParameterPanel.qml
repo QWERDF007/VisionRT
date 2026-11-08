@@ -7,12 +7,12 @@ import VisionRT.Style 1.0
 QuiSplitView {
     id: root
     orientation: Qt.Horizontal
-    backgroundColor: Theme.border
-    handleColor: Theme.border
+    backgroundColor: QuiColor.Border
+    handleColor: QuiColor.Border
     handle: Rectangle {
-        implicitWidth: 1
+        implicitWidth: Theme.separatorWidth
         implicitHeight: root.height
-        color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : Theme.border
+        color: SplitHandle.hovered || SplitHandle.pressed ? Theme.highlight : QuiColor.Border
         containmentMask: Item {
             x: -3; width: 7; height: root.height
         }
@@ -92,10 +92,10 @@ QuiSplitView {
         ColumnLayout {
             anchors.fill: parent; spacing: 0
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 34; color: Theme.tabBarBg
+                Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.tabBarBg
                 Rectangle {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                    height: 1; color: Theme.tabBorder
+                    height: Theme.separatorWidth; color: QuiColor.Border
                 }
                 RowLayout {
                     anchors.fill: parent; spacing: 0
@@ -110,23 +110,23 @@ QuiSplitView {
                             color: isActive ? Theme.tabActiveBg : (isHovered ? Theme.paramRowHoverBg : Theme.tabBg)
                             Rectangle {
                                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                                width: 1; color: Theme.tabBorder
+                                width: Theme.separatorWidth; color: QuiColor.Border
                             }
                             Rectangle {
                                 visible: !tabItem.isActive
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                height: 1; color: Theme.tabBorder
+                                height: Theme.separatorWidth; color: QuiColor.Border
                             }
                             Rectangle {
                                 visible: tabItem.isActive
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                height: 2; color: Theme.tabActiveIndicator
+                                height: 2; color: Theme.highlight
                             }
                             QuiText {
                                 anchors.centerIn: parent
                                 text: tabItem.modelData
-                                font: Qt.font({ family: Theme.bodyFont.family, pixelSize: Theme.tabFontSize, bold: tabItem.isActive })
-                                color: tabItem.isActive ? Theme.tabActiveText : (tabItem.isHovered ? Theme.tabHoverText : Theme.tabText)
+                                font: QuiFont.Body
+                                color: tabItem.isHovered ? Theme.tabHoverText : (tabItem.isActive ? Theme.tabActiveText : Theme.tabText)
                             }
                             MouseArea {
                                 id: tabMouse
@@ -160,7 +160,7 @@ QuiSplitView {
                             }
                             QuiText {
                                 text: "执行"
-                                font: Qt.font({ family: Theme.bodyFont.family, pixelSize: Theme.executeButtonFontSize, bold: true })
+                                font: QuiFont.Body
                                 color: Theme.executeButtonText
                             }
                         }

@@ -8,7 +8,7 @@ import VisionRT.Style 1.0
 Rectangle {
     id: root
     color: Theme.windowBg
-    border.color: Theme.border
+    border.color: QuiColor.Border
     border.width: 1
     signal roiRequested()
 
@@ -22,7 +22,7 @@ Rectangle {
             color: Theme.surfaceBg
             Rectangle {
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                width: 1; color: Theme.border
+                width: Theme.separatorWidth; color: QuiColor.Border
             }
             ColumnLayout {
                 anchors.fill: parent; spacing: 0
@@ -30,7 +30,7 @@ Rectangle {
                     Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.tabBarBg
                     Rectangle {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                        height: 1; color: Theme.tabBorder
+                        height: Theme.separatorWidth; color: QuiColor.Border
                     }
                     QuiComboBox {
                         id: outputChoice
@@ -59,7 +59,7 @@ Rectangle {
                             width: thumbnails.width - 8; height: Theme.thumbnailRowHeight
                             anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
                             color: index === app.imageIndex ? Theme.treeItemSelectedBg : Theme.surfaceBg
-                            border.color: index === app.imageIndex ? Theme.highlight : Theme.border
+                            border.color: index === app.imageIndex ? Theme.highlight : QuiColor.Border
                             border.width: index === app.imageIndex ? 2 : 1
                             radius: Theme.radiusSmall
                             ImageViewport {
@@ -91,7 +91,7 @@ Rectangle {
             color: Theme.surfaceBg
             Rectangle {
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                width: 1; color: Theme.border
+                width: Theme.separatorWidth; color: QuiColor.Border
             }
             ColumnLayout {
                 anchors.top: parent.top; anchors.topMargin: 4
@@ -100,34 +100,53 @@ Rectangle {
                 // Every button here changes only the view, but a run owns all user interaction.
                 enabled: app.workspaceEnabled
                 QuiTextIconButton {
+                    text: "适应窗口"
                     iconSource: Theme.iconFitWindow
                     implicitWidth: Theme.toolbarButtonSize; implicitHeight: Theme.toolbarButtonSize
+                    radius: Theme.radiusSmall
                     display: AbstractButton.IconOnly
-                    ToolTip.visible: hovered; ToolTip.text: "适应窗口"
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     onClicked: viewport.fitContain()
                 }
                 QuiTextIconButton {
+                    text: "放大"
                     iconSource: Theme.iconZoomIn
                     implicitWidth: Theme.toolbarButtonSize; implicitHeight: Theme.toolbarButtonSize
+                    radius: Theme.radiusSmall
                     display: AbstractButton.IconOnly
-                    ToolTip.visible: hovered; ToolTip.text: "放大"
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     onClicked: viewport.zoomBy(1.25)
                 }
                 QuiTextIconButton {
+                    text: "缩小"
                     iconSource: Theme.iconZoomOut
                     implicitWidth: Theme.toolbarButtonSize; implicitHeight: Theme.toolbarButtonSize
+                    radius: Theme.radiusSmall
                     display: AbstractButton.IconOnly
-                    ToolTip.visible: hovered; ToolTip.text: "缩小"
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     onClicked: viewport.zoomBy(0.8)
                 }
                 Rectangle {
-                    Layout.preferredWidth: 20; Layout.preferredHeight: 1; color: Theme.border
+                    Layout.preferredWidth: 20; Layout.preferredHeight: Theme.separatorWidth; color: QuiColor.Border
                     Layout.alignment: Qt.AlignHCenter
                 }
                 // Smart point selection: the button reports the user preference only. Availability
                 // and pausing are explained in the tooltip, never by silently unchecking it.
                 QuiTextIconButton {
                     objectName: "easyTouchToggle"
+                    text: app.easyTouchEnabled
+                          ? (app.assistAvailable ? "智能点选（EasyTouch）：已开启"
+                                                 : "智能点选（EasyTouch）：已开启，" + (app.assistDisabledReason || "当前不可用"))
+                          : "智能点选（EasyTouch）：已关闭"
                     iconSource: Theme.iconEasyTouch
                     implicitWidth: Theme.toolbarButtonSize
                     implicitHeight: Theme.toolbarButtonSize
@@ -135,51 +154,49 @@ Rectangle {
                     radius: Theme.radiusSmall
                     checkable: false
                     checked: app.easyTouchEnabled
-                    normalColor: checked ? Theme.sourceButtonActiveBackground : Theme.surfaceBg
-                    hoverColor: checked ? Theme.sourceButtonActiveBackground : Theme.menuButtonHoverBg
-                    pressedColor: checked ? Theme.sourceButtonActiveBackground : Theme.menuButtonPressedBg
-                    iconColor: checked ? Theme.sourceButtonActiveIcon : Theme.iconMuted
+                    normalColor: checked ? Theme.sourceButtonActiveBackground : Theme.menuButtonBg
+                    hoverColor: checked ? Qt.lighter(Theme.sourceButtonActiveBackground, 1.15) : Theme.buttonHoverBg
+                    pressedColor: checked ? Qt.darker(Theme.sourceButtonActiveBackground, 1.15) : Theme.buttonPressedBg
+                    iconColor: checked ? Theme.sourceButtonActiveIcon : (hovered ? Theme.highlight : Theme.menuButtonIcon)
                     Accessible.name: "智能点选（EasyTouch）"
                     Accessible.role: Accessible.CheckBox
                     Accessible.checkable: true
                     Accessible.checked: app.easyTouchEnabled
-                    ToolTip.visible: hovered
-                    ToolTip.text: app.easyTouchEnabled
-                                  ? (app.assistAvailable ? "智能点选（EasyTouch）：已开启"
-                                                         : "智能点选（EasyTouch）：已开启，" + (app.assistDisabledReason || "当前不可用"))
-                                  : "智能点选（EasyTouch）：已关闭"
-                    ToolTip.delay: 300
                     onClicked: app.setEasyTouchEnabled(!app.easyTouchEnabled)
                 }
                 Rectangle {
-                    Layout.preferredWidth: 20; Layout.preferredHeight: 1; color: Theme.border
+                    Layout.preferredWidth: 20; Layout.preferredHeight: Theme.separatorWidth; color: QuiColor.Border
                     Layout.alignment: Qt.AlignHCenter
                 }
-                Rectangle {
-                    Layout.preferredWidth: Theme.toolbarButtonSize; Layout.preferredHeight: 22
+                QuiTextIconButton {
+                    text: "ROI"
+                    implicitWidth: Theme.toolbarButtonSize
+                    implicitHeight: Theme.toolbarButtonSize
                     radius: Theme.radiusSmall
-                    color: roiMouse.containsMouse ? Theme.menuButtonHoverBg : Theme.surfaceBg
-                    border.color: Theme.border; border.width: 1
+                    display: AbstractButton.TextOnly
+                    font: Qt.font({ pixelSize: 11, bold: true })
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    textColor: enabled ? (hovered ? Qt.darker(Theme.highlight, 1.15) : Theme.highlight) : Theme.disabledText
                     enabled: !app.runtimeBusy && app.selectedNode.length > 0
-                    opacity: enabled ? 1.0 : 0.5
-                    QuiText {
-                        anchors.centerIn: parent
-                        text: "ROI"
-                        font: Qt.font({ family: Theme.bodyFont.family, pixelSize: Theme.fontSizeCaption, bold: true })
-                        color: Theme.highlight
-                    }
-                    MouseArea {
-                        id: roiMouse; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.roiRequested()
-                    }
+                    opacity: enabled ? 1.0 : 0.4
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 200
+                    ToolTip.text: "编辑输入 ROI"
                     Accessible.name: "编辑输入 ROI"
+                    onClicked: root.roiRequested()
                 }
                 QuiTextIconButton {
+                    text: "1:1 像素显示"
                     iconSource: Theme.iconOneToOne
                     implicitWidth: Theme.toolbarButtonSize; implicitHeight: Theme.toolbarButtonSize
+                    radius: Theme.radiusSmall
                     display: AbstractButton.IconOnly
-                    ToolTip.visible: hovered; ToolTip.text: "1:1 像素显示"
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     onClicked: viewport.fitOneToOne()
                 }
             }
@@ -213,13 +230,13 @@ Rectangle {
                     anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 8
                     text: app.assistHint
                     visible: app.assistActive && text.length > 0
-                    font: Theme.captionFont
+                    font: QuiFont.Body
                     color: Theme.assistHintText
                 }
                 QuiText {
                     anchors.bottom: parent.bottom; anchors.right: parent.right; anchors.margins: 8
                     text: viewport.hasImage ? Math.round(viewport.zoom * 100) + "%" : ""
-                    font: Theme.captionFont; color: Theme.zoomText
+                    font: QuiFont.Body; color: Theme.zoomText
                 }
                 QuiText {
                     anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8

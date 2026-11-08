@@ -7,7 +7,7 @@ import VisionRT.Style 1.0
 Rectangle {
     id: root
     color: Theme.surfaceBg
-    border.color: Theme.border
+    border.color: QuiColor.Border
     border.width: 1
     property bool expanded: false
     property string selectedKey: ""
@@ -16,16 +16,16 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 1; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: 34; color: Theme.tabBarBg
+            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 1; color: Theme.tabBorder
+                height: Theme.separatorWidth; color: QuiColor.Border
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
                 QuiText {
                     text: "工具库"
-                    font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 12, bold: true })
+                    font: QuiFont.Body
                     color: Theme.textPrimary
                 }
                 Item { Layout.fillWidth: true }
@@ -74,6 +74,11 @@ Rectangle {
                     visible: root.expanded
                     iconSource: QuiFontIcon.Refresh
                     implicitWidth: 24; implicitHeight: 24
+                    radius: Theme.radiusSmall
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     text: "刷新 Python 工具"
                     enabled: app.workspaceEnabled; onClicked: app.refreshPython()
                 }
@@ -81,6 +86,11 @@ Rectangle {
                     objectName: "toolLibraryToggle"
                     iconSource: root.expanded ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
                     implicitWidth: 24; implicitHeight: 24
+                    radius: Theme.radiusSmall
+                    normalColor: Theme.menuButtonBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
+                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
                     text: root.expanded ? "折叠工具库" : "展开工具库"
                     onClicked: root.toggleRequested()
                 }

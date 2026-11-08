@@ -232,13 +232,15 @@ void parameterEditorsContract()
 
     require(theme->parameterRowHeight() == 32 && theme->paramEditorHeight() == 32,
             "parameter theme height is not the shared 32 pixel contract");
-    require(theme->statusBarHeight() == 26, "statusBarHeight default must be 26");
+    require(theme->statusBarHeight() == 32, "statusBarHeight default must be 32");
     require(theme->segmentButtonWidth() == 92, "segmentButtonWidth default must be 92");
     require(theme->segmentButtonHeight() == 22, "segmentButtonHeight default must be 22");
     require(theme->parameterLabelWidth() == 96, "parameterLabelWidth default must be 96");
     require(theme->logButtonHoverColor() == QColor("#eaf2fd"), "logButtonHoverColor default must be #eaf2fd");
     require(theme->timingIconSize() == 13, "timingIconSize default must be 13");
     require(theme->executeButtonPlayIconSize() == 8, "executeButtonPlayIconSize default must be 8");
+    require(theme->separatorWidth() == 1, "separatorWidth default must be 1");
+    require(theme->separatorHeight() == 32, "separatorHeight default must be 32");
 
     auto *input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "Float parameter did not use the public spin editor");
