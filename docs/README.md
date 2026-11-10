@@ -56,6 +56,18 @@ Release、500 轮的实测（[基准证据](../build/evidence/runtime_benchmark.
 
 Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs': {...}, 'detail': '...'}`（由 SDK `result(outputs, status)` 统一封装打包，`outputs` 包含业务端口及 `__status_code` 与 `__status_message`），类的 `initialize`/`release` 只返回状态字典。工具避免不经 SDK 直接篡改状态端口。
 
+## Python 环境
+
+选择、检查、桥接创建与“能否执行 Python 工具”的判定全部归 VisionRT，VisionTools 不做环境检查。只有一份环境状态 `PythonEnvironmentStatus`（`unconfigured / probing / ready / invalid / backendFailed`，附一句中文原因），由 [PythonBackend](../src/python/PythonBackend.h) 持有：探测写入环境侧裁决，桥接创建写入后端侧裁决，界面、工具列表与节点诊断都读这一个值，不各自再推导一遍。
+
+检查在 GUI 线程之外完成：[PythonProbe](../src/python/PythonProbe.h) 在 worker 上解析并以 `-I -B` 运行一次解释器，再把结果投递回对象线程。设置窗口在检查期间禁用提交，C++ 侧也拒绝并发提交，因此同一时刻只有一个探测进程。配置为空是合法状态（“未配置”）；配置存在但失效必须报告自己的原因（路径不存在 / 版本不兼容 / 缺 NumPy / 桥接缺失），不得回退成“未配置”。改解释器只写配置文件，下次启动才换运行时，运行中不热换 CPython。
+
+工具侧闸口不变：`ToolRegistry::create` 在不可用状态直接抛 `RegistryError`，不调用工厂与 resolver；`NodeRuntime` 只写节点诊断，业务端口是 `Missing`。契约：[环境状态、原因与非阻塞提交](../tests/python_environment_contract.cpp)、[工厂闸口零调用](../tests/tool_registry_contract.cpp)、[探测正负例](../tests/python_probe_contract.cpp)。
+
+发布取证走一次无窗口运行：`VisionRT.exe --python-report <file>` 写出 JSON，包含探测得到的解释器、前缀、`sys.path` 起点、实际提供 NumPy 的文件，以及本进程模块表里真实加载的 `python3*.dll` 与 `numpy*`（未配置时该表为空）。它不打开窗口，只构造控制器并等待环境检查落定，因此“没有随包解释器、也没有隐式加载”的结论可以对着进程取证，而不是对着配置推断。返回码 `0` 表示环境可用，`3` 表示报告已写出但环境不可用。
+
+这些报告由 [release_evidence.py](../tools/release_evidence.py) 汇总成一份发布记录：两仓与 Contracts 的提交、构建所用的编译器与配置、安装包的导入链证据，以及每个场景的环境报告。它不采信“写好了测试”，只采信互相一致的事实——Contracts 提交必须相同，`ready` 场景实际加载的 `python3*.dll` 与 NumPy 必须落在所选 prefix/base 内，未配置进程不得出现任何 Python 模块，安装包启动链不得导入 Python。任一缺失或矛盾即退出 2 并标记 `complete=false`，避免半份证据被当成发布依据。
+
 ## 数组与 Python 类型
 
 宿主 Array 是一块平坦缓冲加 Dense/Ragged 结构，Python 侧看到的类型只有一条规则：
@@ -82,15 +94,17 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 | 工程与工具注册 | [core](../src/core) |
 | 自定义工具编辑与存储 | [存储与模板/复制](../src/core/CustomToolStore.h)、[端口模型与改型/关系候选](../src/ui/ToolPortListModel.h)、[编辑器控制器](../src/ui/ToolEditorController.h)、[改型与删除对账](../src/core/ToolDefinition.h)、[编辑对话框](../src/ui/qml/CustomToolDialog.qml)、[存储契约](../tests/custom_tool_store_contract.cpp)、[端口模型契约](../tests/tool_port_list_model_test.cpp)、[控制器契约](../tests/tool_editor_controller_test.cpp) |
 | 工具声明 JSON | [DefinitionJson](../src/core/DefinitionJson.h)、[声明模型](../src/core/ToolDefinition.h)、[值约束](../src/core/ToolValueValidation.h)、[声明契约](../tests/definition_json_contract.cpp) |
-| 包索引、目录与交付校验 | [ModuleIndex](../src/core/ModuleIndex.h)、[ToolPackage](../src/core/ToolPackage.h)、[路径边界](../src/core/ToolPaths.h)、[双根发现契约](../tests/tool_discovery_contract.cpp)、[校验器](../tools/visionrt_validate_tool.cpp)、[JSON ZIP 部署](../tools/package_app.py)、[部署契约](../tests/test_package_app.py)、[真实构建集成](../tests/test_build_metadata_integration.py) |
+| 包索引、目录与交付校验 | [ModuleIndex](../src/core/ModuleIndex.h)、[ToolPackage](../src/core/ToolPackage.h)、[路径边界](../src/core/ToolPaths.h)、[双根发现契约](../tests/tool_discovery_contract.cpp)、[校验器](../tools/visionrt_validate_tool.cpp)、[JSON ZIP 部署、安装清单所有权与 PE 导入取证](../tools/package_app.py)、[部署、升级与导入表契约](../tests/test_package_app.py)、[真实构建集成](../tests/test_build_metadata_integration.py) |
+| 发布证据汇总与审计 | [release_evidence.py](../tools/release_evidence.py)、[审计规则](../tests/test_release_evidence.py)（`release_evidence_contract`，`package` 组） |
 | 值 JSON 编解码 | [ValueJson](../src/core/ValueJson.h)、[类型与数值契约](../tests/value_json_contract.cpp) |
-| 输出发布与缓存值合同 | [节点合同](../src/core/NodeContracts.h)、[值校验](../src/core/ToolValueValidation.h)、[发布快照](../src/runtime/Snapshot.h)、[运行时契约](../tests/runtime_contract.cpp)、[共享可写值与工具存储策略契约](../tests/runtime_value_contract.cpp)、[原生 DLL 契约](../tests/plugin_contract.cpp)、[Python 作者工具执行](../tests/python_tools_execution_test.cpp) |
+| 输出发布与缓存值合同 | [节点合同](../src/core/NodeContracts.h)、[值校验](../src/core/ToolValueValidation.h)、[发布快照](../src/runtime/Snapshot.h)、[运行时契约](../tests/runtime_contract.cpp)、[共享可写值与工具存储策略契约](../tests/runtime_value_contract.cpp)、[原生 DLL 契约](../tests/plugin_contract.cpp)、[Python 作者工具执行](../tests/python_tools_execution_test.cpp)、[隐藏图像不外泄](../tests/presentation_visibility_contract.cpp) |
 | 工程编辑与 JSON 存取 | [工程模型](../src/core/Project.h)、[序号解析](../src/core/Sequence.h)、[ProjectEditor](../src/core/ProjectEditor.h)、[工程操作状态唯一拥有者](../src/ui/ProjectOperations.h)、[ProjectStorage](../src/core/ProjectStorage.h)、[配置值构造](../src/core/ProjectValues.cpp)、[编辑契约](../tests/project_editor_contract.cpp)、[存储契约](../tests/project_storage_contract.cpp)、[配置隔离与文件值矩阵](../tests/project_value_contract.cpp)、[真实资源另存与跨盘 Python 读取](../tests/ui_project_paths_contract.cpp)、[真实UNC路径保存/重开/读取](../tests/ui_unc_paths_contract.cpp)、[工程样例](../examples) |
 | 输出复制与下层连接 | [候选查询](../src/core/ProjectEditor.h)、[名称列连接入口](../src/ui/AppControllerBindings.cpp)、[输出面板](../src/ui/qml/OutputPanel.qml)、[真实窗口契约](../tests/workbench_popups.cpp) |
 | 节点配置同步、调度与接收 | [RuntimeEngine](../src/runtime/RuntimeEngine.h)、[实例配置与所有权](../src/runtime/RuntimeInternal.h)、[节点执行](../src/runtime/NodeRuntime.cpp)、[Receiver](../src/runtime/Receiver.h)、[接收预检](../src/runtime/Receiver.cpp)、[宽 ID 真实选择与引用修复](../tests/ui_receiver_identity_contract.cpp)、[真实插件与工作台生命周期契约](../tests/plugin_contract.cpp) |
 | 目录状态与显式加载 | [公共注册接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Registry.h)、[ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h)、[CLI 契约](../tests/validator_cli_contract.py)、[目录重扫事务契约](../tests/plugin_contract.cpp) |
 | 原生实例、模块所有权与失败诊断 | [原生适配器](../src/plugins/PluginLoader.cpp)、[运行节点](../src/runtime/NodeRuntime.cpp)、[真实模块契约](../tests/module_registration_contract.cpp)、[输出跨 DLL 生命周期](../tests/native_value_lifetime_contract.cpp)、[插件契约](../tests/plugin_contract.cpp)、[CPU 工具与原始解码异常](../tests/cpu_tools_contract.cpp) |
 | Python 实例适配与包加载 | [PythonRuntime](../src/python/PythonRuntime.h)、[包加载器](../src/python/managed_packages.py)、[适配器契约](../tests/python_adapter_contract.cpp)、[惰性包加载契约](../tests/python_loading_contract.cpp)、[真实发行消费契约](../tests/python_tools_execution_test.cpp)、[独立安装跨语言链路与裁剪所有权](../tests/installed_pipeline_contract.cpp)、[真实安装包Python作者工具](../tests/installed_python_author_contract.cpp) |
+| Python 环境与设置 | [设置模型](../src/ui/UiPreferences.h)、[环境状态](../src/python/PythonEnvironment.h)、[探测](../src/python/PythonProbe.h)、[后端](../src/python/PythonBackend.h)、[环境与原因契约](../tests/python_environment_contract.cpp)、[设置键与类型契约](../tests/ui_preferences_contract.cpp) |
 | Python 值桥接与生命周期 | [PythonInterop](../src/python/PythonInterop.h)、[图像存储桥接](../src/python/PythonImages.cpp)、[Python 对象保活](../src/python/PythonStorage.h)、[值契约](../tests/python_value_contract.cpp)、[视图生命周期契约](../tests/python_array_lifetime_contract.cpp)、[解释器关闭契约](../tests/python_shutdown_contract.cpp) |
 | 执行状态、阶段与独立生命周期诊断 | [快照与诊断模型](../src/runtime/Snapshot.h)、[最终发布](../src/runtime/NodeRuntime.cpp)、[界面上下文与 JSON](../src/ui/Diagnostics.h)、[输出预览与捕获](../src/ui/OutputModel.h)、[真实模块及工作台契约](../tests/plugin_contract.cpp) |
 | 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[真实释放诊断与队列溢出](../tests/runtime_diagnostics_contract.cpp)、[热路径无 JSON 重读与实例重建](../tests/runtime_hotpath_contract.cpp)、[运行期 Python 延迟创建](../tests/runtime_python_lazy_contract.cpp)、[真实停止与关窗事件](../tests/workbench_cancellation.cpp)、[真实停止/复位/关窗交错](../tests/workbench_lifecycle_contract.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |

@@ -17,7 +17,7 @@ const visionrt::PythonEnvironment &pythonEnvironment()
         const auto probed = visionrt::probePythonEnvironment(QString::fromUtf8(VISIONRT_TEST_PYTHON_EXECUTABLE), &error);
         if (!probed)
             throw std::runtime_error(error.toStdString());
-        return probed->environment;
+        return *probed;
     }();
     return environment;
 }

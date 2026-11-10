@@ -672,30 +672,30 @@ struct PythonRuntime::Impl
             const auto utf8 = path.u8string();
             return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
         };
-        // Windows paths are case-insensitive and the interpreter reports the canonical spelling of
-        // the file it was started from.
-        const auto same = [&text](const std::string &left, const std::filesystem::path &right)
+        // CPython canonicalises the paths it reports: which separator it prints and whether it keeps
+        // a trailing one are formatting, not identity. Comparing the raw strings rejected a standard
+        // venv, whose prefix CPython answered with backslashes while the probe had normalised it.
+        const auto same = [](const std::string &reported, const std::filesystem::path &expected)
         {
-            const auto expected = text(right);
-            if (left.size() != expected.size())
-                return false;
-            for (std::size_t index = 0; index < left.size(); ++index)
-                if (std::tolower(static_cast<unsigned char>(left[index]))
-                    != std::tolower(static_cast<unsigned char>(expected[index])))
-                    return false;
-            return true;
+            return environmentPathEquals(reported, expected);
+        };
+        const auto mismatch = [&text](const char *label, const std::string &reported,
+                                      const std::filesystem::path &expected)
+        {
+            throw std::runtime_error(std::string("Python ") + label + " 与所选环境不一致：期望 " + text(expected)
+                                     + "，实际 " + reported);
         };
 
         auto sys = py::module_::import("sys");
         const auto executable = sys.attr("executable").cast<std::string>();
         if (!same(executable, environment.executable))
-            throw std::runtime_error("Python 解释器路径与所选环境不一致：" + executable);
+            mismatch("解释器路径", executable, environment.executable);
         const auto prefix = sys.attr("prefix").cast<std::string>();
         if (!same(prefix, environment.prefix))
-            throw std::runtime_error("Python sys.prefix 与所选环境不一致：" + prefix);
+            mismatch("sys.prefix", prefix, environment.prefix);
         const auto basePrefix = sys.attr("base_prefix").cast<std::string>();
         if (!same(basePrefix, environment.basePrefix))
-            throw std::runtime_error("Python sys.base_prefix 与所选环境不一致：" + basePrefix);
+            mismatch("sys.base_prefix", basePrefix, environment.basePrefix);
 
         // NumPy is not imported here on purpose. It is a single-phase extension module, so CPython
         // cannot initialise it a second time in one process; importing it at startup would make an

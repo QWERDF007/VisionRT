@@ -348,11 +348,12 @@ Rectangle {
             }
         }
 
-        // Field: 布尔类型默认值
+        // Field: 布尔类型默认值。A business output carries a default the same way an input does, and
+        // the host-owned fixed ports stay read-only in both directions.
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: !root.output && root.typeToken === "bool"
+            visible: root.typeToken === "bool"
             Label {
                 text: "默认值:"
                 Layout.preferredWidth: Theme.cardLabelWidth

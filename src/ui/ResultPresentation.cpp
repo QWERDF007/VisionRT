@@ -640,12 +640,19 @@ int ResultPresentation::imageCount() const
 
 QString ResultPresentation::selectedImageOutput() const
 {
-    // An ROI session always presents its frozen background, which is the real declared input.
+    // An ROI session presents the image its input edits as the canvas background. That is an internal
+    // read for editing, not a selection: it is reported only when the selector would offer the same
+    // choice, so an image the author hid can never be read back as the user's selection.
     if (roi_.active())
     {
-        if (const auto *declaration = host_.parameter(roi_.input(), false); declaration && declaration->image)
-            return imageKey(*declaration->image);
-        return {};
+        const auto *declaration = host_.parameter(roi_.input(), false);
+        if (!declaration || !declaration->image)
+            return {};
+        const auto key     = imageKey(*declaration->image);
+        const auto choices = imageChoices();
+        const bool offered = std::any_of(choices.begin(), choices.end(),
+                                         [&](const ImageChoice &choice) { return imageKey(choice.ref) == key; });
+        return offered ? key : QString{};
     }
     return imageSelection_ ? imageKey(*imageSelection_) : QString{};
 }

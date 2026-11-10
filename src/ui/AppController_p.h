@@ -4,6 +4,7 @@
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
 #include "python/PythonBackend.h"
+#include "python/PythonProbe.h"
 #include "runtime/RuntimeEngine.h"
 #include "ui/AppController.h"
 #include "ui/AssistPreview.h"
@@ -70,6 +71,9 @@ struct AppController::Impl : PresentationHost
     // next successful apply.
     QString                     settingsError;
     QString                     settingsErrorField;
+    // A draft whose interpreter is being checked. Exactly one commit is in flight: a second apply is
+    // refused until the check answers, so no two probes overlap.
+    std::optional<Settings>     pendingSettings;
     void requireAvailableTool(std::string_view toolId) const;
     // 读取随包发布的宿主与 Contracts 构建元数据；工具包的元数据在 loadToolsPackage 中读取。
     void loadComponentBuildInfo();
@@ -77,6 +81,9 @@ struct AppController::Impl : PresentationHost
     std::filesystem::path                  applicationDirectory;
     std::filesystem::path                  toolsPackageRoot;
     bool                                   toolsPackageInstalled{false};
+    // Set before the members are torn down: a runtime answer that was already posted must not read
+    // them, and the timer it was posted through is destroyed with this object.
+    bool                                   tearingDown = false;
     // 三个组件的构建元数据分别来自各自的构建产物元数据文件，缺失即为未知，绝不互相顶替。
     std::optional<ComponentBuildInfo>      hostBuildInfo;
     std::optional<ComponentBuildInfo>      contractsBuildInfo;
@@ -86,6 +93,24 @@ struct AppController::Impl : PresentationHost
     ProjectEditor                          editor;
     WireRouter                             wireRouter;
     std::unique_ptr<PythonBackend>         python;
+    // Each environment check runs here, off the GUI thread. One object, one check at a time.
+    std::unique_ptr<PythonProbe>           pythonProbe;
+    // What the running check is for: the startup environment decision, or a draft about to be
+    // committed. The startup answer starts the bridge; a draft answer only allows the write.
+    enum class PythonCheck
+    {
+        None,
+        Startup,
+        Draft
+    };
+    PythonCheck                            pythonCheck = PythonCheck::None;
+    // The environment the check accepted, kept for the evidence report. The status carries what the
+    // window shows; this carries the prefix and search paths the bridge was started with, which the
+    // status deliberately does not expose to every reader.
+    std::optional<PythonEnvironment>       pythonEnvironment;
+    // A probe answer arrived while the runtime was busy: the tool statuses are re-registered as soon
+    // as it is idle again, instead of reporting "只能刷新" to the user.
+    bool                                   pythonRefreshPending = false;
     std::unique_ptr<RuntimeEngine>         runtime;
     ToolTreeModel                          tools;
     OutputModel                            outputs;
@@ -258,6 +283,18 @@ struct AppController::Impl : PresentationHost
     void      requestSynchronize();
     void      refresh(bool rescan);
     void      requestRefresh(bool rescan);
+    // Starts the one check a selection gets. The phase becomes Probing for a startup check, so the
+    // tool list says why Python tools are not usable yet. False means a check was already running
+    // and the caller must not treat the running answer as its own.
+    bool      beginPythonCheck(const QString &selection, PythonCheck purpose);
+    void      finishPythonCheck();
+    // Re-registers every tool status once the runtime is idle; a request during a run waits.
+    void      schedulePythonRefresh();
+    // Commits a validated draft: writes the file, then the running behaviour. Emits settingsApplied.
+    bool      commitSettings(Settings next);
+    // Test seam only: pumps the event loop until the startup check and the refresh it triggers have
+    // both finished, so a test observes the same steady state a user reaches a moment later.
+    void      waitForPythonCheck();
     void      loadToolsPackage();
     void      rescanTools();
     void      refreshFinished();

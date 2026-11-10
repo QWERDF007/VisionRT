@@ -10,19 +10,74 @@
 
 #include <QCommandLineParser>
 #include <QDir>
+#include <QEventLoop>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSaveFile>
 #include <QTextStream>
 #include <QTimer>
 #include <algorithm>
 #include <charconv>
 #include <limits>
 #include <thread>
+
+namespace
+{
+// Release evidence has to describe a settled environment, not a check in flight. The deadline is
+// wider than the probe's own budget, so a hung interpreter is reported by the probe itself instead
+// of being cut off here and looking like a missing answer.
+constexpr int kReportBudgetMs = 120000;
+
+// Writes what the running process knows about Python and exits. It is the only way to record the
+// loaded-module snapshot the packaging checks compare against, and it deliberately opens no window:
+// a machine without a desktop can still prove which interpreter is resident.
+int writePythonReport(visionrt::AppController &controller, const QString &path)
+{
+    if (controller.pythonEnvironmentPhase() == QStringLiteral("probing"))
+    {
+        QEventLoop loop;
+        QTimer     poll;
+        QObject::connect(&poll, &QTimer::timeout, &loop,
+                         [&controller, &loop]
+                         {
+                             if (controller.pythonEnvironmentPhase() != QStringLiteral("probing"))
+                                 loop.quit();
+                         });
+        poll.start(50);
+        QTimer::singleShot(kReportBudgetMs, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+
+    const auto report = controller.pythonEnvironmentReport();
+    const auto bytes  = QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Indented);
+    QFileInfo  info(path);
+    QDir().mkpath(info.absolutePath());
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        QTextStream(stderr) << "cannot write the Python report: " << path << '\n';
+        return 4;
+    }
+    file.write(bytes);
+    if (!file.commit())
+    {
+        QTextStream(stderr) << "cannot commit the Python report: " << path << '\n';
+        return 4;
+    }
+    const auto ready = report.value(QStringLiteral("environment")).toMap().value(QStringLiteral("phase")).toString()
+                       == QStringLiteral("ready");
+    // A report about a broken environment is still evidence; the exit code is what tells the caller
+    // whether the environment behind it was usable.
+    return ready ? 0 : 3;
+}
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -50,6 +105,7 @@ int main(int argc, char *argv[])
     parser.addOption({"demo-settings", "Open the settings window on startup for verification"});
     parser.addOption({"demo-select", "Select first category on startup for verification"});
     parser.addOption({"run-once", "Execute pipeline once on startup"});
+    parser.addOption({"python-report", "Write the Python environment evidence report to a file and exit", "path"});
     parser.process(application);
     std::size_t workers = std::max(2u, std::thread::hardware_concurrency());
     if (parser.isSet("workers"))
@@ -79,6 +135,8 @@ int main(int argc, char *argv[])
         } logShutdown;
         QMetaObject::Connection startupConnection;
         visionrt::AppController controller(workers, QCoreApplication::applicationDirPath());
+        if (parser.isSet("python-report"))
+            return writePythonReport(controller, parser.value("python-report"));
         if (parser.isSet("project"))
         {
             const QString projectPath = parser.value("project");

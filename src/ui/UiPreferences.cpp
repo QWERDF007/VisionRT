@@ -107,16 +107,55 @@ bool writeRoot(const QJsonObject &root, QString *error)
     return true;
 }
 
+// Reads one settings section. A section that exists but is not an object is damage, exactly like a
+// key of the wrong type: silently reading it as empty would let the next save replace what the user
+// or a newer version wrote.
+bool readSection(const QJsonObject &root, const QString &key, QJsonObject &section, QString *error)
+{
+    const auto value = root.value(key);
+    if (value.isUndefined() || value.isNull())
+        return true;
+    if (!value.isObject())
+    {
+        if (error)
+            *error = QStringLiteral("设置项 %1 必须是对象").arg(key);
+        return false;
+    }
+    section = value.toObject();
+    return true;
+}
+
+bool requireType(const QJsonObject &section, const QString &sectionName, const QString &key,
+                 QJsonValue::Type type, const QString &expected, QString *error)
+{
+    if (!section.contains(key) || section.value(key).type() == type)
+        return true;
+    if (error)
+        *error = QStringLiteral("设置项 %1.%2 必须是%3").arg(sectionName, key, expected);
+    return false;
+}
+
 // Reads the three keys of an existing document. A key that is present but cannot be understood is
 // damage, not a reason to fall back to a default and overwrite it on the next save.
 bool applyStoredSettings(const QJsonObject &root, Settings &settings, QString *error)
 {
-    settings.editBuiltins = root.value(QStringLiteral("toolEditor"))
-                                .toObject()
-                                .value(QStringLiteral("editBuiltins"))
-                                .toBool(false);
+    QJsonObject editor;
+    QJsonObject logging;
+    QJsonObject python;
+    if (!readSection(root, QStringLiteral("toolEditor"), editor, error)
+        || !readSection(root, QStringLiteral("logging"), logging, error)
+        || !readSection(root, QStringLiteral("python"), python, error))
+        return false;
+    if (!requireType(editor, QStringLiteral("toolEditor"), QStringLiteral("editBuiltins"), QJsonValue::Bool,
+                     QStringLiteral("布尔值"), error)
+        || !requireType(logging, QStringLiteral("logging"), QStringLiteral("level"), QJsonValue::String,
+                        QStringLiteral("字符串"), error)
+        || !requireType(python, QStringLiteral("python"), QStringLiteral("executable"), QJsonValue::String,
+                        QStringLiteral("字符串"), error))
+        return false;
 
-    const auto logging = root.value(QStringLiteral("logging")).toObject();
+    settings.editBuiltins = editor.value(QStringLiteral("editBuiltins")).toBool(false);
+
     if (logging.contains(QStringLiteral("level")))
     {
         const auto key = logging.value(QStringLiteral("level")).toString().toStdString();
@@ -129,8 +168,7 @@ bool applyStoredSettings(const QJsonObject &root, Settings &settings, QString *e
         }
     }
 
-    settings.pythonExecutable =
-        root.value(QStringLiteral("python")).toObject().value(QStringLiteral("executable")).toString();
+    settings.pythonExecutable = python.value(QStringLiteral("executable")).toString();
     return true;
 }
 
@@ -146,8 +184,16 @@ bool readForWrite(QJsonObject &root, QString *error = nullptr)
         return false;
     }
     Settings stored;
-    if (document.state == SettingsState::Loaded && !applyStoredSettings(document.root, stored, error))
-        return false;
+    if (document.state == SettingsState::Loaded)
+    {
+        QString reason;
+        if (!applyStoredSettings(document.root, stored, &reason))
+        {
+            if (error)
+                *error = QStringLiteral("设置文件（%1）不可用：%2").arg(resolvePreferencesPath(), reason);
+            return false;
+        }
+    }
     root = std::move(document.root);
     return true;
 }
@@ -162,12 +208,21 @@ SettingsState UiPreferences::loadSettings(Settings &settings, QString *error)
 {
     settings      = Settings{};
     auto document = readDocument();
-    if (error)
-        *error = document.error;
     if (document.state != SettingsState::Loaded)
+    {
+        if (error)
+            *error = document.error;
         return document.state;
-    if (!applyStoredSettings(document.root, settings, error))
+    }
+    QString reason;
+    if (!applyStoredSettings(document.root, settings, &reason))
+    {
+        if (error)
+            *error = QStringLiteral("设置文件（%1）不可用：%2").arg(resolvePreferencesPath(), reason);
         return SettingsState::Unreadable;
+    }
+    if (error)
+        error->clear();
     return SettingsState::Loaded;
 }
 

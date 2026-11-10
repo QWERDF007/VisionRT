@@ -9,9 +9,12 @@ The CPython interpreter and its packages stay in the user's chosen environment.
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -73,6 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validator", default=None, help="Explicit path to visionrt_validate_tool executable.")
     parser.add_argument("--deploy-tools-only", action="store_true", help="Deploy or replace tools package in existing installation without full repackaging.")
     parser.add_argument("--allow-dirty", action="store_true", help="Allow dirty or unknown build metadata in release package.")
+    parser.add_argument("--evidence", default=None, help="Path of the package evidence JSON (default: <build-dir>/evidence/package-evidence.json).")
     return parser.parse_args()
 
 
@@ -93,11 +97,17 @@ def default_install_dir() -> Path:
     return REPO_ROOT / "install" / f"{PROJECT_NAME_LONG}-{project_version()}"
 
 
-# Everything the application creates inside its own directory. A clean install replaces program
-# files only: user tools, logs and interaction preferences are data, not build output. The marker
-# itself is preserved too — it is what authorises the next clean, so deleting it would strand a
-# failed package without protection.
-PRESERVED_INSTALL_ENTRIES = frozenset({"custom-tools", "logs", "ui-preferences.json", ".visionrt_package"})
+# Everything the application creates inside its own directory and keeps across an upgrade. A clean
+# install replaces program files only: user tools, logs and interaction preferences are data, not
+# build output. The marker itself is preserved too, because it is what authorises the next clean.
+PRESERVED_INSTALL_ENTRIES = frozenset(
+    {"custom-tools", "logs", "ui-preferences.json", ".visionrt_package", "install-manifest.json"}
+)
+
+# The previous package's own file list. It is the only authority for "this file is mine": anything
+# absent from it belongs to the user and survives an upgrade untouched.
+MANIFEST_FILE = "install-manifest.json"
+MANIFEST_SCHEMA_VERSION = 1
 
 
 def build_release(build_dir: Path, config: str, parallel: int) -> None:
@@ -162,6 +172,48 @@ def target_architecture(build_dir: Path) -> str:
     return "x86"
 
 
+def read_install_manifest(path: Path) -> set[str]:
+    """Files the previous package installed. A missing manifest means no claim on anything."""
+    manifest = path / MANIFEST_FILE
+    if not manifest.is_file():
+        return set()
+    try:
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"install manifest is unreadable: {manifest}: {error}") from error
+    files = document.get("files") if isinstance(document, dict) else None
+    if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
+        raise RuntimeError(f"install manifest is invalid: {manifest}")
+    return set(files)
+
+
+def write_install_manifest(install_dir: Path) -> None:
+    """Records exactly which files this package owns, for the next upgrade to remove."""
+    files = sorted(
+        item.relative_to(install_dir).as_posix()
+        for item in install_dir.rglob("*")
+        if item.is_file()
+        and item.name not in {MANIFEST_FILE, MARKER_FILE}
+        and not is_reparse_point(item)
+    )
+    payload = {"schema_version": MANIFEST_SCHEMA_VERSION, "files": files}
+    (install_dir / MANIFEST_FILE).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def remove_empty_directories(root: Path) -> None:
+    """Removes directories the package emptied, never a user data root."""
+    preserved = {root / name for name in PRESERVED_INSTALL_ENTRIES}
+    directories = sorted((item for item in root.rglob("*") if item.is_dir() and not item.is_symlink()),
+                         key=lambda item: len(item.parts), reverse=True)
+    for directory in directories:
+        if directory in preserved:
+            continue
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+
+
 def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
     """Prepare install directory safely according to marker rules."""
     resolved = path.resolve()
@@ -177,23 +229,50 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
         path.mkdir(parents=True, exist_ok=True)
         return
 
+    if not path.exists():
+        path.mkdir(parents=True)
+        return
+
+    entries = list(path.iterdir())
     marker = path / MARKER_FILE
-    if path.is_dir() and any(path.iterdir()) and not marker.exists() and not force:
+    if entries and not marker.exists() and not force:
         raise RuntimeError(
             f"install dir exists and has no {MARKER_FILE}: {path}; "
             "pass --force-clean to remove it or --no-clean to reuse it"
         )
 
-    if path.exists():
-        for child in path.iterdir():
+    owned = read_install_manifest(path)
+    if entries and not owned and not force:
+        # Without a manifest the package cannot tell its own files from user data. Refusing is the
+        # only answer that cannot destroy something the user wrote.
+        raise RuntimeError(
+            f"install dir has no {MANIFEST_FILE}: {path}; the package cannot separate its own files "
+            "from user data, so nothing was removed. Pass --force-clean to replace the whole "
+            "directory, or --no-clean to keep it."
+        )
+
+    if not owned:
+        # --force-clean on a directory that predates the manifest: the user asked for a full replace.
+        for child in entries:
             if child.name in PRESERVED_INSTALL_ENTRIES:
                 continue
             if child.is_dir() and not child.is_symlink():
                 shutil.rmtree(child)
             else:
                 child.unlink()
-    else:
-        path.mkdir(parents=True)
+        return
+
+    root = path.resolve()
+    for relative in sorted(owned, key=lambda value: value.count("/"), reverse=True):
+        candidate = (root / relative).resolve()
+        if root not in candidate.parents:
+            raise RuntimeError(f"install manifest points outside the install dir: {relative}")
+        if candidate.is_file() or candidate.is_symlink():
+            candidate.unlink()
+    remove_empty_directories(path)
+    remaining = sum(1 for item in path.rglob("*") if item.is_file())
+    if remaining:
+        print(f"preserving {remaining} file(s) this package does not own under {path}")
 
 
 def write_package_marker(
@@ -692,6 +771,131 @@ def is_reparse_point(path: Path) -> bool:
         return False
 
 
+# A binary that names the interpreter in its import table pulls CPython into the process before any
+# host decision is made. That is what this package must never do, so the check reads the loader's
+# own tables instead of trusting the build configuration that was supposed to prevent it.
+PYTHON_RUNTIME_IMPORT = re.compile(r"^python3[0-9]*\.dll$", re.IGNORECASE)
+PE_IMPORT_DIRECTORY = 1
+PE_DELAY_IMPORT_DIRECTORY = 13
+
+
+def _rva_to_offset(rva: int, sections: list[tuple[int, int, int, int]]) -> int | None:
+    for virtual_address, virtual_size, raw_size, raw_pointer in sections:
+        span = max(virtual_size, raw_size)
+        if virtual_address <= rva < virtual_address + span:
+            return raw_pointer + (rva - virtual_address)
+    return None
+
+
+def _read_names(data: bytes, rva: int, sections: list[tuple[int, int, int, int]],
+                entry_size: int, name_offset: int) -> list[str]:
+    names: list[str] = []
+    start = _rva_to_offset(rva, sections)
+    if start is None:
+        return names
+    for index in range(4096):
+        position = start + index * entry_size
+        if position + entry_size > len(data):
+            break
+        if not any(data[position:position + entry_size]):
+            break
+        name_rva = struct.unpack_from("<I", data, position + name_offset)[0]
+        if not name_rva:
+            continue
+        name_position = _rva_to_offset(name_rva, sections)
+        if name_position is None or name_position >= len(data):
+            continue
+        end = data.find(b"\0", name_position, min(len(data), name_position + 260))
+        if end < 0:
+            continue
+        names.append(data[name_position:end].decode("ascii", errors="replace"))
+    return names
+
+
+def read_pe_imports(path: Path) -> tuple[list[str], list[str]]:
+    """DLL names a PE file imports, from the import table and the delay-load table.
+
+    Both tables matter: a delay-loaded `python3*.dll` is still a runtime dependency the package
+    would carry, just resolved later. Malformed files raise instead of reporting "no imports",
+    because an unreadable binary must not look like a clean one.
+    """
+    data = path.read_bytes()
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        raise ValueError(f"not a PE file: {path}")
+    pe_offset = struct.unpack_from("<I", data, 0x3C)[0]
+    if pe_offset + 0x18 > len(data) or data[pe_offset:pe_offset + 4] != b"PE\0\0":
+        raise ValueError(f"not a PE file: {path}")
+    section_count = struct.unpack_from("<H", data, pe_offset + 6)[0]
+    optional_size = struct.unpack_from("<H", data, pe_offset + 20)[0]
+    optional = pe_offset + 24
+    if optional + 2 > len(data):
+        raise ValueError(f"truncated PE header: {path}")
+    magic = struct.unpack_from("<H", data, optional)[0]
+    if magic == 0x10B:
+        count_offset, directory_offset = optional + 92, optional + 96
+    elif magic == 0x20B:
+        count_offset, directory_offset = optional + 108, optional + 112
+    else:
+        raise ValueError(f"unknown PE optional header magic 0x{magic:x}: {path}")
+    directory_count = struct.unpack_from("<I", data, count_offset)[0]
+    sections: list[tuple[int, int, int, int]] = []
+    section_table = optional + optional_size
+    for index in range(section_count):
+        entry = section_table + index * 40
+        if entry + 40 > len(data):
+            raise ValueError(f"truncated section table: {path}")
+        virtual_size, virtual_address, raw_size, raw_pointer = struct.unpack_from("<IIII", data, entry + 8)
+        sections.append((virtual_address, virtual_size, raw_size, raw_pointer))
+
+    def directory(index: int) -> int:
+        if index >= directory_count:
+            return 0
+        return struct.unpack_from("<I", data, directory_offset + index * 8)[0]
+
+    return (
+        _read_names(data, directory(PE_IMPORT_DIRECTORY), sections, 20, 12),
+        _read_names(data, directory(PE_DELAY_IMPORT_DIRECTORY), sections, 32, 4),
+    )
+
+
+def shipped_pe_files(install_dir: Path) -> list[Path]:
+    return sorted(p for p in install_dir.rglob("*") if p.suffix.lower() in {".exe", ".dll", ".pyd"})
+
+
+def python_runtime_imports(install_dir: Path, executable: Path) -> tuple[list[str], list[str]]:
+    """Files whose import tables name a Python runtime, and the startup chain that was walked.
+
+    The walk starts at the executable and follows shipped modules it imports, because that is the
+    chain the process loads before it can decide anything. A module no shipped binary imports (the
+    bridge included) is not on that chain: it is loaded only after an environment was accepted.
+    """
+    by_name: dict[str, Path] = {}
+    for candidate in shipped_pe_files(install_dir):
+        by_name.setdefault(candidate.name.lower(), candidate)
+
+    offenders: list[str] = []
+    chain: list[str] = []
+    pending = [executable]
+    visited: set[Path] = set()
+    while pending:
+        current = pending.pop(0)
+        if current in visited or not current.is_file():
+            continue
+        visited.add(current)
+        chain.append(current.name)
+        try:
+            imports, delay_imports = read_pe_imports(current)
+        except ValueError as error:
+            raise RuntimeError(f"package verification failed: {error}") from error
+        for name in imports + delay_imports:
+            if PYTHON_RUNTIME_IMPORT.match(name):
+                offenders.append(f"{current.name} imports {name}")
+            dependency = by_name.get(name.lower())
+            if dependency is not None and dependency not in visited:
+                pending.append(dependency)
+    return offenders, chain
+
+
 def verify_tools_package(tools_pkg: Path, validator: Path | None = None) -> None:
     """Verify external tools package using the host JSON validator (--package)."""
     if not tools_pkg.is_dir():
@@ -718,6 +922,67 @@ def verify_tools_package(tools_pkg: Path, validator: Path | None = None) -> None
     if res.returncode != 0:
         err = res.stderr.strip() or res.stdout.strip()
         raise RuntimeError(f"Host tools package validation failed via validator:\n{err}")
+
+
+def bundled_python_runtime(install_dir: Path) -> list[str]:
+    """Every place the package carries an interpreter, its standard library or its DLL directory.
+
+    The scan is recursive on purpose: a nested copy is exactly what a top-level glob misses, and an
+    interpreter nobody chose must never be reachable from the installation.
+    """
+    found = sorted(str(candidate) for pattern in ("python3*.dll", "python.exe", "pythonw.exe")
+                   for candidate in install_dir.rglob(pattern))
+    found.extend(str(path) for path in (install_dir / "python" / "Lib", install_dir / "python" / "DLLs")
+                 if path.exists())
+    return found
+
+
+def write_package_evidence(install_dir: Path, path: Path, architecture: str) -> Path:
+    """Records what the verified package ships and what its startup chain imports.
+
+    The file is the machine-readable half of the release claim: no interpreter in the tree, none in
+    the import tables the loader walks, and the bridge present for the on-demand path. It is written
+    only after verification passed, so a failing package never leaves evidence behind.
+    """
+    executable = install_dir / f"{PROJECT_NAME}.exe"
+    offenders, startup_chain = python_runtime_imports(install_dir, executable)
+    product_prefixes = ("visionrt", "quickui")
+    binaries = []
+    for candidate in shipped_pe_files(install_dir):
+        name = candidate.name.lower()
+        if not name.startswith(product_prefixes) and not PYTHON_RUNTIME_IMPORT.match(name):
+            continue
+        try:
+            imports, delay_imports = read_pe_imports(candidate)
+        except (OSError, ValueError) as error:
+            # Recorded, not hidden: evidence that silently drops a file it could not read would read
+            # like a clean import table.
+            binaries.append({"name": candidate.name, "unreadable": str(error)})
+            continue
+        binaries.append({
+            "name": candidate.name,
+            "imports": imports,
+            "delayImports": delay_imports,
+            "pythonImports": sorted({item for item in imports + delay_imports
+                                     if PYTHON_RUNTIME_IMPORT.match(item)}),
+        })
+    payload = {
+        "schemaVersion": 1,
+        "product": PROJECT_NAME,
+        "version": project_version(),
+        "architecture": architecture,
+        "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "fileCount": sum(1 for item in install_dir.rglob("*") if item.is_file()),
+        "bundledPythonRuntime": bundled_python_runtime(install_dir),
+        "startupChain": startup_chain,
+        "startupPythonImports": offenders,
+        "bridgePresent": (install_dir / "visionrt_python_bridge.dll").is_file(),
+        "binaries": binaries,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"package evidence written: {path}")
+    return path
 
 
 def verify_package(
@@ -753,24 +1018,29 @@ def verify_package(
         ])
 
     # The interpreter, its standard library and NumPy are the user's environment. A package that
-    # carries them would run a second runtime nobody selected, so their presence is a failure.
-    bundled_runtime = [
-        str(p)
-        for p in list(install_dir.glob("python3*.dll"))
-        + list(install_dir.glob("python.exe"))
-        + list(install_dir.glob("pythonw.exe"))
-        + [install_dir / "python" / "Lib", install_dir / "python" / "DLLs"]
-        if p.exists()
-    ]
+    # carries them would run a second runtime nobody selected, so their presence anywhere in the tree
+    # is a failure: a nested copy is exactly what a top-level glob misses.
+    bundled_runtime = bundled_python_runtime(install_dir)
 
     missing_files = [str(p) for p in required_files if not p.is_file()]
     linked_paths = [str(p) for p in install_dir.rglob("*") if is_reparse_point(p)]
+
+    # A recursive file scan proves no interpreter was copied in; the import tables prove the shipped
+    # binaries do not pull one in either. A package can pass the first check and still load CPython
+    # before the host has decided anything, so both are part of the same claim. Import tables are a
+    # property of the Windows loader, so the walk applies where the product actually ships.
+    if platform_key() == "windows":
+        python_imports, startup_chain = python_runtime_imports(install_dir, install_dir / f"{PROJECT_NAME}.exe")
+    else:
+        python_imports, startup_chain = [], []
 
     problems = []
     if missing_files:
         problems.append("missing files: " + ", ".join(missing_files))
     if bundled_runtime:
         problems.append("package ships a Python runtime: " + ", ".join(bundled_runtime))
+    if python_imports:
+        problems.append("startup chain imports a Python runtime: " + "; ".join(python_imports))
     if linked_paths:
         problems.append("package contains links: " + ", ".join(linked_paths))
 
@@ -839,6 +1109,9 @@ def main() -> int:
             external_index=ext_index,
             allow_dirty=args.allow_dirty,
         )
+        # The replaced tools package changes what this installation owns, so the ownership record is
+        # rebuilt from what is actually on disk.
+        write_install_manifest(install_dir)
         print(f"tools package successfully deployed into {install_dir / 'tools-package'}")
         return 0
 
@@ -891,15 +1164,22 @@ def main() -> int:
         cleanup_release_debug_artifacts(install_dir)
         write_qt_conf(install_dir)
         write_windows_marker(install_dir, build_dir, arch, version, args.skip_dependencies)
+        # Last, so the record names exactly the files this package leaves behind.
+        write_install_manifest(install_dir)
         if not args.skip_verify:
             verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
+            evidence = resolve_project_path(args.evidence) if args.evidence else build_dir / "evidence" / "package-evidence.json"
+            write_package_evidence(install_dir, evidence, arch)
         print(f"\npackage complete: {install_dir}")
         print(f"double-click to run: {packaged_exe}")
     else:
         write_qt_conf(install_dir)
         write_package_marker(install_dir, build_dir, version)
+        write_install_manifest(install_dir)
         if not args.skip_verify:
             verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
+            evidence = resolve_project_path(args.evidence) if args.evidence else build_dir / "evidence" / "package-evidence.json"
+            write_package_evidence(install_dir, evidence, target_architecture(build_dir))
         print(f"\npackage complete: {install_dir}")
 
     return 0

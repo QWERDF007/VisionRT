@@ -155,6 +155,45 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
     unavailable(runtime.factory(missing), ErrorCode::NotFound);
 }
 
+// A tool whose import fails is that tool's load state, not a statement about the interpreter. The
+// declaration still refreshes cleanly, the failing entry names its own missing module, and a
+// sibling tool in the same refresh keeps loading and executing.
+void partialFailure(PythonRuntime &runtime, const std::filesystem::path &root)
+{
+    const auto healthy = definitionFor(root, "python.partial_ok", "partial_ok.py", ToolOrigin::Custom, "partial");
+    const auto broken  = definitionFor(root, "python.partial_broken", "partial_broken.py", ToolOrigin::Custom, "partial");
+    write(root / "python/custom/partial/partial_ok.py",
+          "def execute(inputs): return {'outputs': {2: 42, 0: 0, 1: ''}, 'detail': ''}\n");
+    write(root / "python/custom/partial/partial_broken.py", "import missing_module_for_partial_failure\n");
+
+    const std::array definitions{healthy, broken};
+    const auto       statuses = runtime.refresh(definitions);
+    assert(statuses.size() == 2);
+    for (const auto &status : statuses)
+        assert(status.status.code == 0);
+
+    ToolRegistry registry;
+    registry.addDefinition(healthy);
+    registry.addDefinition(broken);
+    for (const auto &loaded : statuses)
+        registry.setPythonImplementation(loaded.toolId, runtime.factory(*registry.find(loaded.toolId)),
+                                         loaded.status);
+
+    auto working = registry.create("python.partial_ok", {});
+    assert(working->initialize({}).code == 0);
+    assert(execute(*working) == 42);
+
+    auto       failing = registry.create("python.partial_broken", {});
+    const auto failure = failing->initialize({});
+    assert(!failure && failure.code == hostCode(ErrorCode::PythonUnavailable));
+    assert(failure.detail.find("missing_module_for_partial_failure") != std::string::npos);
+    failing.reset();
+
+    // The sibling is still usable after the failure: the interpreter was never marked unusable.
+    assert(execute(*working) == 42);
+    assert(working->release().code == 0);
+}
+
 void nativeHelper(PythonRuntime &runtime, const std::filesystem::path &root)
 {
     auto definition                = definitionFor(root, "python.native", "native.py");
@@ -486,6 +525,7 @@ try
                                  sharedPackages(runtime, root);
                                  classInstances(runtime, root);
                                  freshGenerations(runtime, root);
+                                 partialFailure(runtime, root);
                                  nativeHelper(runtime, root);
                                  packageBoundaries(runtime, root);
                                   coldConcurrentRollback(runtime, root);

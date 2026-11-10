@@ -4,6 +4,8 @@ import copy
 import json
 import os
 from pathlib import Path
+import shutil
+import struct
 import sys
 import subprocess
 import tempfile
@@ -16,6 +18,45 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import package_app
 
 from toolchain_support import find_cmake, find_git
+
+
+def write_pe(path: Path, imports: tuple[str, ...] = (), delay_imports: tuple[str, ...] = ()) -> None:
+    """Writes a minimal PE32+ image whose import tables name exactly `imports` and `delay_imports`.
+
+    Package verification reads the loader's tables, so a fixture that stands in for the executable
+    has to be a real image: a text file would test the error path and nothing else.
+    """
+    headers = 0x400
+    raw = 0x400
+    image = bytearray(headers + raw)
+    image[0:2] = b"MZ"
+    struct.pack_into("<I", image, 0x3C, 0x80)
+    image[0x80:0x84] = b"PE\0\0"
+    coff = 0x84
+    struct.pack_into("<HHIIIHH", image, coff, 0x8664, 1, 0, 0, 0, 0xF0, 0x2022)
+    optional = coff + 20
+    struct.pack_into("<H", image, optional, 0x20B)
+    struct.pack_into("<I", image, optional + 108, 16)  # NumberOfRvaAndSizes
+    section = optional + 0xF0
+    image[section:section + 8] = b".rdata\0\0"
+    struct.pack_into("<IIII", image, section + 8, raw, 0x1000, raw, headers)
+
+    def write_table(directory_rva: int, names_rva: int, entry_size: int,
+                    name_offset: int, entries: tuple[str, ...]) -> None:
+        for index, name in enumerate(entries):
+            descriptor = headers + (directory_rva - 0x1000) + index * entry_size
+            struct.pack_into("<I", image, descriptor + name_offset, names_rva + index * 0x40)
+            encoded = name.encode("ascii") + b"\0"
+            position = headers + (names_rva - 0x1000) + index * 0x40
+            image[position:position + len(encoded)] = encoded
+
+    write_table(0x1000, 0x1100, 20, 12, imports)
+    write_table(0x1200, 0x1300, 32, 4, delay_imports)
+    if imports:
+        struct.pack_into("<II", image, optional + 112 + 8, 0x1000, 20 * (len(imports) + 1))
+    if delay_imports:
+        struct.pack_into("<II", image, optional + 112 + 13 * 8, 0x1200, 32 * (len(delay_imports) + 1))
+    path.write_bytes(bytes(image))
 
 
 class ToolsDeploymentContract(unittest.TestCase):
@@ -217,7 +258,8 @@ class InstallationContract(unittest.TestCase):
     def test_required_runtime_files_and_clean_target_protection(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-install-") as temporary:
             root = Path(temporary)
-            for name in ("VisionRT.exe", package_app.MARKER_FILE, "quickui.dll", "visionrt_python_bridge.dll"):
+            write_pe(root / "VisionRT.exe")
+            for name in (package_app.MARKER_FILE, "quickui.dll", "visionrt_python_bridge.dll"):
                 (root / name).touch()
             (root / "build_info.json").write_text(
                 '{"schema_version": 1, "component": "VisionRT", "version": "0.1.0", "commit": "abc", "dirty": false, "built_at_epoch": 1793082712}\n',
@@ -237,38 +279,113 @@ class InstallationContract(unittest.TestCase):
                     else:
                         (root / name).touch()
             # A package that carries an interpreter is not deployable: the environment is the
-            # user's, and a second runtime would never be the one they selected.
+            # user's, and a second runtime would never be the one they selected. A nested copy is
+            # the case a top-level listing misses, so it is checked the same way.
             (root / "python312.dll").touch()
             with self.assertRaisesRegex(RuntimeError, "ships a Python runtime"):
                 package_app.verify_package(root, require_qt=False)
             (root / "python312.dll").unlink()
+            nested = root / "tools-package" / "vendor"
+            nested.mkdir(parents=True)
+            (nested / "python.exe").write_text("interpreter", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "ships a Python runtime"):
+                package_app.verify_package(root, require_qt=False)
+            shutil.rmtree(root / "tools-package")
             for protected in (package_app.REPO_ROOT, package_app.REPO_ROOT / "src"):
                 with self.subTest(path=protected), self.assertRaisesRegex(RuntimeError, "refusing to clean"):
                     package_app.clear_install_directory(protected, clean=True, force=True)
 
     def test_clean_replaces_program_files_but_keeps_user_data(self) -> None:
-        """A clean install replaces the program, never what the user authored or configured."""
+        """A clean install replaces the files it installed, never what the user authored."""
         with tempfile.TemporaryDirectory(prefix="visionrt-userdata-") as temporary:
             root = Path(temporary)
             (root / package_app.MARKER_FILE).touch()
             (root / "custom-tools").mkdir()
             (root / "custom-tools" / "tools").mkdir()
+            (root / "custom-tools" / "tools" / "mine.json").write_text("{}", encoding="utf-8")
             (root / "logs").mkdir()
             (root / "logs" / "visionrt.log").write_text("log", encoding="utf-8")
             (root / "ui-preferences.json").write_text("{}", encoding="utf-8")
             (root / "stale.dll").write_text("old", encoding="utf-8")
+            (root / "Qt6Core.dll").write_text("qt", encoding="utf-8")
+            (root / "platforms").mkdir()
+            (root / "platforms" / "qwindows.dll").write_text("plugin", encoding="utf-8")
+            # The previous package owned exactly these three files; the user's folder is not in the
+            # record and must survive even though it sits inside the installation.
+            (root / package_app.MANIFEST_FILE).write_text(
+                json.dumps({"schema_version": package_app.MANIFEST_SCHEMA_VERSION,
+                            "files": ["stale.dll", "Qt6Core.dll", "platforms/qwindows.dll"]}),
+                encoding="utf-8")
 
             package_app.clear_install_directory(root, clean=True, force=False)
 
-            self.assertFalse((root / "stale.dll").exists(), "program files must be replaced")
+            for name in ("stale.dll", "Qt6Core.dll", "platforms"):
+                self.assertFalse((root / name).exists(), f"{name} was installed by the package and must be replaced")
             for name in package_app.PRESERVED_INSTALL_ENTRIES:
                 self.assertTrue((root / name).exists(), f"{name} must survive a clean install")
             self.assertEqual((root / "logs" / "visionrt.log").read_text(encoding="utf-8"), "log")
+            self.assertEqual((root / "custom-tools" / "tools" / "mine.json").read_text(encoding="utf-8"), "{}")
+
+    def test_clean_keeps_files_the_package_never_installed(self) -> None:
+        """An upgrade owns its own files only: anything else is user data and stays untouched."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-owned-") as temporary:
+            root = Path(temporary)
+            (root / package_app.MARKER_FILE).touch()
+            (root / "VisionRT.exe").write_text("old program", encoding="utf-8")
+            (root / "scripts").mkdir()
+            (root / "scripts" / "my_post_step.py").write_text("print('mine')", encoding="utf-8")
+            (root / "project.vrt.json").write_text('{"name": "mine"}', encoding="utf-8")
+            (root / package_app.MANIFEST_FILE).write_text(
+                json.dumps({"schema_version": package_app.MANIFEST_SCHEMA_VERSION, "files": ["VisionRT.exe"]}),
+                encoding="utf-8")
+
+            package_app.clear_install_directory(root, clean=True, force=False)
+
+            self.assertFalse((root / "VisionRT.exe").exists(), "the package did not replace its own file")
+            self.assertEqual((root / "scripts" / "my_post_step.py").read_text(encoding="utf-8"), "print('mine')",
+                             "an upgrade deleted a user script")
+            self.assertEqual((root / "project.vrt.json").read_text(encoding="utf-8"), '{"name": "mine"}',
+                             "an upgrade deleted a user project file")
+
+    def test_clean_without_manifest_refuses_to_guess(self) -> None:
+        """Without a record of what it installed, the package must not decide what is disposable."""
+        for force in (False, True):
+            with self.subTest(force=force), tempfile.TemporaryDirectory(prefix="visionrt-nomanifest-") as temporary:
+                root = Path(temporary)
+                (root / package_app.MARKER_FILE).touch()
+                (root / "user_notes.txt").write_text("keep me", encoding="utf-8")
+                if force:
+                    # An explicit full replace is the user's decision; it still keeps the data roots.
+                    (root / "custom-tools").mkdir()
+                    package_app.clear_install_directory(root, clean=True, force=True)
+                    self.assertFalse((root / "user_notes.txt").exists())
+                    self.assertTrue((root / "custom-tools").exists())
+                else:
+                    with self.assertRaisesRegex(RuntimeError, package_app.MANIFEST_FILE):
+                        package_app.clear_install_directory(root, clean=True, force=False)
+                    self.assertEqual((root / "user_notes.txt").read_text(encoding="utf-8"), "keep me")
+
+    def test_manifest_records_every_installed_file(self) -> None:
+        """The record the next upgrade trusts is written from what is actually on disk."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-manifest-") as temporary:
+            root = Path(temporary)
+            (root / "bin").mkdir()
+            (root / "bin" / "plugin.dll").write_text("dll", encoding="utf-8")
+            (root / "VisionRT.exe").write_text("exe", encoding="utf-8")
+            (root / package_app.MARKER_FILE).touch()
+
+            package_app.write_install_manifest(root)
+
+            files = package_app.read_install_manifest(root)
+            self.assertEqual(files, {"bin/plugin.dll", "VisionRT.exe"})
+            self.assertNotIn(package_app.MANIFEST_FILE, files)
+            self.assertNotIn(package_app.MARKER_FILE, files)
 
     def test_package_without_bridge_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-bridge-") as temporary:
             root = Path(temporary)
-            for name in ("VisionRT.exe", package_app.MARKER_FILE, "quickui.dll"):
+            write_pe(root / "VisionRT.exe")
+            for name in (package_app.MARKER_FILE, "quickui.dll"):
                 (root / name).touch()
             with self.assertRaisesRegex(RuntimeError, "visionrt_python_bridge"):
                 package_app.verify_package(root, require_qt=False, allow_dirty=True)
@@ -287,6 +404,55 @@ class InstallationContract(unittest.TestCase):
 
             self.assertTrue((install / "visionrt_python_bridge.dll").is_file(),
                             "packaging dropped the Python bridge")
+
+
+class PeImportContract(unittest.TestCase):
+    """The "no interpreter is carried" claim is about files, so it is read from the loader's tables."""
+
+    def test_reads_static_and_delay_imports(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-pe-") as temporary:
+            image = Path(temporary) / "sample.exe"
+            write_pe(image, imports=("KERNEL32.dll", "Qt6Core.dll"), delay_imports=("python312.dll",))
+            imports, delay_imports = package_app.read_pe_imports(image)
+            self.assertEqual(imports, ["KERNEL32.dll", "Qt6Core.dll"])
+            self.assertEqual(delay_imports, ["python312.dll"])
+
+    def test_unreadable_binary_is_not_reported_as_clean(self) -> None:
+        """A file the check cannot read must not look like a file with no imports."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-pe-bad-") as temporary:
+            image = Path(temporary) / "broken.exe"
+            image.write_text("not a portable executable", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "not a PE file"):
+                package_app.read_pe_imports(image)
+
+    def test_package_whose_startup_chain_imports_python_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-pe-package-") as temporary:
+            root = Path(temporary)
+            write_pe(root / "VisionRT.exe", imports=("python312.dll",))
+            for name in (package_app.MARKER_FILE, "quickui.dll", "visionrt_python_bridge.dll"):
+                (root / name).touch()
+            with self.assertRaisesRegex(RuntimeError, "imports a Python runtime: VisionRT.exe imports python312.dll"):
+                package_app.verify_package(root, require_qt=False, allow_dirty=True)
+
+    def test_bridge_importing_python_is_not_on_the_startup_chain(self) -> None:
+        """The bridge names CPython on purpose; it is loaded only after an environment was accepted."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-pe-bridge-") as temporary:
+            root = Path(temporary)
+            write_pe(root / "VisionRT.exe", imports=("KERNEL32.dll",))
+            write_pe(root / "visionrt_python_bridge.dll", imports=("python312.dll",))
+            for name in (package_app.MARKER_FILE, "quickui.dll"):
+                (root / name).touch()
+
+            package_app.verify_package(root, require_qt=False, allow_dirty=True)
+
+            evidence_path = root / "evidence" / "package-evidence.json"
+            package_app.write_package_evidence(root, evidence_path, "x64")
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            self.assertEqual(evidence["startupPythonImports"], [])
+            self.assertEqual(evidence["startupChain"], ["VisionRT.exe"])
+            self.assertTrue(evidence["bridgePresent"])
+            bridge = next(item for item in evidence["binaries"] if item["name"] == "visionrt_python_bridge.dll")
+            self.assertEqual(bridge["pythonImports"], ["python312.dll"])
 
 
 class BuildMetadataScriptContract(unittest.TestCase):
@@ -532,7 +698,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         """Matrix Case 9: Release packaging gates strictly enforce clean candidates."""
         install_dir = self.root / "fake_install"
         install_dir.mkdir()
-        (install_dir / "VisionRT.exe").touch()
+        write_pe(install_dir / "VisionRT.exe")
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
         (install_dir / "visionrt_python_bridge.dll").touch()
@@ -574,7 +740,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         """Matrix Case 11: Missing component metadata in release package is rejected (F47-01 / S47-01)."""
         install_dir = self.root / "meta_reject_install"
         install_dir.mkdir()
-        (install_dir / "VisionRT.exe").touch()
+        write_pe(install_dir / "VisionRT.exe")
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
         (install_dir / "visionrt_python_bridge.dll").touch()

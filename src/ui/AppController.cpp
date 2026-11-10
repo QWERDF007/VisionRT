@@ -19,7 +19,9 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDeadlineTimer>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -132,19 +134,16 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     registerSelectTools(registry);
     loadComponentBuildInfo();
     loadToolsPackage();
-    // The interpreter is created only for an environment the user selected and the probe accepted.
+    // The interpreter is created only for an environment the user selected and the check accepted.
     // Without one the backend stays unavailable and every Python tool reports that reason; opening
     // a project, the settings window and every native tool keep working. A test states the choice
     // itself, through the one seam that never exists in a shipped run.
     python = std::make_unique<PythonBackend>();
+    pythonProbe = std::make_unique<PythonProbe>();
+    QObject::connect(pythonProbe.get(), &PythonProbe::finished, owner, [this] { finishPythonCheck(); });
     const auto &interpreter = testPythonExecutable.isEmpty() ? settings.pythonExecutable : testPythonExecutable;
     if (!interpreter.isEmpty())
-    {
-        QString error;
-        const auto probed = probePythonEnvironment(interpreter, &error);
-        if (!probed || !python->start(probed->environment, &error))
-            report(error);
-    }
+        beginPythonCheck(interpreter, PythonCheck::Startup);
     if (!settingsFailure.isEmpty())
     {
         settingsError = settingsFailure;
@@ -154,27 +153,31 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     presentation.setRuntime(runtime.get());
     presentation.setExternalBusy([this] { return assist && assist->busy(); });
     runtime->setReadbackEnabled(true);
+    // The runtime calls these from its worker. They are posted through the timer object, which lives
+    // exactly as long as this implementation: an answer posted while the controller is still being
+    // built is delivered once its members exist, and one posted after teardown is dropped with the
+    // object instead of reaching a pointer that no longer names anything.
     runtime->setReadbackCallback(
-        [owner](RuntimeReadback readback)
+        [this](RuntimeReadback readback)
         {
             QMetaObject::invokeMethod(
-                owner,
-                [owner, readback]
+                &timer,
+                [this, readback]
                 {
-                    if (owner->impl_ && readback.generation >= owner->impl_->generation)
-                        owner->impl_->poll();
+                    if (!tearingDown && readback.generation >= generation)
+                        poll();
                 },
                 Qt::QueuedConnection);
         });
     runtime->setCompletionCallback(
-        [owner](RuntimeCompletion completion)
+        [this](RuntimeCompletion completion)
         {
             QMetaObject::invokeMethod(
-                owner,
-                [owner, completion]
+                &timer,
+                [this, completion]
                 {
-                    if (owner->impl_ && completion.generation >= owner->impl_->generation)
-                        owner->impl_->poll();
+                    if (!tearingDown && completion.generation >= generation)
+                        poll();
                 },
                 Qt::QueuedConnection);
         });
@@ -240,10 +243,17 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     if (std::any_of(registry.definitions().begin(), registry.definitions().end(), [](const auto &tool)
                     { return tool.kind != ToolKind::Host; }))
         refresh(false);
+    // A test needs the steady state, not the moment before the check answers. The wait uses the same
+    // probe and the same refresh a user's first second does; a shipped build never reaches it.
+    if (!testPythonExecutable.isEmpty() && pythonCheck != PythonCheck::None)
+        waitForPythonCheck();
 }
 
 AppController::Impl::~Impl()
 {
+    // Queued runtime answers check this before touching anything: the members they read are about to
+    // go, and the events they arrived in are removed with the timer below.
+    tearingDown = true;
     timer.stop();
     // The helper owns images and may still be executing; release it before any runtime state goes.
     if (assist)
@@ -263,6 +273,9 @@ AppController::Impl::~Impl()
     clipboard.reset();
     operations.clearReplacement();
     refreshResult.reset();
+    // The check outlives nothing: closing the window cancels it, and its answer can no longer reach
+    // a backend that is already gone.
+    pythonProbe.reset();
     for (const auto &tool : registry.definitions())
         if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
             registry.setPythonImplementation(
@@ -675,6 +688,10 @@ void AppController::Impl::poll()
             advancePending();
         }
     }
+    // A Python check that answered during a run has not reached the tool list yet; the moment the
+    // runtime is idle again it does, without asking the user to refresh manually.
+    if (pythonRefreshPending && state == RuntimeState::Idle && !operations.isClosing())
+        schedulePythonRefresh();
     updateReadback();
 }
 
@@ -992,13 +1009,16 @@ void AppController::Impl::requestRefresh(bool rescan)
     auto        definitions   = registry.definitions();
     auto       *pythonBackend = python.get();
     const auto *catalog       = &registry;
+    // The status is snapshotted here, on the thread that owns it; the refresh itself runs on a
+    // runtime worker and must not read a value another thread can replace under it.
+    const auto pythonStatus = pythonBackend ? pythonBackend->environmentStatus() : PythonEnvironmentStatus{};
     const auto  accepted      = runtime->requestRefresh(
-        [result, definitions = std::move(definitions), pythonBackend, catalog]
+        [result, definitions = std::move(definitions), pythonBackend, pythonStatus, catalog]
         {
             catalog->loadNativeImplementations();
             if (pythonBackend)
             {
-                result->implementations = pythonBackend->refresh(definitions);
+                result->implementations = pythonBackend->refresh(definitions, pythonStatus);
                 for (const auto &tool : definitions)
                     if (tool.kind == ToolKind::PythonFunction || tool.kind == ToolKind::PythonClass)
                     {
@@ -1022,6 +1042,135 @@ void AppController::Impl::requestRefresh(bool rescan)
     refreshResult    = std::move(result);
     refreshReconcile = refreshReconcile || rescan;
     setState(RuntimeState::Refreshing);
+}
+
+bool AppController::Impl::beginPythonCheck(const QString &selection, PythonCheck purpose)
+{
+    if (!pythonProbe || pythonProbe->running())
+        return false;
+    if (purpose == PythonCheck::Startup)
+    {
+        // The window opens now and the tool list states why Python tools are not usable yet. The
+        // phase is the host's answer for the time being, not a second status the UI has to combine.
+        PythonEnvironmentStatus status;
+        status.phase    = PythonEnvironmentPhase::Probing;
+        status.selected = selection.toStdString();
+        status.reason   = "正在检查 Python 环境";
+        python->setEnvironmentStatus(std::move(status));
+        emit q->pythonEnvironmentChanged();
+    }
+    pythonCheck = purpose;
+    if (!pythonProbe->start(selection))
+    {
+        pythonCheck = PythonCheck::None;
+        return false;
+    }
+    return true;
+}
+
+void AppController::Impl::finishPythonCheck()
+{
+    const auto purpose = pythonCheck;
+    pythonCheck        = PythonCheck::None;
+    if (purpose == PythonCheck::None)
+        return;
+    const auto result = pythonProbe->result();
+
+    if (purpose == PythonCheck::Draft)
+    {
+        if (!pendingSettings)
+            return;
+        if (!result.status.available())
+        {
+            const auto reason = result.status.reason.empty()
+                                    ? QStringLiteral("所选 Python 环境不可用")
+                                    : QString::fromStdString(result.status.reason);
+            pendingSettings.reset();
+            settingsError      = reason;
+            settingsErrorField = QStringLiteral("runtime");
+            emit q->settingsChanged();
+            emit q->settingsApplied(false);
+            return;
+        }
+        const auto next = *pendingSettings;
+        commitSettings(next);
+        return;
+    }
+
+    if (!result.status.available())
+    {
+        pythonEnvironment.reset();
+        python->setEnvironmentStatus(result.status);
+        emit q->pythonEnvironmentChanged();
+        report(QString::fromStdString(result.status.reason));
+    }
+    else
+    {
+        // The bridge is created here, on the thread that owns it and only once every check passed.
+        pythonEnvironment = result.environment;
+        QString error;
+        if (!python->start(*result.environment, &error))
+            report(error.isEmpty() ? python->unavailableReason() : error);
+        emit q->pythonEnvironmentChanged();
+    }
+    schedulePythonRefresh();
+}
+
+void AppController::Impl::schedulePythonRefresh()
+{
+    if (!runtime || operations.isClosing())
+        return;
+    if (state != RuntimeState::Idle)
+    {
+        pythonRefreshPending = true;
+        return;
+    }
+    pythonRefreshPending = false;
+    // Same gate as any other registry change: the readers release their instances first, then the
+    // tool statuses are replaced.
+    beginDrain([this] { requestRefresh(false); });
+}
+
+void AppController::Impl::waitForPythonCheck()
+{
+    // A test needs the steady state, not the moment before the check answers. The wait pumps the
+    // same events a user's window does; nothing here shortcuts the probe or the refresh.
+    const auto deadline = QDeadlineTimer(120000);
+    while ((pythonCheck != PythonCheck::None || pythonRefreshPending || state != RuntimeState::Idle
+            || presentation.draining())
+           && !deadline.hasExpired())
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+}
+
+bool AppController::Impl::commitSettings(Settings next)
+{
+    QString error;
+    // Write first, then change what the process does: a failed save must leave both the file and
+    // the running behaviour exactly as they were.
+    if (!UiPreferences::saveSettings(next, &error))
+    {
+        pendingSettings.reset();
+        settingsError      = error;
+        settingsErrorField.clear();
+        emit q->settingsChanged();
+        emit q->settingsApplied(false);
+        return false;
+    }
+
+    pendingSettings.reset();
+    const bool builtinsChanged = next.editBuiltins != settings.editBuiltins;
+    settings                   = std::move(next);
+    if (builtinsChanged)
+    {
+        toolEditor.setEditBuiltins(settings.editBuiltins);
+        emit q->editBuiltinsChanged();
+    }
+    LogService::instance().setMinimumLevel(settings.loggingLevel);
+    settingsError.clear();
+    settingsErrorField.clear();
+    emit q->settingsChanged();
+    emit q->settingsApplied(true);
+    return true;
 }
 
 void AppController::Impl::refreshFinished()
@@ -1189,6 +1338,73 @@ QString AppController::settingsErrorField() const
     return impl_->settingsErrorField;
 }
 
+bool AppController::settingsApplying() const
+{
+    return impl_->pendingSettings.has_value();
+}
+
+QString AppController::pythonEnvironmentPhase() const
+{
+    return QString::fromLatin1(pythonEnvironmentPhaseKey(impl_->python->environmentStatus().phase));
+}
+
+QString AppController::pythonEnvironmentText() const
+{
+    // The host's own sentence, not a second wording of the same state: only "ready" needs a label
+    // the backend has no reason to carry.
+    const auto &status = impl_->python->environmentStatus();
+    if (status.phase != PythonEnvironmentPhase::Ready)
+        return QString::fromStdString(status.reason);
+    return status.version.empty() ? QStringLiteral("已就绪")
+                                  : QStringLiteral("已就绪：Python %1")
+                                        .arg(QString::fromStdString(status.version));
+}
+
+QVariantMap AppController::pythonEnvironmentReport() const
+{
+    const auto &status = impl_->python->environmentStatus();
+    const auto  text   = [](const std::string &value)
+    {
+        return QString::fromStdString(value);
+    };
+    const auto fileText = [](const std::filesystem::path &path)
+    {
+        const auto bytes = path.generic_u8string();
+        return QString::fromUtf8(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()));
+    };
+
+    QVariantMap environment{{QStringLiteral("phase"), QString::fromLatin1(pythonEnvironmentPhaseKey(status.phase))},
+                            {QStringLiteral("reason"), text(status.reason)},
+                            {QStringLiteral("selected"), text(status.selected)},
+                            {QStringLiteral("executable"), text(status.executable)},
+                            {QStringLiteral("version"), text(status.version)},
+                            {QStringLiteral("numpyVersion"), text(status.numpyVersion)},
+                            {QStringLiteral("numpyFile"), text(status.numpyFile)}};
+    // The prefix and search paths come from the accepted environment, not from the status: they are
+    // what the bridge was started with, and the evidence has to name the real files.
+    if (impl_->pythonEnvironment)
+    {
+        environment.insert(QStringLiteral("prefix"), fileText(impl_->pythonEnvironment->prefix));
+        environment.insert(QStringLiteral("basePrefix"), fileText(impl_->pythonEnvironment->basePrefix));
+        environment.insert(QStringLiteral("probeRuntime"), fileText(impl_->pythonEnvironment->dll));
+    }
+
+    const auto          facts = impl_->python->runtimeFacts();
+    QVariantList        modules;
+    for (const auto &module : facts.modules)
+        modules.push_back(QVariantMap{{QStringLiteral("name"), text(module.first)},
+                                      {QStringLiteral("path"), text(module.second)}});
+    const QVariantMap process{{QStringLiteral("runtime"), text(facts.runtime)},
+                              {QStringLiteral("bridge"), facts.bridge},
+                              {QStringLiteral("modules"), modules}};
+
+    return {{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("application"), QCoreApplication::applicationDirPath()},
+            {QStringLiteral("version"), QCoreApplication::applicationVersion()},
+            {QStringLiteral("environment"), environment},
+            {QStringLiteral("process"), process}};
+}
+
 QVariantMap AppController::settingsSnapshot() const
 {
     const auto level = logLevelKey(impl_->settings.loggingLevel);
@@ -1201,11 +1417,17 @@ bool AppController::applySettings(const QVariantMap &values)
 {
     const auto fail = [this](const QString &field, const QString &reason)
     {
+        // A refused draft never became a commit: the caller reads settingsError, and settingsApplied
+        // stays reserved for commits that were attempted and finished.
         impl_->settingsError      = reason;
         impl_->settingsErrorField = field;
         emit settingsChanged();
         return false;
     };
+    // One commit at a time: a second apply while the interpreter is being checked would start a
+    // second process against the same settings file.
+    if (impl_->pendingSettings)
+        return fail(QStringLiteral("runtime"), QStringLiteral("正在检查 Python 环境，请稍候"));
 
     Settings next = impl_->settings;
     next.editBuiltins = values.value(QStringLiteral("editBuiltins"), next.editBuiltins).toBool();
@@ -1215,39 +1437,35 @@ bool AppController::applySettings(const QVariantMap &values)
         return fail(QStringLiteral("logging"), QStringLiteral("日志等级无效"));
     next.loggingLevel = level;
 
-    // A chosen interpreter is resolved and probed before anything is written: an incompatible
+    // A chosen interpreter is resolved and checked before anything is written: an incompatible
     // environment is reported on the field that produced it, and no other setting is committed
-    // either. An unchanged path is not probed again, so a temporarily unavailable environment does
+    // either. An unchanged path is not checked again, so a temporarily unavailable environment does
     // not block saving the log level.
     QString    error;
     const auto executable = resolvePythonExecutable(values.value(QStringLiteral("pythonExecutable")).toString(), &error);
     if (!error.isEmpty())
         return fail(QStringLiteral("runtime"), error);
-    if (!executable.isEmpty() && executable != impl_->settings.pythonExecutable)
-        if (!probePythonEnvironment(executable, &error))
-            return fail(QStringLiteral("runtime"), error);
+    // Clearing the choice needs no interpreter and no check: "not configured" is a legal setting.
+    const bool needsCheck = !executable.isEmpty() && executable != impl_->settings.pythonExecutable;
     next.pythonExecutable = executable;
 
     if (next.editBuiltins != impl_->settings.editBuiltins && !impl_->toolEditor.canSetEditBuiltins(next.editBuiltins))
         return fail(QStringLiteral("builtins"), QStringLiteral("内置工具还有未保存的修改，请先保存或取消"));
 
-    // Write first, then change what the process does: a failed save must leave both the file and
-    // the running behaviour exactly as they were.
-    if (!UiPreferences::saveSettings(next, &error))
-        return fail(QString(), error);
-
-    const bool builtinsChanged = next.editBuiltins != impl_->settings.editBuiltins;
-    impl_->settings = next;
-    if (builtinsChanged)
+    if (needsCheck)
     {
-        impl_->toolEditor.setEditBuiltins(next.editBuiltins);
-        emit editBuiltinsChanged();
+        // The answer arrives as settingsApplied: the window stays responsive while the interpreter
+        // starts, and the draft is written only if that check accepts it. The draft is recorded
+        // before the check can answer, and only once the check actually started.
+        if (!impl_->beginPythonCheck(executable, Impl::PythonCheck::Draft))
+            return fail(QStringLiteral("runtime"), QStringLiteral("正在检查 Python 环境，请稍候"));
+        impl_->pendingSettings = next;
+        impl_->settingsError.clear();
+        impl_->settingsErrorField.clear();
+        emit settingsChanged();
+        return true;
     }
-    LogService::instance().setMinimumLevel(next.loggingLevel);
-    impl_->settingsError.clear();
-    impl_->settingsErrorField.clear();
-    emit settingsChanged();
-    return true;
+    return impl_->commitSettings(std::move(next));
 }
 
 void AppController::setEditBuiltins(bool enabled)

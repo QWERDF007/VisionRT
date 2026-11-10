@@ -89,8 +89,8 @@ try
         QString error;
         const auto probed = probePythonEnvironment(buildInterpreter, &error);
         require(probed.has_value(), qPrintable(QStringLiteral("the build interpreter was rejected: ") + error));
-        const auto &environment = probed->environment;
-        require(!probed->version.isEmpty(), "the probe reported no version");
+        const auto &environment = *probed;
+        require(!environment.version.empty(), "the probe reported no version");
         require(environment.executable.is_absolute() && QFileInfo::exists(QString::fromStdWString(environment.executable.wstring())),
                 "the probe reported no executable");
         require(!environment.prefix.empty() && !environment.basePrefix.empty(), "the probe reported no prefix");

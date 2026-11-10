@@ -31,6 +31,9 @@ QuiPopup {
     property string page: "runtime"
     property string errorText: ""
     property string errorField: ""
+    // The one commit asks the controller for an answer instead of receiving it: a changed
+    // interpreter is checked off the GUI thread, so the outcome arrives as settingsApplied.
+    property bool closeAfterApply: true
 
     readonly property var levelKeys: ["trace", "debug", "info", "warn", "error", "critical", "off"]
     readonly property var levelNames: ["跟踪", "调试", "信息", "警告", "错误", "严重", "关闭"]
@@ -39,6 +42,9 @@ QuiPopup {
                                   || draftLevel !== applied.loggingLevel
                                   || draftPython !== appliedPython
     readonly property bool pythonPending: draftPython !== appliedPython
+    readonly property bool applying: app.settingsApplying
+    readonly property bool environmentRejected: app.pythonEnvironmentPhase === "invalid"
+                                                || app.pythonEnvironmentPhase === "backendFailed"
 
     function load() {
         applied = app.settingsSnapshot()
@@ -55,30 +61,51 @@ QuiPopup {
         open()
     }
 
-    function apply(closeAfter) {
-        const values = {
-            "editBuiltins": draftBuiltins,
-            "loggingLevel": draftLevel,
-            "pythonExecutable": draftPython
-        }
-        if (!app.applySettings(values)) {
+    function settle(accepted) {
+        if (!accepted) {
             errorText = app.settingsError
-            if (app.settingsErrorField.length > 0)
-                page = app.settingsErrorField
-            return false
+            errorField = app.settingsErrorField
+            if (errorField.length > 0)
+                page = errorField
+            return
         }
         applied = app.settingsSnapshot()
         draftPython = appliedPython
         pythonField.text = draftPython
         errorText = ""
         errorField = ""
-        if (closeAfter)
+        if (closeAfterApply)
             close()
-        return true
+    }
+
+    function apply(closeAfter) {
+        if (applying)
+            return
+        closeAfterApply = closeAfter
+        // false means the draft never reached a commit; an accepted draft answers later through
+        // settingsApplied, which also covers a refused check.
+        const accepted = app.applySettings({
+            "editBuiltins": draftBuiltins,
+            "loggingLevel": draftLevel,
+            "pythonExecutable": draftPython
+        })
+        if (!accepted) {
+            errorText = app.settingsError
+            errorField = app.settingsErrorField
+            if (errorField.length > 0)
+                page = errorField
+        }
+    }
+
+    Connections {
+        target: app
+        function onSettingsApplied(accepted) {
+            root.settle(accepted)
+        }
     }
 
     Shortcut {
-        enabled: root.opened
+        enabled: root.opened && !root.applying
         sequence: StandardKey.Cancel
         onActivated: root.close()
     }
@@ -126,6 +153,7 @@ QuiPopup {
                 Item { Layout.fillWidth: true }
                 QuiTextIconButton {
                     objectName: "settingsClose"
+                    enabled: !root.applying
                     iconSource: QuiFontIcon.ChromeClose
                     iconSize: 12
                     normalColor: "transparent"
@@ -162,19 +190,23 @@ QuiPopup {
                 QuiButton {
                     objectName: "settingsConfirm"
                     text: "确定"
+                    enabled: !root.applying
                     onClicked: root.apply(true)
                 }
                 QuiButton {
                     objectName: "settingsCancel"
                     text: "取消"
+                    // A commit in flight owns the window until it answers; closing now would hide a
+                    // write the user cannot see.
+                    enabled: !root.applying
                     onClicked: root.close()
                 }
                 QuiButton {
                     objectName: "settingsApply"
-                    text: "应用"
-                    enabled: root.dirty
-                    normalColor: root.dirty ? Theme.highlight : QuiColor.Border
-                    textColor: root.dirty ? "#ffffff" : Theme.textSecondary
+                    text: root.applying ? "检查中" : "应用"
+                    enabled: root.dirty && !root.applying
+                    normalColor: enabled ? Theme.highlight : QuiColor.Border
+                    textColor: enabled ? "#ffffff" : Theme.textSecondary
                     // The shared button fades to 0.3 when disabled, which erases white text on the
                     // accent colour; the apply button states its disabled look here instead.
                     opacity: enabled ? 1 : 0.55
@@ -317,6 +349,7 @@ QuiPopup {
                                 Layout.fillWidth: true
                                 Layout.maximumWidth: 420
                                 flat: false
+                                readOnly: root.applying
                                 actionIcon: QuiFontIcon.Folder
                                 onActionRequested: pythonPicker.open()
                                 Connections {
@@ -332,9 +365,26 @@ QuiPopup {
                         }
                         QuiText {
                             x: 102
-                            visible: root.pythonPending
+                            visible: root.pythonPending && !root.applying
                             text: "Python 环境在下次启动时生效。"
                             color: Theme.textSecondary
+                            font: Theme.parameterFont
+                        }
+                        QuiText {
+                            x: 102
+                            visible: root.applying
+                            text: "正在检查所选 Python 环境..."
+                            color: Theme.textSecondary
+                            font: Theme.parameterFont
+                        }
+                        // One status, read from the host: the check result is never re-derived here.
+                        QuiText {
+                            x: 102
+                            width: parent.width - 102
+                            visible: !root.applying && !root.pythonPending
+                            text: "当前环境：" + app.pythonEnvironmentText
+                            color: root.environmentRejected ? Theme.error : Theme.textSecondary
+                            wrapMode: Text.WordWrap
                             font: Theme.parameterFont
                         }
                     }

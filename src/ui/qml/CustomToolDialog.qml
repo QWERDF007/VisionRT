@@ -24,6 +24,12 @@ Window {
     property var expandedFolders: ({})
     property var menuItem: null
     property string searchKeyword: ""
+    // The entry symbol is a function, a class or a factory depending on the registered kind; one
+    // label for all three would name a shape the file does not have.
+    readonly property string symbolLabel: !root.controller ? "函数名:"
+                                          : root.controller.currentToolKind === "python_class" ? "类名:"
+                                          : root.controller.currentToolKind === "cpp" ? "工厂名:"
+                                          : "函数名:"
 
     function openDialog() {
         if (root.visibility === Window.Minimized)
@@ -503,12 +509,12 @@ Window {
                                         }
                                     }
 
-                                    // 函数名
+                                    // 函数名 / 类名 / 工厂名
                                     RowLayout {
                                         Layout.fillWidth: true
                                         spacing: 8
                                         Label {
-                                            text: "函数名:"
+                                            text: root.symbolLabel
                                             Layout.preferredWidth: 64
                                             horizontalAlignment: Text.AlignRight
                                             font.pixelSize: 13

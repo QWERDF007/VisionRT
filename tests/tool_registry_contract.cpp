@@ -133,6 +133,32 @@ int main()
         assert(testview::status(error).detail == testview::status(failed).detail);
     }
 
+    // A refused environment never reaches the implementation: neither the contract resolver nor the
+    // instance factory runs, so no tool code can execute behind a status the host already rejected.
+    {
+        auto                  loadState = std::make_shared<PythonLoadState>(
+            makeStatus(ErrorCode::PythonUnavailable, "未配置 Python 环境"));
+        int                   resolves = 0;
+        int                   creates  = 0;
+        PythonFactoryFunctor  counted;
+        counted.loadState = loadState;
+        counted.create    = [&creates](const PlatformToolServices &)
+        {
+            ++creates;
+            return std::unique_ptr<IToolInstance>{};
+        };
+        counted.resolve = [&resolves](const ToolDefinition &)
+        {
+            ++resolves;
+            return ToolFactory{};
+        };
+        registry.setPythonImplementation(python.nameEn, counted);
+        assert(registry.availability(python.nameEn).state == ToolAvailability::ImplementationUnavailable);
+        assert(testview::status(registry.availability(python.nameEn)).message == "未配置 Python 环境");
+        rejects([&] { registry.create(python.nameEn, {}); });
+        assert(resolves == 0 && creates == 0);
+    }
+
     auto host        = definition("test.receiver");
     host.kind        = ToolKind::Host;
     host.hostBinding = "receiver";

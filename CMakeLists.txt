@@ -272,6 +272,10 @@ if(BUILD_TESTING)
         "VISIONRT_BUILD_ENTRY=${CMAKE_SOURCE_DIR}/tools/build.cmd"
         "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_package_app.py")
     visionrt_apply_test_environment(package_app_contract)
+    # The release record is assembled from facts another process produced; its audit rules are pure
+    # Python and need neither a build nor an installation, so they run as their own quick test.
+    add_test(NAME release_evidence_contract COMMAND "${CMAKE_COMMAND}" -E env
+        "${Python3_EXECUTABLE}" -S "${CMAKE_SOURCE_DIR}/tests/test_release_evidence.py")
     # The six real nested Git+CMake builds are a separate entry: the quick package suite must not
     # recurse into a compiler, and a candidate selects them explicitly with -L integration.
     add_test(NAME build_metadata_integration_contract COMMAND "${CMAKE_COMMAND}" -E env
@@ -393,6 +397,17 @@ if(BUILD_TESTING)
         target_link_libraries(node_list_model_test PRIVATE Qt6::Test)
         visionrt_contract(tool_port_list_model_test visionrt_ui LABELS backend)
         target_link_libraries(tool_port_list_model_test PRIVATE Qt6::Test)
+        # What the result view may expose is decided without a window, so the visibility rule is
+        # checked here instead of through a rendered frame.
+        visionrt_contract(presentation_visibility_contract visionrt_ui LABELS backend)
+        # The environment verdict is host-owned: one status, one reason per failure, and a check
+        # that never blocks the caller. The controller is the only entry point, so this walks the
+        # real settings path without opening a window.
+        visionrt_contract(python_environment_contract visionrt_ui LABELS backend)
+        target_link_libraries(python_environment_contract PRIVATE Qt6::Test)
+        target_compile_definitions(python_environment_contract PRIVATE
+            VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(tool_editor_controller_test visionrt_ui LABELS backend)
         target_link_libraries(tool_editor_controller_test PRIVATE Qt6::Test)
         # One complete authoring flow through the real dialog: open, add a tool and a parameter,
@@ -728,6 +743,7 @@ if(BUILD_TESTING)
     visionrt_group_test(validator_cli_contract LABELS package
         REQUIRES visionrt_validate_tool test_registration_valid test_plugin_legacy)
     visionrt_group_test(package_app_contract LABELS package)
+    visionrt_group_test(release_evidence_contract LABELS package)
     visionrt_group_test(build_metadata_integration_contract LABELS package integration)
     visionrt_group_test(dependency_manifest_contract LABELS package)
     if(TEST build_incremental_contract)

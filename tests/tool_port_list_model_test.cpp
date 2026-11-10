@@ -96,6 +96,16 @@ int main(int argc, char **argv)
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
     assert(def.nextOutputPortId == 3);
 
+    // SET-VIS-02: a business output carries its own default the same way an input does, so the card
+    // offers the field in both directions. The host-owned status rows stay read-only.
+    assert(model.addPort("通过", "bool", "false"));
+    assert(model.rowCount() == 4);
+    assert(def.outputs.back().type == TypeSpec{Type::Bool});
+    assert(model.updatePort(3, {{"defaultValue", QStringLiteral("true")}}));
+    assert(equalValues(def.outputs.back().defaultValue, PortValue{true}));
+    assert(model.data(model.index(3, 0), ToolPortListModel::DefaultValueRole).toString() == QStringLiteral("true"));
+    assert(!model.updatePort(0, {{"defaultValue", QStringLiteral("true")}}));
+
     // 6. Stage: Init — only a class tool has a lifecycle, so the init stage is exercised on one.
     ToolDefinition initDef;
     initDef.schemaVersion   = 6;

@@ -71,6 +71,13 @@ class AppController : public QObject
     // Which page owns the refusal: "builtins", "runtime", "logging" or empty for a file-level
     // failure. The window switches to that page instead of leaving the user on an unrelated one.
     Q_PROPERTY(QString settingsErrorField READ settingsErrorField NOTIFY settingsChanged)
+    // True while a chosen interpreter is being checked; the window disables its buttons so a second
+    // commit cannot start a second check.
+    Q_PROPERTY(bool settingsApplying READ settingsApplying NOTIFY settingsChanged)
+    // The one host-side answer to "can Python tools run": the phase key and the sentence behind it.
+    // Every surface reads this instead of deriving a second verdict of its own.
+    Q_PROPERTY(QString pythonEnvironmentPhase READ pythonEnvironmentPhase NOTIFY pythonEnvironmentChanged)
+    Q_PROPERTY(QString pythonEnvironmentText READ pythonEnvironmentText NOTIFY pythonEnvironmentChanged)
     Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
     Q_PROPERTY(QString assistDisabledReason READ assistDisabledReason NOTIFY assistChanged)
@@ -226,11 +233,19 @@ public:
     Q_INVOKABLE void         setEditBuiltins(bool enabled);
     // The settings window owns one draft for the three pages and commits it once. The snapshot is
     // the applied state; `applySettings` validates the draft, writes the file and only then changes
-    // the running controller.
+    // the running controller. A changed interpreter is checked off the GUI thread, so the draft is
+    // accepted (true) and the outcome arrives as settingsApplied once the check answers.
     Q_INVOKABLE QVariantMap  settingsSnapshot() const;
     Q_INVOKABLE bool         applySettings(const QVariantMap &values);
     QString                  settingsError() const;
     QString                  settingsErrorField() const;
+    bool                     settingsApplying() const;
+    QString                  pythonEnvironmentPhase() const;
+    QString                  pythonEnvironmentText() const;
+    // One machine-readable answer to "which interpreter runs the tools, which NumPy backs it, and
+    // what is actually resident in this process". Release evidence archives it; the window keeps
+    // reading the two properties above.
+    Q_INVOKABLE QVariantMap  pythonEnvironmentReport() const;
     // Writes an installed declaration back to the file it came from. The compiled implementation
     // owns the ports, so a declaration that no longer matches it is refused instead of written.
     bool                     saveBuiltinTool(const ToolDefinition &definition, QString *error = nullptr);
@@ -274,6 +289,10 @@ signals:
     void assistChanged();
     void editBuiltinsChanged();
     void settingsChanged();
+    // The outcome of one settings commit: true when it was written, false when the draft was
+    // refused (settingsError then names the field and the reason).
+    void settingsApplied(bool accepted);
+    void pythonEnvironmentChanged();
 
 private:
     struct Impl;
