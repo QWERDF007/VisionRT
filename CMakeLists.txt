@@ -183,7 +183,9 @@ if(VISIONRT_BUILD_APP)
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)
     target_link_libraries(visionrt_ui PRIVATE visionrt_avoid)
 
-    qt_add_executable(VisionRT src/main.cpp)
+    # 窗口程序，不是控制台程序：双击启动时不应额外打开命令行终端。命令行走文件与退出码，
+    # 不依赖标准输出，所以 GUI 子系统不损失任何既有入口。
+    qt_add_executable(VisionRT WIN32 src/main.cpp)
     target_link_libraries(VisionRT PRIVATE visionrt_ui quickui::quickui)
     # 桥接模块不参与链接，但必须随程序构建到同一目录，供运行期按名称加载。
     add_dependencies(VisionRT visionrt_python)
