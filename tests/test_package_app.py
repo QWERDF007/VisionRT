@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -70,6 +71,10 @@ class ToolsDeploymentContract(unittest.TestCase):
         self.package = self.install / "tools-package"
         self.package.mkdir()
         (self.package / "old.txt").write_text("old installation", encoding="utf-8")
+        (self.install / package_app.MANIFEST_FILE).write_text(
+            json.dumps({"schema_version": package_app.MANIFEST_SCHEMA_VERSION,
+                        "files": ["tools-package/old.txt"]}),
+            encoding="utf-8")
         self.source = self.root / "source"
         (self.source / "bin").mkdir(parents=True)
         (self.source / "tools/builtin").mkdir(parents=True)
@@ -365,21 +370,117 @@ class InstallationContract(unittest.TestCase):
                         package_app.clear_install_directory(root, clean=True, force=False)
                     self.assertEqual((root / "user_notes.txt").read_text(encoding="utf-8"), "keep me")
 
-    def test_manifest_records_every_installed_file(self) -> None:
-        """The record the next upgrade trusts is written from what is actually on disk."""
+    def test_manifest_records_only_files_this_run_wrote(self) -> None:
+        """The record is the written set, not a scan: a user file in the directory is not claimed."""
         with tempfile.TemporaryDirectory(prefix="visionrt-manifest-") as temporary:
             root = Path(temporary)
             (root / "bin").mkdir()
             (root / "bin" / "plugin.dll").write_text("dll", encoding="utf-8")
             (root / "VisionRT.exe").write_text("exe", encoding="utf-8")
+            (root / "user_notes.txt").write_text("mine", encoding="utf-8")
             (root / package_app.MARKER_FILE).touch()
 
-            package_app.write_install_manifest(root)
+            package_app.write_install_manifest(root, {"bin/plugin.dll", "VisionRT.exe"})
 
             files = package_app.read_install_manifest(root)
             self.assertEqual(files, {"bin/plugin.dll", "VisionRT.exe"})
+            self.assertNotIn("user_notes.txt", files)
             self.assertNotIn(package_app.MANIFEST_FILE, files)
             self.assertNotIn(package_app.MARKER_FILE, files)
+
+            # The next generation removes what it owns and leaves the user file alone.
+            package_app.clear_install_directory(root, clean=True, force=False)
+            self.assertFalse((root / "VisionRT.exe").exists())
+            self.assertEqual((root / "user_notes.txt").read_text(encoding="utf-8"), "mine")
+
+    def test_three_generations_never_claim_user_files(self) -> None:
+        """User assets survive repeated upgrades and never enter a later manifest."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-generations-") as temporary:
+            root = Path(temporary)
+            (root / package_app.MARKER_FILE).write_text("marker", encoding="utf-8")
+            (root / "custom-tools").mkdir()
+            (root / "custom-tools" / "mine.py").write_text("print('mine')", encoding="utf-8")
+            (root / "logs").mkdir()
+            (root / "logs" / "visionrt.log").write_text("log", encoding="utf-8")
+            (root / "scripts").mkdir()
+            (root / "scripts" / "post.py").write_text("print('post')", encoding="utf-8")
+            (root / "ui-preferences.json").write_text("{}", encoding="utf-8")
+            (root / "notes.txt").write_text("notes", encoding="utf-8")
+            user_files = ["custom-tools/mine.py", "logs/visionrt.log", "scripts/post.py",
+                          "ui-preferences.json", "notes.txt"]
+            hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in user_files}
+
+            for generation in range(1, 4):
+                (root / f"gen{generation}.dll").write_text(f"gen{generation}", encoding="utf-8")
+                package_app.write_install_manifest(root, {f"gen{generation}.dll"})
+                manifest = package_app.read_install_manifest(root)
+                self.assertEqual(manifest, {f"gen{generation}.dll"})
+                for name in user_files:
+                    self.assertNotIn(name, manifest, "a user file entered the product manifest")
+                if generation < 3:
+                    package_app.clear_install_directory(root, clean=True, force=False)
+                for name in user_files:
+                    self.assertTrue((root / name).is_file(), f"upgrade {generation} removed {name}")
+                    self.assertEqual(hashlib.sha256((root / name).read_bytes()).hexdigest(), hashes[name],
+                                     f"upgrade {generation} changed {name}")
+
+    def test_manifest_with_protected_or_escaping_entries_refuses_cleanup(self) -> None:
+        """A bad record is refused before a single file is removed."""
+        invalid_manifests = [
+            ["../escape.dll"],
+            ["C:/escape.dll"],
+            ["custom-tools/mine.py"],
+            ["logs/visionrt.log"],
+            ["ui-preferences.json"],
+            ["keep.dll", "keep.dll"],
+            ["folder", "folder/file.dll"],
+            [3],
+        ]
+        for files in invalid_manifests:
+            with self.subTest(files=files), tempfile.TemporaryDirectory(prefix="visionrt-badmanifest-") as temporary:
+                root = Path(temporary)
+                (root / package_app.MARKER_FILE).touch()
+                (root / "Victim.exe").write_text("keep me", encoding="utf-8")
+                (root / package_app.MANIFEST_FILE).write_text(
+                    json.dumps({"schema_version": package_app.MANIFEST_SCHEMA_VERSION,
+                                "files": ["Victim.exe", *files]}),
+                    encoding="utf-8")
+                with self.assertRaises(RuntimeError):
+                    package_app.clear_install_directory(root, clean=True, force=False)
+                self.assertEqual((root / "Victim.exe").read_text(encoding="utf-8"), "keep me")
+
+    def test_ownership_refuses_to_overwrite_an_unowned_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-ownership-") as temporary:
+            root = Path(temporary)
+            (root / "notes.txt").write_text("mine", encoding="utf-8")
+            source = root / "source.bin"
+            source.write_bytes(b"product")
+            ownership = package_app.InstallOwnership(root)
+            with self.assertRaisesRegex(RuntimeError, "does not own"):
+                package_app.owned_copy(source, root / "notes.txt", ownership)
+            self.assertEqual((root / "notes.txt").read_text(encoding="utf-8"), "mine")
+
+            # A file this run wrote may be rewritten without a false conflict.
+            package_app.owned_copy(source, root / "product.bin", ownership)
+            package_app.owned_copy(source, root / "product.bin", ownership)
+            self.assertIn("product.bin", ownership.owned)
+
+    def test_deploy_only_without_manifest_refuses_to_guess(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-deploy-nomanifest-") as temporary:
+            root = Path(temporary)
+            (root / package_app.MARKER_FILE).touch()
+            (root / "tools-package").mkdir()
+            (root / "tools-package" / "user.json").write_text("{}", encoding="utf-8")
+            archive = root / "tools.zip"
+            archive.write_bytes(b"")
+            result = subprocess.run([
+                sys.executable, "-S", str(package_app.REPO_ROOT / "tools/package_app.py"),
+                "--deploy-tools-only", "--install-dir", str(root),
+                "--tools-package", str(archive),
+            ], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("no install-manifest.json", result.stderr + result.stdout)
+            self.assertTrue((root / "tools-package" / "user.json").is_file())
 
     def test_package_without_bridge_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-bridge-") as temporary:

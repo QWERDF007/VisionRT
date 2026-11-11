@@ -215,6 +215,9 @@ struct RuntimeEngine::Impl
         commandReady.notify_all();
         if (coordinator.joinable())
             coordinator.join();
+        // The mailbox's wake callback captures this object; no worker may outlive the body that
+        // makes the callback safe to touch.
+        executor.wait_for_all();
     }
 
     tf::Executor                                                      executor;
@@ -240,6 +243,19 @@ struct RuntimeEngine::Impl
     std::function<void(RuntimeCompletion)>                            callback;
     bool                                                              readbackEnabled = false;
     std::function<void(RuntimeReadback)>                              readbackCallback;
+    std::function<void()>                                             activityCallback;
+    // Bounded, coalesced wake: workers post a small value, the window gets one notification.
+    std::shared_ptr<ActivityMailbox>                                  activity = std::make_shared<ActivityMailbox>(
+        [this]
+        {
+            std::function<void()> notify;
+            {
+                std::lock_guard lock(control);
+                notify = activityCallback;
+            }
+            if (notify)
+                notify();
+        });
     std::optional<RuntimeReadback>                                    readback;
     std::vector<FlowTiming>                                           flowTiming;
     std::optional<double>                                             roundMilliseconds;
@@ -438,7 +454,7 @@ struct RuntimeEngine::Impl
                     break;
                 // Stop and the all-selected-flows commitment share this exact decision point.
                 context = std::make_shared<const RoundContext>(
-                    RoundContext{frozen, generation, session, ++round, activeStop});
+                    RoundContext{frozen, generation, session, ++round, activeStop, activity});
             }
 
             struct Submission
@@ -665,6 +681,7 @@ ErrorInfo RuntimeEngine::start(const ProjectDefinition &project, const ToolRegis
     std::lock_guard lock(impl_->control);
     if (impl_->state != RuntimeState::Idle || impl_->shutdown || impl_->readback.has_value())
         return {ErrorCode::Busy, "运行时忙或读回尚未完成，不能开始执行"};
+    impl_->activity->clear();
     try
     {
         auto frozen      = std::make_shared<FrozenRun>();
@@ -964,5 +981,16 @@ void RuntimeEngine::setCompletionCallback(std::function<void(RuntimeCompletion)>
 {
     std::lock_guard lock(impl_->control);
     impl_->callback = std::move(callback);
+}
+
+void RuntimeEngine::setActivityCallback(std::function<void()> callback)
+{
+    std::lock_guard lock(impl_->control);
+    impl_->activityCallback = std::move(callback);
+}
+
+std::vector<NodeActivityEvent> RuntimeEngine::drainActivity()
+{
+    return impl_->activity->drain();
 }
 } // namespace visionrt

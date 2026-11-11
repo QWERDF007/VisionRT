@@ -91,6 +91,9 @@ public:
                    const std::shared_ptr<const NodeDiagnostic> &instance, ResultSlot::Snapshot snapshot,
                    std::uint64_t generation);
     void forgetNode(NodeId node);
+    // Event-driven running state. Only the transient activity set changes; the snapshot, error and
+    // timing shown by the card stay whatever the last authoritative poll published.
+    bool setActive(NodeId node, bool active);
     // Keeps only nodes that still exist in the committed project.
     void retain(const std::set<NodeId> &existing);
     void clear();

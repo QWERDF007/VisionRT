@@ -57,6 +57,9 @@ struct RoundContext
     std::uint64_t                      session;
     std::uint64_t                      round;
     std::shared_ptr<std::stop_source>  stop;
+    // Shared with the engine for every round of this run; events carry their own epoch so the
+    // window can drop a late answer instead of repainting a node that already moved on.
+    std::shared_ptr<ActivityMailbox>   activity;
 };
 
 // Rejects receivers whose source cannot produce in the frozen run and closed receiver waits.

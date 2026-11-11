@@ -17,7 +17,8 @@ import shutil
 import struct
 import subprocess
 import sys
-from pathlib import Path
+from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -105,9 +106,12 @@ PRESERVED_INSTALL_ENTRIES = frozenset(
 )
 
 # The previous package's own file list. It is the only authority for "this file is mine": anything
-# absent from it belongs to the user and survives an upgrade untouched.
+# absent from it belongs to the user and survives an upgrade untouched. The manifest is produced
+# from the set of files this run actually wrote, never from a scan of the directory.
 MANIFEST_FILE = "install-manifest.json"
 MANIFEST_SCHEMA_VERSION = 1
+PROTECTED_INSTALL_ROOTS = frozenset({"custom-tools", "logs"})
+PROTECTED_INSTALL_FILES = frozenset({"ui-preferences.json"})
 
 
 def build_release(build_dir: Path, config: str, parallel: int) -> None:
@@ -172,6 +176,27 @@ def target_architecture(build_dir: Path) -> str:
     return "x86"
 
 
+def manifest_entry_error(relative: str) -> str | None:
+    """Why a manifest path cannot name a product file, or None when it can."""
+    if not relative or relative.startswith(("/", "\\")) or ":" in relative or "\\" in relative:
+        return f"not a relative forward-slash path: {relative!r}"
+    parts = PurePosixPath(relative).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return f"path leaves the install directory: {relative!r}"
+    if parts[0] in PROTECTED_INSTALL_ROOTS or relative in PROTECTED_INSTALL_FILES:
+        return f"path belongs to the user and is never product-owned: {relative!r}"
+    if relative in {MANIFEST_FILE, MARKER_FILE}:
+        return f"path is packaging metadata, not product content: {relative!r}"
+    return None
+
+
+def _validate_manifest_entry(relative: str, manifest: Path) -> str:
+    problem = manifest_entry_error(relative)
+    if problem:
+        raise RuntimeError(f"install manifest is unsafe ({manifest}): {problem}")
+    return relative
+
+
 def read_install_manifest(path: Path) -> set[str]:
     """Files the previous package installed. A missing manifest means no claim on anything."""
     manifest = path / MANIFEST_FILE
@@ -181,23 +206,84 @@ def read_install_manifest(path: Path) -> set[str]:
         document = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise RuntimeError(f"install manifest is unreadable: {manifest}: {error}") from error
-    files = document.get("files") if isinstance(document, dict) else None
+    if not isinstance(document, dict):
+        raise RuntimeError(f"install manifest is invalid: {manifest}: root is not an object")
+    if document.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"install manifest is invalid: {manifest}: unsupported schema {document.get('schema_version')!r}")
+    files = document.get("files")
     if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
-        raise RuntimeError(f"install manifest is invalid: {manifest}")
-    return set(files)
+        raise RuntimeError(f"install manifest is invalid: {manifest}: files is not a string list")
+    if len(files) != len(set(files)):
+        raise RuntimeError(f"install manifest is invalid: {manifest}: duplicate entries")
+    entries = {_validate_manifest_entry(item, manifest) for item in files}
+    # A path cannot be both a file and a directory in one package; such a record would delete half
+    # of the tree and then fail to remove the rest.
+    for entry in entries:
+        parent = PurePosixPath(entry).parent
+        while str(parent) not in {"", "."}:
+            if str(parent) in entries:
+                raise RuntimeError(
+                    f"install manifest is invalid: {manifest}: {str(parent)!r} is both a file and a directory")
+            parent = parent.parent
+    return entries
 
 
-def write_install_manifest(install_dir: Path) -> None:
-    """Records exactly which files this package owns, for the next upgrade to remove."""
-    files = sorted(
-        item.relative_to(install_dir).as_posix()
-        for item in install_dir.rglob("*")
-        if item.is_file()
-        and item.name not in {MANIFEST_FILE, MARKER_FILE}
-        and not is_reparse_point(item)
-    )
-    payload = {"schema_version": MANIFEST_SCHEMA_VERSION, "files": files}
+def write_install_manifest(install_dir: Path, files: set[str]) -> None:
+    """Records exactly the files this package wrote, for the next upgrade to remove.
+
+    A caller passes the paths it actually copied. Scanning the directory here would also list
+    whatever the user stored there, and the next upgrade would then delete it.
+    """
+    entries = sorted(_validate_manifest_entry(item, install_dir / MANIFEST_FILE) for item in files)
+    missing = [item for item in entries if not (install_dir / item).is_file()]
+    if missing:
+        raise RuntimeError("install manifest names files this run did not leave behind: " + ", ".join(missing))
+    payload = {"schema_version": MANIFEST_SCHEMA_VERSION, "files": entries}
     (install_dir / MANIFEST_FILE).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+@dataclass
+class InstallOwnership:
+    """What this run has written, and what the previous package is allowed to replace."""
+
+    root: Path
+    replaceable: set[str] = field(default_factory=set)
+    owned: set[str] = field(default_factory=set)
+
+    def relative(self, destination: Path) -> str:
+        absolute = Path(destination).absolute()
+        try:
+            relative = absolute.relative_to(self.root)
+        except ValueError as error:
+            raise RuntimeError(f"package write escaped the install directory: {destination}") from error
+        return _validate_manifest_entry(relative.as_posix(), self.root / MANIFEST_FILE)
+
+    def check(self, destination: Path) -> str:
+        """Refuses to overwrite anything this package neither wrote now nor owned before."""
+        destination = Path(destination)
+        relative = self.relative(destination)
+        if destination.is_symlink() or is_reparse_point(destination):
+            raise RuntimeError(f"refusing to replace a link the package does not own: {relative}")
+        if destination.exists():
+            if destination.is_dir():
+                raise RuntimeError(f"refusing to replace a directory with a file: {relative}")
+            if relative not in self.replaceable and relative not in self.owned:
+                raise RuntimeError(
+                    f"refusing to overwrite a file the package does not own: {relative}")
+        return relative
+
+    def claim(self, destination: Path) -> None:
+        self.owned.add(self.relative(destination))
+
+
+def owned_copy(source: Path, destination: Path, ownership: InstallOwnership | None = None) -> None:
+    """Copies a product file and records it as owned by this run."""
+    if ownership is not None:
+        ownership.check(destination)
+    copy_file(source, destination)
+    if ownership is not None:
+        ownership.claim(destination)
 
 
 def remove_empty_directories(root: Path) -> None:
@@ -214,8 +300,8 @@ def remove_empty_directories(root: Path) -> None:
             pass
 
 
-def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
-    """Prepare install directory safely according to marker rules."""
+def clear_install_directory(path: Path, clean: bool, force: bool) -> set[str]:
+    """Prepares the install directory and returns the files the previous package owned."""
     resolved = path.resolve()
     repo_resolved = REPO_ROOT.resolve()
     if resolved == repo_resolved:
@@ -227,11 +313,11 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
 
     if not clean:
         path.mkdir(parents=True, exist_ok=True)
-        return
+        return read_install_manifest(path)
 
     if not path.exists():
         path.mkdir(parents=True)
-        return
+        return set()
 
     entries = list(path.iterdir())
     marker = path / MARKER_FILE
@@ -241,7 +327,9 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
             "pass --force-clean to remove it or --no-clean to reuse it"
         )
 
-    owned = read_install_manifest(path)
+    # A forced full replace does not consult the old manifest: the user asked to replace the
+    # directory. The data roots are still preserved below.
+    owned = set() if force else read_install_manifest(path)
     if entries and not owned and not force:
         # Without a manifest the package cannot tell its own files from user data. Refusing is the
         # only answer that cannot destroy something the user wrote.
@@ -260,19 +348,30 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> None:
                 shutil.rmtree(child)
             else:
                 child.unlink()
-        return
+        return set()
 
     root = path.resolve()
+    # Every record is checked before the first deletion, so a bad manifest cannot leave the
+    # installation half removed.
+    targets: list[Path] = []
     for relative in sorted(owned, key=lambda value: value.count("/"), reverse=True):
-        candidate = (root / relative).resolve()
-        if root not in candidate.parents:
+        candidate = root / relative
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate == root or root not in resolved_candidate.parents:
             raise RuntimeError(f"install manifest points outside the install dir: {relative}")
-        if candidate.is_file() or candidate.is_symlink():
-            candidate.unlink()
+        if candidate.is_symlink():
+            raise RuntimeError(f"install manifest points at a link; refusing to remove it: {relative}")
+        if candidate.is_file():
+            targets.append(candidate)
+        elif candidate.exists() and not candidate.is_dir():
+            raise RuntimeError(f"install manifest names an unsupported entry: {relative}")
+    for candidate in targets:
+        candidate.unlink()
     remove_empty_directories(path)
     remaining = sum(1 for item in path.rglob("*") if item.is_file())
     if remaining:
         print(f"preserving {remaining} file(s) this package does not own under {path}")
+    return owned
 
 
 def write_package_marker(
@@ -356,6 +455,7 @@ def copy_project_runtime(
     install_dir: Path,
     include_pdb: bool,
     allow_dirty: bool = False,
+    ownership: InstallOwnership | None = None,
 ) -> None:
     """Copy project DLLs, plugins, and QML resources."""
     bin_dir = build_dir / "bin"
@@ -373,7 +473,7 @@ def copy_project_runtime(
             quickui_dll = candidate
             break
     if quickui_dll:
-        copy_file(quickui_dll, install_dir / "quickui.dll")
+        owned_copy(quickui_dll, install_dir / "quickui.dll", ownership)
 
     # 1b. The Python bridge is a product component even though no interpreter ships with it: the
     # host resolves it next to the executable only when a user-selected environment is started.
@@ -384,14 +484,14 @@ def copy_project_runtime(
             break
     if bridge_dll is None:
         raise RuntimeError("package verification failed: visionrt_python_bridge.dll was not built")
-    copy_file(bridge_dll, install_dir / "visionrt_python_bridge.dll")
+    owned_copy(bridge_dll, install_dir / "visionrt_python_bridge.dll", ownership)
 
     # 2. 构建完成阶段生成的组件元数据：关于弹窗只从 exe 同目录读取它们
     for name, comp in (("build_info.json", "VisionRT"), ("contracts-build-info.json", "VisionRTContracts")):
         build_info = bin_dir / name
         if build_info.is_file():
             verify_build_metadata(build_info, expected_component=comp, allow_dirty=allow_dirty)
-            copy_file(build_info, install_dir / name)
+            owned_copy(build_info, install_dir / name, ownership)
         else:
             if not allow_dirty:
                 raise RuntimeError(f"package verification failed: missing required build metadata {build_info}")
@@ -399,7 +499,7 @@ def copy_project_runtime(
     # 3. PDB debug symbols if requested
     if include_pdb and bin_dir.is_dir():
         for pdb in bin_dir.glob("*.pdb"):
-            copy_file(pdb, install_dir / pdb.name)
+            owned_copy(pdb, install_dir / pdb.name, ownership)
 
 
 def deploy_tools_package(
@@ -408,6 +508,7 @@ def deploy_tools_package(
     validator: Path | None = None,
     external_index: Path | None = None,
     allow_dirty: bool = False,
+    ownership: InstallOwnership | None = None,
 ) -> None:
     """Deploy external tools package ZIP into install_dir/tools-package (D-05 / D-06)."""
     import zipfile
@@ -494,6 +595,10 @@ def deploy_tools_package(
         if backup_dir.is_dir():
             shutil.rmtree(backup_dir, ignore_errors=True)
 
+    if ownership is not None:
+        for item in sorted(target_pkg.rglob("*")):
+            if item.is_file():
+                ownership.claim(item)
     print(f"deployed tools package from {package_zip} into {target_pkg}")
 
 
@@ -503,6 +608,7 @@ def copy_dependencies(
     dependency_file: Path,
     config: str,
     allow_missing: bool,
+    ownership: InstallOwnership | None = None,
 ) -> None:
     """Copy external dependencies declared in dependencies.json."""
     platform = platform_key()
@@ -546,7 +652,7 @@ def copy_dependencies(
                     if prev_source != source:
                         warn(f"runtime dependency collision for {runtime.name}: {prev_source} and {source}")
                     continue
-                copy_file(source, target_dir / runtime.name)
+                owned_copy(source, target_dir / runtime.name, ownership)
                 copied_runtimes[destination_key] = source
             continue
         patterns = dependency_patterns(dep, platform)
@@ -575,7 +681,7 @@ def copy_dependencies(
                 if prev_source != source:
                     warn(f"runtime dependency collision for {runtime.name}: {prev_source} and {source}")
                 continue
-            copy_file(source, target_dir / runtime.name)
+            owned_copy(source, target_dir / runtime.name, ownership)
             copied_runtimes[destination_key] = source
 
     if missing_dependencies:
@@ -619,7 +725,7 @@ def visual_studio_roots() -> list[Path]:
     return unique
 
 
-def copy_msvc_runtime(install_dir: Path, architecture: str) -> None:
+def copy_msvc_runtime(install_dir: Path, architecture: str, ownership: InstallOwnership | None = None) -> None:
     """Copy MSVC redistributable runtime DLLs."""
     for root in visual_studio_roots():
         redist = root / "VC" / "Redist" / "MSVC"
@@ -632,14 +738,14 @@ def copy_msvc_runtime(install_dir: Path, architecture: str) -> None:
                 continue
             copied = False
             for dll in sorted(runtime_dir.rglob("*.dll")):
-                copy_file(dll, install_dir / dll.name)
+                owned_copy(dll, install_dir / dll.name, ownership)
                 copied = True
             if copied:
                 return
     warn("MSVC runtime DLLs were not found in standard paths")
 
 
-def copy_windows_sdk_dependencies(install_dir: Path, architecture: str) -> None:
+def copy_windows_sdk_dependencies(install_dir: Path, architecture: str, ownership: InstallOwnership | None = None) -> None:
     """Copy DirectX shader compilation runtime from Windows SDK."""
     kits_root = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Windows Kits" / "10" / "bin"
     if not kits_root.is_dir():
@@ -651,7 +757,7 @@ def copy_windows_sdk_dependencies(install_dir: Path, architecture: str) -> None:
     for name in ("dxcompiler.dll", "dxil.dll"):
         candidate = kit_bin / architecture / name
         if candidate.is_file():
-            copy_file(candidate, install_dir / name)
+            owned_copy(candidate, install_dir / name, ownership)
 
 
 def qt_roots(build_dir: Path) -> list[Path]:
@@ -750,12 +856,62 @@ def cleanup_release_debug_artifacts(install_dir: Path) -> None:
             pass
 
 
-def write_qt_conf(install_dir: Path) -> None:
+def write_qt_conf(install_dir: Path, ownership: InstallOwnership | None = None) -> None:
     """Write qt.conf for relative runtime paths."""
-    (install_dir / "qt.conf").write_text(
+    destination = install_dir / "qt.conf"
+    if ownership is not None:
+        ownership.check(destination)
+    destination.write_text(
         "[Paths]\nPrefix=.\nLibraries=.\nPlugins=.\nQml2Imports=qml\nQmlImports=qml\n",
         encoding="utf-8",
     )
+    if ownership is not None:
+        ownership.claim(destination)
+
+
+def deploy_qt_runtime(
+    build_dir: Path,
+    install_dir: Path,
+    exe: Path,
+    explicit: str,
+    skip: bool,
+    ownership: InstallOwnership,
+) -> None:
+    """Runs windeployqt and records exactly the files it wrote.
+
+    A staging directory would make the written set obvious, but it also means moving hundreds of
+    files twice; the snapshot records what actually changed instead. A file that existed before and
+    was not owned by this package is a conflict: windeployqt must never silently replace user data.
+    """
+    if skip:
+        print("skip windeployqt")
+        return
+
+    def fingerprint(path: Path) -> tuple[int, int]:
+        stat = path.stat()
+        return stat.st_size, stat.st_mtime_ns
+
+    before = {item.relative_to(install_dir).as_posix(): fingerprint(item)
+              for item in install_dir.rglob("*") if item.is_file()}
+    invoke_windeployqt(build_dir, install_dir, exe, explicit, False)
+    cleanup_release_debug_artifacts(install_dir)
+
+    written: list[str] = []
+    for item in install_dir.rglob("*"):
+        if not item.is_file():
+            continue
+        relative = item.relative_to(install_dir).as_posix()
+        if before.get(relative) != fingerprint(item):
+            written.append(relative)
+
+    conflicts = sorted(relative for relative in written
+                       if relative in before
+                       and relative not in ownership.replaceable
+                       and relative not in ownership.owned)
+    if conflicts:
+        raise RuntimeError("windeployqt overwrote files this package does not own: " + ", ".join(conflicts))
+    for relative in written:
+        ownership.claim(install_dir / relative)
 
 
 def is_reparse_point(path: Path) -> bool:
@@ -1101,6 +1257,12 @@ def main() -> int:
 
         validator_path = find_validator(build_dir, args.config, args.validator)
 
+        previous = read_install_manifest(install_dir)
+        if not previous:
+            raise RuntimeError(
+                f"install dir has no {MANIFEST_FILE}: {install_dir}; deploy a full package first so the "
+                "ownership record has a baseline")
+        ownership = InstallOwnership(install_dir, replaceable=set(previous))
         ext_index = resolve_project_path(args.tools_index) if args.tools_index else None
         deploy_tools_package(
             install_dir,
@@ -1108,10 +1270,13 @@ def main() -> int:
             validator=validator_path,
             external_index=ext_index,
             allow_dirty=args.allow_dirty,
+            ownership=ownership,
         )
-        # The replaced tools package changes what this installation owns, so the ownership record is
-        # rebuilt from what is actually on disk.
-        write_install_manifest(install_dir)
+        # Only the tools subtree changed; everything else the previous package owned keeps its
+        # claim, and files this deployment did not write are never added.
+        new_files = {item for item in previous if not item.startswith("tools-package/")}
+        new_files.update(item for item in ownership.owned if item.startswith("tools-package/"))
+        write_install_manifest(install_dir, new_files)
         print(f"tools package successfully deployed into {install_dir / 'tools-package'}")
         return 0
 
@@ -1125,12 +1290,14 @@ def main() -> int:
     source_exe = find_executable(build_dir)
     validator_path = find_validator(build_dir, args.config, args.validator)
     version = project_version()
-    clear_install_directory(install_dir, not args.no_clean, args.force_clean)
+    previous = clear_install_directory(install_dir, not args.no_clean, args.force_clean)
+    ownership = InstallOwnership(install_dir, replaceable=set(previous))
     write_package_marker(install_dir, build_dir, version, ("state=incomplete",))
 
     packaged_exe = install_dir / source_exe.name
-    copy_file(source_exe, packaged_exe)
-    copy_project_runtime(build_dir, install_dir, args.include_pdb, allow_dirty=args.allow_dirty)
+    owned_copy(source_exe, packaged_exe, ownership)
+    copy_project_runtime(build_dir, install_dir, args.include_pdb, allow_dirty=args.allow_dirty,
+                         ownership=ownership)
 
     if args.tools_package:
         ext_index = resolve_project_path(args.tools_index) if args.tools_index else None
@@ -1140,12 +1307,14 @@ def main() -> int:
             validator=validator_path,
             external_index=ext_index,
             allow_dirty=args.allow_dirty,
+            ownership=ownership,
         )
 
     if args.skip_dependencies:
         print("skip manifest dependencies")
     elif dependency_file.is_file():
-        copy_dependencies(build_dir, install_dir, dependency_file, args.config, args.allow_missing_dependencies)
+        copy_dependencies(build_dir, install_dir, dependency_file, args.config, args.allow_missing_dependencies,
+                          ownership=ownership)
     else:
         msg = f"dependency manifest was not found: {dependency_file}"
         if args.allow_missing_dependencies:
@@ -1158,28 +1327,29 @@ def main() -> int:
         if args.skip_system_libs:
             print("skip system libraries")
         else:
-            copy_msvc_runtime(install_dir, arch)
-            copy_windows_sdk_dependencies(install_dir, arch)
-        invoke_windeployqt(build_dir, install_dir, packaged_exe, args.windeployqt, args.skip_windeployqt)
-        cleanup_release_debug_artifacts(install_dir)
-        write_qt_conf(install_dir)
+            copy_msvc_runtime(install_dir, arch, ownership)
+            copy_windows_sdk_dependencies(install_dir, arch, ownership)
+        deploy_qt_runtime(build_dir, install_dir, packaged_exe, args.windeployqt, args.skip_windeployqt,
+                          ownership)
+        write_qt_conf(install_dir, ownership)
         write_windows_marker(install_dir, build_dir, arch, version, args.skip_dependencies)
-        # Last, so the record names exactly the files this package leaves behind.
-        write_install_manifest(install_dir)
         if not args.skip_verify:
             verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
             evidence = resolve_project_path(args.evidence) if args.evidence else build_dir / "evidence" / "package-evidence.json"
             write_package_evidence(install_dir, evidence, arch)
+        # Written only after verification: a failed run must not leave a record that claims files
+        # the next upgrade may then delete.
+        write_install_manifest(install_dir, ownership.owned)
         print(f"\npackage complete: {install_dir}")
         print(f"double-click to run: {packaged_exe}")
     else:
-        write_qt_conf(install_dir)
+        write_qt_conf(install_dir, ownership)
         write_package_marker(install_dir, build_dir, version)
-        write_install_manifest(install_dir)
         if not args.skip_verify:
             verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
             evidence = resolve_project_path(args.evidence) if args.evidence else build_dir / "evidence" / "package-evidence.json"
             write_package_evidence(install_dir, evidence, target_architecture(build_dir))
+        write_install_manifest(install_dir, ownership.owned)
         print(f"\npackage complete: {install_dir}")
 
     return 0

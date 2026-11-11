@@ -181,6 +181,18 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                 },
                 Qt::QueuedConnection);
         });
+    runtime->setActivityCallback(
+        [this]
+        {
+            QMetaObject::invokeMethod(
+                &timer,
+                [this]
+                {
+                    if (!tearingDown)
+                        applyActivity();
+                },
+                Qt::QueuedConnection);
+        });
     QObject::connect(&timer, &QTimer::timeout, owner, [this] { poll(); });
     timer.setInterval(34);
     timer.start();
@@ -522,10 +534,56 @@ void AppController::Impl::clearResults()
     timing.clear();
     finishRoi();
     presentation.clear();
+    activityEpoch.clear();
     updateResults();
     publishNodesChanged();
     emit q->runtimeChanged();
     emit q->timingChanged();
+}
+
+void AppController::Impl::applyActivity()
+{
+    if (operations.isClosing())
+        return;
+    const auto events = runtime->drainActivity();
+    if (events.empty())
+        return;
+    bool        changed = false;
+    std::set<NodeId> touched;
+    for (const auto &event : events)
+    {
+        if (event.generation != generation || !nodeExists(event.node))
+            continue;
+        auto &epoch = activityEpoch[event.node];
+        if (event.session < epoch.session
+            || (event.session == epoch.session && event.round < epoch.round))
+            continue;
+        epoch = {event.session, event.round};
+        if (event.kind == ActivityKind::EnteredExecution)
+        {
+            // A queued enter can arrive after the run already published its terminal snapshot. The
+            // snapshot is the authority; do not repaint a finished node as running for one frame.
+            const auto *snapshot = presentation.snapshot(event.node);
+            if (snapshot && (*snapshot)->round == event.round
+                && (*snapshot)->disposition != NodeDisposition::Running)
+                continue;
+        }
+        if (presentation.setActive(event.node, event.kind == ActivityKind::EnteredExecution))
+        {
+            touched.insert(event.node);
+            changed = true;
+        }
+    }
+    if (changed)
+    {
+        for (const auto node : touched)
+            if (const auto *definition = findNode(node))
+                nodesModel.update(nodeRow(*definition));
+        emit q->nodesChanged();
+    }
+    // The event only says "this node entered/left execution"; the terminal state, timing and
+    // diagnostics still come from the runtime snapshot.
+    poll();
 }
 
 void AppController::Impl::poll()

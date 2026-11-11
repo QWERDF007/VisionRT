@@ -30,8 +30,10 @@
 #include <deque>
 #include <functional>
 #include <future>
+#include <map>
 #include <set>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace visionrt {
@@ -120,6 +122,14 @@ struct AppController::Impl : PresentationHost
     RuntimeState                           state        = RuntimeState::Idle;
     std::uint64_t                          generation   = 1;
     std::uint64_t                          projectEpoch = 1;
+    // Newest {session, round} accepted per node. Parallel workers post in their own order, so an
+    // event older than one already applied is dropped instead of clearing a newer running state.
+    struct ActivityEpoch
+    {
+        std::uint64_t session = 0;
+        std::uint64_t round   = 0;
+    };
+    std::map<NodeId, ActivityEpoch>        activityEpoch;
     QString                                flow = "flow_1";
     QString                                selected;
     QString                                search;
@@ -254,6 +264,9 @@ struct AppController::Impl : PresentationHost
     void                 finishDrain();
     void                 updateReadback();
     void      poll();
+    // Drains coalesced node activity events, applies only the transient running set, then polls for
+    // the authoritative snapshot. Never derives status, timing or errors from the event itself.
+    void      applyActivity();
     void      start(RunMode mode);
     void      beginRun(RunMode mode);
     void      request(ProjectOperations::Action action, QString path = {});

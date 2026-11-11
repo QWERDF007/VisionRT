@@ -31,29 +31,32 @@ Rectangle {
 
     readonly property string nodeState: root.nodeStatus || "idle"
     readonly property bool isError: root.nodeState === "failed" || root.nodeMissing === true
+    readonly property bool runningNow: root.nodeState === "running"
     // Gated nodes never enter the algorithm: they keep a neutral canvas colour plus an explicit
     // badge, so a skipped branch can not be mistaken for a green success.
     readonly property bool isSkipped: root.nodeState === "skipped"
     readonly property bool isBlocked: root.nodeState === "blocked"
     readonly property color statusDotColor: {
         if (root.isBlocked) return Theme.nodeStateOrange
-        if (root.nodeState === "running") return Theme.nodeStateGreen
+        if (root.runningNow) return Theme.nodeHeaderTextGreen
         if (root.nodeState === "failed") return Theme.nodeStateRed
         return Theme.nodeStateGray
     }
     readonly property color headerBg: {
-        if (root.nodeState === "running") return Theme.nodeHeaderGreen
+        if (root.runningNow) return Theme.nodeHeaderGreen
         if (root.nodeState === "failed") return Theme.nodeHeaderRed
         return Theme.nodeHeaderGray
     }
     readonly property color headerText: {
-        if (root.nodeState === "running") return Theme.nodeHeaderTextGreen
+        if (root.runningNow) return Theme.nodeHeaderTextGreen
         if (root.nodeState === "failed") return Theme.nodeHeaderTextRed
         return Theme.nodeHeaderTextGray
     }
 
-    border.color: root.selected ? "transparent" : (root.isError ? Theme.nodeStateRed : (root.nodeState === "running" ? Theme.nodeStateGreen : "#c0c6cf"))
-    border.width: root.selected ? 0 : 1
+    // The running border is its own layer: selecting a node must not hide that it is running.
+    border.color: root.runningNow ? Theme.nodeStateGreen
+                                  : (root.selected ? "transparent" : (root.isError ? Theme.nodeStateRed : "#c0c6cf"))
+    border.width: root.runningNow ? 2 : (root.selected ? 0 : 1)
 
     function getIcon(title, category) {
         let t = (title + " " + category).toLowerCase()

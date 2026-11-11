@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Error.h"
+#include "runtime/NodeActivity.h"
 
 #include "core/ToolRegistry.h"
 #include "runtime/Snapshot.h"
@@ -131,6 +132,10 @@ public:
     RuntimeUpdate  pollLatest();
     bool           acknowledgeCompletion(RuntimeCompletion completion);
     void           setCompletionCallback(std::function<void(RuntimeCompletion)> callback);
+    // One coalesced wake for any number of node activity events. The window drains the events and
+    // then asks pollLatest() for the authoritative snapshot; the callback carries no state.
+    void           setActivityCallback(std::function<void()> callback);
+    std::vector<NodeActivityEvent> drainActivity();
 
 private:
     struct Impl;

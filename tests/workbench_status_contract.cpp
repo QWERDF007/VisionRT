@@ -161,7 +161,27 @@ def run(inputs):
     require(QTest::qWaitFor([&] { return sourceItem->property("nodeState").toString() == "running"; }, 2000),
             "status source delegate did not reach running state");
     const auto *theme = themeForEngine(&engine);
-    requireColor(sourceItem, "statusDotColor", theme->nodeStateGreen(), "running status dot is not green");
+    // The status border is its own layer: a selected node keeps it, because selection is drawn as a
+    // separate dashed outline and must never hide that the node is running.
+    const auto borderOf = [](QQuickItem *item)
+    {
+        return item ? item->property("border").value<QObject *>() : nullptr;
+    };
+    const auto requireRunningBorder = [&](QQuickItem *item, const char *message)
+    {
+        auto *pen = borderOf(item);
+        require(pen && pen->property("width").toDouble() == 2
+                    && pen->property("color").value<QColor>() == theme->nodeStateGreen(),
+                message);
+    };
+    const auto requireIdleBorder = [&](QQuickItem *item, const char *message)
+    {
+        auto *pen = borderOf(item);
+        require(pen && pen->property("width").toDouble() == 1
+                    && pen->property("color").value<QColor>() != theme->nodeStateGreen(),
+                message);
+    };
+    requireColor(sourceItem, "statusDotColor", theme->nodeHeaderTextGreen(), "running status dot is not readable on the green header");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGreen(), "running header is not green");
     requireColor(sourceItem, "headerText", theme->nodeHeaderTextGreen(), "running header text is not green");
     // A run owns the workspace: the selection cannot move while it is active, so the running node
@@ -169,18 +189,20 @@ def run(inputs):
     app.selectNode(neighbour);
     require(app.selectedNode() == source, "selection changed while a run owned the workspace");
     require(sourceItem->property("selected").toBool(), "running node lost its selection");
-    requireColor(sourceItem, "statusDotColor", theme->nodeStateGreen(), "running colour depends on selection");
+    requireColor(sourceItem, "statusDotColor", theme->nodeHeaderTextGreen(), "running colour depends on selection");
+    requireRunningBorder(sourceItem, "a selected running node lost its 2px status border");
     write(permission, "allow");
     idle();
     require(stateOf(source).value("state").toString() == "succeeded", "status source did not succeed");
     requireColor(sourceItem, "statusDotColor", theme->nodeStateGray(), "succeeded status dot is not neutral");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGray(), "succeeded header is not neutral");
-    // Status rendering is independent of selection: selecting the neighbour after the run leaves the
-    // finished source neutral.
+    // The border belongs to the status layer, so it is checked again once selection moved away and
+    // the card shows its own neutral outline.
     app.selectNode(neighbour);
     auto *neighbourItem = findItem(canvas, "flowNode_" + neighbour);
     require(neighbourItem && neighbourItem->property("selected").toBool(), "neighbour node was not selected");
     requireColor(sourceItem, "statusDotColor", theme->nodeStateGray(), "selection changed the finished colour");
+    requireIdleBorder(sourceItem, "a finished node did not return to its neutral border");
     require(!stateOf(source).value("timingText").toString().isEmpty()
                 && stateOf(source).value("timingText").toString() != QStringLiteral("运行中"),
             "succeeded node has no timing");
@@ -224,7 +246,7 @@ def run(inputs):
                                  + " diag=" + app.diagnostic().toStdString());
     auto *receiverItem = findItem(canvas, "flowNode_" + receiver);
     require(receiverItem, "status receiver delegate is missing");
-    requireColor(receiverItem, "statusDotColor", theme->nodeStateGreen(), "waiting receiver is not green");
+    requireColor(receiverItem, "statusDotColor", theme->nodeHeaderTextGreen(), "waiting receiver dot is not readable on the green header");
     app.toggleLoop();
     write(permission, "allow");
     idle();

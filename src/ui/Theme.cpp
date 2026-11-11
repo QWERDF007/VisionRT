@@ -142,16 +142,16 @@ void Theme::initLightIndustrialPalette()
     // 流程画布节点四态色彩与徽标
     nodeStateGray_       = QColor("#8c959f");
     nodeStateBlue_       = QColor("#1887d8");
-    nodeStateGreen_      = QColor("#2da44e");
+    nodeStateGreen_      = QColor("#1a7f37");
     nodeStateRed_        = QColor("#cf222e");
     nodeStateOrange_     = QColor("#e66b37");
     nodeHeaderGray_      = QColor("#dfe4ea");
     nodeHeaderBlue_      = QColor("#ddf4ff");
-    nodeHeaderGreen_     = QColor("#dafbe1");
+    nodeHeaderGreen_     = QColor("#1a7f37");
     nodeHeaderRed_       = QColor("#ffebe9");
     nodeHeaderTextGray_  = QColor("#57606a");
     nodeHeaderTextBlue_  = QColor("#0969da");
-    nodeHeaderTextGreen_ = QColor("#1a7f37");
+    nodeHeaderTextGreen_ = QColor("#ffffff");
     nodeHeaderTextRed_   = QColor("#cf222e");
 
     // 顶部工具栏尺寸与间距

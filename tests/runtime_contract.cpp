@@ -1648,6 +1648,37 @@ void authorContractErrorPassesThroughBusinessBoundary()
     assert(!snap->outputs.contains(kStatusMessagePort));
 }
 
+void activityEventsFollowExecution()
+{
+    RuntimeEngine engine(2);
+    ToolRegistry  registry;
+    auto          tool = definition("test.activity");
+    install(registry, tool, [](const Values &) { return toolResult({{2, std::int64_t{5}}}, {}); });
+    auto             node1 = node(1, tool);
+    ProjectDefinition project;
+    project.flows.front().nodes = {node1};
+    assert(engine.start(project, registry, RunMode::Once));
+    const auto result = finish(engine);
+    assert(snapshot(result, 1)->status.code == 0);
+
+    std::vector<NodeActivityEvent> events;
+    for (auto batch = engine.drainActivity(); !batch.empty(); batch = engine.drainActivity())
+        events.insert(events.end(), batch.begin(), batch.end());
+
+    // A node that actually executed produces one enter and one leave, with the run's epoch.
+    assert(events.size() >= 2);
+    assert(events.front().node == node1.id && events.front().kind == ActivityKind::EnteredExecution);
+    assert(events.back().node == node1.id && events.back().kind == ActivityKind::LeftExecution);
+    for (const auto &event : events)
+    {
+        assert(event.generation == result.generation);
+        assert(event.session == result.session);
+        assert(event.round == snapshot(result, 1)->round);
+    }
+    for (std::size_t index = 1; index < events.size(); ++index)
+        assert(events[index].sequence > events[index - 1].sequence);
+}
+
 int main(int argc, char **argv)
 try
 {
@@ -1673,6 +1704,7 @@ try
     std::cout << "19\n"; crossRoundPythonMetricIsolation();
     std::cout << "20\n"; businessNegativeIsNotCancellation();
     std::cout << "21\n"; authorContractErrorPassesThroughBusinessBoundary();
+    std::cout << "22\n"; activityEventsFollowExecution();
     std::cout << "runtime contracts passed\n";
     return 0;
 }

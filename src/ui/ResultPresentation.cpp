@@ -207,6 +207,17 @@ bool ResultPresentation::applyNode(NodeId node, bool active, const std::shared_p
     return changed;
 }
 
+bool ResultPresentation::setActive(NodeId node, bool active)
+{
+    if (active == active_.contains(node))
+        return false;
+    if (active)
+        active_.insert(node);
+    else
+        active_.erase(node);
+    return true;
+}
+
 void ResultPresentation::forgetNode(NodeId node)
 {
     snapshots_.erase(node);

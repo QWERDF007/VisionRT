@@ -174,24 +174,10 @@ void NodeRuntime::reset() noexcept
 
 void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
 {
-    active.store(true, std::memory_order_release);
     // A stop that landed before this task started must not enter execute or
     // publish a fabricated result for a node the user never observed running.
     if (context->stop && context->stop->stop_requested())
-    {
-        active.store(false, std::memory_order_release);
         return;
-    }
-
-    struct Activity
-    {
-        std::atomic<bool> &active;
-
-        ~Activity()
-        {
-            active.store(false, std::memory_order_release);
-        }
-    } activity{active};
 
     struct ScopeTimer
     {
@@ -274,6 +260,44 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     ToolStatus      businessStatus;
     bool            frameworkFailure = false;
     bool            enteredExecute   = false;
+
+    // The UI's running window for this node, as a scope: it opens once the guard and input
+    // preparation passed and the node is about to create, initialize or execute the tool, and it
+    // closes when this function returns. The snapshot is published before that return, so the
+    // window always ends against a readable result instead of the previous round's one. A skipped
+    // or blocked node never calls enter(), which is what keeps gated cards from turning green.
+    // The polled `active` flag and the event describe this one window, so the flag is moved first
+    // and then announced: a window reacting to the announcement can never read the old value.
+    struct ExecutionWindow
+    {
+        std::atomic<bool>                &active;
+        std::shared_ptr<ActivityMailbox>  mailbox;
+        NodeActivityEvent                 event;
+        bool                              posted = false;
+
+        void enter()
+        {
+            active.store(true, std::memory_order_release);
+            if (!mailbox)
+                return;
+            event.kind = ActivityKind::EnteredExecution;
+            mailbox->post(event);
+            posted = true;
+        }
+
+        ~ExecutionWindow()
+        {
+            if (posted)
+            {
+                event.kind = ActivityKind::LeftExecution;
+                mailbox->post(event);
+            }
+            active.store(false, std::memory_order_release);
+        }
+    } executionWindow{
+        active, context->activity,
+        NodeActivityEvent{context->generation, context->session, context->round, 0, id,
+                          ActivityKind::EnteredExecution}};
 
     // Host gate: only an explicitly configured logical condition can skip a node.
     // Upstream business status never gates a normal tool; the tool decides.
@@ -399,6 +423,9 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             publishTerminal(gateMessage);
             return;
         }
+        // The UI's running state starts here: the guard and input preparation passed and the node
+        // is about to create/initialize/execute the tool. The RAII scope ends it on every exit path.
+        executionWindow.enter();
         double deferredCreateMs = 0.0;
         if (!instance && deferredCreate)
         {
