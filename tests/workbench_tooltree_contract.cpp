@@ -152,9 +152,11 @@ try
     clickItem(window, category);
     require(QTest::qWaitFor([&] {
                 auto item = delegateWithKey(tree, targetKey);
-                return item && item->property("expanded").toBool();
+                return item && item->property("expanded").toBool()
+                       && library->property("selectedKey").toString() == targetKey
+                       && item->property("isSelected").toBool();
             }, 2000),
-            "tool tree category did not expand");
+            "tool tree category selection did not persist after expansion");
     require(QTest::qWaitFor(
                 [&]
                 {
@@ -164,6 +166,29 @@ try
                 },
                 2000),
             "expanded tool tree category revealed no children");
+    // Verify switching selection to another category: only the active node is selected, no row offset or jumping
+    const auto currentCats = categories(tree);
+    if (currentCats.size() > 1)
+    {
+        auto otherCat = currentCats[1];
+        const auto otherKey = otherCat->property("stableKey").toString();
+        clickItem(window, otherCat);
+        require(QTest::qWaitFor([&] {
+                    auto item = delegateWithKey(tree, otherKey);
+                    auto prev = delegateWithKey(tree, targetKey);
+                    return item && item->property("isSelected").toBool()
+                           && (!prev || !prev->property("isSelected").toBool())
+                           && library->property("selectedKey").toString() == otherKey;
+                }, 2000),
+                "switching category did not update selection cleanly");
+        int selectedCount = 0;
+        QList<QQuickItem *> allDelegates;
+        collectDelegates(tree, allDelegates);
+        for (auto *del : allDelegates)
+            if (del->property("isSelected").toBool())
+                ++selectedCount;
+        require(selectedCount == 1, "tool tree has multiple highlighted items");
+    }
     QAbstractItemModel *model = app.toolModel();
     QModelIndex          leaf;
     const std::function<void(const QModelIndex &)> findLeaf = [&](const QModelIndex &parent)

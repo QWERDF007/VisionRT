@@ -103,7 +103,7 @@ Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true
             model: app.toolModel; displayRole: "display"
             radius: 0; border.width: 0; cellHeight: Theme.treeRowHeight
-            view.delegate: ToolTreeDelegate {
+            delegate: ToolTreeDelegate {
                 treeView: tree.view
                 selectedKey: root.selectedKey
                 onSelected: function(key) { root.selectedKey = key }

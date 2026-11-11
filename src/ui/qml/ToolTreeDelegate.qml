@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQml.Models
 import quickui
 import VisionRT.Style 1.0
 
@@ -208,14 +209,18 @@ Item {
                 root.contextMenuRequested(mouse, root.model)
                 return
             }
+            if (root.stableKey.length > 0)
+                root.selected(root.stableKey)
+            if (root.treeView && root.treeView.selectionModel) {
+                let idx = root.treeView.modelIndex(root.row, root.column)
+                root.treeView.selectionModel.setCurrentIndex(idx, ItemSelectionModel.ClearAndSelect)
+            }
             if (root.hasChildren) {
                 if (root.treeView && root.treeView.toggleExpanded)
                     root.treeView.toggleExpanded(root.row)
                 root.toggleExpandedRequested()
-            } else {
-                root.selected(root.stableKey)
-                if (root.available)
-                    root.chosen(root.toolId)
+            } else if (root.available) {
+                root.chosen(root.toolId)
             }
         }
         onDoubleClicked: function(mouse) { mouse.accepted = true }
