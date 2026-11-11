@@ -167,6 +167,9 @@ struct AppController::Impl : PresentationHost
     {
         std::vector<PythonImplementation>                implementations;
         std::vector<std::pair<std::string, ToolFactory>> factories;
+        // The environment these answers were produced under. A refresh runs on a worker, so the
+        // live status may already have moved on by the time the window reads the result back.
+        PythonEnvironmentStatus                          environment;
     };
 
     std::shared_ptr<RefreshResult>       refreshResult;

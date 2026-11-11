@@ -1070,6 +1070,7 @@ void AppController::Impl::requestRefresh(bool rescan)
     // The status is snapshotted here, on the thread that owns it; the refresh itself runs on a
     // runtime worker and must not read a value another thread can replace under it.
     const auto pythonStatus = pythonBackend ? pythonBackend->environmentStatus() : PythonEnvironmentStatus{};
+    result->environment     = pythonStatus;
     const auto  accepted      = runtime->requestRefresh(
         [result, definitions = std::move(definitions), pythonBackend, pythonStatus, catalog]
         {
@@ -1249,7 +1250,11 @@ void AppController::Impl::refreshFinished()
         if (found != result->factories.end())
             factory = std::move(found->second);
         registry.setPythonImplementation(implementation.toolId, std::move(factory), implementation.status);
-        if (!implementation.status)
+        // A tool that fails on its own is reported by its own name. While the environment is not
+        // available, every Python tool carries the same environment sentence, so a single check
+        // would add one identical line per tool for a state the tool list and the settings window
+        // already show. Only per-tool failures reach the log.
+        if (!implementation.status && result->environment.available())
             report(implementation.status);
     }
     if (refreshReconcile)
