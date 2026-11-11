@@ -223,10 +223,8 @@ public:
     THEME_INT_PROP(menuBarHeight)
     THEME_INT_PROP(menuButtonHeight)
     THEME_INT_PROP(menuButtonSpacing)
-    THEME_INT_PROP(menuIconSize)
     THEME_INT_PROP(actionButtonWidth)
     THEME_INT_PROP(actionButtonHeight)
-    THEME_INT_PROP(actionIconSize)
     THEME_INT_PROP(separatorWidth)
     THEME_INT_PROP(separatorHeight)
 
@@ -243,7 +241,6 @@ public:
     THEME_INT_PROP(tabFontSize)
     THEME_INT_PROP(executeButtonHeight)
     THEME_INT_PROP(executeButtonWidth)
-    THEME_INT_PROP(executeButtonIconSize)
     THEME_INT_PROP(executeButtonFontSize)
     THEME_INT_PROP(paramGroupHeaderHeight)
     THEME_INT_PROP(paramGroupHeaderFontSize)
@@ -304,7 +301,6 @@ public:
     // 工具编辑卡片内标签列的宽度：卡片比参数面板窄，标签列不跟随参数面板的宽度
     THEME_INT_PROP(cardLabelWidth)
     THEME_INT_PROP(timingIconSize)
-    THEME_INT_PROP(executeButtonPlayIconSize)
 
     // 参数行的统一间距
     THEME_INT_PROP(parameterRowSpacing)
@@ -347,7 +343,6 @@ public:
     THEME_FONT_PROP(monoFont)
 
     // 语义图标（字体 glyph），业务组件不直接选码点
-    THEME_INT_PROP(iconFitWindow)
     THEME_INT_PROP(iconZoomIn)
     THEME_INT_PROP(iconZoomOut)
     THEME_INT_PROP(iconOneToOne)

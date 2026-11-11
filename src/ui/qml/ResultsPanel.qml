@@ -101,7 +101,7 @@ Rectangle {
                 enabled: app.workspaceEnabled
                 QuiTextIconButton {
                     text: "适应窗口"
-                    iconSource: Theme.iconFitWindow
+                    iconSource: QuiFontIcon.FitPage
                     implicitWidth: Theme.toolbarButtonSize; implicitHeight: Theme.toolbarButtonSize
                     radius: Theme.radiusSmall
                     display: AbstractButton.IconOnly

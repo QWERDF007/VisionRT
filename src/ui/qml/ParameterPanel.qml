@@ -146,17 +146,9 @@ QuiSplitView {
                         opacity: enabled ? 1.0 : 0.4
                         RowLayout {
                             anchors.centerIn: parent; spacing: 5
-                            Rectangle {
-                                width: 16; height: 16; radius: 8
-                                color: "transparent"
-                                border.color: Theme.executeButtonIcon; border.width: 1.5
-                                QuiTextIcon {
-                                    anchors.centerIn: parent
-                                    anchors.horizontalCenterOffset: 0.8
-                                    iconSource: QuiFontIcon.Play
-                                    iconSize: Theme.executeButtonPlayIconSize
-                                    iconColor: Theme.executeButtonIcon
-                                }
+                            QuiTextIcon {
+                                iconSource: QuiFontIcon.Play
+                                iconColor: Theme.executeButtonIcon
                             }
                             QuiText {
                                 text: "执行"

@@ -403,7 +403,7 @@ FocusScope {
                 }
                 QuiTextIconButton {
                     objectName: "flowFitButton"
-                    iconSource: QuiFontIcon.FullScreen
+                    iconSource: QuiFontIcon.FitPage
                     implicitWidth: 26; implicitHeight: 24
                     radius: Theme.radiusSmall
                     normalColor: Theme.menuButtonBg

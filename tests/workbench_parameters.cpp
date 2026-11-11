@@ -238,7 +238,6 @@ void parameterEditorsContract()
     require(theme->parameterLabelWidth() == 96, "parameterLabelWidth default must be 96");
     require(theme->logButtonHoverColor() == QColor("#eaf2fd"), "logButtonHoverColor default must be #eaf2fd");
     require(theme->timingIconSize() == 13, "timingIconSize default must be 13");
-    require(theme->executeButtonPlayIconSize() == 8, "executeButtonPlayIconSize default must be 8");
     require(theme->separatorWidth() == 1, "separatorWidth default must be 1");
     require(theme->separatorHeight() == 32, "separatorHeight default must be 32");
 

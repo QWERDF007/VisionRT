@@ -158,10 +158,8 @@ void Theme::initLightIndustrialPalette()
     menuBarHeight_      = 38;
     menuButtonHeight_   = 26;
     menuButtonSpacing_  = 4;
-    menuIconSize_       = 14;
     actionButtonWidth_  = 26;
     actionButtonHeight_ = 26;
-    actionIconSize_     = 14;
 
     // 工具列表尺寸与间距（箭头可调整为 10~12px，规范统一）
     treeRowHeight_      = 30;
@@ -182,7 +180,6 @@ void Theme::initLightIndustrialPalette()
     segmentButtonHeight_      = 22;
     executeButtonHeight_      = 24;
     executeButtonWidth_       = 68;
-    executeButtonIconSize_    = 14;
     executeButtonFontSize_    = 12;
     paramGroupHeaderHeight_   = 28;
     paramGroupHeaderFontSize_ = 12;
@@ -193,7 +190,6 @@ void Theme::initLightIndustrialPalette()
     parameterLabelWidth_       = 96;
     cardLabelWidth_            = 64;
     timingIconSize_            = 13;
-    executeButtonPlayIconSize_ = 8;
     parameterRowSpacing_      = 6;
     paramToggleIconSize_      = 14;
     paramRoiIconSize_         = 16;
@@ -241,7 +237,6 @@ void Theme::initLightIndustrialPalette()
     parameterFont_ = QFont(family, -1, QFont::Normal);
     parameterFont_.setPixelSize(fontSizeBase_);
 
-    iconFitWindow_  = 0xe740; // QuiFontIcon.FullScreen
     iconZoomIn_     = 0xe8a3; // QuiFontIcon.ZoomIn
     iconZoomOut_    = 0xe71f; // QuiFontIcon.ZoomOut
     iconOneToOne_   = 0xeb9f; // QuiFontIcon.Photo2

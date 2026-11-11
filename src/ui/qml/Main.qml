@@ -198,21 +198,6 @@ ApplicationWindow {
                     else helpMenu.popup(helpBtn, 0, helpBtn.height)
                 }
             }
-            QuiTextIconButton {
-                id: runBtn
-                text: "运行"; iconSource: QuiFontIcon.Play
-                font: QuiFont.Body
-                implicitHeight: Theme.menuButtonHeight; display: AbstractButton.TextBesideIcon
-                normalColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.menuButtonBg
-                hoverColor: runMenu.visible ? Theme.menuButtonActiveBg : Theme.buttonHoverBg
-                pressedColor: Theme.buttonPressedBg
-                textColor: runMenu.visible ? Theme.menuButtonActiveText : Theme.menuButtonText
-                iconColor: runMenu.visible ? Theme.menuButtonActiveIcon : Theme.menuButtonIcon
-                onClicked: {
-                    if (runMenu.visible) runMenu.dismiss()
-                    else runMenu.popup(runBtn, 0, runBtn.height)
-                }
-            }
 
             Rectangle { Layout.preferredWidth: Theme.separatorWidth; Layout.preferredHeight: Theme.separatorHeight; color: QuiColor.Border; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
@@ -302,13 +287,6 @@ ApplicationWindow {
         id: helpMenu
         QuiMenuItem { text: "工具作者说明"; onTriggered: authorHelp.open() }
         QuiMenuItem { text: "关于 VisionRT"; onTriggered: about.open() }
-    }
-    QuiMenu {
-        id: runMenu
-        QuiMenuItem { action: runAction }
-        QuiMenuItem { action: loopAction }
-        MenuSeparator {}
-        QuiMenuItem { text: "运行时复位"; enabled: app.workspaceEnabled; onTriggered: resetDialog.open() }
     }
 
     QuiSplitView {
