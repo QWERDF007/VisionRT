@@ -56,6 +56,20 @@ Item {
         return ""
     }
     readonly property bool isSelected: root.selectedKey.length > 0 && root.selectedKey === root.stableKey
+    property bool isHovered: false
+
+    function resetHover() {
+        isHovered = false
+        if (pointer && pointer.hoverEnabled) {
+            pointer.hoverEnabled = false
+            pointer.hoverEnabled = true
+        }
+    }
+
+    onRowChanged: resetHover()
+    onYChanged: resetHover()
+    onModelChanged: resetHover()
+    onVisibleChanged: if (!visible) resetHover()
 
     signal chosen(string toolId)
     signal selected(string key)
@@ -63,7 +77,7 @@ Item {
     signal contextMenuRequested(var mouse, var itemModel)
 
     ToolTip {
-        visible: hoverHandler.hovered && root.leaf && !root.available && root.status.length > 0
+        visible: root.isHovered && root.leaf && !root.available && root.status.length > 0
         text: root.status
         delay: 300
     }
@@ -71,15 +85,11 @@ Item {
     implicitWidth: treeView ? treeView.width : 200
     implicitHeight: Theme.treeRowHeight
 
-    HoverHandler {
-        id: hoverHandler
-    }
-
     Rectangle {
         anchors.fill: parent
         color: root.isSelected
                ? Theme.treeItemSelectedBg
-               : hoverHandler.hovered
+               : root.isHovered
                  ? Theme.treeItemHoverBg
                  : "transparent"
         Rectangle {
@@ -106,7 +116,7 @@ Item {
                 iconSize: Theme.treeArrowSize
                 iconColor: root.isSelected
                            ? Theme.treeItemSelectedText
-                           : hoverHandler.hovered
+                           : root.isHovered
                              ? Theme.treeArrowHoverColor
                              : Theme.treeArrowColor
             }
@@ -189,8 +199,11 @@ Item {
     MouseArea {
         id: pointer
         anchors.fill: parent
-        hoverEnabled: false
+        hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onEntered: root.isHovered = true
+        onExited: root.isHovered = false
+        onCanceled: root.isHovered = false
         preventStealing: root.leaf && !root.isEditor
         drag.target: !root.isEditor && root.leaf && root.available && (typeof app !== "undefined" && app.workspaceEnabled) ? dragPayload : null
         drag.threshold: Qt.styleHints.startDragDistance
@@ -212,7 +225,7 @@ Item {
             if (root.stableKey.length > 0)
                 root.selected(root.stableKey)
             if (root.treeView && root.treeView.selectionModel) {
-                let idx = root.treeView.modelIndex(root.row, root.column)
+                let idx = root.treeView.index ? root.treeView.index(root.row, root.column) : root.treeView.modelIndex(root.row, root.column)
                 root.treeView.selectionModel.setCurrentIndex(idx, ItemSelectionModel.ClearAndSelect)
             }
             if (root.hasChildren) {

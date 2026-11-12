@@ -30,6 +30,504 @@
 - ...
 -->
 
+### 2026-11-12 — 根除 QuiTreeView 与工具树委托复用残存悬浮跳跃
+
+**目标**
+- 彻底根除点击展开/折叠节点时，因 TableView 委托池复用导致其下方的移位节点（如预处理、采集）残留 containsMouse 浅蓝悬浮高亮在项间来回跳动的缺陷。
+
+**当前状态**
+- 已完成：
+  - 定位根因：Qt Quick TableView 动态插入/折叠行时重用委托实例。由于用户鼠标物理坐标保持静止仅单机左键，OS 未发出鼠标移动事件，被移位或复用的委托无法接收 mouseLeave，导致 containsMouse / hovered 状态残留；
+  - 修复 3rdparty/QuickUI/src/controls/QuiTreeView.qml：委托内部增加受控 isHovered 属性并在 row、y、model、visible 变更时重置 hover 状态，切换 hoverEnabled 清空底层 containsMouse 缓存；接入现代 index(row, column) 替换已过时 modelIndex API。改动已在 QuickUI 仓库提交并推送至 origin/main（4d6c70e）；
+  - 修复 src/ui/qml/ToolTreeDelegate.qml：采用相同受控 isHovered 状态机，挂接 onRowChanged、onYChanged、onModelChanged、onVisibleChanged 清除悬空状态，淘汰 HoverHandler，并适配现代 index 接口；
+  - tests/workbench_tooltree_contract.cpp：新增鼠标静止单击深度学习展开与折叠时、零移位复用节点残留 hover 的契约断言，确保全流程无幽灵高亮；
+  - 重新打包部署至 F:/tmp/VisionRT，截屏验证 8 大分类及全界面渲染正常。
+- 未完成：
+  - 无。
+
+**验证证据**
+- `git -C 3rdparty/QuickUI commit` & `push origin main` → `4d6c70e`。
+- `ctest --test-dir build -R "workbench_tooltree_contract|tool_editor_dialog_test" --output-on-failure` → 2/2 Passed (100% tests passed, workbench_tooltree_contract 0.79s)。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\visiontools-deploy.zip --allow-dirty` → 635 files verified, package evidence complete。
+- `Start-Process ... -ArgumentList @("--screenshot", "F:\tmp\deploy_verify.png", "--screenshot-delay", "1500")` → 成功生成 51622 字节无黑框完整截图，退出码 0。
+
+**下一步**
+- 交付用户验收工具树展开折叠时的无残留高亮交互。
+
+### 2026-11-11 — 修复工具树高亮乱跳与统一持久化选中模型
+
+**目标**
+- 根除主界面工具库折叠展开时高亮错位、跳项的缺陷，底层 QuiTreeView 引入 ItemSelectionModel 持久化跟踪，统一 ToolLibrary 与 CustomToolDialog 的选中与展开交互。
+
+**当前状态**
+- 已完成：
+  - 3rdparty/QuickUI/src/controls/QuiTreeView.qml：暴露 delegate 与 selectionModel 属性别名，引入 Qt 原生 ItemSelectionModel；内置委托接入 current 与 selected 属性，消除 d.currentRow 纯整数行号带来的展开错位；提供 setCurrentRow 与 clearSelection 方法。改动已在 QuickUI 仓库提交并推送至 origin/main（9900fbe）。
+  - src/ui/qml/ToolTreeDelegate.qml：修复整行点击 onClicked 中 hasChildren 分支未调用 selected(stableKey) 的缺陷，实现整行点击统一发射选中信号，左侧折叠箭头保持独立折叠；同步更新 selectionModel。
+  - src/ui/qml/ToolLibrary.qml：树委托改用暴露的 delegate 别名配置。
+  - tests/workbench_tooltree_contract.cpp：TDD 落地展开前后选中持久化、多分类切换选中唯一性等断言。
+  - 重新打包部署至 F:/tmp/VisionRT，验证版本输出与启动正常。
+  - 主仓提交 `b31e829`（QuickUI 指针 → `9900fbe`、工具树委托与契约测试），已推送 `origin/dev`。
+- 未完成：
+  - 无。
+
+**验证证据**
+- `ctest --test-dir build -R "workbench_tooltree_contract|tool_editor_dialog_test" --output-on-failure` → 2/2 Passed (100% tests passed)。
+- 提交前复跑同一组 → 2/2 Passed（1.80s / 1.42s）。
+- `git push origin dev` → `e2898f8..b31e829`。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\visiontools-deploy.zip --allow-dirty` → package verification complete: 575 files，tools package verification passed。
+- `F:\tmp\VisionRT\VisionRT.exe -v` → VisionRT 0.1.0。
+- `F:\tmp\VisionRT\VisionRT.exe --screenshot ...` → 启动截图校验工具库 8 大分类完整渲染，退出码 0。
+
+**下一步**
+- 交付用户验收工具树展开折叠高亮体验。
+
+### 2026-11-11 — R61：重建 VisionTools 部署包并对齐元数据
+
+**目标**
+- 部署包内 `VisionTools` 的 `build_info.json` 仍指向旧提交 `d89332d`，与仓库 HEAD `90e0c39` 不一致，重新生成并部署。
+
+**当前状态**
+- 已完成：
+  - 重新 configure `VisionTools/build` 并重跑 `visiontools_build_info`：`commit` 由 `d89332d` 变为 `90e0c39`，`dirty=false`。
+  - `python tools/package_tools.py --profile rtx40-build --install-dir dist/visiontools-deploy` 重打：22 工具、3 模块，ZIP 与索引同步更新。
+  - `package_app.py --deploy-tools-only` 覆盖安装目录；清单仍 571 条、无 `tools-package` 之外的越界条目，`tools-package/build_info.json` 已是 `90e0c39`。
+  - 部署后 `--python-report` → `ready`（3.12.13 / NumPy 2.4.3 / bridge true）；UI 启动新增日志 0 字节。
+  - 删除误生成的 `dist/VisionTools*` 副本，VisionTools 工作区保持干净。
+- 未完成：
+  - `built_at_epoch` 仍为 1793687652（11 月 9 日）：该字段按设计取发行模块产物时间，`90e0c39` 只改 Python 与测试，未重新编译 C++ 产物。
+
+**验证证据**
+- `cat F:/tmp/VisionRT/tools-package/build_info.json` → `90e0c39…`、`dirty=false`。
+- `dist/visiontools-deploy.zip` 内 `build_info.json` 同上；索引 22 工具 / 3 模块。
+- `F:/tmp/evidence/ready-vt90e0c39.json` → `ready`。
+
+**下一步**
+- 无。
+
+### 2026-11-11 — R60：窗口子系统与启动日志修复部署
+
+**目标**
+- 去掉双击启动时附带的命令行终端，并把 R59 的日志修复真正落到 `F:/tmp/VisionRT`。
+
+**当前状态**
+- 已完成：
+  - `VisionRT.exe` 之前是 console 子系统（PE subsystem=3），改为 `qt_add_executable(VisionRT WIN32 ...)` 后为 GUI 子系统（=2）；命令行入口只经文件与退出码交付，不依赖标准输出。
+  - 重新 configure 与重链，`build_info.json` 记录 `e2898f8`。
+  - 覆盖部署 575 文件，保留 4 个非产品文件（`ui-preferences.json`、日志、包标记）。
+  - 启动实测新增日志 0 字节，不再出现“正在检查 Python 环境”；`--python-report` 仍 `ready`（3.12.13 / NumPy 2.4.3 / bridge true）。
+  - 提交并推送 `e2898f8`；删除验证副本 `F:/tmp/VisionRT-check`。
+- 未完成：
+  - `3rdparty/QuickUI` 的 `QuiTreeView.qml` 有 46 行本地未提交改动（delegate/selectionModel 别名与 setCurrentRow），不属于本轮，但本次构建与部署包含它。
+
+**验证证据**
+- PE Subsystem：部署前 3 → 部署后 2。
+- 部署版启动一次：日志文件 4828 → 4828 字节，无新增行。
+- `ctest -R "^python_loading_contract$|^workbench_unavailable_tool_contract$"` → 2/2 Passed。
+
+**下一步**
+- 双击一次安装目录程序，确认不再出现终端窗口。
+
+### 2026-11-11 — R59：Python 环境检查按工具重复写日志
+
+**目标**
+- 定位并修掉启动日志里的 `[E] [应用] 正在检查 Python 环境（重复 6 次）`。
+
+**当前状态**
+- 已完成：
+  - 根因：`refreshFinished()` 对每个 Python 工具都调用 `report(implementation.status)`。后端未运行时 `PythonBackend::refresh` 为每个工具返回同一句环境原因，部署包内共 7 个 Python 工具，日志聚合后显示为一条 + 重复 6 次；环境探测本身只在宿主（`PythonProbe`/`PythonBackend`），工具没有做二次检测。
+  - 修复：`RefreshResult` 记录本次刷新所依据的环境状态；只有当该环境可用（即失败属于单个工具自身的加载问题）时才逐工具上报。环境原因仍由工具列表与设置页呈现，环境检查自身在真正失败时上报一次。
+  - 已提交并推送 `63e413c`。
+- 未完成：
+  - `F:/tmp/VisionRT` 仍是修复前的可执行文件：两个旧实例（PID 4848、28972）占用文件，需要关闭后重新打包。
+
+**验证证据**
+- 同一安装副本 A/B：旧 `VisionRT.exe` → 2 行（`正在检查 Python 环境` + 重复 6 次）；修复版 → 0 行。
+- 未配置环境对照：旧版 2 行（`未配置 Python 环境` + 重复 6 次）；修复版 0 行。
+- `ctest -R "^python_loading_contract$|^workbench_unavailable_tool_contract$"` → 2/2 Passed。
+
+**下一步**
+- 关闭旧实例后 `python tools/package_app.py ...` 重新部署，再确认启动日志无该条目。
+
+### 2026-11-11 — R58：提交、重新打包部署与真实升级验证
+
+**目标**
+- 提交 R51 全部改动，重新打包部署到 `F:/tmp/VisionRT`，并在真实目录上验证清单所有权。
+
+**当前状态**
+- 已完成：
+  - 提交 `69739aa`（19 文件，含 `NodeActivity.h` 与 `runtime_node_activity_contract.cpp`），已推送 `origin/dev`。
+  - 刷新构建元数据：重新 configure 后重链，`build_info.json` 记录 `commit=69739aa`、`dirty=true`（仅 WORKLOG 未提交）。
+  - 旧安装改名为 `F:/tmp/VisionRT.old-20261111-0912`，全新打包 572 文件，工具包校验通过。
+  - 写入有效 `ui-preferences.json`（conda py312）后 `--python-report` → `ready`，桥接与 NumPy 归属正确。
+  - 在同一目录连续再打包两次（合计三代顺序部署）：每次 `preserving 7 file(s)`，清单恒为 571 条且不含任何用户路径；`custom-tools/`、`logs/`、`ui-preferences.json`、未知目录四处字节 SHA 三次一致。
+  - 验证用测试文件已清理，安装目录只保留 `ui-preferences.json` 与运行日志。
+- 未完成：
+  - 200 节点 Loop 性能对照、100/150% DPI 截图仍未做。
+
+**验证证据**
+- `git log -1` → `69739aa feat：运行节点高亮收口与安装清单真实所有权`。
+- `python tools/package_app.py ... --allow-dirty` ×3 → 572 / 578 / 578 文件，`package verification complete`；清单无 `logs/`、`custom-tools/`、`ui-preferences.json` 与 Python 运行时。
+- 第三次部署前后哈希比对 → `ALL PRESERVED: True`（`custom-tools`、`logs`、`ui-preferences`、未知目录）。
+- 第三次部署后 `VisionRT.exe --python-report` → `ready`、3.12.13、NumPy 2.4.3、`bridge=true`。
+- 报告：`F:/tmp/evidence/{unconfigured,ready,ready-after-pass3}-69739aa.json`。
+
+**下一步**
+- 在 `F:/tmp/VisionRT` 做观感（并行/Loop/Stop/跳过）、DPI 与性能验证。
+
+### 2026-11-10 — R57：运行窗口语义收口与活动契约测试
+
+**目标**
+- 收口 R51 运行高亮的语义缺口：窗口边界、结束事件顺序、轮次过滤、门控不误绿，并补上 R51-08 要求的执行窗口契约。
+
+**当前状态**
+- 已完成：
+  - `NodeRuntime`：`active` 与 `EnteredExecution` 合并为同一个 `ExecutionWindow` 作用域，窗口在 guard/输入准备通过后才开；`LeftExecution` 在 `slot.publish()` 之后发出，UI 读到的终态不再是上一轮快照。跳过/阻塞节点不再短暂置 `active`（原先入口即置 true，34ms 轮询可能让被跳过节点闪一帧绿）。
+  - `ActivityMailbox`：队列满时不再提前返回，仍保留一次合并唤醒；权威来源仍是 `pollLatest()`。
+  - `AppController`：`ActivityEpoch{session, round}` 单调过滤，旧会话或旧轮事件直接丢弃（原先按 `session !=` 重置，迟到旧事件会被重新接受）。
+  - 新增 `tests/runtime_node_activity_contract.cpp`：并行双分支同窗口、Stop 不提前结束、Loop 三轮一一配对、跨运行不串事件、工具异常仍关闭窗口、门控跳过零事件。
+  - `workbench_status_contract` 增加运行态 2px 绿框、选中不覆盖、结束后恢复 1px 的断言。
+  - `Theme.cpp` 与 `workbench_status_contract.cpp` 恢复原 CRLF，diff 回到真实改动。
+- 未完成：
+  - 200 节点/高频 Loop 性能对照、100/150% DPI 截图仍未做（沿用 R56 待办）。
+  - 真实三代安装升级仍受本机批量删除守卫限制。
+
+**验证证据**
+- `ctest -R "^runtime_node_activity_contract$|^node_activity_mailbox_test$|^workbench_status_contract$"` → 3/3 Passed。
+- `ctest -R "^runtime_contract$|^runtime_hotpath_contract$"` → 2/2 Passed（含新增事件序列断言）。
+- `ctest -R "^workbench_cancellation_contract$"` → Passed（2.61 s，停止/取消后无残留运行态）。
+- `python -m unittest tests.test_package_app` → 40/40 OK。
+- `cmake --build build --target VisionRT` → 0 error。
+
+**下一步**
+- 需要发布签署时补 200 节点 Loop 性能对照与 DPI 截图；其余功能项按 R51 已完成。
+
+### 2026-11-10 — R56：安装清单真实所有权与运行节点高亮
+
+**目标**
+- 按 `docs/VisionRT_VisionTools_R51` 修复 P0 清单污染，并落地运行态绿色高亮（只改配色，不加卡片文字）。
+
+**当前状态**
+- 已完成：
+  - `package_app.py` 改为 `InstallOwnership`：exe、项目 DLL、依赖、MSVC/SDK 运行库、windeployqt 产物、`qt.conf`、工具包都按实际写入登记；清单不再 `rglob` 全目录。`custom-tools/**`、`logs/**`、`ui-preferences.json` 永不进入清单。
+  - 清单读取严格校验 schema、类型、重复、相对路径、`..`、绝对路径、受保护路径、文件/目录冲突；清理前先验证全部条目，任一非法即整次拒绝且不删文件。
+  - 清单在 `verify_package` 通过后才写；`--deploy-tools-only` 在无清单时拒绝猜测，已有清单则只替换 `tools-package/` 条目。
+  - 运行态事件：`NodeActivity.h` 提供 `EnteredExecution/LeftExecution` 与有界 `ActivityMailbox`（4096、全局序号、合并唤醒、溢出计数）；`NodeRuntime` 在 guard/输入准备通过后以 RAII 发布事件；`RuntimeEngine` 合并通知并在新 run 清理；`AppController` 按 generation/session/round 过滤、只更新受触及节点，再以 `pollLatest()` 作为终态权威。
+  - 视觉：`Theme` 运行绿统一为 `#1a7f37`、标题白字；`NodeDelegate` 运行态 2px 绿框与蓝色选中虚线共存；卡片未新增任何“执行中/诊断”文字，尺寸与信息层级不变。
+- 未完成：
+  - 真实 3 代安装升级因本机“安全删除”守卫在删除第 50 个旧文件时中断，改用“改名旧目录 + 全新打包”部署；跨代升级由 `test_package_app` 的三代用例覆盖。
+  - 100/150% DPI 截图与 200 节点/高频 Loop 性能对照未做。
+
+**验证证据**
+- `python -m unittest tests.test_package_app` → 40/40 OK（含三代升级 hash、保护路径、越界、无清单拒绝、部署事务）。
+- `ctest -R "^node_activity_mailbox_test$"` → Passed（有界、合并唤醒、溢出、并发）。
+- `ctest -R "^runtime_contract$"` → Passed（新增事件序列断言：Entered/Left、generation/session/round 一致、序号递增）。
+- `ctest -R "^workbench_status_contract$"` → Passed（运行绿、白字、选中不影响运行色；仅此一条 UI 契约）。
+- `VisionRT.exe --python-report`（新安装、未配置）→ 退出 3，`unconfigured`，无模块；安装清单 571 条，无 `logs/`、`custom-tools/`、`ui-preferences.json`。
+
+**下一步**
+- 在可正常删除的机器上跑一次真实两代/三代升级，核对用户文件 SHA；补 DPI 截图与性能对照。
+
+### 2026-11-10 — R55：提交、重新打工具包并部署到 F:/tmp/VisionRT
+
+**目标**
+- 把本轮改动提交推送，并用包含新 SDK 语义的部署包重建交付目录。
+
+**当前状态**
+- 已完成：
+  - RT 提交 `abc9cc0`（30 文件），VT 提交 `90e0c39`（6 文件），均已推送 origin/dev。
+  - 发现 `dist/visiontools-deploy.zip` 仍是 11 月 9 日版本，不含 11 月 10 日的 SDK 修改；用 `package_tools.py --profile rtx40-build` 重打，确认注入的 `visiontools_sdk` 已是“无条件 import numpy”。
+  - 旧安装改名为 `VisionRT.old-20261110-2050` 后全新打包到 `F:/tmp/VisionRT`：573 文件，工具包校验通过，无外带解释器，桥接存在。
+  - 旧安装与 `VisionRT-r51`、VT 打包事务备份均已删除。
+- 未完成：
+  - 安装目录是全新状态，未写入 `ui-preferences.json`；Python 环境需在设置里重新选择。
+
+**验证证据**
+- `VisionRT.exe --python-report`（新安装、未配置）→ 退出 3，`phase=unconfigured`、`runtime=""`、`bridge=false`、`modules=0`。
+- 发布证据按新 HEAD 重新生成：RT `abc9cc0`、VT `90e0c39`、Contracts `8070833d`，`complete=true`（RT 因 WORKLOG 未提交标记 dirty）。
+- 打包日志：`tools package verification passed successfully`、`package verification complete: 573 files`。
+
+**下一步**
+- 打开 `F:/tmp/VisionRT` 手动选一次 Python 环境，做 UI 与 DPI 验收。
+
+### 2026-11-10 — R54：单工具失败隔离与负例取证（PY-STATE-04 / PY-N02 / PY-N03 / PY-N07）
+
+**目标**
+- 补齐 `PY-STATE-04`“环境全局状态与单工具加载状态分开”的动态证据，并用安装包取环境负例。
+
+**当前状态**
+- 已完成：
+  - `tests/python_loading_contract.cpp` 新增 `partialFailure`：同一解释器、同一次 refresh 里放入一个健康工具与一个导入失败工具。断言 refresh 对两者都只做声明校验（状态 0）、失败工具在 `initialize` 返回 `PythonUnavailable` 且 `detail` 含缺失模块名、健康工具在失败后仍可执行并释放。证明单工具导入失败不会升级为“Python 全局不可用”。
+  - 注册 `release_evidence_contract` 到 `package` 组，证据审计规则进入 CTest。
+  - 审计规则补：`invalid` / `failed` 角色必须分别对应 `invalid` / `backendFailed` 阶段，避免用错标签把失败场景伪装成别的阶段。
+- 未完成：
+  - `PY-N05`（非 CPython / 32 位 / Debug / free-threaded）无可用样本，未取证。
+  - Windows CI、100%/150% DPI 与安装态交互复验仍未做（本轮未跑 UI 测试）。
+
+**验证证据**
+- `ctest -R "^python_loading_contract$"` → Passed（2.03 s），含新增用例。
+- `ctest -R "^release_evidence_contract$"` → Passed；`python -m unittest tests.test_release_evidence` → 12/12 OK。
+- 安装包 `F:/tmp/VisionRT-r51`（574 文件）三个环境负例，均退出码 3、无 Python 模块加载：
+  - 桥接改名缺失 → `backendFailed`，`缺少 Python 桥接组件：F:\tmp\VisionRT-r51\visionrt_python_bridge.dll`；
+  - 指向 3.13.12 标准布局解释器 → `invalid`，`Python 3.13 与本构建不兼容，需要 3.12`；
+  - 指向 `Z:/visionrt/missing/python.exe` → `invalid`，`路径不存在：Z:\visionrt\missing\python.exe`。
+- `build/evidence/release-evidence.json` 现含 1 个 `unconfigured`、3 个 `ready`（安装包+Conda、构建目录+Conda、venv）、3 个 `invalid`、1 个 `failed`，`complete=true`。
+
+**下一步**
+- `PY-N05` 需要非 CPython/32 位/Debug/free-threaded 样本；可用 Python 官方安装包在隔离目录补测，不必改动产品代码。
+
+### 2026-11-10 — R53：发布证据汇总与宿主消费门（JOINT-QA-01 / VT-QA-01）
+
+**目标**
+- 把验收报告 §6.3 要求的交付证据变成一条可重复执行的命令；让 VisionTools 的发布检查在缺宿主时失败而不是 skip。
+
+**当前状态**
+- 已完成：
+  - 新增 `tools/release_evidence.py`：汇总两仓 HEAD、`3rdparty/VisionRTContracts` 提交、工作区是否脏、CMake 编译器与配置、安装包的导入链证据、各场景 `--python-report`。审计规则不采信自述：Contracts 必须同提交；`ready` 场景实际加载的 `python3*.dll` 与 `numpy.__file__` 必须落在所选 prefix/base 内；未配置进程不得有任何 Python 模块；安装包不得外带运行时或启动链导入 Python。缺场景或矛盾 → 退出 2、`complete=false`。`--allow-dirty` 只在本地核对时可用，并写入 `notes`。
+  - 新增 `tests/test_release_evidence.py`（11 例）：覆盖提交不一致、未配置进程加载模块、运行时/NumPy 越界、venv 允许 base 归属、负例缺原因、外带运行时、启动链导入、脏工作区与参数解析。
+  - VisionTools 新增 `tools/release_check.py`：强制 `VISIONTOOLS_REQUIRE_HOST_EXECUTION=1` 并校验 consumer / deploy script / validator 三个路径，缺一即退出 2；补齐路径后运行 `tests.test_distribution`。
+  - 修复发布门暴露的真实问题：`test_distribution.py` 的单工具夹具仍返回 `{"outputs": {2: ...}}`，不含 0/1 状态端口，真实宿主执行时 `testview::status` 读不到状态端口而抛 `invalid map<K, T> key`。此前宿主执行用例因未配置 consumer 一直 skip，问题被隐藏。夹具改为返回 `{0: 0, 1: "运行成功", 2: ...}`。
+  - 文档：`tools/README.md`（两仓）与 `docs/README.md` 补入口、约束与索引。
+- 未完成：
+  - Windows CI 尚未落地；`release_evidence.py` 需人工按场景先产出报告。
+  - 100%/150% DPI 与安装态交互复验仍未做（本轮未跑 UI 测试）。
+
+**验证证据**
+- `python -m unittest tests.test_release_evidence` → 11/11 OK。
+- `python tools/release_evidence.py --package F:/tmp/VisionRT-r51 --package-evidence build/evidence/package-evidence.json --allow-dirty --report unconfigured=... --report ready=...（安装包+conda）--report ready=...（构建目录+conda）--report ready=...（venv-sys）--report invalid=...（venv-plain）` → 退出 0，`build/evidence/release-evidence.json` 记录 RT `c5103d60deae`、VT `d89332d4d1a8`、Contracts `8070833d50ff`；三条 `ready` 的运行时均为 `D:/.../py312/python312.dll`，其中一条来自安装目录 `F:/tmp/VisionRT-r51/VisionRT.exe`（574 文件）加载外部 Conda 桥接，`numpy.__file__` 也归属该环境。
+- 同命令去掉 `ready` 报告 → 退出 2，`problems=['缺少 ready 场景的 Python 环境报告']`。
+- `python tools/release_check.py --consumer F:/tmp/none.exe` → 退出 2，列出缺失路径（不 skip）。
+- `python tools/release_check.py tests.test_distribution.DistributionContract.test_python_package_executes_in_real_host` → 1/1 OK：VT 打包 ZIP → RT `deploy_tools_package` → `python_tools_execution_test --package` 真实执行，输出 `Pure Python ZIP result: 42`（修复前同一命令失败于 `invalid map<K, T> key`）。
+
+**下一步**
+- 有 Windows CI 后把 `release_check.py` 与 `release_evidence.py` 接成发布 job；安装态交互与 DPI 仍需人工补证。
+
+### 2026-11-10 — R52：标准 venv 可用性修复（环境身份比较）
+
+**目标**
+- 按 `PY-DEP-01` / `PY-N04` / `PY-N06` 取标准 venv 与缺 NumPy 的真实证据；发现并修复 venv 完全不可用的问题。
+
+**当前状态**
+- 已完成：
+  - 定位缺陷：`PythonRuntime::verifyEnvironment` 用原始字符串比较解释器回报的 `sys.prefix`/`sys.base_prefix`。标准 venv 的 `pyvenv.cfg` 会让 CPython 用反斜杠回报 prefix，而探测侧经 `QDir::cleanPath` 存成正斜杠，比较必然失败 → 探测通过但桥接报“sys.prefix 与所选环境不一致”，venv 环境 100% 不可用。
+  - 修复：环境身份改为“规范化后比较”（分隔符、大小写、尾部分隔符都不构成差异），实现提到 `PythonEnvironment.h` 的 `environmentPathEquals`，运行时不再保留第二份实现；错误信息同时给出期望值与实际值。
+  - 新增纯比较用例到 `python_environment_contract`（反斜杠拼写、大小写+尾斜杠、不同目录负例），不依赖解释器即可回归。
+- 未完成：
+  - venv 下的“工具实际执行”未取证据：宿主没有无窗口的项目执行入口，需要一次 UI 运行；本轮按约束未跑。
+  - 标准 Python 安装（非 conda/venv）环境未在本机取证。
+
+**验证证据**
+- 修复前：`F:/tmp/venv-sys/Scripts/python.exe` → `phase=backendFailed`，原因 `Python sys.prefix 与所选环境不一致：F:\tmp\venv-sys`。
+- 修复后 `VisionRT.exe --python-report`：
+  - conda `D:/Software/anaconda3/envs/py312/python.exe` → `ready`，`runtime=D:/Software/anaconda3/envs/py312/python312.dll`，NumPy 2.4.3。
+  - `F:/tmp/venv-sys`（`--system-site-packages`）→ `ready`，`prefix=F:/tmp/venv-sys`、`basePrefix=D:/Software/anaconda3/envs/py312`、`runtime=D:/Software/anaconda3/envs/py312/python312.dll`、NumPy 2.4.3 及其 `__file__` 在 base 环境。
+  - `F:/tmp/venv-plain`（无 NumPy）→ `invalid`，原因 `缺少 NumPy：ModuleNotFoundError`，`process.runtime` 为空（未加载任何解释器）。
+- `ctest -R "^python_environment_contract$|^python_loading_contract$"` → 2/2 Passed。
+- `cmake --build build --target VisionRT python_environment_contract python_loading_contract` → 0 error。
+
+**下一步**
+- 需要时在真实安装包上跑一次带 Python 节点的工程，确认 venv 下工具执行与结果回读；其余见 R51 的安装态 E2E 待办。
+
+### 2026-11-10 — R51：启动链导入取证、进程内环境报告与构建树一致性修复
+
+**目标**
+- 补 `PKG-OWN-02` 缺的两项证据（PE 递归 import、进程实际加载模块）与 `PY-DEP-01` 的 NumPy 归属取证，并补 `PY-GATE-04` 的静态约束；不跑 UI 测试。
+
+**当前状态**
+- 已完成：
+  - 新增无窗口取证入口 `VisionRT.exe --python-report <file>`：构造控制器并等环境检查落定后写 JSON（探测事实、`sys.prefix`/`basePrefix`/DLL、NumPy 版本与 `__file__`、进程模块表里真实加载的 `python3*.dll` 与 `numpy*`），不开窗口；返回码 `0` 可用、`3` 已写报告但环境不可用、`4` 写失败。
+  - 探测新增 `numpy.__file__`；`PythonEnvironmentStatus` 增加 `numpyVersion`/`numpyFile`（`PythonBackend::start` 同步写入）；`AppController` 保留被接受的 `PythonEnvironment` 并以 `pythonEnvironmentReport()` 输出单一快照。
+  - `PythonBackend::runtimeFacts()` 用 Toolhelp 模块快照读“进程里到底装了什么”，只认 `.dll/.pyd`（否则名字以 python 开头的可执行文件会被误认成解释器）。
+  - `package_app.py`：纯 Python 读 PE 导入表（含 delay import），从 `VisionRT.exe` 沿随包模块递归走启动链，链上任何模块静态导入 `python3*.dll` 即拒绝；外带解释器扫描抽成 `bundled_python_runtime` 递归复用；验证通过后写 `package-evidence.json`（`--evidence` 可指定路径）。
+  - 测试：`tests/test_package_app.py` 新增 `PeImportContract` 4 项（合成 PE 的静态/延迟导入、非 PE 不得报干净、链上 Python 被拒、桥接不在启动链且被记录）；`python_environment_contract` 增加报告断言（未配置进程不得有运行时/模块，失效环境保留原因）；VisionTools `test_distribution` 增加 `PY-GATE-04` 静态扫描。
+  - **构建树一致性修复**：`build/` 里 283 个目标文件无依赖记录（`AppControllerRoi.cpp.obj` 为 `#deps 0`），头文件改动不触发重编，导致 `Impl` 布局不一致，`VisionRT.exe --screenshot` 与 `python_environment_contract` 在 `finishRoi` 里段错误（`presentation.roi_` 读到 `baadf00d`）。`cmake --build build --clean-first` 后 deps 恢复（290 条），崩溃消失。
+- 未完成：
+  - 安装态 E2E（外部 CPython/venv/Conda 三环境、PE 依赖与零拷贝归属）未执行；DPI 100%/150% 人工复验未做。
+  - `workbench_roi_contract` 的“窗口失活放弃 ROI 草稿”仍未复跑（未验证）。
+
+**验证证据**
+- `cmake --build build --clean-first` → 全量重编；随后 `--target VisionRT` 链接成功，`build/bin/VisionRT.exe` 为干净重编产物。
+- `VisionRT.exe --python-report <file>`（未配置）→ 退出码 3；`process.runtime` 为空、`process.modules` 为空、`environment.phase=unconfigured`。
+- `VisionRT.exe --python-report <file>`（`D:/Software/anaconda3/envs/py312/python.exe`）→ 退出码 0；`phase=ready`、`runtime=D:/Software/anaconda3/envs/py312/python312.dll`、`numpyVersion=2.4.3`、`numpyFile=...\envs\py312\Lib\site-packages\numpy\__init__.py`、模块表含 `python312.dll`/`python3.DLL`/`visionrt_python_bridge.dll`。
+- `ctest -R "^python_environment_contract$"` → Passed（含新增报告断言）。
+- `ctest -R "^python_probe_contract$|^python_loading_contract$|^python_shutdown_contract$"` → 3/3 Passed。
+- `ctest -R "^package_app_contract$"` → Passed（12 项 unittest，含 `PeImportContract`）。
+- 真实安装包 `F:/tmp/VisionRT`：`verify_package` 通过（575 文件），启动链 19 个模块无 Python 导入，桥接导入 `python312.dll`（记录、不判失败），外带运行时为空。
+- `python tools/package_app.py --install-dir F:/tmp/VisionRT-r51 --tools-package <VisionTools.zip> --validator build/bin/visionrt_validate_tool.exe --allow-dirty --force-clean` → 退出码 0，573 文件，`tools package verification passed`，写出 `build/evidence/package-evidence.json`（`startupPythonImports=[]`、`bundledPythonRuntime=[]`、`bridgePresent=true`、`visionrt_python_bridge.dll` 记录 `python312.dll`）。
+- `F:/tmp/VisionRT-r51/VisionRT.exe --python-report`（未配置）→ 退出码 3；`environment.phase=unconfigured`、`process.runtime=""`、`process.modules=[]`、`bridge=false` —— 安装态“未配置不加载任何解释器”的进程快照。
+- VisionTools：`python -m unittest tests.test_distribution.DistributionContract.test_author_code_never_locates_an_interpreter` → OK。
+- 环境注意：构建输出接管道（`| iconv | grep`）时，ninja 派生的 `cmd /C` 步骤会永久卡住；改 `> log 2>&1` 后正常。
+
+**下一步**
+- 需要时按 JOINT-QA-01 在干净机器跑安装态 E2E，把 `--python-report` 与 `package-evidence.json` 一起归档（含三仓 SHA）。
+- 发布前仍要人工复验 100%/150% DPI 与 `workbench_roi_contract` 的失活用例。
+
+### 2026-11-10 — R50 收口：Python 环境单一状态、异步检查、打包所有权与设置/展示修正
+
+**目标**
+- 按 `docs/VisionRT_VisionTools_dev_20261109_AAE6B696E6888C%85/` 的工单收口：环境失败原因不丢失、检查不阻塞 GUI、升级只删自己安装的文件、设置键类型严格、Bool 输出默认值与 ROI 隐藏图，并同步 VisionTools 的 NumPy 语义。
+
+**当前状态**
+- 已完成：
+  - 环境状态收敛为 `PythonEnvironmentStatus`（`unconfigured/probing/ready/invalid/backendFailed` + 一句中文原因），由 `PythonBackend` 唯一持有；探测写环境裁决、桥接创建写后端裁决，工具列表、设置页与诊断读同一值，不再出现“配置错误被报成未配置”。
+  - `PythonProbe` 改为对象线程之外的单次检查（100 ms 切片等待、可取消、无重试）；`AppController::applySettings` 改解释器时立即返回并置 `settingsApplying`，重复提交被拒绝，结果经 `settingsApplied(bool)` 回到设置窗口；检查中确定/取消/关闭/Esc 禁用。
+  - 修复构造函数内事件泵送暴露的悬空回调：runtime 的读回/完成回调改为投递到 `timer` 对象并检查 `tearingDown`，此前会读尚未赋值的 `owner->impl_`。
+  - `PythonBackend` 用 `DllDirectoryScope`/`ModuleHandle` 管理 DLL 目录 cookie 与 CPython 模块句柄，所有失败出口回滚。
+  - `tools/package_app.py` 写 `install-manifest.json` 并按清单清理；无清单时拒绝清理（`--force-clean` 才整目录替换），并打印保留报告；`--deploy-tools-only` 后重建清单。
+  - `UiPreferences` 对 `toolEditor.editBuiltins`、`logging.level`、`python.executable` 及三个父对象做严格类型校验，错类型时拒绝加载与写入并保留原字节。
+  - Bool 业务输出默认值可编辑；ROI 会话对外不再把隐藏背景图当作已选图像；自定义工具符号字段按类型显示函数名/类名/工厂名；VisionTools SDK 与表达式引擎去掉 NumPy 可选降级（新增 `python_environment_contract`，注册为 `backend` 标签）。
+  - 补充 `presentation_visibility_contract`（backend 标签，无窗口）：两隐藏图像加一可见输出，ROI 编辑隐藏图像时 `selectedImageOutput` 与候选列表都不外泄，发布后才一致。该用例查出一个真实缺陷：第一版判断的是 ROI 端口自身的 `imageVisible`，应判断“被编辑的图像是否出现在候选里”，已改为复用 `imageChoices()`。
+  - `verify_package` 的解释器检查改为递归（`python3*.dll`/`python.exe`/`pythonw.exe` 任意层级都拒绝），补嵌套 `python.exe` 负例；`tool_port_list_model_test` 补 Bool 业务输出默认值用例。
+- 未完成：
+  - 安装态 E2E（外部 CPython/venv/Conda、PE 依赖、加载模块取证）未执行。
+  - 100%/150% DPI 与设置窗口的人工视觉复验未做。
+
+**验证证据**
+- `cmake --build build` → 全量构建通过（0 error）。
+- `ctest -R "^python_environment_contract$"` → Passed：未配置、路径不存在保留原因、非阻塞提交、重复提交被拒、拒绝后设置文件字节不变、运行中不换环境。
+- `ctest -R "^tool_registry_contract$"` → Passed：不可用状态不调用 resolver/工厂（计数 0）。
+- `ctest -R "^ui_preferences_contract$"` → Passed：四类错类型键被拒绝且文件不变。
+- `ctest -R "^package_app_contract$"` → Passed：含清单所有权、未知文件保留、无清单拒绝清理、清单内容、嵌套解释器拒绝五类用例。
+- `ctest -R "^presentation_visibility_contract$|^tool_port_list_model_test$|^tool_registry_contract$|^ui_preferences_contract$|^python_probe_contract$"` → 全通过。
+- `ctest -R "^workbench_unavailable_tool_contract$|^workbench_core_contract$|^workbench_startup_contract$|^tool_editor_dialog_test$"` → 全通过。
+- `workbench_roi_contract`：ROI 显示与隐藏图相关场景早前两次通过；收尾复跑时在“窗口失活放弃 ROI 草稿”用例上失败（断言 1033 的窗口激活前置已满足，1039 的 1 秒内放弃未满足）。该用例依赖桌面窗口焦点，本轮未再复跑，**未验证**是否为环境抖动，也未能排除回归。
+- `ctest -R "^python_probe_contract$|^python_loading_contract$|^python_shutdown_contract$|^runtime_python_lazy_contract$"` → 全通过。
+- VisionTools（`D:/Software/anaconda3/envs/py312/python.exe`）：`test_logic_engine` 24 项、`test_python_tools` 18 项、`test_distribution`（带 `VISIONTOOLS_VALIDATOR`）全通过。
+
+**下一步**
+- 需要时补 SET-VIS-01 的窗口级隐藏图负例。
+- 发布前按 JOINT-QA-01 在干净 Windows 机器执行安装态 E2E 并归档三仓 SHA 与来源证据。
+
+### 2026-11-09 — 拉取两仓、重新构建与打包部署到 F:/tmp/VisionRT
+
+**目标**
+- 拉取 VisionRT 与 VisionTools 最新代码及子模块，完成编译构建、VisionTools 工具包打包，并部署至 `F:/tmp/VisionRT`。
+
+**当前状态**
+- 已完成：
+  - VisionRT 拉取最新提交 `c5103d6`（界面字体与分割线体系重构），子模块 QuickUI 更新至 `f4ab11b`；VisionTools 与 Contracts 均与远端保持一致且工作区干净。
+  - VisionRT 成功编译链接：产出 `VisionRT.exe`、`visionrt_python_bridge.dll`、`visionrt_validate_tool.exe` 等。
+  - VisionTools 重新构建并通过 `package_tools.py --profile rtx40-build` 完成出包（22 个工具，包含 3 模块，产出 `dist/visiontools-deploy.zip`）。
+  - 执行 `package_app.py` 完整部署到 `F:/tmp/VisionRT`（573 文件，包验证全部通过）。
+  - 三份构建元数据一致且干净：VisionRT `c5103d6`、VisionTools `d89332d`、VisionRTContracts `8070833`，`dirty=false`。
+  - 启动验证通过：`VisionRT.exe -v` 输出 `0.1.0`；`--screenshot` 截图捕获正常。
+- 未完成：
+  - 无。
+
+**验证证据**
+- `cmake --build build`（VisionRT）→ 链接通过，退出码 0。
+- `python tools/package_tools.py --profile rtx40-build` → `已打包 22 个工具：F:\Projects\VisionTools\dist\visiontools-deploy.zip`，退出码 0。
+- `python tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package F:/Projects/VisionTools/dist/visiontools-deploy.zip` → `tools package verification passed successfully`，`package verification complete: 573 files`，`package complete: F:\tmp\VisionRT`。
+- `F:\tmp\VisionRT\VisionRT.exe -v` → `VisionRT 0.1.0`。
+- `F:\tmp\VisionRT\VisionRT.exe --screenshot F:/tmp/deploy_verification.png` → 成功生成 51.6KB 截图。
+
+**下一步**
+- 部署目录已就绪，可供测试或集成验证使用。
+
+### 2026-11-08 — 三仓推送、清空旧产物并从干净提交重新部署
+
+**目标**
+- 把 R50 两个本地提交与契约子模块推送到远端，清掉旧安装目录与旧打包产物，从干净工作区重新构建、打包和部署。
+
+**当前状态**
+- 已完成：
+  - `VisionRTContracts` `8070833`、`VisionTools` `d89332d`、`VisionRT` `4e5a509` 均已推送，三个仓库与 `origin` 同步（`WORKLOG.md` 按约定保留本地改动）。
+  - 删除 `F:\tmp\VisionRT`、`VisionRT-r50`、`VisionRT-r50-previous`、`pkg-twice`、`upgrade-test`、`marker-test`、旧 zip 与旧截图/日志；清空 `VisionTools\dist` 后重新生成工具包。
+  - 两仓重新构建：VisionRT 链接 `VisionRT.exe` 与 `visionrt_python_bridge.dll`；VisionTools 22 工具、3 模块、392MB ZIP。
+  - 重新部署 `F:\tmp\VisionRT`：572 文件、871MB，三份构建元数据分别指向 `4e5a509` / `d89332d` / `8070833`，`dirty=false`。
+  - 部署包不含 `python*.dll/exe` 与 NumPy，携带 `visionrt_python_bridge.dll` 与 `.visionrt_package` 标记。
+- 未完成：
+  - 无代码项；GPU 机型上的 QA-01 复核仍按原计划执行。
+
+**验证证据**
+- `git push` → 三个远端分支均更新到本地 HEAD；`git status -sb` 显示与 `origin` 同步。
+- `visionrt_validate_tool --package dist/visiontools-deploy` → `Valid tools package`。
+- `package_app.py`（未带 `--allow-dirty`）→ `package verification complete: 572 files`。
+- 无 Python 环境启动部署版 → 主界面与三页设置窗口正常，日志只有“未配置 Python 环境”。
+
+**下一步**
+- 正式对外发布前，在目标 GPU 机器按 QA-01 复核三仓 SHA、外部解释器与安装清单。
+
+### 2026-11-08 — R50 收口：修复失效契约、补齐探针负例与打包桥接
+
+**目标**
+- 把 R50 方案留下的测试与发布门槛做实：全量测试可编译、SDK 安装态可执行、打包产物含 Python 桥接且升级保留用户数据。
+
+**当前状态**
+- 已完成：
+  - `example_pipelines` 的失败语义改为业务端口 `Missing`（与框架“无数据不借图/不回退”一致），不再用空批次冒充结果。
+  - 旧字符串 PortId 的三份契约（`viewport`、`wire_router`、`runtime_hotpath`）和 `gpu_tools_contract` 迁到数字端口；`runtime_hotpath` 显式声明测试解释器并补状态端口。
+  - `tool_editor_dialog_test` 改用 `WorkbenchInstallation`，不再依赖本机 `E:/Softwares/VisionRT`。
+  - 新增 `python_probe_contract`：空选择、文件/目录解析、歧义目录、缺失路径、有效环境（版本/前缀/DLL/NumPy）、非 CPython 负例。
+  - `package_app.py` 补回 `visionrt_python_bridge.dll` 复制与保留 `.visionrt_package`；新增“打包必须携带桥接”的 Python 用例。
+  - `VisionRTContracts` 安装态消费者改数字 PortId 并把 ABI 断言升到 9（`8070833`），两仓子模块同步。
+  - AGENTS 与 docs/R45 的 U+00B7 全部改为全角分隔符。
+- 未完成：无代码项；`F:\tmp\VisionRT` 实际部署在本次末尾执行。
+
+**验证证据**
+- `ctest` → 110/110 通过（含 `gpu_tools_contract` 209s、`gpu_inference_contract`）。
+- `python tests/test_package_app.py` → 29 项通过；`package_app_contract`、`package_replacement_test` 通过。
+- 安装包 `F:\tmp\upgrade-test`：572 文件，无 CPython/NumPy，`visionrt_python_bridge.dll` 存在；`dumpbin /DEPENDENTS VisionRT.exe` 无 python3。
+- 无 Python 环境启动主界面与设置窗口正常；配置 Conda 后进程加载 `python312.dll`（来自所选环境）与安装目录桥接。
+- 覆盖升级保留 `ui-preferences.json`、`custom-tools/`、`logs/` 与安装标记。
+- VisionTools 六组 Python 用例全通过。
+
+**下一步**
+- 在 GPU 机型按 QA-01 复核三仓 SHA、外部环境与安装清单；本轮已在当前 GPU 机型跑通 GPU 两项契约。
+
+### 2026-11-07 — R50：设置三页窗口、外部解释器与展示收紧
+
+**目标**
+- 按 `docs/VisionRT_R50_设置入口与持久化修订` 落地：设置入口收敛为三页窗口、设置原子提交、日志阈值、Python 改为按选定外部环境启动的按需桥接、结果展示只认真实可见端口、保存失败可跟踪；同时修复 VisionTools 发行用例。
+
+**当前状态**
+- 已完成（VisionRT `2160f43`）：
+  - 设置按钮直接开三页窗口（工具/运行/日志），共用草稿，删除工具栏设置菜单；`SettingsDialog.qml` 新增。
+  - `UiPreferences` 一次读写一份文档、三键一起提交，损坏文件保留原字节并报错。
+  - `LogService` 增加生产阈值，启动前加载等级，保存即生效。
+  - 新增 `PythonBackend`/`PythonProbe`/`PythonBridge`，解释器实现编进 `visionrt_python_bridge.dll`；删除 `pythonHome`、`VISIONRT_PYTHON_HOME/PYTHONHOME` 与编译期默认；打包不再携带解释器。
+  - 结果视图只列声明可见的真实端口，类型派生端口按解析签名入选，取消首次自动选图；ROI 隐藏背景不进入智能点选。
+  - `saveAll` 逐个删除/保存并即时移出待办，失败报告已完成项与失败对象。
+- 已完成（VisionTools `21160bb`）：发行用例改数字端口与 schema 6，夹具与作者代码按端口编号返回，Contracts 子模块跟进 `6fec5bb`。
+- 未完成：无代码项；部署到 `F:\tmp\VisionRT` 与安装态发布门槛未在本次重跑。
+
+**验证证据**
+- `cmake --build build` → 通过（0 error）。
+- `ctest -L ui` → 43/43 通过（此前 19 项因“无解释器/无自动选图”失败，已按新规则修正测试）。
+- `ctest -L backend` → 仅 `example_pipelines_contract` 失败：并发用例里失败节点的业务端口现在是 `Missing`（框架失败语义，`NodeRuntime.cpp` 未改），与部署包 `visionrt.image.read` 的失败方式不一致，非本轮改动引入。
+- `ctest -L bridge` → 仅 2 项环境性失败：`tool_editor_dialog_test` 依赖本机不存在的 `E:/Softwares/VisionRT`；`runtime_hotpath_contract` 用的是旧字符串 PortId API，早已无法编译。
+- `ctest -L package` 6/6、`-L installed` 1/1（重建后）、`installed_python_author_contract`、`python_value_contract`、`python_array_lifetime_contract` 全部通过。
+- `ctest -L sdk` → `test_isolated_installation` 失败在 Contracts 子模块自带 consumer 的编译错误（子模块未改）。
+- 无解释器启动：`VisionRT.exe --screenshot` 主界面正常，工具树 8 个分类，日志只有“未配置 Python 环境”；设置窗口截图 `F:\tmp\r50_settings_final.png` 三页导航与底部按钮正常。
+- VisionTools：`python tests/test_distribution.py`、`test_package.py`(49)、`test_package_payload.py`(11)、`test_package_profile.py`(15)、`test_python_tools.py`(18)、`test_logic_engine.py`(24) 全通过。
+
+**下一步**
+- 处理 `example_pipelines_contract` 与部署包 `visionrt.image.read` 的失败语义分歧（测试期望空批次，运行时按框架失败发布 Missing）。
+- 补齐 `runtime_hotpath_contract`/`wire_router_contract`/`viewport_contract` 的数字 PortId 迁移，它们目前无法编译。
+- 生成 VisionTools 部署包并安装到 `F:\tmp\VisionRT`，按 QA-01 记录三页设置截图与安装态证据。
+
+### 2026-11-06 — 拉取两仓、构建并重新部署（1837 文件）
+
+**目标**
+- 确认两个仓库与远程一致，重新构建 VisionRT 与 VisionTools，用官方工具打包并部署到 `F:\tmp\VisionRT`。
+
+**当前状态**
+- 已完成拉取：VisionRT 与 VisionTools 的 `origin/dev` 均无新提交，本地 `fb89201` / `9cb038f` 与远程一致，工作区干净。
+- 已完成构建：VisionRT Release 构建通过（产物已是最新，仅重新部署运行时 DLL），`build/bin/build_info.json` 为 `fb89201`、`dirty=false`；VisionTools 完整构建通过，`build/build_info.json` 为 `9cb038f`、`dirty=false`。
+- 已完成工具包：用 `package_tools.py --profile rtx40-build` 生成 `dist/visiontools-deploy.zip`（410,322,048 字节），profile 为 `rtx40-build`、`sm89`、`runtime=full`。
+- 已完成部署：`F:\tmp\VisionRT` 1837 文件；打包输出 `tools package verification passed successfully` 与 `package verification complete: 1837 files`。
+- 已完成验证：`VisionRT.exe -v` 输出 0.1.0；截图 `F:\tmp\deploy_20261106.png` 工具树 8 个分类、画布与参数面板正常；日志写入安装目录，`%LOCALAPPDATA%\VisionRT` 未创建。
+- 旧安装目录改名为 `F:\tmp\VisionRT_20261106_prev` 保留，避免批量删除触发环境安全策略。
+
+**验证证据**
+- 安装目录 `build_info.json`：`fb89201`、`dirty=false`；`tools-package/build_info.json`：`9cb038f`、`dirty=false`。
+- `python tools/package_app.py --install-dir F:/tmp/VisionRT --tools-package F:/Projects/VisionTools/dist/visiontools-deploy.zip` → 退出码 0。
+
+**未完成**
+- 未跑测试（本次只做构建与部署）；出包后的十项人工验收仍未进行。
+
+**下一步**
+- 在 `F:\tmp\VisionRT` 上进行人工验收。
+
 ### 2026-11-07 — 弹窗连贯分割线、四列全时架构、默认折叠与主界面目录顺序对齐
 
 **目标**

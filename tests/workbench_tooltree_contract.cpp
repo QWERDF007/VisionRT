@@ -166,6 +166,49 @@ try
                 },
                 2000),
             "expanded tool tree category revealed no children");
+
+    // Verify mouse stationary expand/collapse: no ghost hover leaks to recycled delegates (e.g. 采集, 预处理)
+    auto dlCategory = delegateWithKey(tree, "深度学习");
+    require(dlCategory != nullptr, "深度学习 category delegate was not found");
+    const QPoint clickPos = dlCategory->mapToScene(dlCategory->boundingRect().center()).toPoint();
+    QTest::mouseMove(&window, clickPos);
+    QTest::qWait(50);
+    // 1st click: expand
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, clickPos);
+    require(QTest::qWaitFor([&] {
+                auto item = delegateWithKey(tree, "深度学习");
+                return item && item->property("expanded").toBool() && item->property("isSelected").toBool();
+            }, 2000),
+            "clicking 深度学习 did not expand or select it");
+    // Verify no recycled delegate has ghost hover
+    QList<QQuickItem *> delegatesAfterExpand;
+    collectDelegates(tree, delegatesAfterExpand);
+    for (auto *del : delegatesAfterExpand)
+    {
+        if (del->isVisible() && del->property("stableKey").toString() != "深度学习")
+        {
+            require(!del->property("isHovered").toBool(),
+                    "unfocused delegate unexpectedly has ghost hover after expansion");
+        }
+    }
+
+    // 2nd click: collapse at exact same position without mouse movement
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, clickPos);
+    require(QTest::qWaitFor([&] {
+                auto item = delegateWithKey(tree, "深度学习");
+                return item && !item->property("expanded").toBool() && item->property("isSelected").toBool();
+            }, 2000),
+            "clicking 深度学习 did not collapse it cleanly");
+    QList<QQuickItem *> delegatesAfterCollapse;
+    collectDelegates(tree, delegatesAfterCollapse);
+    for (auto *del : delegatesAfterCollapse)
+    {
+        if (del->isVisible() && del->property("stableKey").toString() != "深度学习")
+        {
+            require(!del->property("isHovered").toBool(),
+                    "unfocused delegate unexpectedly has ghost hover after collapse");
+        }
+    }
     // Verify switching selection to another category: only the active node is selected, no row offset or jumping
     const auto currentCats = categories(tree);
     if (currentCats.size() > 1)
