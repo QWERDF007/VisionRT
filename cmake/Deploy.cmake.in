@@ -29,8 +29,8 @@ if(EXISTS "@CMAKE_SOURCE_DIR@/assets/tools")
     file(COPY "@CMAKE_SOURCE_DIR@/assets/tools/" DESTINATION "${DESTINATION}/tools"
         PATTERN "__pycache__" EXCLUDE)
 endif()
-if(EXISTS "@CMAKE_SOURCE_DIR@/assets/examples")
-    file(COPY "@CMAKE_SOURCE_DIR@/assets/examples/" DESTINATION "${DESTINATION}/examples"
+if(EXISTS "@CMAKE_SOURCE_DIR@/examples")
+    file(COPY "@CMAKE_SOURCE_DIR@/examples/" DESTINATION "${DESTINATION}/examples"
         PATTERN "__pycache__" EXCLUDE)
 endif()
 

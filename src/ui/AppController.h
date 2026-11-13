@@ -182,6 +182,10 @@ public:
     Q_INVOKABLE void         rescanTools();
     Q_INVOKABLE void         requestNew();
     Q_INVOKABLE void         requestOpen(const QString &path);
+    // The examples the product installed next to the executable. The menu opens its dialog there and
+    // names the same path in its refusal when the installation carries none; the url is empty then.
+    Q_INVOKABLE QString      examplesDirectory() const;
+    Q_INVOKABLE QUrl         examplesDirectoryUrl() const;
     // Reuses requestOpen, so the recent list never bypasses the unsaved decision, drain or reset.
     Q_INVOKABLE void         openRecentProject(const QString &path);
     Q_INVOKABLE void         requestClose();

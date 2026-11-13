@@ -99,9 +99,11 @@ int main(int argc, char *argv[])
     parser.addOption({"workers", "Taskflow worker count (positive integer)", "count"});
     parser.addOption({"project", "Project file to open on startup", "file"});
     parser.addOption({"select-node", "Node to select on startup", "nodeId"});
+    parser.addOption({"select-image", "Image output to display on startup, as stage:port", "output"});
     parser.addOption({"screenshot", "Capture UI screenshot to file and exit", "path"});
     parser.addOption({"screenshot-delay", "Delay before screenshot in ms (default 1000)", "ms"});
     parser.addOption({"demo-menu", "Open tools menu on startup for verification"});
+    parser.addOption({"demo-file-menu", "Open the file menu on startup for verification"});
     parser.addOption({"demo-settings", "Open the settings window on startup for verification"});
     parser.addOption({"demo-select", "Select first category on startup for verification"});
     parser.addOption({"run-once", "Execute pipeline once on startup"});
@@ -141,20 +143,35 @@ int main(int argc, char *argv[])
         {
             const QString projectPath = parser.value("project");
             const QString selectNode  = parser.value("select-node");
+            const QString selectImage = parser.value("select-image");
             const bool    runOnce     = parser.isSet("run-once");
-            const auto openProject = [&controller, &startupConnection, projectPath, selectNode, runOnce]()
+            const auto openProject = [&controller, &startupConnection, projectPath, selectNode, selectImage, runOnce]()
             {
                 if (controller.busy())
                     return;
                 QObject::disconnect(startupConnection);
                 QObject::connect(&controller, &visionrt::AppController::projectReplaced, &controller,
-                                 [&controller, selectNode, runOnce]()
+                                 [&controller, selectNode, selectImage, runOnce]()
                                  {
                                      const auto nodes = controller.nodes();
                                      if (!selectNode.isEmpty())
                                          controller.selectNode(selectNode);
                                      else if (!nodes.isEmpty())
                                          controller.selectNode(nodes.first().toMap().value("id").toString());
+                                     if (!selectImage.isEmpty())
+                                     {
+                                         // The image choices exist only once the node has a result, so the
+                                         // selection is applied whenever the runtime settles and repeated
+                                         // until it sticks. Verification hook only.
+                                         QObject::connect(&controller, &visionrt::AppController::runtimeChanged,
+                                                          &controller,
+                                                          [&controller, selectImage]()
+                                                          {
+                                                              if (!controller.busy()
+                                                                  && controller.selectedImageOutput() != selectImage)
+                                                                  controller.setImageOutput(selectImage);
+                                                          });
+                                     }
                                      if (runOnce)
                                      {
                                          QTimer::singleShot(200, &controller, [&controller]() {
@@ -177,6 +194,7 @@ int main(int argc, char *argv[])
         engine.addImportPath(QCoreApplication::applicationDirPath() + "/qml");
         engine.rootContext()->setContextProperty("app", &controller);
         engine.rootContext()->setContextProperty("demoMenu", parser.isSet("demo-menu"));
+        engine.rootContext()->setContextProperty("demoFileMenu", parser.isSet("demo-file-menu"));
         engine.rootContext()->setContextProperty("demoSettings", parser.isSet("demo-settings"));
         engine.rootContext()->setContextProperty("demoSelect", parser.isSet("demo-select"));
         QObject::connect(

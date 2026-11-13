@@ -1,0 +1,764 @@
+{
+  "format_version": 7,
+  "project": {
+    "name": "多分支视觉检测",
+    "next_node_seq": "6",
+    "next_flow_seq": "2"
+  },
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "多分支视觉检测",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "visionrt.image.read",
+          "tool_name_snapshot": "图像读取",
+          "alias": "读取整幅图",
+          "pos": [
+            0,
+            0
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 1
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "literal",
+              "literal": "images"
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": false
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": "循环"
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": "顺序（下一张）"
+            },
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 1
+            },
+            {
+              "port_id": 6,
+              "mode": "literal",
+              "literal": false
+            }
+          ]
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "visionrt.roi.projection",
+          "tool_name_snapshot": "投影ROI",
+          "alias": "定位高反光条",
+          "pos": [
+            0,
+            1
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 8,
+                "type": {
+                  "type": "Int"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "ROI"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": "x"
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": "bright"
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": 128
+            },
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 20
+            },
+            {
+              "port_id": 6,
+              "mode": "literal",
+              "literal": 20
+            },
+            {
+              "port_id": 7,
+              "mode": "literal",
+              "literal": 0
+            },
+            {
+              "port_id": 8,
+              "mode": "literal",
+              "literal": 0
+            }
+          ]
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "visionrt.image.crop",
+          "tool_name_snapshot": "图像裁剪",
+          "alias": "分支一：裁剪定位结果",
+          "pos": [
+            0,
+            2
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "ROI"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 2
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 2,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": 3
+              }
+            }
+          ]
+        },
+        {
+          "node_seq": "4",
+          "tool_id": "visiontools.preprocess.adaptive_binary",
+          "tool_name_snapshot": "自适应二值化",
+          "alias": "分支一：二值化",
+          "pos": [
+            0,
+            3
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Float"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "3",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": 15
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": 5.0
+            }
+          ]
+        },
+        {
+          "node_seq": "5",
+          "tool_id": "visiontools.measure.circle",
+          "tool_name_snapshot": "测量圆",
+          "alias": "分支二：测量圆",
+          "pos": [
+            2,
+            1
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 3
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 8,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 9,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 10,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 11,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 12,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 13,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 14,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 15,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 16,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 17,
+                "type": {
+                  "type": "String"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "bool",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 1
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Array",
+                  "dtype": "int64",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 8,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 3
+                }
+              },
+              {
+                "port_id": 9,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 10,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 11,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 12,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 13,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 14,
+                "type": {
+                  "type": "String"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": [
+                [
+                  [
+                    3,
+                    260.0,
+                    150.0,
+                    50.0
+                  ]
+                ]
+              ]
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": []
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": 64
+            },
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 8.0
+            },
+            {
+              "port_id": 6,
+              "mode": "literal",
+              "literal": 3.0
+            },
+            {
+              "port_id": 7,
+              "mode": "literal",
+              "literal": 1.0
+            },
+            {
+              "port_id": 8,
+              "mode": "literal",
+              "literal": 8.0
+            },
+            {
+              "port_id": 9,
+              "mode": "literal",
+              "literal": "any"
+            },
+            {
+              "port_id": 10,
+              "mode": "literal",
+              "literal": 12
+            },
+            {
+              "port_id": 11,
+              "mode": "literal",
+              "literal": 0.6
+            },
+            {
+              "port_id": 12,
+              "mode": "literal",
+              "literal": 180.0
+            },
+            {
+              "port_id": 13,
+              "mode": "literal",
+              "literal": 0.5
+            },
+            {
+              "port_id": 14,
+              "mode": "literal",
+              "literal": 1000000.0
+            },
+            {
+              "port_id": 15,
+              "mode": "literal",
+              "literal": 1.0
+            },
+            {
+              "port_id": 16,
+              "mode": "literal",
+              "literal": 1.0
+            },
+            {
+              "port_id": 17,
+              "mode": "literal",
+              "literal": "px"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

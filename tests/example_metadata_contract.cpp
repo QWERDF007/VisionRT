@@ -18,7 +18,7 @@ int main(int argc, char **argv)
         registry.registerPackage(visionrt::readToolsPackage(std::filesystem::u8path(argv[1])));
         visionrt::ProjectStorage storage(registry);
         std::size_t checked = 0;
-        for (const auto &file : std::filesystem::directory_iterator(std::filesystem::u8path(argv[2])))
+        for (const auto &file : std::filesystem::recursive_directory_iterator(std::filesystem::u8path(argv[2])))
         {
             if (!file.path().filename().generic_string().ends_with(".vrt.json"))
                 continue;

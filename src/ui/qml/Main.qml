@@ -101,6 +101,11 @@ ApplicationWindow {
     }
     Timer {
         interval: 600
+        running: typeof demoFileMenu !== "undefined" && demoFileMenu === true
+        onTriggered: fileMenu.popup(fileBtn, 0, fileBtn.height)
+    }
+    Timer {
+        interval: 600
         running: typeof demoSettings !== "undefined" && demoSettings === true
         onTriggered: settingsDialog.openDialog()
     }
@@ -109,6 +114,22 @@ ApplicationWindow {
     }
     Action { id: newAction; text: "新建项目"; shortcut: "Ctrl+N"; enabled: app.workspaceEnabled; onTriggered: app.requestNew() }
     Action { id: openAction; text: "打开项目…"; shortcut: "Ctrl+O"; enabled: app.workspaceEnabled; onTriggered: openFile.open() }
+    Action {
+        id: openExampleAction
+        text: "打开示例…"
+        enabled: app.workspaceEnabled
+        // The dialog starts in the installed examples. An installation without them says which path
+        // is missing instead of opening an unrelated folder.
+        onTriggered: {
+            const folder = app.examplesDirectoryUrl()
+            if (folder.toString().length === 0) {
+                examplesMissing.open()
+                return
+            }
+            exampleFile.currentFolder = folder
+            exampleFile.open()
+        }
+    }
     Action { id: saveAction; text: "保存"; shortcut: "Ctrl+S"; enabled: app.workspaceEnabled; onTriggered: window.saveProject(false) }
     Action { id: saveAsAction; text: "另存为…"; shortcut: "Ctrl+Shift+S"; enabled: app.workspaceEnabled; onTriggered: window.saveProject(true) }
     Action { id: runAction; text: "单次"; shortcut: "F5"; enabled: app.workspaceEnabled; onTriggered: app.runOnce() }
@@ -251,6 +272,7 @@ ApplicationWindow {
         objectName: "fileMenu"
         QuiMenuItem { action: newAction }
         QuiMenuItem { action: openAction }
+        QuiMenuItem { action: openExampleAction }
         // The recent list is a submenu of the file menu: newest first, at most ten entries, disabled
         // while there is nothing to offer or while the application is closing.
         QuiMenu {
@@ -534,6 +556,16 @@ ApplicationWindow {
         id: openFile; title: "打开工程"
         nameFilters: ["VisionRT JSON 工程 (*.vrt.json *.json)"]
         onAccepted: app.requestOpen(window.localPath(selectedFile))
+    }
+    FileDialog {
+        id: exampleFile; title: "打开示例"
+        nameFilters: ["VisionRT 工程 (*.vrt.json)"]
+        onAccepted: app.requestOpen(window.localPath(selectedFile))
+    }
+    WorkbenchDialog {
+        id: examplesMissing; title: "未安装示例工程"
+        useNegativeButton: false; positiveText: "关闭"
+        message: "示例目录不存在：" + app.examplesDirectory() + "\n随包示例会随安装目录一起提供。"
     }
     FileDialog {
         id: saveFile; title: "保存工程"; fileMode: FileDialog.SaveFile

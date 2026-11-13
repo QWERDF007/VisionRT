@@ -112,6 +112,8 @@ MANIFEST_FILE = "install-manifest.json"
 MANIFEST_SCHEMA_VERSION = 1
 PROTECTED_INSTALL_ROOTS = frozenset({"custom-tools", "logs"})
 PROTECTED_INSTALL_FILES = frozenset({"ui-preferences.json"})
+# The example projects are product assets next to the executable, not test data.
+EXAMPLES_DIRECTORY = "examples"
 
 
 def build_release(build_dir: Path, config: str, parallel: int) -> None:
@@ -500,6 +502,44 @@ def copy_project_runtime(
     if include_pdb and bin_dir.is_dir():
         for pdb in bin_dir.glob("*.pdb"):
             owned_copy(pdb, install_dir / pdb.name, ownership)
+
+
+def example_files(source: Path | None = None) -> list[Path]:
+    """The shipped example assets, as the source tree lists them."""
+    root = REPO_ROOT / EXAMPLES_DIRECTORY if source is None else source
+    if not root.is_dir():
+        raise RuntimeError(f"examples directory is missing: {root}")
+    files = [
+        item for item in sorted(root.rglob("*"))
+        if item.is_file() and "__pycache__" not in item.parts
+    ]
+    if not files:
+        raise RuntimeError(f"examples directory is empty: {root}")
+    return files
+
+
+def copy_examples(install_dir: Path, ownership: InstallOwnership | None = None) -> None:
+    """Deploys the example projects exactly as the source tree has them."""
+    source = REPO_ROOT / EXAMPLES_DIRECTORY
+    for item in example_files(source):
+        owned_copy(item, install_dir / EXAMPLES_DIRECTORY / item.relative_to(source), ownership)
+
+
+def verify_examples(install_dir: Path) -> list[str]:
+    """Every shipped example file must be installed with the same content."""
+    source = REPO_ROOT / EXAMPLES_DIRECTORY
+    installed = install_dir / EXAMPLES_DIRECTORY
+    if not installed.is_dir():
+        return [f"examples directory missing: {installed}"]
+    problems = []
+    for item in example_files(source):
+        target = installed / item.relative_to(source)
+        relative = target.relative_to(install_dir).as_posix()
+        if not target.is_file():
+            problems.append(f"example file missing: {relative}")
+        elif target.read_bytes() != item.read_bytes():
+            problems.append(f"example file differs from the source tree: {relative}")
+    return problems
 
 
 def deploy_tools_package(
@@ -1199,6 +1239,7 @@ def verify_package(
         problems.append("startup chain imports a Python runtime: " + "; ".join(python_imports))
     if linked_paths:
         problems.append("package contains links: " + ", ".join(linked_paths))
+    problems.extend(verify_examples(install_dir))
 
     # Verify build metadata
     for name, comp in (("build_info.json", "VisionRT"), ("contracts-build-info.json", "VisionRTContracts")):
@@ -1298,6 +1339,7 @@ def main() -> int:
     owned_copy(source_exe, packaged_exe, ownership)
     copy_project_runtime(build_dir, install_dir, args.include_pdb, allow_dirty=args.allow_dirty,
                          ownership=ownership)
+    copy_examples(install_dir, ownership)
 
     if args.tools_package:
         ext_index = resolve_project_path(args.tools_index) if args.tools_index else None

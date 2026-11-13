@@ -65,6 +65,7 @@ add_library(visionrt_core
     src/core/ProjectEditor.cpp
     src/core/ProjectValues.cpp
     src/core/ProjectStorage.cpp
+    src/core/ExampleProject.cpp
     src/core/CustomToolStore.cpp
     src/plugins/PluginLoader.cpp)
 target_link_libraries(visionrt_core PUBLIC visionrt_common Qt6::Core)
@@ -231,6 +232,15 @@ if(VISIONRT_BUILD_APP)
         COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_BINARY_DIR}/Deploy.cmake"
         DEPENDS VisionRT
         USES_TERMINAL)
+
+    # 开发运行目录与安装态同构：示例工程就在可执行文件旁边，菜单在 build/bin 下同样可用。
+    # 先清空再复制，改名或删除的示例不会残留在运行目录里冒充产品文件。
+    add_custom_target(examples_runtime ALL
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "$<TARGET_FILE_DIR:VisionRT>/examples"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_SOURCE_DIR}/examples" "$<TARGET_FILE_DIR:VisionRT>/examples"
+        COMMENT "同步示例工程到运行目录")
+    add_dependencies(examples_runtime VisionRT)
 endif()
 
 # 开发与本地调试动态库拷贝目标：OpenCV 取自本次配置实际链接的导入目标，Python 取自宿主解释器
@@ -551,6 +561,10 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(recent_projects_contract visionrt_ui)
         visionrt_contract(ui_preferences_contract visionrt_ui)
+        # Example recognition, resource export and the installed-example save rule, at controller
+        # level: the shipped assets are checked by example_metadata_contract instead.
+        visionrt_contract(example_project_contract visionrt_ui "${VISIONRT_TEST_TOOLS_PACKAGE}")
+        target_link_libraries(example_project_contract PRIVATE Qt6::Test)
         visionrt_contract(ui_storage_contract visionrt_ui)
         # R50: this scenario executes Python, so the test states the build interpreter.
         target_link_libraries(ui_storage_contract PRIVATE visionrt_python_testing)

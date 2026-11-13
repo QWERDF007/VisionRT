@@ -146,6 +146,106 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert((corruptFailed));
 }
 
+void testShippedExamples(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot)
+{
+    // The shipped examples are the product: every project under examples/ that is offered as a
+    // first-batch sample must load without a diagnostic and produce real results from its own
+    // images. A copy in a Chinese, space-containing folder keeps that claim independent of the
+    // source tree and of the process working directory.
+    QTemporaryDir tmpDir;
+    assert((tmpDir.isValid()));
+    const auto root = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / u8"示例 副本";
+    std::filesystem::copy(repoRoot / "examples", root, std::filesystem::copy_options::recursive);
+
+    const auto package = visionrt::readToolsPackage(toolsPkg);
+    auto       loader  = std::make_shared<PluginLoader>();
+    ToolRegistry registry;
+    registry.setPluginLoader(loader);
+    registry.registerPackage(package);
+    registry.loadNativeImplementations();
+
+    ProjectStorage storage(registry);
+    const auto     run = [&](const std::filesystem::path &project, std::size_t nodeCount)
+    {
+        auto loaded = storage.load(project);
+        for (const auto &diagnostic : loaded.diagnostics)
+            std::cerr << "LOAD DIAGNOSTIC " << project.filename().string() << ": node="
+                      << (diagnostic.node ? *diagnostic.node : 0) << " field=" << diagnostic.field
+                      << " msg=" << diagnostic.message << std::endl;
+        assert((loaded.diagnostics.empty()));
+        assert((loaded.project.flows.size() == 1));
+        assert((loaded.project.flows[0].nodes.size() == nodeCount));
+        RuntimeEngine engine(4);
+        const auto    started = engine.start(loaded.project, registry, RunMode::Once);
+        assert((started.code == 0));
+        auto update = finish(engine);
+        for (const auto &node : loaded.project.flows[0].nodes)
+        {
+            auto result = snapshot(update, node.id);
+            if (!result || result->status.code != 0)
+                std::cerr << "NODE FAILURE " << project.filename().string() << " node=" << node.id
+                          << " tool=" << node.toolId
+                          << " code=" << (result ? result->status.code : -1)
+                          << " message=" << (result ? result->status.message : std::string{"missing"})
+                          << " detail=" << (result ? result->status.detail : std::string{}) << std::endl;
+            assert((result && result->status.code == 0));
+        }
+        return update;
+    };
+
+    const auto firstBatch = root / u8"01_基础入门" / u8"01_图像读取" / u8"图像读取.vrt.json";
+    const auto read       = run(firstBatch, 1);
+    const auto readNode   = snapshot(read, 1);
+    assert((std::get<DataRef<Image>>(readNode->outputs.at(2)).get().size() == 2));
+    assert((std::get<std::int64_t>(readNode->outputs.at(4)) == 0));
+    assert((std::get<std::int64_t>(readNode->outputs.at(5)) == 2));
+
+    const auto preprocess = run(root / u8"02_工具示例" / u8"02_图像预处理" / u8"图像预处理.vrt.json", 3);
+    const auto binarised  = std::get<DataRef<Image>>(snapshot(preprocess, 3)->outputs.at(2)).get();
+    assert((binarised.size() == 1 && binarised[0].rows == 300 && binarised[0].cols == 400));
+
+    const auto located = run(root / u8"02_工具示例" / u8"01_ROI定位与裁剪" / u8"ROI定位与裁剪.vrt.json", 3);
+    const auto &rois   = std::get<DataRef<ROI>>(snapshot(located, 2)->outputs.at(3)).get();
+    assert((rois.size() == 1 && rois[0].size() == 1));
+    const auto &cropped = std::get<DataRef<Image>>(snapshot(located, 3)->outputs.at(2)).get();
+    assert((cropped.size() == 1 && cropped[0].rows == 300 && cropped[0].cols == 60));
+
+    const auto circle       = run(root / u8"02_工具示例" / u8"03_圆测量" / u8"圆测量.vrt.json", 2);
+    const auto circleResult = snapshot(circle, 2);
+    const auto radius       = nestedOf<std::vector<std::vector<double>>>(std::get<Array>(circleResult->outputs.at(9)));
+    const auto centers = nestedOf<std::vector<std::vector<std::vector<double>>>>(
+        std::get<Array>(circleResult->outputs.at(8)));
+    assert((radius.size() == 1 && radius[0].size() == 1));
+    assert((std::abs(radius[0][0] - 60.0) < 0.5));
+    assert((std::abs(centers[0][0][0] - 160.0) < 0.5 && std::abs(centers[0][0][1] - 120.0) < 0.5));
+
+    const auto spacing = run(root / u8"02_工具示例" / u8"04_行间距测量" / u8"行间距测量.vrt.json", 2);
+    const auto spacingResult = snapshot(spacing, 2);
+    const auto widths = nestedOf<std::vector<std::vector<std::vector<double>>>>(
+        std::get<Array>(spacingResult->outputs.at(9)));
+    const auto gaps = nestedOf<std::vector<std::vector<std::vector<double>>>>(
+        std::get<Array>(spacingResult->outputs.at(10)));
+    assert((widths.size() == 1 && widths[0].size() == 1 && widths[0][0].size() == 5));
+    assert((gaps[0][0].size() == 4));
+    for (const auto &width : widths[0][0])
+        assert((std::abs(width - 20.0) < 0.5));
+    for (const auto &gap : gaps[0][0])
+        assert((std::abs(gap - 20.0) < 0.5));
+
+    const auto branch = run(root / u8"03_综合示例" / u8"01_多分支视觉检测" / u8"多分支视觉检测.vrt.json", 5);
+    const auto &branchRois = std::get<DataRef<ROI>>(snapshot(branch, 2)->outputs.at(3)).get();
+    assert((branchRois.size() == 1 && branchRois[0].size() == 1));
+    const auto &branchCrop = std::get<DataRef<Image>>(snapshot(branch, 3)->outputs.at(2)).get();
+    assert((branchCrop.size() == 1 && branchCrop[0].rows == 300 && branchCrop[0].cols == 60));
+    assert((!std::get<DataRef<Image>>(snapshot(branch, 4)->outputs.at(2)).get().empty()));
+    const auto branchRadius
+        = nestedOf<std::vector<std::vector<double>>>(std::get<Array>(snapshot(branch, 5)->outputs.at(9)));
+    assert((branchRadius.size() == 1 && branchRadius[0].size() == 1));
+    assert((std::abs(branchRadius[0][0] - 50.0) < 0.5));
+
+    std::cout << "[SHIPPED EXAMPLES] six projects loaded and executed with their own images\n";
+}
+
 void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
 {
     const auto package = visionrt::readToolsPackage(toolsPkg);
@@ -830,6 +930,10 @@ int main(int argc, char **argv)
     std::cout << "[TEST] Running real Tools package CPU + Python pipeline in unicode path (RT-S03)..." << std::endl;
     testRealToolsCpuPythonPipeline(unicodePkg, repoRoot, python);
     std::cout << "[PASS] Real Tools package CPU + Python pipeline passed." << std::endl;
+
+    std::cout << "[TEST] Running the shipped example projects..." << std::endl;
+    testShippedExamples(unicodePkg, repoRoot);
+    std::cout << "[PASS] Shipped example projects passed." << std::endl;
 
     std::cout << "[TEST] Running ragged detection filter 0/3 targets test (RT-S03)..." << std::endl;
     testRaggedDetectionFilter(unicodePkg);

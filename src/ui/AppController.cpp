@@ -1,6 +1,7 @@
 #include "common/Version.h"
 #include "log/LogService.h"
 #include "core/DefinitionJson.h"
+#include "core/ExampleProject.h"
 #include "core/NodeContracts.h"
 #include "core/Sequence.h"
 #include "core/ToolPaths.h"
@@ -2166,6 +2167,22 @@ void AppController::requestOpen(const QString &path)
         impl_->request(ProjectOperations::Action::Open, path);
 }
 
+QString AppController::examplesDirectory() const
+{
+    return workbench::pathText(ExampleProject::directory(impl_->applicationDirectory));
+}
+
+QUrl AppController::examplesDirectoryUrl() const
+{
+    const auto directory = ExampleProject::directory(impl_->applicationDirectory);
+    if (!std::filesystem::is_directory(directory))
+    {
+        impl_->report(QStringLiteral("未安装示例工程：") + workbench::pathText(directory));
+        return {};
+    }
+    return QUrl::fromLocalFile(workbench::pathText(directory));
+}
+
 void AppController::openRecentProject(const QString &path)
 {
     // The list is only a shortcut: it enters through the same pending-open state machine as the
@@ -2237,9 +2254,22 @@ bool AppController::save(const QString &path)
         impl_->report(QStringLiteral("运行期间不能保存工程，请先停止运行"));
         return false;
     }
+    // An installed example stays as the product shipped it. Ctrl+S therefore asks where the user's
+    // own copy goes instead of writing the installation; the same rule covers an example reached
+    // through the recent list or the ordinary open dialog.
+    const bool installedExample = ExampleProject::owns(impl_->applicationDirectory, previousPath);
+    if (path.isEmpty() && installedExample)
+    {
+        emit savePathRequired();
+        return false;
+    }
     try
     {
-        auto candidate   = impl_->editor.project();
+        auto candidate = impl_->editor.project();
+        // A save of an example into a user folder carries the files it reads; storage keeps writing
+        // the JSON and sees a candidate that already describes the destination layout.
+        if (installedExample)
+            candidate = ExampleProject::adopt(candidate, destination, impl_->registry);
         auto diagnostics = ProjectStorage(impl_->registry).save(candidate, destination);
         impl_->editor.replaceProject(std::move(candidate));
         impl_->synchronizeNodes();
