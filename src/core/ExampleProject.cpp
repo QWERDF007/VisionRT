@@ -28,25 +28,14 @@ std::string utf8Path(const std::filesystem::path &path)
 
 bool sameName(const std::filesystem::path &left, const std::filesystem::path &right)
 {
-    const auto a = left.native();
-    const auto b = right.native();
 #ifdef _WIN32
-    // Windows compares path components case-insensitively; folding ASCII covers every spelling the
-    // shell can hand back for an installed directory.
-    if (a.size() != b.size())
-        return false;
-    for (std::size_t index = 0; index < a.size(); ++index)
-    {
-        const auto fold = [](auto value)
-        {
-            return value >= u'A' && value <= u'Z' ? static_cast<decltype(value)>(value - u'A' + u'a') : value;
-        };
-        if (fold(a[index]) != fold(b[index]))
-            return false;
-    }
-    return true;
+    // Windows compares path components case-insensitively; Qt owns that folding so the check does
+    // not grow a second opinion about which spellings are the same directory.
+    return QString::fromStdWString(left.native())
+               .compare(QString::fromStdWString(right.native()), Qt::CaseInsensitive)
+        == 0;
 #else
-    return a == b;
+    return left.native() == right.native();
 #endif
 }
 
