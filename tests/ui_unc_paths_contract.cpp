@@ -22,7 +22,7 @@ void require(bool condition, const std::string &message)
 }
 }
 
-// visionrt.image.read: 图像路径 is input 1, 图像 is output 2.
+// ReadImage: 图像路径 is input 1, 图像 is output 2.
 constexpr PortId kPathInput    = 1;
 constexpr PortId kImagesOutput = 2;
 
@@ -51,7 +51,7 @@ try
     }
     AppController app(1, root);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC catalog did not become ready");
-    app.addNode("visionrt.image.read", 0, 0);
+    app.addNode("ReadImage", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 1; }, 5000),
             "UNC reader node was not created");
     require(app.setParameter(kPathInput, false, uncImage), "UNC path was rejected");

@@ -138,8 +138,9 @@ try
 
     click(window, saveButton);
     require(QTest::qWaitFor([&] { return !window->isVisible(); }, 3000), "Save did not close the editor");
-    require(std::filesystem::exists(root / "tools" / "custom.image.threshold.json")
-            || std::filesystem::exists(root / "tools" / "custom.tool.1.json"),
+    // The declaration is written inside the folder the tool was added to: that folder is its
+    // category.
+    require(std::filesystem::exists(root / "tools" / u8"用户扩展" / u8"示例工具" / "custom.image.threshold.json"),
             "Save did not write the declaration");
 
     std::cout << "[PASS] tool_editor_dialog_test" << std::endl;

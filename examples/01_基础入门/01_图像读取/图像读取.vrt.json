@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读取两幅图片",
           "pos": [
             0,
@@ -112,7 +113,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images"
+              "literal": "examples/01_基础入门/01_图像读取/images"
             },
             {
               "port_id": 2,

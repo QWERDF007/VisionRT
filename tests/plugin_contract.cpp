@@ -73,10 +73,9 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
 {
     auto loader = std::make_shared<PluginLoader>();
     loader->registerModule("test.plugin.counter", modulePath);
-    PlatformToolServices services;
 
     // First adapter
-    auto adapter1 = loader->createAdapter("test.plugin.counter", services);
+    auto adapter1 = loader->createAdapter("test.plugin.counter");
     assert(adapter1 != nullptr);
     Values initParams1;
     initParams1.emplace(0, std::int64_t{10});
@@ -99,7 +98,7 @@ void lifecycleAndReentrancy(const std::filesystem::path &modulePath)
     assert(relStatus1.code == 0);
 
     // Second independent adapter
-    auto adapter2 = loader->createAdapter("test.plugin.counter", services);
+    auto adapter2 = loader->createAdapter("test.plugin.counter");
     assert(adapter2 != nullptr);
     Values initParams2;
     initParams2.emplace(0, std::int64_t{100});
@@ -117,12 +116,11 @@ void singleModuleLoadOnlyOnce(const std::filesystem::path &modulePath)
 {
     auto loader = std::make_shared<PluginLoader>();
     loader->registerModule("test.plugin.counter", modulePath);
-    PlatformToolServices services;
 
     std::vector<std::unique_ptr<IToolInstance>> adapters;
     for (int i = 0; i < 5; ++i)
     {
-        auto ad = loader->createAdapter("test.plugin.counter", services);
+        auto ad = loader->createAdapter("test.plugin.counter");
         assert(ad->initialize({}).code == 0);
         adapters.push_back(std::move(ad));
     }
@@ -138,7 +136,6 @@ void singleModuleLoadOnlyOnce(const std::filesystem::path &modulePath)
 void faultInjection(const std::filesystem::path &modulePath)
 {
     auto                 loader = std::make_shared<PluginLoader>();
-    PlatformToolServices services;
 
     // A missing library is a load failure; a loaded library that does not export the factory is a
     // different answer. Both used to report the same code, which made "repair the deployment" and
@@ -159,7 +156,7 @@ void faultInjection(const std::filesystem::path &modulePath)
         loader->registerModule(id, path);
         try
         {
-            loader->createAdapter(id, services);
+            loader->createAdapter(id);
             assert(false);
         }
         catch (const RegistryError &error)
@@ -170,7 +167,7 @@ void faultInjection(const std::filesystem::path &modulePath)
 
     // 3. Partial initialization failure inside plugin
     loader->registerModule("test.plugin.fail_init", modulePath);
-    auto failInitAdapter = loader->createAdapter("test.plugin.fail_init", services);
+    auto failInitAdapter = loader->createAdapter("test.plugin.fail_init");
     auto failInitStatus  = failInitAdapter->initialize({});
     assert(failInitStatus.code == 7);
     // A tool the framework never initialised has no answer to give; the failure surfaces as the
@@ -181,7 +178,6 @@ void faultInjection(const std::filesystem::path &modulePath)
 void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &modulePath)
 {
     auto                 loader = std::make_shared<PluginLoader>();
-    PlatformToolServices services;
     QLibrary             probe(QString::fromStdString(modulePath.string()));
     assert(probe.load());
     const auto releaseCalls
@@ -197,7 +193,7 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
         loader->registerModule(id, modulePath);
         try
         {
-            loader->createAdapter(id, services);
+            loader->createAdapter(id);
             assert(false);
         }
         catch (const RegistryError &error)
@@ -211,14 +207,14 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
 
     // 3. initialize throws exception -> host catches, returns -1
     loader->registerModule("test.plugin.init_throw", modulePath);
-    auto       throwAdapter = loader->createAdapter("test.plugin.init_throw", services);
+    auto       throwAdapter = loader->createAdapter("test.plugin.init_throw");
     const auto thrown       = throwAdapter->initialize({});
     assert(thrown.code == -1 && thrown.message == "工具初始化异常");
     assert(thrown.detail == "Simulated init exception in plugin");
 
     // 4. release failure
     loader->registerModule("test.plugin.release_fail", modulePath);
-    auto relFailAdapter = loader->createAdapter("test.plugin.release_fail", services);
+    auto relFailAdapter = loader->createAdapter("test.plugin.release_fail");
     assert(relFailAdapter->initialize({}).code == 0);
     assert(relFailAdapter->release().code == 6);
 
@@ -236,23 +232,14 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
 {
     for (const std::int64_t code : {0, 7})
     {
-        const auto declaration
-            = QJsonDocument(
-                  QJsonObject{
-                      {"schema_version", 6},
-                      {       "name_en", "test.plugin.publication"},
-                      {       "name_zh",               "输出发布"},
-                      {       "version",                   "1.0.0"},
-                      {"implementation", QJsonObject{{"kind", "cpp"}}},
-                      {   "next_port_id",
-                       QJsonObject{{"init", 1}, {"inputs", 1}, {"outputs", 3}}},
-                      {         "ports",
-                       QJsonObject{
-                           {"init", QJsonArray{QJsonObject{{"id", 0}, {"name_en", "code"}, {"name_zh", "状态码"}, {"type", "int"}}}},
-                           {"outputs", QJsonArray{QJsonObject{{"id", 2}, {"name_en", "value"}, {"name_zh", "值"}, {"type", "int"}}}}}}
-            })
-                  .toJson(QJsonDocument::Compact)
-                  .toStdString();
+        const auto declaration = std::string(R"json({
+  "name_en": "test.plugin.publication",
+  "name_zh": "输出发布",
+  "version": "1.0.0",
+  "implementation": { "kind": "cpp" },
+  "init_params": [ { "id": 0, "name_en": "code", "name_zh": "状态码", "type": "int" } ],
+  "outputs": [ { "id": 2, "name_en": "value", "name_zh": "值", "type": "int" } ]
+})json");
         const auto definition = parseToolDefinitionJson(declaration);
         auto       loader     = std::make_shared<PluginLoader>();
         loader->registerModule(definition.nameEn, modulePath);
@@ -273,15 +260,22 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         RuntimeEngine engine(1);
         assert(engine.start(project, registry, RunMode::Once));
         const auto result = snapshot(finish(engine), 1);
-        // A business output the tool never wrote is materialised from the declaration; the tool's own
-        // status, not a fabricated value, says whether the run succeeded.
-        assert(result->status.code == code);
-        assert(equalValues(result->outputs.at(2), PortValue{std::int64_t{0}}));
-        if (result->toolResultPublished)
-            assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == code);
-        else
-            // A framework stop has no tool answer, so it must not publish status ports either.
+        // The tool never produces its declared business output. A successful status may not disguise
+        // that: the host reports the missing port as a contract violation and publishes no answer. A
+        // business failure is different - the tool did answer, and its own code is forwarded.
+        assert(isMissing(result->outputs.at(2)));
+        if (code == 0)
+        {
+            assert(!result->toolResultPublished);
+            assert(result->status.code != 0 && result->status.message.find("未发布输出端口") != std::string::npos);
             assert(!result->outputs.contains(kStatusCodePort) && !result->outputs.contains(kStatusMessagePort));
+        }
+        else
+        {
+            assert(result->toolResultPublished);
+            assert(result->status.code == code);
+            assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == code);
+        }
         assert(result->outputTypes.at(2) == TypeSpec{Type::Int});
     }
 }
@@ -367,7 +361,9 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
 
     project.path = modulePath.parent_path() / "managed.vrt.json";
     assert(engine.requestSynchronize(project, registry));
-    finish(engine);
+    // Only the project location changed: no plugin instance configuration depends on it, so the
+    // request is a no-op and publishes no completion. The instances stay exactly as they were.
+    assert(engine.state() == RuntimeState::Idle);
     assert(instanceCount() == 1 && initializeCount() == initializations + 2);
     auto copied = project.flows.front().nodes.front();
     copied.id     = 2;
@@ -423,98 +419,70 @@ void packageRegistration(const std::filesystem::path &modulePath)
                                std::filesystem::copy_options::overwrite_existing);
 
     writeText(declarationDir / "counter.json", R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "打包计数器",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "init": [
-      {
-        "name_en": "initial",
-        "name_zh": "初始值",
-        "type": "int",
-        "default": 10,
-        "id": 0
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "count",
-        "name_zh": "计数值",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "inputs": []
-  },
-  "next_port_id": {
-    "init": 1,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "init_params": [
+    {
+      "name_en": "initial",
+      "name_zh": "初始值",
+      "type": "int",
+      "default": 10,
+      "id": 0
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "count",
+      "name_zh": "计数值",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     writeText(declarationDir / "function.json", R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "打包函数",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_en": "x",
-        "name_zh": "输入X",
-        "type": "int",
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "y",
-        "name_zh": "输出Y",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "init": []
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_en": "x",
+      "name_zh": "输入X",
+      "type": "int",
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "y",
+      "name_zh": "输出Y",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.ghost.packaged",
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "outputs": [
-      {
-        "name_en": "count",
-        "name_zh": "计数值",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "init": [],
-    "inputs": []
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "outputs": [
+    {
+      "name_en": "count",
+      "name_zh": "计数值",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     writeText(pkgDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -563,37 +531,28 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto legacyDir = base / "legacy-tools" / std::filesystem::path(u8"custom/自定义/示例");
     writeText(legacyDir / "legacy.json", R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.legacy",
   "name_zh": "旧目录工具",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_en": "x",
-        "name_zh": "输入X",
-        "type": "int",
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "y",
-        "name_zh": "输出Y",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "init": []
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_en": "x",
+      "name_zh": "输入X",
+      "type": "int",
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "y",
+      "name_zh": "输出Y",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *legacy = registry.find("test.plugin.legacy");
@@ -601,38 +560,29 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     const auto duplicateDir = base / "duplicate-tools" / std::filesystem::path(u8"builtin/测试/数学");
     writeText(duplicateDir / "counter.json", R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "重复计数器",
   "version": "2.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "init": [
-      {
-        "name_en": "initial",
-        "name_zh": "初始值",
-        "type": "int",
-        "default": 10,
-        "id": 0
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "count",
-        "name_zh": "计数值",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "inputs": []
-  },
-  "next_port_id": {
-    "init": 1,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "init_params": [
+    {
+      "name_en": "initial",
+      "name_zh": "初始值",
+      "type": "int",
+      "default": 10,
+      "id": 0
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "count",
+      "name_zh": "计数值",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *counter = registry.find("test.plugin.counter");
@@ -641,8 +591,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(counter->definitionPath.generic_u8string().rfind(counterRoot, 0) == 0);
 
     // Both packaged tools execute through the single module of the package.
-    PlatformToolServices services;
-    auto                 instance = registry.create("test.plugin.counter", services);
+    auto                 instance = registry.create("test.plugin.counter");
     assert(instance != nullptr);
     Values initParams;
     initParams.emplace(0, std::int64_t{10});
@@ -652,7 +601,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
     assert(std::get<std::int64_t>(counterResult.outputs.at(2)) == 11);
     assert(instance->release().code == 0);
 
-    auto function = registry.create("test.plugin.function", services);
+    auto function = registry.create("test.plugin.function");
     assert(function != nullptr);
     assert(function->initialize({}).code == 0);
     Values functionInputs;
@@ -668,37 +617,28 @@ void packageRegistration(const std::filesystem::path &modulePath)
     std::filesystem::copy_file(modulePath, otherDir / "bin" / "test_module.dll",
                                std::filesystem::copy_options::overwrite_existing);
     writeText(otherDir / std::filesystem::path(u8"tools/custom/Python/示例/function.json"), R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "另一包函数",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_en": "x",
-        "name_zh": "输入X",
-        "type": "int",
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "y",
-        "name_zh": "输出Y",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "init": []
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_en": "x",
+      "name_zh": "输入X",
+      "type": "int",
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "y",
+      "name_zh": "输出Y",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     writeText(otherDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -778,38 +718,29 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(jsonDir / "test.plugin.counter.json"));
         assert(f.open(QIODevice::WriteOnly));
         const char *jsonContent = R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "实际打包插件",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "init": [
-      {
-        "name_en": "initial",
-        "name_zh": "初始值",
-        "type": "int",
-        "default": 10,
-        "id": 0
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "count",
-        "name_zh": "计数值",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "inputs": []
-  },
-  "next_port_id": {
-    "init": 1,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "init_params": [
+    {
+      "name_en": "initial",
+      "name_zh": "初始值",
+      "type": "int",
+      "default": 10,
+      "id": 0
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "count",
+      "name_zh": "计数值",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json";
         f.write(jsonContent);
     }
@@ -881,37 +812,28 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         QFile f(toQString(funcJsonFile));
         assert(f.open(QIODevice::WriteOnly));
         const char *funcJsonContent = R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "函数插件",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_en": "x",
-        "name_zh": "输入X",
-        "type": "int",
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_en": "y",
-        "name_zh": "输出Y",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "init": []
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_en": "x",
+      "name_zh": "输入X",
+      "type": "int",
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_en": "y",
+      "name_zh": "输出Y",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json";
         f.write(funcJsonContent);
     }
@@ -1104,7 +1026,14 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
         QFile definition(toQString(jsonDir / "release.json"));
         assert(definition.open(QIODevice::WriteOnly));
-        definition.write(R"({"schema_version":6,"name_en":"test.plugin.release_fail","name_zh":"释放诊断","version":"1.0.0","implementation":{"kind":"cpp"},"ports":{"init":[],"inputs":[],"outputs":[]},"next_port_id":{"init":0,"inputs":1,"outputs":2}})");
+        definition.write(R"({
+  "name_en": "test.plugin.release_fail",
+  "name_zh": "释放诊断",
+  "version": "1.0.0",
+  "implementation": {
+    "kind": "cpp"
+  }
+})");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
         index.write(
@@ -1127,8 +1056,10 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     const auto released = app.nodes().first().toMap();
     assert(released.value("state") == "succeeded" && released.value("statusCode").toInt() == 0);
     assert(released.value("statusMessage").toString().isEmpty());
-    assert(released.value("lifecycleMessage").toString().contains("释放资源失败"));
-    assert(released.value("lifecycleDetail") == "native release detail");
+    // Saving the project elsewhere is an ordinary save: no plugin instance depends on the project
+    // location, so nothing is released and the node keeps the answer it already published.
+    assert(released.value("lifecycleMessage").toString().isEmpty());
+    assert(released.value("lifecycleDetail").toString().isEmpty());
     const auto reported = app.diagnostics().size();
     for (int attempt = 0; attempt < 10; ++attempt)
     {
@@ -1139,27 +1070,22 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(QDir(temp.path()).mkpath("again"));
     assert(app.save(temp.filePath("again/lifecycle.vrt.json")));
     waitForIdle();
-    assert(app.diagnostics().size() == reported + 1);
+    assert(app.diagnostics().size() == reported);
     const auto applicationLog = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array();
     assert(applicationLog.size() == app.diagnostics().size());
-    for (const auto &entry : {applicationLog.at(0).toObject(), applicationLog.at(1).toObject()})
-    {
-        assert(entry.value("node") == released.value("id").toString());
-        assert(entry.value("tool_id") == "test.plugin.release_fail" && entry.value("phase") == "release");
-        // The tool's own release verdict is forwarded unchanged; the host adds no code of its own.
-        assert(entry.value("code").toInt() == 6 && entry.value("message") == "释放资源失败");
-        assert(entry.value("detail") == "native release detail");
-    }
-    assert(!app.diagnostic().contains("native release detail"));
     app.deleteNodes({released.value("id")});
     waitForIdle();
     assert(app.nodes().isEmpty());
+    // Deleting the node is what releases its instance, so the tool's own verdict is reported here,
+    // forwarded unchanged: the host adds no code of its own.
     const auto removed = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array().first().toObject();
     assert(removed.value("node") == released.value("id").toString());
     assert(removed.value("tool_id") == "test.plugin.release_fail" && removed.value("phase") == "release");
+    assert(removed.value("code").toInt() == 6 && removed.value("message") == "释放资源失败");
+    assert(removed.value("detail") == "native release detail");
     assert(removed.value("runtime_phase") == "management");
     assert(!removed.value("generation").toString().isEmpty() && !removed.value("sequence").toString().isEmpty());
-    assert(removed.value("code").toInt() == 6 && removed.value("detail") == "native release detail");
+    assert(!app.diagnostic().contains("native release detail"));
 }
 #endif
 
@@ -1191,8 +1117,7 @@ void registryIntegration(const std::filesystem::path &modulePath)
     auto avail = registry.availability(def.nameEn);
     assert(avail.state == ToolAvailability::Available);
 
-    PlatformToolServices services;
-    auto                 instance = registry.create(def.nameEn, services);
+    auto                 instance = registry.create(def.nameEn);
     assert(instance != nullptr);
 
     assert(instance->initialize({}).code == 0);
@@ -1250,8 +1175,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
             if (status1.code == 0 && m1 != nullptr)
             {
                 loader1->registerModule("test.plugin.a", dll1);
-                PlatformToolServices s;
-                auto                 ad = loader1->createAdapter("test.plugin.a", s);
+                auto                 ad = loader1->createAdapter("test.plugin.a");
                 if (ad && ad->initialize({}).code == 0)
                 {
                     auto r = ad->execute({});
@@ -1271,8 +1195,7 @@ void windowsDllLoadingAndConcurrency(const std::filesystem::path &modulePath, co
             if (status2.code == 0 && m2 != nullptr)
             {
                 loader2->registerModule("test.plugin.b", dll2);
-                PlatformToolServices s;
-                auto                 ad = loader2->createAdapter("test.plugin.b", s);
+                auto                 ad = loader2->createAdapter("test.plugin.b");
                 if (ad && ad->initialize({}).code == 0)
                 {
                     auto r = ad->execute({});
@@ -1317,30 +1240,20 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
 
     writeText(unicodeDir / std::filesystem::path(u8"tools/builtin/测试/示例") / "plugin_a.json",
               R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.a",
   "name_zh": "插件甲",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "outputs": [
-      {
-        "name_en": "val",
-        "name_zh": "值",
-        "type": "int",
-        "id": 2
-      }
-    ],
-    "init": [],
-    "inputs": []
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "outputs": [
+    {
+      "name_en": "val",
+      "name_zh": "值",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
     writeText(unicodeDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -1371,8 +1284,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
     }
     assert(state.state == ToolAvailability::Available);
 
-    PlatformToolServices services;
-    auto                 instance = registry.create("test.plugin.a", services);
+    auto                 instance = registry.create("test.plugin.a");
     assert(instance != nullptr);
     auto initStatus = instance->initialize({});
     if (initStatus.code != 0)
@@ -1447,8 +1359,7 @@ static int runMissingDepChild(const std::filesystem::path &pluginAPath, const st
         return 4;
     }
     loaderOk->registerModule("test.plugin.b", okDll);
-    PlatformToolServices services;
-    auto                 ad = loaderOk->createAdapter("test.plugin.b", services);
+    auto                 ad = loaderOk->createAdapter("test.plugin.b");
     if (!ad || ad->initialize({}).code != 0)
     {
         std::cerr << "Failed to initialize ok adapter\n";

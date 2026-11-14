@@ -31,7 +31,7 @@ int main(int argc, char **argv)
             std::cerr << "模块加载失败：" << status.message << std::endl;
         assert(status && module);
         std::weak_ptr<const LoadedModule> alive = module;
-        auto instance = std::make_unique<DomainToolAdapter>(module, "test.value.lifetime", PlatformToolServices{});
+        auto instance = std::make_unique<DomainToolAdapter>(module, "test.value.lifetime");
         assert(instance->initialize({
             {0, marker}
         }));

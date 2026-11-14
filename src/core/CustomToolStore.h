@@ -20,8 +20,6 @@ public:
     {
         return rootDir_;
     }
-    void setRootDir(std::filesystem::path rootDir);
-
     std::filesystem::path declarationsDir() const
     {
         return rootDir_ / "tools";
@@ -60,7 +58,7 @@ public:
     // declaration is not removable, so a caller never reports a deletion that did not happen.
     bool deleteCustomTool(const std::string &toolId);
 
-    // Clones a custom tool, preserving port IDs and next_port_id counters
+    // Clones a custom tool, preserving the port numbers the source uses.
     ToolDefinition cloneCustomTool(const ToolDefinition &source, const std::string &newToolId, const std::string &newNameZh);
 
 private:

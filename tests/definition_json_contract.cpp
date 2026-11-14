@@ -11,6 +11,7 @@
 using namespace visionrt;
 
 int main()
+try
 {
     QTemporaryDir directory;
     assert(directory.isValid());
@@ -18,47 +19,37 @@ int main()
     QFile      file(name);
     assert(file.open(QIODevice::WriteOnly));
     file.write(R"json({
-  "schema_version": 6,
   "name_en": "test.json",
   "name_zh": "JSON 声明",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 1, "inputs": 2, "outputs": 3},
-  "ui": {
-    "category": [
-      "测试",
-      "数值"
-    ]
-  },
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_en": "seed",
-        "name_zh": "种子",
-        "type": "int",
-        "default": 9007199254740993
-      }
-    ],
-    "inputs": [
-      {
-        "id": 1,
-        "name_en": "optional",
-        "name_zh": "可选输入",
-        "type": "string"
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_en": "result",
-        "name_zh": "结果",
-        "type": "int"
-      }
-    ]
-  }
+  "init_params": [
+    {
+      "id": 0,
+      "name_en": "seed",
+      "name_zh": "种子",
+      "type": "int",
+      "default": 9007199254740993
+    }
+  ],
+  "inputs": [
+    {
+      "id": 1,
+      "name_en": "optional",
+      "name_zh": "可选输入",
+      "type": "string"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "result",
+      "name_zh": "结果",
+      "type": "int"
+    }
+  ]
 })json");
     file.close();
     const auto definition = parseToolDefinitionFile(std::filesystem::path(name.toStdWString()));
@@ -70,11 +61,12 @@ int main()
     assert(definition.outputs[0].id == kStatusCodePort);
     const auto normalized = emitNormalizedToolJson(definition);
     const auto emitted    = QJsonDocument::fromJson(QByteArray::fromStdString(normalized)).object();
-    assert(emitted["ports"].toObject()["outputs"].toArray().size() == 1);
+    // The three groups are plain top-level arrays; there is no wrapping object and no format number.
+    assert(!emitted.contains("ports") && !emitted.contains("schema_version") && !emitted.contains("next_port_id"));
+    assert(emitted["outputs"].toArray().size() == 1);
     // Host-owned common ports are materialised in the effective contract but never written back
     // into the author declaration.
-    assert(emitted["ports"].toObject()["inputs"].toArray().size() == 1
-           && emitted["ports"].toObject()["inputs"].toArray()[0].toObject()["id"].toInt() == 1);
+    assert(emitted["inputs"].toArray().size() == 1 && emitted["inputs"].toArray()[0].toObject()["id"].toInt() == 1);
     assert(!emitted["implementation"].toObject().contains("entry"));
     const auto roundTrip = parseToolDefinitionJson(normalized);
     assert(equalValues(roundTrip.initParams[0].defaultValue, definition.initParams[0].defaultValue));
@@ -82,9 +74,8 @@ int main()
 
     // display.visible is the author's image-selector choice: Image only, absent means false, and it
     // survives the emit/reparse round trip instead of being a UI-only flag.
-    auto imageDeclaration = emitted;
-    auto imagePorts       = imageDeclaration["ports"].toObject();
-    imagePorts["inputs"]  = QJsonArray{
+    auto imageDeclaration       = emitted;
+    imageDeclaration["inputs"]  = QJsonArray{
         QJsonObject{{"id", 1}, {"name_en", "source"}, {"name_zh", "源图"}, {"type", "image"}},
         QJsonObject{{"id", 2},
                     {"name_en", "mask"},
@@ -92,13 +83,12 @@ int main()
                     {"type", "image"},
                     {"display", QJsonObject{{"visible", true}}}}
     };
-    imageDeclaration["ports"] = imagePorts;
     const auto imageParsed = parseToolDefinitionJson(QJsonDocument(imageDeclaration).toJson().toStdString());
     assert(!imageParsed.inputs[1].imageVisible);
     assert(imageParsed.inputs[2].imageVisible);
     const auto imageEmitted
         = QJsonDocument::fromJson(QByteArray::fromStdString(emitNormalizedToolJson(imageParsed))).object();
-    const auto imageEmittedInputs = imageEmitted["ports"].toObject()["inputs"].toArray();
+    const auto imageEmittedInputs = imageEmitted["inputs"].toArray();
     assert(!imageEmittedInputs[0].toObject()["display"].toObject()["visible"].toBool());
     assert(imageEmittedInputs[1].toObject()["display"].toObject()["visible"].toBool());
 
@@ -120,11 +110,10 @@ int main()
         rejects(QJsonDocument(object).toJson().toStdString());
     };
 
-    // A port list is authored under ports.inputs and referenced by stage-qualified names.
+    // A port list is authored under inputs and referenced by stage-qualified references.
     auto crop          = emitted;
-    auto cropPorts     = crop["ports"].toObject();
     // 端口编号不重复即可，名称只是说明。
-    cropPorts["inputs"] = QJsonArray{
+    crop["inputs"] = QJsonArray{
         QJsonObject{{"id", 2}, {"name_en", "images"}, {"name_zh", "图像"}, {"type", "image"}},
         QJsonObject{{"id", 3},
                     {"name_en", "rect"},
@@ -133,68 +122,67 @@ int main()
                     {"ui", QJsonObject{{"editor", "rect"}}},
                     {"relations", QJsonObject{{"image", QJsonObject{{"stage", "inputs"}, {"id", 2}}}}}}
     };
-    crop["ports"] = cropPorts;
     const auto cropDefinition = parseToolDefinitionJson(QJsonDocument(crop).toJson().toStdString());
     assert(cropDefinition.inputs[2].type.type == Type::ROI && cropDefinition.inputs[2].editor == "rect");
     assert((cropDefinition.inputs[2].image == PortRef{PortStage::Inputs, 2}));
     assert(parseToolDefinitionJson(emitNormalizedToolJson(cropDefinition)).inputs[2].editor == "rect");
 
     // display.visible belongs to Image ports and is a boolean, never a truthy string.
-    auto visibleOnInt = emitted;
-    auto visiblePorts = visibleOnInt["ports"].toObject();
-    visiblePorts["inputs"] = QJsonArray{
+    auto visibleOnInt      = emitted;
+    visibleOnInt["inputs"] = QJsonArray{
         QJsonObject{{"id", 1},
                     {"name_en", "value"},
                     {"name_zh", "数值"},
                     {"type", "int"},
                     {"display", QJsonObject{{"visible", true}}}}
     };
-    visibleOnInt["ports"] = visiblePorts;
     rejectObject(visibleOnInt);
 
-    auto visibleText = imageDeclaration;
-    auto textPorts   = visibleText["ports"].toObject();
-    textPorts["inputs"] = QJsonArray{
+    auto visibleText      = imageDeclaration;
+    visibleText["inputs"] = QJsonArray{
         QJsonObject{{"id", 1},
                     {"name_en", "source"},
                     {"name_zh", "源图"},
                     {"type", "image"},
                     {"display", QJsonObject{{"visible", "yes"}}}}
     };
-    visibleText["ports"] = textPorts;
     rejectObject(visibleText);
 
-    auto badEditor     = crop;
-    auto badPorts      = badEditor["ports"].toObject();
-    badPorts["inputs"] = QJsonArray{
+    auto badEditor      = crop;
+    badEditor["inputs"] = QJsonArray{
         QJsonObject{{"id", 2}, {"name_en", "text"}, {"name_zh", "文本"}, {"type", "string"}, {"ui", QJsonObject{{"editor", "rect"}}}}
     };
-    badEditor["ports"] = badPorts;
     rejectObject(badEditor);
 
-    for (const auto field : {"extra", "tool_id", "display_name", "kind", "entry", "init_params", "inputs", "outputs"})
+    // Old wrappers and any other unknown root field are ordinary field-validation failures.
+    for (const auto field : {"extra", "tool_id", "display_name", "kind", "entry", "schema_version", "ports",
+                             "next_port_id"})
     {
-        auto invalid = emitted;
+        auto invalid   = emitted;
         invalid[field] = 1;
         rejectObject(invalid);
     }
-    auto invalid = emitted;
-    invalid["schema_version"] = 4;
-    rejectObject(invalid);
-    invalid["schema_version"] = "5";
-    rejectObject(invalid);
+    {
+        auto wrapped      = emitted;
+        wrapped["ports"]  = QJsonObject{{"inputs", emitted["inputs"]}};
+        wrapped.remove("inputs");
+        rejectObject(wrapped);
+    }
+    {
+        auto versioned       = emitted;
+        versioned["schema_version"] = 6;
+        rejectObject(versioned);
+    }
 
     // One token per type: the old three-field spelling and capitalised names are gone.
     for (const auto token : {"Int", "Array", "Float64", "vec_float64", "vec_vec_vec_vec_vec_int"})
     {
         auto declaration = emitted;
-        auto ports       = declaration["ports"].toObject();
-        auto inputs      = ports["inputs"].toArray();
+        auto inputs      = declaration["inputs"].toArray();
         auto first       = inputs.first().toObject();
         first["type"]    = token;
         inputs.replace(0, first);
-        ports["inputs"]  = inputs;
-        declaration["ports"] = ports;
+        declaration["inputs"] = inputs;
         rejectObject(declaration);
     }
 
@@ -202,36 +190,30 @@ int main()
     for (const auto field : {"required", "allow_missing"})
     {
         auto declaration = emitted;
-        auto ports       = declaration["ports"].toObject();
-        auto inputs      = ports["inputs"].toArray();
+        auto inputs      = declaration["inputs"].toArray();
         auto first       = inputs.first().toObject();
         first[field]     = true;
         inputs.replace(0, first);
-        ports["inputs"]  = inputs;
-        declaration["ports"] = ports;
+        declaration["inputs"] = inputs;
         rejectObject(declaration);
     }
 
-    // Duplicate and reserved names stay author errors.
+    // Duplicate and reserved numbers stay author errors.
     {
         auto declaration = emitted;
-        auto ports       = declaration["ports"].toObject();
-        auto inputs      = ports["inputs"].toArray();
+        auto inputs      = declaration["inputs"].toArray();
         inputs.append(inputs.first());
-        ports["inputs"]  = inputs;
-        declaration["ports"] = ports;
+        declaration["inputs"] = inputs;
         rejectObject(declaration);
     }
     {
         // 编号是身份：声明不得占用宿主保留的状态输出编号 0/1。
-        auto declaration = emitted;
-        auto ports       = declaration["ports"].toObject();
-        auto outputs     = ports["outputs"].toArray();
-        auto first       = outputs.first().toObject();
-        first["id"]      = 1;
+        auto declaration  = emitted;
+        auto outputs      = declaration["outputs"].toArray();
+        auto first        = outputs.first().toObject();
+        first["id"]       = 1;
         outputs.replace(0, first);
-        ports["outputs"] = outputs;
-        declaration["ports"] = ports;
+        declaration["outputs"] = outputs;
         rejectObject(declaration);
     }
 
@@ -254,7 +236,7 @@ int main()
         assert(std::string(error.what()).find("broken.json") != std::string::npos);
     }
 
-    auto python            = emitted;
+    auto python              = emitted;
     python["implementation"] = QJsonObject{
         {    "kind", "python_class"},
         {"package",  "示例 包/shared"},
@@ -276,18 +258,20 @@ int main()
         rejectObject(missing);
     }
     {
-        auto bad          = python;
-        bad["init_params"] = QJsonArray{};
+        // A function tool has no configuration at all; declaring one stays an author error.
+        auto bad              = python;
+        bad["implementation"] = QJsonObject{
+            {"kind", "python_function"}, {"package", "p"}, {"file", "f.py"}, {"symbol", "execute"}
+        };
+        bad["init_params"] = QJsonArray{QJsonObject{{"id", 0}, {"name_zh", "种子"}, {"type", "int"}}};
         rejectObject(bad);
     }
 
     // A host tool declares its binding in implementation and its dynamic output by reference.
     auto host              = emitted;
     host["implementation"] = QJsonObject{{"kind", "host"}, {"binding", "visionrt.receiver"}};
-    host["next_port_id"]   = QJsonObject{{"init", 3}, {"inputs", 2}, {"outputs", 3}};
-    auto hostPorts         = host["ports"].toObject();
     // 源端口编号按数值传递，因此第三个初始化参数是 int。
-    hostPorts["init"]      = QJsonArray{
+    host["init_params"]    = QJsonArray{
         QJsonObject{{"id", 0}, {"name_en", "flow"}, {"name_zh", "流程"}, {"type", "string"}},
         QJsonObject{{"id", 1}, {"name_en", "node"}, {"name_zh", "节点"}, {"type", "string"}},
         QJsonObject{{"id", 2}, {"name_en", "port"}, {"name_zh", "端口"}, {"type", "int"}}
@@ -300,14 +284,12 @@ int main()
                                   {"node", QJsonObject{{"stage", "init"}, {"id", 1}}},
                                   {"port", QJsonObject{{"stage", "init"}, {"id", 2}}}}}
     };
-    hostPorts["outputs"] = QJsonArray{dynamic};
-    host["ports"]        = hostPorts;
-    const auto receiver  = parseToolDefinitionJson(QJsonDocument(host).toJson().toStdString());
+    host["outputs"]     = QJsonArray{dynamic};
+    const auto receiver = parseToolDefinitionJson(QJsonDocument(host).toJson().toStdString());
     assert(receiver.hostBinding == "visionrt.receiver" && receiver.outputs.back().typeFrom);
     assert(parseToolDefinitionJson(emitNormalizedToolJson(receiver)).outputs.back().typeFrom);
-    dynamic["type"]      = "int";
-    hostPorts["outputs"] = QJsonArray{dynamic};
-    host["ports"]        = hostPorts;
+    dynamic["type"]  = "int";
+    host["outputs"]  = QJsonArray{dynamic};
     rejectObject(host);
 
     // The declaration writer replaces a file only after the whole document is written, and an
@@ -335,4 +317,10 @@ int main()
     }
 
     std::cout << "Qt JSON tool declarations preserve values and derive system outputs\n";
+    return 0;
+}
+catch (const std::exception &error)
+{
+    std::cerr << error.what() << '\n';
+    return 1;
 }

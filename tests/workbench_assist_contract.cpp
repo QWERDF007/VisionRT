@@ -30,10 +30,10 @@ void require(bool condition, const std::string &message)
         throw std::runtime_error(message);
 }
 
-// visionrt.image.read: 图像路径 1, 图像数量 5, 图像 2.
-// visiontools.measure.circle: 图像 1, 测量区域 2, 参考变换 3, 卡尺数量 4, 径向半搜索宽度 5,
+// ReadImage: 图像路径 1, 图像数量 5, 图像 2.
+// MeasureCircle: 图像 1, 测量区域 2, 参考变换 3, 卡尺数量 4, 径向半搜索宽度 5,
 // 边缘极性 9; 测得圆 7.
-// visiontools.measure.row_spacing: 合格宽度上限 8.
+// MeasureRowSpacing: 合格宽度上限 8.
 constexpr PortId kPathInput            = 1;
 constexpr PortId kImagesInput          = 1;
 constexpr PortId kRoisInput            = 2;
@@ -148,7 +148,7 @@ try
     app.rescanTools();
     settle();
 
-    app.addNode("visionrt.image.read", 0, 0);
+    app.addNode("ReadImage", 0, 0);
     settle();
     const auto reader = app.selectedNode();
     if (reader.isEmpty())
@@ -157,7 +157,7 @@ try
     require(app.setParameterPath(kPathInput, false, QUrl::fromLocalFile(images)), "assist image path was rejected");
     settle();
 
-    app.addNode("visiontools.measure.circle", 0, 4);
+    app.addNode("MeasureCircle", 0, 4);
     settle();
     const auto circle = app.selectedNode();
     require(!circle.isEmpty(), "assist circle node is missing");
@@ -304,7 +304,7 @@ try
 
     // The second helper uses the same host path: the row-spacing proposal is a rectangle plus its
     // recommended width range, committed through the same single transaction.
-    app.addNode("visiontools.measure.row_spacing", 0, 12);
+    app.addNode("MeasureRowSpacing", 0, 12);
     settle();
     const auto rowsNode = app.selectedNode();
     require(!rowsNode.isEmpty(), "row spacing node is missing");
@@ -340,7 +340,7 @@ try
 
     // An upstream ROI is read-only: the click reports it instead of silently disconnecting.
     stable();
-    app.addNode("visiontools.measure.circle", 0, 8);
+    app.addNode("MeasureCircle", 0, 8);
     settle();
     const auto downstream = app.selectedNode();
     require(!downstream.isEmpty(), "downstream circle node is missing");

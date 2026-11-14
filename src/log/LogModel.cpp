@@ -1,5 +1,7 @@
 #include "log/LogModel.h"
 
+#include <QStringList>
+
 #include <algorithm>
 
 namespace visionrt
@@ -40,6 +42,7 @@ void LogModel::clear()
     beginResetModel();
     rows_.clear();
     endResetModel();
+    emit countChanged();
 }
 
 QString LogModel::text(int row) const
@@ -47,6 +50,20 @@ QString LogModel::text(int row) const
     if (row < 0 || row >= rows_.size())
         return {};
     return rows_.at(row).line;
+}
+
+QString LogModel::allText() const
+{
+    QStringList lines;
+    lines.reserve(rows_.size());
+    for (const auto &record : rows_)
+        lines.append(record.line);
+    return lines.join(QLatin1Char('\n'));
+}
+
+int LogModel::count() const
+{
+    return static_cast<int>(rows_.size());
 }
 
 void LogModel::append(const QVector<LogRecord> &records)
@@ -69,6 +86,7 @@ void LogModel::append(const QVector<LogRecord> &records)
     for (const auto &record : incoming)
         rows_.push_back(record);
     endInsertRows();
+    emit countChanged();
 }
 
 void LogModel::setCapacity(std::size_t capacity)
@@ -80,6 +98,7 @@ void LogModel::setCapacity(std::size_t capacity)
         beginRemoveRows({}, 0, static_cast<int>(overflow) - 1);
         rows_.remove(0, overflow);
         endRemoveRows();
+        emit countChanged();
     }
 }
 

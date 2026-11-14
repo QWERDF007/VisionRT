@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读取整幅图",
           "pos": [
             0,
@@ -112,7 +113,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images"
+              "literal": "examples/03_综合示例/01_多分支视觉检测/images"
             },
             {
               "port_id": 2,
@@ -143,8 +144,9 @@
         },
         {
           "node_seq": "2",
-          "tool_id": "visionrt.roi.projection",
+          "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
+          "tool_version_snapshot": "1.0.0",
           "alias": "定位高反光条",
           "pos": [
             0,
@@ -279,8 +281,9 @@
         },
         {
           "node_seq": "3",
-          "tool_id": "visionrt.image.crop",
+          "tool_id": "CropImage",
           "tool_name_snapshot": "图像裁剪",
+          "tool_version_snapshot": "2.0.0",
           "alias": "分支一：裁剪定位结果",
           "pos": [
             0,
@@ -355,8 +358,9 @@
         },
         {
           "node_seq": "4",
-          "tool_id": "visiontools.preprocess.adaptive_binary",
+          "tool_id": "AdaptiveThreshold",
           "tool_name_snapshot": "自适应二值化",
+          "tool_version_snapshot": "1.0.0",
           "alias": "分支一：二值化",
           "pos": [
             0,
@@ -430,8 +434,9 @@
         },
         {
           "node_seq": "5",
-          "tool_id": "visiontools.measure.circle",
+          "tool_id": "MeasureCircle",
           "tool_name_snapshot": "测量圆",
+          "tool_version_snapshot": "1.0.0",
           "alias": "分支二：测量圆",
           "pos": [
             2,

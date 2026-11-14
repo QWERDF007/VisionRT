@@ -110,7 +110,7 @@ try
     ToolRegistry                   registry;
     registry.registerPackage(
         readToolsPackage(std::filesystem::path(installation.directory().toStdU16String()) / "tools-package"));
-    const auto *definition = registry.find("visionrt.detection.filter");
+    const auto *definition = registry.find("FilterDetections");
     require(definition != nullptr, "Installed filter declaration is missing");
     AppController app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Catalog initialization deadline exceeded");
@@ -141,7 +141,7 @@ try
     require(QTest::qWaitForWindowExposed(&window), "Benchmark window was not exposed");
     auto *surface = findItem(canvas, "flowSurface");
     require(surface != nullptr, "Canvas surface is missing");
-    // visionrt.detection.filter declares the five business inputs as 1..5 and publishes the same
+    // FilterDetections declares the five business inputs as 1..5 and publishes the same
     // five values as outputs 2..6; a routing graph connects output N to input N.
     const std::array<PortId, 5> sources{2, 3, 4, 5, 6};
     const std::array<PortId, 5> targets{1, 2, 3, 4, 5};

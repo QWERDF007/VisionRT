@@ -42,6 +42,18 @@ struct LogRecord
     QString level;
 };
 
+// Where a line came from. The origin is decided by the code that knows what happened - a project
+// operation, a window interaction, or a tool's own business report - and is never recovered by
+// reading the message text.
+enum class LogSource
+{
+    System,
+    Ui,
+    Tool
+};
+
+std::string_view sourceLabel(LogSource source) noexcept;
+
 // Result of text bounding: text within budget, and whether truncation occurred.
 struct BoundedText
 {
@@ -108,14 +120,14 @@ public:
     // Drains the queue into the sinks without blocking the caller on the GUI.
     void flush();
 
-    // Thread-safe, bounded producer entry. The source is rendered into the line as `[source]`, so
-    // the text keeps the business origin while the formatter owns time, level and thread.
-    static void write(LogLevel level, std::string_view source, std::string_view message);
-    static void write(LogLevel level, const QString &source, const QString &message);
-    void debug(std::string_view source, std::string_view message);
-    void info(std::string_view source, std::string_view message);
-    void warn(std::string_view source, std::string_view message);
-    void error(std::string_view source, std::string_view message);
+    // Thread-safe, bounded producer entry. The source is rendered into the line as `[来源]`, so the
+    // text keeps the business origin while the formatter owns time, level and thread.
+    static void write(LogLevel level, LogSource source, std::string_view message);
+    static void write(LogLevel level, LogSource source, const QString &message);
+    void debug(LogSource source, std::string_view message);
+    void info(LogSource source, std::string_view message);
+    void warn(LogSource source, std::string_view message);
+    void error(LogSource source, std::string_view message);
 
     // Applies a new production threshold without touching the thread pool, the sinks or the
     // records already accepted: queued lines still drain, only new ones are filtered.

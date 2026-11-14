@@ -60,6 +60,9 @@ public:
         if (file.open(QIODevice::ReadOnly))
             previous_ = file.readAll();
         existed_ = file.exists();
+        // The read handle must be closed first: Windows refuses to delete a file that is still open,
+        // and a developer's own preferences would then leak into every case below.
+        file.close();
         QFile::remove(path_);
     }
 
@@ -81,8 +84,8 @@ private:
 
 // The Python declaration shipped with the test package; a native tool is the control group that
 // must keep working while every Python tool is unavailable.
-const QString kPythonTool = QStringLiteral("custom.python.roi");
-const QString kNativeTool = QStringLiteral("visionrt.image.read");
+const QString kPythonTool = QStringLiteral("RoiGeometry");
+const QString kNativeTool = QStringLiteral("ReadImage");
 
 } // namespace
 

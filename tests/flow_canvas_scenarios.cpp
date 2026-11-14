@@ -17,8 +17,10 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -134,11 +136,42 @@ void flowCanvasContract()
     };
     const auto route = readRoute(bypass);
     require(route.size() >= 4, "canvas wire has no obstacle-avoiding path");
+    // Wires leaving the same source port share their first pixels, so the longest segment is not
+    // necessarily the wire's own: the topmost wire receives the click. Take the stretch with the
+    // most clearance from every other wire instead.
+    const auto clearance = [&](const QPointF &point)
+    {
+        double nearest = std::numeric_limits<double>::max();
+        QList<QQuickItem *> items{canvas};
+        while (!items.isEmpty())
+        {
+            auto *item = items.takeLast();
+            if (item != bypass && item->objectName().startsWith(QStringLiteral("flowWire_")))
+            {
+                const auto points = readRoute(item);
+                for (qsizetype index = 1; index < points.size(); ++index)
+                {
+                    const QPointF start  = points[index - 1].toPointF();
+                    const QPointF finish = points[index].toPointF();
+                    const QPointF span   = finish - start;
+                    const double  length = span.x() * span.x() + span.y() * span.y();
+                    const double  t      = length <= 0 ? 0.0
+                                                       : std::clamp(((point.x() - start.x()) * span.x()
+                                                                     + (point.y() - start.y()) * span.y())
+                                                                        / length,
+                                                                    0.0, 1.0);
+                    nearest = std::min(nearest, QLineF(point, start + span * t).length());
+                }
+            }
+            items.append(item->childItems());
+        }
+        return nearest;
+    };
     QPointF selectionPoint;
-    double longestSegment = 0;
+    double  bestClearance = -1;
     for (qsizetype index = 1; index < route.size(); ++index)
     {
-        const auto start = route[index - 1].toPointF();
+        const auto start  = route[index - 1].toPointF();
         const auto finish = route[index].toPointF();
         require(start.x() == finish.x() || start.y() == finish.y(), "canvas route contains a diagonal segment");
         if (start.x() == finish.x() && start.x() > 0 && start.x() < 156)
@@ -147,13 +180,15 @@ void flowCanvasContract()
         if (start.y() == finish.y() && start.y() > 80 && start.y() < 132)
             require(std::max(start.x(), finish.x()) <= 0 || std::min(start.x(), finish.x()) >= 156,
                     "reader-to-crop wire crosses the intervening projection node");
-        const auto length = QLineF(start, finish).length();
-        if (length > longestSegment)
+        const auto middle   = (start + finish) / 2;
+        const auto distance = clearance(middle);
+        if (distance > bestClearance)
         {
-            longestSegment = length;
-            selectionPoint = (start + finish) / 2;
+            bestClearance  = distance;
+            selectionPoint = middle;
         }
     }
+    require(bestClearance > 10, "no part of the reader-to-crop wire is clear of every other wire");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, bypass->mapToScene(selectionPoint).toPoint());
     require(QTest::qWaitFor([&] { return canvas->property("selectedWire").toString() == QStringLiteral("1:3"); }, 500),
             "clicking a routed wire does not select its actual source/target relationship");
@@ -451,7 +486,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     // Title plus exactly three timing rows: preprocessing, operator and post-processing.
     require(content.size() == 7, "hover card does not contain the tool name and three timing rows");
     require(content.contains(first.value("title").toString()), "hover card lost the tool name");
-    require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("算子时间"))
+    require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("工具 API 耗时"))
                 && content.contains(QStringLiteral("后处理")),
             "hover card lost a timing row");
     require(!content.contains(QStringLiteral("宿主准备")) && !content.contains(QStringLiteral("初始化"))
@@ -470,7 +505,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         return {};
     };
     const auto preprocessText  = phaseValue(first, QStringLiteral("预处理"));
-    const auto operatorText    = phaseValue(first, QStringLiteral("算子时间"));
+    const auto operatorText    = phaseValue(first, QStringLiteral("工具 API 耗时"));
     const auto postprocessText = phaseValue(first, QStringLiteral("后处理"));
     require(!preprocessText.isEmpty() && content.contains(preprocessText),
             "hover card preprocess time does not match the structured node data");
@@ -533,7 +568,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         require(hoverCardAt(nodeCenter(refreshed)),
                 "hover card did not return after the execution refresh" + hoverState());
     }
-    require(texts().contains(phaseValue(nodeMap(id), QStringLiteral("算子时间"))),
+    require(texts().contains(phaseValue(nodeMap(id), QStringLiteral("工具 API 耗时"))),
             "visible hover card did not follow the current execution snapshot");
     require(!texts().contains(QStringLiteral("运行中")), "completed hover card retained the running measurement state");
     item = nodeItem(id);

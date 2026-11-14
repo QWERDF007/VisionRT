@@ -62,7 +62,6 @@ try
         {2, "值", {Type::Array, DType::Int64, 1}},
         {3, "图像", {Type::Image}}
     };
-    definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
     // The result view offers only ports the declaration marks visible.
     definition.outputs.back().imageVisible = true;

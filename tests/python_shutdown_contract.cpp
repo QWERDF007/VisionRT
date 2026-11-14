@@ -50,14 +50,32 @@ try
                       "   stream.write(str(self.identity) + '\\n')\n"
                       "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
-        const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"audit.concurrent.shutdown","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"concurrent_shutdown","file":"tool.py","symbol":"Tool"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
+        const auto definition = parseToolDefinitionJson(R"({
+  "name_en": "audit.concurrent.shutdown",
+  "name_zh": "Shutdown",
+  "version": "1",
+  "implementation": {
+    "kind": "python_class",
+    "package": "concurrent_shutdown",
+    "file": "tool.py",
+    "symbol": "Tool"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "Value",
+      "type": "int"
+    }
+  ]
+})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
         runtime->refresh(std::span(&definition, 1));
         std::vector<std::unique_ptr<IToolInstance>> instances;
         for (int index = 0; index < 3; ++index)
         {
-            auto instance = runtime->factory(definition)({});
+            auto instance = runtime->factory(definition)();
             assert(instance->initialize({}).code == 0);
             instances.push_back(std::move(instance));
         }
@@ -107,11 +125,29 @@ try
                       "  (directory / 'finished.flag').write_text('finished')\n"
                       "  return {'code': 0, 'message': '', 'detail': ''}\n";
         }
-        const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"audit.release.inflight","name_zh":"Shutdown","version":"1","implementation":{"kind":"python_class","package":"inflight_shutdown","file":"tool.py","symbol":"Tool"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
+        const auto definition = parseToolDefinitionJson(R"({
+  "name_en": "audit.release.inflight",
+  "name_zh": "Shutdown",
+  "version": "1",
+  "implementation": {
+    "kind": "python_class",
+    "package": "inflight_shutdown",
+    "file": "tool.py",
+    "symbol": "Tool"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "Value",
+      "type": "int"
+    }
+  ]
+})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
         runtime->refresh(std::span(&definition, 1));
-        auto instance = runtime->factory(definition)({});
+        auto instance = runtime->factory(definition)();
         assert(instance->initialize({}).code == 0);
         std::atomic<bool> workerFinished{false};
         std::thread worker([owned = std::move(instance), &workerFinished]() mutable {
@@ -144,7 +180,31 @@ def execute(inputs):
     return {'outputs': {2:[image], 3:__name__, 0: 0, 1: ''}, 'detail': ''}
 )";
     }
-    const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"python.memory","name_zh":"Memory","version":"1","implementation":{"kind":"python_function","package":"memory","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":4},"ports":{"outputs":[{"id":2,"name_en":"images","name_zh":"Images","type":"image"},{"id":3,"name_en":"namespace","name_zh":"Namespace","type":"string"}]}})",
+    const auto definition = parseToolDefinitionJson(R"({
+  "name_en": "python.memory",
+  "name_zh": "Memory",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "memory",
+    "file": "tool.py",
+    "symbol": "execute"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "images",
+      "name_zh": "Images",
+      "type": "image"
+    },
+    {
+      "id": 3,
+      "name_en": "namespace",
+      "name_zh": "Namespace",
+      "type": "string"
+    }
+  ]
+})",
                                                     root / "tools/custom/memory.json",
                                                     {
                                                         ToolOrigin::Custom,
@@ -155,7 +215,7 @@ def execute(inputs):
                                        [&]
                                        {
                                     runtime->refresh(std::span(&definition, 1));
-                                    auto instance = runtime->factory(definition)({});
+                                    auto instance = runtime->factory(definition)();
                                     assert(instance->initialize({}).code == 0);
                                     auto result = instance->execute({});
                                     assert(testview::status(result).code == 0);

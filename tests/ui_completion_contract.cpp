@@ -57,7 +57,6 @@ try
         {2, "数据", {Type::Array, DType::Int64, 1}},
         {3, "图像", {Type::Image}}
     };
-    definition.nextOutputPortId = 4;
     definition.outputs.back().colorOrder = "BGR";
     // The result view offers only ports the declaration marks visible, and the user picks one:
     // this fixture is about completion order, so it selects the image the way a user would.

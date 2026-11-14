@@ -60,11 +60,9 @@ try
         {     1,    "像素值",    {Type::Int}, std::int64_t{1}},
         {     2, "存储释放标记", {Type::String},   std::string{}}
     };
-    image.nextInputPortId = 3;
     image.outputs = {
         {2, "图像", {Type::Image}}
     };
-    image.nextOutputPortId = 3;
     // The workbench only offers an Image port that asks to be displayed; the fixture shows it.
     image.outputs.front().colorOrder  = "BGR";
     image.outputs.front().imageVisible = true;
@@ -78,7 +76,6 @@ try
     scalar.outputs = {
         {2, "同名数值", {Type::Int}}
     };
-    scalar.nextOutputPortId = 3;
     write(package + "tools/custom/isolation/scalar.json", QByteArray::fromStdString(emitNormalizedToolJson(scalar)));
     write(package + "python/custom/isolation/tool.py", R"py(import numpy as np
 import weakref
@@ -117,7 +114,7 @@ def scalar(inputs):
         editor.setLiteral(flow, parent, kMarkerInput, (root + "/" + name + ".released").toStdString());
         auto project = editor.project();
         project.path = std::filesystem::path((root + "/" + name + ".vrt.json").toStdU16String());
-        require(ProjectStorage(definitions).save(project).empty(), "cannot save isolation project");
+        ProjectStorage(definitions).save(project);
     }
     bool forbidImages        = false;
     bool staleFramePresented = false;

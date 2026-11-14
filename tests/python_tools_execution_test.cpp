@@ -35,7 +35,17 @@ int main(int argc, char **argv)
                 std::filesystem::create_directories(externalDeclarations);
                 {
                     std::ofstream declaration(externalDeclarations / "external.json");
-                    declaration << R"({"schema_version":6,"name_en":"test.external.roots","name_zh":"外部根工具","version":"1","implementation":{"kind":"python_function","package":"external","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":2}})";
+                    declaration << R"({
+  "name_en": "test.external.roots",
+  "name_zh": "外部根工具",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "external",
+    "file": "tool.py",
+    "symbol": "execute"
+  }
+})";
                 }
                 const auto overridden = readToolsPackage(
                     root, ToolRoots{externalDeclarations,
@@ -56,7 +66,7 @@ int main(int argc, char **argv)
                 if (argc == 3)
                 {
                     assert(package.index.modules.empty() && package.tools.size() == 1);
-                    auto instance = registry.create("test.add", {});
+                    auto instance = registry.create("test.add");
                     assert(instance->initialize({}).code == 0);
                     const auto result = instance->execute({});
                     assert(testview::status(result).code == 0 && std::get<std::int64_t>(result.outputs.at(2)) == 42);
@@ -65,14 +75,14 @@ int main(int argc, char **argv)
                     return;
                 }
                 assert(registry.definitions().size() == 7);
-                assert(registry.find("custom.image.mean") && registry.find("custom.call.counter")
-                       && registry.find("custom.python.roi") && registry.find("custom.python.image_add")
-                       && registry.find("visiontools.python.image_sizes")
-                       && registry.find("visiontools.logic.expression") && registry.find("visiontools.logic.branch"));
+                assert(registry.find("ImageMean") && registry.find("CallCounter")
+                       && registry.find("RoiGeometry") && registry.find("AddOneToImage")
+                       && registry.find("ImageSizes")
+                       && registry.find("EvaluateExpression") && registry.find("ConditionalBranch"));
                 const auto images = DataRef<Image>(Image{cv::Mat(4, 6, CV_16UC1, cv::Scalar(8))(cv::Rect(1, 1, 3, 2)),
                                                          cv::Mat(4, 5, CV_8UC3, cv::Scalar(2, 2, 2))});
                 {
-                    auto mean = registry.create("custom.image.mean", {});
+                    auto mean = registry.create("ImageMean");
                     assert(mean->initialize({}).code == 0);
                     const auto result = mean->execute({
                         {1, images}
@@ -97,7 +107,7 @@ int main(int argc, char **argv)
                     assert(mean->release().code == 0);
                 }
                 {
-                    auto       function = registry.create("visiontools.python.image_sizes", {});
+                    auto       function = registry.create("ImageSizes");
                     const auto result   = function->execute({
                         {1, images}
                     });
@@ -112,7 +122,7 @@ int main(int argc, char **argv)
                     // A numeric host Array reaches Python as an ndarray. The packaged declaration
                     // cannot state variable ports, so the node contract materialises them and the
                     // production bridge converts the Array on the way in.
-                    const auto *declaration = registry.find("visiontools.logic.expression");
+                    const auto *declaration = registry.find("EvaluateExpression");
                     assert(declaration && declaration->nodeModel == NodeModel::Expression);
                     NodeDefinition node;
                     node.id               = 1;
@@ -134,7 +144,7 @@ int main(int argc, char **argv)
                     assert(expression->release().code == 0);
                 }
                 {
-                    const auto *declaration = registry.find("visiontools.logic.branch");
+                    const auto *declaration = registry.find("ConditionalBranch");
                     assert(declaration && declaration->nodeModel == NodeModel::Condition);
                     NodeDefinition node;
                     node.id               = 2;
@@ -157,7 +167,7 @@ int main(int argc, char **argv)
                     assert(branch->release().code == 0);
                 }
                 {
-                    auto roi = registry.create("custom.python.roi", {});
+                    auto roi = registry.create("RoiGeometry");
                     assert(roi->initialize({}).code == 0);
                     const auto result = roi->execute({
                         {1, images}
@@ -174,7 +184,7 @@ int main(int argc, char **argv)
                     assert(roi->release().code == 0);
                 }
                 {
-                    auto add = registry.create("custom.python.image_add", {});
+                    auto add = registry.create("AddOneToImage");
                     assert(add->initialize({}).code == 0);
                     auto copyInput = DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(10)),
                                                           cv::Mat(2, 3, CV_8UC3, cv::Scalar(20, 20, 20))});
@@ -209,8 +219,8 @@ int main(int argc, char **argv)
                     assert(add->release().code == 0);
                 }
                 {
-                    auto first  = registry.create("custom.call.counter", {});
-                    auto second = registry.create("custom.call.counter", {});
+                    auto first  = registry.create("CallCounter");
+                    auto second = registry.create("CallCounter");
                     assert(first->initialize({}).code == 0 && second->initialize({}).code == 0);
                     assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 1);
                     assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 2);

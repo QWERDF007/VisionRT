@@ -52,8 +52,68 @@ try
     write("module_index.json", R"({"schema_version":1,"variant":"test","tools":[
         {"tool_id":"test.storage.source","definition":"tools/custom/storage/source.json"},
         {"tool_id":"test.storage.probe","definition":"tools/custom/storage/probe.json"}],"modules":[],"runtime_files":[]})");
-    write("tools/custom/storage/source.json", R"({"schema_version":6,"name_en":"test.storage.source","name_zh":"大图存储","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"source"},"next_port_id":{"init":0,"inputs":2,"outputs":4},"ports":{"inputs":[{"id":1,"name_zh":"执行闸门","type":"string"}],"outputs":[{"id":2,"name_zh":"图像","type":"image","display":{"color_order":"BGR","visible":true}},{"id":3,"name_zh":"对象编号","type":"int"}]}})");
-    write("tools/custom/storage/probe.json", R"({"schema_version":6,"name_en":"test.storage.probe","name_zh":"存储计数","version":"1","implementation":{"kind":"python_function","package":"storage","file":"tool.py","symbol":"probe"},"next_port_id":{"init":0,"inputs":1,"outputs":5},"ports":{"outputs":[{"id":2,"name_zh":"分配","type":"int"},{"id":3,"name_zh":"释放","type":"int"},{"id":4,"name_zh":"存活","type":"vec_int"}]}})");
+    write("tools/custom/storage/source.json", R"({
+  "name_en": "test.storage.source",
+  "name_zh": "大图存储",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "storage",
+    "file": "tool.py",
+    "symbol": "source"
+  },
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "执行闸门",
+      "type": "string"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "图像",
+      "type": "image",
+      "display": {
+        "color_order": "BGR",
+        "visible": true
+      }
+    },
+    {
+      "id": 3,
+      "name_zh": "对象编号",
+      "type": "int"
+    }
+  ]
+})");
+    write("tools/custom/storage/probe.json", R"({
+  "name_en": "test.storage.probe",
+  "name_zh": "存储计数",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "storage",
+    "file": "tool.py",
+    "symbol": "probe"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "分配",
+      "type": "int"
+    },
+    {
+      "id": 3,
+      "name_zh": "释放",
+      "type": "int"
+    },
+    {
+      "id": 4,
+      "name_zh": "存活",
+      "type": "vec_int"
+    }
+  ]
+})");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref
 import time

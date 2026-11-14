@@ -129,7 +129,6 @@ ToolDefinition helperDefinition()
                           {3, "坐标", {Type::ROI}},
                           {4, "有效", {Type::Bool}},
                           {5, "质量", {Type::String}}};
-    definition.nextOutputPortId = 6;
     return definition;
 }
 
@@ -156,11 +155,11 @@ try
 
     const auto definition = helperDefinition();
     auto       registry   = std::make_shared<ToolRegistry>();
-    registry->registerCpp(definition, [](const ToolServices &) { return std::make_unique<LatchedReleaseTool>(); });
+    registry->registerCpp(definition, []() { return std::make_unique<LatchedReleaseTool>(); });
     registry->addDefinition(definition);
 
     AssistPreview preview;
-    preview.configure(registry, definition, {});
+    preview.configure(registry, definition);
     learnOnce(preview);
 
     // A refresh while the worker is still destroying the instance must keep the barrier closed:
@@ -209,11 +208,11 @@ try
     {
         ToolDefinition execDef = helperDefinition();
         execDef.nameEn = "test.assist.exec_error";
-        registry->registerCpp(execDef, [](const ToolServices &) { return std::make_unique<ExecuteContractErrorTool>(); });
+        registry->registerCpp(execDef, []() { return std::make_unique<ExecuteContractErrorTool>(); });
         registry->addDefinition(execDef);
 
         AssistPreview execPreview;
-        execPreview.configure(registry, execDef, {});
+        execPreview.configure(registry, execDef);
         QSignalSpy outcomeSpy(&execPreview, &AssistPreview::outcomeReady);
 
         AssistRequest req;
@@ -232,12 +231,11 @@ try
         ToolDefinition setupDef = helperDefinition();
         setupDef.nameEn = "test.assist.setup_error";
         setupDef.inputs = {{1, "数量", {Type::Int}}};
-        setupDef.nextInputPortId = 2;
-        registry->registerCpp(setupDef, [](const ToolServices &) { return std::make_unique<LatchedReleaseTool>(); });
+        registry->registerCpp(setupDef, []() { return std::make_unique<LatchedReleaseTool>(); });
         registry->addDefinition(setupDef);
 
         AssistPreview setupPreview;
-        setupPreview.configure(registry, setupDef, {});
+        setupPreview.configure(registry, setupDef);
         QSignalSpy outcomeSpy(&setupPreview, &AssistPreview::outcomeReady);
 
         AssistRequest req;
@@ -256,11 +254,11 @@ try
     {
         ToolDefinition throwDef = helperDefinition();
         throwDef.nameEn = "test.assist.throw_error";
-        registry->registerCpp(throwDef, [](const ToolServices &) { return std::make_unique<UnexpectedThrowingTool>(); });
+        registry->registerCpp(throwDef, []() { return std::make_unique<UnexpectedThrowingTool>(); });
         registry->addDefinition(throwDef);
 
         AssistPreview throwPreview;
-        throwPreview.configure(registry, throwDef, {});
+        throwPreview.configure(registry, throwDef);
         QSignalSpy outcomeSpy(&throwPreview, &AssistPreview::outcomeReady);
 
         AssistRequest req;

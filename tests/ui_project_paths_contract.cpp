@@ -101,16 +101,13 @@ try
             port.defaultValue = std::string{};
         definition.inputs.push_back(port);
     }
-    definition.nextInputPortId = 8;
     definition.initParams      = definition.inputs;
     for (auto &port : definition.initParams)
         if (port.pathModeFrom)
             port.pathModeFrom = PortRef{PortStage::Init, kModeInput};
-    definition.nextInitPortId = 8;
     definition.outputs = {
         {kDataOutput, "实读内容", {Type::String}}
     };
-    definition.nextOutputPortId = 3;
     write(root + "/tools-package/tools/custom/project_paths/reader.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(root + "/tools-package/python/custom/project_paths/tool.py", R"py(import json

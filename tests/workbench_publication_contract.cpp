@@ -54,18 +54,15 @@ try
     definition.initParams = {
         {1, "初始化值", {Type::Int}, std::int64_t{10}}
     };
-    definition.nextInitPortId = 2;
     definition.inputs = {
         {1, "值", {Type::Int}, std::int64_t{1}}
     };
-    definition.nextInputPortId = 2;
     definition.outputs = {
         {2, "值", {Type::Int}},
         {3, "图像", {Type::Image}},
         {4, "区域", {Type::ROI}},
         {5, "说明", {Type::String}}
     };
-    definition.nextOutputPortId = 6;
     write(package + "tools/custom/publication/source.json",
           QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(package + "python/custom/publication/tool.py", R"py(import numpy as np

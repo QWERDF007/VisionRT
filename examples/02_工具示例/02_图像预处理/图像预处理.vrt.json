@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读取工件",
           "pos": [
             0,
@@ -112,7 +113,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images"
+              "literal": "examples/02_工具示例/02_图像预处理/images"
             },
             {
               "port_id": 2,
@@ -143,8 +144,9 @@
         },
         {
           "node_seq": "2",
-          "tool_id": "visiontools.image.brightness",
+          "tool_id": "AdjustBrightness",
           "tool_name_snapshot": "调整亮度",
+          "tool_version_snapshot": "1.0.0",
           "alias": "提亮对比",
           "pos": [
             0,
@@ -259,8 +261,9 @@
         },
         {
           "node_seq": "3",
-          "tool_id": "visiontools.preprocess.adaptive_binary",
+          "tool_id": "AdaptiveThreshold",
           "tool_name_snapshot": "自适应二值化",
+          "tool_version_snapshot": "1.0.0",
           "alias": "自适应二值化",
           "pos": [
             0,

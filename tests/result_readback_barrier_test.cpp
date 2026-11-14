@@ -88,7 +88,7 @@ try
         {2, "值", {Type::Array, DType::Int64, 1}}
     };
     registry.addDefinition(definition);
-    registry.registerCpp(definition, [&](const ToolServices &) { return std::make_unique<Counter>(calls); });
+    registry.registerCpp(definition, [&]() { return std::make_unique<Counter>(calls); });
     ProjectEditor editor;
     const auto    node = editor.addNode("flow_1", *registry.find(definition.nameEn), {});
     RuntimeEngine engine(2);

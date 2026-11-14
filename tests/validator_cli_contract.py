@@ -37,24 +37,21 @@ def main():
             return result
 
         tool = {
-            "schema_version": 6, "name_en": "test.cli", "name_zh": "校验工具",
+            "name_en": "test.cli", "name_zh": "校验工具",
             "version": "1", "implementation": {"kind": "cpp"},
-            "next_port_id": {"init": 0, "inputs": 2, "outputs": 3},
-            "ports": {
-                "inputs": [{"id": 1, "name_zh": "数量", "type": "int", "default": 9007199254740993}],
-                "outputs": [{"id": 2, "name_zh": "值", "type": "int"}],
-            },
+            "inputs": [{"id": 1, "name_zh": "数量", "type": "int", "default": 9007199254740993}],
+            "outputs": [{"id": 2, "name_zh": "值", "type": "int"}],
         }
         path = write("tools/builtin/工具.json", tool)
         run(path)
         normalized = json.loads(run("--emit-normalized-json", path).stdout)
-        assert normalized["ports"]["inputs"][0]["default"] == 9007199254740993
-        assert len(normalized["ports"]["outputs"]) == 1 and "entry" not in normalized["implementation"]
+        assert normalized["inputs"][0]["default"] == 9007199254740993
+        assert len(normalized["outputs"]) == 1 and "entry" not in normalized["implementation"]
         bad = copy.deepcopy(tool)
-        bad["ports"]["inputs"][0]["required"] = "false"
+        bad["inputs"][0]["required"] = "false"
         run(write("invalid.json", bad), valid=False)
         bad = copy.deepcopy(tool)
-        bad["ports"]["outputs"][0]["id"] = 0
+        bad["outputs"][0]["id"] = 0
         run(write("invalid.json", bad), valid=False)
         run(write("legacy.yaml", tool), valid=False)
 

@@ -68,7 +68,7 @@ public:
     Availability          availability(std::string_view toolId) const;
 
     std::shared_ptr<const LoadedModule> loadModule(const std::filesystem::path &libraryPath, ToolStatus &status);
-    std::unique_ptr<IToolInstance>      createAdapter(std::string_view toolId, const PlatformToolServices &services);
+    std::unique_ptr<IToolInstance>      createAdapter(std::string_view toolId);
 
     std::size_t loadedModuleCount() const;
 
@@ -91,7 +91,7 @@ private:
 class DomainToolAdapter final : public IToolInstance
 {
 public:
-    DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId, PlatformToolServices services);
+    DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId);
     ~DomainToolAdapter() override;
 
     ToolStatus initialize(const Values &initParams) override;
@@ -100,7 +100,6 @@ public:
 
 private:
     std::string                         toolId_;
-    PlatformToolServices                services_;
     std::shared_ptr<const LoadedModule> module_;
     const ToolRegistry::NativeFactory  *factory_     = nullptr;
     IToolInstance                      *raw_         = nullptr;

@@ -97,6 +97,9 @@ struct NodeDefinition
     NodeId                                           id = 0;
     std::string                                      toolId;
     std::string                                      toolNameSnapshot;
+    // The declaration version the node was last reconciled against. Absent in projects saved
+    // before the host recorded it, and then simply unknown.
+    std::string                                      toolVersionSnapshot;
     std::string                                      alias;
     GridPoint                                        position;
     Values                                           initParams;
@@ -131,7 +134,8 @@ struct ProjectDefinition
         {"flow_1", "流程1"}
     };
     std::filesystem::path path;
-    bool                  dirty = true;
+    // A new empty project holds nothing to lose; the first edit marks it dirty.
+    bool                  dirty = false;
 };
 
 PortValue      copyProjectLiteral(const PortValue &value);

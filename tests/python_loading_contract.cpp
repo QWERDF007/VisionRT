@@ -35,7 +35,25 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
                              ToolOrigin origin = ToolOrigin::Custom, std::string package = "math")
 {
     const auto folder = origin == ToolOrigin::Builtin ? "builtin" : "custom";
-    auto       result = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"python.fixture","name_zh":"Fixture","version":"1","implementation":{"kind":"python_function","package":"math","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})",
+    auto       result = parseToolDefinitionJson(R"({
+  "name_en": "python.fixture",
+  "name_zh": "Fixture",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "math",
+    "file": "tool.py",
+    "symbol": "execute"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "Value",
+      "type": "int"
+    }
+  ]
+})",
                                                 root / "tools" / folder / "tool.json",
                                                 {
                                               origin,
@@ -62,7 +80,7 @@ void unavailable(const ToolFactory &factory, ErrorCode expected)
     std::int64_t actual = 0;
     try
     {
-        auto instance = factory({});
+        auto instance = factory();
         if (instance)
         {
             const auto status = instance->initialize({});
@@ -94,9 +112,9 @@ void sharedPackages(PythonRuntime &runtime, const std::filesystem::path &root)
                                  definitionFor(root, "python.second", "second.py"),
                                  definitionFor(root, "python.builtin", "first.py", ToolOrigin::Builtin)};
     runtime.refresh(definitions);
-    auto first  = runtime.factory(definitions[0])({});
-    auto second = runtime.factory(definitions[1])({});
-    auto built  = runtime.factory(definitions[2])({});
+    auto first  = runtime.factory(definitions[0])();
+    auto second = runtime.factory(definitions[1])();
+    auto built  = runtime.factory(definitions[2])();
     assert(execute(*first) == 1 && execute(*second) == 2 && execute(*built) == 101 && execute(*first) == 3);
 }
 
@@ -117,8 +135,8 @@ class Counter:
     definition.kind         = ToolKind::PythonClass;
     definition.entry.symbol = "Counter";
     runtime.refresh(std::span(&definition, 1));
-    auto first  = runtime.factory(definition)({});
-    auto second = runtime.factory(definition)({});
+    auto first  = runtime.factory(definition)();
+    auto second = runtime.factory(definition)();
     assert(first->initialize({}).code == 0 && second->initialize({}).code == 0);
     assert(execute(*first) == 1 && execute(*second) == 1 && execute(*first) == 2);
 }
@@ -137,7 +155,7 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
     runtime.refresh(std::span(&definition, 1));
     unavailable(old, ErrorCode::PythonUnavailable);
     {
-        auto instance = runtime.factory(definition)({});
+        auto instance = runtime.factory(definition)();
         assert(execute(*instance) == 13);
     }
     const auto timestamp = std::filesystem::last_write_time(source);
@@ -145,7 +163,7 @@ void freshGenerations(PythonRuntime &runtime, const std::filesystem::path &root)
     std::filesystem::last_write_time(source, timestamp);
     runtime.refresh(std::span(&definition, 1));
     {
-        auto instance = runtime.factory(definition)({});
+        auto instance = runtime.factory(definition)();
         assert(execute(*instance) == 14);
     }
     auto missing = definitionFor(root, "python.missing", "first_only_builtin.py");
@@ -179,11 +197,11 @@ void partialFailure(PythonRuntime &runtime, const std::filesystem::path &root)
         registry.setPythonImplementation(loaded.toolId, runtime.factory(*registry.find(loaded.toolId)),
                                          loaded.status);
 
-    auto working = registry.create("python.partial_ok", {});
+    auto working = registry.create("python.partial_ok");
     assert(working->initialize({}).code == 0);
     assert(execute(*working) == 42);
 
-    auto       failing = registry.create("python.partial_broken", {});
+    auto       failing = registry.create("python.partial_broken");
     const auto failure = failing->initialize({});
     assert(!failure && failure.code == hostCode(ErrorCode::PythonUnavailable));
     assert(failure.detail.find("missing_module_for_partial_failure") != std::string::npos);
@@ -210,7 +228,7 @@ void nativeHelper(PythonRuntime &runtime, const std::filesystem::path &root)
     write(package / "native.py",
           "from . import _queue\ndef execute(inputs): return {'outputs':{2:int(_queue.SimpleQueue().empty()),0:0,1:''}, 'detail':''}\n");
     runtime.refresh(std::span(&definition, 1));
-    auto instance = runtime.factory(definition)({});
+    auto instance = runtime.factory(definition)();
     assert(execute(*instance) == 1);
 }
 
@@ -247,7 +265,7 @@ void packageBoundaries(PythonRuntime &runtime, const std::filesystem::path &root
     const auto entry = definitionFor(root, "python.package_entry", "__init__.py");
     runtime.refresh(std::span(&entry, 1));
     {
-        auto instance = runtime.factory(entry)({});
+        auto instance = runtime.factory(entry)();
         assert(execute(*instance) == 81);
     }
     const auto named = definitionFor(root, "python.unicode_entry", std::filesystem::path(u8"模块.py"));
@@ -255,7 +273,7 @@ void packageBoundaries(PythonRuntime &runtime, const std::filesystem::path &root
           "from . import value\ndef execute(inputs): return {'outputs':{2:value+1,0:0,1:''}, 'detail':''}\n");
     runtime.refresh(std::span(&named, 1));
     {
-        auto instance = runtime.factory(named)({});
+        auto instance = runtime.factory(named)();
         assert(execute(*instance) == 82);
     }
 }
@@ -309,13 +327,13 @@ void coldConcurrentRollback(PythonRuntime &runtime, const std::filesystem::path 
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    auto good = runtime.factory(definitions[0])({});
+    auto good = runtime.factory(definitions[0])();
     assert(execute(*good) == 1);
 
     write(package / "broken_resume.flag", "resume");
     workerBroken.join();
 
-    auto sibling = runtime.factory(definitions[1])({});
+    auto sibling = runtime.factory(definitions[1])();
     assert(execute(*sibling) == 1);
 }
 
@@ -370,13 +388,13 @@ void sharedHelperRollback(PythonRuntime &runtime, const std::filesystem::path &r
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    auto good = runtime.factory(definitions[0])({});
+    auto good = runtime.factory(definitions[0])();
     assert(execute(*good) == 1);
 
     write(package / "broken_resume.flag", "resume");
     workerBroken.join();
 
-    auto sibling = runtime.factory(definitions[1])({});
+    auto sibling = runtime.factory(definitions[1])();
     assert(execute(*sibling) == 1);
 }
 
@@ -426,13 +444,13 @@ void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::pat
     };
     runtime.refresh(definitions);
 
-    auto npWarm = runtime.factory(definitions[3])({});
+    auto npWarm = runtime.factory(definitions[3])();
     assert(execute(*npWarm) == 6);
 
     bool brokenFailed = false;
     try
     {
-        auto inst = runtime.factory(definitions[4])({});
+        auto inst = runtime.factory(definitions[4])();
         if (inst)
         {
             auto status = inst->initialize({});
@@ -460,17 +478,17 @@ void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::pat
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    auto good = runtime.factory(definitions[0])({});
+    auto good = runtime.factory(definitions[0])();
     assert(execute(*good) == 1);
 
     write(package / "cn_broken_resume.flag", "resume");
     workerBroken.join();
 
-    auto sibling = runtime.factory(definitions[1])({});
+    auto sibling = runtime.factory(definitions[1])();
     assert(execute(*sibling) == 1);
 
     write(package / "helper.py", "VALUE = 99\n");
-    auto sibling2 = runtime.factory(definitions[1])({});
+    auto sibling2 = runtime.factory(definitions[1])();
     assert(execute(*sibling2) == 1);
 
     good.reset();
@@ -479,7 +497,7 @@ void constantAndNumpyRollback(PythonRuntime &runtime, const std::filesystem::pat
     npWarm.reset();
 
     runtime.refresh(definitions);
-    auto siblingFresh = runtime.factory(definitions[1])({});
+    auto siblingFresh = runtime.factory(definitions[1])();
     assert(execute(*siblingFresh) == 99);
 }
 
@@ -500,7 +518,25 @@ try
                   "Path(__file__).with_name('imported.txt').write_text('imported')\n"
                   "def execute(inputs): return {'outputs': {2:23, 0: 0, 1: ''}, 'detail': ''}\n";
     }
-    const auto    definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"python.lazy","name_zh":"Lazy","version":"1","implementation":{"kind":"python_function","package":"math","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":3},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"}]}})",
+    const auto    definition = parseToolDefinitionJson(R"({
+  "name_en": "python.lazy",
+  "name_zh": "Lazy",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "math",
+    "file": "tool.py",
+    "symbol": "execute"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "Value",
+      "type": "int"
+    }
+  ]
+})",
                                                        root / "tools/custom/math/tool.json",
                                                        {
                                                         ToolOrigin::Custom,
@@ -513,7 +549,7 @@ try
                                  const auto statuses = runtime.refresh(std::span(&definition, 1));
                                  assert(statuses.size() == 1 && statuses[0].status.code == 0);
                                  assert(!std::filesystem::exists(code / "imported.txt"));
-                                 auto instance = runtime.factory(definition)({});
+                                 auto instance = runtime.factory(definition)();
                                  assert(!std::filesystem::exists(code / "imported.txt"));
                                  assert(instance->initialize({}).code == 0);
                                  assert(std::filesystem::exists(code / "imported.txt"));

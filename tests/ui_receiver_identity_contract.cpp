@@ -62,7 +62,31 @@ try
         require(file.open(QIODevice::WriteOnly) && file.write(content) == content.size(),
                 "cannot write identity fixture");
     };
-    write("tools/custom/identity/source.json", R"({"schema_version":6,"name_en":"test.identity.source","name_zh":"来源","version":"1.0","implementation":{"kind":"python_function","package":"identity","file":"source.py","symbol":"run"},"next_port_id":{"init":0,"inputs":2,"outputs":3},"ports":{"inputs":[{"id":1,"name_zh":"值","type":"int"}],"outputs":[{"id":2,"name_zh":"值","type":"int"}]}})");
+    write("tools/custom/identity/source.json", R"({
+  "name_en": "test.identity.source",
+  "name_zh": "来源",
+  "version": "1.0",
+  "implementation": {
+    "kind": "python_function",
+    "package": "identity",
+    "file": "source.py",
+    "symbol": "run"
+  },
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "值",
+      "type": "int"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "值",
+      "type": "int"
+    }
+  ]
+})");
     write("python/custom/identity/source.py",
           "import threading\n"
           "calls_lock = threading.Lock()\n"
@@ -74,7 +98,7 @@ try
     ToolRegistry registry;
     registry.registerPackage(readToolsPackage(tools));
     const auto *source   = registry.find("test.identity.source");
-    const auto *receiver = registry.find("visionrt.flow.receive");
+    const auto *receiver = registry.find("ReceiveFlowResult");
     require(source && receiver, "identity tools were not discovered from JSON");
     ProjectDefinition seed;
     seed.nextNodeId = 9'007'199'254'740'993ULL;

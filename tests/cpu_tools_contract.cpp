@@ -19,7 +19,7 @@
 using namespace visionrt;
 
 namespace {
-ToolResult execute(ToolRegistry &registry, const char *id, Values inputs, const ToolServices &services = {})
+ToolResult execute(ToolRegistry &registry, const char *id, Values inputs)
 {
     const auto *definition = registry.find(id);
     assert((definition));
@@ -29,7 +29,7 @@ ToolResult execute(ToolRegistry &registry, const char *id, Values inputs, const 
     Values parameters;
     for (const auto &port : definition->initParams)
         parameters.emplace(port.id, port.defaultValue);
-    auto tool = registry.create(id, services);
+    auto tool = registry.create(id);
     assert((tool->initialize(parameters)));
     auto result = tool->execute(inputs);
     assert((tool->release()));
@@ -71,17 +71,19 @@ void readImages(ToolRegistry &registry)
     assert((QDir().mkpath(folder)));
     saveImage(folder + "/b.png", 22);
     saveImage(folder + "/a.png", 11);
-    const auto         root = std::filesystem::u8path(directory.path().toUtf8().toStdString());
-    const ToolServices services{PathResolver(root)};
+    // A path literal is read relative to the product directory, so the fixture hands the tool the
+    // absolute location it actually created.
+    const auto qtext = [&](const char *name)
+    { return (directory.path() + QLatin1Char('/') + QString::fromUtf8(name)).toUtf8().toStdString(); };
     Values             inputs{
-                    {1, std::string("中文目录")},
+                    {1, qtext("中文目录")},
                     {2, false},
                     {3, std::string("循环")},
                     {4, std::string("顺序（下一张）")},
                     {5, std::int64_t(2)},
                     {6, false}
     };
-    auto result = execute(registry, "visionrt.image.read", inputs, services);
+    auto result = execute(registry, "ReadImage", inputs);
     success(result);
     const auto &images = std::get<DataRef<Image>>(result.outputs.at(2));
     assert((images.get().size() == 2));
@@ -90,16 +92,16 @@ void readImages(ToolRegistry &registry)
     const auto paths = nestedOf<NestedVector<std::string, 1>>(std::get<Array>(result.outputs.at(3)));
     assert((paths[0].ends_with("/a.png") && paths[1].ends_with("/b.png")));
     inputs[5] = std::int64_t{-1};
-    result = execute(registry, "visionrt.image.read", inputs, services);
+    result = execute(registry, "ReadImage", inputs);
     failure(result);
     assert((testview::status(result).message.find(portLabel(5)) != std::string::npos));
     inputs[5] = std::int64_t{1};
-    result          = execute(registry, "visionrt.image.read", inputs, services);
+    result          = execute(registry, "ReadImage", inputs);
     success(result);
     assert((std::get<DataRef<Image>>(result.outputs.at(2)).get().size() == 1));
     saveImage(folder + "/a.png", 99);
     inputs[6] = true;
-    result = execute(registry, "visionrt.image.read", inputs, services);
+    result = execute(registry, "ReadImage", inputs);
     success(result);
     assert((std::get<DataRef<Image>>(result.outputs.at(2)).get()[0].at<unsigned char>(0, 0) == 99));
     inputs[6] = false;
@@ -107,8 +109,8 @@ void readImages(ToolRegistry &registry)
     assert((corrupt.open(QIODevice::WriteOnly)));
     assert((corrupt.write("corrupt") == 7));
     corrupt.close();
-    inputs[1] = std::string("中文目录/c.png");
-    result          = execute(registry, "visionrt.image.read", inputs, services);
+    inputs[1] = qtext("中文目录/c.png");
+    result          = execute(registry, "ReadImage", inputs);
     failure(result);
     assert((testview::status(result).message.find("c.png") != std::string::npos));
     const auto  oversized = testing::oversizedBmp();
@@ -127,16 +129,15 @@ void readImages(ToolRegistry &registry)
     assert(oversizedFile.write(reinterpret_cast<const char *>(oversized.data()), oversized.size())
            == static_cast<qint64>(oversized.size()));
     oversizedFile.close();
-    result = execute(registry, "visionrt.image.read",
+    result = execute(registry, "ReadImage",
                      {
-                         {1, std::string("中文目录/oversized.bmp")},
+                         {1, qtext("中文目录/oversized.bmp")},
                          {2, false},
                          {3, std::string("循环")},
                          {4, std::string("顺序（下一张）")},
                          {5, std::int64_t(1)},
                          {6, false}
-                     },
-                     services);
+                     });
     failure(result);
     // The readable reason is the message; the decoder text is a detail the diagnostic keeps apart.
     const auto decodeStatus = testview::status(result);
@@ -146,21 +147,20 @@ void readImages(ToolRegistry &registry)
     assert((decodeStatus.message.find("批次索引 0") != std::string::npos));
     assert((decodeStatus.message.find("OpenCV") == std::string::npos));
     assert((decodeStatus.detail == decoderDetail));
-    inputs[1] = std::string("中文目录/a.png");
-    success(execute(registry, "visionrt.image.read", inputs, services));
-    inputs[1] = std::string("absent.png");
-    failure(execute(registry, "visionrt.image.read", inputs, services));
+    inputs[1] = qtext("中文目录/a.png");
+    success(execute(registry, "ReadImage", inputs));
+    inputs[1] = qtext("absent.png");
+    failure(execute(registry, "ReadImage", inputs));
     assert((QDir().mkpath(directory.path() + "/empty")));
-    result = execute(registry, "visionrt.image.read",
+    result = execute(registry, "ReadImage",
                      {
-                         {1,     std::string("empty")},
+                         {1,     qtext("empty")},
                          {2, false},
                          {3, std::string("循环")},
                          {4, std::string("顺序（下一张）")},
                          {5, std::int64_t(1)},
                          {6, false}
-                     },
-                     services);
+                     });
     // 空目录没有任何可用文件，按规范明确失败而不是发布空批次。
     failure(result);
     assert((testview::status(result).message.find("没有可用图像") != std::string::npos));
@@ -171,14 +171,14 @@ void readImages(ToolRegistry &registry)
     saveImage(unicodeFolder + "/" + supplementaryName, 100);
     saveImage(unicodeFolder + "/" + bmpName, 14);
     const Values unicodeInputs{
-        {1, std::string("unicode_sort")},
+        {1, qtext("unicode_sort")},
         {2, false},
         {3, std::string("循环")},
         {4, std::string("顺序（下一张）")},
         {5, std::int64_t(2)},
         {6, false}
     };
-    result = execute(registry, "visionrt.image.read", unicodeInputs, services);
+    result = execute(registry, "ReadImage", unicodeInputs);
     success(result);
     const auto &orderedImages = std::get<DataRef<Image>>(result.outputs.at(2));
     assert((orderedImages.get().size() == 2));
@@ -200,7 +200,7 @@ DataRef<Image> fixtureImages()
 void projection(ToolRegistry &registry)
 {
     const auto images = fixtureImages();
-    auto       result = execute(registry, "visionrt.roi.projection",
+    auto       result = execute(registry, "ProjectRoi",
                                 {
                                     {1, images}
     });
@@ -213,7 +213,7 @@ void projection(ToolRegistry &registry)
     assert((std::equal(first.begin(), first.end(), rois.get()[1][0].begin())));
     assert((std::equal(second.begin(), second.end(), rois.get()[1][1].begin())));
     assert((&std::get<DataRef<Image>>(result.outputs.at(2)).get() == &images.get()));
-    result = execute(registry, "visionrt.roi.projection",
+    result = execute(registry, "ProjectRoi",
                      {
                          {    1,           images},
                          { 7, std::int64_t{25}},
@@ -223,7 +223,7 @@ void projection(ToolRegistry &registry)
     success(result);
     const auto merged = std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1][0];
     assert((merged[1] == 0 && merged[3] == 87));
-    result = execute(registry, "visionrt.roi.projection",
+    result = execute(registry, "ProjectRoi",
                      {
                          {   1,              images},
                          {     2,    std::string("y")},
@@ -232,7 +232,7 @@ void projection(ToolRegistry &registry)
     });
     success(result);
     assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
-    result = execute(registry, "visionrt.roi.projection",
+    result = execute(registry, "ProjectRoi",
                      {
                          {    1,            images},
                          {      2,  std::string("y")},
@@ -242,18 +242,18 @@ void projection(ToolRegistry &registry)
     success(result);
     const auto vertical = std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1][0];
     assert((vertical[1] == 0 && vertical[2] == 0 && vertical[3] == 96 && vertical[4] == 64));
-    result = execute(registry, "visionrt.roi.projection",
+    result = execute(registry, "ProjectRoi",
                      {
                          {    1,           images},
                          {5, std::int64_t{65}}
     });
     success(result);
     assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
-    failure(execute(registry, "visionrt.roi.projection",
+    failure(execute(registry, "ProjectRoi",
                     {
                         {1, Missing{}}
     }));
-    failure(execute(registry, "visionrt.roi.projection",
+    failure(execute(registry, "ProjectRoi",
                     {
                         {   1,            images},
                         {4, std::int64_t{256}}
@@ -263,7 +263,7 @@ void projection(ToolRegistry &registry)
 void crop(ToolRegistry &registry)
 {
     const auto images = fixtureImages();
-    auto       result = execute(registry, "visionrt.image.crop",
+    auto       result = execute(registry, "CropImage",
                                 {
                               {1,                                     images},
                               {  2, DataRef<ROI>(ROI{{{2, 10, 0, 20, 64, 0}}})}
@@ -289,7 +289,7 @@ void crop(ToolRegistry &registry)
     })));
     const DataRef<Image> mixed(
         Image{(cv::Mat(8, 10, CV_8UC1, cv::Scalar(11))), (cv::Mat(5, 6, CV_8UC1, cv::Scalar(29)))});
-    result = execute(registry, "visionrt.image.crop",
+    result = execute(registry, "CropImage",
                      {
                          {1,                                   mixed},
                          {  2, DataRef<ROI>(ROI{{{2, 4, 3, 4, 4, 0}}})}
@@ -310,7 +310,7 @@ void crop(ToolRegistry &registry)
                  {4, 3},
                  {4, 3}
     })));
-    failure(execute(registry, "visionrt.image.crop",
+    failure(execute(registry, "CropImage",
                     {
                         {1,                                   mixed},
                         {  2, DataRef<ROI>(ROI{{{2, 7, 6, 2, 2, 0}}})}
@@ -318,7 +318,7 @@ void crop(ToolRegistry &registry)
     const DataRef<Image> solid(Image{(cv::Mat(5, 5, CV_8UC1, cv::Scalar(17)))});
     const auto run = [&](PortValue rectangle)
     {
-        return execute(registry, "visionrt.image.crop", {{1, solid}, {2, std::move(rectangle)}});
+        return execute(registry, "CropImage", {{1, solid}, {2, std::move(rectangle)}});
     };
     result = run(DataRef<ROI>(ROI{{{2, 1, 1, 2, 2, 45}}}));
     success(result);
@@ -338,7 +338,7 @@ void crop(ToolRegistry &registry)
     failure(run(DataRef<ROI>(ROI{
         {{2, 0, 0, 2, 2, 0}, {2, 2, 2, 2, 2, 0}}
     })));
-    result = execute(registry, "visionrt.image.crop",
+    result = execute(registry, "CropImage",
                      {
                          {1,                 DataRef<Image>(Image{})},
                          {  2, DataRef<ROI>(ROI{{{2, 0, 0, 2, 2, 0}}})}
@@ -355,13 +355,13 @@ void preprocess(ToolRegistry &registry)
     source.at<cv::Vec3b>(0, 1) = {128, 128, 128};
     source.at<cv::Vec3b>(0, 2) = {255, 255, 255};
     const DataRef<Image> images(Image{(std::move(source))});
-    auto             result = execute(registry, "visionrt.image.preprocess",
+    auto             result = execute(registry, "PreprocessImage",
                                       {
                                           {1, images}
     });
     success(result);
     assert((&std::get<DataRef<Image>>(result.outputs.at(2)).get() == &images.get()));
-    result = execute(registry, "visionrt.image.preprocess",
+    result = execute(registry, "PreprocessImage",
                      {
                          {   1,              images},
                          {2, std::string("gray")}
@@ -370,7 +370,7 @@ void preprocess(ToolRegistry &registry)
     const auto &grayscale = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((grayscale.rows == 1 && grayscale.cols == 3 && grayscale.channels() == 1));
     assert((grayscale.at<unsigned char>(0, 0) == 76));
-    result = execute(registry, "visionrt.image.preprocess",
+    result = execute(registry, "PreprocessImage",
                      {
                          {   1,                   images},
                          {2, std::string("threshold")},
@@ -383,7 +383,7 @@ void preprocess(ToolRegistry &registry)
     cv::Mat impulse(3, 3, CV_8UC1, cv::Scalar(0));
     impulse.at<unsigned char>(1, 1) = 160;
     const DataRef<Image> impulseBatch(Image{(std::move(impulse))});
-    result = execute(registry, "visionrt.image.preprocess",
+    result = execute(registry, "PreprocessImage",
                      {
                          {   1,            impulseBatch},
                          {2, std::string("gaussian")}
@@ -392,14 +392,14 @@ void preprocess(ToolRegistry &registry)
     const auto &blurred = std::get<DataRef<Image>>(result.outputs.at(2)).get()[0];
     assert((cv::countNonZero(blurred != 40) == 0));
     assert((impulseBatch.get()[0].at<unsigned char>(1, 1) == 160));
-    failure(execute(registry, "visionrt.image.preprocess",
+    failure(execute(registry, "PreprocessImage",
                     {
                         {   1,                  images},
                         {2, std::string("gaussian")},
                         {   3,         std::int64_t{2}}
     }));
     const DataRef<Image> invalid(Image{(cv::Mat(2, 2, CV_16UC1, cv::Scalar(1)))});
-    failure(execute(registry, "visionrt.image.preprocess",
+    failure(execute(registry, "PreprocessImage",
                     {
                         {1, invalid}
     }));
@@ -436,7 +436,7 @@ void filter(ToolRegistry &registry)
         {       7,    64.0},
         {8, allowed}
     };
-    auto result = execute(registry, "visionrt.detection.filter", inputs);
+    auto result = execute(registry, "FilterDetections", inputs);
     success(result);
     const auto counts = nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)));
     assert((counts.size() == 2 && counts[0] == 0 && counts[1] == 2));
@@ -451,25 +451,25 @@ void filter(ToolRegistry &registry)
     assert((keptNames[0] == "first" && keptNames[1] == "third"));
     assert((&std::get<DataRef<Image>>(result.outputs.at(2)).get() == &images.get()));
     inputs[7] = 0.0;
-    result             = execute(registry, "visionrt.detection.filter", inputs);
+    result             = execute(registry, "FilterDetections", inputs);
     success(result);
     assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)))[1] == 2));
     inputs[8] = Array::fromNested(std::vector<std::int64_t>{});
     inputs[7] = 64.0;
-    result             = execute(registry, "visionrt.detection.filter", inputs);
+    result             = execute(registry, "FilterDetections", inputs);
     success(result);
     assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1][1] == "third"));
     assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)))[1] == 2));
     inputs[7]  = 0.0;
     inputs[6] = 0.9;
-    result              = execute(registry, "visionrt.detection.filter", inputs);
+    result              = execute(registry, "FilterDetections", inputs);
     success(result);
     assert((nestedOf<NestedVector<std::int64_t, 1>>(std::get<Array>(result.outputs.at(7)))[1] == 1));
     assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1][0] == "second"));
     inputs[8] = allowed;
     inputs[7]        = 64.0;
     inputs[6]       = 0.9;
-    result                    = execute(registry, "visionrt.detection.filter", inputs);
+    result                    = execute(registry, "FilterDetections", inputs);
     success(result);
     assert((std::get<DataRef<ROI>>(result.outputs.at(3)).get()[1].empty()));
     assert((nestedOf<NestedVector<std::string, 2>>(std::get<Array>(result.outputs.at(6)))[1].size() == 0));
@@ -477,37 +477,37 @@ void filter(ToolRegistry &registry)
         std::vector<float>{},
         std::vector<float>{0.8F, 0.95F}
     });
-    failure(execute(registry, "visionrt.detection.filter", inputs));
+    failure(execute(registry, "FilterDetections", inputs));
     inputs[3] = scores;
     inputs[3] = Array::fromNested(NestedVector<float, 2>{
         std::vector<float>{},
         std::vector<float>{0.8F, std::numeric_limits<float>::quiet_NaN(), 0.7F}
     });
-    failure(execute(registry, "visionrt.detection.filter", inputs));
+    failure(execute(registry, "FilterDetections", inputs));
     inputs[3]  = scores;
     inputs[4] = Array::fromNested(NestedVector<std::int64_t, 2>{
         std::vector<std::int64_t>{},
         std::vector<std::int64_t>{1, -1, 1}
     });
-    failure(execute(registry, "visionrt.detection.filter", inputs));
+    failure(execute(registry, "FilterDetections", inputs));
     inputs[4] = classes;
     inputs[2]    = DataRef<ROI>(ROI{
            {},
            {std::vector<double>{3, 2, 2, 1}, rois.get()[1][1], rois.get()[1][2]}
     });
-    failure(execute(registry, "visionrt.detection.filter", inputs));
+    failure(execute(registry, "FilterDetections", inputs));
 }
 
 void incompleteInstallation(ToolRegistry &completeRegistry)
 {
     ToolRegistry registry;
-    registry.addDefinition(*completeRegistry.find("visionrt.image.preprocess"));
+    registry.addDefinition(*completeRegistry.find("PreprocessImage"));
     registry.setPluginLoader(completeRegistry.pluginLoader());
-    assert((registry.availability("visionrt.image.read").state == ToolAvailability::DefinitionMissing));
+    assert((registry.availability("ReadImage").state == ToolAvailability::DefinitionMissing));
     cv::Mat pixels(1, 2, CV_8UC1);
     pixels.at<unsigned char>(0, 0) = 127;
     pixels.at<unsigned char>(0, 1) = 128;
-    const auto result              = execute(registry, "visionrt.image.preprocess",
+    const auto result              = execute(registry, "PreprocessImage",
                                              {
                                     {1, DataRef<Image>(Image{(std::move(pixels))})},
                                     {2, std::string("threshold")}

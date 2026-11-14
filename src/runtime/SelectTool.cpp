@@ -59,7 +59,7 @@ private:
 void registerSelectTools(ToolRegistry &registry)
 {
     registry.registerHostBinding(kSelectBinding,
-                                 [](const ToolDefinition &definition, const PlatformToolServices &)
+                                 [](const ToolDefinition &definition, const HostToolContext &)
                                  {
                                      const auto output
                                          = std::find_if(definition.outputs.begin(), definition.outputs.end(),

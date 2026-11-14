@@ -94,14 +94,10 @@ try
     require(!published.index.tools.contains("test.installed.relay"), "Fixture unexpectedly indexed");
 
     ToolDefinition relay;
-    relay.schemaVersion    = 6;
     relay.nameEn           = "test.installed.relay";
     relay.nameZh           = "Installed writable relay";
     relay.kind             = ToolKind::PythonFunction;
     relay.entry            = {"examples/image_sizes", "tool.py", "execute"};
-    relay.nextInitPortId   = 0;
-    relay.nextInputPortId  = 6;
-    relay.nextOutputPortId = 8;
     relay.inputs           = {
         PortDefinition{.id = 1, .nameZh = "Images", .type = {Type::Image}, .nameEn = "images"},
         PortDefinition{.id = 2, .nameZh = "Regions", .type = {Type::ROI}, .nameEn = "rois"},
@@ -144,14 +140,10 @@ def execute(inputs):
     return {'outputs': out, 'detail': ''}
 )");
     ToolDefinition generated;
-    generated.schemaVersion    = 6;
     generated.nameEn           = "test.installed.generated";
     generated.nameZh           = "Python-owned padded image";
     generated.kind             = ToolKind::PythonFunction;
     generated.entry            = {"examples/ownership", "tool.py", "execute"};
-    generated.nextInitPortId   = 0;
-    generated.nextInputPortId  = 1;
-    generated.nextOutputPortId = 3;
     generated.outputs          = {
         PortDefinition{.id = 2, .nameZh = "Images", .type = {Type::Image}, .nameEn = "images"}
     };
@@ -159,9 +151,6 @@ def execute(inputs):
     auto counter               = generated;
     counter.nameEn             = "test.installed.ownership_counter";
     counter.entry.symbol       = "counter";
-    counter.nextInitPortId     = 0;
-    counter.nextInputPortId    = 1;
-    counter.nextOutputPortId   = 4;
     counter.outputs            = {
         PortDefinition{.id = 2, .nameZh = "Allocated", .type = {Type::Int}, .nameEn = "allocated"},
         PortDefinition{.id = 3, .nameZh = "Released", .type = {Type::Int}, .nameEn = "released"}
@@ -188,15 +177,11 @@ def counter(inputs):
     return {'outputs': {2: allocated, 3: released, 0: 0, 1: ''}, 'detail': ''}
 )");
     ToolDefinition h35Combo;
-    h35Combo.schemaVersion    = 6;
     h35Combo.nameEn           = "test.installed.h35_combo";
     h35Combo.nameZh           = "H35 native helper and declared resource";
     h35Combo.kind             = ToolKind::PythonFunction;
     h35Combo.entry            = {"examples/h35_combo", "tool.py", "execute"};
     h35Combo.resources        = {std::filesystem::path("resources/h35_weights.bin")};
-    h35Combo.nextInitPortId   = 0;
-    h35Combo.nextInputPortId  = 1;
-    h35Combo.nextOutputPortId = 4;
     h35Combo.outputs          = {
         PortDefinition{.id = 2, .nameZh = "Value", .type = {Type::Int}, .nameEn = "val"},
         PortDefinition{.id = 3, .nameZh = "ResourceLength", .type = {Type::Int}, .nameEn = "res_len"}
@@ -249,17 +234,17 @@ def execute(inputs):
     }
     ProjectEditor editor;
     const auto    flow    = editor.project().flows.front().id;
-    const auto    reader  = editor.addNode(flow, *registry.find("visionrt.image.read"), {0, 0});
+    const auto    reader  = editor.addNode(flow, *registry.find("ReadImage"), {0, 0});
     // The brightness tool is registered through registerFunction: executing it here proves the
     // function entry reaches RuntimeEngine, not only a direct unit-test call.
-    const auto *brightnessDef = registry.find("visiontools.image.brightness");
+    const auto *brightnessDef = registry.find("AdjustBrightness");
     std::cerr << "[DEBUG] brightness definition " << (brightnessDef ? "found" : "missing") << std::endl;
     const auto    brightness = editor.addNode(flow, *brightnessDef, {0, 4});
-    const auto    before  = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 10});
+    const auto    before  = editor.addNode(flow, *registry.find("FilterDetections"), {0, 10});
     const auto    bridge  = editor.addNode(flow, *registry.find(relay.nameEn), {0, 20});
-    const auto    after   = editor.addNode(flow, *registry.find("visionrt.detection.filter"), {0, 30});
-    const auto    crop    = editor.addNode(flow, *registry.find("visionrt.image.crop"), {0, 40});
-    const auto    builtin = editor.addNode(flow, *registry.find("visiontools.python.image_sizes"), {10, 15});
+    const auto    after   = editor.addNode(flow, *registry.find("FilterDetections"), {0, 30});
+    const auto    crop    = editor.addNode(flow, *registry.find("CropImage"), {0, 40});
+    const auto    builtin = editor.addNode(flow, *registry.find("ImageSizes"), {10, 15});
     const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.nameEn), {0, 50});
     editor.setLiteral(flow, reader, 1, std::string("images"));
     editor.setLiteral(flow, reader, 5, std::int64_t(2));
@@ -289,7 +274,7 @@ def execute(inputs):
     ProjectStorage storage(registry);
     auto           project = editor.project();
     project.path           = root / "pipeline.vrt.json";
-    require(storage.save(project).empty(), "Installed project save diagnostics");
+    storage.save(project);
     auto reopened = storage.load(project.path);
     require(reopened.diagnostics.empty(), "Installed project reload diagnostics");
     RuntimeEngine runtime(3);
@@ -340,7 +325,7 @@ def execute(inputs):
         require(std::get<std::int64_t>(h35Snap->outputs.at(3)) == static_cast<std::int64_t>(h35Payload.size()),
                 "H35 declared resource size mismatch");
     }
-    auto probe = python.factory(*registry.find(counter.nameEn))(PlatformToolServices{});
+    auto probe = python.factory(*registry.find(counter.nameEn))();
     require(probe->initialize({}).code == 0, "Ownership probe initialization failed");
     const auto released = [&]
     {
@@ -354,7 +339,7 @@ def execute(inputs):
         ProjectEditor ownership;
         const auto    ownershipFlow = ownership.project().flows.front().id;
         const auto    parent        = ownership.addNode(ownershipFlow, *registry.find(generated.nameEn), {0, 0});
-        const auto    child         = ownership.addNode(ownershipFlow, *registry.find("visionrt.image.crop"), {0, 2});
+        const auto    child         = ownership.addNode(ownershipFlow, *registry.find("CropImage"), {0, 2});
         ownership.bindFreeInput(ownershipFlow, {parent, 2}, {child, 1});
         ownership.setLiteral(ownershipFlow, child, 2, DataRef<ROI>(ROI{{{2., 1., 2., 4., 3., 0.}}}));
         ownership.setMode(ownershipFlow, child, 2, BindingMode::Literal);

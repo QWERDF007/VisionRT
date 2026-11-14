@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读取工件",
           "pos": [
             0,
@@ -112,7 +113,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images"
+              "literal": "examples/02_工具示例/01_ROI定位与裁剪/images"
             },
             {
               "port_id": 2,
@@ -143,8 +144,9 @@
         },
         {
           "node_seq": "2",
-          "tool_id": "visionrt.roi.projection",
+          "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
+          "tool_version_snapshot": "1.0.0",
           "alias": "投影定位亮条",
           "pos": [
             0,
@@ -279,8 +281,9 @@
         },
         {
           "node_seq": "3",
-          "tool_id": "visionrt.image.crop",
+          "tool_id": "CropImage",
           "tool_name_snapshot": "图像裁剪",
+          "tool_version_snapshot": "2.0.0",
           "alias": "按定位结果裁剪",
           "pos": [
             0,

@@ -157,8 +157,8 @@ int main()
         ToolRegistry registry;
         registry.addDefinition(toolA);
         registry.addDefinition(toolB);
-        registry.registerCpp(toolA, [](const auto &) { return std::make_unique<PassTool>(); });
-        registry.registerCpp(toolB, [](const auto &) { return std::make_unique<PassTool>(); });
+        registry.registerCpp(toolA, [] { return std::make_unique<PassTool>(); });
+        registry.registerCpp(toolB, [] { return std::make_unique<PassTool>(); });
 
         QTemporaryDir tmpDir;
         assert(tmpDir.isValid());

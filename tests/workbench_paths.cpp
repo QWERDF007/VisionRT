@@ -27,7 +27,7 @@
 using namespace visionrt;
 
 // test.paths declares 文件 1, 目录 2, 模式 3, 动态路径 4 and answers 模式输出 2.
-// visionrt.image.read declares 图像路径 1 and 图像数量 5.
+// ReadImage declares 图像路径 1 and 图像数量 5.
 constexpr PortId kFilePath         = 1;
 constexpr PortId kFolderInput      = 2;
 constexpr PortId kModeInput        = 3;
@@ -74,7 +74,6 @@ void pathEditorsContract()
           "def run(inputs):\n    return {'outputs': {2: 'directory', 0: 0, 1: ''}, 'detail': ''}\n");
     write("tools-package/tools/custom/Test/paths.json",
           R"json({
-  "schema_version": 6,
   "name_en": "test.paths",
   "name_zh": "路径测试",
   "version": "1.0.0",
@@ -84,64 +83,60 @@ void pathEditorsContract()
     "file": "run.py",
     "symbol": "run"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_zh": "文件",
-        "type": "string",
-        "default": "original file",
-        "ui": {
-          "editor": "path"
-        },
-        "id": 1
+  "inputs": [
+    {
+      "name_zh": "文件",
+      "type": "string",
+      "default": "original file",
+      "ui": {
+        "editor": "path"
       },
-      {
-        "name_zh": "目录",
-        "type": "string",
-        "default": "original folder",
-        "ui": {
-          "editor": "path"
-        },
-        "id": 2
+      "id": 1
+    },
+    {
+      "name_zh": "目录",
+      "type": "string",
+      "default": "original folder",
+      "ui": {
+        "editor": "path"
       },
-      {
-        "name_zh": "模式",
-        "type": "string",
-        "default": "file",
-        "constraints": {
-          "options": [
-            "file",
-            "directory"
-          ]
-        },
-        "id": 3
+      "id": 2
+    },
+    {
+      "name_zh": "模式",
+      "type": "string",
+      "default": "file",
+      "constraints": {
+        "options": [
+          "file",
+          "directory"
+        ]
       },
-      {
-        "name_zh": "动态路径",
-        "type": "string",
-        "default": "original path",
-        "ui": {
-          "editor": "path"
-        },
-        "relations": {
-          "path_mode": {"stage": "inputs", "id": 3}
-        },
-        "id": 4
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "模式输出",
-        "type": "string",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 5,
-    "outputs": 3
-  }
+      "id": 3
+    },
+    {
+      "name_zh": "动态路径",
+      "type": "string",
+      "default": "original path",
+      "ui": {
+        "editor": "path"
+      },
+      "relations": {
+        "path_mode": {
+          "stage": "inputs",
+          "id": 3
+        }
+      },
+      "id": 4
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "模式输出",
+      "type": "string",
+      "id": 2
+    }
+  ]
 })json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
     const QString folderName = QStringLiteral("选择的目录 # %");
@@ -371,7 +366,7 @@ void readImageToolUiContract()
     visionrt::AppController app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "image read catalog did not become ready");
 
-    app.addNode("visionrt.image.read", 0, 10);
+    app.addNode("ReadImage", 0, 10);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "image read node did not synchronize");
     require(app.nodes().size() == 1, "image read tool was not added");
     const auto nodeId = app.nodes().front().toMap().value("id").toString();
@@ -495,7 +490,7 @@ void readImageToolUiContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "pipeline execution with bus.jpg timed out");
     require(app.runState() == QStringLiteral("Idle"), "pipeline execution failed to return to Idle");
     for (const auto &d : app.diagnostics()) {
-        require(!d.contains(QStringLiteral("visionrt.image.read")) && !d.contains(QStringLiteral("图像读取")),
+        require(!d.contains(QStringLiteral("ReadImage")) && !d.contains(QStringLiteral("图像读取")),
                 "pipeline execution with bus.jpg produced node errors");
     }
     require(!app.imageOutputs().isEmpty(), "image read produced no image outputs for bus.jpg");
@@ -522,7 +517,7 @@ void readImageToolUiContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "pipeline execution with directory timed out");
     require(app.runState() == QStringLiteral("Idle"), "directory pipeline execution failed to return to Idle");
     for (const auto &d : app.diagnostics()) {
-        require(!d.contains(QStringLiteral("visionrt.image.read")) && !d.contains(QStringLiteral("图像读取")),
+        require(!d.contains(QStringLiteral("ReadImage")) && !d.contains(QStringLiteral("图像读取")),
                 "directory pipeline execution produced node errors");
     }
     require(!app.imageOutputs().isEmpty(), "image read produced no image outputs for directory");

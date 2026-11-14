@@ -10,6 +10,7 @@
 
 using namespace log_test;
 using visionrt::LogLevel;
+using visionrt::LogSource;
 using visionrt::LogService;
 
 int main(int argc, char **argv)
@@ -25,12 +26,12 @@ int main(int argc, char **argv)
         ServiceSession session(config);
         session.start(directory.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(true);
-        LogService::write(LogLevel::Trace, QStringLiteral("阈值"), QStringLiteral("跟踪记录"));
-        LogService::write(LogLevel::Debug, QStringLiteral("阈值"), QStringLiteral("调试记录"));
-        LogService::write(LogLevel::Info, QStringLiteral("阈值"), QStringLiteral("信息记录"));
-        LogService::write(LogLevel::Warn, QStringLiteral("阈值"), QStringLiteral("警告记录"));
-        LogService::write(LogLevel::Error, QStringLiteral("阈值"), QStringLiteral("错误记录"));
-        LogService::write(LogLevel::Critical, QStringLiteral("阈值"), QStringLiteral("严重记录"));
+        LogService::write(LogLevel::Trace, LogSource::System, QStringLiteral("跟踪记录"));
+        LogService::write(LogLevel::Debug, LogSource::System, QStringLiteral("调试记录"));
+        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("信息记录"));
+        LogService::write(LogLevel::Warn, LogSource::System, QStringLiteral("警告记录"));
+        LogService::write(LogLevel::Error, LogSource::System, QStringLiteral("错误记录"));
+        LogService::write(LogLevel::Critical, LogSource::System, QStringLiteral("严重记录"));
         session.service().flush();
 
         const auto file = fileText(datedLog(directory.path()));
@@ -53,9 +54,9 @@ int main(int argc, char **argv)
         config.minimumLevel = LogLevel::Off;
         ServiceSession session(config);
         session.start(directory.filePath(QStringLiteral("visionrt.log")));
-        LogService::write(LogLevel::Critical, QStringLiteral("阈值"), QStringLiteral("关闭时不应写入"));
+        LogService::write(LogLevel::Critical, LogSource::System, QStringLiteral("关闭时不应写入"));
         for (int repeat = 0; repeat < 3; ++repeat)
-            LogService::write(LogLevel::Error, QStringLiteral("阈值"), QStringLiteral("关闭时重复错误"));
+            LogService::write(LogLevel::Error, LogSource::System, QStringLiteral("关闭时重复错误"));
         session.service().flush();
         visionrt::flushPendingForTesting();
         session.service().flush();
@@ -71,11 +72,11 @@ int main(int argc, char **argv)
         require(directory.isValid(), "temporary directory is unavailable");
         ServiceSession session;
         session.start(directory.filePath(QStringLiteral("visionrt.log")));
-        LogService::write(LogLevel::Info, QStringLiteral("阈值"), QStringLiteral("切换前信息"));
+        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("切换前信息"));
         session.service().setMinimumLevel(LogLevel::Error);
         require(session.service().minimumLevel() == LogLevel::Error, "the reported level did not change");
-        LogService::write(LogLevel::Info, QStringLiteral("阈值"), QStringLiteral("切换后信息"));
-        LogService::write(LogLevel::Error, QStringLiteral("阈值"), QStringLiteral("切换后错误"));
+        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("切换后信息"));
+        LogService::write(LogLevel::Error, LogSource::System, QStringLiteral("切换后错误"));
         session.service().flush();
 
         const auto file = fileText(datedLog(directory.path()));

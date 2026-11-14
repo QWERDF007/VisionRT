@@ -38,7 +38,7 @@ int main(int argc, char **argv)
             assert(status && module);
             alive = module;
             {
-                DomainToolAdapter adapter(module, "test.value.lifetime", PlatformToolServices{});
+                DomainToolAdapter adapter(module, "test.value.lifetime");
                 assert(adapter.initialize({
                     {0, marker}
                 }));

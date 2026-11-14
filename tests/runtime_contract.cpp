@@ -89,7 +89,7 @@ void install(
     std::function<ToolStatus()> close = [] { return ToolStatus{}; })
 {
     registry.registerCpp(d,
-                         [=](const ToolServices &)
+                         [=]()
                          {
                              auto instance   = std::make_unique<Function>();
                              instance->run   = run;
@@ -383,7 +383,7 @@ void receiverPrecheckRejectsUnscheduledSources(const std::filesystem::path &tool
                 return toolResult({{2, std::int64_t{25}}}, {});
             });
     auto        sender  = node(1, source);
-    const auto *receive = registry.find("visionrt.flow.receive");
+    const auto *receive = registry.find("ReceiveFlowResult");
     assert(receive);
     auto typed = *receive;
     for (auto &port : typed.outputs)
@@ -481,10 +481,12 @@ void receiverConsumesFailures()
             {
                 return toolResult({{2, Missing{}}}, {12, "源执行失败", "source detail"});
             });
-    auto sender   = node(1, source);
-    auto consumer = definition("test.cursor");
-    registry.registerCpp(consumer,
-                         [name = std::to_string(sender.id)](const PlatformToolServices &services)
+    auto sender          = node(1, source);
+    auto consumer        = definition("test.cursor");
+    consumer.kind        = ToolKind::Host;
+    consumer.hostBinding = "test.cursor.reader";
+    registry.registerHostBinding("test.cursor.reader",
+                         [name = std::to_string(sender.id)](const ToolDefinition &, const HostToolContext &services)
                          {
                              auto instance = std::make_unique<Function>();
                              instance->run = [reader = services.results, name](const Values &)
@@ -679,7 +681,7 @@ void executionMetricsAndTimingSeparation()
     };
 
     registry.registerCpp(mockDef,
-                         [](const PlatformToolServices &) { return std::make_unique<MetricsTool>(); });
+                         []() { return std::make_unique<MetricsTool>(); });
     registry.addDefinition(mockDef);
     auto              n = node(1, mockDef);
     ProjectDefinition project;
@@ -751,7 +753,7 @@ void timingRecordedOnFailure()
     };
 
     registry.registerCpp(mockDef,
-                         [](const PlatformToolServices &) { return std::make_unique<FailingMetricsTool>(); });
+                         []() { return std::make_unique<FailingMetricsTool>(); });
     registry.addDefinition(mockDef);
     auto              n = node(1, mockDef);
     ProjectDefinition project;
@@ -818,7 +820,7 @@ void crossRoundPythonMetricIsolation()
         }
     };
 
-    registry.registerCpp(mockDef, [&](const PlatformToolServices &)
+    registry.registerCpp(mockDef, [&]()
                          { return std::make_unique<PersistentMetricsTool>(shouldFailInExecute); });
     registry.addDefinition(mockDef);
 
@@ -923,8 +925,7 @@ void hostBindingReceiverContract()
     bool thrownUnknown = false;
     try
     {
-        PlatformToolServices services;
-        registry.create("test.unknown.receiver", services);
+        registry.create("test.unknown.receiver");
     }
     catch (const RegistryError &error)
     {
@@ -936,8 +937,7 @@ void hostBindingReceiverContract()
     bool thrownMissingVal = false;
     try
     {
-        PlatformToolServices services;
-        registry.create("test.missing_val.receiver", services);
+        registry.create("test.missing_val.receiver");
     }
     catch (const ContractError &error)
     {
@@ -1100,7 +1100,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         ProjectEditor editor;
         const auto sourceFlow = editor.addFlow("source");
         const auto sender = editor.addNode(sourceFlow, source, {});
-        const auto receiver = editor.addNode("flow_1", *registry.find("visionrt.flow.receive"), {});
+        const auto receiver = editor.addNode("flow_1", *registry.find("ReceiveFlowResult"), {});
         assert(!engine.start(editor.project(), registry, RunMode::Once));
         editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourceFlow, std::string(sourceFlow));
         editor.setInitParam("flow_1", receiver, ReceiveInitPorts::SourceNode, std::string(std::to_string(sender)));
@@ -1164,7 +1164,7 @@ void stopWakesReceiverWait(const std::filesystem::path &toolsRoot)
                 return toolResult({{2, std::int64_t{1}}}, {});
             });
     auto sender = node(1, source);
-    auto typed = *registry.find("visionrt.flow.receive");
+    auto typed = *registry.find("ReceiveFlowResult");
     for (auto &port : typed.outputs)
         if (port.typeFrom)
         {
@@ -1454,7 +1454,7 @@ void optionalOutputsAndCachedMissing()
     source.hostBinding         = "test.optional_output";
     registry.addDefinition(source);
     registry.registerHostBinding(source.hostBinding,
-                                 [&publishValue](const ToolDefinition &, const PlatformToolServices &)
+                                 [&publishValue](const ToolDefinition &, const HostToolContext &)
                                  {
                                      auto instance = std::make_unique<Function>();
                                      instance->run  = [&publishValue](const Values &)

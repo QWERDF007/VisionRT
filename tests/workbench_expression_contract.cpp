@@ -30,7 +30,7 @@ void require(bool condition, const char *message)
         throw std::runtime_error(message);
 }
 
-// visionrt.image.read declares 图像数量 as input 5; an expression node allocates business
+// ReadImage declares 图像数量 as input 5; an expression node allocates business
 // outputs after the reserved status pair, so the first one is 2.
 constexpr PortId kImageCountInput     = 5;
 constexpr PortId kFirstExpressionPort = 2;
@@ -48,7 +48,7 @@ try
 
     AppController app(2, root);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "expression catalog did not become ready");
-    app.addNode("visiontools.logic.expression", 0, 0);
+    app.addNode("EvaluateExpression", 0, 0);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "expression node did not synchronize");
     const auto nodeId = app.selectedNode();
     require(!nodeId.isEmpty(), "expression node is missing");
@@ -172,7 +172,7 @@ try
 
     // A dynamic Bool output used as an execution guard must survive repeated refreshes and follow
     // the result rename. The guard label borrows a materialised contract, never a temporary port.
-    app.addNode("visiontools.logic.expression", 8, 0);
+    app.addNode("EvaluateExpression", 8, 0);
     settle();
     const auto guardSource = app.selectedNode();
     require(!guardSource.isEmpty(), "guard source node is missing");
@@ -187,7 +187,7 @@ try
     settle();
     // Execution conditions belong to the logical node models; a fixed measuring tool
     // exposes its own upstream_status input instead.
-    app.addNode("visiontools.logic.expression", 8, 6);
+    app.addNode("EvaluateExpression", 8, 6);
     settle();
     const auto guarded = app.selectedNode();
     require(!guarded.isEmpty(), "guarded node is missing");
@@ -214,7 +214,7 @@ try
 
     // A dynamic output connected to an ordinary downstream input must resolve its label from the
     // materialised contract on every refresh; the row may never keep a pointer into a temporary.
-    app.addNode("visiontools.logic.expression", 9, 0);
+    app.addNode("EvaluateExpression", 9, 0);
     settle();
     const auto intSource = app.selectedNode();
     const auto intProgram = [](const QString &name)
@@ -247,7 +247,7 @@ try
     require(declared.value("typeDisplay").toString() == QStringLiteral("整数"),
             "the output table did not use the materialised Chinese type");
 
-    app.addNode("visionrt.image.read", 9, 6);
+    app.addNode("ReadImage", 9, 6);
     settle();
     const auto consumer = app.selectedNode();
     require(!consumer.isEmpty(), "downstream reader node is missing");

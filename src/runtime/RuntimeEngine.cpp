@@ -345,7 +345,7 @@ struct RuntimeEngine::Impl
             if (auto status = runtime->release())
                 diagnose(RuntimePhase::Management, *status);
         for (const auto &[runtime, node] : configured)
-            runtime->configure(*node, registry, InstanceConfiguration(*node, registry, project.path.parent_path()),
+            runtime->configure(*node, registry, InstanceConfiguration(*node, registry),
                                retry.contains(node->id));
     }
 
@@ -875,7 +875,7 @@ ErrorInfo RuntimeEngine::requestSynchronize(const ProjectDefinition &project, co
                 const auto found = impl_->nodes.find(node.id);
                 if (found == impl_->nodes.end() || !found->second->configuration
                     || *found->second->configuration
-                           != InstanceConfiguration(node, registry, project.path.parent_path()))
+                           != InstanceConfiguration(node, registry))
                     changed = true;
             }
         }

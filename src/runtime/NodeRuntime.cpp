@@ -55,7 +55,6 @@ const char *exceptionSummary(NodePhase phase)
 }
 
 std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const ToolRegistry &registry,
-                                              const InstanceConfiguration &configuration,
                                               const std::shared_ptr<IResultReader> &reader, ToolStatus &status)
 {
     try
@@ -63,8 +62,7 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
         const auto *definition = registry.find(node.toolId);
         if (!definition)
             throw RegistryError(ToolAvailability::DefinitionMissing, "工具定义缺失：" + node.toolId);
-        PlatformToolServices services{PathResolver(configuration.directory), reader};
-        return registry.create(nodeContract(node, *definition), services);
+        return registry.create(nodeContract(node, *definition), HostToolContext{reader});
     }
     catch (const RegistryError &error)
     {
@@ -86,12 +84,10 @@ std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const 
 }
 } // namespace
 
-InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry,
-                                             const std::filesystem::path &directory)
+InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry)
     : toolId(node.toolId)
     , availability(registry.availability(node.toolId).state)
     , outputs(node.signatures.outputs)
-    , directory(directory)
 {
     if (const auto *definition = registry.find(toolId))
     {
@@ -104,7 +100,7 @@ InstanceConfiguration::InstanceConfiguration(const NodeDefinition &node, const T
 bool InstanceConfiguration::operator==(const InstanceConfiguration &other) const
 {
     return toolId == other.toolId && version == other.version && kind == other.kind
-        && availability == other.availability && outputs == other.outputs && directory == other.directory
+        && availability == other.availability && outputs == other.outputs
         && sameParameters(parameters, other.parameters);
 }
 
@@ -122,7 +118,7 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
     if (deferredCreate)
         return;
     ToolStatus status;
-    instance = createInstance(node, registry, *configuration, reader, status);
+    instance = createInstance(node, registry, reader, status);
     if (!status)
     {
         preparation.store(std::make_shared<const NodeDiagnostic>(
@@ -432,7 +428,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             snapshot->timing.initMeasured = true;
             const auto createStart = Clock::now();
             ToolStatus status;
-            instance = createInstance(config, frozen.registry, *configuration, reader, status);
+            instance = createInstance(config, frozen.registry, reader, status);
             deferredCreateMs = milliseconds(Clock::now() - createStart);
             if (!status)
                 preparation.store(std::make_shared<const NodeDiagnostic>(

@@ -17,6 +17,7 @@
 #include "ui/ResultPresentation.h"
 #include "ui/RecentProjects.h"
 #include "ui/RoiEditSession.h"
+#include "ui/LogHighlighter.h"
 #include "ui/ToolTreeModel.h"
 #include "ui/ToolEditorController.h"
 #include "core/CustomToolStore.h"
@@ -117,7 +118,14 @@ struct AppController::Impl : PresentationHost
     ToolTreeModel                          tools;
     OutputModel                            outputs;
     NodeListModel                          nodesModel{q};
-    std::unique_ptr<LogModel>              logModel;
+    LogModel                               logModel;
+    // The text document owns the highlighter; this only observes it, because the window may be
+    // destroyed before the controller.
+    QPointer<LogHighlighter>               logHighlighter;
+    // The sentence the update dialog shows; empty when the last load found nothing to report.
+    QString                                toolUpdateSummary;
+    // A loaded project's findings, held until the open actually commits.
+    std::vector<ToolUpdate>                pendingToolUpdates;
     QTimer                                 timer;
     RuntimeState                           state        = RuntimeState::Idle;
     std::uint64_t                          generation   = 1;
@@ -226,14 +234,18 @@ struct AppController::Impl : PresentationHost
     const ToolDefinition                *currentTool() const;
     bool                                 idle();
     bool                                 applyParameter(PortId id, bool initialization, PortValue value);
-    void                                 report(const QString &text);
-    void                                 report(ApplicationDiagnostic diagnostic);
+    // A host failure is a system event; the two interaction notes pass LogSource::Ui explicitly.
+    void                                 report(const QString &text, LogSource source = LogSource::System);
+    void                                 report(ApplicationDiagnostic diagnostic, LogSource source = LogSource::System);
     void                                 report(const ErrorInfo &error);
     void                                 report(const std::exception &error, const QString &summary);
     void                                 changed(bool structure = false);
     NodeListModel::Row                   nodeRow(const NodeDefinition &node) const;
     void                                 refreshNodeModel();
     void                                 publishWiresChanged();
+    // Turns one reconciliation's findings into the sentence the update dialog shows. Called after an
+    // open and after a catalog refresh, so both entry points report the same way.
+    void                                 publishToolUpdates(const std::vector<ToolUpdate> &updates);
     QString                              wireState;
     void                                 publishNodesChanged();
 
@@ -292,7 +304,14 @@ struct AppController::Impl : PresentationHost
     void resultsChanged() override { emit q->resultsChanged(); }
     void runtimeChanged() override { emit q->runtimeChanged(); }
     void endRoiEdit() override { finishRoi(); }
-    void reportDiagnostic(const ApplicationDiagnostic &diagnostic) override { report(diagnostic); }
+    void reportDiagnostic(const ApplicationDiagnostic &diagnostic) override
+    {
+        // A tool's own status or node diagnostic is the tool speaking; everything else here is a
+        // host failure.
+        const bool fromTool = std::holds_alternative<ToolStatus>(diagnostic)
+                           || std::holds_alternative<NodeDiagnostic>(diagnostic);
+        report(diagnostic, fromTool ? LogSource::Tool : LogSource::System);
+    }
     void reportFailure(const std::exception &error, const QString &summary) override { report(error, summary); }
     void      pruneDeletedNodes();
     void      synchronizeNodes();
@@ -318,7 +337,6 @@ struct AppController::Impl : PresentationHost
     void      updateDisplay();
     ResultSlot::Snapshot displaySnapshot(const NodeDefinition &node) const;
     void      applyOverlays();
-    const PortValue *resolvedInputRef(const NodeDefinition &node, PortId input) const;
     PortValue        resolvedInput(const NodeDefinition &node, PortId input) const;
     void                 commitRoi(const RoiEditTarget &target, const EncodedRegion *value);
     void      finishRoi();

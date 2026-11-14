@@ -301,11 +301,6 @@ ResultSlot::Snapshot AppController::Impl::displaySnapshot(const NodeDefinition &
     return presentation.displaySnapshot(node);
 }
 
-const PortValue *AppController::Impl::resolvedInputRef(const NodeDefinition &node, PortId input) const
-{
-    return presentation.resolvedInput(node, input);
-}
-
 PortValue AppController::Impl::resolvedInput(const NodeDefinition &node, PortId input) const
 {
     const auto *value = presentation.resolvedInput(node, input);
@@ -416,7 +411,7 @@ bool AppController::Impl::idle()
         return false;
     if (state == RuntimeState::Idle && !operations.active())
         return true;
-    report(QStringLiteral("当前任务尚未结束，配置编辑不可用"));
+    report(QStringLiteral("当前任务尚未结束，配置编辑不可用"), LogSource::Ui);
     return false;
 }
 
@@ -775,7 +770,7 @@ void AppController::Impl::beginRun(RunMode mode)
         const auto *node = currentNode();
         if (!node)
         {
-            report(QStringLiteral("请先选择工具节点"));
+            report(QStringLiteral("请先选择工具节点"), LogSource::Ui);
             return;
         }
         target = node->id;
@@ -790,7 +785,7 @@ void AppController::Impl::beginRun(RunMode mode)
         report(result);
         return;
     }
-    LogService::write(LogLevel::Info, QStringLiteral("运行"),
+    LogService::write(LogLevel::Info, LogSource::System,
                       mode == RunMode::Once ? QStringLiteral("开始单次运行")
                       : mode == RunMode::Loop ? QStringLiteral("开始循环运行")
                                               : QStringLiteral("开始单节点运行"));
@@ -884,7 +879,7 @@ void AppController::Impl::advancePending()
         pendingDeletion.reset();
         operations.complete();
         if (command([&] { return editor.removeNodes(deletion.flow, deletion.nodes); }, true))
-            LogService::write(LogLevel::Info, QStringLiteral("工程"),
+            LogService::write(LogLevel::Info, LogSource::System,
                               QStringLiteral("删除 %1 个节点").arg(static_cast<qulonglong>(deletion.nodes.size())));
         return;
     }
@@ -928,10 +923,14 @@ void AppController::Impl::advancePending()
             {
                 auto loaded = ProjectStorage(registry).load(workbench::localPath(operations.path()));
                 storageDiagnostics(loaded.diagnostics);
-                operations.replacement() = std::move(loaded.project);
+                pendingToolUpdates          = std::move(loaded.toolUpdates);
+                operations.replacement()    = std::move(loaded.project);
             }
             else if (!operations.replacement() && operations.action() == Action::New)
+            {
+                pendingToolUpdates       = {};
                 operations.replacement() = ProjectDefinition{};
+            }
         }
         catch (const std::exception &error)
         {
@@ -972,11 +971,14 @@ void AppController::Impl::advancePending()
         changed(true);
         emit q->selectionChanged();
         emit q->projectReplaced();
+        // The notice describes the project that is now open, so it waits for the commit.
+        publishToolUpdates(pendingToolUpdates);
+        pendingToolUpdates.clear();
     }
     if (completion.action == Action::Open && replacementCommitted)
     {
         recordRecent(completion.path);
-        LogService::write(LogLevel::Info, QStringLiteral("工程"),
+        LogService::write(LogLevel::Info, LogSource::System,
                           QStringLiteral("打开工程 %1").arg(workbench::pathText(workbench::localPath(completion.path))));
     }
     if (completion.action == Action::Close)
@@ -1264,6 +1266,7 @@ void AppController::Impl::refreshFinished()
         {
             auto reconciled = ProjectStorage(registry).reconcile(editor.project());
             storageDiagnostics(reconciled.diagnostics);
+            publishToolUpdates(reconciled.toolUpdates);
             editor.replaceProject(std::move(reconciled.project));
         }
         catch (const std::exception &error)
@@ -1967,7 +1970,7 @@ void AppController::addNode(const QString &toolId, int x, int y)
             },
             true))
     {
-        LogService::write(LogLevel::Info, QStringLiteral("工程"),
+        LogService::write(LogLevel::Info, LogSource::System,
                           QStringLiteral("添加节点 %1（节点 %2）").arg(toolId, QString::number(added)));
         selectNode(QString::number(added));
     }
@@ -2134,7 +2137,7 @@ void AppController::stop()
 {
     if (!stopEnabled())
         return;
-    LogService::write(LogLevel::Info, QStringLiteral("运行"), QStringLiteral("请求停止运行"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("请求停止运行"));
     impl_->runtime->requestStop();
     impl_->setState(RuntimeState::Stopping);
 }
@@ -2200,13 +2203,6 @@ void AppController::requestClose()
     impl_->request(ProjectOperations::Action::Close);
 }
 
-bool AppController::isCloseReady() const
-{
-    return impl_->operations.closePhase() == ProjectOperations::ClosePhase::Ready
-        || (impl_->operations.closePhase() == ProjectOperations::ClosePhase::None
-            && (!impl_->python || impl_->python->isCloseReady()));
-}
-
 bool AppController::isClosing() const
 {
     return impl_->operations.isClosing();
@@ -2266,20 +2262,15 @@ bool AppController::save(const QString &path)
     try
     {
         auto candidate = impl_->editor.project();
-        // A save of an example into a user folder carries the files it reads; storage keeps writing
-        // the JSON and sees a candidate that already describes the destination layout.
-        if (installedExample)
-            candidate = ExampleProject::adopt(candidate, destination, impl_->registry);
-        auto diagnostics = ProjectStorage(impl_->registry).save(candidate, destination);
+        ProjectStorage(impl_->registry).save(candidate, destination);
         impl_->editor.replaceProject(std::move(candidate));
         impl_->synchronizeNodes();
-        impl_->storageDiagnostics(diagnostics);
         emit projectChanged();
         // A first save or a save-as puts the new file in the recent list; a plain Ctrl+S writes the
         // same file again and must leave the order alone.
         if (destination != previousPath)
             impl_->recordRecent(workbench::pathText(destination));
-        LogService::write(LogLevel::Info, QStringLiteral("工程"),
+        LogService::write(LogLevel::Info, LogSource::System,
                           QStringLiteral("保存工程 %1").arg(workbench::pathText(destination)));
         return true;
     }

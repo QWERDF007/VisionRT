@@ -46,8 +46,6 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     const auto projectPath     = std::filesystem::path(u8"04_扩展示例") / u8"01_Python图像统计";
     const auto tempProjectFile = tmpPath / u8"Python图像统计.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.vrt.json", tempProjectFile);
-    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
-                          std::filesystem::copy_options::recursive);
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
@@ -95,7 +93,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert((preprocessed.get().size() == croppedImages.get().size()));
 
     // Node 5: Python mean over node 1's original images, not over the cropped and binarised branch.
-    // The fixture keeps the two paths distinguishable: nodes 3/4 would yield 95.625 and 191.25.
+    // The example's own images keep the two paths distinguishable: nodes 3/4 would yield other values.
     auto s5 = snapshot(update, 5);
     assert((s5 && s5->status.code == 0));
     const auto &means = std::get<Array>(s5->outputs.at(2));
@@ -147,16 +145,14 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     assert((corruptFailed));
 }
 
-void testShippedExamples(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot)
+void testShippedExamples(const std::filesystem::path &toolsPkg)
 {
-    // The shipped examples are the product: every project under examples/ that is offered as a
-    // first-batch sample must load without a diagnostic and produce real results from its own
-    // images. A copy in a Chinese, space-containing folder keeps that claim independent of the
-    // source tree and of the process working directory.
-    QTemporaryDir tmpDir;
-    assert((tmpDir.isValid()));
-    const auto root = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString()) / u8"示例 副本";
-    std::filesystem::copy(repoRoot / "examples", root, std::filesystem::copy_options::recursive);
+    // The shipped examples are the product: every project under the installed examples must load
+    // without a diagnostic and produce real results from its own images. They are read exactly as
+    // installed, because a resource path is relative to the product directory, not to the project.
+    const auto root = std::filesystem::u8path(QCoreApplication::applicationDirPath().toUtf8().toStdString())
+                    / "examples";
+    assert((std::filesystem::is_directory(root)));
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
@@ -244,7 +240,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg, const std::files
     assert((branchRadius.size() == 1 && branchRadius[0].size() == 1));
     assert((std::abs(branchRadius[0][0] - 50.0) < 0.5));
 
-    std::cout << "[SHIPPED EXAMPLES] six projects loaded and executed with their own images\n";
+    std::cout << "[SHIPPED EXAMPLES] installed projects loaded and executed with the installed images\n";
 }
 
 void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
@@ -258,8 +254,6 @@ void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std
     const auto projectPath = std::filesystem::path(u8"04_扩展示例") / u8"02_逻辑表达式与条件分支";
     const auto projectFile = tmpPath / u8"逻辑表达式与条件分支.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"逻辑表达式与条件分支.vrt.json", projectFile);
-    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
-                          std::filesystem::copy_options::recursive);
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
@@ -314,8 +308,7 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
     auto       loader  = std::make_shared<PluginLoader>();
     loader->registerPackage(package);
 
-    PlatformToolServices services{PathResolver(toolsPkg), nullptr};
-    auto                 inst = loader->createAdapter("visionrt.detection.filter", services);
+    auto                 inst = loader->createAdapter("FilterDetections");
     assert((inst != nullptr));
     assert((inst->initialize({}).code == 0));
 
@@ -463,14 +456,13 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 
-    const auto *def = registry.find("visiontools.preprocess.adaptive_binary");
+    const auto *def = registry.find("AdaptiveThreshold");
     assert((def != nullptr));
-    assert((def->nameEn == "visiontools.preprocess.adaptive_binary"));
+    assert((def->nameEn == "AdaptiveThreshold"));
     assert((def->kind == ToolKind::Cpp));
-    assert((registry.availability("visiontools.preprocess.adaptive_binary").state == ToolAvailability::Available));
+    assert((registry.availability("AdaptiveThreshold").state == ToolAvailability::Available));
 
-    PlatformToolServices services;
-    auto                 inst = registry.create("visiontools.preprocess.adaptive_binary", services);
+    auto                 inst = registry.create("AdaptiveThreshold");
     assert((inst != nullptr));
     assert((inst->initialize({}).code == 0));
 
@@ -504,12 +496,11 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 
-    const auto *def = registry.find("visionrt.roi.projection");
+    const auto *def = registry.find("ProjectRoi");
     assert((def != nullptr));
-    assert((registry.availability("visionrt.roi.projection").state == ToolAvailability::Available));
+    assert((registry.availability("ProjectRoi").state == ToolAvailability::Available));
 
-    PlatformToolServices services;
-    auto                 inst = registry.create("visionrt.roi.projection", services);
+    auto                 inst = registry.create("ProjectRoi");
     assert((inst != nullptr));
     assert((inst->initialize({}).code == 0));
 
@@ -582,7 +573,7 @@ void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const 
 
     // 1. Verify valid real Tools package plugin loads successfully
     ToolStatus statusOk;
-    const auto cropModPath = loader->resolveModulePath("visionrt.image.crop");
+    const auto cropModPath = loader->resolveModulePath("CropImage");
     assert((!cropModPath.empty()));
     auto cropMod = loader->loadModule(cropModPath, statusOk);
     assert((cropMod != nullptr));
@@ -630,8 +621,6 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     const auto projectPath = std::filesystem::path(u8"04_扩展示例") / u8"01_Python图像统计";
     const auto projectFile = tmpPath / u8"Python图像统计.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.vrt.json", projectFile);
-    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
-                          std::filesystem::copy_options::recursive);
 
     ProjectStorage storage(registry);
     auto           loaded = storage.load(projectFile);
@@ -708,8 +697,6 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     const auto projectPath     = std::filesystem::path(u8"04_扩展示例") / u8"04_错误诊断";
     const auto tempProjectFile = tmpPath / u8"错误诊断.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"错误诊断.vrt.json", tempProjectFile);
-    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
-                          std::filesystem::copy_options::recursive);
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
@@ -734,14 +721,14 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     assert((foundMissingDef));
 
     RuntimeEngine engine(2);
-    const bool inferenceIncluded = registry.find("visionrt.dl.yolo") != nullptr;
+    const bool inferenceIncluded = registry.find("DetectObjectsYolo") != nullptr;
     if (!inferenceIncluded)
     {
         assert(std::any_of(loaded.diagnostics.begin(), loaded.diagnostics.end(), [](const auto &diagnostic)
                           { return diagnostic.node == 3 && diagnostic.code == ProjectStorageCode::DefinitionMissing; }));
         assert((!engine.start(loaded.project, registry, RunMode::Once)));
         std::erase_if(loaded.project.flows[0].nodes, [](const auto &node) { return node.id == 3; });
-        std::cout << "[NOT_RUN] Model-file negative execution: visionrt.dl.yolo is not included in this package.\n";
+        std::cout << "[NOT_RUN] Model-file negative execution: DetectObjectsYolo is not included in this package.\n";
     }
     const auto    startRes = engine.start(loaded.project, registry, RunMode::Once);
     if (startRes.code != 0)
@@ -803,14 +790,10 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     // Register plugin counter tool
     ToolDefinition counterDef;
-    counterDef.schemaVersion    = 6;
     counterDef.nameEn           = "test.plugin.counter";
     counterDef.nameZh           = "Plugin Counter";
     counterDef.version          = "1.0.0";
     counterDef.kind             = ToolKind::Cpp;
-    counterDef.nextInitPortId   = 1;
-    counterDef.nextInputPortId  = 1;
-    counterDef.nextOutputPortId = 3;
 
     PortDefinition initParam;
     initParam.id           = 0;
@@ -830,14 +813,10 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     // Register plugin function tool
     ToolDefinition funcDef;
-    funcDef.schemaVersion    = 6;
     funcDef.nameEn           = "test.plugin.function";
     funcDef.nameZh           = "Plugin Function";
     funcDef.version          = "1.0.0";
     funcDef.kind             = ToolKind::Cpp;
-    funcDef.nextInitPortId   = 0;
-    funcDef.nextInputPortId  = 2;
-    funcDef.nextOutputPortId = 3;
 
     PortDefinition inX;
     inX.id           = 1;
@@ -913,8 +892,11 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     storage.save(project, savePath);
     const auto reloaded = storage.load(savePath);
     assert((reloaded.diagnostics.empty()));
-    assert((engine.start(reloaded.project, registry, RunMode::Once).code == 0));
-    const auto reloadedUpdate = finish(engine);
+    // A reopened project starts a new session: the same engine would keep the counter's instance,
+    // which is the point of a stable instance configuration, not of this round-trip check.
+    RuntimeEngine reopened(2);
+    assert((reopened.start(reloaded.project, registry, RunMode::Once).code == 0));
+    const auto reloadedUpdate = finish(reopened);
     auto       rs1            = snapshot(reloadedUpdate, 1);
     assert((rs1 && std::get<std::int64_t>(rs1->outputs.at(2)) == std::get<std::int64_t>(s1->outputs.at(2))));
     auto rs2 = snapshot(reloadedUpdate, 2);
@@ -996,7 +978,7 @@ int main(int argc, char **argv)
     std::cout << "[PASS] Real Tools package CPU + Python pipeline passed." << std::endl;
 
     std::cout << "[TEST] Running the shipped example projects..." << std::endl;
-    testShippedExamples(unicodePkg, repoRoot);
+    testShippedExamples(unicodePkg);
     std::cout << "[PASS] Shipped example projects passed." << std::endl;
 
     std::cout << "[TEST] Running the expression and branch example..." << std::endl;

@@ -125,7 +125,6 @@ struct PortDefinition {
 };
 
 struct ToolDefinition {
-    int                                schemaVersion = 6;
     std::string                        nameEn;
     std::string                        nameZh;
     std::string                        version = "1.0.0";
@@ -134,6 +133,7 @@ struct ToolDefinition {
     ToolVisibility                     visibility = ToolVisibility::Normal;
     std::optional<InteractionMapping>  interaction;
     std::filesystem::path              definitionPath;
+    // Derived from the declaration's directory inside its root, never read from the file.
     std::vector<std::string>           categories;
     ToolSource                         source;
     std::string                        hostBinding;
@@ -143,19 +143,10 @@ struct ToolDefinition {
     std::vector<PortDefinition>        inputs;
     std::vector<PortDefinition>        outputs;
 
-    // High-water counters: the next number each direction will hand out. They are persisted, never
-    // recomputed from the live ids, so deleting the highest port cannot recycle its number.
-    std::uint64_t nextInitPortId   = 0;
-    std::uint64_t nextInputPortId  = 1;
-    std::uint64_t nextOutputPortId = 2;
-
     bool derivesPorts() const noexcept
     {
         return nodeModel != NodeModel::Fixed;
     }
-
-    std::uint64_t nextPortId(PortStage stage) const noexcept;
-    void          setNextPortId(PortStage stage, std::uint64_t value);
 
     std::filesystem::path pythonPackage() const;
     std::filesystem::path pythonScript() const;
@@ -167,9 +158,6 @@ std::string formatPortRef(const PortRef& reference);
 
 // The one Chinese breadcrumb of a tool ("预处理/图像处理"), used by the tool tree and node badges.
 std::string categoryPath(const ToolDefinition& def);
-
-// True only for String ports whose editor selects a resource path (file, directory, path).
-bool isPathPort(const PortDefinition& port);
 
 // A stable ASCII identifier: letter or underscore first, then letters, digits, '_', '.' or '-'.
 // Tool ids name declaration files, so anything that could leave a directory is rejected here.
@@ -214,9 +202,9 @@ void normalizeToolDefinition(ToolDefinition &def);
 // Validating entry used after normalisation; kept separate for read-only checks.
 void validateToolDefinition(const ToolDefinition& def);
 
-// Allocates the next number of one direction. Throws once the 32-bit space is exhausted; a number
-// is never reused, so a deleted port leaves a permanent hole.
-PortId allocatePortId(ToolDefinition &def, PortStage stage);
+// The lowest business number this direction does not use yet. Adding a port picks from here; the
+// caller assigns it and nothing about a removed port is remembered.
+PortId nextFreePortId(const ToolDefinition &def, PortStage stage);
 
 // Editor kinds that can actually present this type. The declaration validator accepts any known
 // editor whose shape fits; this is the subset the editor offers and reconciliation keeps, so a

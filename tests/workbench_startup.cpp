@@ -177,7 +177,7 @@ void startupProjectContract()
             auto projectNodes = projectFlow.value("nodes").toArray();
             auto configured   = projectNodes.at(3).toObject();
             require(configured.value("node_seq").toString() == "4", "project warning node identity changed");
-            // Ports are numeric: 高斯核大小 is input 3 of visionrt.image.preprocess.
+            // Ports are numeric: 高斯核大小 is input 3 of PreprocessImage.
             auto inputs = configured.value("inputs").toArray();
             for (qsizetype index = 0; index < inputs.size(); ++index)
             {
@@ -271,7 +271,7 @@ void startupProjectContract()
             require(QTest::qWaitFor([&] { return logWindow->property("visible").toBool(); }, 1000),
                     "the log window did not become visible");
             require(app.logModel() != nullptr, "the log window has no model");
-            visionrt::LogService::write(visionrt::LogLevel::Info, QStringLiteral("窗口契约"),
+            visionrt::LogService::write(visionrt::LogLevel::Info, visionrt::LogSource::Ui,
                                         QStringLiteral("日志窗口可见行"));
             require(QTest::qWaitFor([&] { return app.logModel()->rowCount() >= 1; }, 3000),
                     "the visible log window did not receive a bounded batch");
@@ -312,7 +312,7 @@ void startupProjectContract()
             // error domain. The host forwards it unchanged instead of inventing a generic 1.
             const auto decoded = decode.value("message").toString();
             const auto flagsOk = decode.value("code").toInt() == 101004 && decode.value("node") == "1"
-                                 && decode.value("tool_id") == "visionrt.image.read"
+                                 && decode.value("tool_id") == "ReadImage"
                                  && decode.value("phase") == "execute";
             const auto textOk = QDir::fromNativeSeparators(decoded).contains(imagePath)
                                 && decoded.contains(QStringLiteral("批次索引 0")) && !decoded.contains("OpenCV");
@@ -333,7 +333,7 @@ void startupProjectContract()
                 if (entry.toMap().value("id") == "1")
                 {
                     const auto summary = entry.toMap().value("statusMessage").toString();
-                    require(summary.count(QStringLiteral("节点 1（visionrt.image.read）执行：")) == 1
+                    require(summary.count(QStringLiteral("节点 1（ReadImage）执行：")) == 1
                                 && !summary.contains("OpenCV")
                                 && entry.toMap().value("statusDetail") == decode.value("detail").toString(),
                             "native exception has duplicated context or leaked detail in the node summary");

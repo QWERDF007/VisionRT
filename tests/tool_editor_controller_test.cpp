@@ -103,17 +103,17 @@ int main(int argc, char **argv)
 
     // 4. A declaration preview is the same normalised JSON the store writes.
     const auto json = controller.previewJson();
-    assert(json.contains("\"schema_version\": 6"));
     assert(json.contains("custom.test.threshold"));
     assert(json.contains("\"visible\": true"));
-    assert(json.contains("next_port_id"));
+    // A declaration never states its category: the folder it is saved into does.
+    assert(!json.contains("category"));
 
     // 5. Saving commits every draft and locks the published id.
     assert(controller.saveAll());
     assert(!controller.isDirty());
     assert(controller.isEditable());
     assert(!controller.isToolIdEditable());
-    assert(std::filesystem::exists(root / "tools" / "custom.test.threshold.json"));
+    assert(std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold.json"));
     assert(std::filesystem::exists(root / "python" / "custom/test/threshold" / "tool.py"));
     controller.setCurrentToolId("custom.test.renamed");
     assert(controller.currentToolId() == "custom.test.threshold");
@@ -144,9 +144,9 @@ int main(int argc, char **argv)
     // 7. Cancel discards the whole window: no file for the second tool, first tool untouched.
     controller.cancelAll();
     assert(!controller.isDirty());
-    assert(!std::filesystem::exists(root / "tools" / "custom.test.second.json"));
+    assert(!std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.second.json"));
     {
-        const QString declaration = readFile(root / "tools" / "custom.test.threshold.json");
+        const QString declaration = readFile(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold.json");
         assert(!declaration.contains("临时参数"));
     }
 
@@ -154,9 +154,9 @@ int main(int argc, char **argv)
     controller.selectKey("custom.test.threshold");
     assert(controller.deleteTool("custom.test.threshold"));
     assert(controller.isDirty());
-    assert(std::filesystem::exists(root / "tools" / "custom.test.threshold.json"));
+    assert(std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold.json"));
     controller.cancelAll();
-    assert(std::filesystem::exists(root / "tools" / "custom.test.threshold.json"));
+    assert(std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold.json"));
 
     // 9. Bounds are real declaration fields: a dirty draft must not be reported clean.
     controller.selectKey("custom.test.threshold");
@@ -165,7 +165,7 @@ int main(int argc, char **argv)
     assert(controller.isDirty());
     assert(controller.saveAll());
     {
-        const QString declaration = readFile(root / "tools" / "custom.test.threshold.json");
+        const QString declaration = readFile(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold.json");
         assert(declaration.contains("\"min\": 0"));
         assert(declaration.contains("\"max\": 255"));
     }
@@ -185,9 +185,9 @@ int main(int argc, char **argv)
     assert(controller.cloneTool("custom.test.threshold"));
     assert(controller.currentToolId() == "custom.test.threshold_copy1");
     assert(controller.isDirty());
-    assert(!std::filesystem::exists(root / "tools" / "custom.test.threshold_copy1.json"));
+    assert(!std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold_copy1.json"));
     assert(controller.saveAll());
-    assert(std::filesystem::exists(root / "tools" / "custom.test.threshold_copy1.json"));
+    assert(std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold_copy1.json"));
 
     // 12. Folder edits are drafts too: renaming moves the tools, deleting a non-empty folder is
     // refused, and an empty folder can be added and removed without touching the disk.
@@ -202,15 +202,15 @@ int main(int argc, char **argv)
     assert(controller.isDirty());
     assert(treeHasFolder(controller.tree(), "用户扩展/图像"));
     assert(controller.saveAll());
-    {
-        const QString declaration = readFile(root / "tools" / "custom.test.threshold.json");
-        assert(declaration.contains("用户扩展"));
-        assert(!declaration.contains("自定义"));
-    }
+    // Renaming a folder moves the declarations with it; the file's folder is the only category.
+    assert(std::filesystem::exists(root / "tools" / u8"用户扩展" / u8"图像" / "custom.test.threshold.json"));
+    assert(!std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold.json"));
 
     // 13. Built-in tools are visible only when editBuiltins is true.
     {
-        AppController appController(1, "E:/Softwares/VisionRT");
+        // The test build keeps the real tools package next to the executable's parent, which is
+        // the installation layout the window expects.
+        AppController appController(1, QDir::cleanPath(QCoreApplication::applicationDirPath() + "/.."));
         ToolEditorController builtinEditor;
         builtinEditor.setAppController(&appController);
         builtinEditor.setCustomStore(&store);

@@ -54,7 +54,7 @@ struct ExecutionMetrics
     double validateMs       = 0; // 结果统一检查与格式验证墙钟
     bool   validateMeasured = false;
     // Python 包含项（已包含在 adapterExecuteMs 中，不能再累加到 totalMs）。桥接算子是 Python 实现，
-    // 因此算子时间取 pythonCallMs，其余阶段各带独立 measured 标志。
+    // 因此工具 API 耗时取 pythonCallMs，其余阶段各带独立 measured 标志。
     bool   pythonBridge        = false;
     bool   pythonInputMeasured = false; // 是否进入 GIL 等待与输入桥接
     bool   pythonCallMeasured  = false; // 是否进入真实函数调用

@@ -78,14 +78,6 @@ bool sameTool(const ToolDefinition &a, const ToolDefinition &b)
            && samePorts(a.outputs, b.outputs) && samePorts(a.initParams, b.initParams);
 }
 
-QString portIdList(const std::set<int> &ids)
-{
-    QStringList parts;
-    for (const int id : ids)
-        parts.append(QString::number(id));
-    return parts.join(QStringLiteral("/"));
-}
-
 QStringList splitCategory(const std::string &path)
 {
     QStringList parts;
@@ -126,14 +118,6 @@ bool validFolderName(const QString &name, QString *reason)
     return true;
 }
 
-QString folderOf(const std::string &categoryPath)
-{
-    QStringList parts = splitCategory(categoryPath);
-    if (parts.isEmpty())
-        return QStringLiteral("未分类");
-    return parts.mid(0, 2).join(QLatin1Char('/'));
-}
-
 } // namespace
 
 ToolEditorController::ToolEditorController(QObject *parent)
@@ -165,8 +149,6 @@ void ToolEditorController::setAppController(AppController *app)
     if (app_)
     {
         connect(app_, &AppController::catalogChanged, this, &ToolEditorController::treeChanged);
-        // Opening or switching a project changes what the pending draft would break.
-        connect(app_, &AppController::projectChanged, this, &ToolEditorController::updateImpactSummary);
     }
 }
 
@@ -260,7 +242,7 @@ QVariantList ToolEditorController::buildTree() const
         Entry entry;
         entry.id       = draft.def.nameEn;
         entry.name     = QString::fromStdString(draft.def.nameZh);
-        entry.folder   = folderOf(joinCategory(splitCategory(categoryPath(draft.def))));
+        entry.folder   = QString::fromStdString(categoryPath(draft.def));
         entry.key      = QString::fromStdString(key);
         entry.editable = toolEditable(draft.def, draft.saved.has_value());
         entry.draft    = true;
@@ -279,7 +261,7 @@ QVariantList ToolEditorController::buildTree() const
         Entry entry;
         entry.id       = id;
         entry.name     = QString::fromStdString(def.nameZh);
-        entry.folder   = folderOf(categoryPath(def));
+        entry.folder   = QString::fromStdString(categoryPath(def));
         entry.key      = QString::fromStdString(id);
         entry.editable = toolEditable(def, true);
         entry.kind     = toolKindString(def.kind);
@@ -299,7 +281,9 @@ QVariantList ToolEditorController::buildTree() const
     }
     for (const auto &tool : tools)
     {
-        QStringList parts = tool.folder.split(QLatin1Char('/'));
+        // A tool saved at the store root has no folder: it sits at the top level, not in an
+        // unnamed one.
+        const QStringList parts = tool.folder.split(QLatin1Char('/'), Qt::SkipEmptyParts);
         QString     prefix;
         for (const auto &part : parts)
         {
@@ -454,8 +438,7 @@ void ToolEditorController::selectKey(const QString &key)
         current_.clear();
         bindModels();
         emit currentToolChanged();
-        updateImpactSummary();
-        return;
+            return;
     }
 
     // A draft is addressed by its stable key, which stops tracking the id when a new tool is
@@ -611,12 +594,6 @@ bool ToolEditorController::isPython() const noexcept
     return draft && (draft->def.kind == ToolKind::PythonFunction || draft->def.kind == ToolKind::PythonClass);
 }
 
-bool ToolEditorController::showsInit() const noexcept
-{
-    const Draft *draft = current();
-    return draft && draft->def.kind == ToolKind::PythonClass;
-}
-
 QString ToolEditorController::currentToolCategory() const
 {
     const Draft *draft = current();
@@ -753,12 +730,6 @@ QString ToolEditorController::currentToolScript() const
     return QString::fromStdWString((store_->pythonDir() / draft->def.entry.package / file).wstring());
 }
 
-QString ToolEditorController::currentToolBinding() const
-{
-    const Draft *draft = current();
-    return draft ? QString::fromStdString(draft->def.hostBinding) : QString();
-}
-
 bool ToolEditorController::toolEditable(const ToolDefinition &definition, bool hasSaved) const
 {
     if (!hasSaved)
@@ -812,19 +783,7 @@ void ToolEditorController::setEditBuiltins(bool enabled)
     emit treeChanged();
 }
 
-bool ToolEditorController::canClone() const noexcept
-{
-    const Draft *draft = current();
-    // A copy reads the script of a tool that already exists; a brand-new draft has none yet.
-    return isPython() && draft && draft->saved;
-}
-
 bool ToolEditorController::isDirty() const noexcept
-{
-    return dirty_;
-}
-
-bool ToolEditorController::canSave() const noexcept
 {
     return dirty_;
 }
@@ -863,84 +822,6 @@ void ToolEditorController::updateDirty()
         dirty_ = dirty;
         emit dirtyChanged();
     }
-    updateImpactSummary();
-}
-
-void ToolEditorController::updateImpactSummary()
-{
-    Draft *draft = current();
-    QString summary = QStringLiteral("当前工程无引用该工具的节点");
-    if (app_ && draft && dirty_)
-    {
-        const auto &project = app_->project();
-        const auto declared = [draft](PortStage stage, PortId id) {
-            const auto &ports = stage == PortStage::Outputs   ? draft->def.outputs
-                                : stage == PortStage::Inputs  ? draft->def.inputs
-                                                              : draft->def.initParams;
-            return std::any_of(ports.begin(), ports.end(), [id](const PortDefinition &port) { return port.id == id; });
-        };
-
-        std::set<int> unboundInputs;
-        std::set<int> retypedInputs;
-        std::set<int> droppedOutputs;
-        std::set<NodeId> ownNodes;
-        const int     nodes = referencingNodes(draft->def.nameEn);
-        for (const auto &flow : project.flows)
-        {
-            for (const auto &node : flow.nodes)
-            {
-                if (node.toolId != draft->def.nameEn)
-                    continue;
-                ownNodes.insert(node.id);
-                for (const auto &[id, binding] : node.inputs)
-                {
-                    (void)binding;
-                    if (!isReservedPort(PortStage::Inputs, id) && !declared(PortStage::Inputs, id))
-                        unboundInputs.insert(static_cast<int>(id));
-                }
-                for (const auto &[id, type] : node.signatures.inputs)
-                {
-                    const auto port = std::find_if(draft->def.inputs.begin(), draft->def.inputs.end(),
-                                                   [id](const PortDefinition &item) { return item.id == id; });
-                    if (port != draft->def.inputs.end() && !(port->type == type))
-                        retypedInputs.insert(static_cast<int>(id));
-                }
-            }
-        }
-
-        // A deleted output matters only where another node reads it; the binding lives in the
-        // consumer, so it has to be found by following the sources of every node.
-        if (!ownNodes.empty())
-        {
-            for (const auto &flow : project.flows)
-                for (const auto &node : flow.nodes)
-                    for (const auto &[id, binding] : node.inputs)
-                        if (binding.source && ownNodes.count(binding.source->node)
-                            && !isReservedPort(PortStage::Outputs, binding.source->port)
-                            && !declared(PortStage::Outputs, binding.source->port))
-                            droppedOutputs.insert(static_cast<int>(binding.source->port));
-        }
-
-        if (nodes > 0)
-        {
-            summary = QStringLiteral("%1 个节点引用该工具").arg(nodes);
-            if (!unboundInputs.empty())
-                summary += QStringLiteral("；删除的输入参数 %1 会解除绑定").arg(portIdList(unboundInputs));
-            if (!droppedOutputs.empty())
-                summary += QStringLiteral("；删除的输出参数 %1 会断开下游连接").arg(portIdList(droppedOutputs));
-            if (!retypedInputs.empty())
-                summary += QStringLiteral("；输入参数 %1 的类型已变更").arg(portIdList(retypedInputs));
-            if (unboundInputs.empty() && droppedOutputs.empty() && retypedInputs.empty())
-                summary += QStringLiteral("；本次修改不影响现有绑定");
-        }
-    }
-    impactSummary_ = summary;
-    emit impactSummaryChanged();
-}
-
-QString ToolEditorController::impactSummary() const
-{
-    return impactSummary_;
 }
 
 int ToolEditorController::toolUsage(const QString &toolId) const
@@ -1016,14 +897,10 @@ bool ToolEditorController::addTool(const QString &folderPath)
     }
 
     ToolDefinition def;
-    def.schemaVersion    = 6;
-    def.nameZh           = "新工具 " + std::to_string(seq);
-    def.nameEn           = id;
-    def.version          = "1.0.0";
-    def.kind             = ToolKind::PythonFunction;
-    def.nextInitPortId   = 0;
-    def.nextInputPortId  = 1;
-    def.nextOutputPortId = 2;
+    def.nameZh = "新工具 " + std::to_string(seq);
+    def.nameEn = id;
+    def.version = "1.0.0";
+    def.kind    = ToolKind::PythonFunction;
 
     const QString folder = folderPath.isEmpty() ? QStringLiteral("未分类") : folderPath;
     for (const auto &part : folder.split(QLatin1Char('/')))
@@ -1244,7 +1121,7 @@ bool ToolEditorController::folderHasTools(const QString &path) const
     {
         if (deleted_.count(draft.def.nameEn))
             continue;
-        const QString folder = folderOf(categoryPath(draft.def));
+        const QString folder = QString::fromStdString(categoryPath(draft.def));
         if (folder == path || folder.startsWith(prefix))
             return true;
     }
@@ -1252,7 +1129,7 @@ bool ToolEditorController::folderHasTools(const QString &path) const
     {
         if (drafts_.count(id) || deleted_.count(id))
             continue;
-        const QString folder = folderOf(categoryPath(def));
+        const QString folder = QString::fromStdString(categoryPath(def));
         if (folder == path || folder.startsWith(prefix))
             return true;
     }
@@ -1550,24 +1427,6 @@ QString ToolEditorController::previewJson() const
     catch (const std::exception &error)
     {
         return QStringLiteral("/* 声明格式错误: %1 */").arg(error.what());
-    }
-}
-
-void ToolEditorController::openCodeFile() const
-{
-    const QString path = currentToolScript();
-    if (!path.isEmpty() && QFileInfo::exists(path))
-        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
-}
-
-void ToolEditorController::openCodeDirectory() const
-{
-    const QString path = currentToolScript();
-    if (!path.isEmpty())
-    {
-        const QFileInfo info(path);
-        if (info.dir().exists())
-            QDesktopServices::openUrl(QUrl::fromLocalFile(info.dir().absolutePath()));
     }
 }
 

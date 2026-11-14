@@ -63,13 +63,6 @@ QVariantMap typeMap(const TypeSpec &type)
 }
 } // namespace
 
-QString AppController::nodeModel() const
-{
-    const auto *node = impl_->currentNode();
-    const auto *tool = impl_->currentTool();
-    return node && tool ? QString::fromLatin1(modelName(tool->nodeModel)) : QStringLiteral("fixed");
-}
-
 QString AppController::executionGuardText() const
 {
     const auto *node = impl_->currentNode();
@@ -101,6 +94,13 @@ QString AppController::executionGuardText() const
     return (source ? workbench::q(source->title()) : QString::number(guardSource.node)) + "-" + portName;
 }
 
+QString AppController::nodeModel() const
+{
+    const auto *node = impl_->currentNode();
+    const auto *tool = impl_->currentTool();
+    return node && tool ? QString::fromLatin1(modelName(tool->nodeModel)) : QStringLiteral("fixed");
+}
+
 QString AppController::conditionMode() const
 {
     const auto *node = impl_->currentNode();
@@ -108,22 +108,6 @@ QString AppController::conditionMode() const
     if (!node || !tool || tool->nodeModel != NodeModel::Condition)
         return {};
     return QString::fromStdString(conditionModeText(*node));
-}
-
-bool AppController::executionGuardActive() const
-{
-    const auto *node = impl_->currentNode();
-    const auto *tool = impl_->currentTool();
-    return node && tool && supportsExecutionGuard(tool->nodeModel) && node->executionGuard.has_value()
-        && node->executionGuard->mode == BindingMode::Upstream;
-}
-
-QString AppController::selectTypeText() const
-{
-    const auto *node = impl_->currentNode();
-    if (!node || !node->selectType)
-        return {};
-    return visionrt::typeText(*node->selectType);
 }
 
 QVariantMap AppController::expressionConfig(const QString &nodeId) const

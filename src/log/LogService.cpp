@@ -287,7 +287,7 @@ public:
         std::size_t budget = maximum;
         if (dropped_ > 0)
         {
-            result.push_back(LogRecord{formatLine(spdlog::level::warn, "",
+            result.push_back(LogRecord{formatLine(spdlog::level::warn, sourceLabel(LogSource::System),
                                                   "队列已满，丢弃 " + std::to_string(dropped_) + " 条较早日志"),
                                        levelText(spdlog::level::warn)});
             dropped = dropped_;
@@ -503,9 +503,17 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
                 case QtCriticalMsg: level = LogLevel::Error; break;
                 case QtFatalMsg: level = LogLevel::Critical; break;
                 }
-                const std::string_view source = context.category ? std::string_view(context.category)
-                                                                 : std::string_view("Qt");
-                LogService::instance().write(level, source, message.toStdString());
+                // A QML or control message is the window talking about itself; anything else is a
+                // Qt-internal report the system owns. The native category stays in the text so the
+                // line is still traceable to its producer.
+                const auto category = context.category ? QString::fromUtf8(context.category) : QString();
+                const auto folded   = category.toLower();
+                const bool ui       = folded.contains(QLatin1String("qml"))
+                                || folded.contains(QLatin1String("quick"));
+                const auto text = category.isEmpty() || category == QLatin1String("default")
+                                      ? message
+                                      : QStringLiteral("[%1] %2").arg(category, message);
+                LogService::instance().write(level, ui ? LogSource::Ui : LogSource::System, text.toStdString());
                 if (type == QtFatalMsg)
                 {
                     std::fputs("VisionRT fatal: ", stderr);
@@ -523,16 +531,17 @@ bool LogService::start(const LogConfig &config, const QString &filePath)
     if (!impl_->fileReady)
     {
         if (impl_->path.isEmpty())
-            warn("", "无法确定软件目录，文件日志不可用，仅窗口日志可用");
+            warn(LogSource::System, "无法确定软件目录，文件日志不可用，仅窗口日志可用");
         else
-            warn("", ("日志目录不可写，仅窗口日志可用：" + QFileInfo(impl_->path).absolutePath()).toStdString());
+            warn(LogSource::System,
+                 ("日志目录不可写，仅窗口日志可用：" + QFileInfo(impl_->path).absolutePath()).toStdString());
     }
     return true;
 }
 
 void LogService::shutdown()
 {
-    if (!impl_ || !impl_->running.load(std::memory_order_acquire))
+    if (!impl_->running.load(std::memory_order_acquire))
         return;
     impl_->running.store(false, std::memory_order_release);
     gRunning.store(false, std::memory_order_release);
@@ -600,40 +609,52 @@ void LogService::flush()
 
 bool LogService::running() const
 {
-    return impl_ && impl_->running.load(std::memory_order_acquire);
+    return impl_->running.load(std::memory_order_acquire);
 }
 
 bool LogService::fileSinkReady() const
 {
-    return impl_ && impl_->fileReady;
+    return impl_->fileReady;
 }
 
 QString LogService::baseFilePath() const
 {
-    return impl_ ? impl_->path : QString();
+    return impl_->path;
 }
 
-void LogService::write(LogLevel level, std::string_view source, std::string_view message)
+std::string_view sourceLabel(LogSource source) noexcept
+{
+    switch (source)
+    {
+    case LogSource::System:
+        return "系统";
+    case LogSource::Ui:
+        return "界面";
+    case LogSource::Tool:
+        return "工具";
+    }
+    return "系统";
+}
+
+void LogService::write(LogLevel level, LogSource source, std::string_view message)
 {
     if (!gRunning.load(std::memory_order_acquire))
         return;
     auto &service = instance();
     if (!service.admits(level))
         return;
-    service.writeImpl(level, source, message);
+    service.writeImpl(level, sourceLabel(source), message);
 }
 
 bool LogService::admits(LogLevel level) const noexcept
 {
-    if (!impl_ || !impl_->running.load(std::memory_order_acquire))
+    if (!impl_->running.load(std::memory_order_acquire))
         return false;
     return static_cast<int>(level) >= impl_->minimum.load(std::memory_order_relaxed);
 }
 
 void LogService::setMinimumLevel(LogLevel level)
 {
-    if (!impl_)
-        return;
     std::shared_lock<std::shared_mutex> lock(impl_->writeMutex);
     impl_->config.minimumLevel = level;
     impl_->minimum.store(static_cast<int>(level), std::memory_order_relaxed);
@@ -645,7 +666,7 @@ void LogService::setMinimumLevel(LogLevel level)
 
 LogLevel LogService::minimumLevel() const
 {
-    return impl_ ? static_cast<LogLevel>(impl_->minimum.load(std::memory_order_relaxed)) : LogLevel::Info;
+    return static_cast<LogLevel>(impl_->minimum.load(std::memory_order_relaxed));
 }
 
 void LogService::postLocked(LogLevel level, std::string_view source, std::string_view message,
@@ -834,7 +855,7 @@ void LogService::flushPending()
     postPendingLocked();
 }
 
-void LogService::write(LogLevel level, const QString &source, const QString &message)
+void LogService::write(LogLevel level, LogSource source, const QString &message)
 {
     if (!gRunning.load(std::memory_order_acquire))
         return;
@@ -842,28 +863,27 @@ void LogService::write(LogLevel level, const QString &source, const QString &mes
     auto &service = instance();
     if (!service.admits(level))
         return;
-    const auto sourceText  = source.toUtf8();
     const auto messageText = message.toUtf8();
-    service.writeImpl(level, std::string_view(sourceText.constData(), static_cast<std::size_t>(sourceText.size())),
+    service.writeImpl(level, sourceLabel(source),
                       std::string_view(messageText.constData(), static_cast<std::size_t>(messageText.size())));
 }
 
-void LogService::debug(std::string_view source, std::string_view message)
+void LogService::debug(LogSource source, std::string_view message)
 {
     write(LogLevel::Debug, source, message);
 }
 
-void LogService::info(std::string_view source, std::string_view message)
+void LogService::info(LogSource source, std::string_view message)
 {
     write(LogLevel::Info, source, message);
 }
 
-void LogService::warn(std::string_view source, std::string_view message)
+void LogService::warn(LogSource source, std::string_view message)
 {
     write(LogLevel::Warn, source, message);
 }
 
-void LogService::error(std::string_view source, std::string_view message)
+void LogService::error(LogSource source, std::string_view message)
 {
     write(LogLevel::Error, source, message);
 }

@@ -81,9 +81,6 @@ try
     imageOut.colorOrder   = "BGR";
     imageOut.sameGeometryAs = PortRef{PortStage::Inputs, 1};
     valid.outputs.push_back(imageOut);
-    // The high-water counters must sit above every live number; the schema requires them.
-    valid.setNextPortId(PortStage::Inputs, 3);
-    valid.setNextPortId(PortStage::Outputs, 3);
     validateToolDefinition(valid);
 
     {
@@ -95,8 +92,6 @@ try
         auto rectOutput  = makePort(3, "矩形", {Type::ROI});
         rectOutput.image = PortRef{PortStage::Outputs, 2};
         geometryTool.outputs.push_back(rectOutput);
-        geometryTool.setNextPortId(PortStage::Inputs, 4);
-        geometryTool.setNextPortId(PortStage::Outputs, 4);
         validateToolDefinition(geometryTool);
         geometryTool.inputs.back().image = PortRef{PortStage::Inputs, 2};
         rejects([&] { validateToolDefinition(geometryTool); });
@@ -112,10 +107,10 @@ try
         assert(status.type == TypeSpec{Type::Int});
         assert(isMissing(status.defaultValue));
     }
-    // 1. bad schemaVersion
+    // 1. empty version
     {
-        auto bad          = valid;
-        bad.schemaVersion = 4;
+        auto bad     = valid;
+        bad.version.clear();
         rejects([&] { validateToolDefinition(bad); });
     }
     // 2. empty tool name
@@ -150,10 +145,10 @@ try
         bad.inputs.push_back(makePort(1, "重复编号", {Type::Int}));
         rejects([&] { validateToolDefinition(bad); });
     }
-    // 7. an id at or above the high-water mark is a bookkeeping error, not a new port
+    // 7. a path editor renders strings only
     {
-        auto bad             = valid;
-        bad.nextInputPortId  = 2;
+        auto bad         = valid;
+        bad.inputs[1].editor = "path";
         rejects([&] { validateToolDefinition(bad); });
     }
     // 8. min > max
@@ -205,49 +200,47 @@ try
     {
         auto shared = valid;
         shared.initParams.push_back(makePort(2, "同名初始化", {Type::Int}));
-        shared.setNextPortId(PortStage::Init, 3);
         validateToolDefinition(shared);
     }
 
     const auto pathEditor = parseToolDefinitionJson(
         R"json({
-  "schema_version": 6,
   "name_en": "test.path",
   "name_zh": "Path",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 0, "inputs": 3, "outputs": 2},
-  "ports": {
-    "inputs": [
-      {
-        "id": 1,
-        "name_en": "mode",
-        "name_zh": "Mode",
-        "type": "string",
-        "default": "file",
-        "constraints": {
-          "options": [
-            "file",
-            "directory"
-          ]
-        }
+  "inputs": [
+    {
+      "id": 1,
+      "name_en": "mode",
+      "name_zh": "Mode",
+      "type": "string",
+      "default": "file",
+      "constraints": {
+        "options": [
+          "file",
+          "directory"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name_en": "path",
+      "name_zh": "Path",
+      "type": "string",
+      "ui": {
+        "editor": "path"
       },
-      {
-        "id": 2,
-        "name_en": "path",
-        "name_zh": "Path",
-        "type": "string",
-        "ui": {
-          "editor": "path"
-        },
-        "relations": {
-          "path_mode": {"stage": "inputs", "id": 1}
+      "relations": {
+        "path_mode": {
+          "stage": "inputs",
+          "id": 1
         }
       }
-    ]
-  }
+    }
+  ]
 })json");
     // The effective contract prepends the host-owned upstream_status input.
     assert(pathEditor.inputs[2].editor == "path");
@@ -274,7 +267,6 @@ try
         auto initialization       = pathEditor;
         initialization.initParams = std::move(initialization.inputs);
         // The numbers keep their meaning when a design moves a port into another stage.
-        initialization.setNextPortId(PortStage::Init, 3);
         initialization.inputs.clear();
         for (auto &port : initialization.initParams)
             if (port.pathModeFrom)

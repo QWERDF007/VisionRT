@@ -43,8 +43,9 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 
     NodeTimingText text;
     text.total = stageText(true, t.totalMs);
-    // Operator time is the tool's own work: the execute boundary for a native operator, the real
-    // function call for a Python one, where the bridge cost belongs to the neighbouring stages.
+    // The tool API call is the tool's own work: the execute boundary for a native tool, the real
+    // function or class-method call for a Python one, where the bridge cost belongs to the
+    // neighbouring stages. It is the middle line of the hover card, between the two aggregates.
     text.toolCall = stageText(opMeasured, op);
     // Hover-card phases. Bridging is counted once: the GIL wait and input mapping are preparation,
     // the output copy belongs to post-processing, and the function call is the operator time. Only
@@ -78,7 +79,7 @@ QVector<NodeTimingPhase> timingPhasesOf(const NodeTimingText &text)
     if (!text.preprocess.isEmpty())
         phases.push_back({QStringLiteral("预处理"), text.preprocess});
     if (!text.toolCall.isEmpty())
-        phases.push_back({QStringLiteral("算子时间"), text.toolCall});
+        phases.push_back({QStringLiteral("工具 API 耗时"), text.toolCall});
     if (!text.postprocess.isEmpty())
         phases.push_back({QStringLiteral("后处理"), text.postprocess});
     return phases;

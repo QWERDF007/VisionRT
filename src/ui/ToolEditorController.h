@@ -40,9 +40,6 @@ class ToolEditorController : public QObject
     Q_PROPERTY(QString currentToolSymbol READ currentToolSymbol WRITE setCurrentToolSymbol NOTIFY currentToolChanged)
     // Absolute path of the draft's script, for the open actions only. The card edits the relative one.
     Q_PROPERTY(QString currentToolScript READ currentToolScript NOTIFY currentToolChanged)
-    Q_PROPERTY(QString currentToolBinding READ currentToolBinding NOTIFY currentToolChanged)
-    Q_PROPERTY(bool isPython READ isPython NOTIFY currentToolChanged)
-    Q_PROPERTY(bool showsInit READ showsInit NOTIFY currentToolChanged)
     Q_PROPERTY(visionrt::ToolPortListModel *inputModel READ inputModel CONSTANT)
     Q_PROPERTY(visionrt::ToolPortListModel *outputModel READ outputModel CONSTANT)
     Q_PROPERTY(visionrt::ToolPortListModel *initModel READ initModel CONSTANT)
@@ -52,13 +49,10 @@ class ToolEditorController : public QObject
     Q_PROPERTY(bool editBuiltins READ editBuiltins WRITE setEditBuiltins NOTIFY editBuiltinsChanged)
     // Copying carries a script: a Python tool (own or installed) can be copied into the user root,
     // while a registered native factory has nothing to carry and stays read-only.
-    Q_PROPERTY(bool canClone READ canClone NOTIFY currentToolChanged)
     Q_PROPERTY(bool isDirty READ isDirty NOTIFY dirtyChanged)
-    Q_PROPERTY(bool canSave READ canSave NOTIFY dirtyChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusChanged)
     Q_PROPERTY(bool isStatusError READ isStatusError NOTIFY statusChanged)
     Q_PROPERTY(QVariantList supportedTypes READ supportedTypes CONSTANT)
-    Q_PROPERTY(QString impactSummary READ impactSummary NOTIFY impactSummaryChanged)
 
 public:
     explicit ToolEditorController(QObject *parent = nullptr);
@@ -84,10 +78,8 @@ public:
     QString      currentToolSymbol() const;
     void         setCurrentToolSymbol(const QString &value);
     QString      currentToolScript() const;
-    QString      currentToolBinding() const;
     bool         hasTool() const noexcept;
     bool         isPython() const noexcept;
-    bool         showsInit() const noexcept;
 
     ToolPortListModel *inputModel() noexcept
     {
@@ -108,15 +100,12 @@ public:
     // edit the user would no longer be able to see.
     bool canSetEditBuiltins(bool enabled) const;
     void setEditBuiltins(bool enabled);
-    bool canClone() const noexcept;
     bool isDirty() const noexcept;
-    bool canSave() const noexcept;
 
     QString statusMessage() const;
     bool    isStatusError() const noexcept;
 
     QVariantList supportedTypes() const;
-    QString      impactSummary() const;
 
     // Selecting a tool keeps every other draft in memory; nothing is written and no edit is lost.
     Q_INVOKABLE void selectKey(const QString &key);
@@ -131,20 +120,17 @@ public:
     Q_INVOKABLE bool saveAll();
     Q_INVOKABLE void cancelAll();
     Q_INVOKABLE QString previewJson() const;
-    Q_INVOKABLE void openCodeFile() const;
-    Q_INVOKABLE void openCodeDirectory() const;
     // How many nodes of the open project reference this tool. The delete prompt and the impact
     // preview read the same count, so "referenced" has one meaning in the editor.
     Q_INVOKABLE int toolUsage(const QString &toolId) const;
     Q_INVOKABLE QString folderName(const QString &path) const;
-    Q_INVOKABLE QString parentFolder(const QString &path) const;
+    QString              parentFolder(const QString &path) const;
 
 signals:
     void treeChanged();
     void currentToolChanged();
     void dirtyChanged();
     void statusChanged();
-    void impactSummaryChanged();
     void editBuiltinsChanged();
 
 private:
@@ -162,7 +148,6 @@ private:
 
     void        setStatus(const QString &message, bool isError = false);
     void        updateDirty();
-    void        updateImpactSummary();
     void        bindModels();
     Draft      *current();
     const Draft *current() const;
@@ -195,7 +180,6 @@ private:
     bool    dirty_ = false;
     QString statusMessage_;
     bool    statusError_ = false;
-    QString impactSummary_;
 };
 
 } // namespace visionrt

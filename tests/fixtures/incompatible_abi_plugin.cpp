@@ -6,7 +6,7 @@ struct LegacyModuleApi
 {
     std::uint32_t abi_major;
     std::uint32_t struct_bytes;
-    visionrt::IToolInstance *(VT_CALL *create)(const char *, const visionrt::ToolServices *,
+    visionrt::IToolInstance *(VT_CALL *create)(const char *,
                                                visionrt::ToolStatus *) noexcept;
     void(VT_CALL *destroy)(visionrt::IToolInstance *) noexcept;
 };

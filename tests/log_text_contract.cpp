@@ -43,6 +43,7 @@ void operator delete(void *ptr, std::size_t) noexcept
 using namespace log_test;
 using visionrt::boundedSingleLine;
 using visionrt::LogLevel;
+using visionrt::LogSource;
 using visionrt::LogModel;
 using visionrt::LogService;
 
@@ -178,7 +179,7 @@ try
 
     // 1. Every row is one finished line: time, level, thread, business source and text, with no
     //    logger name and no ANSI escape. The file receives the identical line.
-    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("单行文本"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("单行文本"));
     require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.endsWith(QStringLiteral("单行文本")); }); },
                             2000),
             "the text record did not reach the window");
@@ -197,24 +198,8 @@ try
     require(fileText(datedLog(directory.path())).contains(visibleLine),
             "the file does not contain the identical line the window displays");
 
-    // An empty source produces no empty brackets [] and no [日志] field.
-    LogService::write(LogLevel::Info, QStringLiteral(""), QStringLiteral("无来源直接消息"));
-    require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.endsWith(QStringLiteral("无来源直接消息")); }); },
-                            2000),
-            "the empty-source record did not reach the window");
-    QString emptyLine;
-    for (int r = 0; r < model.rowCount(); ++r)
-    {
-        const auto l = rowLine(model, r);
-        if (l.endsWith(QStringLiteral("无来源直接消息")))
-            emptyLine = l;
-    }
-    require(!emptyLine.isEmpty(), "empty source line not found");
-    require(!emptyLine.contains(QStringLiteral("[]")), "empty source produced empty brackets");
-    require(!emptyLine.contains(QStringLiteral("[日志]")), "empty source produced [日志] field");
-
     // 2. One record is one line: CR/LF and other line breaks are escaped, never written through.
-    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("第一行\r\n第二行\n第三行"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("第一行\r\n第二行\n第三行"));
     require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.contains(QStringLiteral("第一行")); }); },
                             2000),
             "the multi-line record did not reach the window");
@@ -229,7 +214,7 @@ try
 
     // 3. Long messages are capped identically for the window and the file.
     const auto oversized = QString(200, QLatin1Char('x'));
-    LogService::write(LogLevel::Info, QStringLiteral("测试"), oversized);
+    LogService::write(LogLevel::Info, LogSource::System, oversized);
     require(QTest::qWaitFor([&] { return anyRow(model, [](const QString &line) { return line.endsWith(QStringLiteral("…")); }); },
                             2000),
             "an oversized log message was not truncated");
@@ -245,7 +230,7 @@ try
                     }(),
                     directory.filePath(QStringLiteral("visionrt.log")));
     session.service().setViewActive(true);
-    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("中文中文"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("中文中文"));
     require(QTest::qWaitFor(
                 [&]
                 {
@@ -265,7 +250,7 @@ try
     session.restart(testConfig(), directory.filePath(QStringLiteral("visionrt.log")));
     session.service().setViewActive(true);
     const std::string badSequence = "\xE2\x0A\x78";
-    LogService::write(LogLevel::Info, std::string_view("测试"), std::string_view(badSequence));
+    LogService::write(LogLevel::Info, LogSource::System, std::string_view(badSequence));
     require(QTest::qWaitFor(
                 [&]
                 {

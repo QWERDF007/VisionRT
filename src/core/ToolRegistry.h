@@ -98,14 +98,13 @@ public:
     void setPythonImplementation(std::string toolId, ToolFactory factory, ToolStatus status = {});
 
     using HostBindingFactory
-        = std::function<std::unique_ptr<IToolInstance>(const ToolDefinition &, const PlatformToolServices &)>;
+        = std::function<std::unique_ptr<IToolInstance>(const ToolDefinition &, const HostToolContext &)>;
     void registerHostBinding(std::string bindingName, HostBindingFactory factory);
 
     const ToolDefinition            *find(std::string_view id) const;
     Availability                     availability(std::string_view id) const;
-    std::shared_ptr<PythonLoadState> pythonLoadState(std::string_view id) const;
-    std::unique_ptr<IToolInstance>   create(std::string_view id, const PlatformToolServices &services) const;
-    std::unique_ptr<IToolInstance>   create(const ToolDefinition &definition, const PlatformToolServices &services) const;
+    std::unique_ptr<IToolInstance>   create(std::string_view id, const HostToolContext &host = {}) const;
+    std::unique_ptr<IToolInstance>   create(const ToolDefinition &definition, const HostToolContext &host = {}) const;
 
     const std::vector<ToolDefinition> &definitions() const noexcept
     {

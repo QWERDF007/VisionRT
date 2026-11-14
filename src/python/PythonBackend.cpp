@@ -162,7 +162,7 @@ const PythonEnvironmentStatus &PythonBackend::environmentStatus() const noexcept
 
 bool PythonBackend::running() const noexcept
 {
-    return impl_ && impl_->handle != nullptr;
+    return impl_->handle != nullptr;
 }
 
 QString PythonBackend::unavailableReason() const
@@ -217,7 +217,7 @@ bool PythonBackend::loadModule(QString *error)
 
 void PythonBackend::releaseModule()
 {
-    if (!impl_ || !impl_->module)
+    if (!impl_->module)
         return;
     FreeLibrary(impl_->module);
     impl_->module = nullptr;

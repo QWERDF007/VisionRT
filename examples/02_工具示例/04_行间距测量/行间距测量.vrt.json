@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读取栅条",
           "pos": [
             0,
@@ -112,7 +113,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images"
+              "literal": "examples/02_工具示例/04_行间距测量/images"
             },
             {
               "port_id": 2,
@@ -143,8 +144,9 @@
         },
         {
           "node_seq": "2",
-          "tool_id": "visiontools.measure.row_spacing",
+          "tool_id": "MeasureRowSpacing",
           "tool_name_snapshot": "测量行间距",
+          "tool_version_snapshot": "1.0.0",
           "alias": "测量宽度与节距",
           "pos": [
             0,

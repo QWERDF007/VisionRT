@@ -70,7 +70,6 @@ try
         {2, "Value", {Type::Int}},
         {3, "Image", {Type::Image}}
     };
-    gate.nextOutputPortId = 4;
     write(root + "/tools-package/tools/custom/lifecycle.json",
           QByteArray::fromStdString(emitNormalizedToolJson(gate)));
     write(script, R"py(from pathlib import Path

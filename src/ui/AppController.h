@@ -3,6 +3,7 @@
 #include "ui/ToolEditorController.h"
 
 #include <QAbstractItemModel>
+#include <QColor>
 #include <QObject>
 #include <QPointF>
 #include <QString>
@@ -10,6 +11,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <memory>
+
+class QQuickTextDocument;
 
 namespace visionrt {
 class ImageViewport;
@@ -51,17 +54,17 @@ class AppController : public QObject
     // 日志窗口模型：服务未启动时为空，启动后按可见性批量追加
     Q_PROPERTY(QAbstractItemModel *logModel READ logModel CONSTANT)
     Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
+    // What the last open or tool refresh found changed under the project. Empty means there is
+    // nothing to announce; the window shows this once and leaves it until the user closes it.
+    Q_PROPERTY(QString toolUpdateSummary READ toolUpdateSummary NOTIFY toolUpdateSummaryChanged)
     Q_PROPERTY(QString timingText READ timingText NOTIFY timingChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY projectChanged)
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY pasteChanged)
     Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
     Q_PROPERTY(QString aboutText READ aboutText NOTIFY aboutTextChanged)
     Q_PROPERTY(visionrt::ToolEditorController *toolEditor READ toolEditor CONSTANT)
-    Q_PROPERTY(QString nodeModel READ nodeModel NOTIFY parametersChanged)
     Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
-    Q_PROPERTY(bool executionGuardActive READ executionGuardActive NOTIFY parametersChanged)
     Q_PROPERTY(QString conditionMode READ conditionMode NOTIFY parametersChanged)
-    Q_PROPERTY(QString selectTypeText READ selectTypeText NOTIFY parametersChanged)
     Q_PROPERTY(bool easyTouchEnabled READ easyTouchEnabled WRITE setEasyTouchEnabled NOTIFY assistChanged)
     // The tool editor lists the declarations shipped with the installation only when this is on.
     Q_PROPERTY(bool editBuiltins READ editBuiltins WRITE setEditBuiltins NOTIFY editBuiltinsChanged)
@@ -116,6 +119,13 @@ public:
     QAbstractItemModel *toolModel() const;
     QAbstractItemModel *outputModel() const;
     QAbstractItemModel *logModel();
+    QString             toolUpdateSummary() const;
+    // The window has shown the notice; a later refresh starts from an empty summary again.
+    Q_INVOKABLE void    dismissToolUpdate();
+    // Copies the whole window history as plain text; the selection and the scroll position stay.
+    Q_INVOKABLE void copyAllLogs();
+    // Installs the window's level colouring on the text document the log view owns.
+    Q_INVOKABLE void attachLogHighlighter(QQuickTextDocument *document, const QColor &warning, const QColor &error);
     QVariantList        searchResults() const;
     QString             timingText() const;
     bool                dirty() const;
@@ -156,7 +166,6 @@ public:
     Q_INVOKABLE void         copyFlow(const QString &id);
     Q_INVOKABLE void         setFlowSelected(const QString &id, bool selected);
     Q_INVOKABLE bool         setParameter(int port, bool initialization, const QString &text, bool jsonInput = false);
-    Q_INVOKABLE bool         setRectParameter(int port, bool initialization, double x, double y, double width, double height, double angle = 0.0);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QString &path);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QUrl &url);
     Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction,
@@ -189,7 +198,6 @@ public:
     // Reuses requestOpen, so the recent list never bypasses the unsaved decision, drain or reset.
     Q_INVOKABLE void         openRecentProject(const QString &path);
     Q_INVOKABLE void         requestClose();
-    Q_INVOKABLE bool         isCloseReady() const;
     Q_INVOKABLE bool         isClosing() const;
     Q_INVOKABLE void         resolveUnsaved(const QString &decision, const QString &savePath = {});
     // The log window reports whether it can actually show records; hidden windows stay passive.
@@ -221,16 +229,14 @@ public:
                                              int rank);
     // Chinese description of a type row, reusing the parameter panel's display mapping.
     Q_INVOKABLE QString      typeDescription(const QString &type, const QString &dtype, int rank) const;
-    QString                  nodeModel() const;
     QAbstractListModel      *nodeListModel() const;
     // Single-row lookups by id: canvas helpers use these instead of scanning a list of maps.
     Q_INVOKABLE QVariantMap  nodeRecord(const QString &id) const;
     Q_INVOKABLE QPointF      nodePosition(const QString &id) const;
     Q_INVOKABLE QVariantList nodePositions() const;
     QString                  executionGuardText() const;
-    bool                     executionGuardActive() const;
+    QString                  nodeModel() const;
     QString                  conditionMode() const;
-    QString                  selectTypeText() const;
     bool                     easyTouchEnabled() const;
     Q_INVOKABLE void         setEasyTouchEnabled(bool enabled);
     bool                     editBuiltins() const;
@@ -288,6 +294,7 @@ signals:
     void nodeLocated(const QString &node);
     void outputTextReady(const QString &text);
     void catalogChanged();
+    void toolUpdateSummaryChanged();
     void aboutTextChanged();
     void pasteChanged();
     void assistChanged();

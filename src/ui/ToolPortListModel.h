@@ -64,7 +64,7 @@ public:
     // Number of fixed rows for the active stage
     Q_INVOKABLE int fixedRowCount() const noexcept;
 
-    // Adds a new business port, assigning nextPortId and bumping high-water counter
+    // Adds a new business port at the lowest number this direction still leaves free.
     Q_INVOKABLE bool addPort(const QString &nameZh, const QString &typeToken = QStringLiteral("int"), const QString &defaultValue = {});
 
     // Removes a business port; rejects fixed rows. Does not recycle port IDs.
@@ -92,7 +92,6 @@ public:
     Q_INVOKABLE QVariantList editorOptions(int row) const;
 
     // Finds row by PortId (-1 if not found)
-    Q_INVOKABLE int rowForPortId(quint32 portId) const;
 
     // Returns all properties for row as QVariantMap
     Q_INVOKABLE QVariantMap portAt(int row) const;

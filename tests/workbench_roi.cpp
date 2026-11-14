@@ -92,7 +92,6 @@ void roiParameterContract()
           "0: 0, 1: ''}, 'detail': ''}\n");
     write("tools/custom/roi/source.json",
           R"json({
-  "schema_version": 6,
   "name_en": "test.roi.source",
   "name_zh": "ROI图像源",
   "version": "1.0.0",
@@ -102,40 +101,33 @@ void roiParameterContract()
     "file": "source.py",
     "symbol": "run"
   },
-  "ports": {
-    "outputs": [
-      {
-        "name_zh": "图像",
-        "type": "image",
-        "display": {
-          "color_order": "BGR",
-          "visible": true
-        },
-        "id": 2
+  "outputs": [
+    {
+      "name_zh": "图像",
+      "type": "image",
+      "display": {
+        "color_order": "BGR",
+        "visible": true
       },
-      {
-        "name_zh": "源区域",
-        "type": "roi",
-        "id": 3
+      "id": 2
+    },
+    {
+      "name_zh": "源区域",
+      "type": "roi",
+      "id": 3
+    },
+    {
+      "name_zh": "源矩形",
+      "type": "roi",
+      "relations": {
+        "image": {
+          "stage": "outputs",
+          "id": 2
+        }
       },
-      {
-        "name_zh": "源矩形",
-        "type": "roi",
-        "relations": {
-          "image": {
-            "stage": "outputs",
-            "id": 2
-          }
-        },
-        "id": 4
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 5
-  }
+      "id": 4
+    }
+  ]
 })json");
     write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
@@ -149,7 +141,6 @@ void roiParameterContract()
           "0: 0, 1: ''}, 'detail': ''}\n");
     write("tools/custom/roi/editor.json",
           R"json({
-  "schema_version": 6,
   "name_en": "test.roi.editor",
   "name_zh": "ROI编辑",
   "version": "1.0.0",
@@ -159,170 +150,163 @@ void roiParameterContract()
     "file": "editor.py",
     "symbol": "run"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_zh": "图像",
-        "type": "image",
-        "id": 1
+  "inputs": [
+    {
+      "name_zh": "图像",
+      "type": "image",
+      "id": 1
+    },
+    {
+      "name_zh": "区域",
+      "type": "roi",
+      "default": [
+        []
+      ],
+      "relations": {
+        "image": {
+          "stage": "inputs",
+          "id": 1
+        }
       },
-      {
-        "name_zh": "区域",
-        "type": "roi",
-        "default": [
-          []
-        ],
-        "relations": {
-          "image": {
-            "stage": "inputs",
-            "id": 1
-          }
-        },
-        "id": 2
-      },
-      {
-        "name_zh": "矩形",
-        "type": "roi",
-        "default": [
+      "id": 2
+    },
+    {
+      "name_zh": "矩形",
+      "type": "roi",
+      "default": [
+        [
           [
-            [
-              2,
-              1.234567881,
-              2.5,
-              3.75,
-              4.5,
-              17.5
-            ]
+            2,
+            1.234567881,
+            2.5,
+            3.75,
+            4.5,
+            17.5
           ]
-        ],
-        "ui": {
-          "editor": "rect"
-        },
-        "relations": {
-          "image": {
-            "stage": "inputs",
-            "id": 1
-          }
-        },
-        "id": 3
+        ]
+      ],
+      "ui": {
+        "editor": "rect"
       },
-      {
-        "name_zh": "参考区域",
-        "type": "roi",
-        "default": [
+      "relations": {
+        "image": {
+          "stage": "inputs",
+          "id": 1
+        }
+      },
+      "id": 3
+    },
+    {
+      "name_zh": "参考区域",
+      "type": "roi",
+      "default": [
+        [
           [
-            [
-              2,
-              80,
-              50,
-              20,
-              20,
-              0
-            ]
+            2,
+            80,
+            50,
+            20,
+            20,
+            0
           ]
-        ],
-        "ui": {
-          "editor": "rect"
-        },
-        "relations": {
-          "image": {
-            "stage": "inputs",
-            "id": 1
-          }
-        },
-        "id": 4
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "区域数量",
-        "type": "int",
-        "id": 2
+        ]
+      ],
+      "ui": {
+        "editor": "rect"
       },
-      {
-        "name_zh": "图像",
-        "type": "image",
-        "relations": {
-          "same_geometry_as": {
-            "stage": "inputs",
-            "id": 1
-          }
-        },
-        "display": {
-          "color_order": "BGR",
-          "visible": true
-        },
-        "id": 3
+      "relations": {
+        "image": {
+          "stage": "inputs",
+          "id": 1
+        }
       },
-      {
-        "name_zh": "结果区域",
-        "type": "roi",
-        "relations": {
-          "image": {
-            "stage": "outputs",
-            "id": 3
-          }
-        },
-        "id": 4
+      "id": 4
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "区域数量",
+      "type": "int",
+      "id": 2
+    },
+    {
+      "name_zh": "图像",
+      "type": "image",
+      "relations": {
+        "same_geometry_as": {
+          "stage": "inputs",
+          "id": 1
+        }
       },
-      {
-        "name_zh": "其他坐标图像",
-        "type": "image",
-        "display": {
-          "visible": true
-        },
-        "id": 5
+      "display": {
+        "color_order": "BGR",
+        "visible": true
       },
-      {
-        "name_zh": "空图像输出",
-        "type": "image",
-        "display": {
-          "visible": true
-        },
-        "id": 6
+      "id": 3
+    },
+    {
+      "name_zh": "结果区域",
+      "type": "roi",
+      "relations": {
+        "image": {
+          "stage": "outputs",
+          "id": 3
+        }
       },
-      {
-        "name_zh": "裁剪坐标图像",
-        "type": "image",
-        "display": {
-          "visible": true
-        },
-        "id": 7
+      "id": 4
+    },
+    {
+      "name_zh": "其他坐标图像",
+      "type": "image",
+      "display": {
+        "visible": true
       },
-      {
-        "name_zh": "裁剪坐标区域",
-        "type": "roi",
-        "relations": {
-          "image": {
-            "stage": "outputs",
-            "id": 7
-          }
-        },
-        "id": 8
+      "id": 5
+    },
+    {
+      "name_zh": "空图像输出",
+      "type": "image",
+      "display": {
+        "visible": true
       },
-      {
-        "name_zh": "原点坐标",
-        "type": "vec_vec_float",
-        "id": 9
+      "id": 6
+    },
+    {
+      "name_zh": "裁剪坐标图像",
+      "type": "image",
+      "display": {
+        "visible": true
       },
-      {
-        "name_zh": "其他坐标区域",
-        "type": "roi",
-        "relations": {
-          "image": {
-            "stage": "outputs",
-            "id": 5
-          }
-        },
-        "id": 10
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 5,
-    "outputs": 11
-  }
+      "id": 7
+    },
+    {
+      "name_zh": "裁剪坐标区域",
+      "type": "roi",
+      "relations": {
+        "image": {
+          "stage": "outputs",
+          "id": 7
+        }
+      },
+      "id": 8
+    },
+    {
+      "name_zh": "原点坐标",
+      "type": "vec_vec_float",
+      "id": 9
+    },
+    {
+      "name_zh": "其他坐标区域",
+      "type": "roi",
+      "relations": {
+        "image": {
+          "stage": "outputs",
+          "id": 5
+        }
+      },
+      "id": 10
+    }
+  ]
 })json");
 
     AppController app(1, directory.path());

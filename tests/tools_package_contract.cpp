@@ -37,11 +37,12 @@ void write(const QString &path, const QByteArray &bytes)
 }
 
 const QByteArray declaration = R"json({
-    "schema_version": 6,
-    "name_en": "test.package",
-    "name_zh": "包工具",
-    "version": "1",
-    "implementation": {"kind": "cpp"}
+  "name_en": "test.package",
+  "name_zh": "包工具",
+  "version": "1",
+  "implementation": {
+    "kind": "cpp"
+  }
 })json";
 
 QJsonObject index()

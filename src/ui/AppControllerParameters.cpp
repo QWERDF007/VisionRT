@@ -57,14 +57,6 @@ bool AppController::setParameter(int port, bool initialization, const QString &t
     });
 }
 
-bool AppController::setRectParameter(int port, bool initialization, double x, double y, double width,
-                                    double height, double angle)
-{
-    return impl_->command(
-        [&] { return impl_->applyParameter(static_cast<PortId>(port), initialization,
-                                       DataRef<ROI>(ROI{{makeRectangle(x, y, width, height, angle)}})); });
-}
-
 bool AppController::setParameterPath(int port, bool initialization, const QString &path)
 {
     return impl_->command([&]

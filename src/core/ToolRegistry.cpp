@@ -187,12 +187,6 @@ void ToolRegistry::setPythonImplementation(std::string toolId, ToolFactory facto
                              PythonImplementation{std::move(factory), std::move(resolve), std::move(loadState)});
 }
 
-std::shared_ptr<PythonLoadState> ToolRegistry::pythonLoadState(std::string_view id) const
-{
-    const auto it = python_.find(id);
-    return it != python_.end() ? it->second.loadState : nullptr;
-}
-
 void ToolRegistry::registerHostBinding(std::string bindingName, HostBindingFactory factory)
 {
     if (bindingName.empty() || !factory)
@@ -256,16 +250,16 @@ Availability ToolRegistry::availability(std::string_view id) const
     };
 }
 
-std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const PlatformToolServices &services) const
+std::unique_ptr<IToolInstance> ToolRegistry::create(std::string_view id, const HostToolContext &host) const
 {
     const auto *definition = find(id);
     if (!definition)
         throw RegistryError(ToolAvailability::DefinitionMissing, availability(id).status);
-    return create(*definition, services);
+    return create(*definition, host);
 }
 
-std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &definition,
-                                                    const PlatformToolServices &services) const
+std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition &definition,
+                                                    const HostToolContext &host) const
 {
     const std::string_view id    = definition.nameEn;
     const auto             state = availability(id);
@@ -279,7 +273,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
         const auto execIt = hostBindingExecutors_.find(definition.hostBinding);
         if (execIt != hostBindingExecutors_.end() && execIt->second)
         {
-            auto instance = execIt->second(definition, services);
+            auto instance = execIt->second(definition, host);
             if (!instance)
                 throw RegistryError(ToolAvailability::ImplementationUnavailable,
                                     "宿主绑定工厂返回空实例：" + std::string(id));
@@ -292,14 +286,14 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
         const auto it = cpp_.find(definition.nameEn);
         if (it != cpp_.end() && it->second.factory)
         {
-            auto instance = it->second.factory(services);
+            auto instance = it->second.factory();
             if (!instance)
                 throw RegistryError(ToolAvailability::ImplementationUnavailable,
                                     "工具工厂返回空实例：" + std::string(id));
             return instance;
         }
         if (pluginLoader_)
-            return pluginLoader_->createAdapter(definition.nameEn, services);
+            return pluginLoader_->createAdapter(definition.nameEn);
     }
     const auto it = python_.find(id);
     if (it == python_.end() || !it->second.factory)
@@ -309,8 +303,7 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition       &
     {
         // A node contract adds ports the packaged declaration cannot state, so the instance is
         // built from the contract being created rather than from the registered declaration.
-        auto instance = it->second.resolve ? it->second.resolve(definition)(services)
-                                           : it->second.factory(services);
+        auto instance = it->second.resolve ? it->second.resolve(definition)() : it->second.factory();
         if (!instance)
             throw RegistryError(ToolAvailability::ImplementationUnavailable,
                                 makeStatus(ErrorCode::ResourceUnavailable, "工具工厂返回空实例：" + std::string(id)));

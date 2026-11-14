@@ -94,7 +94,7 @@ private:
 void registerReceiveTools(ToolRegistry &registry)
 {
     registry.registerHostBinding("visionrt.receiver",
-                                 [](const ToolDefinition &definition, const PlatformToolServices &services)
+                                 [](const ToolDefinition &definition, const HostToolContext &host)
                                  {
                                      const auto output
                                          = std::find_if(definition.outputs.begin(), definition.outputs.end(),
@@ -103,7 +103,7 @@ void registerReceiveTools(ToolRegistry &registry)
                                      {
                                          throw ContractError("接收工具缺少 value 输出端口：" + definition.nameEn);
                                      }
-                                     return std::make_unique<ReceiveTool>(output->type, services.results);
+                                     return std::make_unique<ReceiveTool>(output->type, host.results);
                                  });
 }
 

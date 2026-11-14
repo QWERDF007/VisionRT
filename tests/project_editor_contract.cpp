@@ -492,49 +492,54 @@ void bindingEffectiveSourceDraftsAndOccupiedContract()
 void receiverOutputFollowsItsSource()
 {
     const auto    receiver = parseToolDefinitionJson(R"json({
-  "schema_version": 6,
-  "name_en": "visionrt.flow.receive",
+  "name_en": "ReceiveFlowResult",
   "name_zh": "跨流程接收",
   "version": "1.0.0",
   "implementation": {
     "kind": "host",
     "binding": "visionrt.receiver"
   },
-  "next_port_id": {"init": 3, "inputs": 1, "outputs": 3},
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_en": "source_flow_id",
-        "name_zh": "源流程",
-        "type": "string"
-      },
-      {
-        "id": 1,
-        "name_en": "source_node_seq",
-        "name_zh": "源节点",
-        "type": "string"
-      },
-      {
-        "id": 2,
-        "name_en": "source_port_id",
-        "name_zh": "源端口",
-        "type": "int"
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_en": "value",
-        "name_zh": "数据",
-        "type_from": {
-          "flow": {"stage": "init", "id": 0},
-          "node": {"stage": "init", "id": 1},
-          "port": {"stage": "init", "id": 2}
+  "init_params": [
+    {
+      "id": 0,
+      "name_en": "source_flow_id",
+      "name_zh": "源流程",
+      "type": "string"
+    },
+    {
+      "id": 1,
+      "name_en": "source_node_seq",
+      "name_zh": "源节点",
+      "type": "string"
+    },
+    {
+      "id": 2,
+      "name_en": "source_port_id",
+      "name_zh": "源端口",
+      "type": "int"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "数据",
+      "type_from": {
+        "flow": {
+          "stage": "init",
+          "id": 0
+        },
+        "node": {
+          "stage": "init",
+          "id": 1
+        },
+        "port": {
+          "stage": "init",
+          "id": 2
         }
       }
-    ]
-  }
+    }
+  ]
 })json",
                                                      {}, {ToolOrigin::Builtin, {}});
     ProjectEditor editor;

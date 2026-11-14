@@ -15,6 +15,7 @@
 using namespace log_test;
 using visionrt::boundedSingleLine;
 using visionrt::LogLevel;
+using visionrt::LogSource;
 using visionrt::LogModel;
 using visionrt::LogRecord;
 using visionrt::LogService;
@@ -35,7 +36,7 @@ try
 
     // 1. Hidden window: records stay in the bounded mailbox and nothing reaches the model.
     for (int index = 0; index < 12; ++index)
-        LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("隐藏批次 %1").arg(index));
+        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("隐藏批次 %1").arg(index));
     QTest::qWait(120);
     require(model.rowCount() == 0, "a hidden log window received records");
 
@@ -58,7 +59,7 @@ try
     // 2. Overflow uses overrun_oldest and reports one summary for the discarded records.
     session.service().setViewActive(false);
     for (int index = 0; index < static_cast<int>(session.config().uiCapacity) * 3; ++index)
-        LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("溢出 %1").arg(index));
+        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("溢出 %1").arg(index));
     QTest::qWait(100);
     session.service().setViewActive(true);
     require(QTest::qWaitFor(
@@ -69,7 +70,7 @@ try
     // 3. Error bursts: the first occurrence is queued immediately with its own level, and only the
     //    repeats are counted until the next flush.
     for (int index = 0; index < 5; ++index)
-        LogService::write(LogLevel::Error, QStringLiteral("测试工具"), QStringLiteral("同一个错误"));
+        LogService::write(LogLevel::Error, LogSource::Tool, QStringLiteral("同一个错误"));
     require(QTest::qWaitFor(
                 [&]
                 {
@@ -86,7 +87,7 @@ try
             "the repeats of an error burst were not summarised with their count");
 
     // 3b. Critical never waits for a timer and is never reported under another level.
-    LogService::write(LogLevel::Critical, QStringLiteral("测试工具"), QStringLiteral("致命错误"));
+    LogService::write(LogLevel::Critical, LogSource::Tool, QStringLiteral("致命错误"));
     require(QTest::qWaitFor(
                 [&] { return anyRow(model, [](const QString &line) { return line.endsWith(QStringLiteral("致命错误")); }); }, 500),
             "a critical line waited for the batch timer");
@@ -107,7 +108,7 @@ try
 
     // 5. The window trims its own history and the file grows by day instead of rotating by size.
     for (int index = 0; index < 80; ++index)
-        LogService::write(LogLevel::Info, QStringLiteral("文件"),
+        LogService::write(LogLevel::Info, LogSource::System,
                           QStringLiteral("每日文件测试行 %1 0123456789").arg(index));
     session.service().flush();
     QTest::qWait(200);
@@ -121,7 +122,7 @@ try
     session.service().setViewActive(false);
     session.stop();
     session.start(logPath);
-    LogService::write(LogLevel::Info, QStringLiteral("文件"), QStringLiteral("同日重启追加标记"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("同日重启追加标记"));
     session.service().flush();
     QTest::qWait(200);
     const auto restarted = fileText(datedLog(directory.path()));
@@ -134,7 +135,7 @@ try
     //    returns the summary alone instead of the summary plus a record.
     session.service().setViewActive(false);
     for (int index = 0; index < static_cast<int>(session.config().uiCapacity) * 2; ++index)
-        LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("预算 %1").arg(index));
+        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("预算 %1").arg(index));
     QTest::qWait(100);
     const auto single = session.service().take(1);
     require(single.size() == 1, "the drop summary ignored the requested record budget");
@@ -167,13 +168,13 @@ try
         session.start(critDir.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
         for (int i = 0; i < 5; ++i)
-            LogService::write(LogLevel::Critical, std::string_view("critical-probe"), std::string_view("panic payload"));
+            LogService::write(LogLevel::Critical, LogSource::Tool, std::string_view("panic payload"));
         int critCount = 0;
         require(QTest::qWaitFor(
                     [&]
                     {
                         for (const auto &record : session.service().take(64))
-                            if (record.line.contains(QStringLiteral("critical-probe"))
+                            if (record.line.contains(QStringLiteral("[工具]"))
                                 && record.line.contains(QStringLiteral("panic payload")))
                                 ++critCount;
                         return critCount == 5;
@@ -184,7 +185,7 @@ try
         session.stop();
         int critFileCount = 0;
         for (const auto &line : fileText(datedLog(critDir.path())).split('\n'))
-            if (line.contains("critical-probe") && line.contains("panic payload"))
+            if (line.contains(QStringLiteral("[工具]")) && line.contains("panic payload"))
                 ++critFileCount;
         require(critFileCount == 5, "critical records missing from the daily file");
 
@@ -200,10 +201,10 @@ try
         cap16.maxMessageBytes           = 16;
         session.restart(cap16, esc16Dir.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
-        const std::string escA16 = std::string(8, '\n') + "AAAA";
-        const std::string escB16 = std::string(8, '\n') + "BBBB";
-        session.service().error("esc16-collision-probe", escA16);
-        session.service().error("esc16-collision-probe", escB16);
+        const std::string escA16 = "P16A" + std::string(3, '\n') + "AAAA";
+        const std::string escB16 = "P16B" + std::string(3, '\n') + "BBBB";
+        session.service().error(LogSource::Tool, escA16);
+        session.service().error(LogSource::Tool, escB16);
         session.service().flush();
         visionrt::flushPendingForTesting();
         int esc16Count = 0;
@@ -212,7 +213,7 @@ try
                     {
                         for (const auto &record : session.service().take(64))
                         {
-                            if (record.line.contains(QStringLiteral("esc16-collision-probe")))
+                            if (record.line.contains(QStringLiteral("P16A")) || record.line.contains(QStringLiteral("P16B")))
                             {
                                 require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
                                         "cap 16 truncated escaped messages collided into a repeat summary");
@@ -227,7 +228,7 @@ try
         session.stop();
         int esc16FileCount = 0;
         for (const auto &line : fileText(datedLog(esc16Dir.path())).split('\n'))
-            if (line.contains("esc16-collision-probe"))
+            if (line.contains("P16A") || line.contains("P16B"))
                 ++esc16FileCount;
         require(esc16FileCount == 2, "cap 16 escaped messages must produce 2 distinct lines on disk");
 
@@ -237,14 +238,14 @@ try
         cap64.maxMessageBytes = 64;
         session.restart(cap64, cap64Dir.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
-        const std::string msgA = std::string(61, 'M') + "111111111";
-        const std::string msgB = std::string(61, 'M') + "222222222";
-        session.service().error("msg-collision-probe", msgA);
-        session.service().error("msg-collision-probe", msgB);
-        const std::string escA64 = std::string(30, '\n') + "111111111";
-        const std::string escB64 = std::string(30, '\n') + "222222222";
-        session.service().error("esc64-collision-probe", escA64);
-        session.service().error("esc64-collision-probe", escB64);
+        const std::string msgA = "MSGA-" + std::string(56, 'M') + "111111111";
+        const std::string msgB = "MSGB-" + std::string(56, 'M') + "222222222";
+        session.service().error(LogSource::Tool, msgA);
+        session.service().error(LogSource::Tool, msgB);
+        const std::string escA64 = "ESCA-" + std::string(25, '\n') + "111111111";
+        const std::string escB64 = "ESCB-" + std::string(25, '\n') + "222222222";
+        session.service().error(LogSource::Tool, escA64);
+        session.service().error(LogSource::Tool, escB64);
         session.service().flush();
         visionrt::flushPendingForTesting();
         int msgCollisionCount = 0;
@@ -254,13 +255,13 @@ try
                     {
                         for (const auto &record : session.service().take(64))
                         {
-                            if (record.line.contains(QStringLiteral("msg-collision-probe")))
+                            if (record.line.contains(QStringLiteral("MSGA-")) || record.line.contains(QStringLiteral("MSGB-")))
                             {
                                 require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
                                         "truncated long messages collided into a repeat summary");
                                 ++msgCollisionCount;
                             }
-                            if (record.line.contains(QStringLiteral("esc64-collision-probe")))
+                            if (record.line.contains(QStringLiteral("ESCA-")) || record.line.contains(QStringLiteral("ESCB-")))
                             {
                                 require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
                                         "truncated escaped messages at 64 budget collided into a repeat summary");
@@ -277,41 +278,13 @@ try
         int cap64EscFileCount   = 0;
         for (const auto &line : fileText(datedLog(cap64Dir.path())).split('\n'))
         {
-            if (line.contains("msg-collision-probe"))
+            if (line.contains("MSGA-") || line.contains("MSGB-"))
                 ++cap64AsciiFileCount;
-            if (line.contains("esc64-collision-probe"))
+            if (line.contains("ESCA-") || line.contains("ESCB-"))
                 ++cap64EscFileCount;
         }
         require(cap64AsciiFileCount == 2, "64-byte ASCII collision messages must produce 2 lines on disk");
         require(cap64EscFileCount == 2, "64-byte escaped collision messages must produce 2 lines on disk");
-
-        // 9d. Truncated source anti-collision: two long sources sharing a prefix but differing in
-        //     the tail stay distinct.
-        session.restart(testConfig(), directory.filePath(QStringLiteral("visionrt.log")));
-        session.service().setViewActive(false);
-        const std::string longA = std::string(130, 'X') + "AAA";
-        const std::string longB = std::string(130, 'X') + "BBB";
-        session.service().error(longA, "collision payload");
-        session.service().error(longB, "collision payload");
-        session.service().flush();
-        visionrt::flushPendingForTesting();
-        int collisionCount = 0;
-        require(QTest::qWaitFor(
-                    [&]
-                    {
-                        for (const auto &record : session.service().take(64))
-                        {
-                            if (record.line.contains(QStringLiteral("collision payload")))
-                            {
-                                require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
-                                        "truncated long sources collided into a repeat summary");
-                                ++collisionCount;
-                            }
-                        }
-                        return collisionCount == 2;
-                    },
-                    2000),
-                "truncated long sources failed to deliver both distinct records");
 
         // 9e. Budget threshold 21 versus 22: only the latter reaches the coalescing minimum.
         session.stop();
@@ -320,14 +293,14 @@ try
         session.restart(cap21, directory.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
         for (int i = 0; i < 3; ++i)
-            session.service().error("cap21-probe", "threshold payload");
+            session.service().error(LogSource::Tool, "threshold payload");
         session.service().flush();
         int cap21Count = 0;
         require(QTest::qWaitFor(
                     [&]
                     {
                         for (const auto &record : session.service().take(64))
-                            if (record.line.contains(QStringLiteral("cap21-probe")))
+                            if (record.line.contains(QStringLiteral("threshold payload")))
                                 ++cap21Count;
                         return cap21Count == 3;
                     },
@@ -341,7 +314,7 @@ try
         session.restart(cap22, cap22Dir.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
         for (int i = 0; i < 3; ++i)
-            session.service().error("cap22-probe", "1234567890");
+            session.service().error(LogSource::Tool, "1234567890");
         session.service().flush();
         visionrt::flushPendingForTesting();
         int cap22Initial = 0;
@@ -351,14 +324,14 @@ try
                     {
                         for (const auto &record : session.service().take(64))
                         {
-                            if (record.line.contains(QStringLiteral("cap22-probe")))
-                            {
-                                if (record.line.contains(QStringLiteral("（重复 2 次）"))
-                                    || record.line.contains(QStringLiteral("×2")))
-                                    ++cap22Summary;
-                                else
-                                    ++cap22Initial;
-                            }
+                            // The summary is identified by its repeat marker: with a 22-byte budget the
+                            // payload itself is shortened to make room for the count.
+                            const bool summary = record.line.contains(QStringLiteral("（重复 2 次）"))
+                                              || record.line.contains(QStringLiteral("×2"));
+                            if (summary)
+                                ++cap22Summary;
+                            else if (record.line.contains(QStringLiteral("1234567890")))
+                                ++cap22Initial;
                         }
                         return cap22Initial == 1 && cap22Summary == 1;
                     },
@@ -368,7 +341,8 @@ try
         session.stop();
         int cap22FileLineCount = 0;
         for (const auto &line : fileText(datedLog(cap22Dir.path())).split('\n'))
-            if (line.contains("cap22-probe"))
+            if (line.contains("1234567890") || line.contains(QStringLiteral("（重复 2 次）"))
+                || line.contains(QStringLiteral("×2")))
                 ++cap22FileLineCount;
         require(cap22FileLineCount == 2, "a 22-byte budget must write exactly 2 lines (initial + summary)");
 
@@ -377,7 +351,7 @@ try
         QTemporaryDir negativeDir;
         session.restart(testConfig(), negativeDir.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
-        session.service().error("single-refresh-probe", "single event payload");
+        session.service().error(LogSource::Tool, "single event payload");
         session.service().flush();
         int probeCount = 0;
         require(QTest::qWaitFor(
@@ -385,7 +359,7 @@ try
                     {
                         for (const auto &record : session.service().take(64))
                         {
-                            if (record.line.contains(QStringLiteral("single-refresh-probe")))
+                            if (record.line.contains(QStringLiteral("single event payload")))
                             {
                                 ++probeCount;
                                 require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
@@ -400,7 +374,7 @@ try
         QTest::qWait(600);
         for (const auto &record : session.service().take(64))
         {
-            if (record.line.contains(QStringLiteral("single-refresh-probe")))
+            if (record.line.contains(QStringLiteral("single event payload")))
             {
                 ++probeCount;
                 require(!record.line.contains(QStringLiteral("重复")) && !record.line.contains(QStringLiteral("×")),
@@ -412,7 +386,7 @@ try
         session.stop();
         int negativeFileLines = 0;
         for (const auto &line : fileText(datedLog(negativeDir.path())).split('\n'))
-            if (line.contains("single-refresh-probe"))
+            if (line.contains("single event payload"))
                 ++negativeFileLines;
         require(negativeFileLines == 1, "a single error must write exactly 1 line");
 
@@ -421,7 +395,7 @@ try
         session.restart(testConfig(), repeatDir.filePath(QStringLiteral("visionrt.log")));
         session.service().setViewActive(false);
         for (int i = 0; i < 5; ++i)
-            session.service().error("rep-probe", "repeat event payload");
+            session.service().error(LogSource::Tool, "repeat event payload");
         session.service().flush();
         visionrt::flushPendingForTesting();
         int repeatInitial = 0;
@@ -431,7 +405,7 @@ try
                     {
                         for (const auto &record : session.service().take(64))
                         {
-                            if (record.line.contains(QStringLiteral("rep-probe")))
+                            if (record.line.contains(QStringLiteral("repeat event payload")))
                             {
                                 if (record.line.contains(QStringLiteral("（重复 4 次）")) || record.line.contains(QStringLiteral("×4")))
                                     ++repeatSummary;
@@ -447,7 +421,7 @@ try
         session.stop();
         int repeatFileLines = 0;
         for (const auto &line : fileText(datedLog(repeatDir.path())).split('\n'))
-            if (line.contains("rep-probe"))
+            if (line.contains("repeat event payload"))
                 ++repeatFileLines;
         require(repeatFileLines == 2, "5 identical errors must write exactly 2 lines (initial + summary)");
     }

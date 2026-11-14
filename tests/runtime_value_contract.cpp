@@ -117,11 +117,11 @@ void nativeGraphSharing(std::size_t batchSize)
     registry.addDefinition(source);
     registry.addDefinition(mutator);
     registry.registerCpp(
-        source, [values](const ToolServices &)
+        source, [values]()
         { return std::make_unique<Function>([values](const Values &) { return toolResult(values, {}); }); });
     registry.registerCpp(
         mutator,
-        [&](const ToolServices &)
+        [&]()
         {
             return std::make_unique<Function>(
                 [&](const Values &inputs)
@@ -200,7 +200,7 @@ void explicitToolStoragePolicies()
     ToolRegistry registry;
     registry.addDefinition(source);
     registry.registerCpp(source,
-                         [images](const ToolServices &) {
+                         [images]() {
                              return std::make_unique<Function>([images](const Values &)
                                                                { return toolResult({{2, images}}, {}); });
                          });
@@ -215,7 +215,7 @@ void explicitToolStoragePolicies()
         registry.addDefinition(definition);
         registry.registerCpp(
             definition,
-            [images, policy](const ToolServices &)
+            [images, policy]()
             {
                 return std::make_unique<Function>(
                     [images, policy](const Values &inputs)
@@ -295,7 +295,7 @@ void toolCoordinatedBranches()
     ToolRegistry registry;
     registry.addDefinition(source);
     registry.registerCpp(source,
-                         [images](const ToolServices &) {
+                         [images]() {
                              return std::make_unique<Function>([images](const Values &)
                                                                { return toolResult({{2, images}}, {}); });
                          });
@@ -310,7 +310,7 @@ void toolCoordinatedBranches()
         registry.addDefinition(definition);
         registry.registerCpp(
             definition,
-            [images, coordination, policy](const ToolServices &)
+            [images, coordination, policy]()
             {
                 return std::make_unique<Function>(
                     [images, coordination, policy](const Values &inputs)

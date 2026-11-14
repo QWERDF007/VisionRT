@@ -508,12 +508,13 @@ void saveAsPaths(const QString &directory)
     project.dirty = true;
     storage.save(project, path(newDirectory + "/另存.vrt.json"));
     const auto &saved = project.flows[0].nodes[0];
-    require(std::get<std::string>(saved.inputs.at(1).literal) == "../旧位置/图像/不存在.png",
-            "hidden upstream literal path did not rebase");
-    require(std::get<std::string>(saved.initParams.at(0)) == "../旧位置/目录",
-            "directory init parameter did not rebase");
-    require(std::get<std::string>(saved.inputs.at(7).literal) == "../旧位置/动态/图像.png",
-            "dynamic path input did not rebase");
+    // Save As keeps every literal exactly as the user entered it: a path is interpreted by the tool
+    // against the product directory, so moving the project never rewrites one.
+    require(std::get<std::string>(saved.inputs.at(1).literal) == "图像/不存在.png",
+            "save-as rewrote a hidden upstream literal");
+    require(std::get<std::string>(saved.initParams.at(0)) == "目录", "save-as rewrote a directory parameter");
+    require(std::get<std::string>(saved.inputs.at(7).literal) == "动态/图像.png",
+            "save-as rewrote a dynamically gated path input");
     {
         const auto &text  = std::get<std::string>(saved.inputs.at(2).literal);
         const auto &empty = std::get<std::string>(saved.inputs.at(3).literal);
@@ -524,8 +525,8 @@ void saveAsPaths(const QString &directory)
             "cross-drive resource lost its absolute path");
     auto reopened = storage.load(project.path);
     require(std::get<std::string>(reopened.project.flows[0].nodes[0].inputs.at(1).literal)
-                == "../旧位置/图像/不存在.png",
-            "saved path differs from installed candidate");
+                == "图像/不存在.png",
+            "reopened literal differs from the saved value");
     const auto before  = std::get<std::string>(saved.inputs.at(1).literal);
     const auto oldPath = project.path;
     project.dirty      = true;
@@ -547,7 +548,53 @@ void retiredInitialization(const QString &directory)
 {
     // 端口 9 当前声明里没有：它的值必须原样保留，但不能进入可执行配置。
     const auto tool = parseToolDefinitionJson(
-        R"({"schema_version":6,"name_en":"unavailable","name_zh":"接收器","version":"1.0","implementation":{"kind":"host","binding":"visionrt.receiver"},"next_port_id":{"init":3,"inputs":1,"outputs":3},"ports":{"init":[{"id":0,"name_zh":"流程","type":"string"},{"id":1,"name_zh":"节点","type":"string"},{"id":2,"name_zh":"端口","type":"int","default":2}],"outputs":[{"id":2,"name_zh":"值","type_from":{"flow":{"stage":"init","id":0},"node":{"stage":"init","id":1},"port":{"stage":"init","id":2}}}]}})");
+        R"({
+  "name_en": "unavailable",
+  "name_zh": "接收器",
+  "version": "1.0",
+  "implementation": {
+    "kind": "host",
+    "binding": "visionrt.receiver"
+  },
+  "init_params": [
+    {
+      "id": 0,
+      "name_zh": "流程",
+      "type": "string"
+    },
+    {
+      "id": 1,
+      "name_zh": "节点",
+      "type": "string"
+    },
+    {
+      "id": 2,
+      "name_zh": "端口",
+      "type": "int",
+      "default": 2
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "值",
+      "type_from": {
+        "flow": {
+          "stage": "init",
+          "id": 0
+        },
+        "node": {
+          "stage": "init",
+          "id": 1
+        },
+        "port": {
+          "stage": "init",
+          "id": 2
+        }
+      }
+    }
+  ]
+})");
     auto       raw  = savedNode("9007199254740993", "");
     raw.insert("init_params", QJsonArray{
         QJsonObject{{"port_id", 0}, {"value", "flow_1"}},
@@ -623,8 +670,7 @@ void retiredInitialization(const QString &directory)
         "copying a flow lost opaque initialization metadata");
     auto relocated = reloaded.project;
     require(QDir().mkpath(directory + "/迁移"), "cannot create retired-parameter relocation directory");
-    require(has(storage.save(relocated, path(directory + "/迁移/retained.vrt.json")), ProjectStorageCode::UnknownPaths),
-            "Save As silently treated undeclared parameter values as known paths");
+    storage.save(relocated, path(directory + "/迁移/retained.vrt.json"));
     const auto movedNode = QJsonDocument::fromJson(get(directory + "/迁移/retained.vrt.json"))
                                .object()["flows"]
                                .toArray()[0]
@@ -637,7 +683,6 @@ void retiredInitialization(const QString &directory)
     // 声明承认端口 9 之后，同一个文件里的值直接成为配置，不再是退役项。
     auto extended = tool;
     extended.initParams.push_back({9, "补充参数", {Type::Array, DType::Int64, 2}, Missing{}});
-    extended.setNextPortId(PortStage::Init, 10);
     ToolRegistry extendedRegistry;
     extendedRegistry.addDefinition(extended);
     const auto adopted     = ProjectStorage(extendedRegistry).load(path(input));
@@ -768,6 +813,106 @@ void canonicalSequences(const QString &directory)
 }
 }
 
+// 工具更新：声明改了端口类型或删了端口，连线按新声明断开，并在一次通知里说明两端和原因；同一
+// 版本同一声明重开后不再提示。只改版本、端口形状不变的更新仍然要提示，且连线全部保留。
+void toolUpdatesCutIncompatibleWires(const QString &directory)
+{
+    ToolDefinition upstream = scalarTool();
+    upstream.nameZh         = "上游";
+    upstream.version        = "1.0.0";
+    // 这条用例只关心输出与连线：上游只产出，初始化参数在别处覆盖。
+    upstream.initParams.clear();
+    upstream.inputs.clear();
+    ToolDefinition sink;
+    sink.nameEn = "sink";
+    sink.nameZh = "下游";
+    sink.kind   = ToolKind::Cpp;
+    PortDefinition value;
+    value.id     = 1;
+    value.nameZh = "值";
+    value.type   = {Type::Int};
+    sink.inputs.push_back(value);
+    value.id = 2;
+    sink.outputs.push_back(value);
+
+    ToolRegistry original;
+    original.addDefinition(upstream);
+    original.addDefinition(sink);
+
+    const auto node = [](const QString &id, const QString &tool, const QString &name, const QString &version, int row,
+                         const QJsonObject &snapshot, const QJsonArray &inputs)
+    {
+        return QJsonObject{{"node_seq", id},
+                           {"tool_id", tool},
+                           {"tool_name_snapshot", name},
+                           {"tool_version_snapshot", version},
+                           {"alias", ""},
+                           {"pos", QJsonArray{0, row}},
+                           {"type_snapshot", snapshot},
+                           {"inputs", inputs}};
+    };
+    const QJsonObject sourceSnapshot{{"init_params", QJsonArray{}},
+                                     {"inputs", QJsonArray{}},
+                                     {"outputs", QJsonArray{savedType(2, savedKind("Int"))}}};
+    const QJsonObject sinkSnapshot{{"init_params", QJsonArray{}},
+                                   {"inputs", QJsonArray{savedType(1, savedKind("Int"))}},
+                                   {"outputs", QJsonArray{savedType(2, savedKind("Int"))}}};
+    const auto        file    = directory + "/tool-update.vrt.json";
+    const auto        project = savedProject({node("7", "unavailable", "上游", "1.0.0", 0, sourceSnapshot, QJsonArray{}),
+                                              node("8", "sink", "下游", "1.0.0", 1, sinkSnapshot,
+                                                   QJsonArray{savedInput(1, "7")})},
+                                             "9");
+    put(file, QJsonDocument(project).toJson());
+    require(ProjectStorage(original).load(path(file)).toolUpdates.empty(),
+            "an unchanged declaration was reported as a tool update");
+
+    ToolDefinition retyped      = upstream;
+    retyped.version             = "2.0.0";
+    retyped.outputs.front().type         = {Type::String};
+    retyped.outputs.front().defaultValue = std::string{};
+    ToolRegistry replaced;
+    replaced.addDefinition(retyped);
+    replaced.addDefinition(sink);
+    const auto updated = ProjectStorage(replaced).load(path(file));
+    require(updated.project.dirty, "cutting a wire did not mark the project dirty");
+    require(updated.toolUpdates.size() == 1, "one changed tool produced more than one notice");
+    const auto &notice = updated.toolUpdates.front();
+    require(notice.toolId == "unavailable" && notice.savedVersion == "1.0.0" && notice.currentVersion == "2.0.0",
+            "the notice lost the version that moved");
+    require(notice.nodes.size() == 1 && notice.nodes.front() == "上游-7", "the notice did not name the affected node");
+    require(notice.kept == 0 && notice.removed.size() == 1, "the notice did not report the removed wire");
+    require(notice.removed.front().reason.find("类型") != std::string::npos,
+            "the removal did not name its cause");
+    require(notice.removed.front().source.find("上游-7") != std::string::npos
+                && notice.removed.front().target.find("下游-8") != std::string::npos,
+            "the removal did not name both ends");
+    const auto &binding = updated.project.flows[0].nodes[1].inputs.at(1);
+    require(binding.mode == BindingMode::Literal && !binding.source, "an unusable wire stayed in the project");
+    require(std::any_of(updated.diagnostics.begin(), updated.diagnostics.end(),
+                        [](const auto &diagnostic)
+                        {
+                            return diagnostic.code == ProjectStorageCode::InvalidReference
+                                && diagnostic.message.find("连线已断开") != std::string::npos;
+                        }),
+            "cutting a wire was not reported");
+
+    auto kept = updated.project;
+    ProjectStorage(replaced).save(kept, path(file));
+    require(ProjectStorage(replaced).load(path(file)).toolUpdates.empty(),
+            "the same declaration was reported again");
+
+    put(file, QJsonDocument(project).toJson());
+    ToolDefinition patched = upstream;
+    patched.version        = "1.0.1";
+    ToolRegistry compatible;
+    compatible.addDefinition(patched);
+    compatible.addDefinition(sink);
+    const auto bumped = ProjectStorage(compatible).load(path(file));
+    require(bumped.toolUpdates.size() == 1 && bumped.toolUpdates.front().kept == 1
+                && bumped.toolUpdates.front().removed.empty() && !bumped.project.dirty,
+            "a version bump with an intact wiring was not announced as kept only");
+}
+
 int main()
 {
     try
@@ -780,6 +925,7 @@ int main()
         typedArraysAndRanges(temporary.path());
         saveAsPaths(temporary.path());
         retiredInitialization(temporary.path());
+        toolUpdatesCutIncompatibleWires(temporary.path());
         wideIdsAndCycleMembership(temporary.path());
         canonicalSequences(temporary.path());
         dormantLiteralSources(temporary.path());

@@ -41,8 +41,7 @@ AssistPreview::~AssistPreview()
     shutdown();
 }
 
-void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper,
-                              std::filesystem::path directory)
+void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     normalizeToolDefinition(helper);
@@ -50,7 +49,7 @@ void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, Tool
     hoverRequest_.reset();
     pending_.reset();
     ++epoch_;
-    session_ = std::make_shared<Session>(Session{std::move(registry), std::move(helper), std::move(directory)});
+    session_ = std::make_shared<Session>(Session{std::move(registry), std::move(helper)});
     notifyBusy();
 }
 
@@ -272,8 +271,7 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
         if (!instance_ || instanceSession_ != sessionPtr)
         {
             releaseInstance();
-            PlatformToolServices services{PathResolver(session.directory)};
-            instance_ = session.registry->create(session.helper, services);
+            instance_ = session.registry->create(session.helper);
             if (!instance_)
                 throw ContractError("辅助工具实例不可用：" + session.helper.nameEn);
             const auto status = instance_->initialize({});

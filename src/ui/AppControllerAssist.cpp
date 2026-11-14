@@ -56,7 +56,7 @@ bool nearCursor(std::span<const double> record, const std::array<double, 9> &ref
         // otherwise look like point-and-click silently ignoring the click.
         static std::atomic_bool reported{false};
         if (!reported.exchange(true))
-            LogService::write(LogLevel::Warn, "智能点选", std::string("对齐矩阵不可用：") + error.what());
+            LogService::write(LogLevel::Warn, LogSource::Ui, std::string("智能点选：对齐矩阵不可用：") + error.what());
         return false;
     }
     return cursor.x() >= bounds[0].x - margin && cursor.x() <= bounds[1].x + margin
@@ -480,8 +480,7 @@ void AppController::Impl::refreshAssist()
             {
                 if (assistToolId != tool->nameEn || assist->helperId() != helper->nameEn)
                 {
-                    assist->configure(std::make_shared<const ToolRegistry>(registry), *helper,
-                                      editor.project().path.parent_path());
+                    assist->configure(std::make_shared<const ToolRegistry>(registry), *helper);
                     assistToolId = tool->nameEn;
                 }
                 enabled = true;

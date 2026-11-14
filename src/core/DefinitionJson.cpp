@@ -41,18 +41,9 @@ PortId portId(const QJsonValue &value, const QString &context)
     return static_cast<PortId>(value.toDouble());
 }
 
-std::uint64_t highWater(const QJsonValue &value, const QString &context)
-{
-    const double number = value.toDouble(-1.0);
-    if (!value.isDouble() || number < 0.0 || number > static_cast<double>(kPortIdExhausted)
-        || number != std::floor(number))
-        throw ContractError((context + " 必须是 0 到 2^32 之间的整数").toStdString());
-    return static_cast<std::uint64_t>(number);
-}
-
 std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJsonObject &root, PortStage stage)
 {
-    const auto direction = QString::fromLatin1(stage == PortStage::Init    ? "init"
+    const auto direction = QString::fromLatin1(stage == PortStage::Init    ? "init_params"
                                                : stage == PortStage::Inputs ? "inputs"
                                                                             : "outputs");
     const bool output = stage == PortStage::Outputs;
@@ -63,7 +54,7 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
     result.reserve(items.size());
     for (qsizetype index = 0; index < items.size(); ++index)
     {
-        const auto path    = QStringList{"ports", direction, QString::number(index)};
+        const auto path    = QStringList{direction, QString::number(index)};
         const auto context = direction + "[" + QString::number(index) + "]";
         const auto item    = json::object(items[index], context);
         json::fields(item,
@@ -299,11 +290,9 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             throw ContractError("工具声明必须是 JSON 对象");
         const auto root = document.json().object();
         json::fields(root,
-                     {"schema_version", "name_en", "name_zh", "version", "implementation", "ui", "next_port_id",
-                      "ports", "node_model", "interaction"},
+                     {"name_en", "name_zh", "version", "implementation", "ui", "init_params", "inputs", "outputs",
+                      "node_model", "interaction"},
                      "工具声明");
-        if (!equalValues(document.decode({"schema_version"}, {Type::Int}), PortValue{std::int64_t{6}}))
-            throw ContractError("schema_version 必须是整数 6");
         ToolDefinition definition;
         definition.nameEn  = json::text(root.value("name_en"), "name_en");
         definition.nameZh  = json::text(root.value("name_zh"), "name_zh");
@@ -356,15 +345,8 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
         if (root.contains("ui"))
         {
             const auto ui = json::object(root.value("ui"), "ui");
-            json::fields(ui, {"category", "visibility"}, "ui");
-            if (ui.contains("category"))
-            {
-                const auto category = json::array(ui.value("category"), "ui.category");
-                if (category.isEmpty())
-                    throw ContractError("ui.category 不能是空数组");
-                for (const auto &value : category)
-                    definition.categories.push_back(json::text(value, "ui.category"));
-            }
+            // The tree groups by declaration directory, so a file never states its own category.
+            json::fields(ui, {"visibility"}, "ui");
             if (ui.contains("visibility"))
             {
                 const auto visibility = json::text(ui.value("visibility"), "ui.visibility");
@@ -439,27 +421,9 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             }
             definition.interaction = std::move(mapping);
         }
-        if (root.contains("next_port_id"))
-        {
-            const auto block = json::object(root.value("next_port_id"), "next_port_id");
-            json::fields(block, {"init", "inputs", "outputs"}, "next_port_id");
-            for (const char *key : {"init", "inputs", "outputs"})
-                if (!block.contains(key))
-                    throw ContractError("next_port_id 必须声明 init/inputs/outputs 三项");
-            definition.setNextPortId(PortStage::Init, highWater(block.value("init"), "next_port_id.init"));
-            definition.setNextPortId(PortStage::Inputs, highWater(block.value("inputs"), "next_port_id.inputs"));
-            definition.setNextPortId(PortStage::Outputs, highWater(block.value("outputs"), "next_port_id.outputs"));
-        }
-        if (root.contains("ports"))
-        {
-            const auto container = json::object(root.value("ports"), "ports");
-            json::fields(container, {"init", "inputs", "outputs"}, "ports");
-            definition.initParams = ports(document, container, PortStage::Init);
-            definition.inputs     = ports(document, container, PortStage::Inputs);
-            definition.outputs    = ports(document, container, PortStage::Outputs);
-        }
-        if (!root.contains("next_port_id") && (!definition.inputs.empty() || !definition.outputs.empty()))
-            throw ContractError("声明必须保存 next_port_id，否则重启后无法保证编号不复用");
+        definition.initParams = ports(document, root, PortStage::Init);
+        definition.inputs     = ports(document, root, PortStage::Inputs);
+        definition.outputs    = ports(document, root, PortStage::Outputs);
         for (const auto *list : {&definition.initParams, &definition.inputs, &definition.outputs})
             for (const auto &port : *list)
                 if (isReservedPort(list == &definition.inputs   ? PortStage::Inputs
@@ -481,7 +445,21 @@ ToolDefinition parseToolDefinitionFile(const std::filesystem::path &path, ToolSo
 {
     if (path.extension() != ".json")
         throw ContractError("工具声明仅支持 JSON：" + json::pathText(path).toStdString());
-    return parseToolDefinitionJson(json::read(path).toStdString(), path, std::move(source));
+    auto definition = parseToolDefinitionJson(json::read(path).toStdString(), path, std::move(source));
+    // The declaration's folder inside its root is the tool's category, so the tree groups by the
+    // file system and a folder rename regroups a tool without touching its declaration.
+    const auto &root = definition.source.roots.declarations;
+    if (!root.empty())
+    {
+        for (const auto &component : path.lexically_relative(root).parent_path())
+        {
+            if (component.empty() || component == ".")
+                continue;
+            const auto utf8 = component.u8string();
+            definition.categories.emplace_back(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+        }
+    }
+    return definition;
 }
 
 std::string emitNormalizedToolJson(const ToolDefinition &source)
@@ -513,36 +491,19 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
         implementation.insert("resources", resources);
     }
     QJsonObject root{
-        {"schema_version", definition.schemaVersion},
         {"name_en", QString::fromStdString(definition.nameEn)},
         {"name_zh", QString::fromStdString(definition.nameZh)},
         {"version", QString::fromStdString(definition.version)},
         {"implementation", implementation}
     };
-    QJsonObject ui;
-    if (!definition.categories.empty())
-    {
-        QJsonArray category;
-        for (const auto &name : definition.categories) category.append(QString::fromStdString(name));
-        ui.insert("category", category);
-    }
     if (definition.visibility != ToolVisibility::Normal)
-        ui.insert("visibility", "assist");
-    if (!ui.isEmpty())
-        root.insert("ui", ui);
-    root.insert("next_port_id",
-                QJsonObject{{"init", static_cast<double>(definition.nextInitPortId)},
-                            {"inputs", static_cast<double>(definition.nextInputPortId)},
-                            {"outputs", static_cast<double>(definition.nextOutputPortId)}});
-    QJsonObject ports;
+        root.insert("ui", QJsonObject{{"visibility", "assist"}});
     if (auto init = encodePorts(definition.initParams, PortStage::Init); !init.isEmpty())
-        ports.insert("init", init);
+        root.insert("init_params", init);
     if (auto inputs = encodePorts(definition.inputs, PortStage::Inputs); !inputs.isEmpty())
-        ports.insert("inputs", inputs);
+        root.insert("inputs", inputs);
     if (auto outputs = encodePorts(definition.outputs, PortStage::Outputs); !outputs.isEmpty())
-        ports.insert("outputs", outputs);
-    if (!ports.isEmpty())
-        root.insert("ports", ports);
+        root.insert("outputs", outputs);
     if (definition.nodeModel != NodeModel::Fixed)
     {
         const char *model = "fixed";

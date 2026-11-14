@@ -59,7 +59,6 @@ void cancellationWindowContract()
     gate.outputs = {
         {2, "Value", {Type::Int}}
     };
-    gate.nextOutputPortId = 3;
     auto tail         = gate;
     tail.nameEn           = "test.cancellation.tail";
     tail.kind         = ToolKind::PythonFunction;
@@ -112,7 +111,7 @@ def tail(inputs):
     editor.bindFreeInput(flow, {parent, 2}, {child, 2});
     auto project = editor.project();
     project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.vrt.json";
-    require(ProjectStorage(definitions).save(project).empty(), "Cannot save cancellation project");
+    ProjectStorage(definitions).save(project);
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
     {
         AppController app(2, root);

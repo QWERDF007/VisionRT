@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读取工件",
           "pos": [
             0,
@@ -122,7 +123,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images"
+              "literal": "examples/04_扩展示例/02_逻辑表达式与条件分支/images"
             },
             {
               "port_id": 2,
@@ -143,8 +144,9 @@
         },
         {
           "node_seq": "2",
-          "tool_id": "custom.image.mean",
+          "tool_id": "ImageMean",
           "tool_name_snapshot": "计算图像均值",
+          "tool_version_snapshot": "1.0.0",
           "alias": "Python均值",
           "pos": [
             1,
@@ -198,8 +200,9 @@
         },
         {
           "node_seq": "3",
-          "tool_id": "visiontools.logic.expression",
+          "tool_id": "EvaluateExpression",
           "tool_name_snapshot": "评估表达式",
+          "tool_version_snapshot": "1.0.0",
           "alias": "亮度判定",
           "pos": [
             2,
@@ -314,8 +317,9 @@
         },
         {
           "node_seq": "4",
-          "tool_id": "visiontools.logic.branch",
+          "tool_id": "ConditionalBranch",
           "tool_name_snapshot": "条件分支",
+          "tool_version_snapshot": "1.0.0",
           "alias": "亮暗分支",
           "pos": [
             3,

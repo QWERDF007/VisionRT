@@ -145,22 +145,21 @@ def absent(inputs):
     }
     const auto loaded = runtime.refresh(definitions);
     for (const auto &record : loaded) assert(testview::status(record).code == 0);
-    const ToolServices services;
     {
-        auto       instance = runtime.factory(optional)(services);
+        auto       instance = runtime.factory(optional)();
         const auto result   = instance->execute({});
         assert(testview::status(result).code == 0 && isMissing(result.outputs.at(2)));
         assert(instance->release());
     }
     {
-        auto badInstance = runtime.factory(constructor)(services);
+        auto badInstance = runtime.factory(constructor)();
         assert(badInstance != nullptr);
         const auto status = badInstance->initialize({});
         assert(status.code == -1);
         assert(status.detail.find("constructor detail") != std::string::npos);
     }
-    auto first  = runtime.factory(counter)(services);
-    auto second = runtime.factory(counter)(services);
+    auto first  = runtime.factory(counter)();
+    auto second = runtime.factory(counter)();
     assert(first->initialize({}).code == 0 && second->initialize({}).code == 0);
     assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 1);
     assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 2);
@@ -170,7 +169,7 @@ def absent(inputs):
     first.reset();
     second.reset();
 
-    auto       failures       = runtime.factory(broken)(services);
+    auto       failures       = runtime.factory(broken)();
     const auto initialization = failures->initialize({});
     assert(initialization.code == -1 && initialization.message == "Python 初始化异常");
     assert(initialization.detail.find("initialization detail") != std::string::npos);
@@ -186,7 +185,7 @@ def absent(inputs):
     failures.reset();
     for (const auto &definition : {missing, extra, wrong})
     {
-        auto        instance = runtime.factory(definition)(services);
+        auto        instance = runtime.factory(definition)();
         const auto failed    = testview::executionFailure(*instance);
         assert(failed.find("技术详情") == std::string::npos);
         if (definition.nameEn == wrong.nameEn)
@@ -199,19 +198,19 @@ def absent(inputs):
             assert(failed.find("execute 必须返回 outputs 与 detail") != std::string::npos);
     }
     {
-        auto       instance = runtime.factory(business)(services);
+        auto       instance = runtime.factory(business)();
         const auto result   = instance->execute({});
         assert(testview::status(result).code == 5 && std::get<std::int64_t>(result.outputs.at(2)) == 7);
     }
     {
         // A declared port the tool answered with the wrong type is a broken answer, not a value.
-        auto       instance = runtime.factory(partial)(services);
+        auto       instance = runtime.factory(partial)();
         const auto failed   = testview::executionFailure(*instance);
         assert(failed.find("端口 3") != std::string::npos);
     }
     const auto oldFactory = runtime.factory(function);
     {
-        auto instance = oldFactory(services);
+        auto instance = oldFactory();
         assert(std::get<std::int64_t>(instance->execute({}).outputs.at(2)) == 11);
     }
     const auto timestamp = std::filesystem::last_write_time(sources.directory / "helper.py");
@@ -219,7 +218,7 @@ def absent(inputs):
     std::filesystem::last_write_time(sources.directory / "helper.py", timestamp);
     runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     {
-        auto instance = runtime.factory(function)(services);
+        auto instance = runtime.factory(function)();
         assert(std::get<std::int64_t>(instance->execute({}).outputs.at(2)) == 22);
     }
     sources.put("helper.py", "value = 33\n");
@@ -231,7 +230,7 @@ def execute(inputs):
 )");
     runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     {
-        auto instance = runtime.factory(function)(services);
+        auto instance = runtime.factory(function)();
         assert(std::get<std::int64_t>(instance->execute({}).outputs.at(2)) == 33);
         py::gil_scoped_acquire gil;
         assert(reinterpret_cast<std::uintptr_t>(py::module_::import("numpy").ptr()) == numpyIdentity);
@@ -240,14 +239,14 @@ def execute(inputs):
     const auto invalid = runtime.refresh(std::span<const ToolDefinition>(&function, 1));
     assert(invalid[0].status.code == 0);
     {
-        auto inst = runtime.factory(function)(services);
+        auto inst = runtime.factory(function)();
         assert(inst != nullptr);
         const auto status = inst->initialize({});
         assert(status.code == hostCode(ErrorCode::PythonUnavailable)
                && status.detail.find("SyntaxError") != std::string::npos);
         try
         {
-            runtime.factory(function)(services);
+            runtime.factory(function)();
             assert(false);
         }
         catch (const RegistryError &error)
@@ -257,7 +256,7 @@ def execute(inputs):
         }
     }
     {
-        rejects([&] { oldFactory(services); });
+        rejects([&] { oldFactory(); });
     }
     runtime.refresh({});
 }
@@ -277,7 +276,6 @@ class PathProbe:
         return {'code': 0, 'message': 'ok', 'detail': ''}
 )");
     Sources::write(sources.declarations / "paths.json", R"json({
-  "schema_version": 6,
   "name_en": "python.paths",
   "name_zh": "Path probe",
   "version": "1.0.0",
@@ -287,79 +285,74 @@ class PathProbe:
     "file": "entry.py",
     "symbol": "PathProbe"
   },
-  "next_port_id": {"init": 2, "inputs": 3, "outputs": 3},
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_en": "init_mode",
-        "name_zh": "Mode",
-        "type": "string",
-        "ui": {
-          "editor": "text"
-        }
+  "init_params": [
+    {
+      "id": 0,
+      "name_en": "init_mode",
+      "name_zh": "Mode",
+      "type": "string",
+      "ui": {
+        "editor": "text"
+      }
+    },
+    {
+      "id": 1,
+      "name_en": "base_dir",
+      "name_zh": "Base",
+      "type": "string",
+      "ui": {
+        "editor": "path"
       },
-      {
-        "id": 1,
-        "name_en": "base_dir",
-        "name_zh": "Base",
-        "type": "string",
-        "ui": {
-          "editor": "path"
-        },
-        "relations": {
-          "path_mode": {"stage": "init", "id": 0}
+      "relations": {
+        "path_mode": {
+          "stage": "init",
+          "id": 0
         }
       }
-    ],
-    "inputs": [
-      {
-        "id": 1,
-        "name_en": "input_mode",
-        "name_zh": "Mode",
-        "type": "string",
-        "ui": {
-          "editor": "text"
-        }
+    }
+  ],
+  "inputs": [
+    {
+      "id": 1,
+      "name_en": "input_mode",
+      "name_zh": "Mode",
+      "type": "string",
+      "ui": {
+        "editor": "text"
+      }
+    },
+    {
+      "id": 2,
+      "name_en": "input_path",
+      "name_zh": "Input",
+      "type": "string",
+      "ui": {
+        "editor": "path"
       },
-      {
-        "id": 2,
-        "name_en": "input_path",
-        "name_zh": "Input",
-        "type": "string",
-        "ui": {
-          "editor": "path"
-        },
-        "relations": {
-          "path_mode": {"stage": "inputs", "id": 1}
+      "relations": {
+        "path_mode": {
+          "stage": "inputs",
+          "id": 1
         }
       }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_en": "resolved",
-        "name_zh": "Resolved",
-        "type": "string"
-      }
-    ]
-  }
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "resolved",
+      "name_zh": "Resolved",
+      "type": "string"
+    }
+  ]
 })json");
     const auto definition = parseToolDefinitionFile(sources.declarations / "paths.json", sources.source());
     const auto loaded     = runtime.refresh(std::span<const ToolDefinition>(&definition, 1));
     assert(loaded.size() == 1 && loaded[0].status.code == 0);
 
-    const auto project = sources.directory / std::filesystem::path(u8"工程 目录");
-    std::filesystem::create_directories(project);
-    const auto text = [](const std::filesystem::path &value)
-    {
-        const auto utf8 = value.lexically_normal().u8string();
-        return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
-    };
-    const auto         expectedBase  = text(project / std::filesystem::path(L"数据") / L"模型.bin");
-    const auto         expectedInput = text(project / std::filesystem::path(L"图像") / L"输入.png");
-    const ToolServices services{PathResolver(project)};
-    auto               instance = runtime.factory(definition)(services);
+    // A path-editor string reaches Python exactly as the user entered it: the bridge does not know
+    // which strings name files, and the tool decides what to do with the text.
+    auto instance = runtime.factory(definition)();
     assert(instance
                ->initialize({
                    {0, std::string("file")},
@@ -372,14 +365,14 @@ class PathProbe:
         {2, std::string("图像/输入.png")}
     });
     assert(testview::status(result).code == 0);
-    assert(std::get<std::string>(result.outputs.at(2)) == expectedBase + "|" + expectedInput);
+    assert(std::get<std::string>(result.outputs.at(2)) == "数据/模型.bin|图像/输入.png");
 
     const auto empty = instance->execute({
         {1, std::string("file")},
         {2, std::string("")}
     });
     assert(testview::status(empty).code == 0);
-    assert(std::get<std::string>(empty.outputs.at(2)) == expectedBase + "|");
+    assert(std::get<std::string>(empty.outputs.at(2)) == "数据/模型.bin|");
     instance.reset();
     runtime.refresh({});
 }
@@ -397,7 +390,7 @@ int main()
                                      pathInputs(runtime);
                                  });
         worker.get();
-        std::cout << "Python adapter status, lifecycle, atomic outputs, refreshed sources and project-relative paths "
+        std::cout << "Python adapter status, lifecycle, atomic outputs, refreshed sources and verbatim path text "
                      "passed\n";
         return 0;
     }

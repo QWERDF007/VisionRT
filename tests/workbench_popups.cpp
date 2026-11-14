@@ -213,7 +213,7 @@ void popupSessionsContract()
 
     // The name column is the connection menu: it lists the free downstream inputs grouped by node,
     // and the entry it creates is the same relation the graph then contains.
-    app.addNode(QStringLiteral("visionrt.image.crop"), 8, 8);
+    app.addNode(QStringLiteral("CropImage"), 8, 8);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto target = app.selectedNode();
     require(app.nodes().size() == 6 && !target.isEmpty(), "cannot create the connection target");
@@ -547,22 +547,20 @@ void outputCellReuseContract()
           "    values[0] = 0\n"
           "    values[1] = ''\n"
           "    return {'outputs': values, 'detail': ''}\n");
-    QJsonObject definition{
-        {"schema_version",                                                                              6},
-        {       "name_en",                                                                 "test.outputs"},
-        {       "name_zh",                                                                 "Many outputs"},
-        {       "version",                                                                        "1.0.0"},
-        {"implementation", QJsonObject{{"kind", "python_function"},
-                                        {"package", "outputs"},
-                                        {"file", "outputs.py"},
-                                        {"symbol", "run"}}},
-        {  "next_port_id", QJsonObject{{"init", 0}, {"inputs", 1}, {"outputs", 66}}}
-    };
     QJsonArray ports;
     for (int number = 0; number < 64; ++number)
         ports.append(QJsonObject{{"id", 2 + number},
             {"name_zh", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "int"}});
-    definition["ports"] = QJsonObject{{"outputs", ports}};
+    const QJsonObject definition{
+        {       "name_en",                                 "test.outputs"},
+        {       "name_zh",                                 "Many outputs"},
+        {       "version",                                        "1.0.0"},
+        {"implementation", QJsonObject{{"kind", "python_function"},
+                                        {"package", "outputs"},
+                                        {"file", "outputs.py"},
+                                        {"symbol", "run"}}},
+        {       "outputs",                                             ports}
+    };
     write("tools/custom/outputs.json", QJsonDocument(definition).toJson());
     visionrt::AppController manyApp(1, manyDirectory.path());
     require(QTest::qWaitFor([&] { return !manyApp.busy(); }, 5000), "many-output catalog did not become ready");

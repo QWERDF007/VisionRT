@@ -11,13 +11,9 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
 
     ToolDefinition def;
-    def.schemaVersion    = 6;
     def.nameEn           = "custom.test.ports";
     def.nameZh           = "端口测试工具";
     def.kind             = ToolKind::PythonFunction;
-    def.nextInputPortId  = 1;
-    def.nextOutputPortId = 2;
-    def.nextInitPortId   = 0;
 
     ToolPortListModel model;
 
@@ -42,12 +38,10 @@ int main(int argc, char **argv)
     assert(!model.isFixedRow(1));
     assert(model.data(model.index(1, 0), ToolPortListModel::IdRole).toUInt() == 1);
     assert(model.data(model.index(1, 0), ToolPortListModel::NameZhRole).toString() == "阈值");
-    assert(def.nextInputPortId == 2);
 
     assert(model.addPort("输入图像", "image"));
     assert(model.rowCount() == 3);
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
-    assert(def.nextInputPortId == 3);
 
     // The workbench image selector is an author choice stored in the declaration, only for Image.
     assert(!model.updatePort(1, {{"showImage", true}}));
@@ -68,18 +62,14 @@ int main(int argc, char **argv)
     // Rejects moving into or before fixed prefix (row 0)
     assert(!model.movePort(1, 0));
 
-    // 4. Delete port & verify non-recycling
-    // Delete row 1 (which is id 2, the current max id)
+    // 4. Delete a port: its number becomes free again and the next added port takes it.
     assert(model.removePort(1));
     assert(model.rowCount() == 2);
-    // Next port ID must NOT be decremented! It stays at 3!
-    assert(def.nextInputPortId == 3);
 
-    // Add another port -> must get ID 3, NOT recycling ID 2!
     assert(model.addPort("掩模", "image"));
     assert(model.rowCount() == 3);
-    assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 3);
-    assert(def.nextInputPortId == 4);
+    assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
+
 
     // 5. Stage: Outputs
     model.setDraft(&def, PortStage::Outputs, true);
@@ -90,11 +80,10 @@ int main(int argc, char **argv)
     assert(model.data(model.index(0, 0), ToolPortListModel::IdRole).toUInt() == 0);
     assert(model.data(model.index(1, 0), ToolPortListModel::IdRole).toUInt() == 1);
 
-    // Add business output -> start at nextOutputPortId = 2
+    // Add business output -> the first number above the status envelope.
     assert(model.addPort("输出图像", "image"));
     assert(model.rowCount() == 3);
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
-    assert(def.nextOutputPortId == 3);
 
     // SET-VIS-02: a business output carries its own default the same way an input does, so the card
     // offers the field in both directions. The host-owned status rows stay read-only.
@@ -108,11 +97,9 @@ int main(int argc, char **argv)
 
     // 6. Stage: Init — only a class tool has a lifecycle, so the init stage is exercised on one.
     ToolDefinition initDef;
-    initDef.schemaVersion   = 6;
     initDef.nameEn          = "custom.test.init";
     initDef.nameZh          = "初始化测试";
     initDef.kind            = ToolKind::PythonClass;
-    initDef.nextInitPortId  = 0;
     model.setDraft(&initDef, PortStage::Init, true);
     // Init has 0 fixed rows
     assert(model.rowCount() == 0);
@@ -120,17 +107,13 @@ int main(int argc, char **argv)
     assert(model.addPort("初始参数", "int", "0"));
     assert(model.rowCount() == 1);
     assert(model.data(model.index(0, 0), ToolPortListModel::IdRole).toUInt() == 0);
-    assert(initDef.nextInitPortId == 1);
 
     // 7. A type change reconciles the draft: values and constraints the new type cannot hold are
     // cleared, and every reference to the retyped port that no longer type-checks goes with it.
     ToolDefinition retype;
-    retype.schemaVersion    = 6;
     retype.nameEn           = "custom.test.retype";
     retype.nameZh           = "改型测试";
     retype.kind             = ToolKind::PythonFunction;
-    retype.nextInputPortId  = 1;
-    retype.nextOutputPortId = 2;
 
     ToolPortListModel retypeModel;
     retypeModel.setDraft(&retype, PortStage::Inputs, true);
@@ -170,12 +153,9 @@ int main(int argc, char **argv)
     // 9. Relations are edited against real candidates: the editor can only pick a reference the
     // declaration accepts, so a dangling or mistyped relation never reaches the draft.
     ToolDefinition rel;
-    rel.schemaVersion    = 6;
     rel.nameEn           = "custom.test.relations";
     rel.nameZh           = "关系测试";
     rel.kind             = ToolKind::PythonFunction;
-    rel.nextInputPortId  = 1;
-    rel.nextOutputPortId = 2;
 
     ToolPortListModel relModel;
     relModel.setDraft(&rel, PortStage::Inputs, true);
@@ -284,11 +264,9 @@ int main(int argc, char **argv)
     assert(def.initParams.empty());
 
     ToolDefinition classDef;
-    classDef.schemaVersion = 6;
     classDef.nameEn        = "custom.test.cls";
     classDef.nameZh        = "类工具";
     classDef.kind          = ToolKind::PythonClass;
-    classDef.nextInitPortId = 0;
     ToolPortListModel classInitModel;
     classInitModel.setDraft(&classDef, PortStage::Init, true);
     assert(classInitModel.addPort("初始化参数", "int", "0"));

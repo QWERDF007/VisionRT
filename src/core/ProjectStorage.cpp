@@ -23,9 +23,8 @@
 namespace visionrt {
 namespace {
 constexpr int projectFormatVersion = 7;
-// Older projects stay readable through their own version-gated migration: format 4 moves execution
-// conditions to the explicit mode object, format 5 states Array values as nested lists. Writing
-// always produces format 6, where an Array value carries its own shape or ragged offsets.
+// One readable version: an older file is refused instead of migrated. Nothing produces 7 except this
+// writer, which states every Array value with its own shape or ragged offsets.
 constexpr int minimumProjectFormatVersion = 7;
 
 QString qtPath(const std::filesystem::path &path)
@@ -105,9 +104,10 @@ TypeMap types(const std::vector<PortDefinition> &ports)
 }
 
 void diagnose(ProjectLoadResult &result, ProjectStorageCode code, const FlowDefinition &flow,
-              const NodeDefinition &node, std::string field, std::string message, bool changed = false)
+              const NodeDefinition &node, std::string field, std::string message, bool changed = false,
+              std::optional<PortRef> port = {})
 {
-    result.diagnostics.push_back({code, flow.id, node.id, std::move(field), std::move(message)});
+    result.diagnostics.push_back({code, flow.id, node.id, std::move(field), std::move(message), port});
     result.project.dirty = result.project.dirty || changed;
 }
 
@@ -142,9 +142,17 @@ PortValue defaultValue(const PortDefinition &port)
     return copyProjectLiteral(port.defaultValue);
 }
 
-void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node, const QJsonObject &raw,
+// What reconciling one node against its current declaration moved. The wire pass reads it to know
+// which connections the declarations can still carry, and the update notice lists the node.
+struct NodeReconciliation
+{
+    std::set<PortId> changedOutputs;
+    bool             declarationChanged = false;
+};
+
+void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDefinition &node,
                    const ToolDefinition &definition, const std::set<PortId> &savedInputLiterals,
-                   std::set<PortId> &changedOutputs)
+                   NodeReconciliation &changes)
 {
     const auto contract = definition.derivesPorts() ? nodeContract(node, definition) : definition;
     auto       initTypes    = types(contract.initParams);
@@ -175,11 +183,11 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     {
         const auto current = outputTypes.find(id);
         if (current == outputTypes.end() || !compatible(previous, current->second))
-            changedOutputs.insert(id);
+            changes.changedOutputs.insert(id);
     }
     for (const auto &[id, current] : outputTypes)
         if (!node.signatures.outputs.contains(id))
-            changedOutputs.insert(id);
+            changes.changedOutputs.insert(id);
     for (const auto &[id, value] : node.initParams)
     {
         if (initTypes.contains(id))
@@ -218,6 +226,11 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     if (!changedStages.empty())
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "type_snapshot",
                  "保存的端口类型已与当前工具定义同步：" + changedStages, true);
+    // A version the project recorded itself is the sharpest signal: it changes even when the
+    // declaration keeps every port. A project saved before the host recorded versions has none,
+    // and then only a port set that actually moved counts as an update.
+    changes.declarationChanged = !changedStages.empty()
+                              || (!node.toolVersionSnapshot.empty() && node.toolVersionSnapshot != definition.version);
 
     Values parameters;
     for (const auto &port : definition.derivesPorts() ? std::vector<PortDefinition>{} : contract.initParams)
@@ -240,14 +253,15 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             // and the node fails its contract until the parameter is corrected.
             parameters.emplace(port.id, old->second);
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
-                     "初始化参数与当前声明类型不兼容，原值已保留，修正后才能执行");
+                     "初始化参数与当前声明类型不兼容，原值已保留，修正后才能执行", false,
+                     PortRef{PortStage::Init, port.id});
             continue;
         }
         // A port the declaration has now but the project never saved is materialised from the
         // declaration; there is no saved value to preserve.
         parameters.emplace(port.id, defaultValue(port));
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
-                 "当前声明新增此初始化参数，已填入声明默认值", true);
+                 "当前声明新增此初始化参数，已填入声明默认值", true, PortRef{PortStage::Init, port.id});
     }
     std::map<PortId, InputBinding> inputs;
     for (const auto &port : contract.inputs)
@@ -264,7 +278,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             {
                 binding.literal = defaultValue(port);
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "未配置的字面量草稿已填入声明默认值", true);
+                         "未配置的字面量草稿已填入声明默认值", true, PortRef{PortStage::Inputs, port.id});
             }
             if (binding.mode == BindingMode::Literal || !binding.source)
                 rangeWarning(result, flow, node, port, binding.literal);
@@ -277,22 +291,25 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             binding = old->second;
             if (!isReservedPort(PortStage::Inputs, port.id))
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "输入与当前声明类型不兼容，原值与上游绑定已保留，修正后才能执行");
+                         "输入与当前声明类型不兼容，原值与上游绑定已保留，修正后才能执行", false,
+                         PortRef{PortStage::Inputs, port.id});
         }
         else
         {
             binding.literal = defaultValue(port);
             if (!isReservedPort(PortStage::Inputs, port.id))
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "当前声明新增此输入，已填入声明默认值", true);
+                         "当前声明新增此输入，已填入声明默认值", true, PortRef{PortStage::Inputs, port.id});
         }
         inputs.emplace(port.id, std::move(binding));
     }
     for (const auto &[id, binding] : node.inputs)
     {
         if (!inputTypes.contains(id))
+        {
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(id),
-                     "已丢弃声明中不再存在的输入及其绑定", true);
+                     "已丢弃声明中不再存在的输入及其绑定", true, PortRef{PortStage::Inputs, id});
+        }
     }
     node.initParams = std::move(parameters);
     node.inputs     = std::move(inputs);
@@ -303,6 +320,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "tool_name_snapshot", "工具显示名称快照已更新",
                  true);
     }
+    node.toolVersionSnapshot = definition.version;
 }
 
 void diagnoseCycles(ProjectLoadResult &result, const FlowDefinition &flow)
@@ -400,12 +418,47 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
     project.name       = text(metadata.value("name"), "project.name");
     project.nextNodeId = sequence(metadata.value("next_node_seq"), "next_node_seq");
     project.nextFlowId = sequence(metadata.value("next_flow_seq"), "next_flow_seq");
-    std::set<std::string, std::less<>>                   flowIds, flowNames;
-    std::set<NodeId>                                     nodeIds;
-    std::map<NodeId, std::set<PortId>>                   changedOutputs;
-    NodeId                                               minimumNode = 0;
-    std::uint64_t                                        minimumFlow = 1;
-    const auto                                           flows       = root.value("flows").toArray();
+    std::set<std::string, std::less<>>   flowIds, flowNames;
+    std::set<NodeId>                     nodeIds;
+    std::map<NodeId, NodeReconciliation> reconciliations;
+    NodeId                               minimumNode = 0;
+    std::uint64_t                        minimumFlow = 1;
+    const auto                           flows       = root.value("flows").toArray();
+    // One notice per tool, created by the first node whose declaration moved. A node created after
+    // the update already carries the current version, so the notice keeps the version it saw first.
+    const auto updateFor = [&result](const ToolDefinition &definition, const std::string &savedVersion) -> ToolUpdate &
+    {
+        for (auto &update : result.toolUpdates)
+            if (update.toolId == definition.nameEn)
+            {
+                if (update.savedVersion.empty())
+                    update.savedVersion = savedVersion;
+                return update;
+            }
+        result.toolUpdates.push_back(
+            {definition.nameEn, definition.nameZh, savedVersion, definition.version, {}, 0, {}});
+        return result.toolUpdates.back();
+    };
+    const auto findUpdate = [&result](std::string_view toolId) -> ToolUpdate *
+    {
+        for (auto &update : result.toolUpdates)
+            if (update.toolId == toolId)
+                return &update;
+        return nullptr;
+    };
+    // How a port is called in a notice: the declaration's Chinese name, which is what the user sees
+    // on the canvas, instead of a bare number.
+    const auto portName = [&registry](const NodeDefinition &owner, PortStage stage, PortId port) -> std::string
+    {
+        const auto *definition = registry.find(owner.toolId);
+        if (!definition)
+            return portLabel(port);
+        const auto  contract = definition->derivesPorts() ? nodeContract(owner, *definition) : *definition;
+        const auto &ports    = stage == PortStage::Inputs ? contract.inputs : contract.outputs;
+        const auto  found    = std::find_if(ports.begin(), ports.end(),
+                                            [port](const PortDefinition &item) { return item.id == port; });
+        return found == ports.end() ? portLabel(port) : found->nameZh;
+    };
     for (qsizetype flowIndex = 0; flowIndex < flows.size(); ++flowIndex)
     {
         const auto     rawFlow = map(flows[flowIndex], "flow");
@@ -457,7 +510,10 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                          "节点标识序号已耗尽，无法新建节点");
             node.toolId           = text(raw.value("tool_id"), "tool_id", true);
             node.toolNameSnapshot = text(raw.value("tool_name_snapshot"), "tool_name_snapshot");
-            node.alias            = text(raw.value("alias"), "alias");
+            // Absent means the project predates the record, which is a different fact from "1.0.0".
+            if (raw.contains("tool_version_snapshot"))
+                node.toolVersionSnapshot = text(raw.value("tool_version_snapshot"), "tool_version_snapshot");
+            node.alias = text(raw.value("alias"), "alias");
             if (!raw.value("pos").isArray() || raw.value("pos").toArray().size() != 2)
                 invalid("node.pos 必须包含两个整数坐标");
             const auto x = std::get<std::int64_t>(literal({"pos", "0"}, {Type::Int}));
@@ -608,7 +664,11 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             }
             else
             {
-                reconcileNode(result, flow, node, raw, *definition, savedInputLiterals, changedOutputs[node.id]);
+                const auto savedVersion = node.toolVersionSnapshot;
+                auto      &changes      = reconciliations[node.id];
+                reconcileNode(result, flow, node, *definition, savedInputLiterals, changes);
+                if (changes.declarationChanged)
+                    updateFor(*definition, savedVersion).nodes.push_back(node.title());
                 if (node.executionGuard && !supportsExecutionGuard(definition->nodeModel))
                     diagnose(result, ProjectStorageCode::LegacyExecutionGuard, flow, node, "execution_guard",
                              "普通工具不再支持执行条件，原配置已保留但不再执行；请改用上层工具状态输入重新配置");
@@ -634,7 +694,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
         {
             for (const auto &[port, type] : savedOutputs.at(node.id))
                 if (!node.signatures.outputs.contains(port) || node.signatures.outputs.at(port) != type)
-                    changedOutputs[node.id].insert(port);
+                    reconciliations[node.id].changedOutputs.insert(port);
             for (const auto &[port, message] : node.outputTypeErrors)
                 diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
                          "outputs." + portLabel(port), message);
@@ -657,31 +717,48 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                              "上游工具定义缺失，引用已保留以便恢复");
                     continue;
                 }
-                const auto check = validateBinding(flow, binding.source->node, binding.source->port, node.id, id);
-                if (!check)
+                const auto  check      = validateBinding(flow, binding.source->node, binding.source->port, node.id, id);
+                const auto *sourceNode = source == nodes.end() ? nullptr : source->second;
+                const auto  moved      = sourceNode ? reconciliations.find(sourceNode->id) : reconciliations.end();
+                const bool  outputMoved
+                    = moved != reconciliations.end() && moved->second.changedOutputs.contains(binding.source->port);
+                // A declaration that no longer owns both ports cannot carry the connection. Cutting
+                // it is the truthful result: the canvas, the execution dependency and the saved file
+                // then agree, instead of a wire drawn over a binding the node can never run.
+                const bool cut = check.reason == BindingError::MissingPort || check.reason == BindingError::TypeMismatch
+                              || (check && outputMoved);
+                if (!cut)
                 {
                     if (check.reason == BindingError::SameOrUpperRow)
-                    {
                         diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
                                  "inputs." + portLabel(id),
                                  "上游节点未在当前节点上方（违反上游 Y < 下游 Y 层级约束），绑定已保留供修复，不可执行");
-                    }
-                    else
-                    {
-                        // The binding is kept: clearing it would silently rewrite the project and hide
-                        // which upstream the user chose. The node is reported as not executable until
-                        // the reference is repaired.
+                    else if (!check)
                         diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
                                  "inputs." + portLabel(id),
-                                 "上游不存在、输出已变更、跨流程或类型不兼容，绑定已保留供修复，不可执行");
-                    }
+                                 "上游不存在或跨流程，绑定已保留供修复，不可执行");
+                    auto *updated = findUpdate(node.toolId);
+                    if (!updated && sourceNode)
+                        updated = findUpdate(sourceNode->toolId);
+                    if (updated)
+                        ++updated->kept;
+                    continue;
                 }
-                else if (source != nodes.end() && changedOutputs[source->second->id].contains(binding.source->port))
-                {
-                    diagnose(result, ProjectStorageCode::InvalidReference, flow, node,
-                             "inputs." + portLabel(id),
-                             "上游输出已变更，绑定已保留供修复，不可执行");
-                }
+                // The tool whose declaration moved owns the removal; both ends are recorded so the
+                // notice names the two ports instead of only the node that lost its input.
+                const auto *owner = outputMoved ? sourceNode : &node;
+                if (auto *update = findUpdate(owner->toolId))
+                    update->removed.push_back(
+                        {sourceNode ? sourceNode->title() + "." + portName(*sourceNode, PortStage::Outputs, binding.source->port)
+                                    : portLabel(binding.source->port),
+                         node.title() + "." + portName(node, PortStage::Inputs, id),
+                         check.reason == BindingError::TypeMismatch || (check && outputMoved)
+                             ? std::string("端口类型已变更")
+                             : std::string("端口已从工具声明中删除")});
+                binding.mode = BindingMode::Literal;
+                binding.source.reset();
+                diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + portLabel(id),
+                         "两端端口已无法对接（端口已删除或类型已变更），连线已断开", true);
             }
         }
         diagnoseCycles(result, flow);
@@ -710,6 +787,15 @@ QJsonObject encodeProject(const ProjectDefinition &project)
             raw.insert("node_seq", QString::number(node.id));
             raw.insert("tool_id", QString::fromStdString(node.toolId));
             raw.insert("tool_name_snapshot", QString::fromStdString(node.toolNameSnapshot));
+            // A lost tool keeps whatever version its file recorded; a resolved node always states
+            // the version it was reconciled against, so the next open can tell what moved.
+            if (unresolved)
+            {
+                if (!node.toolVersionSnapshot.empty())
+                    raw.insert("tool_version_snapshot", QString::fromStdString(node.toolVersionSnapshot));
+            }
+            else
+                raw.insert("tool_version_snapshot", QString::fromStdString(node.toolVersionSnapshot));
             raw.insert("alias", QString::fromStdString(node.alias));
             raw.insert("pos", QJsonArray{node.position.x, node.position.y});
             if (!unresolved)
@@ -826,21 +912,6 @@ QJsonObject encodeProject(const ProjectDefinition &project)
     };
 }
 
-void rewritePath(PortValue &value, const PortDefinition &port, const std::filesystem::path &oldDirectory,
-                 const std::filesystem::path &newDirectory)
-{
-    if (!isPathPort(port))
-        return;
-    auto *string = std::get_if<std::string>(&value);
-    if (!string || string->empty())
-        return;
-    const auto original = std::filesystem::u8path(*string);
-    if (original.is_relative() && oldDirectory.empty())
-        return;
-    const auto absolute = (original.is_absolute() ? original : oldDirectory / original).lexically_normal();
-    const auto relative = absolute.lexically_relative(newDirectory);
-    value               = utf8Path(relative.empty() ? absolute : relative);
-}
 } // namespace
 
 ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
@@ -905,33 +976,21 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
                     changedExecution = true;
                 }
             }
+            // A reconciliation that changed what the node will actually run invalidates the cached
+            // instance. A schema note that only preserved or displayed something does not.
             for (const auto &diagnostic : result.diagnostics)
             {
-                if (diagnostic.node != updated.id || diagnostic.code != ProjectStorageCode::SchemaChanged)
+                if (diagnostic.node != updated.id || diagnostic.code != ProjectStorageCode::SchemaChanged
+                    || !diagnostic.port)
                     continue;
-                // The field is a display text such as "inputs.端口 3"; the number after the last space
-                // is the port it names.
-                const auto named = [&](std::string_view prefix) -> std::optional<PortId>
+                if (diagnostic.port->stage == PortStage::Init)
                 {
-                    if (!diagnostic.field.starts_with(prefix))
-                        return std::nullopt;
-                    const auto space = diagnostic.field.find_last_of(' ');
-                    if (space == std::string::npos)
-                        return std::nullopt;
-                    try
-                    {
-                        return static_cast<PortId>(std::stoul(diagnostic.field.substr(space + 1)));
-                    }
-                    catch (const std::exception &)
-                    {
-                        return std::nullopt;
-                    }
-                };
-                if (const auto id = named("init_params."); id && updated.initParams.contains(*id))
-                    changedExecution = true;
-                if (const auto id = named("inputs."); id)
+                    if (updated.initParams.contains(diagnostic.port->id))
+                        changedExecution = true;
+                }
+                else if (diagnostic.port->stage == PortStage::Inputs)
                 {
-                    const auto input = updated.inputs.find(*id);
+                    const auto input = updated.inputs.find(diagnostic.port->id);
                     if (input != updated.inputs.end() && input->second.mode == BindingMode::Literal)
                         changedExecution = true;
                 }
@@ -945,56 +1004,18 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
     return result;
 }
 
-std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition           &project,
-                                                           const std::filesystem::path &destination) const
+void ProjectStorage::save(ProjectDefinition &project, const std::filesystem::path &destination) const
 {
     auto target = destination.empty() ? project.path : destination;
     if (target.empty())
         invalid("未命名工程必须指定保存位置");
     if (!target.has_extension())
         target += ".vrt.json";
-    if (target.extension() != ".json")
+    // Load accepts any casing of the suffix, so save has to accept the same spellings.
+    if (qtPath(target.extension()).toLower() != ".json")
         invalid("工程保存路径必须使用 .json 扩展名：" + utf8Path(target));
-    target                                          = std::filesystem::absolute(target).lexically_normal();
-    ProjectDefinition                     candidate = project;
-    std::vector<ProjectStorageDiagnostic> diagnostics;
-    const auto                            oldDirectory = project.path.empty()
-                                                           ? std::filesystem::path{}
-                                                           : std::filesystem::absolute(project.path).lexically_normal().parent_path();
-    if (!project.path.empty() && target != std::filesystem::absolute(project.path).lexically_normal())
-    {
-        for (auto &flow : candidate.flows)
-        {
-            for (auto &node : flow.nodes)
-            {
-                const auto *definition = registry_.find(node.toolId);
-                if (!definition || !node.unresolved.isEmpty())
-                {
-                    diagnostics.push_back({ProjectStorageCode::UnknownPaths,
-                                           flow.id,
-                                           node.id,
-                                           {},
-                                           "未知工具字段已保留，另存为后可能需要修复相对路径"});
-                    continue;
-                }
-                if (!node.retiredInitParams.isEmpty() && oldDirectory != target.parent_path())
-                    diagnostics.push_back({ProjectStorageCode::UnknownPaths, flow.id, node.id, "init_params",
-                                           "未识别的初始化参数已保留原文，另存后请核对其中的相对路径"});
-                for (const auto &port : definition->initParams)
-                {
-                    const auto value = node.initParams.find(port.id);
-                    if (value != node.initParams.end())
-                        rewritePath(value->second, port, oldDirectory, target.parent_path());
-                }
-                for (const auto &port : definition->inputs)
-                {
-                    const auto value = node.inputs.find(port.id);
-                    if (value != node.inputs.end())
-                    rewritePath(value->second.literal, port, oldDirectory, target.parent_path());
-                }
-            }
-        }
-    }
+    target                = std::filesystem::absolute(target).lexically_normal();
+    ProjectDefinition candidate = project;
     candidate.path        = target;
     candidate.dirty       = false;
     const auto serialized = QJsonDocument(encodeProject(candidate)).toJson(QJsonDocument::Indented);
@@ -1011,6 +1032,5 @@ std::vector<ProjectStorageDiagnostic> ProjectStorage::save(ProjectDefinition    
     if (!file.commit())
         throw std::runtime_error("无法提交工程文件 " + utf8Path(target) + "：" + file.errorString().toStdString());
     project = std::move(candidate);
-    return diagnostics;
 }
 } // namespace visionrt

@@ -300,15 +300,14 @@ std::shared_ptr<LoadedModule> PluginLoader::loadModuleFile(const std::filesystem
     return loaded;
 }
 
-std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view            toolId,
-                                                           const PlatformToolServices &services)
+std::unique_ptr<IToolInstance> PluginLoader::createAdapter(std::string_view toolId)
 {
     const auto path = resolveModulePath(toolId);
     ToolStatus status;
     auto       module = loadModule(path, status);
     if (!module)
         throw RegistryError(ToolAvailability::ImplementationUnavailable, std::move(status));
-    return std::make_unique<DomainToolAdapter>(std::move(module), std::string(toolId), services);
+    return std::make_unique<DomainToolAdapter>(std::move(module), std::string(toolId));
 }
 
 std::size_t PluginLoader::loadedModuleCount() const
@@ -317,10 +316,8 @@ std::size_t PluginLoader::loadedModuleCount() const
     return loadedModules_.size();
 }
 
-DomainToolAdapter::DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId,
-                                     PlatformToolServices services)
+DomainToolAdapter::DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId)
     : toolId_(std::move(toolId))
-    , services_(std::move(services))
     , module_(std::move(module))
 {
     const auto found = module_->registry.nativeFactories().find(toolId_);
@@ -331,7 +328,7 @@ DomainToolAdapter::DomainToolAdapter(std::shared_ptr<const LoadedModule> module,
                        json::pathText(module_->path).toStdString()));
     factory_ = &found->second;
     ToolStatus createStatus;
-    raw_ = factory_->create(&services_, &createStatus);
+    raw_ = factory_->create(&createStatus);
     if (!raw_ || !createStatus)
     {
         if (createStatus)

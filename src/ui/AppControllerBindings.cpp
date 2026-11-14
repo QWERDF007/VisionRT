@@ -159,7 +159,7 @@ bool AppController::bindInput(const QVariantMap &context, const QString &node, i
             return impl_->editor.setBinding(impl_->flow.toStdString(), target->id, input, std::move(binding));
         });
     if (result)
-        LogService::write(LogLevel::Info, QStringLiteral("连接"),
+        LogService::write(LogLevel::Info, LogSource::System,
                           QStringLiteral("绑定 %1.%2 ← %3.%4")
                               .arg(impl_->selected, q(portLabel(input)), node, q(portLabel(output))));
     return result;
@@ -180,7 +180,7 @@ bool AppController::unbindInput(const QVariantMap &context)
             return impl_->editor.unbind(impl_->flow.toStdString(), node->id, input);
         });
     if (result)
-        LogService::write(LogLevel::Info, QStringLiteral("连接"),
+        LogService::write(LogLevel::Info, LogSource::System,
                           QStringLiteral("解除绑定 %1.%2").arg(impl_->selected, q(portLabel(input))));
     return result;
 }

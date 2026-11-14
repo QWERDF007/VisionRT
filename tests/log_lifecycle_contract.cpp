@@ -19,6 +19,7 @@
 
 using namespace log_test;
 using visionrt::LogLevel;
+using visionrt::LogSource;
 using visionrt::LogService;
 
 namespace
@@ -81,7 +82,7 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
             nullptr,
             [&](std::string_view source)
             {
-                if (source == "scenario-a-writer-" + tag)
+                if (source == visionrt::sourceLabel(LogSource::System))
                 {
                     recordEvent("writer_inside_lock");
                     writerInLockPromise.set_value();
@@ -102,12 +103,11 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         threads.spawn(
             [&]
             {
-                const std::string source  = "scenario-a-writer-" + tag;
                 const std::string payload = "in-lock payload " + tag;
                 if (level == LogLevel::Error)
-                    service.error(source, payload);
+                    service.error(LogSource::System, payload);
                 else
-                    service.info(source, payload);
+                    service.info(LogSource::System, payload);
             });
         threads.spawn(
             [&]
@@ -164,7 +164,7 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         visionrt::setLogTestHooks({
             [&](std::string_view source)
             {
-                if (source == "scenario-b-writer-" + tag)
+                if (source == visionrt::sourceLabel(LogSource::System))
                 {
                     writerBeforeLockPromise.set_value();
                     require(allowWriterProceedFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
@@ -180,12 +180,11 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         threads.spawn(
             [&]
             {
-                const std::string source  = "scenario-b-writer-" + tag;
                 const std::string payload = "late payload " + tag;
                 if (level == LogLevel::Error)
-                    service.error(source, payload);
+                    service.error(LogSource::System, payload);
                 else
-                    service.info(source, payload);
+                    service.info(LogSource::System, payload);
             });
 
         require(writerBeforeLockFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
@@ -195,7 +194,7 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         triggerUnblock();
         threads.join();
 
-        require(!fileText(datedLog(directory.path())).contains(QString::fromStdString("scenario-b-writer-" + tag)),
+        require(!fileText(datedLog(directory.path())).contains(QString::fromStdString("late payload " + tag)),
                 "scenario B: a late writer appended to the closed session file");
     }
     visionrt::setLogTestHooks({});
@@ -225,7 +224,7 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         visionrt::setLogTestHooks({
             [&](std::string_view source)
             {
-                if (source == "scenario-c-writer-" + tag)
+                if (source == visionrt::sourceLabel(LogSource::System))
                 {
                     writerWaitingPromise.set_value();
                     require(allowWriterResumeFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
@@ -241,12 +240,11 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         threads.spawn(
             [&]
             {
-                const std::string source  = "scenario-c-writer-" + tag;
                 const std::string payload = "restart payload " + tag;
                 if (level == LogLevel::Error)
-                    service.error(source, payload);
+                    service.error(LogSource::System, payload);
                 else
-                    service.info(source, payload);
+                    service.info(LogSource::System, payload);
             });
 
         require(writerWaitingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
@@ -268,15 +266,13 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         service.flush();
         visionrt::flushPendingForTesting();
 
-        const std::string source  = "scenario-c-writer-" + tag;
         const std::string payload = "restart payload " + tag;
         int               delivered = 0;
         require(QTest::qWaitFor(
                     [&]
                     {
                         for (const auto &record : service.take(64))
-                            if (record.line.contains(QString::fromStdString(source))
-                                && record.line.contains(QString::fromStdString(payload)))
+                            if (record.line.contains(QString::fromStdString(payload)))
                                 ++delivered;
                         return delivered == 1;
                     },
@@ -285,11 +281,11 @@ void runConcurrencyScenario(LogService &service, const visionrt::LogConfig &conf
         service.flush();
         service.shutdown();
 
-        require(!fileText(datedLog(oldDirectory.path())).contains(QString::fromStdString(source)),
+        require(!fileText(datedLog(oldDirectory.path())).contains(QString::fromStdString(payload)),
                 "scenario C: the old session file received the late record");
         int newFileCount = 0;
         for (const auto &line : fileText(datedLog(newDirectory.path())).split('\n'))
-            if (line.contains(QString::fromStdString(source)) && line.contains(QString::fromStdString(payload)))
+            if (line.contains(QString::fromStdString(payload)))
                 ++newFileCount;
         require(newFileCount == 1, "scenario C: the new session file must contain exactly one record");
     }
@@ -320,7 +316,7 @@ try
             "the service refused to start on an unwritable directory");
     require(!service.fileSinkReady(), "an unwritable directory reported a ready file sink");
     require(service.writeFailures() > 0, "an unwritable directory was not counted as a write failure");
-    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("降级会话"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("降级会话"));
     service.flush();
     QTest::qWait(120);
     bool degradedReported = false;
@@ -346,7 +342,7 @@ try
     service.setViewActive(false);
     service.shutdown();
     require(!service.running(), "shutdown did not stop the service");
-    LogService::write(LogLevel::Info, QStringLiteral("测试"), QStringLiteral("关闭后写入"));
+    LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("关闭后写入"));
     service.shutdown();
     require(service.writeFailures() == 1, "a closed healthy service reported additional write failures");
 
@@ -360,7 +356,7 @@ try
                 [&]
                 {
                     while (!stop.load(std::memory_order_relaxed))
-                        LogService::write(LogLevel::Info, QStringLiteral("并发"), QStringLiteral("关闭竞争"));
+                        LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("关闭竞争"));
                 });
         QTest::qWait(20);
         service.shutdown();

@@ -121,7 +121,7 @@ try
     AppController controller(1, installation.directory());
     require(QTest::qWaitFor([&] { return !controller.busy() && !controller.toolDefinitions().isEmpty(); }, 5000),
             "tool catalog did not become ready");
-    controller.addNode(QStringLiteral("custom.python.roi"), 0, 0);
+    controller.addNode(QStringLiteral("RoiGeometry"), 0, 0);
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 1; }, 5000),
             "available Python tool was not added before removal");
     const auto nodeId = controller.nodes().first().toMap().value("id").toString();
@@ -133,14 +133,14 @@ try
     require(QTest::qWaitFor(
                 [&]
                 {
-                    const auto current = findDefinition(controller.toolDefinitions(), QStringLiteral("custom.python.roi"));
+                    const auto current = findDefinition(controller.toolDefinitions(), QStringLiteral("RoiGeometry"));
                     return !controller.busy() && !current.isEmpty() && current.value("available").toBool() == false;
                 },
                 5000),
             "missing-script Python declaration was not retained as unavailable");
-    const auto roi = findDefinition(controller.toolDefinitions(), QStringLiteral("custom.python.roi"));
+    const auto roi = findDefinition(controller.toolDefinitions(), QStringLiteral("RoiGeometry"));
     require(roi.value("available").toBool() == false, "missing-script Python tool was reported available");
-    const auto index = findToolIndex(controller.toolModel(), QStringLiteral("custom.python.roi"));
+    const auto index = findToolIndex(controller.toolModel(), QStringLiteral("RoiGeometry"));
     require(index.isValid(), "missing-script Python declaration disappeared from the tool tree");
     require(controller.toolModel()->data(index, ToolTreeModel::AvailableRole).toBool() == false,
             "tool tree did not mark the missing-script Python tool unavailable");
@@ -159,13 +159,13 @@ try
     QCoreApplication::processEvents();
     require(controller.nodes().size() == 1, "unavailable clipboard node was pasted into the flow");
 
-    controller.addNode(QStringLiteral("custom.python.roi"), 0, 0);
+    controller.addNode(QStringLiteral("RoiGeometry"), 0, 0);
     QCoreApplication::processEvents();
     require(controller.nodes().size() == 1, "unavailable tool was added to the flow");
     require(controller.diagnostic().contains(QStringLiteral("Python 脚本缺失")),
             "unavailable add did not surface its concrete diagnostic");
 
-    controller.addNode(QStringLiteral("visionrt.image.read"), 0, 0);
+    controller.addNode(QStringLiteral("ReadImage"), 0, 0);
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
             ("available tool was not added: " + controller.diagnostic().toStdString()).c_str());
 
@@ -206,9 +206,9 @@ try
         QCoreApplication::processEvents();
         QTest::qWait(50);
     }
-    require(QTest::qWaitFor([&] { return delegateWithTool(tree, QStringLiteral("custom.python.roi")) != nullptr; }, 3000),
+    require(QTest::qWaitFor([&] { return delegateWithTool(tree, QStringLiteral("RoiGeometry")) != nullptr; }, 3000),
             "unavailable tool delegate was not laid out");
-    auto *delegate = delegateWithTool(tree, QStringLiteral("custom.python.roi"));
+    auto *delegate = delegateWithTool(tree, QStringLiteral("RoiGeometry"));
     require(delegate->property("available").toBool() == false, "delegate lost unavailable state");
     require(delegate->property("status").toString().contains(QStringLiteral("Python 脚本缺失")),
             "delegate lost the unavailable diagnostic");
@@ -222,7 +222,7 @@ try
     controller.requestOpen(QString::fromStdWString(savedPath.wstring()));
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
             "project with unavailable tool was not reopened");
-    const auto reopenedRoi = findDefinition(controller.toolDefinitions(), QStringLiteral("custom.python.roi"));
+    const auto reopenedRoi = findDefinition(controller.toolDefinitions(), QStringLiteral("RoiGeometry"));
     require(!reopenedRoi.isEmpty() && reopenedRoi.value("available").toBool() == false,
             "reopened unavailable tool lost its diagnostic state");
     std::cout << "Unavailable Python declarations stay diagnostic-only; available tools remain addable\n";

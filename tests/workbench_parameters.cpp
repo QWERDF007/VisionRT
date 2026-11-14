@@ -61,7 +61,6 @@ void parameterEditorsContract()
           "    return {'outputs': {2: inputs[1], 3: inputs[2], 0: 0, 1: ''}, 'detail': ''}\n");
     write("tools/custom/Test/Parameters/tool.json",
           R"json({
-  "schema_version": 6,
   "name_en": "test.parameters",
   "name_zh": "参数测试",
   "version": "1.0.0",
@@ -71,128 +70,121 @@ void parameterEditorsContract()
     "file": "run.py",
     "symbol": "run"
   },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 12,
-    "outputs": 4
-  },
-  "ports": {
-    "inputs": [
-      {
-        "id": 1,
-        "name_zh": "比例",
-        "type": "float",
-        "default": 0.15,
-        "constraints": {
-          "min": 0,
-          "max": 1
-        },
-        "ui": {
-          "step": 0.05,
-          "decimals": 2
-        }
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "比例",
+      "type": "float",
+      "default": 0.15,
+      "constraints": {
+        "min": 0,
+        "max": 1
       },
-      {
-        "id": 2,
-        "name_zh": "整数",
-        "type": "int",
-        "default": 9007199254740993
-      },
-      {
-        "id": 3,
-        "name_zh": "路径",
-        "type": "string",
-        "default": "原始路径",
-        "ui": {
-          "editor": "path"
-        }
-      },
-      {
-        "id": 4,
-        "name_zh": "启用",
-        "type": "bool",
-        "default": true
-      },
-      {
-        "id": 5,
-        "name_zh": "色彩",
-        "type": "string",
-        "default": "bgr",
-        "constraints": {
-          "options": [
-            "bgr",
-            "gray"
-          ]
-        }
-      },
-      {
-        "id": 6,
-        "name_zh": "标签列表",
-        "type": "vec_string",
-        "default": [
-          "a",
-          "b"
+      "ui": {
+        "step": 0.05,
+        "decimals": 2
+      }
+    },
+    {
+      "id": 2,
+      "name_zh": "整数",
+      "type": "int",
+      "default": 9007199254740993
+    },
+    {
+      "id": 3,
+      "name_zh": "路径",
+      "type": "string",
+      "default": "原始路径",
+      "ui": {
+        "editor": "path"
+      }
+    },
+    {
+      "id": 4,
+      "name_zh": "启用",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": 5,
+      "name_zh": "色彩",
+      "type": "string",
+      "default": "bgr",
+      "constraints": {
+        "options": [
+          "bgr",
+          "gray"
         ]
+      }
+    },
+    {
+      "id": 6,
+      "name_zh": "标签列表",
+      "type": "vec_string",
+      "default": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "id": 7,
+      "name_zh": "备注",
+      "type": "string",
+      "default": "中文备注"
+    },
+    {
+      "id": 8,
+      "name_zh": "数据目录",
+      "type": "string",
+      "default": "F:/tmp",
+      "ui": {
+        "editor": "path"
+      }
+    },
+    {
+      "id": 9,
+      "name_zh": "数值数组",
+      "type": "vec_float",
+      "default": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": 10,
+      "name_zh": "图像",
+      "type": "image",
+      "display": {
+        "visible": true
       },
-      {
-        "id": 7,
-        "name_zh": "备注",
-        "type": "string",
-        "default": "中文备注"
-      },
-      {
-        "id": 8,
-        "name_zh": "数据目录",
-        "type": "string",
-        "default": "F:/tmp",
-        "ui": {
-          "editor": "path"
-        }
-      },
-      {
-        "id": 9,
-        "name_zh": "数值数组",
-        "type": "vec_float",
-        "default": [
-          0,
-          1
-        ]
-      },
-      {
-        "id": 10,
-        "name_zh": "图像",
-        "type": "image",
-        "display": {
-          "visible": true
-        },
-        "default": []
-      },
-      {
-        "id": 11,
-        "name_zh": "区域",
-        "type": "roi",
-        "default": [],
-        "relations": {
-          "image": {
-            "stage": "inputs",
-            "id": 10
-          }
+      "default": []
+    },
+    {
+      "id": 11,
+      "name_zh": "区域",
+      "type": "roi",
+      "default": [],
+      "relations": {
+        "image": {
+          "stage": "inputs",
+          "id": 10
         }
       }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_zh": "比例",
-        "type": "float"
-      },
-      {
-        "id": 3,
-        "name_zh": "整数",
-        "type": "int"
-      }
-    ]
-  }
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "比例",
+      "type": "float"
+    },
+    {
+      "id": 3,
+      "name_zh": "整数",
+      "type": "int"
+    }
+  ]
 })json");
 
     AppController app(1, directory.path());

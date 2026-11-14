@@ -3,6 +3,7 @@
 
 #include <QAbstractItemModel>
 #include <QString>
+#include <QStringList>
 #include <memory>
 #include <vector>
 
@@ -44,12 +45,16 @@ private:
 
     struct Definition
     {
-        QString category, group, name, id, version, status;
-        bool    available;
+        // Folder names below the declaration root; the tree nests one level per entry.
+        QStringList categories;
+        QString     name, id, version, status;
+        bool        available;
     };
 
-    void                    rebuild();
-    Entry                   root_;
+    static Entry *findById(Entry &entry, const QString &id);
+    static Entry &groupEntry(Entry &parent, const QString &name);
+    void          rebuild();
+    Entry         root_;
     std::vector<Definition> definitions_;
     QString                 filter_;
 };

@@ -21,25 +21,6 @@ bool inOptions(const std::vector<PortValue> &options, const PortValue &value)
     return std::any_of(options.begin(), options.end(), [&](const auto &option) { return equalValues(option, value); });
 }
 
-bool inRange(const PortDefinition &port, const PortValue &value)
-{
-    if (port.type.type == Type::Int)
-    {
-        const auto current = std::get<std::int64_t>(value);
-        if (port.minimum && current < std::get<std::int64_t>(*port.minimum))
-            return false;
-        if (port.maximum && current > std::get<std::int64_t>(*port.maximum))
-            return false;
-        return true;
-    }
-    const auto current = std::get<double>(value);
-    if (port.minimum && current < std::get<double>(*port.minimum))
-        return false;
-    if (port.maximum && current > std::get<double>(*port.maximum))
-        return false;
-    return true;
-}
-
 void clampNumeric(const PortDefinition &port, PortValue &value, std::string &adjustment)
 {
     if (!port.minimum && !port.maximum)

@@ -734,6 +734,7 @@ NodeId ProjectEditor::addNode(std::string_view flowId, const ToolDefinition &too
     node.id               = edit.project_.nextNodeId;
     node.toolId           = definition.nameEn;
     node.toolNameSnapshot = definition.nameZh;
+    node.toolVersionSnapshot = definition.version;
     if (definition.nodeModel == NodeModel::Expression || definition.nodeModel == NodeModel::Condition)
         node.expression = ExpressionConfig{};
     if (definition.nodeModel == NodeModel::Select)

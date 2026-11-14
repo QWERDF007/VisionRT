@@ -67,8 +67,7 @@ public:
     ~AssistPreview() override;
 
     // GUI thread. Replaces the helper session and drops whatever was queued.
-    void        configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper,
-                          std::filesystem::path directory);
+    void        configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper);
     bool        configured() const;
     std::string helperId() const;
 
@@ -103,7 +102,6 @@ private:
     {
         std::shared_ptr<const ToolRegistry> registry;
         ToolDefinition                      helper;
-        std::filesystem::path               directory;
     };
 
     struct Job

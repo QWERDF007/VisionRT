@@ -1,6 +1,7 @@
-#include <visionrt/contracts/Module.h>
-
+#include <filesystem>
 #include <fstream>
+
+#include <visionrt/contracts/Module.h>
 
 namespace {
 using namespace visionrt;
@@ -52,7 +53,7 @@ private:
     std::filesystem::path marker_;
 };
 
-IToolInstance *VT_CALL create(const ToolServices *, ToolStatus *status) noexcept
+IToolInstance *VT_CALL create(ToolStatus *status) noexcept
 {
     try
     {

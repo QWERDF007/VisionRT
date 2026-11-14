@@ -39,7 +39,7 @@ private:
 };
 
 template<std::int64_t Value>
-visionrt::IToolInstance *VT_CALL create(const visionrt::ToolServices *, visionrt::ToolStatus *status) noexcept
+visionrt::IToolInstance *VT_CALL create(visionrt::ToolStatus *status) noexcept
 {
     try
     {

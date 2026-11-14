@@ -17,11 +17,6 @@ CustomToolStore::CustomToolStore(std::filesystem::path rootDir)
 {
 }
 
-void CustomToolStore::setRootDir(std::filesystem::path rootDir)
-{
-    rootDir_ = rootDir.empty() ? defaultRootDir() : std::filesystem::weakly_canonical(rootDir);
-}
-
 std::filesystem::path CustomToolStore::defaultRootDir()
 {
     // The installation owns its user tools: they sit next to the executable, never in a per-user
@@ -46,6 +41,36 @@ void writeAtomically(const std::filesystem::path &path, std::string_view content
     }
     if (!file.commit())
         throw ContractError("提交" + std::string(what) + "失败：" + path.string());
+}
+
+// The declaration of this id anywhere under the root: a tool keeps one file whichever folder its
+// category names, so moving it must find the old one without reading every declaration.
+std::filesystem::path existingDeclaration(const std::filesystem::path &root, const std::string &toolId)
+{
+    if (!std::filesystem::is_directory(root))
+        return {};
+    const auto name = toolId + ".json";
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(root))
+        if (entry.is_regular_file() && entry.path().filename() == name)
+            return entry.path();
+    return {};
+}
+
+// The folder a declaration lives in is its category, so a tool's place in the tree is a directory
+// name the store can always reach: no empty part, no separator and no parent reference.
+std::filesystem::path declarationFolder(const std::filesystem::path        &root,
+                                        const std::vector<std::string> &categories)
+{
+    auto folder = root;
+    for (const auto &name : categories)
+    {
+        if (name.empty() || name == "." || name == ".." || name.find_first_of("/\\") != std::string::npos)
+            throw ContractError("工具分类目录不合法：" + name);
+        // Categories are UTF-8 like every other author string; a narrow path would be read as ANSI.
+        folder /= std::filesystem::path(
+            std::u8string(reinterpret_cast<const char8_t *>(name.data()), name.size()));
+    }
+    return folder;
 }
 
 } // namespace
@@ -113,7 +138,7 @@ std::vector<PackageTool> CustomToolStore::discoverCustomTools(std::vector<std::s
         }
     };
 
-    for (const auto &entry : std::filesystem::directory_iterator(declDir))
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(declDir))
     {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
@@ -173,7 +198,6 @@ ToolDefinition CustomToolStore::saveCustomTool(const ToolDefinition &authored, c
     std::filesystem::create_directories(declDir);
     std::filesystem::create_directories(pyDir);
 
-    definition.schemaVersion = 6;
     definition.source.origin = ToolOrigin::Custom;
     definition.source.roots.declarations = std::filesystem::weakly_canonical(declDir);
     definition.source.roots.python       = std::filesystem::weakly_canonical(pyDir);
@@ -211,10 +235,22 @@ ToolDefinition CustomToolStore::saveCustomTool(const ToolDefinition &authored, c
                             "Python 脚本");
     }
 
-    const auto jsonPath = declDir / (definition.nameEn + ".json");
+    const auto jsonDir  = declarationFolder(declDir, definition.categories);
+    const auto jsonPath = jsonDir / (definition.nameEn + ".json");
     definition.definitionPath = jsonPath;
 
+    // A tool moved to another folder keeps one declaration: the former file would otherwise be
+    // discovered as a second copy of the same id.
+    const auto previous = existingDeclaration(declDir, definition.nameEn);
+    std::filesystem::create_directories(jsonDir);
     writeAtomically(jsonPath, emitNormalizedToolJson(definition), "工具声明");
+    if (!previous.empty() && previous != jsonPath)
+    {
+        std::error_code error;
+        std::filesystem::remove(previous, error);
+        if (error)
+            throw ContractError("无法删除旧位置的工具声明：" + previous.string() + "：" + error.message());
+    }
     return definition;
 }
 
@@ -222,9 +258,8 @@ bool CustomToolStore::deleteCustomTool(const std::string &toolId)
 {
     validateIdentifier(toolId, false);
 
-    const auto declDir  = declarationsDir();
-    const auto jsonPath = declDir / (toolId + ".json");
-    if (!std::filesystem::exists(jsonPath))
+    const auto jsonPath = existingDeclaration(declarationsDir(), toolId);
+    if (jsonPath.empty())
         return false;
 
     // The declaration owns the code directory, and its package is not necessarily the id spelled
@@ -248,7 +283,7 @@ bool CustomToolStore::deleteCustomTool(const std::string &toolId)
         return true;
 
     // A package another declaration still references is not ours to remove.
-    for (const auto &entry : std::filesystem::directory_iterator(declDir))
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(declarationsDir()))
     {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;

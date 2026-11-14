@@ -100,7 +100,6 @@ void outputContract()
     port.nameZh = "值";
     port.type   = {Type::String};
     tool.outputs.push_back(port);
-    tool.nextOutputPortId = 3;
     auto snapshot    = std::make_shared<NodeSnapshot>();
     snapshot->node   = 18446744073709551614ULL;
     snapshot->toolId = "test.output";
@@ -164,7 +163,6 @@ void outputContract()
         {4, "列表", {Type::Array, DType::Int64, 1}},
         {5, "文本", {Type::String}}
     };
-    typed.nextOutputPortId = 6;
     auto typedSnapshot    = std::make_shared<NodeSnapshot>();
     typedSnapshot->node   = 2;
     typedSnapshot->toolId = typed.nameEn;
@@ -202,11 +200,26 @@ void outputContract()
 
 void pendingContract()
 {
+    // S20: an untouched project holds nothing to lose, so closing it asks nothing.
+    {
+        QTemporaryDir directory;
+        AppController app(1, directory.path());
+        int           confirmations = 0;
+        QObject::connect(&app, &AppController::unsavedDecisionRequired, [&] { ++confirmations; });
+        require(!app.dirty(), "a new project starts dirty");
+        app.requestClose();
+        require(confirmations == 0 && app.isClosing(), "an unedited project asked to save before closing");
+    }
+
     QTemporaryDir directory;
     AppController app(1, directory.path());
     int           confirmations = 0, closes = 0;
     QObject::connect(&app, &AppController::unsavedDecisionRequired, [&] { ++confirmations; });
     QObject::connect(&app, &AppController::closeReady, [&] { ++closes; });
+    // The first real edit arms the decision; the flow is the smallest change that survives the
+    // empty-project rule.
+    app.addFlow(QStringLiteral("流程2"));
+    require(app.dirty(), "adding a flow left the project clean");
     app.requestClose();
     require(confirmations == 1 && closes == 0, "dirty close bypasses decision");
     app.resolveUnsaved("cancel");
@@ -227,8 +240,9 @@ void pendingContract()
         AppController saveApp(1, saveDir.path());
         int saveCloses = 0;
         QObject::connect(&saveApp, &AppController::closeReady, [&] { ++saveCloses; });
+        saveApp.addFlow(QStringLiteral("流程2"));
         saveApp.requestClose();
-        require(saveApp.dirty(), "new project without file should be dirty");
+        require(saveApp.dirty(), "edited project should be dirty");
         const QString validSavePath = saveDir.path() + "/saved_on_close.vrt.json";
         saveApp.resolveUnsaved("save", validSavePath);
         require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
@@ -305,7 +319,7 @@ void durationTextContract()
             "tooltip phases did not aggregate the measured preparation/post-processing");
     const auto phases = timingPhasesOf(called);
     require(phases.size() == 3 && phases.at(0).label == QStringLiteral("预处理")
-                && phases.at(1).label == QStringLiteral("算子时间") && phases.at(2).label == QStringLiteral("后处理"),
+                && phases.at(1).label == QStringLiteral("工具 API 耗时") && phases.at(2).label == QStringLiteral("后处理"),
             "hover rows lost their labels or order");
 
     const std::pair<double, std::optional<QString>> measurements[] = {
@@ -394,7 +408,6 @@ void nodeDiagnosticsContract()
     {
         jsonFile.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.diag.python",
   "name_zh": "诊断测试",
   "version": "1.0.0",
@@ -404,35 +417,28 @@ void nodeDiagnosticsContract()
     "file": "test_diag.py",
     "symbol": "run"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_zh": "输入",
-        "type": "int",
-        "default": 1,
-        "constraints": {
-          "min": 0,
-          "max": 100
-        },
-        "ui": {
-          "step": 1
-        },
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "输出",
-        "type": "int",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_zh": "输入",
+      "type": "int",
+      "default": 1,
+      "constraints": {
+        "min": 0,
+        "max": 100
+      },
+      "ui": {
+        "step": 1
+      },
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "输出",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
         jsonFile.close();
     }
@@ -441,7 +447,6 @@ void nodeDiagnosticsContract()
     {
         failJsonFile.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.diag.fail",
   "name_zh": "诊断失败",
   "version": "1.0.0",
@@ -451,20 +456,13 @@ void nodeDiagnosticsContract()
     "file": "test_diag_fail.py",
     "symbol": "run"
   },
-  "ports": {
-    "outputs": [
-      {
-        "name_zh": "输出",
-        "type": "int",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "outputs": [
+    {
+      "name_zh": "输出",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
         failJsonFile.close();
     }
@@ -473,18 +471,12 @@ void nodeDiagnosticsContract()
     {
         unfulfilledJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.diag.unfulfilled",
   "name_zh": "未提供实现测试",
   "version": "1.0.0",
   "implementation": {
     "kind": "host",
     "binding": "nonexistent.binding"
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 2
   }
 })json");
         unfulfilledJson.close();
@@ -644,7 +636,7 @@ void nodeDiagnosticsContract()
     require(executedMap.value("state").toString() == "succeeded", "executed node is not succeeded");
     require(executedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "executed node total timing is not measured");
-    require(phaseValue(executedMap, QStringLiteral("算子时间")).endsWith(QStringLiteral(" ms")),
+    require(phaseValue(executedMap, QStringLiteral("工具 API 耗时")).endsWith(QStringLiteral(" ms")),
             "executed node operator timing is not measured");
     // The executed node measured its preparation and result validation, so the two aggregate
     // rows must show real values instead of an empty row.
@@ -655,7 +647,7 @@ void nodeDiagnosticsContract()
 
     const auto unavailableMap = executedNodes.at(1).toMap();
     require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
-    require(phaseValue(unavailableMap, QStringLiteral("算子时间")).isEmpty(),
+    require(phaseValue(unavailableMap, QStringLiteral("工具 API 耗时")).isEmpty(),
             "implementation without a tool call must not report operator time");
 
     const auto failedMap = executedNodes.at(2).toMap();
@@ -673,7 +665,7 @@ void nodeDiagnosticsContract()
             "parameter change discarded the last successful display state");
     require(staleMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous total timing");
-    require(phaseValue(staleMap, QStringLiteral("算子时间")).endsWith(QStringLiteral(" ms")),
+    require(phaseValue(staleMap, QStringLiteral("工具 API 耗时")).endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous operator timing");
     require(staleMap.value("statusCode").toLongLong() == 0, "stale snapshot still exposes an old status");
 
@@ -730,27 +722,19 @@ void mainQmlContract(double scale)
     {
         sleepJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.sleep",
   "name_zh": "Plugin Sleep",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "outputs": [
-      {
-        "name_zh": "Y",
-        "type": "int",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "outputs": [
+    {
+      "name_zh": "Y",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
         sleepJson.close();
     }
@@ -760,35 +744,27 @@ void mainQmlContract(double scale)
     {
         counterJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "Plugin Counter",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_zh": "Step",
-        "type": "int",
-        "default": 1,
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "Count",
-        "type": "int",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_zh": "Step",
+      "type": "int",
+      "default": 1,
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "Count",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
         counterJson.close();
     }
@@ -798,17 +774,11 @@ void mainQmlContract(double scale)
     {
         failJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.fail_init",
   "name_zh": "Fail Init Tool",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 2
   }
 })json");
         failJson.close();
@@ -1121,17 +1091,11 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyJson.write(
                 R"json({
-  "schema_version": 6,
   "name_en": "test.legacy.func",
   "name_zh": "遗留函数",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 2
   }
 })json");
             legacyJson.close();
@@ -1148,7 +1112,6 @@ void packageDrivenCatalogAndRefreshContract()
         {
             legacyPyJson.write(
                 R"json({
-  "schema_version": 6,
   "name_en": "test.legacy.python",
   "name_zh": "遗留脚本",
   "version": "1.0.0",
@@ -1156,11 +1119,6 @@ void packageDrivenCatalogAndRefreshContract()
     "kind": "python_function",
     "file": "legacy.py",
     "symbol": "run"
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 2
   }
 })json");
             legacyPyJson.close();
@@ -1193,35 +1151,27 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootCounterJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "计数器插件",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "init": [
-      {
-        "name_zh": "初始值",
-        "type": "int",
-        "default": 10,
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "计数值",
-        "type": "int",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 2,
-    "inputs": 1,
-    "outputs": 3
-  }
+  "init_params": [
+    {
+      "name_zh": "初始值",
+      "type": "int",
+      "default": 10,
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "计数值",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
         rootCounterJson.close();
     }
@@ -1233,35 +1183,27 @@ void packageDrivenCatalogAndRefreshContract()
     {
         rootFunctionJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "函数插件",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "name_zh": "输入",
-        "type": "int",
-        "default": 5,
-        "id": 1
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "输出",
-        "type": "int",
-        "id": 2
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 2,
-    "outputs": 3
-  }
+  "inputs": [
+    {
+      "name_zh": "输入",
+      "type": "int",
+      "default": 5,
+      "id": 1
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "输出",
+      "type": "int",
+      "id": 2
+    }
+  ]
 })json");
         rootFunctionJson.close();
     }
@@ -1282,7 +1224,6 @@ void packageDrivenCatalogAndRefreshContract()
     {
         root3JsonA.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.user.pythonA",
   "name_zh": "用户脚本A",
   "version": "1.0.0",
@@ -1292,28 +1233,21 @@ void packageDrivenCatalogAndRefreshContract()
     "file": "user_node_a.py",
     "symbol": "run"
   },
-  "ports": {
-    "outputs": [
-      {
-        "name_zh": "结果",
-        "type": "int",
-        "id": 2
+  "outputs": [
+    {
+      "name_zh": "结果",
+      "type": "int",
+      "id": 2
+    },
+    {
+      "name_zh": "图像",
+      "type": "image",
+      "display": {
+        "visible": true
       },
-      {
-        "name_zh": "图像",
-        "type": "image",
-        "display": {
-          "visible": true
-        },
-        "id": 3
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 4
-  }
+      "id": 3
+    }
+  ]
 })json");
         root3JsonA.close();
     }
@@ -1325,7 +1259,6 @@ void packageDrivenCatalogAndRefreshContract()
     {
         recvJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.custom.receiver",
   "name_zh": "动态接收器",
   "version": "1.0.0",
@@ -1333,57 +1266,59 @@ void packageDrivenCatalogAndRefreshContract()
     "kind": "host",
     "binding": "visionrt.receiver"
   },
-  "ports": {
-    "init": [
-      {
-        "name_zh": "源流程",
-        "type": "string",
-        "id": 0
-      },
-      {
-        "name_zh": "源节点",
-        "type": "string",
-        "id": 1
-      },
-      {
-        "name_zh": "源端口",
-        "type": "int",
-        "id": 2
-      },
-      {
-        "name_zh": "超时时间(ms)",
-        "type": "int",
-        "default": 500,
-        "id": 3
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "接收值",
-        "type_from": {
-          "flow": {"stage": "init", "id": 0},
-          "node": {"stage": "init", "id": 1},
-          "port": {"stage": "init", "id": 2}
+  "init_params": [
+    {
+      "name_zh": "源流程",
+      "type": "string",
+      "id": 0
+    },
+    {
+      "name_zh": "源节点",
+      "type": "string",
+      "id": 1
+    },
+    {
+      "name_zh": "源端口",
+      "type": "int",
+      "id": 2
+    },
+    {
+      "name_zh": "超时时间(ms)",
+      "type": "int",
+      "default": 500,
+      "id": 3
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "接收值",
+      "type_from": {
+        "flow": {
+          "stage": "init",
+          "id": 0
         },
-        "id": 2
+        "node": {
+          "stage": "init",
+          "id": 1
+        },
+        "port": {
+          "stage": "init",
+          "id": 2
+        }
       },
-      {
-        "name_zh": "源状态码",
-        "type": "int",
-        "id": 3
-      },
-      {
-        "name_zh": "源状态消息",
-        "type": "string",
-        "id": 4
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 4,
-    "inputs": 1,
-    "outputs": 5
-  }
+      "id": 2
+    },
+    {
+      "name_zh": "源状态码",
+      "type": "int",
+      "id": 3
+    },
+    {
+      "name_zh": "源状态消息",
+      "type": "string",
+      "id": 4
+    }
+  ]
 })json");
         recvJson.close();
     }
@@ -1395,17 +1330,11 @@ void packageDrivenCatalogAndRefreshContract()
     {
         unindexedJson.write(
             R"json({
-  "schema_version": 6,
   "name_en": "test.unindexed.tool",
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
-  },
-  "next_port_id": {
-    "init": 0,
-    "inputs": 1,
-    "outputs": 2
   }
 })json");
         unindexedJson.close();
@@ -1681,7 +1610,6 @@ void packageDrivenCatalogAndRefreshContract()
         {
             renamedJson.write(
                 R"json({
-  "schema_version": 6,
   "name_en": "test.custom.renamed_recv",
   "name_zh": "改名接收器",
   "version": "1.0.0",
@@ -1689,57 +1617,59 @@ void packageDrivenCatalogAndRefreshContract()
     "kind": "host",
     "binding": "visionrt.receiver"
   },
-  "ports": {
-    "init": [
-      {
-        "name_zh": "源流程",
-        "type": "string",
-        "id": 0
-      },
-      {
-        "name_zh": "源节点",
-        "type": "string",
-        "id": 1
-      },
-      {
-        "name_zh": "源端口",
-        "type": "int",
-        "id": 2
-      },
-      {
-        "name_zh": "超时时间(ms)",
-        "type": "int",
-        "default": 500,
-        "id": 3
-      }
-    ],
-    "outputs": [
-      {
-        "name_zh": "接收值",
-        "type_from": {
-          "flow": {"stage": "init", "id": 0},
-          "node": {"stage": "init", "id": 1},
-          "port": {"stage": "init", "id": 2}
+  "init_params": [
+    {
+      "name_zh": "源流程",
+      "type": "string",
+      "id": 0
+    },
+    {
+      "name_zh": "源节点",
+      "type": "string",
+      "id": 1
+    },
+    {
+      "name_zh": "源端口",
+      "type": "int",
+      "id": 2
+    },
+    {
+      "name_zh": "超时时间(ms)",
+      "type": "int",
+      "default": 500,
+      "id": 3
+    }
+  ],
+  "outputs": [
+    {
+      "name_zh": "接收值",
+      "type_from": {
+        "flow": {
+          "stage": "init",
+          "id": 0
         },
-        "id": 2
+        "node": {
+          "stage": "init",
+          "id": 1
+        },
+        "port": {
+          "stage": "init",
+          "id": 2
+        }
       },
-      {
-        "name_zh": "源状态码",
-        "type": "int",
-        "id": 3
-      },
-      {
-        "name_zh": "源状态消息",
-        "type": "string",
-        "id": 4
-      }
-    ]
-  },
-  "next_port_id": {
-    "init": 4,
-    "inputs": 1,
-    "outputs": 5
-  }
+      "id": 2
+    },
+    {
+      "name_zh": "源状态码",
+      "type": "int",
+      "id": 3
+    },
+    {
+      "name_zh": "源状态消息",
+      "type": "string",
+      "id": 4
+    }
+  ]
 })json");
             renamedJson.close();
         }

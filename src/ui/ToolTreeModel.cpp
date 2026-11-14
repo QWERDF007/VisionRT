@@ -18,13 +18,12 @@ void ToolTreeModel::setRegistry(const ToolRegistry &registry)
         if (tool.visibility == ToolVisibility::Assist)
             continue;
         const auto availability = registry.availability(tool.nameEn);
-        const auto category     = tool.categories.empty() ? QString{} : QString::fromStdString(tool.categories.front());
-        QString    subcategory;
-        for (std::size_t level = 1; level < tool.categories.size(); ++level)
-            subcategory += (subcategory.isEmpty() ? QString{} : QStringLiteral("/"))
-                           + QString::fromStdString(tool.categories[level]);
-        definitions_.push_back({category, subcategory,
-                                QString::fromStdString(tool.nameZh), QString::fromStdString(tool.nameEn),
+        QStringList categories;
+        for (const auto &name : tool.categories)
+            categories.append(QString::fromStdString(name));
+        definitions_.push_back({categories,
+                                QString::fromStdString(tool.nameZh),
+                                QString::fromStdString(tool.nameEn),
                                 QString::fromStdString(tool.version),
                                 QString::fromStdString(availability.status.message),
                                 availability.state == ToolAvailability::Available});
@@ -40,78 +39,76 @@ void ToolTreeModel::setFilter(const QString &text)
     rebuild();
 }
 
+// The folder node with this name, created on first use so one group holds every tool under it.
+ToolTreeModel::Entry &ToolTreeModel::groupEntry(Entry &parent, const QString &name)
+{
+    for (auto &child : parent.children)
+        if (child->name == name)
+            return *child;
+    auto child    = std::make_unique<Entry>();
+    child->name   = name;
+    child->parent = &parent;
+    parent.children.push_back(std::move(child));
+    return *parent.children.back();
+}
+
+ToolTreeModel::Entry *ToolTreeModel::findById(Entry &entry, const QString &id)
+{
+    for (auto &child : entry.children)
+    {
+        if (child->id == id)
+            return child.get();
+        if (auto *found = findById(*child, id))
+            return found;
+    }
+    return nullptr;
+}
+
 bool ToolTreeModel::updateToolStatus(const QString &toolId, bool available, const QString &status)
 {
-    bool changed = false;
-    for (auto &def : definitions_)
-    {
-        if (def.id == toolId)
-        {
-            if (def.available != available || def.status != status)
-            {
-                def.available = available;
-                def.status    = status;
-                changed       = true;
-            }
-            break;
-        }
-    }
+    auto *tool = findById(root_, toolId);
+    if (!tool || (tool->available == available && tool->status == status))
+        return false;
+    tool->available = available;
+    tool->status    = status;
 
-    for (int catRow = 0; catRow < static_cast<int>(root_.children.size()); ++catRow)
+    const auto indexOf = [this](const Entry *entry) -> QModelIndex
     {
-        auto &cat = *root_.children[catRow];
-        for (int subRow = 0; subRow < static_cast<int>(cat.children.size()); ++subRow)
-        {
-            auto &sub = *cat.children[subRow];
-            for (int toolRow = 0; toolRow < static_cast<int>(sub.children.size()); ++toolRow)
-            {
-                auto &tool = *sub.children[toolRow];
-                if (tool.id == toolId)
-                {
-                    if (tool.available == available && tool.status == status)
-                        return changed;
-                    tool.available = available;
-                    tool.status    = status;
-                    const auto parentIdx = index(subRow, 0, index(catRow, 0, {}));
-                    const auto toolIdx   = index(toolRow, 0, parentIdx);
-                    emit dataChanged(toolIdx, toolIdx, {AvailableRole, StatusRole});
-                    return true;
-                }
-            }
-        }
-    }
-    return changed;
+        const auto *parent = entry->parent;
+        if (!parent)
+            return {};
+        const auto &siblings = parent->children;
+        for (std::size_t row = 0; row < siblings.size(); ++row)
+            if (siblings[row].get() == entry)
+                return createIndex(static_cast<int>(row), 0, const_cast<Entry *>(entry));
+        return {};
+    };
+    const auto idx = indexOf(tool);
+    emit       dataChanged(idx, idx, {AvailableRole, StatusRole});
+    return true;
 }
 
 void ToolTreeModel::rebuild()
 {
     beginResetModel();
     root_.children.clear();
-    auto group = [](Entry &parent, const QString &name) -> Entry &
-    {
-        for (auto &child : parent.children)
-            if (child->name == name)
-                return *child;
-        auto child    = std::make_unique<Entry>();
-        child->name   = name;
-        child->parent = &parent;
-        parent.children.push_back(std::move(child));
-        return *parent.children.back();
-    };
     for (const auto &definition : definitions_)
     {
         if (!filter_.isEmpty() && !definition.name.contains(filter_, Qt::CaseInsensitive))
             continue;
-        auto &category   = group(root_, definition.category.isEmpty() ? QStringLiteral("未分类") : definition.category);
-        auto &subgroup   = group(category, definition.group.isEmpty() ? QStringLiteral("通用") : definition.group);
-        auto  child      = std::make_unique<Entry>();
+        Entry *parent = &root_;
+        if (definition.categories.isEmpty())
+            parent = &groupEntry(root_, QStringLiteral("未分类"));
+        for (const auto &category : definition.categories)
+            parent = &groupEntry(*parent, category);
+        auto child       = std::make_unique<Entry>();
         child->name      = definition.name;
         child->id        = definition.id;
         child->version   = definition.version;
         child->status    = definition.status;
         child->available = definition.available;
-        child->parent    = &subgroup;
-        subgroup.children.push_back(std::move(child));
+        child->parent    = parent;
+        parent->children.push_back(std::move(child));
     }
     endResetModel();
 }
@@ -175,7 +172,13 @@ QVariant ToolTreeModel::data(const QModelIndex &index, int role) const
     case StableKeyRole:
         if (!entry.id.isEmpty())
             return entry.id;
-        return entry.parent == &root_ ? entry.name : entry.parent->name + "/" + entry.name;
+        {
+            // The full folder path, so two roots that use the same leaf name stay distinct.
+            QStringList path;
+            for (const Entry *node = &entry; node && node != &root_; node = node->parent)
+                path.prepend(node->name);
+            return path.join(QLatin1Char('/'));
+        }
     default:
         return {};
     }

@@ -78,8 +78,7 @@ ToolStatus errorStatus(ErrorCode code, const char *summary, const std::string &d
     return makeStatus(code, summary, detail);
 }
 
-py::dict inputDictionary(const Values &values, const std::vector<PortDefinition> &declarations,
-                         const ToolServices &services)
+py::dict inputDictionary(const Values &values, const std::vector<PortDefinition> &declarations)
 {
     py::dict result;
     for (const auto &[id, value] : values)
@@ -87,19 +86,7 @@ py::dict inputDictionary(const Values &values, const std::vector<PortDefinition>
         const auto definition = std::find_if(declarations.begin(), declarations.end(),
                                              [&](const PortDefinition &port) { return port.id == id; });
         if (definition != declarations.end())
-        {
             validateValue(definition->type, value);
-            if (isPathPort(*definition) && std::holds_alternative<std::string>(value)
-                && !std::get<std::string>(value).empty())
-            {
-                const auto resolution = services.paths.tryResolve(std::get<std::string>(value));
-                if (!resolution)
-                    throw ContractError(resolution.issue().describe());
-                const auto resolved = resolution.value().u8string();
-                result[py::int_(id)] = py::str(reinterpret_cast<const char *>(resolved.data()), resolved.size());
-                continue;
-            }
-        }
         result[py::int_(id)] = toPython(value);
     }
     return result;
@@ -229,11 +216,10 @@ class PythonTool final
 {
 public:
     PythonTool(std::shared_ptr<RuntimeState> state, std::shared_ptr<const ToolDefinition> definition,
-               ToolServices services, std::shared_ptr<PythonLoadState> sharedLoadState)
+               std::shared_ptr<PythonLoadState> sharedLoadState)
         : state_(std::move(state))
         , definitionOwner_(std::move(definition))
         , definition_(*definitionOwner_)
-        , services_(std::move(services))
         , sharedLoadState_(std::move(sharedLoadState))
         , generation_(state_ ? state_->generation : 0)
         , objects_(std::make_shared<ToolObjects>())
@@ -281,7 +267,7 @@ public:
             return {};
         try
         {
-            auto inputs = inputDictionary(parameters, definition_.initParams, services_);
+            auto inputs = inputDictionary(parameters, definition_.initParams);
             return lifecycleStatus(objects_->instance.attr("initialize")(inputs), state_->storage);
         }
         catch (const py::error_already_set &error)
@@ -352,7 +338,7 @@ public:
         {
             {
                 ScopeTimer inputTimer(metrics_.pythonInputMs);
-                auto       parameters = inputDictionary(inputs, definition_.inputs, services_);
+                auto       parameters = inputDictionary(inputs, definition_.inputs);
                 inputTimer.stop();
 
                 metrics_.pythonCallMeasured = true;
@@ -577,7 +563,6 @@ private:
     std::shared_ptr<RuntimeState>         state_;
     std::shared_ptr<const ToolDefinition> definitionOwner_;
     const ToolDefinition                 &definition_;
-    ToolServices                 services_;
     std::shared_ptr<PythonLoadState> sharedLoadState_;
     std::shared_ptr<ToolObjects> objects_;
     ExecutionMetrics             metrics_;
@@ -820,8 +805,8 @@ PythonFactoryFunctor pythonToolFactory(const std::shared_ptr<RuntimeState> &stat
     normalizeToolDefinition(normalized);
     auto       defPtr     = std::make_shared<const ToolDefinition>(std::move(normalized));
     const auto generation = state->generation;
-    auto       createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState, generation](
-                            const PlatformToolServices &services) -> std::unique_ptr<IToolInstance>
+    auto       createFunc = [weak = std::weak_ptr<RuntimeState>(state), defPtr, loadState, generation]()
+        -> std::unique_ptr<IToolInstance>
     {
         auto lockedState = weak.lock();
         if (!lockedState || !lockedState->alive)
@@ -836,7 +821,7 @@ PythonFactoryFunctor pythonToolFactory(const std::shared_ptr<RuntimeState> &stat
             if (!status)
                 throw RegistryError(ToolAvailability::ImplementationUnavailable, status);
         }
-        return std::make_unique<PythonTool>(std::move(lockedState), defPtr, services, loadState);
+        return std::make_unique<PythonTool>(std::move(lockedState), defPtr, loadState);
     };
     return PythonFactoryFunctor{loadState, std::move(createFunc), {}};
 }
@@ -866,20 +851,17 @@ ToolFactory PythonRuntime::factory(const ToolDefinition &definition) const
 
 bool PythonRuntime::isCloseReady() const noexcept
 {
-    if (!impl_)
-        return true;
     return impl_->state->storage.isReadyForClose();
 }
 
 void PythonRuntime::prepareShutdown()
 {
-    if (impl_)
-        impl_->prepareShutdown();
+    impl_->prepareShutdown();
 }
 
 std::size_t PythonRuntime::activeReferences() const noexcept
 {
-    return impl_ ? impl_->state->storage.activeCount() : 0;
+    return impl_->state->storage.activeCount();
 }
 
 } // namespace visionrt

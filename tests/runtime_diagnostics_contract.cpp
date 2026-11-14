@@ -76,7 +76,7 @@ try
         definition.nameEn          = id;
         definition.nameZh = id;
         registry.addDefinition(definition);
-        registry.registerCpp(definition, [&, message](const ToolServices &)
+        registry.registerCpp(definition, [&, message]()
                              { return std::make_unique<ReleaseFailure>(lifetime, message); });
     }
     std::mutex                       mutex;

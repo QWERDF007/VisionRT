@@ -89,8 +89,7 @@ private:
 
 struct InstanceConfiguration
 {
-    InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry,
-                          const std::filesystem::path &directory);
+    InstanceConfiguration(const NodeDefinition &node, const ToolRegistry &registry);
     bool operator==(const InstanceConfiguration &other) const;
 
     std::string           toolId;
@@ -99,7 +98,6 @@ struct InstanceConfiguration
     ToolAvailability      availability;
     Values                parameters;
     TypeMap               outputs;
-    std::filesystem::path directory;
 };
 
 struct NodeRuntime

@@ -86,7 +86,7 @@ class ToolsDeploymentContract(unittest.TestCase):
         (self.source / "bin/plugin.dll").write_bytes(b"metadata-only module")
         (self.source / "bin/runtime.dll").write_bytes(b"runtime dependency")
         self.definition = {
-            "schema_version": 6, "name_en": "test.plugin", "name_zh": "部署测试",
+            "name_en": "test.plugin", "name_zh": "部署测试",
             "version": "1.0.0", "implementation": {"kind": "cpp"},
         }
         self.index = {
@@ -196,12 +196,13 @@ class ToolsDeploymentContract(unittest.TestCase):
         self.assertTrue((self.package / "old.txt").is_file())
 
     def test_duplicate_json_members_are_rejected_before_installation(self) -> None:
-        for name in ("module_index.json", "tools/builtin/test.json"):
+        for name, member in (("module_index.json", '"schema_version":'),
+                             ("tools/builtin/test.json", '"name_en":')):
             with self.subTest(name=name):
                 self.write_source()
                 source = self.source / name
                 source.write_text(source.read_text(encoding="utf-8").replace(
-                    '"schema_version":', '"schema_version": 1, "schema_version":'), encoding="utf-8")
+                    member, member + " 1, " + member), encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, "duplicate JSON member"):
                     package_app.deploy_tools_package(self.install, self.archive(), self.validator)
                 self.assertTrue((self.package / "old.txt").is_file())

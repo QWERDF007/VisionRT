@@ -46,7 +46,7 @@ ProjectDefinition exampleProject(const std::filesystem::path &path)
     project.path = path;
     NodeDefinition node;
     node.id                = 1;
-    node.toolId            = "visionrt.image.read";
+    node.toolId            = "ReadImage";
     node.toolNameSnapshot  = "图像读取";
     node.alias             = "读图";
     node.inputs[1].mode    = BindingMode::Literal;
@@ -80,36 +80,18 @@ try
             "a user project was mistaken for an installed example");
     require(!ExampleProject::owns(appDir, {}), "an unsaved project was reported as an installed example");
 
-    const auto userProject = root / u8"用户" / u8"我的工程.vrt.json";
-    auto       adopted     = ExampleProject::adopt(exampleProject(example), userProject, registry);
-    require(adopted.path == std::filesystem::absolute(userProject).lexically_normal(),
-            "adopted project does not describe the user location");
-    require(read(userProject.parent_path() / "images" / "input_01.png") == "first-image-bytes",
-            "example resources were not copied next to the user project");
-    // Storage must not rewrite the literal back towards the installation: the copied folder is what
-    // the saved project reads.
+    // A copy of an example is an ordinary save: the literal travels unchanged, the resource stays in
+    // the installation, and nothing is collected into the user folder behind the user's back.
+    const auto     userProject = root / u8"用户" / u8"我的工程.vrt.json";
+    require(std::filesystem::create_directories(userProject.parent_path()), "cannot create the user folder");
     ProjectStorage storage(registry);
-    storage.save(adopted, userProject);
+    auto           copied = exampleProject(example);
+    storage.save(copied, userProject);
     const auto saved = read(userProject);
     require(saved.find("\"images\"") != std::string::npos, "the saved project lost its relative image path");
     require(saved.find("examples") == std::string::npos, "the saved project points back into the installation");
-    // A repeated export is a no-op: the same bytes are already there.
-    ExampleProject::adopt(exampleProject(example), userProject, registry);
-
-    write(userProject.parent_path() / "images" / "input_01.png", "user-owned-bytes");
-    bool refused = false;
-    try
-    {
-        ExampleProject::adopt(exampleProject(example), userProject, registry);
-    }
-    catch (const std::runtime_error &error)
-    {
-        refused = true;
-        require(std::string(error.what()).find("未覆盖") != std::string::npos, "conflict message is not Chinese");
-    }
-    require(refused, "an export overwrote a user resource");
-    require(read(userProject.parent_path() / "images" / "input_01.png") == "user-owned-bytes",
-            "a refused export changed the user resource");
+    require(!std::filesystem::exists(userProject.parent_path() / "images"),
+            "saving a copy collected example resources into the user folder");
 
     // The controller rule: an installed example never writes itself, and its copy leaves the
     // installation as an ordinary project that saves in place again.

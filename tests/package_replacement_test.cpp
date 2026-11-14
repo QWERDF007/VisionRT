@@ -57,31 +57,27 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "func.json");
         ofs << R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.function",
   "name_zh": "Plugin Function",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 0, "inputs": 2, "outputs": 3},
-  "ports": {
-    "inputs": [
-      {
-        "id": 1,
-        "name_zh": "X",
-        "type": "int",
-        "default": 10
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_zh": "Y",
-        "type": "int"
-      }
-    ]
-  }
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "X",
+      "type": "int",
+      "default": 10
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "Y",
+      "type": "int"
+    }
+  ]
 })json";
     }
 
@@ -94,7 +90,6 @@ void runPackageReplacement(PythonRuntime &python)
 
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "calc.json");
         ofs << R"json({
-  "schema_version": 6,
   "name_en": "custom.py_math",
   "name_zh": "Python Calc",
   "version": "1.0.0",
@@ -104,23 +99,20 @@ void runPackageReplacement(PythonRuntime &python)
     "file": "calc.py",
     "symbol": "execute"
   },
-  "next_port_id": {"init": 0, "inputs": 2, "outputs": 3},
-  "ports": {
-    "inputs": [
-      {
-        "id": 1,
-        "name_zh": "Val",
-        "type": "int"
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_zh": "Res",
-        "type": "int"
-      }
-    ]
-  }
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "Val",
+      "type": "int"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "Res",
+      "type": "int"
+    }
+  ]
 })json";
     }
 
@@ -128,7 +120,6 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(toolsPackageDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 6,
   "name_en": "platform.test_recv",
   "name_zh": "Test Receiver",
   "version": "1.0.0",
@@ -136,49 +127,46 @@ void runPackageReplacement(PythonRuntime &python)
     "kind": "host",
     "binding": "visionrt.receiver"
   },
-  "next_port_id": {"init": 4, "inputs": 1, "outputs": 5},
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_zh": "Source Flow",
-        "type": "string"
-      },
-      {
-        "id": 1,
-        "name_zh": "Source Node",
-        "type": "string"
-      },
-      {
-        "id": 2,
-        "name_zh": "Source Port",
-        "type": "int"
-      },
-      {
-        "id": 3,
-        "name_zh": "Timeout",
-        "type": "int",
-        "default": 1000
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_zh": "Value",
-        "type": "int"
-      },
-      {
-        "id": 3,
-        "name_zh": "Source Status Code",
-        "type": "int"
-      },
-      {
-        "id": 4,
-        "name_zh": "Source Status Message",
-        "type": "string"
-      }
-    ]
-  }
+  "init_params": [
+    {
+      "id": 0,
+      "name_zh": "Source Flow",
+      "type": "string"
+    },
+    {
+      "id": 1,
+      "name_zh": "Source Node",
+      "type": "string"
+    },
+    {
+      "id": 2,
+      "name_zh": "Source Port",
+      "type": "int"
+    },
+    {
+      "id": 3,
+      "name_zh": "Timeout",
+      "type": "int",
+      "default": 1000
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "Value",
+      "type": "int"
+    },
+    {
+      "id": 3,
+      "name_zh": "Source Status Code",
+      "type": "int"
+    },
+    {
+      "id": 4,
+      "name_zh": "Source Status Message",
+      "type": "string"
+    }
+  ]
 })json";
     }
 
@@ -405,37 +393,32 @@ void runPackageReplacement(PythonRuntime &python)
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "counter.json");
         ofs << R"json({
-  "schema_version": 6,
   "name_en": "test.plugin.counter",
   "name_zh": "Plugin Counter",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 1, "inputs": 1, "outputs": 3},
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_zh": "Initial",
-        "type": "int"
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_zh": "Count",
-        "type": "int"
-      }
-    ]
-  }
+  "init_params": [
+    {
+      "id": 0,
+      "name_zh": "Initial",
+      "type": "int"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "Count",
+      "type": "int"
+    }
+  ]
 })json";
     }
     // Write platform receiver declaration
     {
         std::ofstream ofs(stagingDir / "tools" / "builtin" / "recv.json");
         ofs << R"json({
-  "schema_version": 6,
   "name_en": "platform.test_recv",
   "name_zh": "Test Receiver",
   "version": "1.0.0",
@@ -443,49 +426,46 @@ void runPackageReplacement(PythonRuntime &python)
     "kind": "host",
     "binding": "visionrt.receiver"
   },
-  "next_port_id": {"init": 4, "inputs": 1, "outputs": 5},
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_zh": "Source Flow",
-        "type": "string"
-      },
-      {
-        "id": 1,
-        "name_zh": "Source Node",
-        "type": "string"
-      },
-      {
-        "id": 2,
-        "name_zh": "Source Port",
-        "type": "int"
-      },
-      {
-        "id": 3,
-        "name_zh": "Timeout",
-        "type": "int",
-        "default": 1000
-      }
-    ],
-    "outputs": [
-      {
-        "id": 2,
-        "name_zh": "Value",
-        "type": "int"
-      },
-      {
-        "id": 3,
-        "name_zh": "Source Status Code",
-        "type": "int"
-      },
-      {
-        "id": 4,
-        "name_zh": "Source Status Message",
-        "type": "string"
-      }
-    ]
-  }
+  "init_params": [
+    {
+      "id": 0,
+      "name_zh": "Source Flow",
+      "type": "string"
+    },
+    {
+      "id": 1,
+      "name_zh": "Source Node",
+      "type": "string"
+    },
+    {
+      "id": 2,
+      "name_zh": "Source Port",
+      "type": "int"
+    },
+    {
+      "id": 3,
+      "name_zh": "Timeout",
+      "type": "int",
+      "default": 1000
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "Value",
+      "type": "int"
+    },
+    {
+      "id": 3,
+      "name_zh": "Source Status Code",
+      "type": "int"
+    },
+    {
+      "id": 4,
+      "name_zh": "Source Status Message",
+      "type": "string"
+    }
+  ]
 })json";
     }
     // Write module_index.json for Package 2

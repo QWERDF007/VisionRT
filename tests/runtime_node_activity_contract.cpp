@@ -54,7 +54,7 @@ public:
 void install(ToolRegistry &registry, const ToolDefinition &tool, std::function<ToolResult(const Values &)> run)
 {
     registry.registerCpp(tool,
-                         [run](const ToolServices &)
+                         [run]()
                          {
                              auto instance = std::make_unique<Function>();
                              instance->run  = run;
@@ -108,7 +108,7 @@ void installBranch(ToolRegistry &registry, const ToolDefinition &tool, std::func
 {
     registry.addDefinition(tool);
     registry.setPythonImplementation(tool.nameEn,
-                                     [run](const ToolServices &)
+                                     [run]()
                                      {
                                          auto instance = std::make_unique<Function>();
                                          instance->run  = run;

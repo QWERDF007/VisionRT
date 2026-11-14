@@ -30,7 +30,6 @@ class ImageViewport : public QQuickItem
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY imageChanged)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
     Q_PROPERTY(double zoom READ zoom NOTIFY transformChanged)
-    Q_PROPERTY(ViewMode viewMode READ viewMode NOTIFY transformChanged)
     Q_PROPERTY(bool editing READ editing NOTIFY editingChanged)
     Q_PROPERTY(bool singleRectangle READ singleRectangle NOTIFY editingChanged)
     Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged)
@@ -84,11 +83,6 @@ public:
     double zoom() const noexcept
     {
         return scale_;
-    }
-
-    ViewMode viewMode() const noexcept
-    {
-        return mode_;
     }
 
     bool editing() const noexcept
@@ -159,7 +153,7 @@ public:
     Q_INVOKABLE void fitOneToOne();
     Q_INVOKABLE void zoomBy(double factor);
     Q_INVOKABLE void cancelDraft();
-    Q_INVOKABLE void finishDraft();
+    void             finishDraft();
     Q_INVOKABLE void deleteSelectedRoi();
 
 signals:

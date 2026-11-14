@@ -18,35 +18,6 @@ std::filesystem::path ToolDefinition::pythonScript() const
     return resolveToolPath(pythonPackage(), entry.file);
 }
 
-std::uint64_t ToolDefinition::nextPortId(PortStage stage) const noexcept
-{
-    switch (stage)
-    {
-    case PortStage::Init:
-        return nextInitPortId;
-    case PortStage::Inputs:
-        return nextInputPortId;
-    case PortStage::Outputs:
-        return nextOutputPortId;
-    }
-    return nextInputPortId;
-}
-
-void ToolDefinition::setNextPortId(PortStage stage, std::uint64_t value)
-{
-    switch (stage)
-    {
-    case PortStage::Init:
-        nextInitPortId = value;
-        return;
-    case PortStage::Inputs:
-        nextInputPortId = value;
-        return;
-    case PortStage::Outputs:
-        nextOutputPortId = value;
-        return;
-    }
-}
 
 namespace {
 
@@ -276,20 +247,6 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
     }
 }
 
-// The high-water counter must stay above every live number and inside the uint32 space.
-void validateHighWater(const ToolDefinition &def, PortStage stage)
-{
-    const auto next = def.nextPortId(stage);
-    const auto floor = floorId(stage);
-    if (next < floor || next > kPortIdExhausted)
-        throw ContractError("next_port_id." + std::string(stageName(stage)) + " 超出范围："
-                            + std::to_string(next));
-    for (const auto &port : stagePorts(def, stage))
-        if (port.id >= next)
-            throw ContractError("next_port_id." + std::string(stageName(stage)) + " 必须大于已用编号 "
-                                + std::to_string(port.id));
-}
-
 } // namespace
 
 void validateIdentifier(const std::string &value, bool isPort)
@@ -352,10 +309,6 @@ std::string categoryPath(const ToolDefinition& def)
     for (const auto &name : def.categories)
         path += (path.empty() ? "" : "/") + name;
     return path;
-}
-
-bool isPathPort(const PortDefinition& port) {
-    return port.type == TypeSpec{Type::String} && port.editor == "path";
 }
 
 std::vector<std::string_view> editorChoices(const TypeSpec &type)
@@ -466,13 +419,14 @@ PortValue portDefault(const PortDefinition& port)
     return port.defaultValue;
 }
 
-PortId allocatePortId(ToolDefinition &def, PortStage stage)
+PortId nextFreePortId(const ToolDefinition &def, PortStage stage)
 {
-    const auto next = def.nextPortId(stage);
-    if (next > std::numeric_limits<PortId>::max())
-        throw ContractError("端口编号已耗尽：" + std::string(stageName(stage)));
-    def.setNextPortId(stage, next + 1);
-    return static_cast<PortId>(next);
+    std::set<PortId> used;
+    for (const auto &port : stagePorts(def, stage)) used.insert(port.id);
+    for (std::uint64_t candidate = floorId(stage); candidate <= std::numeric_limits<PortId>::max(); ++candidate)
+        if (!used.contains(static_cast<PortId>(candidate)))
+            return static_cast<PortId>(candidate);
+    throw ContractError("端口编号已耗尽：" + std::string(stageName(stage)));
 }
 
 namespace {
@@ -840,21 +794,9 @@ void normalizeToolDefinition(ToolDefinition &def)
                 && isMissing(port.defaultValue))
                 port.defaultValue = defaultValue(port.type);
 
-    // The counters are persisted state; normalisation only raises them above what is live.
-    for (const auto stage : {PortStage::Init, PortStage::Inputs, PortStage::Outputs})
-    {
-        std::uint64_t next = std::max<std::uint64_t>(def.nextPortId(stage), floorId(stage));
-        for (const auto &port : stagePorts(def, stage))
-            next = std::max<std::uint64_t>(next, static_cast<std::uint64_t>(port.id) + 1);
-        def.setNextPortId(stage, next);
-    }
 }
 
 void validateToolDefinition(const ToolDefinition& def) {
-    if (def.schemaVersion != 6)
-    {
-        throw ContractError("Unsupported schema_version: " + std::to_string(def.schemaVersion));
-    }
     validateIdentifier(def.nameEn, false);
     if (def.nameZh.empty()) {
         throw ContractError("Tool name_zh must not be empty: " + def.nameEn);
@@ -862,9 +804,6 @@ void validateToolDefinition(const ToolDefinition& def) {
     if (def.version.empty()) {
         throw ContractError("Tool version must not be empty: " + def.nameEn);
     }
-    for (const auto &name : def.categories)
-        if (name.empty())
-            throw ContractError("ui.category must not contain an empty name: " + def.nameEn);
 
     const int kindInt = static_cast<int>(def.kind);
     if (kindInt < 0 || kindInt > 3) {
@@ -901,8 +840,6 @@ void validateToolDefinition(const ToolDefinition& def) {
     }
     validatePorts(def.inputs, PortStage::Inputs);
     validatePorts(def.outputs, PortStage::Outputs);
-    for (const auto stage : {PortStage::Init, PortStage::Inputs, PortStage::Outputs})
-        validateHighWater(def, stage);
 
     const auto requireImage = [&](const PortRef &reference, const char *context)
     {

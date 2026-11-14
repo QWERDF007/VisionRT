@@ -33,7 +33,7 @@ public:
     }
 };
 
-visionrt::IToolInstance *VT_CALL pluginCreate(const visionrt::ToolServices *, visionrt::ToolStatus *status) noexcept
+visionrt::IToolInstance *VT_CALL pluginCreate(visionrt::ToolStatus *status) noexcept
 {
     try
     {

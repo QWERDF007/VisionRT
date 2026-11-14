@@ -67,9 +67,9 @@ try
         assert(testview::status(loaded).code == 0);
         registry.setPythonImplementation(loaded.toolId, python.factory(*registry.find(loaded.toolId)), loaded.status);
     }
-    const auto *read = registry.find("visionrt.image.read");
-    const auto *roi  = registry.find("custom.python.roi");
-    const auto *add  = registry.find("custom.python.image_add");
+    const auto *read = registry.find("ReadImage");
+    const auto *roi  = registry.find("RoiGeometry");
+    const auto *add  = registry.find("AddOneToImage");
     assert(read && roi && add);
 
     QTemporaryDir temporary;
@@ -98,7 +98,7 @@ try
     auto project  = editor.project();
     project.path  = std::filesystem::path(temporary.path().toStdWString()) / "author.vrt.json";
     ProjectStorage storage(registry);
-    assert(storage.save(project).empty());
+    storage.save(project);
     const auto reopened = storage.load(project.path);
     assert(reopened.diagnostics.empty());
 

@@ -63,7 +63,31 @@ try
                   "                        0: 0, 1: '运行成功'},\n"
                   "            'detail': ''}\n";
     }
-    const auto definition = parseToolDefinitionJson(R"({"schema_version":6,"name_en":"python.lazy.runtime","name_zh":"Lazy runtime","version":"1","implementation":{"kind":"python_function","package":"lazy","file":"tool.py","symbol":"execute"},"next_port_id":{"init":0,"inputs":1,"outputs":4},"ports":{"outputs":[{"id":2,"name_en":"value","name_zh":"Value","type":"int"},{"id":3,"name_en":"rois","name_zh":"ROIs","type":"roi"}]}})",
+    const auto definition = parseToolDefinitionJson(R"({
+  "name_en": "python.lazy.runtime",
+  "name_zh": "Lazy runtime",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "lazy",
+    "file": "tool.py",
+    "symbol": "execute"
+  },
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "Value",
+      "type": "int"
+    },
+    {
+      "id": 3,
+      "name_en": "rois",
+      "name_zh": "ROIs",
+      "type": "roi"
+    }
+  ]
+})",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {
                                                           ToolOrigin::Custom,

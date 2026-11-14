@@ -62,84 +62,73 @@ try
     // CT-01: a single classification for every resource-path editor.
     {
         const auto definition = parseToolDefinitionJson(R"json({
-  "schema_version": 6,
   "name_en": "runtime.paths",
   "name_zh": "路径分类",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 0, "inputs": 4, "outputs": 2},
-  "ports": {
-    "inputs": [
-      {
-        "id": 1,
-        "name_en": "mode",
-        "name_zh": "模式",
-        "type": "string",
-        "ui": {
-          "editor": "text"
-        }
+  "inputs": [
+    {
+      "id": 1,
+      "name_en": "mode",
+      "name_zh": "模式",
+      "type": "string",
+      "ui": {
+        "editor": "text"
+      }
+    },
+    {
+      "id": 2,
+      "name_en": "resource",
+      "name_zh": "文件或目录",
+      "type": "string",
+      "ui": {
+        "editor": "path"
+      }
+    },
+    {
+      "id": 3,
+      "name_en": "dynamic",
+      "name_zh": "动态路径",
+      "type": "string",
+      "ui": {
+        "editor": "path"
       },
-      {
-        "id": 2,
-        "name_en": "resource",
-        "name_zh": "文件或目录",
-        "type": "string",
-        "ui": {
-          "editor": "path"
-        }
-      },
-      {
-        "id": 3,
-        "name_en": "dynamic",
-        "name_zh": "动态路径",
-        "type": "string",
-        "ui": {
-          "editor": "path"
-        },
-        "relations": {
-          "path_mode": {"stage": "inputs", "id": 1}
+      "relations": {
+        "path_mode": {
+          "stage": "inputs",
+          "id": 1
         }
       }
-    ]
-  }
+    }
+  ]
 })json");
-        assert(isPathPort(definition.inputs[2]));
-        assert(isPathPort(definition.inputs[3]));
-        assert(!isPathPort(definition.inputs[1]));
-        auto plain   = port(8, {Type::String});
-        plain.editor = "text";
-        assert(!isPathPort(plain));
-        auto wrongType   = port(12, {Type::Int});
-        wrongType.editor = "path";
-        assert(!isPathPort(wrongType));
+        // A path editor is an editing choice only: the port stays an ordinary string port.
+        assert(definition.inputs[2].editor == "path" && definition.inputs[2].type.type == Type::String);
+        assert(definition.inputs[3].editor == "path" && definition.inputs[1].editor == "text");
 
         rejects(
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 6,
   "name_en": "runtime.paths.bad.file",
-  "next_port_id": {"init": 0, "inputs": 2, "outputs": 2},
   "name_zh": "错误文件端口",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "id": 2,
-        "name_en": "file",
-        "name_zh": "文件",
-        "type": "int",
-        "ui": {
-          "editor": "path"
-        }
+  "inputs": [
+    {
+      "id": 2,
+      "name_en": "file",
+      "name_zh": "文件",
+      "type": "int",
+      "ui": {
+        "editor": "path"
       }
-    ]
-  }
+    }
+  ]
 })json");
             },
             "路径编辑器");
@@ -147,27 +136,23 @@ try
             []
             {
                 (void)parseToolDefinitionJson(R"json({
-  "schema_version": 6,
   "name_en": "runtime.paths.bad.directory",
-  "next_port_id": {"init": 0, "inputs": 2, "outputs": 2},
   "name_zh": "旧目录编辑器",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "ports": {
-    "inputs": [
-      {
-        "id": 3,
-        "name_en": "directory",
-        "name_zh": "目录",
-        "type": "string",
-        "ui": {
-          "editor": "directory"
-        }
+  "inputs": [
+    {
+      "id": 3,
+      "name_en": "directory",
+      "name_zh": "目录",
+      "type": "string",
+      "ui": {
+        "editor": "directory"
       }
-    ]
-  }
+    }
+  ]
 })json");
             },
             "Unknown editor");
@@ -385,40 +370,36 @@ try
 
     {
         const auto declared = parseToolDefinitionJson(R"json({
-  "schema_version": 6,
   "name_en": "runtime.required",
   "name_zh": "必填声明",
   "version": "1.0.0",
   "implementation": {
     "kind": "cpp"
   },
-  "next_port_id": {"init": 1, "inputs": 3, "outputs": 2},
-  "ports": {
-    "init": [
-      {
-        "id": 0,
-        "name_en": "seed",
-        "name_zh": "种子",
-        "type": "int",
-        "default": 5
-      }
-    ],
-    "inputs": [
-      {
-        "id": 1,
-        "name_en": "input",
-        "name_zh": "输入",
-        "type": "string",
-        "default": "text"
-      },
-      {
-        "id": 2,
-        "name_en": "optional",
-        "name_zh": "可选输入",
-        "type": "int"
-      }
-    ]
-  }
+  "init_params": [
+    {
+      "id": 0,
+      "name_en": "seed",
+      "name_zh": "种子",
+      "type": "int",
+      "default": 5
+    }
+  ],
+  "inputs": [
+    {
+      "id": 1,
+      "name_en": "input",
+      "name_zh": "输入",
+      "type": "string",
+      "default": "text"
+    },
+    {
+      "id": 2,
+      "name_en": "optional",
+      "name_zh": "可选输入",
+      "type": "int"
+    }
+  ]
 })json");
         // Explicit defaults survive, omitted ones become the type's empty value.
         assert(equalValues(declared.initParams[0].defaultValue, PortValue{std::int64_t{5}}));

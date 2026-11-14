@@ -253,7 +253,7 @@ bool ToolPortListModel::addPort(const QString &nameZh, const QString &typeToken,
         emit rejected(QString::fromUtf8(error.what()));
         return false;
     }
-    port.id = allocatePortId(*draft_, stage_);
+    port.id = nextFreePortId(*draft_, stage_);
 
     const int newRow = fixedRowCount() + static_cast<int>(ports->size());
     beginInsertRows(QModelIndex(), newRow, newRow);
@@ -716,17 +716,6 @@ QVariantList ToolPortListModel::editorOptions(int row) const
         result.append(QVariantMap{{"token", token}, {"label", label}});
     }
     return result;
-}
-
-int ToolPortListModel::rowForPortId(quint32 portId) const
-{
-    const int count = rowCount();
-    for (int r = 0; r < count; ++r)
-    {
-        if (data(index(r, 0), IdRole).toUInt() == portId)
-            return r;
-    }
-    return -1;
 }
 
 QVariantMap ToolPortListModel::portAt(int row) const

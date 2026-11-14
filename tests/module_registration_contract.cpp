@@ -43,7 +43,7 @@ try
     assert(loader->loadedModuleCount() == 0);
     try
     {
-        catalog.create("test.registration.first", {});
+        catalog.create("test.registration.first");
         assert(false);
     }
     catch (const RegistryError &error)
@@ -85,7 +85,7 @@ try
     {
         const auto before            = createCalls();
         const auto initializedBefore = initializeCalls();
-        auto       instance          = catalog.create(id, {});
+        auto       instance          = catalog.create(id);
         assert(instance && createCalls() == before + 1);
         assert(initializeCalls() == initializedBefore);
         // Executing an instance the framework never initialised has no tool answer; the failure is
@@ -108,7 +108,7 @@ try
     loader->registerModule("not.registered", path);
     try
     {
-        loader->createAdapter("not.registered", {});
+        loader->createAdapter("not.registered");
         assert(false);
     }
     catch (const RegistryError &error)
@@ -127,11 +127,11 @@ try
         if (index == 5)
             assert(rejected.message.find("不同模块") != std::string::npos);
     }
-    auto surviving = loader->createAdapter("test.registration.first", {});
+    auto surviving = loader->createAdapter("test.registration.first");
     assert(surviving->initialize({}));
     assert(std::get<std::int64_t>(surviving->execute({}).outputs.at(2)) == 11);
     assert(surviving->release());
-    auto                              retained  = catalog.create("test.registration.first", {});
+    auto                              retained  = catalog.create("test.registration.first");
     std::weak_ptr<const LoadedModule> ownership = module;
     assert(probe.unload());
     module.reset();

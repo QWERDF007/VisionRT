@@ -94,11 +94,6 @@ std::vector<QPointF> contourOf(const RegionView &region)
     return points;
 }
 
-std::vector<QPointF> contour(const EncodedRegion &roi)
-{
-    return contourOf(RegionView(roi));
-}
-
 double segmentDistance(QPointF point, QPointF a, QPointF b)
 {
     const auto   delta   = b - a;

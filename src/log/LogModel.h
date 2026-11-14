@@ -15,6 +15,8 @@ namespace visionrt
 class LogModel final : public QAbstractListModel
 {
     Q_OBJECT
+    // Read-only row count so the window can disable its actions on an empty history.
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     enum Role
@@ -32,9 +34,15 @@ public:
     Q_INVOKABLE void clear();
     // Plain text of one row, used by the window's copy action.
     Q_INVOKABLE QString text(int row) const;
+    // Every retained line joined by '\n', in the order the window shows them.
+    Q_INVOKABLE QString allText() const;
+    int                 count() const;
 
     void append(const QVector<LogRecord> &records);
     void setCapacity(std::size_t capacity);
+
+signals:
+    void countChanged();
 
 private:
     QVector<LogRecord> rows_;

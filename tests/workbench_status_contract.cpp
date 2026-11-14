@@ -77,12 +77,10 @@ try
     definition.inputs      = {
         {1, "模式", {Type::String}, std::string("success")}
     };
-    definition.nextInputPortId = 2;
     definition.outputs = {
         {2, "值", {Type::Int}},
         {3, "标志", {Type::Bool}}
     };
-    definition.nextOutputPortId = 4;
     write(package + "tools/custom/status/source.json", QByteArray::fromStdString(emitNormalizedToolJson(definition)));
     write(script, R"py(import time
 from pathlib import Path
@@ -223,7 +221,7 @@ def run(inputs):
     idle();
     const auto receiverFlow = app.currentFlow();
     require(receiverFlow != sourceFlow, "status receiver flow was not created");
-    app.addNode("visionrt.flow.receive", 0, 0);
+    app.addNode("ReceiveFlowResult", 0, 0);
     idle();
     const auto receiver = app.selectedNode();
     require(!receiver.isEmpty(), "status receiver node is missing");
@@ -268,7 +266,7 @@ def run(inputs):
     require(app.setParameter(kModeInput, false, "gate_false"), "gate node could not produce a false flag");
     idle();
     // Execution conditions belong to the logical node models only.
-    app.addNode("visiontools.logic.expression", 4, 8);
+    app.addNode("EvaluateExpression", 4, 8);
     idle();
     const auto gated = app.selectedNode();
     require(!gated.isEmpty() && app.applyExecutionGuard(gated, gate, kFlagOutput), "gate guard could not be applied");

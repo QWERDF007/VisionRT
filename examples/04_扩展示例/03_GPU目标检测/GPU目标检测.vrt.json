@@ -13,8 +13,9 @@
       "nodes": [
         {
           "node_seq": "1",
-          "tool_id": "visionrt.image.read",
+          "tool_id": "ReadImage",
           "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
           "alias": "读图",
           "pos": [
             0,
@@ -122,7 +123,7 @@
             {
               "port_id": 1,
               "mode": "literal",
-              "literal": "images/bus.jpg"
+              "literal": "examples/04_扩展示例/03_GPU目标检测/bus.jpg"
             },
             {
               "port_id": 2,
@@ -143,8 +144,9 @@
         },
         {
           "node_seq": "2",
-          "tool_id": "visionrt.dl.yolo",
+          "tool_id": "DetectObjectsYolo",
           "tool_name_snapshot": "YOLO目标检测",
+          "tool_version_snapshot": "1.0.0",
           "alias": "YOLO推理",
           "pos": [
             2,
@@ -361,8 +363,9 @@
         },
         {
           "node_seq": "3",
-          "tool_id": "visionrt.detection.filter",
+          "tool_id": "FilterDetections",
           "tool_name_snapshot": "缺陷过滤",
+          "tool_version_snapshot": "1.0.0",
           "alias": "结果过滤",
           "pos": [
             2,

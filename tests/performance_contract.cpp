@@ -261,7 +261,7 @@ void test200NodesExecution()
         }
     };
 
-    registry.registerCpp(addDef, [](const ToolServices &) { return std::make_unique<AddTool>(); });
+    registry.registerCpp(addDef, []() { return std::make_unique<AddTool>(); });
     registry.addDefinition(addDef);
 
     ProjectDefinition project;
@@ -414,7 +414,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     };
 
     DataRef<Image> batchForSource = batch;
-    registry.registerCpp(srcDef, [batchForSource](const ToolServices &)
+    registry.registerCpp(srcDef, [batchForSource]()
                          { return std::make_unique<SourceTool>(batchForSource); });
     registry.addDefinition(srcDef);
 
@@ -482,7 +482,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     };
 
     registry.registerCpp(
-        consDef, [&originalPointers, &consumerExecCount, &pointerMismatch](const ToolServices &)
+        consDef, [&originalPointers, &consumerExecCount, &pointerMismatch]()
         { return std::make_unique<ConsumerTool>(originalPointers, consumerExecCount, pointerMismatch); });
     registry.addDefinition(consDef);
 
@@ -705,7 +705,7 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
         }
     };
 
-    registry.registerCpp(genDef, [](const ToolServices &) { return std::make_unique<GenTool>(); });
+    registry.registerCpp(genDef, []() { return std::make_unique<GenTool>(); });
     registry.addDefinition(genDef);
 
     ToolDefinition procDef;
@@ -747,7 +747,7 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
     };
 
     registry.registerCpp(procDef,
-                         [](const ToolServices &) { return std::make_unique<ProcTool>(); });
+                         []() { return std::make_unique<ProcTool>(); });
     registry.addDefinition(procDef);
 
     ProjectDefinition project;

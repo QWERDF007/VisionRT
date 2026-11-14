@@ -567,6 +567,14 @@ ApplicationWindow {
         useNegativeButton: false; positiveText: "关闭"
         message: "示例目录不存在：" + app.examplesDirectory() + "\n随包示例会随安装目录一起提供。"
     }
+    WorkbenchDialog {
+        id: toolUpdated; title: "工具已更新"; objectName: "toolUpdateDialog"
+        useNegativeButton: false; positiveText: "知道了"
+        message: app.toolUpdateSummary
+        // Dismissing the window is the whole interaction: the next detection is a new event and
+        // must be able to raise it again.
+        onClosed: app.dismissToolUpdate()
+    }
     FileDialog {
         id: saveFile; title: "保存工程"; fileMode: FileDialog.SaveFile
         nameFilters: ["VisionRT JSON 工程 (*.vrt.json)"]; defaultSuffix: "vrt.json"
@@ -617,6 +625,7 @@ ApplicationWindow {
         function onSavePathRequired() { saveFile.open() }
         function onCloseReady() { window.closingApproved = true; window.close() }
         function onProjectReplaced() { unsaved.close(); window.unsavedSaving = false; window.resetLayout() }
+        function onToolUpdateSummaryChanged() { if (app.toolUpdateSummary.length > 0) toolUpdated.open() }
         function onProjectChanged() { if (!app.dirty && window.unsavedSaving) { unsaved.close(); window.unsavedSaving = false } }
     }
 }

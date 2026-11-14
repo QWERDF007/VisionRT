@@ -86,8 +86,8 @@ const char *storageCodeName(ProjectStorageCode code)
         return "layout_conflict";
     case ProjectStorageCode::RangeWarning:
         return "range_warning";
-    case ProjectStorageCode::UnknownPaths:
-        return "unknown_paths";
+    case ProjectStorageCode::LegacyExecutionGuard:
+        return "legacy_execution_guard";
     }
     std::terminate();
 }

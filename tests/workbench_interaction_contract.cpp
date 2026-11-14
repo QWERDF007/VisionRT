@@ -79,7 +79,6 @@ try
     gate.outputs = {
         {2, "值", {Type::Int}}
     };
-    gate.nextOutputPortId = 3;
     write(package + "tools/custom/interaction/source.json", QByteArray::fromStdString(emitNormalizedToolJson(gate)));
     write(script, R"py(import time
 from pathlib import Path

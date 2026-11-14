@@ -53,7 +53,6 @@ int main(int argc, char **argv)
 
     // 2. Save a custom tool (JSON-last: python script is written first)
     ToolDefinition def;
-    def.schemaVersion = 6;
     def.nameEn        = "custom.test.demo";
     def.nameZh        = "演示自定义工具";
     def.version       = "1.0.0";
@@ -61,8 +60,6 @@ int main(int argc, char **argv)
     def.entry.package = "custom/test/demo";
     def.entry.file    = "tool.py";
     def.entry.symbol  = "execute";
-    def.nextInputPortId = 3;
-    def.nextOutputPortId = 3;
     def.inputs.push_back(PortDefinition{
         .id = 1,
         .nameZh = "阈值",
@@ -111,15 +108,11 @@ int main(int argc, char **argv)
     assert(tools[0].definition.outputs[0].id == 0);
     assert(tools[0].definition.outputs[1].id == 1);
     assert(tools[0].definition.outputs[2].id == 2);
-    assert(tools[0].definition.nextInputPortId == 3);
-    assert(tools[0].definition.nextOutputPortId == 3);
 
     // 4. Clone custom tool
     const auto cloned = store.cloneCustomTool(tools[0].definition, "custom.test.demo_copy1", "演示自定义工具 副本");
     assert(cloned.nameEn == "custom.test.demo_copy1");
     assert(cloned.nameZh == "演示自定义工具 副本");
-    assert(cloned.nextInputPortId == 3);
-    assert(cloned.nextOutputPortId == 3);
     assert(cloned.inputs.size() == 3);
     assert(cloned.inputs[0].id == 0);
     assert(cloned.inputs[1].id == 1);
@@ -165,7 +158,6 @@ int main(int argc, char **argv)
     // 5c. A native tool is a registered factory, not a declaration, so copying its JSON would
     // create a tool nothing can instantiate.
     ToolDefinition native;
-    native.schemaVersion = 6;
     native.nameEn        = "builtin.native.demo";
     native.nameZh        = "原生工具";
     native.kind          = ToolKind::Cpp;
@@ -193,7 +185,6 @@ int main(int argc, char **argv)
     }
 
     ToolDefinition installed;
-    installed.schemaVersion = 6;
     installed.nameEn        = "examples.installed";
     installed.nameZh        = "内置示例";
     installed.kind          = ToolKind::PythonFunction;

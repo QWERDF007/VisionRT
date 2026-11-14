@@ -69,7 +69,7 @@ ToolDefinition conditionTool()
 ToolDefinition selectTool()
 {
     ToolDefinition tool;
-    tool.nameEn            = "visionrt.control.select";
+    tool.nameEn            = "SelectBranch";
     tool.nameZh   = "分支合流";
     tool.kind          = ToolKind::Host;
     tool.nodeModel     = NodeModel::Select;
@@ -100,7 +100,7 @@ public:
 void install(ToolRegistry &registry, const ToolDefinition &tool, std::function<ToolResult(const Values &)> run)
 {
     registry.registerCpp(tool,
-                         [run](const ToolServices &)
+                         [run]()
                          {
                              auto instance = std::make_unique<Function>();
                              instance->run = run;

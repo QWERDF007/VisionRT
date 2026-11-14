@@ -78,12 +78,12 @@ int main()
     registry.registerPackage(package(tool));
     assert(registry.availability("missing").state == ToolAvailability::DefinitionMissing);
     assert(registry.availability(tool.nameEn).state == ToolAvailability::ImplementationUnavailable);
-    rejects([&] { registry.create(tool.nameEn, {}); });
-    registry.registerCpp(tool, [](const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+    rejects([&] { registry.create(tool.nameEn); });
+    registry.registerCpp(tool, []() { return std::make_unique<PassTool>(); });
     assert(registry.availability(tool.nameEn).state == ToolAvailability::Available);
     rejects([&]
-            { registry.registerCpp(tool, [](const PlatformToolServices &) { return std::make_unique<PassTool>(); }); });
-    auto instance = registry.create(tool.nameEn, {});
+            { registry.registerCpp(tool, []() { return std::make_unique<PassTool>(); }); });
+    auto instance = registry.create(tool.nameEn);
     assert(instance->initialize({}));
     assert(std::get<std::int64_t>(instance
                                       ->execute({
@@ -114,7 +114,7 @@ int main()
     python.entry  = PythonEntry{"fixture", "tool.py", "execute"};
     registry.registerPackage(package(python));
     registry.setPythonImplementation(python.nameEn,
-                                     [](const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+                                     []() { return std::make_unique<PassTool>(); });
     assert(registry.availability(python.nameEn).state == ToolAvailability::Available);
     registry.registerPackage(package(python));
     assert(registry.availability(python.nameEn).state == ToolAvailability::ImplementationUnavailable);
@@ -124,7 +124,7 @@ int main()
     assert(testview::status(failed).detail == "original import detail");
     try
     {
-        registry.create(python.nameEn, {});
+        registry.create(python.nameEn);
         assert(false);
     }
     catch (const RegistryError &error)
@@ -142,7 +142,7 @@ int main()
         int                   creates  = 0;
         PythonFactoryFunctor  counted;
         counted.loadState = loadState;
-        counted.create    = [&creates](const PlatformToolServices &)
+        counted.create    = [&creates]()
         {
             ++creates;
             return std::unique_ptr<IToolInstance>{};
@@ -155,7 +155,7 @@ int main()
         registry.setPythonImplementation(python.nameEn, counted);
         assert(registry.availability(python.nameEn).state == ToolAvailability::ImplementationUnavailable);
         assert(testview::status(registry.availability(python.nameEn)).message == "未配置 Python 环境");
-        rejects([&] { registry.create(python.nameEn, {}); });
+        rejects([&] { registry.create(python.nameEn); });
         assert(resolves == 0 && creates == 0);
     }
 
@@ -165,9 +165,9 @@ int main()
     registry.registerPackage(package(host));
     assert(registry.availability(host.nameEn).state == ToolAvailability::ImplementationUnavailable);
     registry.registerHostBinding(
-        "receiver", [](const ToolDefinition &, const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+        "receiver", [](const ToolDefinition &, const HostToolContext &) { return std::make_unique<PassTool>(); });
     assert(registry.availability(host.nameEn).state == ToolAvailability::Available);
-    assert(registry.create(host.nameEn, {}));
+    assert(registry.create(host.nameEn));
     rejects([&] { registry.setPythonImplementation(host.nameEn, {}); });
 
     auto         loader = std::make_shared<PluginLoader>();
@@ -177,7 +177,7 @@ int main()
     unavailable.tools.front().moduleLibrary = "nonexistent-module.dll";
     unavailable.tools.push_back({host, {}});
     modules.registerHostBinding(
-        "receiver", [](const ToolDefinition &, const PlatformToolServices &) { return std::make_unique<PassTool>(); });
+        "receiver", [](const ToolDefinition &, const HostToolContext &) { return std::make_unique<PassTool>(); });
     modules.registerPackage(unavailable);
     assert(modules.availability("test.missing.dll").state == ToolAvailability::ImplementationUnavailable);
     assert(modules.availability(host.nameEn).state == ToolAvailability::Available);

@@ -173,6 +173,8 @@ if(VISIONRT_BUILD_APP)
         src/ui/AssistPreview.h
         src/ui/AppController.h
         src/ui/AppControllerDiagnostics.cpp
+        src/ui/LogHighlighter.cpp
+        src/ui/LogHighlighter.h
         src/ui/ToolTreeModel.cpp
         src/ui/ToolTreeModel.h
         src/ui/ToolPortListModel.cpp
@@ -263,7 +265,6 @@ if(BUILD_TESTING)
 
     visionrt_contract(version_contract visionrt_common)
     visionrt_contract(value_contract visionrt_core)
-    visionrt_contract(path_contract visionrt_core)
 
     visionrt_contract(tool_registry_contract visionrt_core)
     visionrt_contract(port_value_validation_test visionrt_core)
