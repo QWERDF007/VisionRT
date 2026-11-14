@@ -60,6 +60,11 @@ def write_pe(path: Path, imports: tuple[str, ...] = (), delay_imports: tuple[str
     path.write_bytes(bytes(image))
 
 
+def install_examples(root: Path) -> None:
+    """Copies the shipped examples into a fixture installation, as real packaging does."""
+    shutil.copytree(package_app.REPO_ROOT / "examples", root / "examples", dirs_exist_ok=True)
+
+
 class ToolsDeploymentContract(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="visionrt-deploy-")
@@ -272,6 +277,7 @@ class InstallationContract(unittest.TestCase):
             (root / "contracts-build-info.json").write_text(
                 '{"schema_version": 1, "component": "VisionRTContracts", "version": "0.1.0", "commit": "def", "dirty": false, "built_at_epoch": 1793082712}\n',
                 encoding="utf-8")
+            install_examples(root)
             package_app.verify_package(root, require_qt=False)
             for name in ("quickui.dll", "visionrt_python_bridge.dll", "build_info.json", "contracts-build-info.json"):
                 with self.subTest(name=name):
@@ -424,6 +430,21 @@ class InstallationContract(unittest.TestCase):
                     self.assertEqual(hashlib.sha256((root / name).read_bytes()).hexdigest(), hashes[name],
                                      f"upgrade {generation} changed {name}")
 
+    def test_reinstall_keeps_ownership_of_untouched_files(self) -> None:
+        """A reinstall owns the files it left in place, and still never claims a user file."""
+        with tempfile.TemporaryDirectory(prefix="visionrt-reinstall-") as temporary:
+            root = Path(temporary)
+            (root / "Qt6Core.dll").write_text("qt", encoding="utf-8")
+            (root / "VisionRT.exe").write_text("exe", encoding="utf-8")
+            (root / "notes.txt").write_text("mine", encoding="utf-8")
+
+            # windeployqt skips an identical Qt binary, so only the executable is written this run.
+            ownership = package_app.InstallOwnership(
+                root, replaceable={"Qt6Core.dll", "VisionRT.exe", "already-removed.dll"})
+            ownership.claim(root / "VisionRT.exe")
+
+            self.assertEqual(ownership.manifest_entries(), {"Qt6Core.dll", "VisionRT.exe"})
+
     def test_manifest_with_protected_or_escaping_entries_refuses_cleanup(self) -> None:
         """A bad record is refused before a single file is removed."""
         invalid_manifests = [
@@ -543,6 +564,7 @@ class PeImportContract(unittest.TestCase):
             write_pe(root / "visionrt_python_bridge.dll", imports=("python312.dll",))
             for name in (package_app.MARKER_FILE, "quickui.dll"):
                 (root / name).touch()
+            install_examples(root)
 
             package_app.verify_package(root, require_qt=False, allow_dirty=True)
 
@@ -803,6 +825,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
         (install_dir / "visionrt_python_bridge.dll").touch()
+        install_examples(install_dir)
 
         # 1. Unknown commit -> rejected
         (install_dir / "build_info.json").write_text(
@@ -845,6 +868,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
         (install_dir / "visionrt_python_bridge.dll").touch()
+        install_examples(install_dir)
 
         # Missing host build_info.json
         (install_dir / "contracts-build-info.json").write_text(

@@ -19,6 +19,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Iterator
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -114,6 +115,21 @@ PROTECTED_INSTALL_ROOTS = frozenset({"custom-tools", "logs"})
 PROTECTED_INSTALL_FILES = frozenset({"ui-preferences.json"})
 # The example projects are product assets next to the executable, not test data.
 EXAMPLES_DIRECTORY = "examples"
+
+# The first batch is the product promise: these six projects ship with every installation and run
+# without prerequisites. Packaging compares source and installation byte for byte, which cannot
+# notice a project that is missing from both sides, so the shipped set is stated here once.
+REQUIRED_EXAMPLE_PROJECTS = (
+    "01_基础入门/01_图像读取/图像读取.vrt.json",
+    "02_工具示例/01_ROI定位与裁剪/ROI定位与裁剪.vrt.json",
+    "02_工具示例/02_图像预处理/图像预处理.vrt.json",
+    "02_工具示例/03_圆测量/圆测量.vrt.json",
+    "02_工具示例/04_行间距测量/行间距测量.vrt.json",
+    "03_综合示例/01_多分支视觉检测/多分支视觉检测.vrt.json",
+)
+
+# A developer machine path in a shipped project is a broken example on every other machine.
+ABSOLUTE_PATH_LITERAL = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\|/)")
 
 
 def build_release(build_dir: Path, config: str, parallel: int) -> None:
@@ -232,10 +248,10 @@ def read_install_manifest(path: Path) -> set[str]:
 
 
 def write_install_manifest(install_dir: Path, files: set[str]) -> None:
-    """Records exactly the files this package wrote, for the next upgrade to remove.
+    """Records the product paths this installation owns, for the next upgrade to remove.
 
-    A caller passes the paths it actually copied. Scanning the directory here would also list
-    whatever the user stored there, and the next upgrade would then delete it.
+    The caller passes every path the package owns after the run, not a directory scan: a scan would
+    also list whatever the user stored there, and the next upgrade would then delete it.
     """
     entries = sorted(_validate_manifest_entry(item, install_dir / MANIFEST_FILE) for item in files)
     missing = [item for item in entries if not (install_dir / item).is_file()]
@@ -277,6 +293,17 @@ class InstallOwnership:
 
     def claim(self, destination: Path) -> None:
         self.owned.add(self.relative(destination))
+
+    def manifest_entries(self) -> set[str]:
+        """Every product path this installation owns once the run is over.
+
+        Writing only what this run copied loses the files it left untouched: windeployqt skips an
+        identical Qt binary, and a reinstall over an existing directory would then drop hundreds of
+        product files from the manifest. Those paths stay the package's, so the next upgrade may
+        still replace them; user files were never in the previous manifest and are never added.
+        """
+        surviving = {entry for entry in self.replaceable if (self.root / entry).is_file()}
+        return self.owned | surviving
 
 
 def owned_copy(source: Path, destination: Path, ownership: InstallOwnership | None = None) -> None:
@@ -525,8 +552,39 @@ def copy_examples(install_dir: Path, ownership: InstallOwnership | None = None) 
         owned_copy(item, install_dir / EXAMPLES_DIRECTORY / item.relative_to(source), ownership)
 
 
+def example_texts(value: object) -> Iterator[str]:
+    """Every string a project document stores, wherever it sits."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from example_texts(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from example_texts(item)
+
+
+def example_project_problems(source: Path) -> list[str]:
+    """Each shipped project is format 7 and names its resources relatively."""
+    problems = []
+    for project in sorted(source.rglob("*.vrt.json")):
+        relative = project.relative_to(source).as_posix()
+        try:
+            document = json.loads(project.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            problems.append(f"example project is not readable JSON: {relative}: {error}")
+            continue
+        if document.get("format_version") != 7:
+            problems.append(f"example project is not format 7: {relative}")
+        for text in example_texts(document):
+            if ABSOLUTE_PATH_LITERAL.match(text):
+                problems.append(f"example project stores an absolute path: {relative}: {text}")
+    return problems
+
+
 def verify_examples(install_dir: Path) -> list[str]:
-    """Every shipped example file must be installed with the same content."""
+    """Every shipped example file must be installed with the same content, and the first batch must
+    still be complete with its own input images."""
     source = REPO_ROOT / EXAMPLES_DIRECTORY
     installed = install_dir / EXAMPLES_DIRECTORY
     if not installed.is_dir():
@@ -539,6 +597,20 @@ def verify_examples(install_dir: Path) -> list[str]:
             problems.append(f"example file missing: {relative}")
         elif target.read_bytes() != item.read_bytes():
             problems.append(f"example file differs from the source tree: {relative}")
+    for relative in REQUIRED_EXAMPLE_PROJECTS:
+        if not (source / relative).is_file():
+            problems.append(f"required example project is missing from the source tree: {relative}")
+            continue
+        project = installed / relative
+        if not project.is_file():
+            problems.append(f"required example project missing: {relative}")
+            continue
+        images = project.parent / "images"
+        if not images.is_dir() or not any(item.is_file() for item in images.iterdir()):
+            problems.append(f"required example has no input images: {relative}")
+        if not (project.parent / "README.md").is_file():
+            problems.append(f"required example has no README: {relative}")
+    problems.extend(example_project_problems(source))
     return problems
 
 
@@ -1381,7 +1453,7 @@ def main() -> int:
             write_package_evidence(install_dir, evidence, arch)
         # Written only after verification: a failed run must not leave a record that claims files
         # the next upgrade may then delete.
-        write_install_manifest(install_dir, ownership.owned)
+        write_install_manifest(install_dir, ownership.manifest_entries())
         print(f"\npackage complete: {install_dir}")
         print(f"double-click to run: {packaged_exe}")
     else:
@@ -1391,7 +1463,7 @@ def main() -> int:
             verify_package(install_dir, not args.skip_windeployqt, validator=validator_path, allow_dirty=args.allow_dirty)
             evidence = resolve_project_path(args.evidence) if args.evidence else build_dir / "evidence" / "package-evidence.json"
             write_package_evidence(install_dir, evidence, target_architecture(build_dir))
-        write_install_manifest(install_dir, ownership.owned)
+        write_install_manifest(install_dir, ownership.manifest_entries())
         print(f"\npackage complete: {install_dir}")
 
     return 0
