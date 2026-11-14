@@ -1,0 +1,417 @@
+{
+  "format_version": 7,
+  "project": {
+    "name": "逻辑表达式与条件分支",
+    "next_node_seq": "5",
+    "next_flow_seq": "2"
+  },
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "亮度判定分支",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "visionrt.image.read",
+          "tool_name_snapshot": "图像读取",
+          "alias": "读取工件",
+          "pos": [
+            0,
+            0
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "String"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 1
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 2
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": "顺序（下一张）"
+            },
+            {
+              "port_id": 1,
+              "mode": "literal",
+              "literal": "images"
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": false
+            },
+            {
+              "port_id": 6,
+              "mode": "literal",
+              "literal": false
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": "循环"
+            }
+          ]
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "custom.image.mean",
+          "tool_name_snapshot": "计算图像均值",
+          "alias": "Python均值",
+          "pos": [
+            1,
+            1
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 1
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": 2
+              }
+            }
+          ]
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "visiontools.logic.expression",
+          "tool_name_snapshot": "评估表达式",
+          "alias": "亮度判定",
+          "pos": [
+            2,
+            2
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              }
+            ],
+            "inputs": [
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 1
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Float"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 2,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": 2
+              }
+            }
+          ],
+          "expression_config": {
+            "next_port_id": "5",
+            "variables": [
+              {
+                "port_id": 2,
+                "name": "图像均值",
+                "symbol": "mean",
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 1
+                },
+                "allow_missing": false
+              }
+            ],
+            "program": [
+              {
+                "port_id": 3,
+                "name": "判定为亮图",
+                "symbol": "is_bright",
+                "expression": "mean[0] > 50.0",
+                "type": {
+                  "type": "Bool"
+                },
+                "exposed": true
+              },
+              {
+                "port_id": 4,
+                "name": "与50的偏差",
+                "symbol": "deviation",
+                "expression": "abs(mean[0] - 50.0)",
+                "type": {
+                  "type": "Float"
+                },
+                "exposed": true
+              }
+            ]
+          }
+        },
+        {
+          "node_seq": "4",
+          "tool_id": "visiontools.logic.branch",
+          "tool_name_snapshot": "条件分支",
+          "alias": "亮暗分支",
+          "pos": [
+            3,
+            3
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "String"
+                }
+              }
+            ],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Bool"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "3",
+                "port_id": 3
+              }
+            }
+          ],
+          "expression_config": {
+            "next_port_id": "2",
+            "variables": [],
+            "program": []
+          }
+        }
+      ]
+    }
+  ]
+}

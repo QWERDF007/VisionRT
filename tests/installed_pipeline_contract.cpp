@@ -266,7 +266,6 @@ def execute(inputs):
     editor.setLiteral(flow, reader, 6, true);
     editor.setLiteral(flow, brightness, 2, 1.0);
     editor.setLiteral(flow, brightness, 3, 1.0);
-    editor.setLiteral(flow, brightness, 7, true);
     editor.setLiteral(flow, brightness, 4, DataRef<ROI>(ROI{}));
     editor.setLiteral(flow, brightness, 6, Array::fromNested(NestedVector<double, 3>{}));
     editor.bindFreeInput(flow, {reader, 2}, {before, 1});

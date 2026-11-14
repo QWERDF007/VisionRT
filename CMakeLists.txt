@@ -787,7 +787,7 @@ if(BUILD_TESTING)
 
     if(TARGET gpu_tools_contract)
         add_test(NAME gpu_tools_contract COMMAND gpu_tools_contract
-            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/pipeline_gpu_yolo.vrt.json"
+            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/04_扩展示例/03_GPU目标检测/GPU目标检测.vrt.json"
             "${VISIONRT_GPU_FIXTURES}")
         visionrt_apply_test_environment(gpu_tools_contract)
         # Without a CUDA device or the external YOLO fixtures the case is reported as not run; it
@@ -800,7 +800,7 @@ if(BUILD_TESTING)
         # an existing engine still infers correctly is a separate, cheap capability. It shares the
         # binary but not the failure domain, and reports NOT RUN when no engine was ever built.
         add_test(NAME gpu_inference_contract COMMAND gpu_tools_contract
-            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/pipeline_gpu_yolo.vrt.json"
+            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/04_扩展示例/03_GPU目标检测/GPU目标检测.vrt.json"
             "${VISIONRT_GPU_FIXTURES}" --engine-only)
         visionrt_apply_test_environment(gpu_inference_contract)
         set_tests_properties(gpu_inference_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)

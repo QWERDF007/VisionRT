@@ -38,7 +38,7 @@ void startupProjectContract()
         visionrt::testing::WorkbenchInstallation installation;
         visionrt::AppController                  app(1, installation.directory());
         require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "startup catalog did not become ready");
-        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
+        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
         app.resolveUnsaved(QStringLiteral("discard"));
         if (projectReadyBeforeWindow)
             require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
@@ -169,7 +169,7 @@ void startupProjectContract()
                     "the project failure has no log surface");
             require(window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/project_load_failure.png")),
                     "cannot capture project failure diagnostic");
-            QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
+            QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
             require(example.open(QIODevice::ReadOnly), "cannot read project warning fixture");
             auto document     = QJsonDocument::fromJson(example.readAll()).object();
             auto projectFlows = document.value("flows").toArray();

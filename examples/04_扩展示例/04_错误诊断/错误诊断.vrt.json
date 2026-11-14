@@ -1,7 +1,7 @@
 {
   "format_version": 7,
   "project": {
-    "name": "节点错误诊断复现工程",
+    "name": "错误诊断",
     "next_node_seq": "5",
     "next_flow_seq": "2"
   },

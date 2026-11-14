@@ -112,7 +112,7 @@ try
     {
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "clipboard operation did not finish");
     };
-    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/pipeline_cpu_python.vrt.json"));
+    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
     if (!app.busy() && app.nodes().isEmpty())
         app.resolveUnsaved("discard");
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),

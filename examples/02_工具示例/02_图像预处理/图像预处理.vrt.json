@@ -191,12 +191,6 @@
                   "dtype": "float64",
                   "rank": 3
                 }
-              },
-              {
-                "port_id": 7,
-                "type": {
-                  "type": "Bool"
-                }
               }
             ],
             "outputs": [
@@ -260,11 +254,6 @@
               "port_id": 6,
               "mode": "literal",
               "literal": []
-            },
-            {
-              "port_id": 7,
-              "mode": "literal",
-              "literal": true
             }
           ]
         },

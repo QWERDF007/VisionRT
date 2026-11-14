@@ -43,9 +43,10 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
     const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto tempProjectFile = tmpPath / "pipeline_cpu_python.vrt.json";
-    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt.json", tempProjectFile);
-    std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
+    const auto projectPath     = std::filesystem::path(u8"04_扩展示例") / u8"01_Python图像统计";
+    const auto tempProjectFile = tmpPath / u8"Python图像统计.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.vrt.json", tempProjectFile);
+    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
                           std::filesystem::copy_options::recursive);
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
@@ -244,6 +245,67 @@ void testShippedExamples(const std::filesystem::path &toolsPkg, const std::files
     assert((std::abs(branchRadius[0][0] - 50.0) < 0.5));
 
     std::cout << "[SHIPPED EXAMPLES] six projects loaded and executed with their own images\n";
+}
+
+void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
+                                PythonRuntime &python)
+{
+    // The extension examples are shipped too, but they state a prerequisite: this one borrows the
+    // Python runtime for its mean node, and the expression/branch nodes judge that number.
+    QTemporaryDir tmpDir;
+    assert((tmpDir.isValid()));
+    const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
+    const auto projectPath = std::filesystem::path(u8"04_扩展示例") / u8"02_逻辑表达式与条件分支";
+    const auto projectFile = tmpPath / u8"逻辑表达式与条件分支.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"逻辑表达式与条件分支.vrt.json", projectFile);
+    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
+                          std::filesystem::copy_options::recursive);
+
+    const auto package = visionrt::readToolsPackage(toolsPkg);
+    auto       loader  = std::make_shared<PluginLoader>();
+    ToolRegistry registry;
+    registry.setPluginLoader(loader);
+    registry.registerPackage(package);
+    registry.loadNativeImplementations();
+    setupPython(registry, python);
+
+    ProjectStorage storage(registry);
+    auto           loaded = storage.load(projectFile);
+    for (const auto &diagnostic : loaded.diagnostics)
+        std::cerr << "LOAD DIAGNOSTIC node=" << (diagnostic.node ? *diagnostic.node : 0)
+                  << " field=" << diagnostic.field << " msg=" << diagnostic.message << std::endl;
+    assert((loaded.diagnostics.empty()));
+    assert((loaded.project.flows[0].nodes.size() == 4));
+
+    RuntimeEngine engine(4);
+    assert((engine.start(loaded.project, registry, RunMode::Once).code == 0));
+    const auto update = finish(engine);
+
+    // The first image averages 51.0, so the expression result is true and one unit away from 50.
+    const auto expression = snapshot(update, 3);
+    assert((expression && expression->status.code == 0));
+    assert((std::get<bool>(expression->outputs.at(3))));
+    assert((std::abs(std::get<double>(expression->outputs.at(4)) - 1.0) < 1e-6));
+
+    // The branch reads that Bool upstream: the true side runs and the false side reports 1.
+    const auto branch = snapshot(update, 4);
+    assert((branch && branch->status.code == 0));
+    assert((std::get<bool>(branch->outputs.at(2))));
+    assert((!std::get<bool>(branch->outputs.at(3))));
+    assert((std::get<std::int64_t>(branch->outputs.at(4)) == 0));
+    assert((std::get<std::int64_t>(branch->outputs.at(5)) == 1));
+
+    // The authored file must also be what the editor itself would write: saving it again and
+    // reloading has to stay free of schema diagnostics.
+    const auto saved = tmpPath / u8"重新保存.vrt.json";
+    storage.save(loaded.project, saved);
+    const auto reloaded = storage.load(saved);
+    for (const auto &diagnostic : reloaded.diagnostics)
+        std::cerr << "RELOAD DIAGNOSTIC field=" << diagnostic.field << " msg=" << diagnostic.message << std::endl;
+    assert((reloaded.diagnostics.empty()));
+    assert((reloaded.project.flows[0].nodes.size() == 4));
+
+    std::cout << "[EXTENSION EXAMPLES] expression and branch example executed its Python prerequisites\n";
 }
 
 void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
@@ -565,9 +627,10 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
     const auto tmpPath     = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto projectFile = tmpPath / "pipeline_cpu_python.vrt.json";
-    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_cpu_python.vrt.json", projectFile);
-    std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
+    const auto projectPath = std::filesystem::path(u8"04_扩展示例") / u8"01_Python图像统计";
+    const auto projectFile = tmpPath / u8"Python图像统计.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.vrt.json", projectFile);
+    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
                           std::filesystem::copy_options::recursive);
 
     ProjectStorage storage(registry);
@@ -642,9 +705,10 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     QTemporaryDir tmpDir;
     assert((tmpDir.isValid()));
     const auto tmpPath         = std::filesystem::u8path(tmpDir.path().toUtf8().toStdString());
-    const auto tempProjectFile = tmpPath / "pipeline_error_diagnostic.vrt.json";
-    std::filesystem::copy_file(repoRoot / "examples" / "pipeline_error_diagnostic.vrt.json", tempProjectFile);
-    std::filesystem::copy(repoRoot / "examples" / "images", tmpPath / "images",
+    const auto projectPath     = std::filesystem::path(u8"04_扩展示例") / u8"04_错误诊断";
+    const auto tempProjectFile = tmpPath / u8"错误诊断.vrt.json";
+    std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"错误诊断.vrt.json", tempProjectFile);
+    std::filesystem::copy(repoRoot / "examples" / projectPath / "images", tmpPath / "images",
                           std::filesystem::copy_options::recursive);
 
     const auto package = visionrt::readToolsPackage(toolsPkg);
@@ -934,6 +998,10 @@ int main(int argc, char **argv)
     std::cout << "[TEST] Running the shipped example projects..." << std::endl;
     testShippedExamples(unicodePkg, repoRoot);
     std::cout << "[PASS] Shipped example projects passed." << std::endl;
+
+    std::cout << "[TEST] Running the expression and branch example..." << std::endl;
+    testLogicExpressionExample(unicodePkg, repoRoot, python);
+    std::cout << "[PASS] Expression and branch example passed." << std::endl;
 
     std::cout << "[TEST] Running ragged detection filter 0/3 targets test (RT-S03)..." << std::endl;
     testRaggedDetectionFilter(unicodePkg);

@@ -22,30 +22,20 @@
 
 这六套只使用 CPU 原生工具，不依赖外部 Python、模型或相机。
 
-## 研发型样例
+## 扩展示例
 
-目录根部的三个工程是研发期样例，不是首批交付：它们需要额外资源或预期失败，仅用于诊断与 GPU 验证。
+扩展示例有明确前置条件，不属于免配置集合；各目录的 README 写明需要准备什么。
 
-| 工程 | 用途 |
-| --- | --- |
-| [CPU / Python](pipeline_cpu_python.vrt.json) | 读图后的两条并行分支：ROI 定位与裁剪二值化、Python 原图均值 |
-| [GPU YOLO](pipeline_gpu_yolo.vrt.json) | 检测与缺陷过滤 |
-| [错误诊断](pipeline_error_diagnostic.vrt.json) | 缺参、模型加载失败与缺工具占位 |
-
-`pipeline_cpu_python.vrt.json` 的两条分支互不串联：节点 5 的上游是节点 1 的 `images`，取的是裁剪与二值化之前的原图；端口绑定以工程 JSON 为唯一来源，此处不重复连线细节。样例图像的原图均值（51.0、22.95）与裁剪二值化后的均值（95.625、191.25）不同，因此“均值取原图”是可被验证的语义。
+| 示例 | 节点链 | 前置条件 |
+| --- | --- | --- |
+| [Python图像统计](04_扩展示例/01_Python图像统计/README.md) | 图像读取 → 投影ROI → 裁剪 → 二值化；图像读取 → 计算图像均值 | 外部 Python 环境 |
+| [逻辑表达式与条件分支](04_扩展示例/02_逻辑表达式与条件分支/README.md) | 图像读取 → 计算图像均值 → 评估表达式 → 条件分支 | 外部 Python 环境 |
+| [GPU目标检测](04_扩展示例/03_GPU目标检测/README.md) | 图像读取 → YOLO推理 → 结果过滤 | GPU 环境、自备图片与权重 |
+| [错误诊断](04_扩展示例/04_错误诊断/README.md) | 缺输入、缺引擎、缺工具定义的负例 | 无；预期失败 |
 
 ## 验证入口
 
-- [首批示例加载与执行](../tests/example_pipelines.cpp)：`testShippedExamples` 逐套加载、执行并校验上述数值，含中文与空格目录。
+- [首批示例加载与执行](../tests/example_pipelines.cpp)：逐套加载、执行并校验上述数值，含中文与空格目录；同一文件内的 `testLogicExpressionExample` 覆盖逻辑表达式与条件分支示例。
 - [示例元数据契约](../tests/example_metadata_contract.cpp)：工程签名与工具声明一致、参数取值在声明选项内。
 - [示例保存规则契约](../tests/example_project_contract.cpp)：示例识别、素材随行、冲突不覆盖、`Ctrl+S` 不写安装目录。
-
-## GPU 资源准备
-
-GPU 样例需要 Ultralytics 的 `bus.jpg` 与由 InferRT 导出入口生成的 COCO YOLOv8n `yolov8n.wts`。这些资源及生成的引擎不属于通用工具包，也不会自动下载。
-
-```cmd
-build\bin\gpu_tools_contract.exe <tools-package> examples\pipeline_gpu_yolo.vrt.json <fixture-directory>
-```
-
-安装态验证需隔离开发机依赖；开发环境通过不等于部署通过。
+- [打包结构校验](../tools/package_app.py)：首批六套工程存在、工程引用的相对资源随包安装。
