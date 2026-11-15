@@ -26,8 +26,6 @@ ApplicationWindow {
     property real leftRatio: 0.362
     property real libraryRatio: 0.38
     property real resultsRatio: 0.59
-    readonly property real leftMinimum: Math.min(260, workbench.width * 0.34)
-    readonly property real rightMinimum: Math.min(400, workbench.width * 0.60)
 
     function localPath(url) {
         let text = decodeURIComponent(url.toString())
@@ -358,10 +356,6 @@ ApplicationWindow {
                 visible: window.leftExpanded
                 enabled: window.leftExpanded
                 clip: true
-                function containsFocusItem(item) {
-                    while (item) { if (item === leftContent) return true; item = item.parent }
-                    return false
-                }
                 QuiSplitView {
                     id: leftSplit
                     anchors.fill: parent

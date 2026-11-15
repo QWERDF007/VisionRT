@@ -302,12 +302,6 @@ class PathProbe:
       "type": "string",
       "ui": {
         "editor": "path"
-      },
-      "relations": {
-        "path_mode": {
-          "stage": "init",
-          "id": 0
-        }
       }
     }
   ],
@@ -328,12 +322,6 @@ class PathProbe:
       "type": "string",
       "ui": {
         "editor": "path"
-      },
-      "relations": {
-        "path_mode": {
-          "stage": "inputs",
-          "id": 1
-        }
       }
     }
   ],

@@ -232,45 +232,17 @@ try
       "type": "string",
       "ui": {
         "editor": "path"
-      },
-      "relations": {
-        "path_mode": {
-          "stage": "inputs",
-          "id": 1
-        }
       }
     }
   ]
 })json");
     // The effective contract prepends the host-owned upstream_status input.
     assert(pathEditor.inputs[2].editor == "path");
-    assert((pathEditor.inputs[2].pathModeFrom == PortRef{PortStage::Inputs, 1}));
-    {
-        auto invalid                   = pathEditor;
-        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 99};
-        rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 2};
-        rejects([&] { validateToolDefinition(invalid); });
-        invalid.inputs[2].pathModeFrom = PortRef{PortStage::Inputs, 1};
-        invalid.inputs[2].editor       = "text";
-        rejects([&] { validateToolDefinition(invalid); });
-        invalid                        = pathEditor;
-        invalid.inputs[1].type         = {Type::Int};
-        invalid.inputs[1].defaultValue = std::int64_t{0};
-        invalid.inputs[1].options.clear();
-        rejects([&] { validateToolDefinition(invalid); });
-        invalid = pathEditor;
-        invalid.inputs[2].pathModeFrom.reset();
-        validateToolDefinition(invalid);
-    }
     {
         auto initialization       = pathEditor;
         initialization.initParams = std::move(initialization.inputs);
         // The numbers keep their meaning when a design moves a port into another stage.
         initialization.inputs.clear();
-        for (auto &port : initialization.initParams)
-            if (port.pathModeFrom)
-                port.pathModeFrom->stage = PortStage::Init;
         validateToolDefinition(initialization);
     }
 

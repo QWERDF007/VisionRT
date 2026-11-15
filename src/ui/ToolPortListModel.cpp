@@ -22,8 +22,6 @@ const char *relationLabel(const std::string &kind)
         return "图像关联";
     if (kind == "alignment")
         return "对齐关系";
-    if (kind == "path_mode")
-        return "路径模式";
     return "同几何关系";
 }
 
@@ -124,7 +122,6 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         case DecimalsRole:    return QString();
         case ImageRefRole:    return QString();
         case AlignmentRefRole:return QString();
-        case PathModeRefRole: return QString();
         case SameGeometryRefRole: return QString();
         case OptionsTextRole: return QString();
         case TabRole:         return QString::fromStdString(port.tab);
@@ -172,8 +169,6 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         return port.image ? QString::fromStdString(formatPortRef(*port.image)) : QString();
     case AlignmentRefRole:
         return port.alignment ? QString::fromStdString(formatPortRef(*port.alignment)) : QString();
-    case PathModeRefRole:
-        return port.pathModeFrom ? QString::fromStdString(formatPortRef(*port.pathModeFrom)) : QString();
     case SameGeometryRefRole:
         return port.sameGeometryAs ? QString::fromStdString(formatPortRef(*port.sameGeometryAs)) : QString();
     case OptionsTextRole:
@@ -212,7 +207,6 @@ QHash<int, QByteArray> ToolPortListModel::roleNames() const
         {DecimalsRole,     "decimalsValue"},
         {ImageRefRole,     "imageRef"},
         {AlignmentRefRole, "alignmentRef"},
-        {PathModeRefRole,  "pathModeRef"},
         {SameGeometryRefRole, "sameGeometryRef"},
         {OptionsTextRole,  "optionsText"},
         {TabRole,          "tabName"},
@@ -424,10 +418,6 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
                 if (std::find(choices.begin(), choices.end(), std::string_view{editor}) == choices.end())
                     throw ContractError("编辑器 " + editor + " 不能用于 " + typeToken(candidate.type) + " 参数");
             }
-            // A path mode names another String parameter and only means anything with the path
-            // editor; dropping the editor silently would leave the declaration lying.
-            if (editor != "path" && candidate.pathModeFrom)
-                throw ContractError("请先清除路径模式再修改编辑器");
             candidate.editor = editor;
         }
         const auto relation = [&candidate](const QVariant &value, const std::string &kind) -> std::optional<PortRef> {
@@ -460,13 +450,6 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
             if (reference)
                 requireRelationTarget(candidate, "alignment", *reference);
             candidate.alignment = reference;
-        }
-        if (properties.contains("path_mode"))
-        {
-            auto reference = relation(properties.value("path_mode"), "path_mode");
-            if (reference)
-                requireRelationTarget(candidate, "path_mode", *reference);
-            candidate.pathModeFrom = reference;
         }
         if (properties.contains("same_geometry_as"))
         {
@@ -640,8 +623,7 @@ QVariantList ToolPortListModel::relationCandidates(int row, const QString &kind)
         return result;
 
     const std::string relation = kind.toStdString();
-    if (relation != "image" && relation != "alignment" && relation != "path_mode"
-        && relation != "same_geometry_as")
+    if (relation != "image" && relation != "alignment" && relation != "same_geometry_as")
         return result;
 
     const auto &port = (*ports)[businessIndex];
@@ -738,7 +720,6 @@ QVariantMap ToolPortListModel::portAt(int row) const
     map.insert("decimalsValue", data(idx, DecimalsRole));
     map.insert("imageRef", data(idx, ImageRefRole));
     map.insert("alignmentRef", data(idx, AlignmentRefRole));
-    map.insert("pathModeRef", data(idx, PathModeRefRole));
     map.insert("sameGeometryRef", data(idx, SameGeometryRefRole));
     map.insert("optionsText", data(idx, OptionsTextRole));
     map.insert("tabName", data(idx, TabRole));

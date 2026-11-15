@@ -755,8 +755,8 @@ void ResultPresentation::updateReadback()
         readRequests_.pop_front();
         // The queued context dropped its publication; rebuild the live one and serve only when the
         // identity still matches, exactly as the direct entry would.
-        const auto current = host_.portContext(intent.context.value("port").toInt());
-        if (intent.context == textTarget(current))
+        const auto current = host_.portContext(intent.value("port").toInt());
+        if (intent == textTarget(current))
             requestText(current);
     }
     const bool textQueued = !readRequests_.empty();
@@ -779,9 +779,9 @@ void ResultPresentation::requestText(const QVariantMap &context)
         const auto target = textTarget(context);
         const bool alreadyQueued
             = std::any_of(readRequests_.begin(), readRequests_.end(),
-                          [&](const auto &item) { return item.context == target; });
+                          [&](const auto &item) { return item == target; });
         if (!alreadyQueued)
-            readRequests_.push_back(TextRequest{target});
+            readRequests_.push_back(target);
         return;
     }
     if (textTask_.valid())

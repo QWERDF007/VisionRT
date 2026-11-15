@@ -145,13 +145,11 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
             if (item.contains("relations"))
             {
                 const auto block = json::object(item.value("relations"), context + ".relations");
-                json::fields(block, {"image", "alignment", "path_mode", "same_geometry_as"}, context + ".relations");
+                json::fields(block, {"image", "alignment", "same_geometry_as"}, context + ".relations");
                 if (block.contains("image"))
                     port.image = reference(block.value("image"), context + ".relations.image");
                 if (block.contains("alignment"))
                     port.alignment = reference(block.value("alignment"), context + ".relations.alignment");
-                if (block.contains("path_mode"))
-                    port.pathModeFrom = reference(block.value("path_mode"), context + ".relations.path_mode");
                 if (block.contains("same_geometry_as"))
                     port.sameGeometryAs
                         = reference(block.value("same_geometry_as"), context + ".relations.same_geometry_as");
@@ -261,7 +259,6 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage
         for (const auto &[key, value] : std::initializer_list<std::pair<const char *, const std::optional<PortRef> *>>{
                  {         "image",          &port.image},
                  {     "alignment",      &port.alignment},
-                 {     "path_mode", &port.pathModeFrom},
                  {"same_geometry_as", &port.sameGeometryAs}
         })
             if (*value)

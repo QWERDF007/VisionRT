@@ -165,7 +165,7 @@ int main(int argc, char **argv)
     assert(relModel.addPort("根目录", "string"));                   // id 4
     assert(relModel.addPort("模式", "string"));                     // id 5
 
-    // The editor list follows the row's type; "path" is what makes a path mode meaningful.
+    // The editor list follows the row's type.
     assert(relModel.updatePort(4, {{"editor", QStringLiteral("path")}}));
     assert(rel.inputs[3].editor == "path");
     assert(!relModel.updatePort(5, {{"editor", QStringLiteral("rect")}}));
@@ -185,11 +185,6 @@ int main(int argc, char **argv)
     assert(relModel.relationCandidates(2, QStringLiteral("alignment")).size() == 1);
     assert(relModel.updatePort(2, {{"alignment", QStringLiteral("inputs.3")}}));
     assert(rel.inputs[1].alignment.has_value());
-
-    assert(relModel.relationCandidates(4, QStringLiteral("path_mode")).size() == 1);
-    assert(relModel.updatePort(4, {{"path_mode", QStringLiteral("inputs.5")}}));
-    assert(rel.inputs[3].pathModeFrom.has_value());
-    assert(!relModel.updatePort(4, {{"path_mode", QStringLiteral("inputs.1")}}));
 
     // A String value is edited as its own text, and candidate values are declared one per line.
     assert(relModel.updatePort(5, {{"defaultValue", QStringLiteral("自动")}}));
@@ -219,9 +214,6 @@ int main(int argc, char **argv)
     assert(roi && !roi->image.has_value());
     assert(roi && roi->alignment.has_value());
     assert((*roi->alignment == PortRef{PortStage::Inputs, 3}));
-    // The path mode pointed at a String that still exists, so it survives the deletion.
-    const auto *root = findInput(4);
-    assert(root && root->pathModeFrom.has_value());
     assert(clearedMessage.contains(QStringLiteral("端口 2 的图像关联")));
 
     // A host port cannot be erased, and a parameter a type_from output derives from is refused

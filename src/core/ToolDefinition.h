@@ -115,7 +115,6 @@ struct PortDefinition {
     std::vector<PortValue>   options;
     std::optional<PortRef>   image;
     std::optional<PortRef>   alignment;
-    std::optional<PortRef>   pathModeFrom;
     std::optional<PortRef>   sameGeometryAs;
     std::string              colorOrder;
     // Author's explicit choice to offer this Image port in the workbench image selector. Absent in

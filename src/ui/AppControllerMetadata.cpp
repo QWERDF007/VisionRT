@@ -59,8 +59,6 @@ QVariantMap portMetadata(const PortDefinition &port, PortStage stage)
         relations.insert("image", relationRef(*port.image));
     if (port.alignment)
         relations.insert("alignment", relationRef(*port.alignment));
-    if (port.pathModeFrom)
-        relations.insert("pathMode", relationRef(*port.pathModeFrom));
     if (port.sameGeometryAs)
         relations.insert("sameGeometryAs", relationRef(*port.sameGeometryAs));
     if (!relations.isEmpty())
@@ -513,8 +511,8 @@ QVariantList AppController::parameters() const
                     if (parentTool)
                         try
                         {
-                            const auto contract = nodeContract(*parent, *parentTool);
-                            if (const auto *port = workbench::port(contract.outputs, source.port))
+                            const auto resolved = nodeContract(*parent, *parentTool);
+                            if (const auto *port = workbench::port(resolved.outputs, source.port))
                                 name = workbench::q(port->nameZh);
                         }
                         catch (const ContractError &)

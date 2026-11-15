@@ -47,12 +47,9 @@ void Theme::initLightIndustrialPalette()
     buttonHoverBg_        = QColor("#f0f2f5");  // 悬浮浅灰底色（取消蓝色高亮）
     buttonPressedBg_      = QColor("#e4e7eb");
     menuButtonActiveBg_   = QColor("#1677ff"); // 菜单展开激活态实心蓝底色（参考 123055.png）
-    menuButtonBorder_     = QColor(0, 0, 0, 0);
     menuButtonText_       = QColor("#262626"); // 统一深灰文字
-    menuButtonHoverText_  = QColor("#262626"); // 悬浮时保持深灰
     menuButtonActiveText_ = QColor("#ffffff"); // 激活状态文字反白
     menuButtonIcon_       = QColor("#262626"); // 统一深灰图标
-    menuButtonHoverIcon_  = QColor("#262626"); // 悬浮时保持深灰
     menuButtonActiveIcon_ = QColor("#ffffff"); // 激活状态图标反白
 
     // 运行/循环运行按钮色彩（常规状态与其他按钮完全一致）
@@ -60,7 +57,6 @@ void Theme::initLightIndustrialPalette()
     runButtonHoverBg_   = QColor("#f0f2f5");
     runButtonPressedBg_ = QColor("#e4e7eb");
     runButtonIcon_      = QColor("#262626");
-    runButtonHoverIcon_ = QColor("#262626");
     loopRunningIcon_    = QColor("#cf222e");
 
     // 工具列表（工具库树控件）色彩（完全对齐 125712.png 标准）
@@ -88,16 +84,13 @@ void Theme::initLightIndustrialPalette()
     executeButtonNormalBg_  = QColor("#ffffff");
     executeButtonHoverBg_   = QColor("#f0f4f9");
     executeButtonPressedBg_ = QColor("#e4e7eb");
-    executeButtonBorder_    = QColor("#d0d7de");
     executeButtonIcon_      = QColor("#1677ff");
     executeButtonText_      = QColor("#24292f");
 
     // 参数编辑区与表格
     paramPanelBg_            = QColor("#ffffff");
     paramGroupHeaderBg_      = QColor("#f6f8fa");
-    paramGroupHeaderHoverBg_ = QColor("#f0f2f5");
     paramGroupHeaderText_    = QColor("#24292f");
-    paramRowBorder_          = QColor("#eef0f3");
     paramRowHoverBg_         = QColor("#f8fafd");
     paramLabelText_          = QColor("#24292f");
     parameterTextColor_      = paramLabelText_;
@@ -128,7 +121,6 @@ void Theme::initLightIndustrialPalette()
     warning_       = QColor("#9a6700");
     disabledText_  = QColor("#8c959f");
     tooltipBg_     = QColor("#ffffff");
-    tooltipText_   = QColor("#24292f");
     viewportBg_    = QColor("#eaebef");
     navItemActiveBg_   = QColor("#e7f5ff"); // 设置导航选中浅蓝底
     navItemActiveText_ = QColor("#0875d9"); // 设置导航选中强调文字
@@ -141,16 +133,13 @@ void Theme::initLightIndustrialPalette()
 
     // 流程画布节点四态色彩与徽标
     nodeStateGray_       = QColor("#8c959f");
-    nodeStateBlue_       = QColor("#1887d8");
     nodeStateGreen_      = QColor("#1a7f37");
     nodeStateRed_        = QColor("#cf222e");
     nodeStateOrange_     = QColor("#e66b37");
     nodeHeaderGray_      = QColor("#dfe4ea");
-    nodeHeaderBlue_      = QColor("#ddf4ff");
     nodeHeaderGreen_     = QColor("#1a7f37");
     nodeHeaderRed_       = QColor("#ffebe9");
     nodeHeaderTextGray_  = QColor("#57606a");
-    nodeHeaderTextBlue_  = QColor("#0969da");
     nodeHeaderTextGreen_ = QColor("#ffffff");
     nodeHeaderTextRed_   = QColor("#cf222e");
 
@@ -174,16 +163,12 @@ void Theme::initLightIndustrialPalette()
 
     // 底部参数面板与执行按钮尺寸
     tabBarHeight_             = 34;
-    tabFontSize_              = 12;
     statusBarHeight_          = 32;
     segmentButtonWidth_       = 92;
     segmentButtonHeight_      = 22;
     executeButtonHeight_      = 24;
     executeButtonWidth_       = 68;
-    executeButtonFontSize_    = 12;
     paramGroupHeaderHeight_   = 28;
-    paramGroupHeaderFontSize_ = 12;
-    paramLabelFontSize_       = 12;
     parameterRowHeight_       = 32;
     paramActionBtnWidth_      = 28;
     logButtonHoverColor_       = QColor("#eaf2fd");
@@ -200,16 +185,11 @@ void Theme::initLightIndustrialPalette()
     fontSizeSmall_   = 11;
     fontSizeBase_    = 12;
     fontSizeMedium_  = 13;
-    fontSizeLarge_   = 14;
     iconSizeTiny_    = 10;
     iconSizeSmall_   = 12;
     iconSizeBase_    = 14;
-    iconSizeMedium_  = 16;
-    iconSizeLarge_   = 18;
-    iconSizeXLarge_  = 20;
     radiusSmall_     = 3;
     radiusBase_      = 4;
-    radiusLarge_     = 6;
 
     // 结果面板与 tooltip
     toolbarWidth_          = 32;
@@ -218,12 +198,8 @@ void Theme::initLightIndustrialPalette()
     thumbnailRowHeight_    = 86;
     thumbnailImageHeight_  = 60;
     tooltipWidth_          = 232;
-    tooltipRowHeight_      = 16;
     roiStrokeWidth_        = 2;
     roiHandleSize_         = 4;
-    dialogWidth_           = 520;
-    dialogMaxHeight_       = 560;
-    menuItemHeight_        = 26;
 
     sourceButtonDisabledOpacity_ = 0.45;
 
@@ -241,9 +217,6 @@ void Theme::initLightIndustrialPalette()
     iconZoomOut_    = 0xe71f; // QuiFontIcon.ZoomOut
     iconOneToOne_   = 0xeb9f; // QuiFontIcon.Photo2
     iconEasyTouch_  = 0xe721; // QuiFontIcon.Search
-    iconEdit_       = 0xe70f; // QuiFontIcon.Edit
-    iconClear_      = 0xe74d; // QuiFontIcon.Delete
-    iconFolderOpen_ = 0xe838; // QuiFontIcon.FolderOpen
 }
 
 } // namespace visionrt

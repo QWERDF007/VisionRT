@@ -433,12 +433,6 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
-        visionrt_contract(ui_project_paths_contract visionrt_ui)
-        # R50: this scenario executes Python, so the test states the build interpreter.
-        target_link_libraries(ui_project_paths_contract PRIVATE visionrt_python_testing)
-        target_link_libraries(ui_project_paths_contract PRIVATE Qt6::Test)
-        target_compile_definitions(ui_project_paths_contract PRIVATE
-            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(ui_unc_paths_contract visionrt_ui)
         # R50: these scenarios execute Python, so the test states the build interpreter.
         target_link_libraries(ui_unc_paths_contract PRIVATE visionrt_python_testing)

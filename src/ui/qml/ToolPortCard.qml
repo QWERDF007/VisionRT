@@ -28,7 +28,6 @@ Rectangle {
                                        (showsRelation("image") && model.imageRef !== "") ||
                                        (showsRelation("alignment") && model.alignmentRef !== "") ||
                                        (showsRelation("same_geometry_as") && model.sameGeometryRef !== "") ||
-                                       (showsRelation("path_mode") && model.pathModeRef !== "") ||
                                        (typeToken === "string" && model.editorType !== "") ||
                                        (model.optionsText && model.optionsText !== "")
     property bool advancedChecked: false
@@ -93,8 +92,6 @@ Rectangle {
             return root.isRoi
         if (kind === "alignment")
             return root.isRoi && root.stage === "inputs"
-        if (kind === "path_mode")
-            return model.editorType === "path"
         if (kind === "same_geometry_as")
             return root.isImage && root.stage === "outputs"
         return false
@@ -558,30 +555,6 @@ Rectangle {
                     }
                     onActivated: function(index) {
                         root.commit({ same_geometry_as: root.relationOptions("same_geometry_as")[index].ref })
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                visible: root.showsRelation("path_mode")
-                Label { text: "路径模式:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
-                QuiComboBox {
-                    Layout.fillWidth: true
-                    implicitHeight: Theme.paramEditorHeight
-                    enabled: root.editable
-                    model: root.relationOptions("path_mode")
-                    textRole: "label"
-                    currentIndex: root.relationIndex("path_mode", model.pathModeRef)
-                    background: Rectangle {
-                        radius: Theme.radiusSmall
-                        border.width: 1
-                        border.color: QuiColor.Border
-                        color: Theme.surfaceBg
-                    }
-                    onActivated: function(index) {
-                        root.commit({ path_mode: root.relationOptions("path_mode")[index].ref })
                     }
                 }
             }

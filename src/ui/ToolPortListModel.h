@@ -31,7 +31,6 @@ public:
         DecimalsRole,
         ImageRefRole,
         AlignmentRefRole,
-        PathModeRefRole,
         SameGeometryRefRole,
         OptionsTextRole,
         TabRole,

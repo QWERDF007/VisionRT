@@ -247,9 +247,6 @@ QuiSplitView {
         if (expressionEditorLoader.item) invoke()
         else Qt.callLater(invoke)
     }
-    function openExpressionEditorWithDraft(nodeId, draftText) {
-        openExpressionEditor(nodeId, draftText, true)
-    }
     function openGuardEditor(nodeId) {
         if (!guardEditorLoader.active) guardEditorLoader.active = true
         if (guardEditorLoader.item) guardEditorLoader.item.openFor(nodeId)

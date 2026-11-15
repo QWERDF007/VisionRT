@@ -622,16 +622,16 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 for (qsizetype index = 0; index < program.size(); ++index)
                 {
                     const auto item = map(program[index], "expression result");
-                    ExpressionResult result;
-                    result.portId     = portId(item.value("port_id"), "result.port_id");
-                    result.name       = text(item.value("name"), "result.name", true);
-                    result.symbol     = text(item.value("symbol"), "result.symbol", true);
-                    result.expression = text(item.value("expression"), "result.expression", true);
+                    ExpressionResult entry;
+                    entry.portId     = portId(item.value("port_id"), "result.port_id");
+                    entry.name       = text(item.value("name"), "result.name", true);
+                    entry.symbol     = text(item.value("symbol"), "result.symbol", true);
+                    entry.expression = text(item.value("expression"), "result.expression", true);
                     if (!item.value("exposed").isBool())
                         invalid("result.exposed 必须是布尔值");
-                    result.exposed = item.value("exposed").toBool();
-                    result.type    = ValueJson::decodeType(object(item.value("type"), "type"));
-                    expression.program.push_back(std::move(result));
+                    entry.exposed = item.value("exposed").toBool();
+                    entry.type    = ValueJson::decodeType(object(item.value("type"), "type"));
+                    expression.program.push_back(std::move(entry));
                 }
                 node.expression = std::move(expression);
             }

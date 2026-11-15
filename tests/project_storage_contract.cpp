@@ -445,7 +445,7 @@ void saveAsPaths(const QString &directory)
     tool.initParams.clear();
     tool.outputs.clear();
     tool.inputs.clear();
-    // 输入按声明顺序从 1 编号：path 1、text 2、empty 3、remote 4、absolute 5、mode 6、dynamic 7。
+    // 输入按声明顺序从 1 编号：path 1、text 2、empty 3、remote 4、absolute 5、dynamic 6。
     PortId next = 1;
     for (const auto &id : {"path", "text", "empty", "remote", "absolute"})
     {
@@ -457,18 +457,11 @@ void saveAsPaths(const QString &directory)
         port.editor = std::string(id) == "text" ? "text" : "path";
         tool.inputs.push_back(port);
     }
-    PortDefinition mode;
-    mode.id     = next++;   // 6
-    mode.nameZh = "模式";
-    mode.type   = {Type::String};
-    mode.editor = "text";
-    tool.inputs.push_back(mode);
     PortDefinition dynamic;
-    dynamic.id           = next++;   // 7
-    dynamic.nameZh       = "动态路径";
-    dynamic.type         = {Type::String};
-    dynamic.editor       = "path";
-    dynamic.pathModeFrom = PortRef{PortStage::Inputs, mode.id};
+    dynamic.id     = next++;   // 6
+    dynamic.nameZh = "动态路径";
+    dynamic.type   = {Type::String};
+    dynamic.editor = "path";
     tool.inputs.push_back(dynamic);
     // 目录参数是同一个编辑器、另一条初始化编号：初始化从 0 起。
     PortDefinition folder = tool.inputs[0];
@@ -487,7 +480,7 @@ void saveAsPaths(const QString &directory)
     node.inputs[2].literal          = std::string("图像/不存在.png");
     node.inputs[3].literal          = std::string("");
     node.inputs[4].literal          = std::string("Z:/异盘/资源.png");
-    node.inputs[7].literal          = std::string("动态/图像.png");
+    node.inputs[6].literal          = std::string("动态/图像.png");
     node.initParams[0]              = std::string("目录");
     const auto oldDirectory         = directory + "/旧位置";
     const auto newDirectory         = directory + "/新位置";
@@ -513,8 +506,8 @@ void saveAsPaths(const QString &directory)
     require(std::get<std::string>(saved.inputs.at(1).literal) == "图像/不存在.png",
             "save-as rewrote a hidden upstream literal");
     require(std::get<std::string>(saved.initParams.at(0)) == "目录", "save-as rewrote a directory parameter");
-    require(std::get<std::string>(saved.inputs.at(7).literal) == "动态/图像.png",
-            "save-as rewrote a dynamically gated path input");
+    require(std::get<std::string>(saved.inputs.at(6).literal) == "动态/图像.png",
+            "save-as rewrote a path input");
     {
         const auto &text  = std::get<std::string>(saved.inputs.at(2).literal);
         const auto &empty = std::get<std::string>(saved.inputs.at(3).literal);

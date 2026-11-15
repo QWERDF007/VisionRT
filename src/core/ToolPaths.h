@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <filesystem>
+#include <string_view>
 
 namespace visionrt {
 
@@ -20,6 +21,13 @@ inline std::filesystem::path softwareDataDir()
     if (directory.isEmpty())
         throw ContractError("无法确定软件目录，拒绝写入");
     return std::filesystem::weakly_canonical(std::filesystem::path(directory.toStdWString()));
+}
+
+// A path built from UTF-8 text. std::filesystem::u8path is deprecated in C++20; the char8_t view
+// is its replacement and needs no locale or code-page conversion.
+inline std::filesystem::path pathFromUtf8(std::string_view text)
+{
+    return std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t *>(text.data()), text.size()));
 }
 
 inline std::filesystem::path resolveToolPath(const std::filesystem::path &root, const std::filesystem::path &relative)

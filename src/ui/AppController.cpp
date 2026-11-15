@@ -50,7 +50,7 @@ std::filesystem::path localPath(const QString &text)
 {
     const QUrl url(text);
     const auto local = url.isLocalFile() ? url.toLocalFile() : text;
-    return std::filesystem::u8path(local.toUtf8().toStdString()).lexically_normal();
+    return pathFromUtf8(local.toUtf8().toStdString()).lexically_normal();
 }
 
 NodeId nodeId(const QString &text)
@@ -371,21 +371,21 @@ const ToolDefinition *AppController::Impl::effectiveTool() const
 }
 
 const std::map<PortId, bool> *
-AppController::Impl::refreshConnectable(const FlowDefinition &flow, const NodeDefinition &node) const
+AppController::Impl::refreshConnectable(const FlowDefinition &flowDefinition, const NodeDefinition &node) const
 {
     if (connectable.valid && connectable.node == node.id && connectable.epoch == projectEpoch
-        && connectable.structureRevision == flow.structureRevision && connectable.flow.toStdString() == flow.id)
+        && connectable.structureRevision == flowDefinition.structureRevision && connectable.flow.toStdString() == flowDefinition.id)
         return connectable.valid ? &connectable.connectable : nullptr;
     connectable.epoch             = projectEpoch;
-    connectable.flow              = workbench::q(flow.id);
-    connectable.structureRevision = flow.structureRevision;
+    connectable.flow              = workbench::q(flowDefinition.id);
+    connectable.structureRevision = flowDefinition.structureRevision;
     connectable.node              = node.id;
     connectable.valid             = true;
     connectable.connectable.clear();
     connectable.candidates.clear();
     for (const auto &[id, type] : node.signatures.outputs)
     {
-        auto candidates = candidateInputsWithState(flow, SourcePort{node.id, id});
+        auto candidates = candidateInputsWithState(flowDefinition, SourcePort{node.id, id});
         bool free       = false;
         for (const auto &candidate : candidates)
             if (!candidate.connected && !candidate.occupied)
@@ -429,8 +429,8 @@ void AppController::Impl::setState(RuntimeState value)
 
 bool AppController::Impl::nodeExists(NodeId id) const
 {
-    for (const auto &flow : editor.project().flows)
-        for (const auto &node : flow.nodes)
+    for (const auto &eachFlow : editor.project().flows)
+        for (const auto &node : eachFlow.nodes)
             if (node.id == id)
                 return true;
     return false;
@@ -439,8 +439,8 @@ bool AppController::Impl::nodeExists(NodeId id) const
 void AppController::Impl::pruneDeletedNodes()
 {
     std::set<NodeId> existing;
-    for (const auto &flow : editor.project().flows)
-        for (const auto &node : flow.nodes)
+    for (const auto &eachFlow : editor.project().flows)
+        for (const auto &node : eachFlow.nodes)
             existing.insert(node.id);
     const auto kept = presentation.snapshotCount();
     presentation.retain(existing);
@@ -464,8 +464,8 @@ void AppController::Impl::publishWiresChanged()
     // The wires binding depends on the edge topology only; timings and node state must not repaint
     // every connection. A signature keeps the decision here instead of in QML.
     QString signature;
-    if (const auto *flow = currentFlow())
-        for (const auto &relation : portRelations(*flow).active)
+    if (const auto *activeFlow = currentFlow())
+        for (const auto &relation : portRelations(*activeFlow).active)
             signature += QString::number(relation.source.node) + u':' + QString::number(relation.source.port) + u'>'
                        + QString::number(relation.target.node) + u':' + QString::number(relation.target.port) + u';';
     if (signature == wireState)
@@ -1754,26 +1754,26 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     const bool running = presentation.active(node.id);
     const auto snapshot = displaySnapshot(node);
     const auto disposition = snapshot ? snapshot->disposition : NodeDisposition::Pending;
-    QString state = "idle";
+    QString stateText = "idle";
     if (running)
-        state = "running";
+        stateText = "running";
     else if (snapshot)
         switch (disposition)
         {
         case NodeDisposition::Skipped:
-            state = "skipped";
+            stateText = "skipped";
             break;
         case NodeDisposition::Blocked:
-            state = "blocked";
+            stateText = "blocked";
             break;
         case NodeDisposition::Canceled:
-            state = "cancelled";
+            stateText = "cancelled";
             break;
         case NodeDisposition::Failed:
-            state = "failed";
+            stateText = "failed";
             break;
         default:
-            state = snapshot->status.code == 0 ? "succeeded" : "failed";
+            stateText = snapshot->status.code == 0 ? "succeeded" : "failed";
             break;
         }
     std::int64_t statusCode = 0;
@@ -1791,9 +1791,9 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
                           : diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status});
         statusDetail = statusDisplay(snapshot->status).detail;
     }
-    const auto timing = nodeTimingText(snapshot.get(), running);
+    const auto timingText = nodeTimingText(snapshot.get(), running);
     QVariantList phases;
-    for (const auto &phase : timingPhasesOf(timing))
+    for (const auto &phase : timingPhasesOf(timingText))
         phases.push_back(QVariantMap{{"label", phase.label}, {"value", phase.value}});
 
     NodeListModel::Row row;
@@ -1803,11 +1803,11 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     row.toolId        = workbench::q(node.toolId);
     row.x             = node.position.x;
     row.y             = node.position.y;
-    row.state         = state;
+    row.state         = stateText;
     row.disposition   = dispositionName(disposition);
     row.executed      = disposition == NodeDisposition::Succeeded || disposition == NodeDisposition::Failed
                    || disposition == NodeDisposition::Canceled;
-    row.timingText    = timing.total;
+    row.timingText    = timingText.total;
     row.timingPhases  = phases;
     row.statusCode    = statusCode;
     row.statusMessage = statusMessage;
@@ -1841,8 +1841,8 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
 void AppController::Impl::refreshNodeModel()
 {
     std::vector<NodeListModel::Row> rows;
-    if (const auto *flow = currentFlow())
-        for (const auto &node : flow->nodes)
+    if (const auto *activeFlow = currentFlow())
+        for (const auto &node : activeFlow->nodes)
             rows.push_back(nodeRow(node));
     nodesModel.sync(std::move(rows));
 }

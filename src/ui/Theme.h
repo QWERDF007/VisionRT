@@ -110,12 +110,9 @@ public:
     THEME_COLOR_PROP(buttonHoverBg)
     THEME_COLOR_PROP(buttonPressedBg)
     THEME_COLOR_PROP(menuButtonActiveBg)
-    THEME_COLOR_PROP(menuButtonBorder)
     THEME_COLOR_PROP(menuButtonText)
-    THEME_COLOR_PROP(menuButtonHoverText)
     THEME_COLOR_PROP(menuButtonActiveText)
     THEME_COLOR_PROP(menuButtonIcon)
-    THEME_COLOR_PROP(menuButtonHoverIcon)
     THEME_COLOR_PROP(menuButtonActiveIcon)
 
     // 运行/循环运行按钮色彩
@@ -123,7 +120,6 @@ public:
     THEME_COLOR_PROP(runButtonHoverBg)
     THEME_COLOR_PROP(runButtonPressedBg)
     THEME_COLOR_PROP(runButtonIcon)
-    THEME_COLOR_PROP(runButtonHoverIcon)
     THEME_COLOR_PROP(loopRunningIcon)
 
     // 工具列表（工具库树控件）色彩
@@ -151,16 +147,13 @@ public:
     THEME_COLOR_PROP(executeButtonNormalBg)
     THEME_COLOR_PROP(executeButtonHoverBg)
     THEME_COLOR_PROP(executeButtonPressedBg)
-    THEME_COLOR_PROP(executeButtonBorder)
     THEME_COLOR_PROP(executeButtonIcon)
     THEME_COLOR_PROP(executeButtonText)
 
     // 参数编辑区与表格
     THEME_COLOR_PROP(paramPanelBg)
     THEME_COLOR_PROP(paramGroupHeaderBg)
-    THEME_COLOR_PROP(paramGroupHeaderHoverBg)
     THEME_COLOR_PROP(paramGroupHeaderText)
-    THEME_COLOR_PROP(paramRowBorder)
     THEME_COLOR_PROP(paramRowHoverBg)
     THEME_COLOR_PROP(paramLabelText)
     // 参数字段文本的唯一来源：名称与取值同色，不再分叉成 label/editor 两套
@@ -191,7 +184,6 @@ public:
     THEME_COLOR_PROP(warning)
     THEME_COLOR_PROP(disabledText)
     THEME_COLOR_PROP(tooltipBg)
-    THEME_COLOR_PROP(tooltipText)
     THEME_COLOR_PROP(viewportBg)
     // 设置窗口左导航：选中项浅蓝底与强调文字，与工具树的选中语义区分开
     THEME_COLOR_PROP(navItemActiveBg)
@@ -206,16 +198,13 @@ public:
 
     // 流程画布节点四态色彩
     THEME_COLOR_PROP(nodeStateGray)
-    THEME_COLOR_PROP(nodeStateBlue)
     THEME_COLOR_PROP(nodeStateGreen)
     THEME_COLOR_PROP(nodeStateRed)
     THEME_COLOR_PROP(nodeStateOrange)
     THEME_COLOR_PROP(nodeHeaderGray)
-    THEME_COLOR_PROP(nodeHeaderBlue)
     THEME_COLOR_PROP(nodeHeaderGreen)
     THEME_COLOR_PROP(nodeHeaderRed)
     THEME_COLOR_PROP(nodeHeaderTextGray)
-    THEME_COLOR_PROP(nodeHeaderTextBlue)
     THEME_COLOR_PROP(nodeHeaderTextGreen)
     THEME_COLOR_PROP(nodeHeaderTextRed)
 
@@ -238,13 +227,9 @@ public:
 
     // 底部参数面板与执行按钮尺寸
     THEME_INT_PROP(tabBarHeight)
-    THEME_INT_PROP(tabFontSize)
     THEME_INT_PROP(executeButtonHeight)
     THEME_INT_PROP(executeButtonWidth)
-    THEME_INT_PROP(executeButtonFontSize)
     THEME_INT_PROP(paramGroupHeaderHeight)
-    THEME_INT_PROP(paramGroupHeaderFontSize)
-    THEME_INT_PROP(paramLabelFontSize)
     THEME_INT_PROP(paramActionBtnWidth)
     // 状态栏与分段按钮尺寸
     THEME_INT_PROP(statusBarHeight)
@@ -315,28 +300,19 @@ public:
     THEME_INT_PROP(thumbnailRowHeight)
     THEME_INT_PROP(thumbnailImageHeight)
     THEME_INT_PROP(tooltipWidth)
-    THEME_INT_PROP(tooltipRowHeight)
     THEME_INT_PROP(roiStrokeWidth)
     THEME_INT_PROP(roiHandleSize)
-    THEME_INT_PROP(dialogWidth)
-    THEME_INT_PROP(dialogMaxHeight)
-    THEME_INT_PROP(menuItemHeight)
 
     // 全局字号、图标与圆角
     THEME_INT_PROP(fontSizeCaption)
     THEME_INT_PROP(fontSizeSmall)
     THEME_INT_PROP(fontSizeBase)
     THEME_INT_PROP(fontSizeMedium)
-    THEME_INT_PROP(fontSizeLarge)
     THEME_INT_PROP(iconSizeTiny)
     THEME_INT_PROP(iconSizeSmall)
     THEME_INT_PROP(iconSizeBase)
-    THEME_INT_PROP(iconSizeMedium)
-    THEME_INT_PROP(iconSizeLarge)
-    THEME_INT_PROP(iconSizeXLarge)
     THEME_INT_PROP(radiusSmall)
     THEME_INT_PROP(radiusBase)
-    THEME_INT_PROP(radiusLarge)
 
     // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
     THEME_FONT_PROP(titleFont)
@@ -347,9 +323,6 @@ public:
     THEME_INT_PROP(iconZoomOut)
     THEME_INT_PROP(iconOneToOne)
     THEME_INT_PROP(iconEasyTouch)
-    THEME_INT_PROP(iconEdit)
-    THEME_INT_PROP(iconClear)
-    THEME_INT_PROP(iconFolderOpen)
 
     THEME_REAL_PROP(sourceButtonDisabledOpacity)
 

@@ -94,12 +94,6 @@ try
       "type": "string",
       "ui": {
         "editor": "path"
-      },
-      "relations": {
-        "path_mode": {
-          "stage": "inputs",
-          "id": 1
-        }
       }
     }
   ]

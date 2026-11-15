@@ -107,7 +107,7 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
                 throw ContractError("type_from requires a business output: " + portLabel(port.id));
             if (!isMissing(port.defaultValue) || !port.editor.empty() || port.minimum || port.maximum || port.step
                 || port.decimals || !port.options.empty() || !port.optionsProvider.empty() || port.image
-                || port.alignment || port.pathModeFrom || port.sameGeometryAs || !port.colorOrder.empty()
+                || port.alignment || port.sameGeometryAs || !port.colorOrder.empty()
                 || port.imageVisible)
                 throw ContractError("type_from cannot have concrete value or display attributes: " + portLabel(port.id));
             continue;
@@ -122,8 +122,8 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             if (port.decimals.has_value()) throw ContractError("ui.decimals is not an output field: " + portLabel(port.id));
             if (!port.options.empty()) throw ContractError("constraints.options is not an output field: " + portLabel(port.id));
             if (!port.optionsProvider.empty()) throw ContractError("ui.options_provider is not an output field: " + portLabel(port.id));
-            if (port.alignment || port.pathModeFrom)
-                throw ContractError("relations.alignment and relations.path_mode apply to inputs: " + portLabel(port.id));
+            if (port.alignment)
+                throw ContractError("relations.alignment applies to inputs: " + portLabel(port.id));
         } else {
             if (!port.colorOrder.empty())
                 throw ContractError("display.color_order applies only to outputs: " + portLabel(port.id));
@@ -144,9 +144,6 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             throw ContractError("矩形编辑器要求 ROI 类型端口：" + portLabel(port.id));
         if (pathEditor && port.type != TypeSpec{Type::String})
             throw ContractError("路径编辑器要求 String 类型端口：" + portLabel(port.id));
-
-        if (port.pathModeFrom && (output || port.editor != "path"))
-            throw ContractError("relations.path_mode requires a path editor: " + portLabel(port.id));
 
         if (!port.tab.empty()) {
             const auto tabs = toolTabs();
@@ -577,11 +574,6 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
         port.alignment.reset();
         note("对齐关系");
     }
-    if (port.pathModeFrom && port.editor != "path")
-    {
-        port.pathModeFrom.reset();
-        note("路径模式");
-    }
     if (port.sameGeometryAs && newType.type != Type::Image)
     {
         port.sameGeometryAs.reset();
@@ -621,11 +613,6 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
             {
                 other.alignment.reset();
                 note(owner + "对齐关系");
-            }
-            if (pointsHere(other.pathModeFrom) && newType != TypeSpec{Type::String})
-            {
-                other.pathModeFrom.reset();
-                note(owner + "路径模式");
             }
         }
     }
@@ -697,11 +684,6 @@ std::vector<std::string> erasePort(ToolDefinition &def, PortStage stage, PortId 
             {
                 other.alignment.reset();
                 note(owner + "对齐关系");
-            }
-            if (pointsHere(other.pathModeFrom))
-            {
-                other.pathModeFrom.reset();
-                note(owner + "路径模式");
             }
         }
     }
@@ -847,16 +829,6 @@ void validateToolDefinition(const ToolDefinition& def) {
         if (!target || target->type.type != Type::Image)
             throw ContractError(std::string(context) + " must reference an Image port: " + formatPortRef(reference));
     };
-
-    for (const auto *ports : {&def.initParams, &def.inputs})
-        for (const auto& port : *ports) {
-            if (!port.pathModeFrom) continue;
-            if (port.pathModeFrom->stage != (ports == &def.initParams ? PortStage::Init : PortStage::Inputs))
-                throw ContractError("relations.path_mode must reference the same stage: " + portLabel(port.id));
-            const auto* mode = findPort(*ports, port.pathModeFrom->id);
-            if (!mode || mode->id == port.id || mode->type != TypeSpec{Type::String})
-                throw ContractError("relations.path_mode must reference another String parameter: " + portLabel(port.id));
-        }
 
     for (const auto *list : {&def.initParams, &def.inputs, &def.outputs})
         for (const auto& port : *list)

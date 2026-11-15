@@ -121,12 +121,6 @@ void pathEditorsContract()
       "ui": {
         "editor": "path"
       },
-      "relations": {
-        "path_mode": {
-          "stage": "inputs",
-          "id": 3
-        }
-      },
       "id": 4
     }
   ],

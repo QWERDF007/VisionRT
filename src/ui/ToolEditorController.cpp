@@ -2,6 +2,7 @@
 
 #include "core/DefinitionJson.h"
 #include "core/Project.h"
+#include "core/ToolPaths.h"
 #include "ui/AppController.h"
 #include "ui/DisplayTypes.h"
 
@@ -57,7 +58,6 @@ bool samePort(const PortDefinition &left, const PortDefinition &right)
            && sameOptionalValue(left.maximum, right.maximum)
            && sameOptionalValue(left.step, right.step)
            && sameReference(left.image, right.image) && sameReference(left.alignment, right.alignment)
-           && sameReference(left.pathModeFrom, right.pathModeFrom)
            && sameReference(left.sameGeometryAs, right.sameGeometryAs)
            && left.typeFrom == right.typeFrom
            && left.options.size() == right.options.size()
@@ -667,7 +667,7 @@ void ToolEditorController::setCurrentToolFile(const QString &value)
         emit currentToolChanged();
         return;
     }
-    const std::filesystem::path relative = std::filesystem::u8path(text.toStdString());
+    const std::filesystem::path relative = pathFromUtf8(text.toStdString());
     if (relative.is_absolute() || text.contains(QStringLiteral("..")))
     {
         setStatus(QStringLiteral("脚本路径必须是工具包内的相对路径"), true);

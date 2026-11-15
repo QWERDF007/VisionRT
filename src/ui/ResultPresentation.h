@@ -123,10 +123,8 @@ public:
     bool readsAllowed() const;
     // Returns true when the barrier identity changed; a repeated poll is a no-op.
     bool setReadback(const RuntimeReadback *readback);
-    bool hasReadback() const { return readback_.has_value(); }
     void updateReadback();
     void requestText(const QVariantMap &context);
-    bool textRunning() const { return textTask_.valid(); }
 
     // --- drain --------------------------------------------------------------------------------
     void beginDrain(std::function<void()> continuation);
@@ -136,11 +134,6 @@ public:
     bool draining() const noexcept { return draining_; }
 
 private:
-    struct TextRequest
-    {
-        QVariantMap context;
-    };
-
     struct TextResult
     {
         QString       text;
@@ -196,7 +189,7 @@ private:
     std::vector<QPointer<ImageViewport>> thumbnails_;
     std::vector<QPointer<ImageViewport>> displayTargets_;
 
-    std::deque<TextRequest>            readRequests_;
+    std::deque<QVariantMap>            readRequests_;
     std::optional<RuntimeReadback>     readback_;
     std::future<void>                  textTask_;
     std::shared_ptr<TextMailbox>       textMailbox_;
