@@ -59,12 +59,15 @@ int cudaDeviceCount()
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
+    const auto arguments = QCoreApplication::arguments();
     try
     {
-        if ((argc != 4 && argc != 5) || (argc == 5 && std::string_view(argv[4]) != "--engine-only"))
+        if ((argc != 4 && argc != 5) || (argc == 5 && std::string_view(argv[4]) != "--engine-only"
+                                         && std::string_view(argv[4]) != "--engine-output-error"))
             throw std::runtime_error("Usage: gpu_tools_contract <tools-package> <example-project> <fixture-directory> [--engine-only]");
-        const bool buildWeights = argc == 4;
-        const auto fixtures = std::filesystem::absolute(std::filesystem::u8path(argv[3]));
+        const bool outputError = argc == 5 && std::string_view(argv[4]) == "--engine-output-error";
+        const bool buildWeights = argc == 4 || outputError;
+        const auto fixtures = std::filesystem::absolute(std::filesystem::path(arguments.at(3).toStdU16String()));
         const auto weights = fixtures / "yolov8n.wts";
         const auto image = fixtures / "bus.jpg";
         const auto enginePath = fixtures / "yolov8n.engine";
@@ -89,7 +92,7 @@ int main(int argc, char **argv)
         // A package built from a profile without inference carries no infer module: the contract
         // has nothing to measure there, and reporting it as a failure would blame the wrong thing.
         {
-            const auto indexPath = std::filesystem::u8path(argv[1]) / "module_index.json";
+            const auto indexPath = std::filesystem::path(arguments.at(1).toStdU16String()) / "module_index.json";
             std::ifstream indexStream(indexPath, std::ios::binary);
             const auto    indexDocument = QJsonDocument::fromJson(QByteArray::fromStdString(
                 std::string(std::istreambuf_iterator<char>(indexStream), std::istreambuf_iterator<char>())));
@@ -105,10 +108,10 @@ int main(int argc, char **argv)
         }
         ToolRegistry registry;
         registry.setPluginLoader(std::make_shared<PluginLoader>());
-        registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
+        registry.registerPackage(readToolsPackage(std::filesystem::path(arguments.at(1).toStdU16String())));
         registry.loadNativeImplementations();
         ProjectStorage storage(registry);
-        auto loaded = storage.load(std::filesystem::u8path(argv[2]));
+        auto loaded = storage.load(std::filesystem::path(arguments.at(2).toStdU16String()));
         for (const auto &diagnostic : loaded.diagnostics)
             std::cerr << "GPU project diagnostic: " << diagnostic.field << ": " << diagnostic.message << '\n';
         if (!loaded.diagnostics.empty() || loaded.project.flows.size() != 1
@@ -127,6 +130,28 @@ int main(int argc, char **argv)
         reader.inputs.at(5).literal            = std::int64_t{1}; // single-image detection reference
         detector.initParams.at(2)         = std::string(weights.generic_string());
         detector.initParams.at(3) = std::string(enginePath.generic_string());
+        if (outputError)
+        {
+            const auto parentFile = fixtures / "engine-output-parent-file";
+            {
+                std::ofstream barrier(parentFile, std::ios::binary);
+                barrier << "A regular file cannot contain an output engine.";
+                if (!barrier)
+                    throw std::runtime_error("Cannot create the engine output failure fixture");
+            }
+            const auto output = parentFile / "output.engine";
+            detector.initParams.at(3) = output.generic_string();
+            auto tool = registry.create(detector.toolId);
+            const auto status = tool->initialize(detector.initParams);
+            tool->release();
+            auto message = status.message;
+            std::replace(message.begin(), message.end(), '\\', '/');
+            if (status || message.find("引擎输出") == std::string::npos
+                || message.find(output.generic_string()) == std::string::npos || status.detail.empty())
+                throw std::runtime_error("Engine write failure lost its role, target or cause: " + status.message);
+            std::cout << "[PASS] " << status.message << ": " << status.detail << '\n';
+            return 0;
+        }
         struct Reference
         {
             cv::Rect2f rectangle;

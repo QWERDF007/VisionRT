@@ -88,7 +88,7 @@ private:
     std::map<std::filesystem::path, ToolStatus>                    failures_;
 };
 
-class DomainToolAdapter final : public IToolInstance
+class DomainToolAdapter final : public IToolInstance, public ILifecycleDiagnostics
 {
 public:
     DomainToolAdapter(std::shared_ptr<const LoadedModule> module, std::string toolId);
@@ -97,6 +97,7 @@ public:
     ToolStatus initialize(const Values &initParams) override;
     ToolResult execute(const Values &inputs) override;
     ToolStatus release() override;
+    DiagnosticOrigin lifecycleOrigin() const noexcept override { return origin_; }
 
 private:
     std::string                         toolId_;
@@ -105,6 +106,7 @@ private:
     IToolInstance                      *raw_         = nullptr;
     bool                                initialized_ = false;
     ToolStatus                          failureStatus_;
+    DiagnosticOrigin                    origin_ = DiagnosticOrigin::System;
 };
 
 } // namespace visionrt

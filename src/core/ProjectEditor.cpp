@@ -1163,7 +1163,7 @@ std::vector<SourcePort> ProjectEditor::compatibleSources(std::string_view flowId
     const auto &target = flow(flowId);
     const auto &node   = findNode(target, id);
     requireEditable(node);
-    const auto &type      = signature(node.signatures.inputs, input);
+    signature(node.signatures.inputs, input);
     auto        candidate = inputBinding(node, input);
     candidate.mode        = BindingMode::Upstream;
     std::vector<SourcePort> result;
@@ -1189,7 +1189,7 @@ std::vector<InputPort> ProjectEditor::compatibleInputs(std::string_view flowId, 
     const auto &target     = flow(flowId);
     const auto &sourceNode = findNode(target, source.node);
     requireEditable(sourceNode);
-    const auto            &type = signature(sourceNode.signatures.outputs, source.port);
+    signature(sourceNode.signatures.outputs, source.port);
     std::vector<InputPort> result;
     for (const auto &node : target.nodes)
     {

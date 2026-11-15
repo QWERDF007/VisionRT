@@ -41,6 +41,7 @@ class BuildIncrementalContract(unittest.TestCase):
                 "cmake_minimum_required(VERSION 3.25)\n"
                 "project(Incremental LANGUAGES CXX)\n"
                 f'include("{(REPO_ROOT / "cmake/ConfigCompiler.cmake").as_posix()}")\n'
+                f'include("{(REPO_ROOT / "cmake/ConfigBuildTree.cmake").as_posix()}")\n'
                 "add_executable(probe main.cpp other.cpp)\n", encoding="utf-8")
             header = source / "payload.h"
             header.write_text("struct Payload { char bytes[4]; };\n", encoding="utf-8")
@@ -74,7 +75,8 @@ class BuildIncrementalContract(unittest.TestCase):
                                  + result.stderr.decode("utf-8", errors="replace"))
                 if arguments[1] != "--build":
                     continue
-                output = subprocess.check_output([str(build / "probe.exe")], timeout=10)
+                self.assertFalse((source / "build").exists(), "An out-of-tree build wrote into the source tree")
+                output = subprocess.check_output([str(build / "bin/probe.exe")], timeout=10)
                 expected = b"8" if header.read_text(encoding="utf-8").find("[4]") >= 0 else b"40"
                 self.assertEqual(output.strip(), expected, "Both translation units must rebuild")
                 if code_page == 936 and expected == b"40":

@@ -102,9 +102,10 @@ struct InstanceConfiguration
 
 struct NodeRuntime
 {
-    NodeRuntime(NodeId id, std::shared_ptr<WaitBudget> budget)
+    NodeRuntime(NodeId id, std::shared_ptr<WaitBudget> budget, std::function<void(NodeDiagnostic)> report)
         : id(id)
         , reader(std::make_shared<NodeReader>(id, std::move(budget)))
+        , report(std::move(report))
     {
     }
 
@@ -114,6 +115,7 @@ struct NodeRuntime
     std::atomic<std::shared_ptr<const NodeDiagnostic>> lifecycle;
     std::atomic<std::shared_ptr<const NodeDiagnostic>> preparation;
     std::shared_ptr<NodeReader>                    reader;
+    std::function<void(NodeDiagnostic)>            report;
     std::unique_ptr<IToolInstance>                 instance;
     std::optional<InstanceConfiguration>           configuration;
     bool                                           deferredCreate       = false;

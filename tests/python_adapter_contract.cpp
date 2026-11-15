@@ -112,6 +112,8 @@ def missing(inputs):
     return {'code': 0, 'message': '', 'detail': ''}
 def extra(inputs):
     return {'outputs': {2: 1, 9: 2, 0: 0, 1: ''}, 'detail': ''}
+def wide_key(inputs):
+    return {'outputs': {2: 1, 4294967298: 7, 0: 0, 1: ''}, 'detail': ''}
 def wrong(inputs):
     return {'outputs': {2: True, 0: 0, 1: ''}, 'detail': ''}
 def business(inputs):
@@ -127,6 +129,7 @@ def absent(inputs):
     auto constructor = sources.definition("python.constructor", ToolKind::PythonClass, "BadConstructor");
     auto missing     = sources.definition("python.missing", ToolKind::PythonFunction, "missing");
     auto extra       = sources.definition("python.extra", ToolKind::PythonFunction, "extra");
+    auto wideKey     = sources.definition("python.wide", ToolKind::PythonFunction, "wide_key");
     auto wrong       = sources.definition("python.wrong", ToolKind::PythonFunction, "wrong");
     auto business    = sources.definition("python.business", ToolKind::PythonFunction, "business");
     auto partial     = sources.definition("python.partial", ToolKind::PythonFunction, "partial", true);
@@ -135,7 +138,7 @@ def absent(inputs):
         if (port.id == 2)
             sources.put("python.optional.json", emitNormalizedToolJson(optional));
     std::vector<ToolDefinition> definitions{function, counter, broken,   constructor, missing,
-                                            extra,    wrong,   business, partial,     optional};
+                                            extra,    wideKey, wrong, business, partial, optional};
     std::uintptr_t              numpyIdentity;
     {
         py::gil_scoped_acquire gil;
@@ -183,7 +186,7 @@ def absent(inputs):
     assert(cleanup.code == hostCode(ErrorCode::Internal) && cleanup.message == "Python 释放异常");
     assert(cleanup.detail.find("release detail") != std::string::npos);
     failures.reset();
-    for (const auto &definition : {missing, extra, wrong})
+    for (const auto &definition : {missing, extra, wrong, wideKey})
     {
         auto        instance = runtime.factory(definition)();
         const auto failed    = testview::executionFailure(*instance);
@@ -193,6 +196,8 @@ def absent(inputs):
         else if (definition.nameEn == extra.nameEn)
             // A name the declaration never mentions is still refused; an omitted declared port is not.
             assert(failed.find("输出键不在声明中") != std::string::npos);
+        else if (definition.nameEn == wideKey.nameEn)
+            assert(failed.find("Python 输出转换异常") != std::string::npos);
         else
             // A status dict is a lifecycle answer: execute owes the two-field envelope.
             assert(failed.find("execute 必须返回 outputs 与 detail") != std::string::npos);

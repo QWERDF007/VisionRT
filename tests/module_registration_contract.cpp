@@ -142,7 +142,7 @@ try
     assert(std::get<std::int64_t>(retained->execute({}).outputs.at(2)) == 11);
     assert(retained->release());
     assert(ownership.expired());
-    std::cout << "ABI9 registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
+    std::cout << "Registration copies IDs, isolates rejected tables and dispatches module-owned factories\n";
 }
 catch (const std::exception &error)
 {

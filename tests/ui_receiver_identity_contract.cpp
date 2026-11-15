@@ -134,8 +134,7 @@ try
     QSignalSpy replacements(&app, &AppController::projectReplaced);
     QSignalSpy decisions(&app, &AppController::unsavedDecisionRequired);
     app.requestOpen(input);
-    require(decisions.size() == 1, "new unsaved project did not request a discard decision");
-    app.resolveUnsaved("discard");
+    require(decisions.empty(), "an untouched empty project requested a discard decision");
     idle();
     require(replacements.size() == 1, "wide-ID project was not actually opened");
     const auto targetId = QString::number(target);

@@ -351,9 +351,11 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
         return makeStatus(ErrorCode::FailedPrecondition, "工具实例已释放或已初始化：" + toolId_);
 
     ToolStatus status;
+    origin_ = DiagnosticOrigin::System;
     try
     {
         status = raw_->initialize(initParams);
+        origin_ = DiagnosticOrigin::Tool;
     }
     catch (const std::exception &error)
     {
@@ -366,7 +368,6 @@ ToolStatus DomainToolAdapter::initialize(const Values &initParams)
 
     if (!status)
     {
-        release();
         failureStatus_ = status;
         return failureStatus_;
     }
@@ -397,12 +398,14 @@ ToolResult DomainToolAdapter::execute(const Values &inputs)
 
 ToolStatus DomainToolAdapter::release()
 {
+    origin_ = DiagnosticOrigin::System;
     if (!raw_)
         return {};
     ToolStatus status;
     try
     {
         status = raw_->release();
+        origin_ = DiagnosticOrigin::Tool;
     }
     catch (const std::exception &error)
     {

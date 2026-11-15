@@ -331,7 +331,12 @@ struct RuntimeEngine::Impl
             {
                 auto [item, inserted] = nodes.try_emplace(id);
                 if (inserted)
-                    item->second = std::make_shared<NodeRuntime>(id, budget);
+                    item->second = std::make_shared<NodeRuntime>(id, budget, [this](NodeDiagnostic diagnostic)
+                    {
+                        const auto phase = diagnostic.phase == NodePhase::Create || diagnostic.phase == NodePhase::Release
+                            ? RuntimePhase::Management : RuntimePhase::Completion;
+                        diagnose(phase, std::move(diagnostic));
+                    });
                 configured.emplace_back(item->second, definition);
             }
         }
@@ -342,8 +347,7 @@ struct RuntimeEngine::Impl
                                              [&](NodeId id) { return !definitions.contains(id); });
                       });
         for (auto &runtime : removed)
-            if (auto status = runtime->release())
-                diagnose(RuntimePhase::Management, *status);
+            runtime->release();
         for (const auto &[runtime, node] : configured)
             runtime->configure(*node, registry, InstanceConfiguration(*node, registry),
                                retry.contains(node->id));
@@ -573,6 +577,20 @@ struct RuntimeEngine::Impl
 
     void manage(Management action, std::function<ToolStatus()> work)
     {
+        if (action == Management::Reset)
+        {
+            std::lock_guard lock(control);
+            ++generation;
+            session = 0;
+            round   = 0;
+            flowTiming.clear();
+            roundMilliseconds.reset();
+            sessionElapsedMs = 0;
+            sessionEndTime.reset();
+            diagnostics.clear();
+            nextDiagnosticSequence = 1;
+            droppedDiagnostics = 0;
+        }
         std::vector<std::shared_ptr<NodeRuntime>> affected;
         {
             std::lock_guard lock(control);
@@ -588,20 +606,6 @@ struct RuntimeEngine::Impl
             auto status = work();
             if (!status)
                 diagnose(RuntimePhase::Management, std::move(status));
-        }
-        if (action == Management::Reset)
-        {
-            std::lock_guard lock(control);
-            ++generation;
-            session = 0;
-            round   = 0;
-            flowTiming.clear();
-            roundMilliseconds.reset();
-            sessionElapsedMs  = 0;
-            sessionEndTime.reset();
-            diagnostics.clear();
-            nextDiagnosticSequence = 1;
-            droppedDiagnostics     = 0;
         }
     }
 

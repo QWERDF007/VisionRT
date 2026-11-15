@@ -234,8 +234,8 @@ void test200NodesExecution()
     addDef.nameZh  = "Add One";
     addDef.version      = "1.0";
     addDef.kind         = ToolKind::Cpp;
-    addDef.inputs.push_back({"in", "in", {Type::Int}});
-    addDef.outputs.push_back({"out", "out", {Type::Int}});
+    addDef.inputs.push_back({1, "in", {Type::Int}});
+    addDef.outputs.push_back({2, "out", {Type::Int}});
 
     class AddTool final : public IToolInstance
     {
@@ -248,11 +248,11 @@ void test200NodesExecution()
         ToolResult execute(const Values &in) override
         {
             std::int64_t v = 0;
-            if (in.contains("in") && !isMissing(in.at("in")))
+            if (in.contains(1) && !isMissing(in.at(1)))
             {
-                v = std::get<std::int64_t>(in.at("in"));
+                v = std::get<std::int64_t>(in.at(1));
             }
-            return toolResult({{"out", v + 1}}, {});
+            return toolResult({{2, v + 1}}, {});
         }
 
         ToolStatus release() override
@@ -277,20 +277,20 @@ void test200NodesExecution()
         n.position         = {0, i};
         n.toolId           = addDef.nameEn;
         n.toolNameSnapshot = addDef.nameZh;
-        n.signatures.inputs.emplace("in", TypeSpec{Type::Int});
-        n.signatures.outputs.emplace("out", TypeSpec{Type::Int});
-        n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-        n.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+        n.signatures.inputs.emplace(1, TypeSpec{Type::Int});
+        n.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+        n.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+        n.signatures.outputs.emplace(1, TypeSpec{Type::String});
 
         if (i == 1)
         {
-            n.inputs["in"] = {BindingMode::Literal, std::int64_t{0}, std::nullopt};
+            n.inputs[1] = {BindingMode::Literal, std::int64_t{0}, std::nullopt};
         }
         else
         {
-            n.inputs["in"] = {
+            n.inputs[1] = {
                 BindingMode::Upstream, Missing{},
-                 SourcePort{static_cast<NodeId>(i - 1), "out"}
+                 SourcePort{static_cast<NodeId>(i - 1), 2}
             };
         }
         flow.nodes.push_back(n);
@@ -334,7 +334,7 @@ void test200NodesExecution()
         require(completed, "200-node round did not complete");
         require(terminal.has_value(), "terminal node published no result");
         require(terminal->status.code == 0, "node 200 status non-zero");
-        require(std::get<std::int64_t>(terminal->outputs.at("out")) == kNodeCount,
+        require(std::get<std::int64_t>(terminal->outputs.at(2)) == kNodeCount,
                 "node 200 calculation incorrect");
         terminal.reset();
     }
@@ -385,7 +385,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
     srcDef.nameZh  = "10x4K Source";
     srcDef.version      = "1.0";
     srcDef.kind         = ToolKind::Cpp;
-    srcDef.outputs.push_back({"batch", "batch", {Type::Image}});
+    srcDef.outputs.push_back({2, "batch", {Type::Image}});
 
     class SourceTool final : public IToolInstance
     {
@@ -404,7 +404,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
 
         ToolResult execute(const Values &) override
         {
-            return toolResult({{"batch", batch_}}, {});
+            return toolResult({{2, batch_}}, {});
         }
 
         ToolStatus release() override
@@ -424,8 +424,8 @@ void test10x4KZeroCopyAndPythonPassthrough()
     consDef.nameZh  = "Batch Consumer";
     consDef.version      = "1.0";
     consDef.kind         = ToolKind::Cpp;
-    consDef.inputs.push_back({"batch", "batch", {Type::Image}});
-    consDef.outputs.push_back({"matched", "matched", {Type::Int}});
+    consDef.inputs.push_back({1, "batch", {Type::Image}});
+    consDef.outputs.push_back({2, "matched", {Type::Int}});
 
     std::atomic<int>  consumerExecCount{0};
     std::atomic<bool> pointerMismatch{false};
@@ -451,12 +451,12 @@ void test10x4KZeroCopyAndPythonPassthrough()
 
         ToolResult execute(const Values &in) override
         {
-            if (!in.contains("batch") || isMissing(in.at("batch")))
+            if (!in.contains(1) || isMissing(in.at(1)))
             {
                 mismatch_ = true;
-                return toolResult({{"matched", std::int64_t{0}}}, {1, "missing batch"});
+                return toolResult({{2, std::int64_t{0}}}, {1, "missing batch"});
             }
-            const auto &b = std::get<DataRef<Image>>(in.at("batch"));
+            const auto &b = std::get<DataRef<Image>>(in.at(1));
             if (static_cast<int>(b.get().size()) != 10)
             {
                 mismatch_ = true;
@@ -472,7 +472,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
                 }
             }
             count_++;
-            return toolResult({{"matched", std::int64_t{1}}}, {});
+            return toolResult({{2, std::int64_t{1}}}, {});
         }
 
         ToolStatus release() override
@@ -497,9 +497,9 @@ void test10x4KZeroCopyAndPythonPassthrough()
     srcNode.position         = {0, 0};
     srcNode.toolId           = srcDef.nameEn;
     srcNode.toolNameSnapshot = srcDef.nameZh;
-    srcNode.signatures.outputs.emplace("batch", TypeSpec{Type::Image});
-    srcNode.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-    srcNode.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+    srcNode.signatures.outputs.emplace(2, TypeSpec{Type::Image});
+    srcNode.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+    srcNode.signatures.outputs.emplace(1, TypeSpec{Type::String});
     flow.nodes.push_back(srcNode);
 
     for (int i = 2; i <= kFanOutCount + 1; ++i)
@@ -509,13 +509,13 @@ void test10x4KZeroCopyAndPythonPassthrough()
         cNode.position         = {i, 1};
         cNode.toolId           = consDef.nameEn;
         cNode.toolNameSnapshot = consDef.nameZh;
-        cNode.signatures.inputs.emplace("batch", TypeSpec{Type::Image});
-        cNode.signatures.outputs.emplace("matched", TypeSpec{Type::Int});
-        cNode.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-        cNode.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
-        cNode.inputs["batch"] = {
+        cNode.signatures.inputs.emplace(1, TypeSpec{Type::Image});
+        cNode.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+        cNode.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+        cNode.signatures.outputs.emplace(1, TypeSpec{Type::String});
+        cNode.inputs[1] = {
             BindingMode::Upstream, Missing{},
-             SourcePort{1, "batch"}
+             SourcePort{1, 2}
         };
         flow.nodes.push_back(cNode);
     }
@@ -677,8 +677,8 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
     genDef.nameZh  = "Generator";
     genDef.version      = "1.0";
     genDef.kind         = ToolKind::Cpp;
-    genDef.outputs.push_back({"val", "val", {Type::Int}});
-    genDef.outputs.push_back({"image", "image", {Type::Image}});
+    genDef.outputs.push_back({2, "val", {Type::Int}});
+    genDef.outputs.push_back({3, "image", {Type::Image}});
 
     class GenTool final : public IToolInstance
     {
@@ -696,7 +696,7 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
             cv::Mat                 mat(720, 1280, CV_8UC3, cv::Scalar(step_ % 256, 120, 200));
             Image                   imgs;
             imgs.push_back(mat);
-            return toolResult({{"val", step_}, {"image", DataRef<Image>(std::move(imgs))}}, {});
+            return toolResult({{2, step_}, {3, DataRef<Image>(std::move(imgs))}}, {});
         }
 
         ToolStatus release() override
@@ -714,10 +714,10 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
     procDef.nameZh  = "Processor";
     procDef.version      = "1.0";
     procDef.kind         = ToolKind::Cpp;
-    procDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
-    procDef.inputs.push_back({"in_image", "in_image", {Type::Image}});
-    procDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
-    procDef.outputs.push_back({"out_image", "out_image", {Type::Image}});
+    procDef.inputs.push_back({1, "in_val", {Type::Int}});
+    procDef.inputs.push_back({2, "in_image", {Type::Image}});
+    procDef.outputs.push_back({2, "out_val", {Type::Int}});
+    procDef.outputs.push_back({3, "out_image", {Type::Image}});
 
     class ProcTool final : public IToolInstance
     {
@@ -729,15 +729,15 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
 
         ToolResult execute(const Values &in) override
         {
-            std::int64_t v       = std::get<std::int64_t>(in.at("in_val"));
-            const auto  &inBatch = std::get<DataRef<Image>>(in.at("in_image"));
+            std::int64_t v       = std::get<std::int64_t>(in.at(1));
+            const auto  &inBatch = std::get<DataRef<Image>>(in.at(2));
             // Trigger real display conversion within tool execution pipeline
             if (!inBatch.get().empty())
             {
                 auto frame = DisplayConverter::convert(inBatch.get().front(), "BGR");
                 require(!frame.image.isNull(), "Display conversion in loop returned null image");
             }
-            return toolResult({{"out_val", v * 2}, {"out_image", inBatch}}, {});
+            return toolResult({{2, v * 2}, {3, inBatch}}, {});
         }
 
         ToolStatus release() override
@@ -760,29 +760,29 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
     n1.id     = 1;
     n1.position = {0, 0};
     n1.toolId = genDef.nameEn;
-    n1.signatures.outputs.emplace("val", TypeSpec{Type::Int});
-    n1.signatures.outputs.emplace("image", TypeSpec{Type::Image});
-    n1.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-    n1.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+    n1.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+    n1.signatures.outputs.emplace(3, TypeSpec{Type::Image});
+    n1.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+    n1.signatures.outputs.emplace(1, TypeSpec{Type::String});
     flow.nodes.push_back(n1);
 
     NodeDefinition n2;
     n2.id     = 2;
     n2.position = {0, 1};
     n2.toolId = procDef.nameEn;
-    n2.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
-    n2.signatures.inputs.emplace("in_image", TypeSpec{Type::Image});
-    n2.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
-    n2.signatures.outputs.emplace("out_image", TypeSpec{Type::Image});
-    n2.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-    n2.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
-    n2.inputs["in_val"] = {
+    n2.signatures.inputs.emplace(1, TypeSpec{Type::Int});
+    n2.signatures.inputs.emplace(2, TypeSpec{Type::Image});
+    n2.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+    n2.signatures.outputs.emplace(3, TypeSpec{Type::Image});
+    n2.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+    n2.signatures.outputs.emplace(1, TypeSpec{Type::String});
+    n2.inputs[1] = {
         BindingMode::Upstream, Missing{},
-         SourcePort{1, "val"}
+         SourcePort{1, 2}
     };
-    n2.inputs["in_image"] = {
+    n2.inputs[2] = {
         BindingMode::Upstream, Missing{},
-         SourcePort{1, "image"}
+         SourcePort{1, 3}
     };
     flow.nodes.push_back(n2);
 
@@ -795,8 +795,8 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
         const auto    scriptPath = packageRoot / "loop/loop_tool.py";
         std::ofstream ofs(scriptPath);
         ofs << "def execute(inputs):\n"
-            << "    v = inputs.get('in_val', 0)\n"
-            << "    return {'outputs': {'out_val': v + 1, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n";
+            << "    v = inputs.get(1, 0)\n"
+            << "    return {'outputs': {2: v + 1, 0: 0, 1: ''}, 'detail': ''}\n";
         ofs.close();
 
         ToolDefinition pyToolDef;
@@ -807,8 +807,8 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
         pyToolDef.source.roots.python = packageRoot;
         pyToolDef.entry               = {"loop", "loop_tool.py", "execute"};
         pyToolDef.definitionPath = scriptPath.parent_path() / "loop_tool.json";
-        pyToolDef.inputs.push_back({"in_val", "in_val", {Type::Int}});
-        pyToolDef.outputs.push_back({"out_val", "out_val", {Type::Int}});
+        pyToolDef.inputs.push_back({1, "in_val", {Type::Int}});
+        pyToolDef.outputs.push_back({2, "out_val", {Type::Int}});
 
         auto st = pyRuntime->refresh(std::vector<ToolDefinition>{pyToolDef});
         require(!st.empty() && st[0].status.code == 0, "Python stability fixture could not load");
@@ -822,13 +822,13 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
             n3.position         = {0, 2};
             n3.toolId           = pyToolDef.nameEn;
             n3.toolNameSnapshot = pyToolDef.nameZh;
-            n3.signatures.inputs.emplace("in_val", TypeSpec{Type::Int});
-            n3.signatures.outputs.emplace("out_val", TypeSpec{Type::Int});
-            n3.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-            n3.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
-            n3.inputs["in_val"] = {
+            n3.signatures.inputs.emplace(1, TypeSpec{Type::Int});
+            n3.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+            n3.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+            n3.signatures.outputs.emplace(1, TypeSpec{Type::String});
+            n3.inputs[1] = {
                 BindingMode::Upstream, Missing{},
-                 SourcePort{2, "out_val"}
+                 SourcePort{2, 2}
             };
             flow.nodes.push_back(n3);
         }
@@ -1036,12 +1036,12 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     {
         std::ofstream ofs(scriptPath);
         ofs << "def execute(inputs):\n"
-            << "    val = inputs.get('val', 0)\n"
+            << "    val = inputs.get(1, 0)\n"
             << "    if val == 666:\n"
             << "        raise RuntimeError('simulated python execution failure')\n"
             << "    if val == 777:\n"
-            << "        return {'outputs': {'out': 'wrong_type_string', '__status_code': 0, '__status_message': ''}, 'detail': ''}\n"
-            << "    return {'outputs': {'out': val * 2, '__status_code': 0, '__status_message': ''}, 'detail': ''}\n";
+            << "        return {'outputs': {2: 'wrong_type_string', 0: 0, 1: ''}, 'detail': ''}\n"
+            << "    return {'outputs': {2: val * 2, 0: 0, 1: ''}, 'detail': ''}\n";
         ofs.close();
     }
 
@@ -1053,8 +1053,8 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     pyDef.source.roots.python = tempPath;
     pyDef.entry               = {"timing", "timing_test.py", "execute"};
     pyDef.definitionPath = tempPath / "timing_test.json";
-    pyDef.inputs.push_back({"val", "val", {Type::Int}});
-    pyDef.outputs.push_back({"out", "out", {Type::Int}});
+    pyDef.inputs.push_back({1, "val", {Type::Int}});
+    pyDef.outputs.push_back({2, "out", {Type::Int}});
 
     auto statuses = pyRuntime.refresh(std::vector<ToolDefinition>{pyDef});
     require(!statuses.empty() && statuses[0].status.code == 0, "Python tool refresh failed");
@@ -1073,16 +1073,16 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
     n.id               = 1;
     n.toolId           = pyDef.nameEn;
     n.toolNameSnapshot = pyDef.nameZh;
-    n.signatures.inputs.emplace("val", TypeSpec{Type::Int});
-    n.signatures.outputs.emplace("out", TypeSpec{Type::Int});
-    n.signatures.outputs.emplace("__status_code", TypeSpec{Type::Int});
-    n.signatures.outputs.emplace("__status_message", TypeSpec{Type::String});
+    n.signatures.inputs.emplace(1, TypeSpec{Type::Int});
+    n.signatures.outputs.emplace(2, TypeSpec{Type::Int});
+    n.signatures.outputs.emplace(0, TypeSpec{Type::Int});
+    n.signatures.outputs.emplace(1, TypeSpec{Type::String});
 
     {
         auto engine = std::make_unique<RuntimeEngine>(1);
 
         // Round 1: Success
-        n.inputs["val"] = {BindingMode::Literal, std::int64_t{10}, std::nullopt};
+        n.inputs[1] = {BindingMode::Literal, std::int64_t{10}, std::nullopt};
         flow.nodes      = {n};
         project.flows   = {flow};
 
@@ -1091,7 +1091,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         require(u1.nodes.size() == 1 && u1.nodes[0].snapshot != nullptr, "Round 1 snapshot missing");
         const auto &s1 = *u1.nodes[0].snapshot;
         require(testview::status(s1).code == 0, "Round 1 status must be 0");
-        require(std::get<std::int64_t>(s1.outputs.at("out")) == 20, "Round 1 output value mismatch");
+        require(std::get<std::int64_t>(s1.outputs.at(2)) == 20, "Round 1 output value mismatch");
         require(s1.timing.pythonCallMs > 0.0, "Round 1 pythonCallMs must be > 0");
         require(s1.timing.adapterExecuteMs > 0.0, "Round 1 adapterExecuteMs must be > 0");
         // A Python operator declares its own stages; the bridge parts are inside the adapter boundary
@@ -1106,7 +1106,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
 
         // Round 2: Prepare failure (Wrong input type: float 3.14 where int is expected)
         // HS5-04 requirement: All execution subphases must be strictly 0; no history contamination.
-        n.inputs["val"] = {BindingMode::Literal, 3.14, std::nullopt};
+        n.inputs[1] = {BindingMode::Literal, 3.14, std::nullopt};
         flow.nodes      = {n};
         project.flows   = {flow};
 
@@ -1115,7 +1115,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         require(u2.nodes.size() == 1 && u2.nodes[0].snapshot != nullptr, "Round 2 snapshot missing");
         const auto &s2 = *u2.nodes[0].snapshot;
         require(testview::status(s2).code < 0, "Round 2 must fail in prepare");
-        require(isMissing(s2.outputs.at("out")), "Round 2 failed outputs must be Missing");
+        require(isMissing(s2.outputs.at(2)), "Round 2 failed outputs must be Missing");
         require(s2.timing.adapterExecuteMs == 0.0, "Round 2 adapterExecuteMs must be strictly 0");
         require(s2.timing.adapterExecuteMs == 0.0, "Round 2 adapterExecuteMs must be strictly 0");
         require(s2.timing.waitGilMs == 0.0, "Round 2 waitGilMs must be strictly 0");
@@ -1126,7 +1126,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
 
         // Round 3: Python exception (val == 666 raises RuntimeError)
         // HS5-04 requirement: Retains current round's error timing, no history pollution.
-        n.inputs["val"] = {BindingMode::Literal, std::int64_t{666}, std::nullopt};
+        n.inputs[1] = {BindingMode::Literal, std::int64_t{666}, std::nullopt};
         flow.nodes      = {n};
         project.flows   = {flow};
 
@@ -1140,7 +1140,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         require(testview::status(s3).message.find("simulated python execution failure") != std::string::npos
                     && testview::status(s3).detail.empty(),
                 "Round 3 exception detail mismatch");
-        require(isMissing(s3.outputs.at("out")), "Round 3 output must be Missing");
+        require(isMissing(s3.outputs.at(2)), "Round 3 output must be Missing");
         require(s3.timing.pythonCallMs > 0.0, "Round 3 pythonCallMs must retain real error timing");
         require(s3.timing.adapterExecuteMs > 0.0, "Round 3 adapterExecuteMs must be > 0");
         std::cout << "  -> Round 3 Exception Timing: pythonCallMs=" << s3.timing.pythonCallMs
@@ -1148,7 +1148,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
 
         // Round 4: Output conversion error (val == 777 returns string instead of int)
         // HS5-04 requirement: Retains pythonOutputMs timing, no history pollution.
-        n.inputs["val"] = {BindingMode::Literal, std::int64_t{777}, std::nullopt};
+        n.inputs[1] = {BindingMode::Literal, std::int64_t{777}, std::nullopt};
         flow.nodes      = {n};
         project.flows   = {flow};
 
@@ -1157,7 +1157,7 @@ void testRealPythonTimingPhasesAndFailureIsolation(PythonRuntime &pyRuntime)
         require(u4.nodes.size() == 1 && u4.nodes[0].snapshot != nullptr, "Round 4 snapshot missing");
         const auto &s4 = *u4.nodes[0].snapshot;
         require(testview::status(s4).code < 0, "Round 4 must fail with output conversion error");
-        require(isMissing(s4.outputs.at("out")), "Round 4 output must be Missing");
+        require(isMissing(s4.outputs.at(2)), "Round 4 output must be Missing");
         require(s4.timing.pythonCallMs > 0.0, "Round 4 pythonCallMs must be > 0");
         require(s4.timing.pythonOutputMs > 0.0, "Round 4 pythonOutputMs must retain actual conversion error timing");
         std::cout << "  -> Round 4 Output Conversion Error Timing: pythonOutputMs=" << s4.timing.pythonOutputMs

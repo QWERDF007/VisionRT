@@ -48,7 +48,7 @@ public:
 
     ToolResult execute(const Values &) override
     {
-        return {};
+        return {{{0, std::int64_t{0}}, {1, std::string{}}}, {}};
     }
 
     ToolStatus release() override
@@ -60,6 +60,17 @@ public:
 private:
     Lifetime   &lifetime_;
     std::string message_;
+};
+
+class BusinessFailure final : public IToolInstance
+{
+public:
+    ToolStatus initialize(const Values &) override { return {}; }
+    ToolResult execute(const Values &) override
+    {
+        return {{{0, std::int64_t{9}}, {1, std::string("资源读取失败")}}, "实际资源路径"};
+    }
+    ToolStatus release() override { return {}; }
 };
 }
 
@@ -200,6 +211,41 @@ try
             "post-run diagnostic identity test leaked or double-released a tool");
     std::cout << "Diagnostic lifecycle: created=106 released=106 destroyed=106 idle_polls=200 new_generation="
               << next.generation << " sequences=1,2,3\n";
+    ToolDefinition business;
+    business.nameEn = "BusinessFailure";
+    business.nameZh = "业务失败";
+    registry.addDefinition(business);
+    registry.registerCpp(business, [] { return std::make_unique<BusinessFailure>(); });
+    ProjectEditor failed;
+    failed.addNode(failed.project().flows.front().id, *registry.find(business.nameEn), {0, 0});
+    require(engine.start(failed.project(), registry, RunMode::Once).code == 0, "business failure run rejected");
+    const auto failure = settle();
+    require(failure.diagnostics.size() == 1 && failure.diagnostics.front().status().code == 9
+                && failure.diagnostics.front().status().detail == "实际资源路径",
+            "a tool execution failure was not delivered as one diagnostic event");
+    require(std::get<NodeDiagnostic>(failure.diagnostics.front().payload).origin == DiagnosticOrigin::Tool,
+            "a tool result was labeled as a framework failure");
+    require(engine.pollLatest().diagnostics.empty(), "polling replayed the tool failure");
+    business.nameEn = "InvalidInitialization";
+    business.initParams.push_back({3, "参数", {Type::Int}, std::int64_t{1}});
+    registry.addDefinition(business);
+    registry.registerCpp(business, [] { return std::make_unique<BusinessFailure>(); });
+    ProjectEditor invalid;
+    invalid.addNode(invalid.project().flows.front().id, *registry.find(business.nameEn), {0, 0});
+    auto invalidProject = invalid.project();
+    invalidProject.flows.front().nodes.front().initParams[3] = std::string("wrong type");
+    require(engine.start(invalidProject, registry, RunMode::Once).code == 0, "initialization rejection run refused");
+    const auto invalidResult = settle();
+    require(invalidResult.diagnostics.size() == 1
+                && std::get<NodeDiagnostic>(invalidResult.diagnostics.front().payload).origin == DiagnosticOrigin::System,
+            "framework initialization validation did not publish one system diagnostic");
+    require(engine.requestSynchronize(execution.project(), registry).code == 0, "reset fixture rejected");
+    require(settle().diagnostics.empty(), "reset fixture raised an unexpected diagnostic");
+    require(engine.requestReset().code == 0, "reset was rejected");
+    const auto resetFailure = settle();
+    require(resetFailure.diagnostics.size() == 1 && resetFailure.diagnostics.front().status().code == 7
+                && resetFailure.diagnostics.front().generation == resetFailure.generation,
+            "reset discarded its release failure instead of publishing it in the new generation");
     return 0;
 }
 catch (const std::exception &error)

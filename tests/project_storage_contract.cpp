@@ -423,6 +423,18 @@ void typedArraysAndRanges(const QString &directory)
     require(std::get<std::int64_t>(ranged.project.flows[0].nodes[0].inputs.at(1).literal) == 10
                 && has(ranged.diagnostics, ProjectStorageCode::RangeWarning) && ranged.project.dirty,
             "saved range violation was not clamped to the declared maximum");
+    ToolRegistry unconstrained;
+    unconstrained.addDefinition(scalarTool());
+    auto beforeClamp = ProjectStorage(unconstrained).load(path(file)).project;
+    beforeClamp.flows.front().nodes.front().executionRevision = 19;
+    const auto clamped = ProjectStorage(rangedRegistry).reconcile(beforeClamp);
+    require(clamped.project.flows.front().nodes.front().executionRevision == 20,
+            "normalizing an effective literal did not invalidate its execution revision");
+    beforeClamp.flows.front().nodes.front().inputs.at(1).mode = BindingMode::Upstream;
+    beforeClamp.flows.front().nodes.front().inputs.at(1).source = SourcePort{7, 2};
+    const auto dormant = ProjectStorage(rangedRegistry).reconcile(beforeClamp);
+    require(dormant.project.flows.front().nodes.front().executionRevision == 19,
+            "a dormant literal invalidated the execution revision");
     auto overflow = QJsonDocument(savedProject({rangedNode})).toJson();
     overflow.replace("9007199254740993", "-9223372036854775809");
     put(file, overflow);
@@ -904,6 +916,74 @@ void toolUpdatesCutIncompatibleWires(const QString &directory)
     require(bumped.toolUpdates.size() == 1 && bumped.toolUpdates.front().kept == 1
                 && bumped.toolUpdates.front().removed.empty() && !bumped.project.dirty,
             "a version bump with an intact wiring was not announced as kept only");
+
+    ToolDefinition retypedSink = sink;
+    retypedSink.version = "2.0.0";
+    retypedSink.inputs.front().type = {Type::String};
+    retypedSink.inputs.front().defaultValue = std::string{};
+    ToolRegistry bothChanged;
+    bothChanged.addDefinition(retyped);
+    bothChanged.addDefinition(retypedSink);
+    const auto sameType = ProjectStorage(bothChanged).load(path(file));
+    const auto &retained = sameType.project.flows.front().nodes.back().inputs.at(1);
+    require(retained.mode == BindingMode::Upstream && retained.source == SourcePort{7, 2},
+            "updating both ends to the same type removed a valid connection");
+    require(dependencyEdges(sameType.project.flows.front()).size() == 1,
+            "a retained connection lost its execution dependency");
+    const auto refreshed = ProjectStorage(bothChanged).reconcile(ProjectStorage(original).load(path(file)).project);
+    require(refreshed.project.flows.front().nodes.back().inputs.at(1).source == SourcePort{7, 2},
+            "catalog refresh removed a connection accepted by the current declarations");
+    auto persisted = sameType.project;
+    ProjectStorage(bothChanged).save(persisted, path(file));
+    const auto reopened = ProjectStorage(bothChanged).load(path(file));
+    require(reopened.toolUpdates.empty()
+                && reopened.project.flows.front().nodes.back().inputs.at(1).source == SourcePort{7, 2},
+            "saving a compatible update changed its connection or repeated the notice");
+
+    put(file, QJsonDocument(project).toJson());
+    ToolDefinition removedInput = sink;
+    removedInput.version = "2.0.0";
+    removedInput.inputs.clear();
+    ToolRegistry removed;
+    removed.addDefinition(upstream);
+    removed.addDefinition(removedInput);
+    const auto deleted = ProjectStorage(removed).load(path(file));
+    require(deleted.toolUpdates.size() == 1 && deleted.toolUpdates.front().removed.size() == 1,
+            "deleting the target input omitted the removed connection from the update notice");
+    const auto &removedWire = deleted.toolUpdates.front().removed.front();
+    require(removedWire.source.find("上游-7") != std::string::npos
+                && removedWire.target.find("下游-8") != std::string::npos
+                && removedWire.reason.find("删除") != std::string::npos,
+            "a deleted target input lost its connection endpoints or removal reason");
+    require(!deleted.project.flows.front().nodes.back().inputs.contains(1)
+                && dependencyEdges(deleted.project.flows.front()).empty(),
+            "a removed input kept an execution dependency");
+}
+
+void initializationTypeChanges(const QString &directory)
+{
+    auto tool = scalarTool();
+    ProjectEditor editor;
+    editor.addNode(editor.project().flows.front().id, tool, {0, 0});
+    auto project = editor.project();
+    project.flows.front().nodes.front().initParams[0] = std::string("保留值");
+    tool.initParams.front().type = {Type::Int};
+    tool.initParams.front().defaultValue = std::int64_t{0};
+    ToolRegistry retyped;
+    retyped.addDefinition(tool);
+    auto changed = ProjectStorage(retyped).reconcile(project).project;
+    const auto file = path(directory + "/initialization-types.json");
+    ProjectStorage(retyped).save(changed, file);
+    const auto restored = ProjectStorage(retyped).load(file);
+    tool.initParams.clear();
+    ToolRegistry removed;
+    removed.addDefinition(tool);
+    auto retired = ProjectStorage(removed).reconcile(restored.project).project;
+    ProjectStorage(removed).save(retired, file);
+    const auto reopened = ProjectStorage(removed).load(file);
+    const auto record = reopened.project.flows.front().nodes.front().retiredInitParams.value("0").toObject();
+    require(record.value("value").toString() == "保留值" && record.value("type").toObject().value("type") == "String",
+            "retiring a retyped initialization parameter lost its actual value type");
 }
 
 int main()
@@ -919,6 +999,7 @@ int main()
         saveAsPaths(temporary.path());
         retiredInitialization(temporary.path());
         toolUpdatesCutIncompatibleWires(temporary.path());
+        initializationTypeChanges(temporary.path());
         wideIdsAndCycleMembership(temporary.path());
         canonicalSequences(temporary.path());
         dormantLiteralSources(temporary.path());

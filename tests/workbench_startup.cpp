@@ -280,9 +280,52 @@ void startupProjectContract()
             require(logQuick != nullptr, "the log window is not a quick window");
             require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_window.png")),
                     "cannot capture the log window");
+            auto *logText = logWindow->findChild<QObject *>("logText");
+            require(logText != nullptr, "continuous log text area is missing");
+            auto *logItem = qobject_cast<QQuickItem *>(logText);
+            QObject *flickable = logItem->parentItem();
+            while (flickable && !flickable->property("contentY").isValid())
+                flickable = flickable->parent();
+            require(flickable != nullptr, "log scrolling surface is missing");
+            for (int row = 0; row < 100; ++row)
+                visionrt::LogService::write(visionrt::LogLevel::Info, visionrt::LogSource::System,
+                                            QStringLiteral("跨行日志 %1 中文路径 C:/图像/样本.png").arg(row));
+            require(QTest::qWaitFor([&] { return logText->property("text").toString().contains("跨行日志 99"); }, 3000),
+                    "log text did not receive the appended batch");
+            require(QTest::qWaitFor([&] { return flickable->property("contentHeight").toDouble()
+                                               > flickable->property("height").toDouble(); }, 1000),
+                    "log fixture is not scrollable");
+            QTest::qWait(100);
+            flickable->setProperty("contentY", 0.0);
+            QTest::qWait(50);
+            require(flickable->property("contentY").toDouble() < 1.0, "cannot browse earlier log records");
             require(QMetaObject::invokeMethod(logWindow, "close"), "cannot close the log window");
             require(QTest::qWaitFor([&] { return !logWindow->property("visible").toBool(); }, 1000),
                     "closing the log window did not hide it");
+            require(QMetaObject::invokeMethod(logWindow, "showAndRaise"), "cannot reopen the log window");
+            require(QTest::qWaitFor([&] {
+                return flickable->property("contentY").toDouble()
+                    >= flickable->property("contentHeight").toDouble() - flickable->property("height").toDouble() - 2;
+            }, 1000), "reopening the log window did not show the latest record");
+            const auto logBody = logText->property("text").toString();
+            const auto firstBreak = logBody.indexOf('\n');
+            const auto secondBreak = logBody.indexOf('\n', firstBreak + 1);
+            const int selectionStart = static_cast<int>(firstBreak - 4);
+            const int selectionEnd = static_cast<int>(secondBreak + 4);
+            require(QMetaObject::invokeMethod(logText, "select", Q_ARG(int, selectionStart), Q_ARG(int, selectionEnd)),
+                    "cannot select across log lines");
+            const auto selection = logText->property("selectedText").toString();
+            require(selection == logBody.mid(selectionStart, selectionEnd - selectionStart),
+                    "log selection did not preserve cross-line character boundaries");
+            const auto scrollBeforeCopy = flickable->property("contentY");
+            app.copyAllLogs();
+            require(QGuiApplication::clipboard()->text() == logBody
+                        && logText->property("selectedText").toString() == selection
+                        && flickable->property("contentY") == scrollBeforeCopy,
+                    "copy-all changed selection, scrolling, or log content");
+            require(QMetaObject::invokeMethod(app.logModel(), "clear"), "cannot clear window log history");
+            require(QTest::qWaitFor([&] { return logText->property("text").toString().isEmpty(); }, 1000),
+                    "clearing log history did not clear the text area");
             const auto oversized = visionrt::testing::oversizedBmp();
             const auto imagePath = directory.filePath(QStringLiteral("超尺寸图像.bmp"));
             QFile      oversizedFile(imagePath);
@@ -329,6 +372,10 @@ void startupProjectContract()
                      + flagText + " " + decodeJson)
                         .toStdString()
                         .c_str());
+            require(QTest::qWaitFor([&] {
+                const auto text = logText->property("text").toString();
+                return text.contains("[工具]") && text.count(QStringLiteral("图像解码失败")) == 1;
+            }, 2000), "native business failure was not logged once with the tool source");
             for (const auto &entry : app.nodes())
                 if (entry.toMap().value("id") == "1")
                 {

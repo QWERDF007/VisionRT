@@ -1,4 +1,5 @@
 #include "WorkbenchFixtures.h"
+#include "TestPythonConfiguration.h"
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
@@ -39,6 +40,7 @@ constexpr PortId kImagesOutput = 2;
 int main(int argc, char **argv)
 try
 {
+    testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
@@ -148,11 +150,12 @@ def scalar(inputs):
         idle();
         require(app.nodes().size() == 2, "isolation project did not load");
         app.selectNode(imageNode);
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
     };
     const auto frame = [&](QColor main, QColor preview)
     {
         QImage rendered;
-        require(QTest::qWaitFor(
+        const auto matched = QTest::qWaitFor(
                     [&]
                     {
                         rendered = window.grabWindow();
@@ -160,13 +163,21 @@ def scalar(inputs):
                             && rendered.pixelColor(rendered.width() / 3, rendered.height() / 2) == main
                             && rendered.pixelColor(rendered.width() * 5 / 6, rendered.height() / 2) == preview;
                     },
-                    5000),
-                "rendered main image or thumbnail belongs to another target");
+                    5000);
+        if (!matched)
+            throw std::runtime_error(QStringLiteral("viewport mismatch: expected %1/%2, got %3/%4; images=%5 main=%6 thumbnail=%7; %8")
+                .arg(main.name(), preview.name(),
+                     rendered.isNull() ? "null" : rendered.pixelColor(rendered.width() / 3, rendered.height() / 2).name(),
+                     rendered.isNull() ? "null" : rendered.pixelColor(rendered.width() * 5 / 6, rendered.height() / 2).name())
+                .arg(app.imageCount()).arg(mainView.hasImage()).arg(thumbnail.hasImage()).arg(app.diagnostic()).toStdString());
         return rendered;
     };
     open("first");
     app.runNode();
     idle();
+    const auto firstImage = outputs->capture(kImagesOutput);
+    if (!firstImage || !std::holds_alternative<DataRef<Image>>(firstImage->value))
+        throw std::runtime_error("Image fixture did not execute: " + app.diagnostic().toStdString());
     frame(QColor(201, 0, 0), QColor(0, 201, 0));
     const auto oldContext = app.portContext(kImagesOutput, true);
     require(!oldContext.isEmpty(), "first output context unavailable");
@@ -188,6 +199,7 @@ def scalar(inputs):
         app.setImageIndex(change % 2);
         app.selectNode(scalarNode);
         app.selectNode(imageNode);
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
     }
     app.setImageIndex(1);
     frame(QColor(0, 97, 0), QColor(0, 97, 0));
@@ -217,6 +229,7 @@ def scalar(inputs):
         app.selectNode(scalarNode);
         presented.clear();
         app.selectNode(imageNode);
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
         require(QTest::qWaitFor([&] { return !presented.isEmpty() && mainView.hasImage(); }, 5000),
                 "fresh display request did not reach the main viewport");
         const auto publication = outputs->capture(kImagesOutput);
@@ -227,6 +240,7 @@ def scalar(inputs):
         frame(QColor(17, 23, 31), QColor(17, 23, 31));
         forbidImages = true;
         app.selectNode(imageNode);
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
         std::get<DataRef<Image>>(publication->value).get().clear();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (!QFile::exists(marker) && std::chrono::steady_clock::now() < deadline)
@@ -279,6 +293,7 @@ def scalar(inputs):
     app.rescanTools();
     idle();
     app.selectNode(imageNode);
+        app.setImageOutput(QStringLiteral("outputs:%1").arg(kImagesOutput));
     {
         const auto changed = outputs->capture(kImagesOutput);
         require(changed && changed->type.type == Type::Int && isMissing(changed->value),

@@ -5,6 +5,7 @@
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
 #include "ui/ToolTreeModel.h"
+#include "ui/LogHighlighter.h"
 #include "runtime/Snapshot.h"
 #include "core/ValueJson.h"
 
@@ -23,6 +24,9 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTextBlock>
+#include <QTextDocument>
+#include <QTextLayout>
 #include <QUrl>
 #include <cmath>
 #include <filesystem>
@@ -78,6 +82,27 @@ void treeContract()
     require(model.rowCount() == 0, "filter retains unrelated categories");
     model.setFilter("精确");
     require(model.rowCount() == 1, "filter loses matching descendant");
+    require(model.updateToolStatus("custom.precise", true, "可用"), "tool status did not change");
+    model.setFilter("不存在");
+    require(model.updateToolStatus("custom.precise", false, "实例失败"), "a hidden tool lost its status update");
+    model.setFilter("");
+    leaf = model.index(0, 0, model.index(0, 0, model.index(0, 0)));
+    require(!model.data(leaf, ToolTreeModel::AvailableRole).toBool()
+                && model.data(leaf, ToolTreeModel::StatusRole).toString() == "实例失败",
+            "rebuilding the tree restored a stale availability");
+
+    tool.nameEn = "custom.znested";
+    tool.categories.push_back("精确整数");
+    registry.addDefinition(tool);
+    model.setRegistry(registry);
+    group = model.index(0, 0, model.index(0, 0));
+    require(model.rowCount(group) == 2, "a tool and an equally named directory merged");
+    for (int row = 0; row < model.rowCount(group); ++row)
+    {
+        const auto item = model.index(row, 0, group);
+        require(model.data(item, ToolTreeModel::LeafRole).toBool() == (model.rowCount(item) == 0),
+                "a tool leaf became a directory");
+    }
 }
 
 void outputContract()
@@ -1868,6 +1893,15 @@ void shortWindowContract()
 // cannot drift from the child-process dispatch table above.
 void coreContracts()
 {
+    QTextDocument logDocument;
+    LogHighlighter highlighter(&logDocument, Qt::yellow, Qt::red);
+    logDocument.setPlainText("[2026/11/15 12:00:00.000] [I] [1] [工具] 正文包含 ] [E]\n"
+                             "[2026/11/15 12:00:00.000] [W] [1] [工具] 正文包含 ] [E]");
+    highlighter.rehighlight();
+    require(logDocument.firstBlock().layout()->formats().isEmpty(), "message text changed an Info log color");
+    const auto warningFormats = logDocument.lastBlock().layout()->formats();
+    require(warningFormats.size() == 1 && warningFormats.front().format.foreground().color() == Qt::yellow,
+            "message text changed a Warning log color");
     treeContract();
     pendingContract();
     durationTextContract();

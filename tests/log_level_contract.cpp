@@ -14,6 +14,7 @@ using visionrt::LogSource;
 using visionrt::LogService;
 
 int main(int argc, char **argv)
+try
 {
     QCoreApplication application(argc, argv);
 
@@ -25,6 +26,7 @@ int main(int argc, char **argv)
         config.minimumLevel = LogLevel::Warn;
         ServiceSession session(config);
         session.start(directory.filePath(QStringLiteral("visionrt.log")));
+        visionrt::LogModel model;
         session.service().setViewActive(true);
         LogService::write(LogLevel::Trace, LogSource::System, QStringLiteral("跟踪记录"));
         LogService::write(LogLevel::Debug, LogSource::System, QStringLiteral("调试记录"));
@@ -33,6 +35,9 @@ int main(int argc, char **argv)
         LogService::write(LogLevel::Error, LogSource::System, QStringLiteral("错误记录"));
         LogService::write(LogLevel::Critical, LogSource::System, QStringLiteral("严重记录"));
         session.service().flush();
+        require(QTest::qWaitFor([&] { return model.rowCount() == 3; }, 2000),
+                "the window channel did not receive exactly the admitted records");
+        session.stop();
 
         const auto file = fileText(datedLog(directory.path()));
         require(!file.contains(QStringLiteral("跟踪记录")) && !file.contains(QStringLiteral("调试记录"))
@@ -42,8 +47,6 @@ int main(int argc, char **argv)
                     && file.contains(QStringLiteral("严重记录")),
                 "a record at or above the threshold did not reach the file");
 
-        const auto rows = session.service().take(32);
-        require(rows.size() == 3, "the window channel did not receive exactly the admitted records");
     }
 
     // S04: Off rejects everything, including the error coalescing summary.
@@ -59,7 +62,7 @@ int main(int argc, char **argv)
             LogService::write(LogLevel::Error, LogSource::System, QStringLiteral("关闭时重复错误"));
         session.service().flush();
         visionrt::flushPendingForTesting();
-        session.service().flush();
+        session.stop();
 
         const auto file = fileText(datedLog(directory.path())).trimmed();
         require(file.isEmpty(), "logging off still produced a record or a repeat summary");
@@ -77,7 +80,7 @@ int main(int argc, char **argv)
         require(session.service().minimumLevel() == LogLevel::Error, "the reported level did not change");
         LogService::write(LogLevel::Info, LogSource::System, QStringLiteral("切换后信息"));
         LogService::write(LogLevel::Error, LogSource::System, QStringLiteral("切换后错误"));
-        session.service().flush();
+        session.stop();
 
         const auto file = fileText(datedLog(directory.path()));
         require(file.contains(QStringLiteral("切换前信息")), "a record written before the change was lost");
@@ -88,4 +91,9 @@ int main(int argc, char **argv)
     std::cout << "The production threshold filters before formatting, applies to new records only and "
                  "never manufactures a summary while logging is off\n";
     return 0;
+}
+catch (const std::exception &error)
+{
+    std::cerr << error.what() << '\n';
+    return 1;
 }

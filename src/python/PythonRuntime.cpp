@@ -134,6 +134,7 @@ struct ToolObjects
     std::thread::id           releasingThread{};
     py::object                instance;
     py::object                execute;
+    DiagnosticOrigin          releaseOrigin = DiagnosticOrigin::System;
 
     bool isReleased() const noexcept
     {
@@ -183,6 +184,7 @@ struct ToolObjects
             if (instance)
             {
                 status = lifecycleStatus(instance.attr("release")(), storage);
+                releaseOrigin = DiagnosticOrigin::Tool;
             }
         }
         catch (const py::error_already_set &error)
@@ -213,6 +215,7 @@ struct ToolObjects
 class PythonTool final
     : public IToolInstance
     , public IPythonExecutionMetrics
+    , public ILifecycleDiagnostics
 {
 public:
     PythonTool(std::shared_ptr<RuntimeState> state, std::shared_ptr<const ToolDefinition> definition,
@@ -254,6 +257,7 @@ public:
 
     ToolStatus initialize(const Values &parameters) override
     {
+        origin_ = DiagnosticOrigin::System;
         phase_ = NodePhase::Initialize;
         if (!state_ || !state_->alive || !Py_IsInitialized() || generation_ != state_->generation)
             return makeStatus(ErrorCode::PythonUnavailable, "Python 实例跨代或运行时不可用，不能初始化");
@@ -268,7 +272,9 @@ public:
         try
         {
             auto inputs = inputDictionary(parameters, definition_.initParams);
-            return lifecycleStatus(objects_->instance.attr("initialize")(inputs), state_->storage);
+            auto status = lifecycleStatus(objects_->instance.attr("initialize")(inputs), state_->storage);
+            origin_ = DiagnosticOrigin::Tool;
+            return status;
         }
         catch (const py::error_already_set &error)
         {
@@ -405,7 +411,7 @@ public:
                     const auto key = py::reinterpret_borrow<py::object>(item.first);
                     if (!py::isinstance<py::int_>(key) || py::isinstance<py::bool_>(key))
                         throw ContractError("输出键必须是整数端口编号");
-                    const auto id = static_cast<PortId>(key.cast<std::uint64_t>());
+                    const auto id = key.cast<PortId>();
                     if (!declared.contains(id))
                         throw ContractError("输出键不在声明中：" + portLabel(id));
                 }
@@ -430,9 +436,12 @@ public:
 
     ToolStatus releaseWithGil() noexcept
     {
+        origin_ = DiagnosticOrigin::System;
         if (!objects_)
             return {};
-        return objects_->releaseWithGil(state_->storage);
+        auto status = objects_->releaseWithGil(state_->storage);
+        origin_ = objects_->releaseOrigin;
+        return status;
     }
 
     ToolStatus release() override
@@ -447,8 +456,10 @@ public:
             return {};
         }
         py::gil_scoped_acquire gil;
-        return objects_->releaseWithGil(state_->storage);
+        return releaseWithGil();
     }
+
+    DiagnosticOrigin lifecycleOrigin() const noexcept override { return origin_; }
 
 private:
     ToolStatus ensureLoaded()
@@ -566,6 +577,7 @@ private:
     std::shared_ptr<PythonLoadState> sharedLoadState_;
     std::shared_ptr<ToolObjects> objects_;
     ExecutionMetrics             metrics_;
+    DiagnosticOrigin             origin_ = DiagnosticOrigin::System;
     NodePhase                    phase_      = NodePhase::Execute;
     bool                         loaded_     = false;
     std::uint64_t                generation_ = 0;

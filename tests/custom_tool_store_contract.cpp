@@ -227,6 +227,21 @@ int main(int argc, char **argv)
     assert(!std::filesystem::exists(root / "tools" / "custom.test.demo_copy1.json"));
     assert(!store.deleteCustomTool("custom.test.demo_copy1"));
 
+    const auto authoredPath = root / "tools" / u8"任意声明名.json";
+    std::filesystem::rename(jsonPath, authoredPath);
+    auto authored = store.findCustomTool(def.nameEn)->definition;
+    authored.nameZh = "已编辑";
+    const auto edited = store.saveCustomTool(authored);
+    assert(edited.definitionPath == authoredPath);
+    assert(store.discoverCustomTools().size() == 1);
+    authored.categories = {"分类", "子分类"};
+    const auto moved = store.saveCustomTool(authored);
+    assert(moved.definitionPath.filename() == authoredPath.filename());
+    assert(!std::filesystem::exists(authoredPath));
+    assert(store.discoverCustomTools().size() == 1);
+    assert(store.deleteCustomTool(def.nameEn));
+    assert(store.discoverCustomTools().empty());
+
     std::cout << "[PASS] custom_tool_store_contract" << std::endl;
     return 0;
 }

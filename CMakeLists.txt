@@ -252,6 +252,15 @@ if(_visionrt_runtime_dlls)
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${_visionrt_runtime_dlls} "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
         COMMENT "Deploying runtime DLLs to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
+    if(TARGET VisionRT)
+        add_dependencies(deploy_runtime_dlls VisionRT)
+        add_custom_command(TARGET deploy_runtime_dlls POST_BUILD
+            COMMAND "${VISIONRT_WINDEPLOYQT}" "$<IF:$<CONFIG:Debug>,--debug,--release>"
+                --no-translations --no-compiler-runtime
+                --qmldir "${CMAKE_SOURCE_DIR}/src/ui/qml" --qmlimport "${VISIONRT_QUICKUI_QML_ROOT}"
+                --dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}" "$<TARGET_FILE:VisionRT>"
+            COMMENT "Deploying Qt runtime and QML imports to the build tree")
+    endif()
 endif()
 
 # 测试契约与自动化测试用例
@@ -425,6 +434,8 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(tool_editor_controller_test visionrt_ui LABELS backend)
         target_link_libraries(tool_editor_controller_test PRIVATE Qt6::Test)
+        target_compile_definitions(tool_editor_controller_test PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         # One complete authoring flow through the real dialog: open, add a tool and a parameter,
         # click Save, and read the declaration the window wrote.
         visionrt_contract(tool_editor_dialog_test visionrt_ui)
@@ -553,6 +564,7 @@ if(BUILD_TESTING)
         visionrt_contract(ui_result_isolation_contract visionrt_ui)
         target_link_libraries(ui_result_isolation_contract PRIVATE Qt6::Test)
         target_compile_definitions(ui_result_isolation_contract PRIVATE
+            VISIONRT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
         visionrt_contract(recent_projects_contract visionrt_ui)
         visionrt_contract(ui_preferences_contract visionrt_ui)
@@ -801,6 +813,12 @@ if(BUILD_TESTING)
         set_tests_properties(gpu_inference_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)
         set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_gpu gpu_inference_contract)
         add_dependencies(tests-gpu gpu_tools_contract)
+        add_test(NAME gpu_engine_output_contract COMMAND gpu_tools_contract
+            "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}/examples/04_扩展示例/03_GPU目标检测/GPU目标检测.vrt.json"
+            "${VISIONRT_GPU_FIXTURES}" --engine-output-error)
+        visionrt_apply_test_environment(gpu_engine_output_contract)
+        set_tests_properties(gpu_engine_output_contract PROPERTIES LABELS "gpu" SKIP_RETURN_CODE 77)
+        set_property(GLOBAL APPEND PROPERTY VISIONRT_GROUP_MEMBERS_gpu gpu_engine_output_contract)
     endif()
 
     foreach(_executable IN ITEMS plugin_contract example_pipelines_contract libavoid_contract performance_contract

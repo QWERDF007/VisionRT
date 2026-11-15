@@ -1,10 +1,12 @@
 #include "core/CustomToolStore.h"
 #include "ui/AppController.h"
 #include "ui/ToolEditorController.h"
+#include "WorkbenchFixtures.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QTemporaryDir>
+#include <QTest>
 #include <cassert>
 #include <fstream>
 #include <iostream>
@@ -208,9 +210,9 @@ int main(int argc, char **argv)
 
     // 13. Built-in tools are visible only when editBuiltins is true.
     {
-        // The test build keeps the real tools package next to the executable's parent, which is
-        // the installation layout the window expects.
-        AppController appController(1, QDir::cleanPath(QCoreApplication::applicationDirPath() + "/.."));
+        testing::WorkbenchInstallation installation;
+        AppController appController(1, installation.directory());
+        assert(QTest::qWaitFor([&] { return !appController.busy(); }, 20000));
         ToolEditorController builtinEditor;
         builtinEditor.setAppController(&appController);
         builtinEditor.setCustomStore(&store);

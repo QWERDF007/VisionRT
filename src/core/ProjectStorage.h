@@ -29,9 +29,6 @@ struct ProjectStorageDiagnostic
     std::optional<NodeId>  node;
     std::string            field;
     std::string            message;
-    // The port the message is about, when it names one. Reconciliation reads this instead of
-    // recovering a number from the display text.
-    std::optional<PortRef> port;
 };
 
 // A connection the current declarations can no longer carry. Both ends are named, because the

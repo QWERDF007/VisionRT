@@ -38,6 +38,7 @@ Window {
         root.raise()
         root.requestActivate()
         syncActive()
+        Qt.callLater(scrollToBottom)
     }
     onClosing: function(close) {
         // Closing the window hides it; writing continues and the single instance stays available.

@@ -43,7 +43,7 @@ void ToolTreeModel::setFilter(const QString &text)
 ToolTreeModel::Entry &ToolTreeModel::groupEntry(Entry &parent, const QString &name)
 {
     for (auto &child : parent.children)
-        if (child->name == name)
+        if (child->id.isEmpty() && child->name == name)
             return *child;
     auto child    = std::make_unique<Entry>();
     child->name   = name;
@@ -66,9 +66,15 @@ ToolTreeModel::Entry *ToolTreeModel::findById(Entry &entry, const QString &id)
 
 bool ToolTreeModel::updateToolStatus(const QString &toolId, bool available, const QString &status)
 {
-    auto *tool = findById(root_, toolId);
-    if (!tool || (tool->available == available && tool->status == status))
+    const auto definition = std::find_if(definitions_.begin(), definitions_.end(),
+                                         [&](const auto &value) { return value.id == toolId; });
+    if (definition == definitions_.end() || (definition->available == available && definition->status == status))
         return false;
+    definition->available = available;
+    definition->status = status;
+    auto *tool = findById(root_, toolId);
+    if (!tool)
+        return true;
     tool->available = available;
     tool->status    = status;
 

@@ -40,6 +40,7 @@ struct NodeDiagnostic
     std::string toolId;
     NodePhase   phase;
     ToolStatus  status;
+    DiagnosticOrigin origin = DiagnosticOrigin::System;
 };
 
 struct ExecutionMetrics

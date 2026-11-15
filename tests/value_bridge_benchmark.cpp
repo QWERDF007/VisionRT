@@ -132,7 +132,7 @@ public:
         std::array<std::vector<double>, 5> phases;
         const int                          samples = full_ ? 21 : 3;
         ToolDefinition                     definition;
-        definition.outputs.push_back({"value", "Value", type});
+        definition.outputs.push_back({2, "Value", type});
         OutputModel model;
         const auto  started = Clock::now();
         for (int sample = 0; sample < samples; ++sample)
@@ -163,7 +163,7 @@ public:
             else
             {
                 auto snapshot = std::make_shared<NodeSnapshot>();
-                snapshot->outputs.emplace("value", decoded);
+                snapshot->outputs.emplace(2, decoded);
                 model.setResult(&definition, std::move(snapshot), {});
                 const auto displayed = model.get(2);
                 require(!displayed["preview"].toString().isEmpty() && displayed["preview"].toString().size() <= 256

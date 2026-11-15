@@ -1,18 +1,11 @@
-#include <visionrt/contracts/Registry.h>
+#include <visionrt/contracts/Module.h>
+#include <cstdlib>
 
-#include <cstdint>
-
-struct LegacyModuleApi
+// ABI 9 shares the module header, but its factories expect the removed service argument.
+// A rejected module must never reach registration, and therefore cannot call any old factory.
+extern "C" VT_EXPORT const visionrt::ModuleApi *VT_CALL visiontoolsModuleApi() noexcept
 {
-    std::uint32_t abi_major;
-    std::uint32_t struct_bytes;
-    visionrt::IToolInstance *(VT_CALL *create)(const char *,
-                                               visionrt::ToolStatus *) noexcept;
-    void(VT_CALL *destroy)(visionrt::IToolInstance *) noexcept;
-};
-
-extern "C" VT_EXPORT const LegacyModuleApi *VT_CALL visiontoolsModuleApi() noexcept
-{
-    static const LegacyModuleApi api{2, sizeof(LegacyModuleApi), nullptr, nullptr};
+    static const visionrt::ModuleApi api{9, sizeof(visionrt::ModuleApi),
+        +[](visionrt::IToolRegistry &) noexcept -> visionrt::ToolStatus { std::abort(); }};
     return &api;
 }

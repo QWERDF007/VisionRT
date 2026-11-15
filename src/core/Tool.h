@@ -11,6 +11,16 @@ namespace visionrt {
 
 class IResultReader;
 
+enum class DiagnosticOrigin { System, Tool };
+
+// Host adapters distinguish a returned lifecycle verdict from a failed bridge invocation.
+class ILifecycleDiagnostics
+{
+public:
+    virtual ~ILifecycleDiagnostics() = default;
+    virtual DiagnosticOrigin lifecycleOrigin() const noexcept = 0;
+};
+
 // What a host-implemented tool may need from the running session. A C++ or Python tool never
 // receives this: it gets only the values its declaration names, and interprets any path itself.
 struct HostToolContext

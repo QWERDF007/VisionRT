@@ -12,6 +12,7 @@
 #include "runtime/RuntimeEngine.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QTemporaryDir>
 #include <opencv2/imgcodecs.hpp>
 #include <algorithm>
@@ -206,12 +207,15 @@ def execute(inputs):
             "Custom discovery required an index rebuild");
     validateToolsPackage(root);
 
+    QTemporaryDir images(QDir(QCoreApplication::applicationDirPath()).filePath("pipeline-images-XXXXXX"));
+    require(images.isValid(), "Cannot create executable-relative image fixture");
+    const auto imageRoot = std::filesystem::path(images.path().toStdU16String());
     for (int batch = 0; batch < 2; ++batch)
     {
         std::vector<unsigned char> bytes;
         require(cv::imencode(".png", cv::Mat(8, 10, CV_8UC1, cv::Scalar(batch == 0 ? 7 : 11)), bytes),
                 "Cannot encode image fixture");
-        write(root / "images" / (std::to_string(batch) + ".png"),
+        write(imageRoot / (std::to_string(batch) + ".png"),
               {reinterpret_cast<const char *>(bytes.data()), bytes.size()});
     }
 
@@ -238,7 +242,7 @@ def execute(inputs):
     // The brightness tool is registered through registerFunction: executing it here proves the
     // function entry reaches RuntimeEngine, not only a direct unit-test call.
     const auto *brightnessDef = registry.find("AdjustBrightness");
-    std::cerr << "[DEBUG] brightness definition " << (brightnessDef ? "found" : "missing") << std::endl;
+    require(brightnessDef != nullptr, "Installed brightness declaration is missing");
     const auto    brightness = editor.addNode(flow, *brightnessDef, {0, 4});
     const auto    before  = editor.addNode(flow, *registry.find("FilterDetections"), {0, 10});
     const auto    bridge  = editor.addNode(flow, *registry.find(relay.nameEn), {0, 20});
@@ -246,7 +250,7 @@ def execute(inputs):
     const auto    crop    = editor.addNode(flow, *registry.find("CropImage"), {0, 40});
     const auto    builtin = editor.addNode(flow, *registry.find("ImageSizes"), {10, 15});
     const auto    h35     = editor.addNode(flow, *registry.find(h35Combo.nameEn), {0, 50});
-    editor.setLiteral(flow, reader, 1, std::string("images"));
+    editor.setLiteral(flow, reader, 1, imageRoot.filename().string());
     editor.setLiteral(flow, reader, 5, std::int64_t(2));
     editor.setLiteral(flow, reader, 6, true);
     editor.setLiteral(flow, brightness, 2, 1.0);

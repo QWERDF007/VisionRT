@@ -54,6 +54,13 @@ const char *exceptionSummary(NodePhase phase)
     std::terminate();
 }
 
+DiagnosticOrigin lifecycleOrigin(const IToolInstance &instance, ToolKind kind)
+{
+    if (const auto *adapter = dynamic_cast<const ILifecycleDiagnostics *>(&instance))
+        return adapter->lifecycleOrigin();
+    return kind == ToolKind::Host ? DiagnosticOrigin::System : DiagnosticOrigin::Tool;
+}
+
 std::unique_ptr<IToolInstance> createInstance(const NodeDefinition &node, const ToolRegistry &registry,
                                               const std::shared_ptr<IResultReader> &reader, ToolStatus &status)
 {
@@ -124,6 +131,7 @@ void NodeRuntime::configure(const NodeDefinition &node, const ToolRegistry &regi
         preparation.store(std::make_shared<const NodeDiagnostic>(
                               NodeDiagnostic{id, node.toolId, NodePhase::Create, std::move(status)}),
                           std::memory_order_release);
+        report(*preparation.load());
     }
 }
 
@@ -133,9 +141,11 @@ std::shared_ptr<const NodeDiagnostic> NodeRuntime::release() noexcept
     if (!instance)
         return {};
     ToolStatus status;
+    auto origin = DiagnosticOrigin::System;
     try
     {
         status = instance->release();
+        origin = lifecycleOrigin(*instance, configuration->kind);
     }
     catch (const std::exception &error)
     {
@@ -150,8 +160,9 @@ std::shared_ptr<const NodeDiagnostic> NodeRuntime::release() noexcept
     {
         // The tool's own release verdict is kept as reported; the host only forwards it.
         auto diagnostic = std::make_shared<const NodeDiagnostic>(
-            NodeDiagnostic{id, configuration->toolId, NodePhase::Release, std::move(status)});
+            NodeDiagnostic{id, configuration->toolId, NodePhase::Release, std::move(status), origin});
         lifecycle.store(diagnostic, std::memory_order_release);
+        report(*diagnostic);
         return diagnostic;
     }
     return {};
@@ -255,6 +266,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     ToolStatus      frameworkStatus;
     ToolStatus      businessStatus;
     bool            frameworkFailure = false;
+    bool            diagnosticPublished = false;
     bool            enteredExecute   = false;
 
     // The UI's running window for this node, as a scope: it opens once the guard and input
@@ -431,9 +443,12 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             instance = createInstance(config, frozen.registry, reader, status);
             deferredCreateMs = milliseconds(Clock::now() - createStart);
             if (!status)
+            {
                 preparation.store(std::make_shared<const NodeDiagnostic>(
                                       NodeDiagnostic{id, config.toolId, NodePhase::Create, std::move(status)}),
                                   std::memory_order_release);
+                report(*preparation.load());
+            }
             else
                 preparation.store({}, std::memory_order_release);
         }
@@ -444,11 +459,13 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         {
             const auto normalizedParams = normalizeInputs(definition->initParams, parameters);
             ToolStatus status;
+            auto origin = DiagnosticOrigin::System;
             {
                 ScopeTimer initTimer(snapshot->timing.initMs, &snapshot->timing.initMeasured);
                 try
                 {
                     status = instance->initialize(normalizedParams);
+                    origin = lifecycleOrigin(*instance, configuration->kind);
                 }
                 catch (const RegistryError &error)
                 {
@@ -473,8 +490,9 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             {
                 release();
                 preparation.store(std::make_shared<const NodeDiagnostic>(
-                                      NodeDiagnostic{id, config.toolId, NodePhase::Initialize, std::move(status)}),
+                                      NodeDiagnostic{id, config.toolId, NodePhase::Initialize, std::move(status), origin}),
                                   std::memory_order_release);
+                report(*preparation.load());
             }
             else
                 initialized = true;
@@ -499,6 +517,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             // the node owns its terminal state instead.
             const auto diagnostic = preparation.load(std::memory_order_acquire);
             frameworkStatus       = diagnostic->status;
+            diagnosticPublished   = true;
             phase                 = diagnostic->phase;
             frameworkFailure      = true;
         }
@@ -597,6 +616,11 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         snapshot->startedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(windowStart.time_since_epoch()).count();
         snapshot->endedNs   = std::chrono::duration_cast<std::chrono::nanoseconds>(windowEnd.time_since_epoch()).count();
     }
+    if (!snapshot->status && disposition != NodeDisposition::Canceled
+        && !diagnosticPublished)
+        report({id, config.toolId, phase, snapshot->status,
+                snapshot->toolResultPublished && definition->kind != ToolKind::Host
+                    ? DiagnosticOrigin::Tool : DiagnosticOrigin::System});
     slot.publish(std::move(snapshot));
 }
 } // namespace visionrt::runtime_detail

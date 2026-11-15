@@ -211,6 +211,8 @@ void advancedFaultInjectionAndModuleDestroy(const std::filesystem::path &moduleP
     const auto thrown       = throwAdapter->initialize({});
     assert(thrown.code == -1 && thrown.message == "工具初始化异常");
     assert(thrown.detail == "Simulated init exception in plugin");
+    assert(dynamic_cast<ILifecycleDiagnostics *>(throwAdapter.get())->lifecycleOrigin() == DiagnosticOrigin::System);
+    assert(throwAdapter->release());
 
     // 4. release failure
     loader->registerModule("test.plugin.release_fail", modulePath);
@@ -1447,7 +1449,7 @@ int main(int argc, char **argv)
             const auto module = loader.loadModule(std::filesystem::u8path(argv[2]), status);
             assert(!module && !status);
             assert(status.message.find("ABI 主版本不匹配") != std::string::npos);
-            assert(status.message.find("实际 2") != std::string::npos);
+            assert(status.message.find("实际 9") != std::string::npos);
             assert(loader.loadedModuleCount() == 0);
         }
         return 0;

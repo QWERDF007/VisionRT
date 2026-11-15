@@ -104,10 +104,9 @@ TypeMap types(const std::vector<PortDefinition> &ports)
 }
 
 void diagnose(ProjectLoadResult &result, ProjectStorageCode code, const FlowDefinition &flow,
-              const NodeDefinition &node, std::string field, std::string message, bool changed = false,
-              std::optional<PortRef> port = {})
+              const NodeDefinition &node, std::string field, std::string message, bool changed = false)
 {
-    result.diagnostics.push_back({code, flow.id, node.id, std::move(field), std::move(message), port});
+    result.diagnostics.push_back({code, flow.id, node.id, std::move(field), std::move(message)});
     result.project.dirty = result.project.dirty || changed;
 }
 
@@ -147,6 +146,7 @@ PortValue defaultValue(const PortDefinition &port)
 struct NodeReconciliation
 {
     std::set<PortId> changedOutputs;
+    std::map<PortId, SourcePort> removedInputs;
     bool             declarationChanged = false;
 };
 
@@ -193,12 +193,13 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
         if (initTypes.contains(id))
             continue;
         const auto key = QString::number(id);
+        const auto valueType = typeOf(value).value_or(node.signatures.initParams.at(id));
         node.retiredInitParams.insert(
             key, QJsonObject{
                      {"port_id", static_cast<double>(id)},
-                     {"value", ValueJson::encode(value, node.signatures.initParams.at(id),
+                     {"value", ValueJson::encode(value, valueType,
                                                  ValueJson::Purpose::Stored)},
-                     {"type", ValueJson::encodeType(node.signatures.initParams.at(id))}
+                     {"type", ValueJson::encodeType(valueType)}
         });
         node.signatures.initParams.erase(id);
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(id),
@@ -253,15 +254,14 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             // and the node fails its contract until the parameter is corrected.
             parameters.emplace(port.id, old->second);
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
-                     "初始化参数与当前声明类型不兼容，原值已保留，修正后才能执行", false,
-                     PortRef{PortStage::Init, port.id});
+                     "初始化参数与当前声明类型不兼容，原值已保留，修正后才能执行");
             continue;
         }
         // A port the declaration has now but the project never saved is materialised from the
         // declaration; there is no saved value to preserve.
         parameters.emplace(port.id, defaultValue(port));
         diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "init_params." + portLabel(port.id),
-                 "当前声明新增此初始化参数，已填入声明默认值", true, PortRef{PortStage::Init, port.id});
+                 "当前声明新增此初始化参数，已填入声明默认值", true);
     }
     std::map<PortId, InputBinding> inputs;
     for (const auto &port : contract.inputs)
@@ -278,7 +278,7 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             {
                 binding.literal = defaultValue(port);
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "未配置的字面量草稿已填入声明默认值", true, PortRef{PortStage::Inputs, port.id});
+                         "未配置的字面量草稿已填入声明默认值", true);
             }
             if (binding.mode == BindingMode::Literal || !binding.source)
                 rangeWarning(result, flow, node, port, binding.literal);
@@ -291,15 +291,14 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
             binding = old->second;
             if (!isReservedPort(PortStage::Inputs, port.id))
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "输入与当前声明类型不兼容，原值与上游绑定已保留，修正后才能执行", false,
-                         PortRef{PortStage::Inputs, port.id});
+                         "输入与当前声明类型不兼容，原值与上游绑定已保留，修正后才能执行");
         }
         else
         {
             binding.literal = defaultValue(port);
             if (!isReservedPort(PortStage::Inputs, port.id))
                 diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(port.id),
-                         "当前声明新增此输入，已填入声明默认值", true, PortRef{PortStage::Inputs, port.id});
+                         "当前声明新增此输入，已填入声明默认值", true);
         }
         inputs.emplace(port.id, std::move(binding));
     }
@@ -307,8 +306,10 @@ void reconcileNode(ProjectLoadResult &result, const FlowDefinition &flow, NodeDe
     {
         if (!inputTypes.contains(id))
         {
+            if (binding.mode == BindingMode::Upstream && binding.source)
+                changes.removedInputs.emplace(id, *binding.source);
             diagnose(result, ProjectStorageCode::SchemaChanged, flow, node, "inputs." + portLabel(id),
-                     "已丢弃声明中不再存在的输入及其绑定", true, PortRef{PortStage::Inputs, id});
+                     "已丢弃声明中不再存在的输入及其绑定", true);
         }
     }
     node.initParams = std::move(parameters);
@@ -542,7 +543,9 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 const auto signature = node.signatures.initParams.find(id);
                 if (signature == node.signatures.initParams.end())
                     invalid("保存的初始化参数缺少 type_snapshot：" + portLabel(id));
-                node.initParams.emplace(id, literal({"init_params", QString::number(index), "value"}, signature->second));
+                const auto valueType = entry.contains("value_type")
+                    ? ValueJson::decodeType(map(entry.value("value_type"), "init value type")) : signature->second;
+                node.initParams.emplace(id, literal({"init_params", QString::number(index), "value"}, valueType));
             }
             std::set<PortId> savedInputLiterals;
             if (raw.contains("retired_init_params"))
@@ -583,7 +586,9 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                     invalid("保存的输入缺少 type_snapshot：" + portLabel(id));
                 if (saved.contains("literal"))
                 {
-                    binding.literal = literal({"inputs", QString::number(index), "literal"}, signature->second);
+                    const auto valueType = saved.contains("value_type")
+                        ? ValueJson::decodeType(map(saved.value("value_type"), "input value type")) : signature->second;
+                    binding.literal = literal({"inputs", QString::number(index), "literal"}, valueType);
                     savedInputLiterals.insert(id);
                 }
                 const auto source = saved.value("source");
@@ -705,11 +710,13 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
         {
             if (!node.unresolved.isEmpty())
                 continue;
-            for (auto &[id, binding] : node.inputs)
+            auto sources = reconciliations[node.id].removedInputs;
+            for (const auto &[id, binding] : node.inputs)
+                if (binding.mode == BindingMode::Upstream && binding.source)
+                    sources.emplace(id, *binding.source);
+            for (const auto &[id, upstream] : sources)
             {
-                if (binding.mode != BindingMode::Upstream || !binding.source)
-                    continue;
-                const auto source = nodes.find(binding.source->node);
+                const auto source = nodes.find(upstream.node);
                 if (source != nodes.end() && !source->second->unresolved.isEmpty())
                 {
                     diagnose(result, ProjectStorageCode::PendingReference, flow, node,
@@ -717,16 +724,15 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                              "上游工具定义缺失，引用已保留以便恢复");
                     continue;
                 }
-                const auto  check      = validateBinding(flow, binding.source->node, binding.source->port, node.id, id);
+                const auto  check      = validateBinding(flow, upstream.node, upstream.port, node.id, id);
                 const auto *sourceNode = source == nodes.end() ? nullptr : source->second;
                 const auto  moved      = sourceNode ? reconciliations.find(sourceNode->id) : reconciliations.end();
                 const bool  outputMoved
-                    = moved != reconciliations.end() && moved->second.changedOutputs.contains(binding.source->port);
+                    = moved != reconciliations.end() && moved->second.changedOutputs.contains(upstream.port);
                 // A declaration that no longer owns both ports cannot carry the connection. Cutting
                 // it is the truthful result: the canvas, the execution dependency and the saved file
                 // then agree, instead of a wire drawn over a binding the node can never run.
-                const bool cut = check.reason == BindingError::MissingPort || check.reason == BindingError::TypeMismatch
-                              || (check && outputMoved);
+                const bool cut = check.reason == BindingError::MissingPort || check.reason == BindingError::TypeMismatch;
                 if (!cut)
                 {
                     if (check.reason == BindingError::SameOrUpperRow)
@@ -749,14 +755,17 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 const auto *owner = outputMoved ? sourceNode : &node;
                 if (auto *update = findUpdate(owner->toolId))
                     update->removed.push_back(
-                        {sourceNode ? sourceNode->title() + "." + portName(*sourceNode, PortStage::Outputs, binding.source->port)
-                                    : portLabel(binding.source->port),
+                        {sourceNode ? sourceNode->title() + "." + portName(*sourceNode, PortStage::Outputs, upstream.port)
+                                    : portLabel(upstream.port),
                          node.title() + "." + portName(node, PortStage::Inputs, id),
-                         check.reason == BindingError::TypeMismatch || (check && outputMoved)
+                         check.reason == BindingError::TypeMismatch
                              ? std::string("端口类型已变更")
                              : std::string("端口已从工具声明中删除")});
-                binding.mode = BindingMode::Literal;
-                binding.source.reset();
+                if (const auto binding = node.inputs.find(id); binding != node.inputs.end())
+                {
+                    binding->second.mode = BindingMode::Literal;
+                    binding->second.source.reset();
+                }
                 diagnose(result, ProjectStorageCode::InvalidReference, flow, node, "inputs." + portLabel(id),
                          "两端端口已无法对接（端口已删除或类型已变更），连线已断开", true);
             }
@@ -807,9 +816,13 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                     const auto signature = node.signatures.initParams.find(id);
                     if (signature == node.signatures.initParams.end())
                         invalid("无法保存缺少 type_snapshot 的初始化参数：" + portLabel(id));
-                    parameters.append(QJsonObject{
+                    const auto valueType = typeOf(value).value_or(signature->second);
+                    QJsonObject entry{
                         {"port_id", static_cast<double>(id)},
-                        {"value", ValueJson::encode(value, signature->second, ValueJson::Purpose::Stored)}});
+                        {"value", ValueJson::encode(value, valueType, ValueJson::Purpose::Stored)}};
+                    if (valueType != signature->second)
+                        entry.insert("value_type", ValueJson::encodeType(valueType));
+                    parameters.append(entry);
                 }
                 raw.remove("retired_init_params");
                 if (!node.retiredInitParams.isEmpty())
@@ -883,8 +896,11 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                 // The draft value belongs to the binding whatever the mode is: an upstream input
                 // keeps the literal it falls back to, and dropping it would turn a plain reload
                 // into a schema change.
-                saved.insert("literal", ValueJson::encode(binding.literal, signature->second,
+                const auto valueType = typeOf(binding.literal).value_or(signature->second);
+                saved.insert("literal", ValueJson::encode(binding.literal, valueType,
                                                           ValueJson::Purpose::Stored));
+                if (valueType != signature->second)
+                    saved.insert("value_type", ValueJson::encodeType(valueType));
                 if (binding.mode == BindingMode::Upstream && binding.source)
                     saved.insert("source", QJsonObject{
                                                {"node_seq", QString::number(binding.source->node)},
@@ -960,7 +976,11 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
                                       || original.signatures.inputs != updated.signatures.inputs
                                       || original.signatures.outputs != updated.signatures.outputs;
             changedStructure      = changedStructure || contractChanged;
-            bool changedExecution = contractChanged;
+            bool changedExecution = contractChanged
+                || !std::equal(updated.initParams.begin(), updated.initParams.end(),
+                               original.initParams.begin(), original.initParams.end(),
+                               [](const auto &left, const auto &right)
+                               { return left.first == right.first && equalValues(left.second, right.second); });
             for (const auto &[id, binding] : updated.inputs)
             {
                 const auto previous = original.inputs.find(id);
@@ -975,25 +995,8 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
                     changedStructure = true;
                     changedExecution = true;
                 }
-            }
-            // A reconciliation that changed what the node will actually run invalidates the cached
-            // instance. A schema note that only preserved or displayed something does not.
-            for (const auto &diagnostic : result.diagnostics)
-            {
-                if (diagnostic.node != updated.id || diagnostic.code != ProjectStorageCode::SchemaChanged
-                    || !diagnostic.port)
-                    continue;
-                if (diagnostic.port->stage == PortStage::Init)
-                {
-                    if (updated.initParams.contains(diagnostic.port->id))
-                        changedExecution = true;
-                }
-                else if (diagnostic.port->stage == PortStage::Inputs)
-                {
-                    const auto input = updated.inputs.find(diagnostic.port->id);
-                    if (input != updated.inputs.end() && input->second.mode == BindingMode::Literal)
-                        changedExecution = true;
-                }
+                if (binding.mode == BindingMode::Literal && !equalValues(previous->second.literal, binding.literal))
+                    changedExecution = true;
             }
             if (changedExecution)
                 ++updated.executionRevision;

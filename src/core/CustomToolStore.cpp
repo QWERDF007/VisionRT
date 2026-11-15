@@ -43,19 +43,6 @@ void writeAtomically(const std::filesystem::path &path, std::string_view content
         throw ContractError("提交" + std::string(what) + "失败：" + path.string());
 }
 
-// The declaration of this id anywhere under the root: a tool keeps one file whichever folder its
-// category names, so moving it must find the old one without reading every declaration.
-std::filesystem::path existingDeclaration(const std::filesystem::path &root, const std::string &toolId)
-{
-    if (!std::filesystem::is_directory(root))
-        return {};
-    const auto name = toolId + ".json";
-    for (const auto &entry : std::filesystem::recursive_directory_iterator(root))
-        if (entry.is_regular_file() && entry.path().filename() == name)
-            return entry.path();
-    return {};
-}
-
 // The folder a declaration lives in is its category, so a tool's place in the tree is a directory
 // name the store can always reach: no empty part, no separator and no parent reference.
 std::filesystem::path declarationFolder(const std::filesystem::path        &root,
@@ -236,12 +223,13 @@ ToolDefinition CustomToolStore::saveCustomTool(const ToolDefinition &authored, c
     }
 
     const auto jsonDir  = declarationFolder(declDir, definition.categories);
-    const auto jsonPath = jsonDir / (definition.nameEn + ".json");
+    const auto existing = findCustomTool(definition.nameEn);
+    const auto previous = existing ? existing->definition.definitionPath : std::filesystem::path{};
+    const auto jsonPath = jsonDir / (existing ? previous.filename() : std::filesystem::path(definition.nameEn + ".json"));
     definition.definitionPath = jsonPath;
 
     // A tool moved to another folder keeps one declaration: the former file would otherwise be
     // discovered as a second copy of the same id.
-    const auto previous = existingDeclaration(declDir, definition.nameEn);
     std::filesystem::create_directories(jsonDir);
     writeAtomically(jsonPath, emitNormalizedToolJson(definition), "工具声明");
     if (!previous.empty() && previous != jsonPath)
@@ -258,15 +246,16 @@ bool CustomToolStore::deleteCustomTool(const std::string &toolId)
 {
     validateIdentifier(toolId, false);
 
-    const auto jsonPath = existingDeclaration(declarationsDir(), toolId);
-    if (jsonPath.empty())
+    const auto existing = findCustomTool(toolId);
+    if (!existing)
         return false;
+    const auto &jsonPath = existing->definition.definitionPath;
 
     // The declaration owns the code directory, and its package is not necessarily the id spelled
     // with slashes, so read it before the declaration that names it is gone.
     // An unreadable declaration cannot name the code directory it owns, so it is not deleted: a
     // guessed removal could take another tool's resources with it.
-    const auto package = parseToolDefinitionFile(jsonPath).entry.package;
+    const auto &package = existing->definition.entry.package;
 
     // The declaration goes first: once it is gone the tool cannot be discovered, so a leftover code
     // directory is an orphan a later pass can clean instead of a half-deleted tool that still runs.

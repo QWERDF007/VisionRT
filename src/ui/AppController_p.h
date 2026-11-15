@@ -306,11 +306,7 @@ struct AppController::Impl : PresentationHost
     void endRoiEdit() override { finishRoi(); }
     void reportDiagnostic(const ApplicationDiagnostic &diagnostic) override
     {
-        // A tool's own status or node diagnostic is the tool speaking; everything else here is a
-        // host failure.
-        const bool fromTool = std::holds_alternative<ToolStatus>(diagnostic)
-                           || std::holds_alternative<NodeDiagnostic>(diagnostic);
-        report(diagnostic, fromTool ? LogSource::Tool : LogSource::System);
+        report(diagnostic, LogSource::Ui);
     }
     void reportFailure(const std::exception &error, const QString &summary) override { report(error, summary); }
     void      pruneDeletedNodes();

@@ -631,7 +631,6 @@ void AppController::Impl::poll()
             if (lifecycle && lifecycle != lifecycleBefore)
             {
                 selectedChanged |= selected == QString::number(item.node);
-                report(*lifecycle);
                 if (const auto *node = findNode(item.node))
                 {
                     const auto avail = registry.availability(node->toolId);
@@ -643,7 +642,6 @@ void AppController::Impl::poll()
             const auto *instance = presentation.instance(item.node);
             if (instance && instance != instanceBefore)
             {
-                report(*instance);
                 if (const auto *node = findNode(item.node))
                 {
                     const auto avail = registry.availability(node->toolId);
@@ -666,7 +664,11 @@ void AppController::Impl::poll()
                                                      });
             }
         }
-        for (const auto &event : update.diagnostics) report(event);
+        for (const auto &event : update.diagnostics)
+        {
+            const auto *node = std::get_if<NodeDiagnostic>(&event.payload);
+            report(event, node && node->origin == DiagnosticOrigin::Tool ? LogSource::Tool : LogSource::System);
+        }
         if (update.droppedDiagnostics > 0)
             report(QStringLiteral("诊断已截断，丢失 %1 条").arg(update.droppedDiagnostics));
         // Bottom statistics belong to complete runs only. A single-node session updates its own
