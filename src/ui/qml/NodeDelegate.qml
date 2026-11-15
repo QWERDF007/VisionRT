@@ -8,13 +8,12 @@ import VisionRT.Style 1.0
 Rectangle {
     id: root
     required property string nodeId
+    required property string nodeToolName
     required property string nodeTitle
     required property string nodeCategory
     required property string nodeVersion
     required property string nodeStatus
     required property bool nodeMissing
-    required property bool nodeDefMissing
-    required property bool nodeImplUnavailable
     required property string nodeTimingText
     property bool selected: false
     property real viewScale: 1
@@ -32,16 +31,6 @@ Rectangle {
     readonly property string nodeState: root.nodeStatus || "idle"
     readonly property bool isError: root.nodeState === "failed" || root.nodeMissing === true
     readonly property bool runningNow: root.nodeState === "running"
-    // Gated nodes never enter the algorithm: they keep a neutral canvas colour plus an explicit
-    // badge, so a skipped branch can not be mistaken for a green success.
-    readonly property bool isSkipped: root.nodeState === "skipped"
-    readonly property bool isBlocked: root.nodeState === "blocked"
-    readonly property color statusDotColor: {
-        if (root.isBlocked) return Theme.nodeStateOrange
-        if (root.runningNow) return Theme.nodeHeaderTextGreen
-        if (root.nodeState === "failed") return Theme.nodeStateRed
-        return Theme.nodeStateGray
-    }
     readonly property color headerBg: {
         if (root.runningNow) return Theme.nodeHeaderGreen
         if (root.nodeState === "failed") return Theme.nodeHeaderRed
@@ -68,7 +57,7 @@ Rectangle {
         return QuiFontIcon.Settings
     }
 
-    // Top Header with four-state background and status indicator
+    // Tool identity stays independent of the editable node title.
     Rectangle {
         id: nodeHeader
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
@@ -82,46 +71,15 @@ Rectangle {
         }
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
-            Rectangle {
-                width: 7; height: 7; radius: 3.5
-                color: root.statusDotColor
-                Layout.alignment: Qt.AlignVCenter
-            }
             QuiText {
-                visible: root.nodeDefMissing === true
-                text: "缺定义"
+                objectName: "nodeToolName_" + root.nodeId
+                text: root.nodeToolName
+                Layout.fillWidth: true
+                elide: Text.ElideRight
                 renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: "#d97706"
-                Layout.alignment: Qt.AlignVCenter
+                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9 })
+                color: root.headerText
             }
-            QuiText {
-                visible: !root.nodeDefMissing && root.nodeImplUnavailable === true
-                text: "缺实现"
-                renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: Theme.nodeStateOrange
-                Layout.alignment: Qt.AlignVCenter
-            }
-            QuiText {
-                visible: root.isSkipped
-                objectName: "nodeBadgeSkip_" + root.nodeId
-                text: "跳过"
-                renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: Theme.nodeStateGray
-                Layout.alignment: Qt.AlignVCenter
-            }
-            QuiText {
-                visible: root.isBlocked
-                objectName: "nodeBadgeBlock_" + root.nodeId
-                text: "阻塞"
-                renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9, bold: true })
-                color: Theme.nodeStateOrange
-                Layout.alignment: Qt.AlignVCenter
-            }
-            Item { Layout.fillWidth: true }
             QuiText {
                 text: root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0"
                 renderType: Text.QtRendering
@@ -139,7 +97,7 @@ Rectangle {
         QuiTextIcon {
             Layout.preferredWidth: 16; Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
-            iconSource: root.getIcon(root.nodeTitle, root.nodeCategory || "")
+            iconSource: root.getIcon(root.nodeToolName, root.nodeCategory || "")
             iconSize: Theme.iconSizeBase
             iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "running" ? Theme.nodeStateGreen : Theme.nodeStateGray)
             renderType: Text.QtRendering

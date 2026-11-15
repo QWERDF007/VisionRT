@@ -116,6 +116,25 @@ ResultSlot::Snapshot ResultPresentation::sharedSnapshot(NodeId node) const
     return found == snapshots_.end() ? ResultSlot::Snapshot{} : found->second;
 }
 
+NodeDiagnostic ResultPresentation::status(const NodeDefinition &node) const
+{
+    if (active(node.id))
+        return {node.id, node.toolId, NodePhase::Execute, makeStatus(ErrorCode::Busy, "运行中")};
+    const auto availability = host_.toolAvailability(node.toolId);
+    if (availability.state != ToolAvailability::Available)
+        return {node.id, node.toolId, NodePhase::Create, availability.status};
+    if (const auto *diagnostic = instance(node.id))
+        return *diagnostic;
+    const auto snapshot = displaySnapshot(node);
+    if (snapshot && !snapshot->status)
+        return {node.id, node.toolId, snapshot->phase, snapshot->status};
+    if (const auto *diagnostic = lifecycle(node.id))
+        return *diagnostic;
+    if (snapshot)
+        return {node.id, node.toolId, snapshot->phase, snapshot->status};
+    return {node.id, node.toolId, NodePhase::Prepare, makeStatus(ErrorCode::NotExecuted, "未执行")};
+}
+
 bool ResultPresentation::active(NodeId node) const
 {
     return active_.contains(node);
@@ -289,6 +308,8 @@ void ResultPresentation::updateResults()
             }
             host_.resultsChanged();
         }
+        if (node && active(node->id))
+            outputs_.setStatus(status(*node));
         return;
     }
     const auto *node   = host_.selectedNode();
@@ -316,7 +337,7 @@ void ResultPresentation::updateResults()
         if (const auto *flow = host_.currentFlow())
             connectable = host_.refreshConnectable(*flow, *node);
         outputs_.setResult(tool, snapshot, references, connectable, &node->signatures.outputs,
-                           lifecycleShared(node->id));
+                           lifecycleShared(node->id), status(*node));
         // The viewport starts empty and only ever shows a port the user chose: selecting the first
         // offered image on the user's behalf would present a port they never asked for. A selection
         // survives while its real port is still offered; a hidden or removed port leaves the view

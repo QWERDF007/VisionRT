@@ -40,6 +40,7 @@ public:
                                                                                const NodeDefinition &node) const = 0;
 
     // Runtime facts the presentation must not duplicate.
+    virtual Availability toolAvailability(std::string_view toolId) const = 0;
     virtual bool runtimeIdle() const = 0;
     virtual bool closing() const     = 0;
 
@@ -77,6 +78,7 @@ public:
     // Shared owner for consumers that keep the snapshot (assist contexts), never a deep copy.
     ResultSlot::Snapshot        sharedSnapshot(NodeId node) const;
     bool                        active(NodeId node) const;
+    NodeDiagnostic              status(const NodeDefinition &node) const;
     std::size_t                 snapshotCount() const noexcept { return snapshots_.size(); }
     const NodeDiagnostic       *lifecycle(NodeId node) const;
     // Shared owner for consumers that pass the diagnostic into the output model.

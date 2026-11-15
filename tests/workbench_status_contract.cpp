@@ -4,6 +4,7 @@
 #include "core/NodeContracts.h"
 #include "ui/AppController.h"
 #include "ui/Theme.h"
+#include "ui/OutputModel.h"
 #include <quickui/Color.h>
 
 #include <QDir>
@@ -99,6 +100,25 @@ def run(inputs):
     return {'outputs': {2: 7, 3: mode != 'gate_false', 0: 0, 1: ''},
             'detail': ''}
 )py");
+    ToolDefinition initFailure = definition;
+    initFailure.nameEn = "test.init_failure";
+    initFailure.nameZh = "初始化测试";
+    initFailure.kind = ToolKind::PythonClass;
+    initFailure.entry.symbol = "InitFailure";
+    write(package + "tools/custom/status/init.json", QByteArray::fromStdString(emitNormalizedToolJson(initFailure)));
+    {
+        QFile file(script);
+        require(file.open(QIODevice::Append), "initialization fixture is not writable");
+        file.write(R"py(
+class InitFailure:
+    def initialize(self, parameters):
+        return {'code': 17, 'message': '模型路径未填写', 'detail': ''}
+    def execute(self, inputs):
+        raise AssertionError('execute must not run after initialization fails')
+    def release(self):
+        return {'code': 0, 'message': '', 'detail': ''}
+)py");
+    }
     AppController app(2, root);
     const auto    releaseOnExit = qScopeGuard([&] { write(permission, "allow"); });
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "status catalog did not become ready");
@@ -144,6 +164,13 @@ def run(inputs):
     idle();
     const auto source = app.selectedNode();
     require(!source.isEmpty(), "status source node is missing");
+    app.renameNode(source, "自定义节点名");
+    idle();
+    require(stateOf(source).value("toolName").toString() == "状态工具", "rename changed the original tool name");
+    require(stateOf(source).value("title").toString() == "自定义节点名-" + source, "node alias was not applied");
+    auto *nameItem = findItem(canvas, "nodeToolName_" + source);
+    require(nameItem && nameItem->property("text").toString() == "状态工具", "card header lost the original tool name");
+
     app.addNode("test.status", 4, 0);
     idle();
     const auto neighbour = app.selectedNode();
@@ -179,7 +206,6 @@ def run(inputs):
                     && pen->property("color").value<QColor>() != theme->nodeStateGreen(),
                 message);
     };
-    requireColor(sourceItem, "statusDotColor", theme->nodeHeaderTextGreen(), "running status dot is not readable on the green header");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGreen(), "running header is not green");
     requireColor(sourceItem, "headerText", theme->nodeHeaderTextGreen(), "running header text is not green");
     // A run owns the workspace: the selection cannot move while it is active, so the running node
@@ -187,19 +213,16 @@ def run(inputs):
     app.selectNode(neighbour);
     require(app.selectedNode() == source, "selection changed while a run owned the workspace");
     require(sourceItem->property("selected").toBool(), "running node lost its selection");
-    requireColor(sourceItem, "statusDotColor", theme->nodeHeaderTextGreen(), "running colour depends on selection");
     requireRunningBorder(sourceItem, "a selected running node lost its 2px status border");
     write(permission, "allow");
     idle();
     require(stateOf(source).value("state").toString() == "succeeded", "status source did not succeed");
-    requireColor(sourceItem, "statusDotColor", theme->nodeStateGray(), "succeeded status dot is not neutral");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderGray(), "succeeded header is not neutral");
     // The border belongs to the status layer, so it is checked again once selection moved away and
     // the card shows its own neutral outline.
     app.selectNode(neighbour);
     auto *neighbourItem = findItem(canvas, "flowNode_" + neighbour);
     require(neighbourItem && neighbourItem->property("selected").toBool(), "neighbour node was not selected");
-    requireColor(sourceItem, "statusDotColor", theme->nodeStateGray(), "selection changed the finished colour");
     requireIdleBorder(sourceItem, "a finished node did not return to its neutral border");
     require(!stateOf(source).value("timingText").toString().isEmpty()
                 && stateOf(source).value("timingText").toString() != QStringLiteral("运行中"),
@@ -212,7 +235,6 @@ def run(inputs):
     idle();
     require(stateOf(source).value("state").toString() == "failed", "status source did not fail");
     require(stateOf(source).value("statusMessage").toString().contains("受控失败"), "failure message is missing");
-    requireColor(sourceItem, "statusDotColor", theme->nodeStateRed(), "failed status dot is not red");
     requireColor(sourceItem, "headerBg", theme->nodeHeaderRed(), "failed header is not red");
     requireColor(sourceItem, "headerText", theme->nodeHeaderTextRed(), "failed header text is not red");
     require(app.setParameter(kModeInput, false, "wait"), "status source could not return to wait mode");
@@ -244,7 +266,6 @@ def run(inputs):
                                  + " diag=" + app.diagnostic().toStdString());
     auto *receiverItem = findItem(canvas, "flowNode_" + receiver);
     require(receiverItem, "status receiver delegate is missing");
-    requireColor(receiverItem, "statusDotColor", theme->nodeHeaderTextGreen(), "waiting receiver dot is not readable on the green header");
     app.toggleLoop();
     write(permission, "allow");
     idle();
@@ -252,7 +273,6 @@ def run(inputs):
     require(stateOf(receiver).value("statusCode").toInt() == -5
                 && stateOf(receiver).value("statusMessage").toString().contains("运行已取消"),
             "cancelled receiver lost its message");
-    requireColor(receiverItem, "statusDotColor", theme->nodeStateGray(), "cancelled status dot is not neutral");
     requireColor(receiverItem, "headerBg", theme->nodeHeaderGray(), "cancelled header is not neutral");
 
     // Gated nodes never ran the algorithm: they must show 跳过/阻塞, never a green success and
@@ -277,19 +297,17 @@ def run(inputs):
     require(gatedRow.value("state").toString() == "skipped", "false branch must be reported as skipped");
     require(gatedRow.value("disposition").toString() == "skipped", "skipped disposition is missing");
     require(gatedRow.value("timingText").toString().isEmpty()
-                && gatedRow.value("timingPhases").toList().isEmpty(),
+                && gatedRow.value("timingPhases").toList().size() == 3,
             "a skipped node must not report algorithm time");
     require(!gatedRow.value("executed").toBool(), "a skipped node must not be marked as executed");
     auto *gatedItem = findItem(canvas, "flowNode_" + gated);
     require(gatedItem, "gated delegate is missing");
     require(gatedItem->property("nodeState").toString() == "skipped", "gated delegate did not reach skipped state");
-    requireColor(gatedItem, "statusDotColor", theme->nodeStateGray(), "skipped status dot is not neutral");
     auto *skipBadge = findItem(gatedItem, "nodeBadgeSkip_" + gated);
     auto *blockBadge = findItem(gatedItem, "nodeBadgeBlock_" + gated);
-    require(skipBadge && skipBadge->isVisible(), "skipped badge is missing");
-    require(blockBadge && !blockBadge->isVisible(), "skipped node must not show a blocked badge");
-    require(gatedItem->property("statusDotColor").value<QColor>() != theme->nodeStateGreen(),
-            "skipped node must not borrow the running green");
+    require(!skipBadge, "skipped badge must not appear on the card");
+    require(!blockBadge, "blocked badge must not appear on the card");
+
 
     // A failing upstream blocks the guarded node instead of running it.
     app.selectNode(gate);
@@ -301,16 +319,54 @@ def run(inputs):
     require(gatedRow.value("state").toString() == "blocked", "failed upstream must block the guarded node");
     require(gatedRow.value("disposition").toString() == "blocked", "blocked disposition is missing");
     require(gatedRow.value("timingText").toString().isEmpty()
-                && gatedRow.value("timingPhases").toList().isEmpty(),
+                && gatedRow.value("timingPhases").toList().size() == 3,
             "a blocked node must not report algorithm time");
-    require(gatedRow.value("statusMessage").toString().contains(QStringLiteral("未执行")),
+    require(gatedRow.value("statusMessage").toString().contains(QStringLiteral("阻塞")),
             "blocked reason must stay separate from tool errors");
-    requireColor(gatedItem, "statusDotColor", theme->nodeStateOrange(), "blocked status dot is not orange");
-    require(blockBadge && blockBadge->isVisible(), "blocked badge is missing");
-    require(skipBadge && !skipBadge->isVisible(), "blocked node must not show a skipped badge");
+    require(!blockBadge, "blocked badge must not appear on the card");
+    require(!skipBadge, "skipped badge must not appear on the card");
 
     std::cout << "WORKBENCH_STATUS_PASS running=green succeeded=neutral failed=red cancelled=neutral "
                  "skipped=neutral blocked=orange timing=1\n";
+    app.selectFlow(sourceFlow);
+    app.addNode("test.init_failure", 8, 0);
+    idle();
+    const auto failedInit = app.selectedNode();
+    require(!failedInit.isEmpty(), "initialization fixture node is missing");
+    app.runNode();
+    idle();
+    const auto failedInitRow = stateOf(failedInit);
+    require(!failedInitRow.value("implUnavailable").toBool(), "initialization failure was marked missing implementation");
+    auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
+    require(outputs && std::get<std::int64_t>(outputs->capture(0)->value) == 17,
+            "initialization status is absent from output rows");
+    require(std::get<std::string>(outputs->capture(1)->value) == "模型路径未填写",
+            "initialization message is absent from output rows");
+    require(failedInitRow.value("timingPhases").toList().size() == 3, "initialization failure hid the API timing row");
+    QMetaObject::invokeMethod(canvas, "centerNode", Q_ARG(QVariant, failedInit));
+    QTest::qWait(50);
+    auto *failedItem = findItem(canvas, "flowNode_" + failedInit);
+    require(failedItem, "initialization failure card is missing");
+    QTest::mouseMove(&window, failedItem->mapToScene(QPointF(failedItem->width() / 2, failedItem->height() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return canvas->property("hoverCardVisible").toBool(); }, 2000),
+            "initialization failure tooltip did not open");
+    auto *tooltip = findItem(canvas, "nodeHoverCard");
+    QStringList tooltipText;
+    const auto collectText = [&](auto &&self, QQuickItem *parent) -> void {
+        for (auto *child : parent->childItems())
+        {
+            if (child->isVisible() && child->property("text").isValid())
+                tooltipText << child->property("text").toString();
+            self(self, child);
+        }
+    };
+    collectText(collectText, tooltip);
+    require(tooltipText.size() == 6 && tooltipText.at(0) == "预处理" && tooltipText.at(2) == "API"
+                && tooltipText.at(4) == "后处理" && tooltipText.at(3) == "0.000 ms"
+                && tooltipText.at(5) == "0.000 ms", "tooltip must contain exactly three timing rows");
+    QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
+    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/node-status-card.png")),
+            "status screenshot could not be saved");
     window.hide();
     return 0;
 }

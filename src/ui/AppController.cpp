@@ -576,6 +576,7 @@ void AppController::Impl::applyActivity()
             if (const auto *definition = findNode(node))
                 nodesModel.update(nodeRow(*definition));
         emit q->nodesChanged();
+        updateResults();
     }
     // The event only says "this node entered/left execution"; the terminal state, timing and
     // diagnostics still come from the runtime snapshot.
@@ -621,7 +622,6 @@ void AppController::Impl::poll()
                 continue;
             }
             const auto *lifecycleBefore = presentation.lifecycle(item.node);
-            const auto *instanceBefore  = presentation.instance(item.node);
             if (!presentation.applyNode(item.node, item.active, item.lifecycleDiagnostic,
                                         item.instanceDiagnostic, std::move(item.snapshot), generation))
                 continue;
@@ -629,27 +629,7 @@ void AppController::Impl::poll()
             touched.insert(item.node);
             const auto *lifecycle = presentation.lifecycle(item.node);
             if (lifecycle && lifecycle != lifecycleBefore)
-            {
                 selectedChanged |= selected == QString::number(item.node);
-                if (const auto *node = findNode(item.node))
-                {
-                    const auto avail = registry.availability(node->toolId);
-                    tools.updateToolStatus(QString::fromStdString(node->toolId),
-                                           avail.state == ToolAvailability::Available,
-                                           QString::fromStdString(avail.status.message));
-                }
-            }
-            const auto *instance = presentation.instance(item.node);
-            if (instance && instance != instanceBefore)
-            {
-                if (const auto *node = findNode(item.node))
-                {
-                    const auto avail = registry.availability(node->toolId);
-                    tools.updateToolStatus(QString::fromStdString(node->toolId),
-                                           avail.state == ToolAvailability::Available,
-                                           QString::fromStdString(avail.status.message));
-                }
-            }
             const auto *snapshot = presentation.snapshot(item.node);
             if (snapshot && (*snapshot)->generation == generation)
             {
@@ -1778,21 +1758,7 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
             stateText = snapshot->status.code == 0 ? "succeeded" : "failed";
             break;
         }
-    std::int64_t statusCode = 0;
-    QString      statusMessage;
-    QString      statusDetail;
-    if (snapshot && (snapshot->status.code != 0 || disposition == NodeDisposition::Skipped
-                     || disposition == NodeDisposition::Blocked))
-    {
-        statusCode = snapshot->status.code;
-        // The gate reason stays separate from tool errors: no error code is invented.
-        statusMessage = disposition == NodeDisposition::Skipped || disposition == NodeDisposition::Blocked
-                          ? (workbench::q(snapshot->status.message).isEmpty()
-                                 ? QStringLiteral("节点未执行")
-                                 : QStringLiteral("节点未执行：") + workbench::q(snapshot->status.message))
-                          : diagnosticMessage({snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status});
-        statusDetail = statusDisplay(snapshot->status).detail;
-    }
+    const auto diagnostic = presentation.status(node);
     const auto timingText = nodeTimingText(snapshot.get(), running);
     QVariantList phases;
     for (const auto &phase : timingPhasesOf(timingText))
@@ -1811,22 +1777,19 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
                    || disposition == NodeDisposition::Canceled;
     row.timingText    = timingText.total;
     row.timingPhases  = phases;
-    row.statusCode    = statusCode;
-    row.statusMessage = statusMessage;
-    row.statusDetail  = statusDetail;
-    if (const auto *instanceDiagnostic = presentation.instance(node.id))
-    {
-        row.state         = "failed";
-        row.statusCode    = instanceDiagnostic->status.code;
-        row.statusMessage = diagnosticMessage(*instanceDiagnostic);
-        row.statusDetail  = workbench::q(instanceDiagnostic->status.detail);
-    }
+    row.statusCode    = diagnostic.status.code;
+    row.statusMessage = workbench::q(diagnostic.status.message);
+    row.statusDetail  = workbench::q(diagnostic.status.detail);
+    if (!running && (presentation.instance(node.id) || diagnostic.phase == NodePhase::Release
+                     || (stateText == "idle" && diagnostic.status.code != hostCode(ErrorCode::NotExecuted) && !diagnostic.status)))
+        row.state = "failed";
     if (const auto *lifecycleDiagnostic = presentation.lifecycle(node.id))
     {
         row.lifecycleMessage = diagnosticMessage(*lifecycleDiagnostic);
         row.lifecycleDetail  = workbench::q(lifecycleDiagnostic->status.detail);
     }
     const auto   *def     = registry.find(node.toolId);
+    row.toolName          = workbench::q(def ? def->nameZh : node.toolNameSnapshot);
     row.version           = def ? workbench::q(def->version) : QStringLiteral("1.0");
     // A snapshot produced by an older configuration is still shown, but it must not claim to
     // describe the current parameters.
@@ -1835,7 +1798,7 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     const auto avail      = registry.availability(node.toolId);
     row.defMissing        = avail.state == ToolAvailability::DefinitionMissing;
     row.implUnavailable   = !row.defMissing
-                          && (avail.state != ToolAvailability::Available || presentation.instance(node.id) != nullptr);
+                          && (avail.state != ToolAvailability::Available);
     row.missing           = row.defMissing || row.implUnavailable;
     return row;
 }
@@ -1950,20 +1913,12 @@ void AppController::locateNode(const QString &flow, const QString &node)
         emit nodeLocated(node);
 }
 
-void AppController::Impl::requireAvailableTool(std::string_view toolId) const
-{
-    const auto availability = registry.availability(toolId);
-    if (availability.state != ToolAvailability::Available)
-        throw RegistryError(availability.state, availability.status);
-}
-
 void AppController::addNode(const QString &toolId, int x, int y)
 {
     NodeId added = 0;
     if (impl_->command(
             [&]
             {
-                impl_->requireAvailableTool(toolId.toStdString());
                 const auto *tool = impl_->registry.find(toolId.toStdString());
                 if (!tool)
                     throw ContractError("工具定义缺失：" + toolId.toStdString());
@@ -2027,8 +1982,6 @@ void AppController::pasteNodes(int x, int y)
         {
             if (!impl_->clipboard)
                 return false;
-            for (const auto &node : impl_->clipboard->nodes)
-                impl_->requireAvailableTool(node.toolId);
             impl_->editor.pasteSelection(impl_->flow.toStdString(), *impl_->clipboard, {x, y});
             return true;
         },

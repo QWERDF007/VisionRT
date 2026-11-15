@@ -483,10 +483,10 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(card->isVisible(), "hover card item is not visible");
     require(!card->hasActiveFocus(), "hover card took keyboard focus");
     const QStringList content = texts();
-    // Title plus exactly three timing rows: preprocessing, operator and post-processing.
-    require(content.size() == 7, "hover card does not contain the tool name and three timing rows");
-    require(content.contains(first.value("title").toString()), "hover card lost the tool name");
-    require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("工具 API 耗时"))
+    // Exactly three timing rows: preprocessing, API and post-processing.
+    require(content.size() == 6, "hover card must contain only three timing rows");
+    require(!content.contains(first.value("title").toString()), "hover card must contain only timing rows");
+    require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("API"))
                 && content.contains(QStringLiteral("后处理")),
             "hover card lost a timing row");
     require(!content.contains(QStringLiteral("宿主准备")) && !content.contains(QStringLiteral("初始化"))
@@ -505,7 +505,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         return {};
     };
     const auto preprocessText  = phaseValue(first, QStringLiteral("预处理"));
-    const auto operatorText    = phaseValue(first, QStringLiteral("工具 API 耗时"));
+    const auto operatorText    = phaseValue(first, QStringLiteral("API"));
     const auto postprocessText = phaseValue(first, QStringLiteral("后处理"));
     require(!preprocessText.isEmpty() && content.contains(preprocessText),
             "hover card preprocess time does not match the structured node data");
@@ -540,14 +540,14 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
 
     require(ensureActive(), "execution hover test window did not stay active");
     app.toggleLoop();
-    // While the node runs, both the card and the hover card must be free of timing text: the state
-    // is carried by the header colour and the status dot, and no earlier round may be reused.
+    // During execution the tooltip retains zero rows without reusing previous measurements.
     const bool runningVisible = QTest::qWaitFor([&]
     {
         const auto runningMap = nodeMap(id);
         return runningMap.value("state").toString() == QStringLiteral("running")
             && runningMap.value("timingText").toString().isEmpty()
-            && runningMap.value("timingPhases").toList().isEmpty()
+            && runningMap.value("timingPhases").toList().size() == 3
+            && phaseValue(runningMap, QStringLiteral("API")) == "0.000 ms"
             && !texts().contains(QStringLiteral("运行中")) && !texts().contains(QStringLiteral("—"));
     }, 3000);
     app.toggleLoop();
@@ -568,7 +568,7 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
         require(hoverCardAt(nodeCenter(refreshed)),
                 "hover card did not return after the execution refresh" + hoverState());
     }
-    require(texts().contains(phaseValue(nodeMap(id), QStringLiteral("工具 API 耗时"))),
+    require(texts().contains(phaseValue(nodeMap(id), QStringLiteral("API"))),
             "visible hover card did not follow the current execution snapshot");
     require(!texts().contains(QStringLiteral("运行中")), "completed hover card retained the running measurement state");
     item = nodeItem(id);

@@ -383,9 +383,13 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> set[str]:
     # Every record is checked before the first deletion, so a bad manifest cannot leave the
     # installation half removed.
     targets: list[Path] = []
+    seen: set[Path] = set()
     for relative in sorted(owned, key=lambda value: value.count("/"), reverse=True):
         candidate = root / relative
         resolved_candidate = candidate.resolve()
+        if resolved_candidate in seen:
+            continue
+        seen.add(resolved_candidate)
         if resolved_candidate == root or root not in resolved_candidate.parents:
             raise RuntimeError(f"install manifest points outside the install dir: {relative}")
         if candidate.is_symlink():
@@ -395,7 +399,7 @@ def clear_install_directory(path: Path, clean: bool, force: bool) -> set[str]:
         elif candidate.exists() and not candidate.is_dir():
             raise RuntimeError(f"install manifest names an unsupported entry: {relative}")
     for candidate in targets:
-        candidate.unlink()
+        candidate.unlink(missing_ok=True)
     remove_empty_directories(path)
     remaining = sum(1 for item in path.rglob("*") if item.is_file())
     if remaining:

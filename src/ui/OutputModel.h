@@ -44,7 +44,9 @@ public:
     void                    setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                                       const std::map<PortId, std::size_t> &references,
                                       const std::map<PortId, bool> *connectable = nullptr,
-                                      const TypeMap *nodeOutputs = nullptr, std::shared_ptr<const NodeDiagnostic> lifecycle = {});
+                                      const TypeMap *nodeOutputs = nullptr, std::shared_ptr<const NodeDiagnostic> lifecycle = {},
+                                      std::optional<NodeDiagnostic> status = {});
+    void                    setStatus(const NodeDiagnostic &status);
     std::optional<Captured> capture(int row) const;
     std::optional<Captured> capture(PortId port) const;
     static QString          fullText(const Captured &captured);

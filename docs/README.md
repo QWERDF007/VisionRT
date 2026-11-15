@@ -2,9 +2,10 @@
 
 ## 当前方案
 
+- [MERLIC 线缆颜色示例分析](<D:/Project/MVTec MERLIC工具说明/示例工程/识别颜色/00_阅读索引.md>)：整体、四工具、样本训练、UI、调试验收与复用；参数及证据索引以该交付目录为准。
+
 - 工具契约以代码为准：[工具接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[声明读写](../src/core/DefinitionJson.cpp)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)、[工具树分类](../src/core/ToolDefinition.cpp)。
-- [R45 阅读入口](R45/00_阅读入口.md)：自定义工具在 Schema 6、ABI 9 时期的方案，仅作沿革参考。
-- [完整方案](R45/03_自定义工具完整方案.md)、[工单](R45/07_Tickets.md)：同期的架构与实施记录。
+- [工具契约验收依据](VisionRT_工具契约改进方案_Specs_Tickets.md)：三仓行为规范与交付验收。
 - [任务账本](../WORKLOG.md)：实际进度与验证记录。
 
 ## 实现与版本入口
@@ -19,7 +20,7 @@
 
 | 显示 | 区间 | 语义 |
 | --- | --- | --- |
-| 预处理 / 工具 API 耗时 / 后处理 | 节点内实际进入的阶段 | 只显示测到的阶段；`0.000 ms` 是有效值，“未测量”不显示 |
+| 预处理 / API / 后处理 | 节点内三个阶段 | 固定三行与零值展示由 [DurationText](../src/ui/DurationText.cpp) 统一派生 |
 | 节点总计 | 输入准备开始 → 最后一个阶段结束 | 各阶段之和不超过总计，差额仅是阶段之间的调度帧 |
 | 流程 | 该流程内已执行节点窗口的并集 | 单节点流程时与节点总计相同 |
 | 全流程 | 本轮所有流程窗口的并集 | 单流程时与流程相同；多流程差额来自并发错峰 |
@@ -44,7 +45,7 @@ Release、500 轮的实测（[基准证据](../build/evidence/runtime_benchmark.
 | 失败返回值与错误信息 | `ErrorInfo`、`ErrorCode` 与 `ToolStatus` | [Error.h](../src/core/Error.h)、[Tool.h](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h) |
 | `__status_code` / `__status_message` 的写入 | SDK `toolResult` / `result()` 统一打包入 `outputs` | [Tool.h](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[Parameters.h](../3rdparty/VisionRTContracts/include/visionrt/contracts/Parameters.h)、[NodeRuntime.cpp](../src/runtime/NodeRuntime.cpp) |
 
-约定：工具返回 `ToolResult{outputs, detail}`（由 SDK `toolResult(outputs, status)` 构造），`outputs` 包含声明的业务端口及打包后的 `__status_code` 与 `__status_message`；`detail` 承载技术诊断。直接在业务中手动篡改状态端口属于保留违规。跳过、阻断、取消与框架失败不伪造工具结果。节点 Tooltip 仍只显示三阶段耗时，错误只经输出参数与既有诊断展示。
+约定：工具返回 `ToolResult{outputs, detail}`（由 SDK `toolResult(outputs, status)` 构造），`outputs` 包含声明的业务端口及打包后的 `__status_code` 与 `__status_message`；`detail` 承载技术诊断。直接在业务中手动篡改状态端口属于保留违规。节点整体状态的发布见 [NodeRuntime](../src/runtime/NodeRuntime.cpp)，界面当前状态的选择见 [ResultPresentation](../src/ui/ResultPresentation.cpp)，状态输出与下游传递契约见 [runtime_contract](../tests/runtime_contract.cpp)。卡片工具原名及三阶段 Tooltip 的验收见 [workbench_status_contract](../tests/workbench_status_contract.cpp) 和 [flow_canvas_scenarios](../tests/flow_canvas_scenarios.cpp)。
 
 ### 宿主错误码与产生点
 
@@ -88,6 +89,8 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 ## 安装与升级
 
+ABI 9 原生模块须使用当前 SDK 重新编译。旧声明与旧工程不作为兼容目标；升级时核对相对资源路径。Python 工具接收原始字符串，不再接收宿主按工程目录转换的绝对路径。当前接口见 [SDK](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[Python 值桥](../src/python/PythonRuntime.cpp) 与 [工程存储](../src/core/ProjectStorage.cpp)。
+
 安装清单只记录**本轮实际写入**的文件：exe、项目 DLL、依赖、windeployqt 产物、工具包与 `qt.conf` 都经 `InstallOwnership` 登记；`custom-tools/**`、`logs/**`、`ui-preferences.json` 永不进入清单。清单在验证通过后才写，失败不会留下宣称完成的记录。清理只删除旧清单内的文件；清单缺失、含用户路径、绝对路径、`..`、重复项或文件/目录冲突时整次拒绝，不删除任何文件。契约见 [test_package_app.py](../tests/test_package_app.py)（三代升级逐文件 hash、保护路径与越界负例）。
 
 ## 构建与模块
@@ -104,7 +107,7 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 | 发布证据汇总与审计 | [release_evidence.py](../tools/release_evidence.py)、[审计规则](../tests/test_release_evidence.py)（`release_evidence_contract`，`package` 组） |
 | 值 JSON 编解码 | [ValueJson](../src/core/ValueJson.h)、[类型与数值契约](../tests/value_json_contract.cpp) |
 | 输出发布与缓存值合同 | [节点合同](../src/core/NodeContracts.h)、[值校验](../src/core/ToolValueValidation.h)、[发布快照](../src/runtime/Snapshot.h)、[运行时契约](../tests/runtime_contract.cpp)、[共享可写值与工具存储策略契约](../tests/runtime_value_contract.cpp)、[原生 DLL 契约](../tests/plugin_contract.cpp)、[Python 作者工具执行](../tests/python_tools_execution_test.cpp)、[隐藏图像不外泄](../tests/presentation_visibility_contract.cpp) |
-| 工程编辑与 JSON 存取 | [工程模型](../src/core/Project.h)、[序号解析](../src/core/Sequence.h)、[ProjectEditor](../src/core/ProjectEditor.h)、[工程操作状态唯一拥有者](../src/ui/ProjectOperations.h)、[ProjectStorage](../src/core/ProjectStorage.h)、[配置值构造](../src/core/ProjectValues.cpp)、[编辑契约](../tests/project_editor_contract.cpp)、[存储契约](../tests/project_storage_contract.cpp)、[配置隔离与文件值矩阵](../tests/project_value_contract.cpp)、[真实资源另存与跨盘 Python 读取](../tests/ui_project_paths_contract.cpp)、[真实UNC路径保存/重开/读取](../tests/ui_unc_paths_contract.cpp)、[工程样例](../examples) |
+| 工程编辑与 JSON 存取 | [工程模型](../src/core/Project.h)、[序号解析](../src/core/Sequence.h)、[ProjectEditor](../src/core/ProjectEditor.h)、[工程操作状态唯一拥有者](../src/ui/ProjectOperations.h)、[ProjectStorage](../src/core/ProjectStorage.h)、[配置值构造](../src/core/ProjectValues.cpp)、[编辑契约](../tests/project_editor_contract.cpp)、[存储契约](../tests/project_storage_contract.cpp)、[配置隔离与文件值矩阵](../tests/project_value_contract.cpp)、[真实资源另存与跨盘 Python 读取](../tests/workbench_paths.cpp)、[真实UNC路径保存/重开/读取](../tests/ui_unc_paths_contract.cpp)、[工程样例](../examples) |
 | 示例工程交付与安装 | [示例资产](../examples/README.md)、[示例识别与素材随行](../src/core/ExampleProject.h)、[打开示例入口](../src/ui/qml/Main.qml)、[安装态保存保护](../src/ui/AppController.cpp)、[示例元数据契约](../tests/example_metadata_contract.cpp)、[示例工程契约](../tests/example_project_contract.cpp)、[逐套加载与执行](../tests/example_pipelines.cpp)、[打包交付与校验](../tools/package_app.py) |
 | 输出复制与下层连接 | [候选查询](../src/core/ProjectEditor.h)、[名称列连接入口](../src/ui/AppControllerBindings.cpp)、[输出面板](../src/ui/qml/OutputPanel.qml)、[真实窗口契约](../tests/workbench_popups.cpp) |
 | 节点配置同步、调度与接收 | [RuntimeEngine](../src/runtime/RuntimeEngine.h)、[实例配置与所有权](../src/runtime/RuntimeInternal.h)、[节点执行](../src/runtime/NodeRuntime.cpp)、[Receiver](../src/runtime/Receiver.h)、[接收预检](../src/runtime/Receiver.cpp)、[宽 ID 真实选择与引用修复](../tests/ui_receiver_identity_contract.cpp)、[真实插件与工作台生命周期契约](../tests/plugin_contract.cpp) |

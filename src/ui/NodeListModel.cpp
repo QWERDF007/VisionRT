@@ -21,6 +21,7 @@ QVariant NodeListModel::value(const Row &row, int role)
     case TitleRole: return row.title;
     case AliasRole: return row.alias;
     case ToolIdRole: return row.toolId;
+    case ToolNameRole: return row.toolName;
     case VersionRole: return row.version;
     case CategoryRole: return row.category;
     case PosXRole: return row.x;
@@ -52,6 +53,7 @@ bool NodeListModel::sameValue(const Row &left, const Row &right, int role)
     case TitleRole: return left.title == right.title;
     case AliasRole: return left.alias == right.alias;
     case ToolIdRole: return left.toolId == right.toolId;
+    case ToolNameRole: return left.toolName == right.toolName;
     case VersionRole: return left.version == right.version;
     case CategoryRole: return left.category == right.category;
     case PosXRole: return left.x == right.x;
@@ -90,6 +92,7 @@ QHash<int, QByteArray> NodeListModel::roleNames() const
         {         TitleRole,      "nodeTitle"},
         {         AliasRole,      "nodeAlias"},
         {        ToolIdRole,     "nodeToolId"},
+        {      ToolNameRole,   "nodeToolName"},
         {       VersionRole,    "nodeVersion"},
         {      CategoryRole,   "nodeCategory"},
         {          PosXRole,        "nodeX"},
@@ -220,6 +223,7 @@ bool NodeListModel::update(Row row)
         switch (role)
         {
         case TitleRole: current.title = row.title; break;
+        case ToolNameRole: current.toolName = row.toolName; break;
         case AliasRole: current.alias = row.alias; break;
         case VersionRole: current.version = row.version; break;
         case CategoryRole: current.category = row.category; break;
@@ -271,6 +275,7 @@ QVariantMap NodeListModel::rowMap(const QString &id) const
         {                "title", item.title},
         {                "alias", item.alias},
         {               "toolId", item.toolId},
+        {             "toolName", item.toolName},
         {              "version", item.version},
         {             "category", item.category},
         {                    "x", item.x},

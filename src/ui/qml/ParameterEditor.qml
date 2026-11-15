@@ -131,39 +131,35 @@ ColumnLayout {
                     color: Theme.paramEditorBorder
                 }
 
-                Rectangle {
+                QuiTextIconButton {
                     id: toggleAction
                     objectName: "parameterActions"
                     visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.guardRow || root.conditionRow)
                     Layout.preferredWidth: Theme.paramActionBtnWidth
                     Layout.fillHeight: true
                     radius: Theme.radiusSmall
-                    color: root.upstream ? Theme.sourceButtonActiveBackground
-                                        : (toggleMouse.containsMouse ? Theme.paramRowHoverBg : "transparent")
-                    border.width: root.upstream ? 1 : 0
-                    border.color: Theme.sourceButtonActiveBorder
+                    padding: 0
+                    verticalPadding: 0
+                    horizontalPadding: 0
+                    focusPolicy: Qt.NoFocus
+                    enabled: root.editable
                     opacity: root.editable ? 1.0 : Theme.sourceButtonDisabledOpacity
+                    normalColor: "transparent"
+                    hoverColor: Theme.paramRowHoverBg
+                    pressedColor: Qt.darker(Theme.paramRowHoverBg, 1.05)
+                    iconSource: QuiFontIcon.Upload
+                    iconSize: Theme.paramToggleIconSize
+                    iconColor: root.upstream
+                        ? Theme.sourceButtonActiveBackground
+                        : (hovered ? Theme.iconPrimary : Theme.sourceButtonIdleIcon)
 
-                    UpstreamToggleIcon {
-                        anchors.centerIn: parent
-                        iconSize: Theme.paramToggleIconSize
-                        iconColor: root.upstream ? Theme.sourceButtonActiveIcon : Theme.sourceButtonIdleIcon
-                    }
-
-                    MouseArea {
-                        id: toggleMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        enabled: root.editable
-                        onClicked: {
-                            if (root.guardRow) {
-                                app.setExecutionGuardMode(root.nodeId, !root.upstream)
-                            } else if (root.conditionRow) {
-                                app.setConditionMode(root.nodeId, !root.upstream)
-                            } else {
-                                app.setParameterMode(root.parameter.id, !root.upstream)
-                            }
+                    onClicked: {
+                        if (root.guardRow) {
+                            app.setExecutionGuardMode(root.nodeId, !root.upstream)
+                        } else if (root.conditionRow) {
+                            app.setConditionMode(root.nodeId, !root.upstream)
+                        } else {
+                            app.setParameterMode(root.parameter.id, !root.upstream)
                         }
                     }
 
@@ -173,7 +169,7 @@ ColumnLayout {
                     Accessible.checked: root.upstream
 
                     QuiToolTip {
-                        visible: toggleMouse.containsMouse
+                        visible: toggleAction.hovered
                         text: {
                             if (root.guardRow) {
                                 return root.upstream ? "切换为始终执行（用户输入）" : "绑定上层输入（执行条件）"

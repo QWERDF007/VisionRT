@@ -270,7 +270,8 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         {
             assert(!result->toolResultPublished);
             assert(result->status.code != 0 && result->status.message.find("未发布输出端口") != std::string::npos);
-            assert(!result->outputs.contains(kStatusCodePort) && !result->outputs.contains(kStatusMessagePort));
+            assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == result->status.code);
+            assert(std::get<std::string>(result->outputs.at(kStatusMessagePort)) == result->status.message);
         }
         else
         {
@@ -1057,7 +1058,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     const auto released = app.nodes().first().toMap();
     assert(released.value("state") == "succeeded" && released.value("statusCode").toInt() == 0);
-    assert(released.value("statusMessage").toString().isEmpty());
+    assert(released.value("statusMessage").toString() == "ok");
     // Saving the project elsewhere is an ordinary save: no plugin instance depends on the project
     // location, so nothing is released and the node keeps the answer it already published.
     assert(released.value("lifecycleMessage").toString().isEmpty());

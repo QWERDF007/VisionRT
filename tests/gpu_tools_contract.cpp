@@ -165,8 +165,20 @@ int main(int argc, char **argv)
             {{31.489F, 230.744F, 769.925F, 545.036F}, 0.843369F, 5},
             {{0.450F, 549.838F, 57.320F, 318.462F}, 0.436308F, 0}
         }};
-        for (int pass = buildWeights ? 0 : 1; pass < 2; ++pass)
+        for (int pass = -1; pass < 2; ++pass)
         {
+            if (pass == 0 && !buildWeights)
+                continue;
+            if (pass < 0)
+            {
+                detector.initParams.at(1) = std::string("engine");
+                detector.initParams.at(2) = std::string{};
+            }
+            else if (pass == 0)
+            {
+                detector.initParams.at(1) = std::string("build_wts");
+                detector.initParams.at(2) = std::string(weights.generic_string());
+            }
             if (pass == 1)
             {
                 if (!std::filesystem::is_regular_file(enginePath) || std::filesystem::file_size(enginePath) == 0)
@@ -174,7 +186,7 @@ int main(int argc, char **argv)
                 detector.initParams.at(1)  = std::string("engine");
                 detector.initParams.at(2) = std::string(enginePath.generic_string());
             }
-            const auto phase = pass == 0 ? "build_wts" : "engine";
+            const auto phase = pass < 0 ? "missing-model-path" : pass == 0 ? "build_wts" : "engine";
             std::cout << "[YOLO] " << phase << std::endl;
             RuntimeEngine runtime(2);
             const auto phaseStarted = std::chrono::steady_clock::now();
@@ -201,6 +213,17 @@ int main(int argc, char **argv)
             }
             if (!completed)
                 throw std::runtime_error(std::string("GPU ") + phase + " completion deadline exceeded");
+            if (pass < 0)
+            {
+                const auto detected = results.at(detector.id);
+                if (detected->phase != NodePhase::Initialize || detected->status.code == 0
+                    || std::get<std::int64_t>(detected->outputs.at(kStatusCodePort)) != detected->status.code
+                    || std::get<std::string>(detected->outputs.at(kStatusMessagePort)) != detected->status.message
+                    || detected->timing.toolCallMeasured)
+                    throw std::runtime_error("YOLO initialization failure did not publish its node status");
+                std::cout << "[YOLO] Missing model path publishes initialization status without entering API\n";
+                continue;
+            }
             for (const auto &node : nodes)
                 if (!results.contains(node.id) || !results.at(node.id)->status)
                     throw std::runtime_error("GPU node " + std::to_string(node.id) + ": "

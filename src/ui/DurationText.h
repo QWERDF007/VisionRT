@@ -9,9 +9,7 @@ namespace visionrt {
 
 struct NodeSnapshot;
 
-// What a node shows about time. An unavailable measurement is the empty string, never a dash: the
-// node card, the hover card and the copy actions all read this one struct, so "no measurement" has
-// exactly one representation.
+// Measured timing text. Empty fields indicate absent measurements; hover rows format them as zero.
 struct NodeTimingText
 {
     QString total;
@@ -23,8 +21,7 @@ struct NodeTimingText
     QString validate;
 };
 
-// One hover-card row. Only stages that were actually measured produce a row, so a running or gated
-// node has no timing rows at all while a measured 0.000 ms stays a real row.
+// Hover always has three rows; absent measurements are displayed as 0.000 ms.
 struct NodeTimingPhase
 {
     QString label;

@@ -77,7 +77,6 @@ struct AppController::Impl : PresentationHost
     // A draft whose interpreter is being checked. Exactly one commit is in flight: a second apply is
     // refused until the check answers, so no two probes overlap.
     std::optional<Settings>     pendingSettings;
-    void requireAvailableTool(std::string_view toolId) const;
     // 读取随包发布的宿主与 Contracts 构建元数据；工具包的元数据在 loadToolsPackage 中读取。
     void loadComponentBuildInfo();
     AppController                         *q;
@@ -296,6 +295,7 @@ struct AppController::Impl : PresentationHost
     const PortDefinition *parameter(PortId id, bool initialization) const override;
     const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
                                                                       const NodeDefinition &node) const override;
+    Availability toolAvailability(std::string_view id) const override { return registry.availability(id); }
     bool runtimeIdle() const override { return state == RuntimeState::Idle; }
     bool closing() const override { return operations.isClosing(); }
     bool contextCurrent(const QVariantMap &context) const override { return q->portContextCurrent(context); }

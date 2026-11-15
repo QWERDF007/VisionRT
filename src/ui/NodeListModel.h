@@ -22,6 +22,7 @@ public:
         TitleRole,
         AliasRole,
         ToolIdRole,
+        ToolNameRole,
         VersionRole,
         CategoryRole,
         PosXRole,
@@ -49,6 +50,7 @@ public:
         QString      title;
         QString      alias;
         QString      toolId;
+        QString      toolName;
         QString      version;
         QString      category;
         double       x = 0;

@@ -380,10 +380,10 @@ void startupProjectContract()
                 if (entry.toMap().value("id") == "1")
                 {
                     const auto summary = entry.toMap().value("statusMessage").toString();
-                    require(summary.count(QStringLiteral("节点 1（ReadImage）执行：")) == 1
+                    require(summary == outputModel->get(1).value("preview").toString()
                                 && !summary.contains("OpenCV")
                                 && entry.toMap().value("statusDetail") == decode.value("detail").toString(),
-                            "native exception has duplicated context or leaked detail in the node summary");
+                            "node status differs from output data or leaks technical detail");
                 }
             require(QTest::qWaitFor(
                         [&] {

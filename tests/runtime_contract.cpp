@@ -523,12 +523,15 @@ void receiverConsumesFailures()
 
 void executionDiagnostics()
 {
-    for (int scenario = 0; scenario < 4; ++scenario)
+    for (int scenario = 0; scenario < 5; ++scenario)
     {
         RuntimeEngine engine(1);
         ToolRegistry  registry;
         const auto    tool = definition("test.diagnostic");
-        install(
+        if (scenario == 4)
+            registry.addDefinition(tool);
+        else
+            install(
             registry, tool,
             [scenario](const Values &) -> ToolResult
             {
@@ -539,25 +542,27 @@ void executionDiagnostics()
                 return toolResult({{2, std::int64_t{42}}}, {7, "业务条件未满足", "business detail"});
             },
             [scenario] { return scenario == 3 ? ToolStatus{6, "资源未准备", "init detail"} : ToolStatus{}; });
+        auto consumer = definition("test.status.consumer", {"code", "message"});
+        consumer.inputs[1].type = {Type::String};
+        Values received;
+        install(registry, consumer, [&](const Values &inputs) {
+            received = inputs;
+            return toolResult({{2, std::int64_t{42}}}, {});
+        });
         ProjectDefinition project;
-        project.flows.front().nodes = {node(1, tool)};
+        project.flows.front().nodes = {node(1, tool), node(2, consumer)};
+        auto &downstream = project.flows.front().nodes.back();
+        downstream.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{1, kStatusCodePort}};
+        downstream.inputs[2] = {BindingMode::Upstream, Missing{}, SourcePort{1, kStatusMessagePort}};
         assert(engine.start(project, registry, RunMode::Once));
-        const auto result = snapshot(finish(engine), 1);
+        const auto update = finish(engine);
+        const auto result = snapshot(update, 1);
+        assert(std::get<std::int64_t>(received.at(1)) == result->status.code);
+        assert(std::get<std::string>(received.at(2)) == result->status.message);
         assert(result->status.message.find("节点") == std::string::npos);
-        if (scenario == 2)
-        {
-            assert(result->toolResultPublished);
-            assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == result->status.code);
-            assert(std::get<std::string>(result->outputs.at(kStatusMessagePort)) == result->status.message);
-        }
-        else
-        {
-            // The framework stopped the node before any ToolResult existed, so no status port may
-            // be fabricated from the framework diagnostic.
-            assert(!result->toolResultPublished);
-            assert(!result->outputs.contains(kStatusCodePort));
-            assert(!result->outputs.contains(kStatusMessagePort));
-        }
+        assert(result->toolResultPublished == (scenario == 2));
+        assert(std::get<std::int64_t>(result->outputs.at(kStatusCodePort)) == result->status.code);
+        assert(std::get<std::string>(result->outputs.at(kStatusMessagePort)) == result->status.message);
         if (scenario == 0)
         {
             assert(result->phase == NodePhase::Execute && result->status.code == -1);
@@ -575,10 +580,15 @@ void executionDiagnostics()
             // A business status keeps its message and detail apart all the way to the diagnostic.
             assert(result->status.message == "业务条件未满足" && result->status.detail == "business detail");
         }
-        else
+        else if (scenario == 3)
         {
             assert(result->phase == NodePhase::Initialize && result->status.code == 6);
             assert(result->status.message == "资源未准备" && result->status.detail == "init detail");
+        }
+        else
+        {
+            assert(result->phase == NodePhase::Create);
+            assert(result->status.code == hostCode(ErrorCode::ResourceUnavailable));
         }
     }
 }
@@ -1644,8 +1654,8 @@ void authorContractErrorPassesThroughBusinessBoundary()
     const auto snap = snapshot(outcome, 1);
     assert(snap->status.code == hostCode(ErrorCode::DataInvalid));
     assert(!snap->toolResultPublished);
-    assert(!snap->outputs.contains(kStatusCodePort));
-    assert(!snap->outputs.contains(kStatusMessagePort));
+    assert(std::get<std::int64_t>(snap->outputs.at(kStatusCodePort)) == snap->status.code);
+    assert(std::get<std::string>(snap->outputs.at(kStatusMessagePort)) == snap->status.message);
 }
 
 void activityEventsFollowExecution()

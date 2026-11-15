@@ -576,9 +576,7 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         applyPythonMetrics();
     if (frameworkFailure)
     {
-        // The framework stopped the node, so it owns the terminal state. There is no tool answer to
-        // publish: business ports are structurally Missing, but the status keys are only created by
-        // a tool result and must never be synthesised here.
+        // A failed node publishes its status while business outputs remain unavailable.
         result.outputs.clear();
         snapshot->roiInputs.clear();
         snapshot->status = std::move(frameworkStatus);
@@ -607,6 +605,10 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     }
     snapshot->disposition = disposition;
     snapshot->phase   = phase;
+    if (snapshot->status.code == 0 && snapshot->status.message.empty())
+        snapshot->status.message = "运行成功";
+    result.outputs.insert_or_assign(kStatusCodePort, snapshot->status.code);
+    result.outputs.insert_or_assign(kStatusMessagePort, snapshot->status.message);
     snapshot->outputs = std::move(result.outputs);
     if (windowStart != Clock::time_point{})
     {

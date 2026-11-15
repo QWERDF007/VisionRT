@@ -30,6 +30,191 @@
 - ...
 -->
 
+### 2026-11-15 — 全局清理工具树与控制器中的过度设计
+
+**目标**
+- 彻底清理编辑期与运行期职责越界的过度设计，解决工具树底层拖拽门槛及控制器反向污染工具树的耦合问题。
+- 让工具树纯粹作为工具展示与拖拽源，解耦节点实例生命周期与工具目录模型。
+
+**当前状态**
+- 已完成：
+  - 修改 src/ui/ToolTreeModel.cpp：移除 flags() 中的 entry.available 校验，所有已声明工具均具备 Qt::ItemIsDragEnabled；
+  - 修改 src/ui/AppController.cpp：移除 applyNode 生命周期更新中对 tools.updateToolStatus 的反向调用，杜绝节点运行对工具目录的无意义污染与重复重绘；
+  - 修改 src/ui/qml/ToolTreeDelegate.qml：清理未被消费的 available 与 status 废弃属性；
+  - 调整 tests/workbench_unavailable_tool_contract.cpp：更新模型拖拽契约断言，并在批量操作间同步等待 controller 空闲状态；
+  - 重新编译 Release 并通过 workbench_unavailable_tool_contract、workbench_tooltree_contract、workbench_parameters_contract 契约测试；
+  - 全量重新打包部署至 E:/Softwares/VisionRT，1500 个文件校验全部通过；
+  - 运行态截图验证通过（clean_overdesign_verify.png，退出码 0，45096 字节）。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release` -> 编译通过，退出码 0。
+- `tools/build.cmd ctest --test-dir build -R "workbench_unavailable_tool_contract" --output-on-failure` -> 1/1 Test #76: Passed (0.99 sec)。
+- `tools/build.cmd ctest --test-dir build -R "workbench_tooltree_contract" --output-on-failure` -> 1/1 Test #75: Passed (0.83 sec)。
+- `tools/build.cmd ctest --test-dir build -R "workbench_parameters_contract" --output-on-failure` -> 1/1 Test #88: Passed (4.50 sec)。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --config release --allow-dirty` -> package verification complete: 1500 files。
+- `Start-Process -FilePath "E:/Softwares/VisionRT/VisionRT.exe" -ArgumentList "--screenshot", "D:/tmp/clean_overdesign_verify.png" -Wait` -> 退出码 0，生成 45096 字节截图。
+
+**下一步**
+- 交付用户验收；后续可按需评估是否将 QML 中图标关键词猜测进一步规范为静态分类映射。
+
+### 2026-11-15 — 移除节点添加与粘贴的不可用拦截过度设计
+
+**目标**
+- 移除 C++ 控制层在添加节点（addNode）与粘贴节点（pasteNodes）时对工具可用性状态的过度拦截（requireAvailableTool）。
+- 允许所有已声明工具（包括未配置运行环境的 Python 算子等）正常加入流程图画布并参与流程排布，节点不可用状态由运行时模型统一承载。
+
+**当前状态**
+- 已完成：
+  - 修改 src/ui/AppController.cpp 与 src/ui/AppController_p.h：彻底删除 requireAvailableTool 检查函数；在 addNode 与 pasteNodes 中放开限制，直接委托给底层 ProjectEditor 创建并添加节点；
+  - 调整 tests/workbench_unavailable_tool_contract.cpp 测试用例以契合无拦截新规范；
+  - 增量编译 Release 配置，并通过 workbench_parameters_contract 契约测试；
+  - 重新打包部署至 E:/Softwares/VisionRT，1559 个文件全部校验通过；
+  - 运行态截图验证通过（退出码 0，生成 54635 字节截图）。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release` -> 编译与链接成功，退出码 0。
+- `tools/build.cmd ctest --test-dir build -R "workbench_parameters_contract" --output-on-failure` -> 1/1 Test #88: workbench_parameters_contract Passed (4.62 sec)。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty` -> package verification complete: 1559 files。
+- `Start-Process -FilePath "E:/Softwares/VisionRT/VisionRT.exe" -ArgumentList @("--screenshot", "D:/tmp/remove_intercept_verify.png", "--screenshot-delay", "1500") -PassThru -Wait` -> 退出码 0，生成 54635 字节截图。
+
+**下一步**
+- 交付用户验收未配置环境算子的正常拖拽与卡片生成。
+
+### 2026-11-15 — 对照 Gemini 整理完整线缆颜色方案
+
+**目标**
+- 对照 `D:/Project/MVTec MERLIC工具说明/示例工程/识别颜色gemini`，核实缺项并在原“识别颜色”目录整理唯一一套完整交付。
+
+**当前状态**
+- 已交付50文件，入口保持 `D:/Project/MVTec MERLIC工具说明/示例工程/识别颜色/00_阅读索引.md`；参考目录10文件未改动。
+- 补齐双直边几何、搜索及训练矩形、62条参数声明、Creator/Designer/Frontend职责、两层交互状态、11图目视工况、调试验收与生产复用条件。
+- 已纠正未经实证的GMM/LUT、高斯核、HDR、内存交错、任意姿态/光照免疫、实测角度、急停与稳定帧率、现成PLC/MES及伪前端截图等表述。交付是方案正文，不附版本差异说明。
+- 未验证：MERLIC实际执行与11图算法结果、真实Frontend交互；前三工具编码算法主体仍未还原。未改项目代码或重复连接诊断。
+
+**验证证据**
+- 11张PNG逐文件检查IHDR并实际解码：全部2448×2048、每通道8bit RGB；生成可视总览并目视核对错序/缺线样本，记录在02文档，明确非算法输出。
+- 保存矩阵对五圆进行离线数值交叉核验：与颜色输出Y/X每坐标最大绝对差0.4005161195px；角度绝对值5.8881288086度，仅保存值计算。证据为 `证据/alignment-crosscheck.json`。
+- `证据/static-verification.json`：115个本地Markdown/HTML/SVG链接有效，12个JSON可解析，44个文本无U+00B7；原包SHA与全部10成员哈希匹配，SVG可解析，结构4工具/4连接/21控件。
+- 写回外部目录逐文件SHA256复核50/50一致；Gemini参考目录10文件哈希未变。原包SHA256仍为 `2aee29d22ebed2524b8e99fe2dffe2eeed28eb8cee6e00a29a028f7f9a58eda4`。
+
+**下一步**
+- 直接阅读交付索引；需要实机验收时按 `06_调试验收与复用.md` 执行并记录，避免将样本目视、保存结果或离线几何核验当作实机测试。
+
+### 2026-11-15 — MERLIC 线缆颜色示例方案分析
+
+**目标**
+- 解析指定 recognize_color_of_cables.mvapp，分别交付整体、四工具、训练配置及 UI 设计交互说明至用户指定目录。
+
+**当前状态**
+- 已交付：`D:/Project/MVTec MERLIC工具说明/示例工程/识别颜色/00_阅读索引.md`；目录含 41 文件，包括离线 UI 静态复原 HTML/SVG、原始 MVApp/XML/预览、工具包、手册和 QML 证据。
+- 确认四工具四连接、21 控件、四种颜色五个检测位置、六个表达式；五份 HOBJ 字节相同；工程保存版本为 26.03.0，安装环境为 26.10。
+- 未完成：前三工具编码主体未还原为算法源码；MERLIC 实际单次/连续运行与 11 张样本检测未验证。工具公开机制、实际配置和 QML 可见交互已分析，未把保存结果当作本轮运行。
+
+**验证证据**
+- ZipArchive/XML 解析及 `Get-FileHash -Algorithm SHA256`：原包与 10 个非目录成员逐一校验通过；外部 11 张 PNG 存在并记录哈希。原包 SHA256：`2aee29d22ebed2524b8e99fe2dffe2eeed28eb8cee6e00a29a028f7f9a58eda4`。
+- IDA MCP `http://127.0.0.1:13337/mcp`：server_health 和有界 find_regex 成功，目标为 merlic_creator.exe；survey_binary 25 秒超时，无概览结果。REA CLI doctor 因 npm EACCES 失败，未改注册配置。
+- 桌面入口两次返回 native pipe unavailable，备用清单同样失败；没有可操作窗口，未运行目标。未做项目代码改动或全量测试。
+- 写入用户目录后逐文件 SHA256 比较：41/41 一致，0 差异；SVG 可解析，文档本地链接和 U+00B7 检查通过。详细证据从交付索引进入。
+
+**下一步**
+- 静态方案已可阅读。桌面连接恢复后直接按交付 `02_训练与工程配置.md` 的检查表验证真实运行；如需下钻底层算法，先定位 `.mvtool` 执行模块与入口，复用已保存证据。
+
+### 2026-11-15 — 去除工具树委托过度设计，恢复纯粹目录展示
+
+**目标**
+- 精简移除工具树委托（ToolTreeDelegate）中针对工具不可用状态的过度设计。
+- 移除文字变红（Theme.treeItemUnavailableText）逻辑，所有工具名称统一使用标准文本颜色。
+- 彻底移除悬浮提示 ToolTip，不再在工具树中弹出状态提示黑框。
+- 移除拖拽与点击时对 available 的拦截限制，使工具树回归纯粹的工具浏览与添加职责。
+
+**当前状态**
+- 已完成：
+  - 修改 src/ui/qml/ToolTreeDelegate.qml：删除 ToolTip 浮层组件；文本颜色统一为 `root.isSelected ? Theme.treeItemSelectedText : Theme.treeItemText`；移除 drag.target、Drag.active 以及点击响应中对 `root.available` 的前置拦截；
+  - 增量编译 Release 配置，并通过 `workbench_parameters_contract` 验证；
+  - 执行 `package_app.py` 全量打包并部署至 `E:/Softwares/VisionRT`，1559 个文件全部校验通过；
+  - 执行运行态截图验证，程序正常退出（退出码 0），生成验证截图。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release` -> 编译与链接成功，退出码 0。
+- `tools/build.cmd ctest --test-dir build -R "workbench_parameters_contract" --output-on-failure` -> 1/1 Test #88: workbench_parameters_contract Passed (4.57 sec)。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty` -> package verification complete: 1559 files。
+- `Start-Process -FilePath "E:/Softwares/VisionRT/VisionRT.exe" -ArgumentList @("--screenshot", "D:/tmp/tooltree_verify.png", "--screenshot-delay", "1500") -PassThru -Wait` -> 退出码 0，生成 54635 字节截图。
+
+**下一步**
+- 交付用户验收工具树纯粹展示体验。
+
+### 2026-11-15 — 参数输入来源切换改用 QuiTextIconButton 并优化激活高亮
+
+**目标**
+- 将参数编辑行（ParameterEditor）右侧的输入来源切换按钮改造为 QuickUI 标准控件 QuiTextIconButton。
+- 淘汰自定义画布矢量图标 UpstreamToggleIcon，改用 QuiFontIcon 内置图标（QuiFontIcon.Upload）。
+- 改变激活态视觉呈现：由整块填充蓝色底色改为底色保持透明、仅将图标高亮为主题蓝（Theme.sourceButtonActiveBackground）。
+- 保持 objectName 为 parameterActions 锚点，确保 C++ 契约测试与对齐约束不被破坏。
+- 修复 tools/package_app.py 在 Windows 大小写不敏感文件系统下清理已安装文件时同名不同大小写导致的 [WinError 2] 异常。
+
+**当前状态**
+- 已完成：
+  - 修改 src/ui/qml/ParameterEditor.qml：将手写 Rectangle 与 MouseArea 结构重构为 QuiTextIconButton，配置 iconSource: QuiFontIcon.Upload、iconSize: Theme.paramToggleIconSize、normalColor: "transparent"、hoverColor: Theme.paramRowHoverBg，激活状态下 iconColor 设为 Theme.sourceButtonActiveBackground，悬停提示与点击分发逻辑完整保留；
+  - 彻底删除已无任何引用的旧矢量组件 src/ui/qml/UpstreamToggleIcon.qml；
+  - 修复 tools/package_app.py：在 clear_install_directory 中维护已解析绝对路径去重集合 seen，并将删除调用变更为 candidate.unlink(missing_ok=True)；
+  - 构建并全量部署至 E:/Softwares/VisionRT。
+
+**验证证据**
+- `tools/build.cmd ctest --test-dir build -R "workbench_parameters_contract" --output-on-failure` -> 1/1 Test #88: workbench_parameters_contract Passed (4.50 sec)。
+- `python -m unittest tests.test_package_app` -> Ran 41 tests in 6.797s, OK。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty` -> package verification complete: 1559 files, package evidence written: D:/Project/VisionRT/build/evidence/package-evidence.json。
+- `Start-Process -FilePath "E:/Softwares/VisionRT/VisionRT.exe" -ArgumentList @("--screenshot", "D:/tmp/deploy_verify_3.png", "--screenshot-delay", "1500") -PassThru -Wait` -> 进程正常退出，生成截图文件（54634 字节）。
+
+**下一步**
+- 交付用户验收参数组件新视觉样式与交互。
+
+### 2026-11-15 — 节点整体状态与卡片三阶段耗时
+
+**目标**
+- 卡片保留工具原名与节点别名，整体运行结果统一显示在状态端口并传给类型匹配的下游；悬浮只显示预处理、API、后处理时间。
+
+**当前状态**
+- 已完成运行时终态统一发布状态端口，覆盖初始化、实现不可用、执行异常与输出校验失败；保留原业务码和消息，空成功消息统一为运行成功。
+- 已完成当前状态派生与输出面板展示；运行中只更新状态两行，保留业务结果发布编号和读回生命周期。初始化失败不再标记缺实现。
+- 已完成卡片原名角色、删除状态徽标与圆点、保留节点别名；tooltip 固定三行，没有测量的阶段显示 0.000 ms，取消前的实际测量保留。
+- 安装产物：`install/node-status/VisionRT.exe`，本地 dirty 候选；本轮未提交、未推送。docs 与 WORKLOG 按用户要求留在本地。
+- 工作期间出现的 `ParameterEditor.qml`、`UpstreamToggleIcon.qml`、`tools/package_app.py` 其他改动不属于本轮逻辑实现，保持其内容，不混入本轮结论。
+
+**验证证据**
+- TDD：`runtime_contract` 先因失败节点没有状态端口、下游取值失败而红；`workbench_core_contract` 先因 tooltip 缺少三行而红，修复后通过。实际下游验证初始化失败、业务失败、执行异常、输出校验失败及实现不可用的整数/字符串状态。
+- `tools/build.cmd cmake --build build-verify --target all tests-all --parallel 6` 成功；`ctest --test-dir build-verify -LE gpu --parallel 4 --output-on-failure --no-tests=error --output-log D:/Project/VisionRT/build-verify/node-status-verification.log`：112/112 通过（54.77 秒）。
+- `gpu_inference_contract` 通过：实际 YOLO 空模型路径初始化失败发布状态、API 未进入；随后加载既有引擎完成推理并匹配独立参考。
+- `workbench_status_contract` 使用真实 Python 类、真实窗口和鼠标悬浮，验证初始化错误、原名/别名、三行时间及零值；截图 `build-verify/evidence/node-status-card.png`。
+- `python tools/package_app.py --build-dir build-verify --install-dir install/node-status --tools-package D:/Project/VisionTools/dist/verification.zip --allow-dirty` 成功。从 `D:/Project` 启动安装版并运行两个 YOLO 工程，截图人工核对状态 1001/输入缺失、0/运行成功；工程与截图位于 `build-verify/evidence/node-status-yolo-{failed,success}.{json,png}`。
+- 未纳入通过项：独立旧 `workbench_contract.exe --dpi-child 1.0` 探针异常退出（0xc0000374），未取得可靠诊断；本轮 tooltip 的直接验收由上述已通过的真实鼠标悬浮测试完成，未声称完整 DPI 矩阵通过。
+- `git diff --check` 通过。SDK 接口和 ABI 未改动。
+
+**下一步**
+- 本轮功能可交付。若继续维护独立 DPI 探针，先隔离其完整窗口生命周期复现，不以该探针替代已通过的注册回归。后续提交仅选择本轮文件，排除 docs、WORKLOG 与其他工作流改动。
+
+### 2026-11-15 — 三仓契约修复与全仓审查
+
+**目标**
+- 完成工具契约方案 S01–S23，修复三仓审查中有确定证据的问题，保持职责与公共契约简洁。
+
+**当前状态**
+- 已完成工程改型连接保留、不兼容字面量保存重开、删除端口摘要与有效值执行修订；自定义声明按注册 ID 编辑、移动、删除；工具树隐藏状态及同名分类修复。
+- 已完成原生/Python 生命周期错误来源归属，通过原有有界队列统一写日志；修复 Python 输出 PortId 窄化、日志等级解析、窗口重开滚动及异步落盘测试。
+- 已完成 VisionTools 上游跳过、矩阵结构、ROI 重复计算、实际路径错误与发布源码一致性修复；SDK 安装消费者覆盖类、函数注册和实例生命周期，公共 SDK/ABI 未改动。
+- 已完成独立构建目录输出隔离、Qt 构建树部署、过时测试夹具清理、安装态 GUI、真实 GPU 与三仓最终回归。原始 Specs_Tickets 文档未修改。
+- 可运行产物：`install/verification/VisionRT.exe`；工具包：`D:/Project/VisionTools/dist/verification.zip`。当前为明确标记 dirty 的本地开发候选，代码已提交并推送：VisionRT `bca66da`（dev）、VisionTools `4b3b572`（dev）、SDK `76bc8b6`（main）。按用户要求，docs 与 WORKLOG 改动保留本地，未提交。
+
+**验证证据**
+- `tools/build.cmd cmake --build build-verify --target all tests-all --parallel 6`：独立构建成功。
+- `tools/build.cmd ctest --test-dir build-verify -LE gpu --parallel 4 --output-on-failure --no-tests=error --output-log build-verify/final-verification.log`：112/112 通过，含 7 项 SDK、独立安装消费、GUI 与性能回归。
+- `gpu_tools_contract`、`gpu_engine_output_contract`、`gpu_inference_contract` 分别通过；RTX 4090 实际构建/保存/加载引擎，5 个检测匹配独立参考，真实写入失败验证角色、路径和原因。日志：`build-verify/gpu-build.log`、`gpu-output-error.log`、`gpu-inference.log`。
+- VisionTools 最终 20/20 通过，启用真实引擎及强制 Python 包宿主执行；复跑配置见其根 WORKLOG。
+- 安装包校验 1551 个文件；原生/Python 示例从不同工作目录运行、复制工程运行、缺失图片诊断均验证。截图及机器证据见 `build-verify/evidence/`，`release-evidence.json` 状态 complete；外部 Python 3.12.13 / NumPy 2.4.3 就绪，未配置场景按契约退出 3。
+- 三仓及 SDK 两工作树 `git diff --check` 通过；SDK 两份差异相同，新增行无 U+00B7。
+
+**下一步**
+- 本轮实现与验证无待办。若后续制作正式发布，先提交 SDK 与两主仓，再按干净源码重新构建及打包；当前产物不作为干净发布候选。
+
 ### 2026-11-12 — 根除 QuiTreeView 与工具树委托复用残存悬浮跳跃
 
 **目标**

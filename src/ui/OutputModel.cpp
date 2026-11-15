@@ -331,32 +331,35 @@ void OutputModel::clear()
 void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapshot snapshot,
                             const std::map<PortId, std::size_t> &references,
                             const std::map<PortId, bool> *connectable,
-                            const TypeMap *nodeOutputs, std::shared_ptr<const NodeDiagnostic> lifecycle)
+                            const TypeMap *nodeOutputs, std::shared_ptr<const NodeDiagnostic> lifecycle,
+                            std::optional<NodeDiagnostic> status)
 {
+    if (!status)
+    {
+        if (snapshot)
+            status = NodeDiagnostic{snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status};
+        else
+            status = NodeDiagnostic{0, {}, NodePhase::Prepare, makeStatus(ErrorCode::NotExecuted, "未执行")};
+    }
     beginResetModel();
     rows_.clear();
     auto add = [&](PortId id, std::string name, TypeSpec type, bool system)
     {
         PortValue value = Missing{};
-        // A framework-stopped node has no tool answer: its diagnostic must never appear as port
-        // data. Only a real ToolResult fills the two status rows.
-        if (snapshot && (!system || snapshot->toolResultPublished))
-        {
-            if (id == kStatusCodePort)
-                value = snapshot->status.code;
-            else if (id == kStatusMessagePort)
-                value = snapshot->status.message;
-            else if (const auto found = snapshot->outputs.find(id); found != snapshot->outputs.end())
+        if (id == kStatusCodePort)
+            value = status->status.code;
+        else if (id == kStatusMessagePort)
+            value = status->status.message;
+        else if (snapshot)
+            if (const auto found = snapshot->outputs.find(id); found != snapshot->outputs.end())
                 value = found->second;
-        }
         const auto count = references.find(id);
         Captured   captured{std::move(value), type, snapshot ? snapshot->publication : 0, id};
-        if (system && snapshot)
-        {
-            captured.diagnostic = NodeDiagnostic{snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status};
-        }
         if (system)
+        {
+            captured.diagnostic = status;
             captured.lifecycle = lifecycle;
+        }
         bool       canConnect = false;
         if (connectable)
         {
@@ -412,6 +415,25 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                 add(id, portLabel(id), type, false);
         }
     endResetModel();
+}
+
+void OutputModel::setStatus(const NodeDiagnostic &status)
+{
+    for (int index = 0; index < rowCount(); ++index)
+    {
+        auto &row = rows_[index];
+        if (!row.system)
+            continue;
+        const PortValue value = row.id == kStatusCodePort ? PortValue{status.status.code}
+                                                        : PortValue{status.status.message};
+        if (equalValues(row.captured.value, value))
+            continue;
+        row.captured.value = value;
+        row.captured.diagnostic = status;
+        row.preview = preview(value, 256);
+        row.tooltip = preview(value, 4096);
+        emit dataChanged(this->index(index, 0), this->index(index, columnCount() - 1));
+    }
 }
 
 std::optional<OutputModel::Captured> OutputModel::capture(int row) const

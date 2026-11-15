@@ -172,8 +172,8 @@ void outputContract()
         NodePhase::Release,
         {-4, "释放失败", "uninitialized release detail"}
     });
-    model.setResult(&tool, {}, {}, nullptr, &outputs, lifecycle);
-    require(isMissing(model.capture(0)->value), "release failure must not create an execution status");
+    model.setResult(&tool, {}, {}, nullptr, &outputs, lifecycle, *lifecycle);
+    require(std::get<std::int64_t>(model.capture(0)->value) == -4, "release failure must appear in overall status");
     const auto releaseJson = QJsonDocument::fromJson(OutputModel::diagnosticText(*model.capture(1)).toUtf8()).object();
     require(releaseJson.value("phase") == "release" && releaseJson.value("detail") == "uninitialized release detail",
             "release diagnostics without execution must remain independently exportable");
@@ -304,7 +304,7 @@ void durationTextContract()
     require(absent.total.isEmpty() && absent.toolCall.isEmpty() && absent.preprocess.isEmpty()
                 && absent.postprocess.isEmpty(),
             "absent execution snapshot fabricated a measurement");
-    require(timingPhasesOf(absent).isEmpty(), "an absent snapshot produced hover rows");
+    require(timingPhasesOf(absent).size() == 3 && timingPhasesOf(absent).at(1).value == "0.000 ms", "absent timing must display three zero rows");
 
     NodeSnapshot snapshot;
     snapshot.timing.totalMs          = 1234.567;
@@ -315,7 +315,7 @@ void durationTextContract()
     // A gated node publishes a terminal snapshot without entering a stage; it must stay blank even
     // though the snapshot carries array-initialised numbers.
     const auto gated = nodeTimingText(&snapshot, false);
-    require(gated.total.isEmpty() && timingPhasesOf(gated).isEmpty(),
+    require(gated.total.isEmpty() && timingPhasesOf(gated).size() == 3,
             "a node that never entered a stage displayed a measurement");
 
     snapshot.timing.prepareMeasured = true;
@@ -327,7 +327,7 @@ void durationTextContract()
     require(uncalled.prepare == QStringLiteral("27.000 ms") && uncalled.init.isEmpty()
                 && uncalled.validate.isEmpty(),
             "unmeasured stages must stay blank");
-    require(timingPhasesOf(uncalled).size() == 1, "an uncalled tool produced operator hover rows");
+    require(timingPhasesOf(uncalled).size() == 3 && timingPhasesOf(uncalled).at(1).value == "0.000 ms", "uncalled API must retain its zero timing row");
 
     snapshot.timing.toolCallMeasured = true;
     snapshot.timing.initMeasured     = true;
@@ -344,7 +344,7 @@ void durationTextContract()
             "tooltip phases did not aggregate the measured preparation/post-processing");
     const auto phases = timingPhasesOf(called);
     require(phases.size() == 3 && phases.at(0).label == QStringLiteral("预处理")
-                && phases.at(1).label == QStringLiteral("工具 API 耗时") && phases.at(2).label == QStringLiteral("后处理"),
+                && phases.at(1).label == QStringLiteral("API") && phases.at(2).label == QStringLiteral("后处理"),
             "hover rows lost their labels or order");
 
     const std::pair<double, std::optional<QString>> measurements[] = {
@@ -403,11 +403,11 @@ void durationTextContract()
     {
         const auto running = nodeTimingText(previous, true);
         require(running.total.isEmpty() && running.toolCall.isEmpty() && running.preprocess.isEmpty()
-                    && running.postprocess.isEmpty() && timingPhasesOf(running).isEmpty(),
+                    && running.postprocess.isEmpty() && timingPhasesOf(running).size() == 3 && timingPhasesOf(running).at(1).value == "0.000 ms",
                 "running node reused an earlier snapshot measurement");
     }
     std::cout << "[Evidence T-03] Duration text formatting covers missing, zero, tiny, regular and non-finite values.\n";
-    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, gated, uncalled, measured and running values, and the hover rows only contain measured stages.\n";
+    std::cout << "[Evidence T-03] Controlled snapshots distinguish absent, gated, uncalled, measured and running values, and hover rows retain three stages.\n";
 }
 
 void nodeDiagnosticsContract()
@@ -612,8 +612,7 @@ void nodeDiagnosticsContract()
     require(map0.contains("implUnavailable"), "node missing implUnavailable");
     require(map0.value("implUnavailable").toBool() == false, "available node marked implUnavailable");
     require(!map0.contains("timingDetail"), "obsolete timingDetail source must be removed");
-    // A node that never ran shows no time at all and offers no hover rows; the state badge owns the
-    // meaning, so no dash and no fabricated zero may appear.
+    // The card has no measured total before execution; the tooltip retains three zero rows.
     const auto phaseValue = [](const QVariantMap &node, const QString &label) -> QString
     {
         for (const auto &item : node.value("timingPhases").toList())
@@ -625,7 +624,7 @@ void nodeDiagnosticsContract()
         return {};
     };
     require(map0.value("timingText").toString().isEmpty(), "unrun node total must stay empty");
-    require(map0.value("timingPhases").toList().isEmpty(), "unrun node must not offer hover rows");
+    require(map0.value("timingPhases").toList().size() == 3, "unrun node must retain three timing rows");
 
     const auto map1 = nodes.at(1).toMap();
     require(map1.value("defMissing").toBool() == false, "unfulfilled node marked defMissing");
@@ -661,7 +660,7 @@ void nodeDiagnosticsContract()
     require(executedMap.value("state").toString() == "succeeded", "executed node is not succeeded");
     require(executedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "executed node total timing is not measured");
-    require(phaseValue(executedMap, QStringLiteral("工具 API 耗时")).endsWith(QStringLiteral(" ms")),
+    require(phaseValue(executedMap, QStringLiteral("API")).endsWith(QStringLiteral(" ms")),
             "executed node operator timing is not measured");
     // The executed node measured its preparation and result validation, so the two aggregate
     // rows must show real values instead of an empty row.
@@ -672,7 +671,7 @@ void nodeDiagnosticsContract()
 
     const auto unavailableMap = executedNodes.at(1).toMap();
     require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
-    require(phaseValue(unavailableMap, QStringLiteral("工具 API 耗时")).isEmpty(),
+    require(phaseValue(unavailableMap, QStringLiteral("API")) == "0.000 ms",
             "implementation without a tool call must not report operator time");
 
     const auto failedMap = executedNodes.at(2).toMap();
@@ -690,7 +689,7 @@ void nodeDiagnosticsContract()
             "parameter change discarded the last successful display state");
     require(staleMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous total timing");
-    require(phaseValue(staleMap, QStringLiteral("工具 API 耗时")).endsWith(QStringLiteral(" ms")),
+    require(phaseValue(staleMap, QStringLiteral("API")).endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous operator timing");
     require(staleMap.value("statusCode").toLongLong() == 0, "stale snapshot still exposes an old status");
 

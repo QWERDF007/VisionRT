@@ -144,8 +144,8 @@ try
     require(index.isValid(), "missing-script Python declaration disappeared from the tool tree");
     require(controller.toolModel()->data(index, ToolTreeModel::AvailableRole).toBool() == false,
             "tool tree did not mark the missing-script Python tool unavailable");
-    require((controller.toolModel()->flags(index) & Qt::ItemIsDragEnabled) == 0,
-            "unavailable tool remained draggable in the tool model");
+    require((controller.toolModel()->flags(index) & Qt::ItemIsDragEnabled) != 0,
+            "tool was not draggable in the tool model");
     require(controller.toolModel()->data(index, ToolTreeModel::StatusRole).toString().contains(
                 QStringLiteral("Python 脚本缺失")),
             "tool tree did not retain the unavailable diagnostic");
@@ -156,17 +156,15 @@ try
     require(controller.nodes().size() == 1, "refresh removed the existing node");
 
     controller.pasteNodes(0, 0);
-    QCoreApplication::processEvents();
-    require(controller.nodes().size() == 1, "unavailable clipboard node was pasted into the flow");
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
+            "clipboard node was not pasted into the flow");
 
     controller.addNode(QStringLiteral("RoiGeometry"), 0, 0);
-    QCoreApplication::processEvents();
-    require(controller.nodes().size() == 1, "unavailable tool was added to the flow");
-    require(controller.diagnostic().contains(QStringLiteral("Python 脚本缺失")),
-            "unavailable add did not surface its concrete diagnostic");
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 3; }, 5000),
+            ("unavailable tool was not added to the flow: " + controller.diagnostic().toStdString()).c_str());
 
     controller.addNode(QStringLiteral("ReadImage"), 0, 0);
-    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 4; }, 5000),
             ("available tool was not added: " + controller.diagnostic().toStdString()).c_str());
 
     controller.filterTools(QStringLiteral("ROI几何"));
@@ -209,18 +207,16 @@ try
     require(QTest::qWaitFor([&] { return delegateWithTool(tree, QStringLiteral("RoiGeometry")) != nullptr; }, 3000),
             "unavailable tool delegate was not laid out");
     auto *delegate = delegateWithTool(tree, QStringLiteral("RoiGeometry"));
-    require(delegate->property("available").toBool() == false, "delegate lost unavailable state");
-    require(delegate->property("status").toString().contains(QStringLiteral("Python 脚本缺失")),
-            "delegate lost the unavailable diagnostic");
-    require(library->property("selectedTool").toString().isEmpty(), "unavailable tool was selected before click");
+    require(library->property("selectedTool").toString().isEmpty(), "tool was selected before click");
     clickItem(window, delegate);
     QCoreApplication::processEvents();
-    require(library->property("selectedTool").toString().isEmpty(), "unavailable tool was chosen by click");
+    require(library->property("selectedTool").toString() == QStringLiteral("RoiGeometry"),
+            "tool was not chosen by click");
 
     const auto savedPath = std::filesystem::path(installation.directory().toStdWString()) / "unavailable.vrt.json";
     require(controller.save(QString::fromStdWString(savedPath.wstring())), "project with unavailable tool was not saved");
     controller.requestOpen(QString::fromStdWString(savedPath.wstring()));
-    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 2; }, 5000),
+    require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 4; }, 5000),
             "project with unavailable tool was not reopened");
     const auto reopenedRoi = findDefinition(controller.toolDefinitions(), QStringLiteral("RoiGeometry"));
     require(!reopenedRoi.isEmpty() && reopenedRoi.value("available").toBool() == false,

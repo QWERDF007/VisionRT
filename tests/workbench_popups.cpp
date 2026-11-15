@@ -161,16 +161,15 @@ void popupSessionsContract()
     require(!nameMenu->property("opened").toBool() && !menu->property("opened").toBool(),
             "a name cell without a legal downstream input opened a menu");
 
-    // The data column has exactly one action. Before execution the value does not exist, so copy is
-    // visible but disabled instead of silently disappearing.
+    // The current node status is readable even before execution.
     auto *statusData = waitForCell(panel, 0, 2);
     require(statusData != nullptr, "status code data cell is missing");
     rightClick(window, statusData);
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
             "data column did not open its menu");
     auto *copyAction = menu->findChild<QObject *>(QStringLiteral("outputCopyAction"));
-    require(copyAction != nullptr && !copyAction->property("enabled").toBool(),
-            "copy of an unexecuted output is not disabled");
+    require(copyAction != nullptr && copyAction->property("enabled").toBool(),
+            "the current node status cannot be copied");
     const auto dataActions = menu->property("count").toInt();
     require(dataActions == 1, "the data column still offers actions other than copy");
     QMetaObject::invokeMethod(menu, "close", Qt::DirectConnection);

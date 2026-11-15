@@ -29,12 +29,11 @@ bool enteredExecution(const NodeSnapshot *snapshot)
 
 NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 {
-    // While the node is running the state lives in the header colour and the status dot. Reusing
+    // While the node is running, reusing
     // the previous round's numbers would describe work that is no longer running.
     if (running || !enteredExecution(snapshot))
         return {};
-    if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked
-        || snapshot->disposition == NodeDisposition::Canceled)
+    if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
         return {};
 
     const auto &t  = snapshot->timing;
@@ -74,15 +73,9 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
 
 QVector<NodeTimingPhase> timingPhasesOf(const NodeTimingText &text)
 {
-    QVector<NodeTimingPhase> phases;
-    phases.reserve(3);
-    if (!text.preprocess.isEmpty())
-        phases.push_back({QStringLiteral("预处理"), text.preprocess});
-    if (!text.toolCall.isEmpty())
-        phases.push_back({QStringLiteral("工具 API 耗时"), text.toolCall});
-    if (!text.postprocess.isEmpty())
-        phases.push_back({QStringLiteral("后处理"), text.postprocess});
-    return phases;
+    return {{QStringLiteral("预处理"), text.preprocess.isEmpty() ? durationText(0.0) : text.preprocess},
+            {QStringLiteral("API"), text.toolCall.isEmpty() ? durationText(0.0) : text.toolCall},
+            {QStringLiteral("后处理"), text.postprocess.isEmpty() ? durationText(0.0) : text.postprocess}};
 }
 
 QString durationText(std::optional<double> milliseconds)

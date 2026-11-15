@@ -45,16 +45,6 @@ Item {
         if (model.leaf !== undefined) return model.leaf === true
         return !root.hasChildren
     }
-    readonly property bool available: {
-        if (!model) return true
-        if (model.available !== undefined) return model.available !== false
-        return true
-    }
-    readonly property string status: {
-        if (!model) return ""
-        if (model.status !== undefined) return model.status
-        return ""
-    }
     readonly property bool isSelected: root.selectedKey.length > 0 && root.selectedKey === root.stableKey
     property bool isHovered: false
 
@@ -75,12 +65,6 @@ Item {
     signal selected(string key)
     signal toggleExpandedRequested()
     signal contextMenuRequested(var mouse, var itemModel)
-
-    ToolTip {
-        visible: root.isHovered && root.leaf && !root.available && root.status.length > 0
-        text: root.status
-        delay: 300
-    }
 
     implicitWidth: treeView ? treeView.width : 200
     implicitHeight: Theme.treeRowHeight
@@ -163,11 +147,7 @@ Item {
             Layout.fillWidth: true
             elide: Text.ElideRight
             font: QuiFont.Body
-            color: root.isSelected
-                   ? Theme.treeItemSelectedText
-                   : root.available === false && root.leaf
-                     ? Theme.treeItemUnavailableText
-                     : Theme.treeItemText
+            color: root.isSelected ? Theme.treeItemSelectedText : Theme.treeItemText
         }
     }
 
@@ -177,7 +157,7 @@ Item {
         z: 1000
         width: 160; height: 32; visible: pointer.drag.active
         property string toolId: root.toolId
-        Drag.active: !root.isEditor && pointer.drag.active && root.leaf && root.available && (typeof app !== "undefined" && app.workspaceEnabled)
+        Drag.active: !root.isEditor && pointer.drag.active && root.leaf && (typeof app !== "undefined" && app.workspaceEnabled)
         Drag.keys: ["visionrt/tool"]
         Drag.source: dragPayload
         Drag.hotSpot.x: 12; Drag.hotSpot.y: 16
@@ -205,7 +185,7 @@ Item {
         onExited: root.isHovered = false
         onCanceled: root.isHovered = false
         preventStealing: root.leaf && !root.isEditor
-        drag.target: !root.isEditor && root.leaf && root.available && (typeof app !== "undefined" && app.workspaceEnabled) ? dragPayload : null
+        drag.target: !root.isEditor && root.leaf && (typeof app !== "undefined" && app.workspaceEnabled) ? dragPayload : null
         drag.threshold: Qt.styleHints.startDragDistance
         onPressed: function(mouse) {
             if (mouse.button === Qt.LeftButton && !root.isEditor) {
@@ -232,7 +212,7 @@ Item {
                 if (root.treeView && root.treeView.toggleExpanded)
                     root.treeView.toggleExpanded(root.row)
                 root.toggleExpandedRequested()
-            } else if (root.available) {
+            } else {
                 root.chosen(root.toolId)
             }
         }
