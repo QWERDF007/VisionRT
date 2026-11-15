@@ -164,6 +164,12 @@ class InitFailure:
     idle();
     const auto source = app.selectedNode();
     require(!source.isEmpty(), "status source node is missing");
+    require(!stateOf(source).value("statusCode").isValid(), "new node must not fabricate a status code");
+    require(stateOf(source).value("statusMessage").toString().isEmpty(), "new node must not fabricate a status message");
+    const auto *initialOutputs = qobject_cast<OutputModel *>(app.outputModel());
+    require(initialOutputs && isMissing(initialOutputs->capture(kStatusCodePort)->value)
+                && isMissing(initialOutputs->capture(kStatusMessagePort)->value),
+            "new node output status must be empty");
     app.renameNode(source, "自定义节点名");
     idle();
     require(stateOf(source).value("toolName").toString() == "状态工具", "rename changed the original tool name");
@@ -275,59 +281,7 @@ class InitFailure:
             "cancelled receiver lost its message");
     requireColor(receiverItem, "headerBg", theme->nodeHeaderGray(), "cancelled header is not neutral");
 
-    // Gated nodes never ran the algorithm: they must show 跳过/阻塞, never a green success and
-    // never a fabricated zero-millisecond algorithm time.
-    app.addFlow("门控流程");
-    idle();
-    app.addNode("test.status", 0, 0);
-    idle();
-    const auto gate = app.selectedNode();
-    require(!gate.isEmpty(), "gate node is missing");
-    require(app.setParameter(kModeInput, false, "gate_false"), "gate node could not produce a false flag");
-    idle();
-    // Execution conditions belong to the logical node models only.
-    app.addNode("EvaluateExpression", 4, 8);
-    idle();
-    const auto gated = app.selectedNode();
-    require(!gated.isEmpty() && app.applyExecutionGuard(gated, gate, kFlagOutput), "gate guard could not be applied");
-    idle();
-    app.runOnce();
-    idle();
-    auto gatedRow = stateOf(gated);
-    require(gatedRow.value("state").toString() == "skipped", "false branch must be reported as skipped");
-    require(gatedRow.value("disposition").toString() == "skipped", "skipped disposition is missing");
-    require(gatedRow.value("timingText").toString().isEmpty()
-                && gatedRow.value("timingPhases").toList().size() == 3,
-            "a skipped node must not report algorithm time");
-    require(!gatedRow.value("executed").toBool(), "a skipped node must not be marked as executed");
-    auto *gatedItem = findItem(canvas, "flowNode_" + gated);
-    require(gatedItem, "gated delegate is missing");
-    require(gatedItem->property("nodeState").toString() == "skipped", "gated delegate did not reach skipped state");
-    auto *skipBadge = findItem(gatedItem, "nodeBadgeSkip_" + gated);
-    auto *blockBadge = findItem(gatedItem, "nodeBadgeBlock_" + gated);
-    require(!skipBadge, "skipped badge must not appear on the card");
-    require(!blockBadge, "blocked badge must not appear on the card");
-
-
-    // A failing upstream blocks the guarded node instead of running it.
-    app.selectNode(gate);
-    require(app.setParameter(kModeInput, false, "fail"), "gate node could not enter failure mode");
-    idle();
-    app.runOnce();
-    idle();
-    gatedRow = stateOf(gated);
-    require(gatedRow.value("state").toString() == "blocked", "failed upstream must block the guarded node");
-    require(gatedRow.value("disposition").toString() == "blocked", "blocked disposition is missing");
-    require(gatedRow.value("timingText").toString().isEmpty()
-                && gatedRow.value("timingPhases").toList().size() == 3,
-            "a blocked node must not report algorithm time");
-    require(gatedRow.value("statusMessage").toString().contains(QStringLiteral("阻塞")),
-            "blocked reason must stay separate from tool errors");
-    require(!blockBadge, "blocked badge must not appear on the card");
-    require(!skipBadge, "skipped badge must not appear on the card");
-
-    std::cout << "WORKBENCH_STATUS_PASS running=green succeeded=neutral failed=red cancelled=neutral "
-                 "skipped=neutral blocked=orange timing=1\n";
+    std::cout << "WORKBENCH_STATUS_PASS\n";
     app.selectFlow(sourceFlow);
     app.addNode("test.init_failure", 8, 0);
     idle();
@@ -361,9 +315,10 @@ class InitFailure:
         }
     };
     collectText(collectText, tooltip);
-    require(tooltipText.size() == 6 && tooltipText.at(0) == "预处理" && tooltipText.at(2) == "API"
-                && tooltipText.at(4) == "后处理" && tooltipText.at(3) == "0.000 ms"
-                && tooltipText.at(5) == "0.000 ms", "tooltip must contain exactly three timing rows");
+    require(tooltipText.size() == 7 && tooltipText.at(0) == failedInitRow.value("title").toString()
+                && tooltipText.at(1) == "预处理" && tooltipText.at(3) == "API"
+                && tooltipText.at(5) == "后处理" && tooltipText.at(4) == "0.000 ms"
+                && tooltipText.at(6) == "0.000 ms", "tooltip must contain title and three timing rows");
     QDir().mkpath(QStringLiteral(VISIONRT_BINARY_DIR "/evidence"));
     require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/node-status-card.png")),
             "status screenshot could not be saved");

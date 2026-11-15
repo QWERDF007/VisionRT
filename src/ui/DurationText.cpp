@@ -33,8 +33,6 @@ NodeTimingText nodeTimingText(const NodeSnapshot *snapshot, bool running)
     // the previous round's numbers would describe work that is no longer running.
     if (running || !enteredExecution(snapshot))
         return {};
-    if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
-        return {};
 
     const auto &t  = snapshot->timing;
     const auto  op = t.pythonBridge ? t.pythonCallMs : t.adapterExecuteMs;

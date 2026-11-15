@@ -10,6 +10,12 @@
 
 namespace visionrt {
 
+std::string AppController::Impl::parameterLabel(PortId id, bool initialization) const
+{
+    const auto *declaration = parameter(id, initialization);
+    return declaration ? declaration->nameZh : "未声明的参数（编号 " + std::to_string(id) + "）";
+}
+
 bool AppController::Impl::applyParameter(PortId id, bool initialization, PortValue value)
 {
     const auto *node = currentNode();
@@ -18,7 +24,7 @@ bool AppController::Impl::applyParameter(PortId id, bool initialization, PortVal
     const auto &signatures = initialization ? node->signatures.initParams : node->signatures.inputs;
     const auto signature = signatures.find(id);
     if (signature == signatures.end())
-        throw ContractError("参数不存在：" + portLabel(id));
+        throw ContractError("参数不存在：" + parameterLabel(id, initialization));
     if (const auto *declaration = parameter(id, initialization))
     {
         // Manual edits run through the same normalisation as upstream values: declared ranges
@@ -28,7 +34,7 @@ bool AppController::Impl::applyParameter(PortId id, bool initialization, PortVal
         {
             auto normalized = normalizeInput(*declaration, value);
             if (!normalized.adjustment.empty())
-                report(QString::fromStdString(portLabel(id) + "：" + normalized.adjustment));
+                report(QString::fromStdString(parameterLabel(id, initialization) + "：" + normalized.adjustment));
             value = std::move(normalized.value);
         }
     }
@@ -50,7 +56,7 @@ bool AppController::setParameter(int port, bool initialization, const QString &t
         const auto &signatures = initialization ? node->signatures.initParams : node->signatures.inputs;
         const auto signature = signatures.find(static_cast<PortId>(port));
         if (signature == signatures.end())
-            throw ContractError("参数不存在：" + portLabel(static_cast<PortId>(port)));
+            throw ContractError("参数不存在：" + impl_->parameterLabel(static_cast<PortId>(port), initialization));
         auto value = signature->second.type == Type::String && !jsonInput ? PortValue{text.toUtf8().toStdString()}
                                                                           : ValueJson::parse(text, signature->second);
         return impl_->applyParameter(static_cast<PortId>(port), initialization, std::move(value));
@@ -70,7 +76,7 @@ bool AppController::setParameterPath(int port, bool initialization, const QUrl &
     return impl_->command([&]
     {
         if (!url.isLocalFile())
-            throw ContractError("参数路径必须是本地文件或目录：" + portLabel(static_cast<PortId>(port)));
+            throw ContractError("参数路径必须是本地文件或目录：" + impl_->parameterLabel(static_cast<PortId>(port), initialization));
         return impl_->applyParameter(static_cast<PortId>(port), initialization, url.toLocalFile().toUtf8().toStdString());
     });
 }
@@ -89,9 +95,9 @@ bool AppController::stepIntegerParameter(int port, bool initialization, int dire
         const auto id = static_cast<PortId>(port);
         const auto signature = signatures.find(id);
         if (signature == signatures.end() || signature->second.type != Type::Int)
-            throw ContractError("参数不是整数：" + portLabel(id));
+            throw ContractError("参数不是整数：" + impl_->parameterLabel(id, initialization));
         if (!initialization && node->inputs.at(id).mode != BindingMode::Literal)
-            throw ContractError("上游绑定的整数参数不能步进：" + portLabel(id));
+            throw ContractError("上游绑定的整数参数不能步进：" + impl_->parameterLabel(id, initialization));
         const auto value = ValueJson::parse(literal, signature->second);
         if (isMissing(value))
             throw ContractError("步进前请输入有效整数");
@@ -105,13 +111,13 @@ bool AppController::stepIntegerParameter(int port, bool initialization, int dire
             {
                 const auto *declared = std::get_if<std::int64_t>(&*declaration->step);
                 if (!declared || *declared <= 0)
-                    throw ContractError("整数步长必须为正数：" + portLabel(id));
+                    throw ContractError("整数步长必须为正数：" + impl_->parameterLabel(id, initialization));
                 step = *declared;
             }
         }
         if ((direction > 0 && current > std::numeric_limits<std::int64_t>::max() - step)
             || (direction < 0 && current < std::numeric_limits<std::int64_t>::min() + step))
-            throw ContractError("参数步进超出 int64 范围：" + portLabel(id));
+            throw ContractError("参数步进超出 int64 范围：" + impl_->parameterLabel(id, initialization));
         const std::int64_t target = current + direction * step;
         // The stepped value is clamped by the same declaration rule instead of being rejected.
         return impl_->applyParameter(id, initialization, target);

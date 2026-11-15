@@ -986,12 +986,41 @@ void initializationTypeChanges(const QString &directory)
             "retiring a retyped initialization parameter lost its actual value type");
 }
 
+void rejectsHostExecutionGuard(const QString &directory)
+{
+    auto tool = scalarTool();
+    ToolRegistry registry;
+    registry.addDefinition(tool);
+    ProjectEditor editor;
+    editor.addNode(editor.project().flows.front().id, tool, {0, 0});
+    const auto filename = directory + "/removed-guard.json";
+    ProjectStorage storage(registry);
+    auto project = editor.project();
+    storage.save(project, path(filename));
+    auto document = QJsonDocument::fromJson(get(filename)).object();
+    auto flows = document["flows"].toArray();
+    auto flow = flows[0].toObject();
+    auto nodes = flow["nodes"].toArray();
+    auto node = nodes[0].toObject();
+    node["execution_guard"] = QJsonObject{{"mode", "upstream"}};
+    nodes[0] = node;
+    flow["nodes"] = nodes;
+    flows[0] = flow;
+    document["flows"] = flows;
+    put(filename, QJsonDocument(document).toJson());
+    bool rejected = false;
+    try { storage.load(path(filename)); }
+    catch (const ContractError &error) { rejected = std::string(error.what()).find("execution_guard") != std::string::npos; }
+    require(rejected, "removed host execution guards must not be silently ignored");
+}
+
 int main()
 {
     try
     {
         QTemporaryDir temporary;
         require(temporary.isValid(), "temporary directory unavailable");
+        rejectsHostExecutionGuard(temporary.path());
         knownFailureDiagnostics(temporary.path());
         candidateAndRawPreservation(temporary.path());
         reconciliationAndIdentities(temporary.path());

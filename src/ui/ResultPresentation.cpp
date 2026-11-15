@@ -116,23 +116,23 @@ ResultSlot::Snapshot ResultPresentation::sharedSnapshot(NodeId node) const
     return found == snapshots_.end() ? ResultSlot::Snapshot{} : found->second;
 }
 
-NodeDiagnostic ResultPresentation::status(const NodeDefinition &node) const
+std::optional<NodeDiagnostic> ResultPresentation::status(const NodeDefinition &node) const
 {
     if (active(node.id))
-        return {node.id, node.toolId, NodePhase::Execute, makeStatus(ErrorCode::Busy, "运行中")};
+        return NodeDiagnostic{node.id, node.toolId, NodePhase::Execute, makeStatus(ErrorCode::Busy, "运行中")};
     const auto availability = host_.toolAvailability(node.toolId);
     if (availability.state != ToolAvailability::Available)
-        return {node.id, node.toolId, NodePhase::Create, availability.status};
+        return NodeDiagnostic{node.id, node.toolId, NodePhase::Create, availability.status};
     if (const auto *diagnostic = instance(node.id))
         return *diagnostic;
     const auto snapshot = displaySnapshot(node);
     if (snapshot && !snapshot->status)
-        return {node.id, node.toolId, snapshot->phase, snapshot->status};
+        return NodeDiagnostic{node.id, node.toolId, snapshot->phase, snapshot->status};
     if (const auto *diagnostic = lifecycle(node.id))
         return *diagnostic;
     if (snapshot)
-        return {node.id, node.toolId, snapshot->phase, snapshot->status};
-    return {node.id, node.toolId, NodePhase::Prepare, makeStatus(ErrorCode::NotExecuted, "未执行")};
+        return NodeDiagnostic{node.id, node.toolId, snapshot->phase, snapshot->status};
+    return {};
 }
 
 bool ResultPresentation::active(NodeId node) const

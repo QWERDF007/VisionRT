@@ -1,5 +1,5 @@
 #include "core/ToolRegistry.h"
-#include "core/StatusCodes.h"
+#include "core/Error.h"
 #include "ToolResultAssertions.h"
 #include "plugins/PluginLoader.h"
 #include <core/ToolPackage.h>

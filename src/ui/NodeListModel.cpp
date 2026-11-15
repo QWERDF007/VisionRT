@@ -35,7 +35,7 @@ QVariant NodeListModel::value(const Row &row, int role)
     case MissingRole: return row.missing;
     case DefMissingRole: return row.defMissing;
     case ImplUnavailableRole: return row.implUnavailable;
-    case StatusCodeRole: return static_cast<qlonglong>(row.statusCode);
+    case StatusCodeRole: return row.statusCode;
     case StatusMessageRole: return row.statusMessage;
     case StatusDetailRole: return row.statusDetail;
     case LifecycleMessageRole: return row.lifecycleMessage;
@@ -289,7 +289,7 @@ QVariantMap NodeListModel::rowMap(const QString &id) const
         {              "missing", item.missing},
         {           "defMissing", item.defMissing},
         {      "implUnavailable", item.implUnavailable},
-        {           "statusCode", static_cast<qlonglong>(item.statusCode)},
+        {           "statusCode", item.statusCode},
         {        "statusMessage", item.statusMessage},
         {         "statusDetail", item.statusDetail},
         {     "lifecycleMessage", item.lifecycleMessage},

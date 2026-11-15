@@ -75,16 +75,6 @@ struct ExpressionConfig
     bool operator==(const ExpressionConfig &) const = default;
 };
 
-// Explicit execution condition of a logical node. `mode` is the single stored
-// input mode (absent guard means the default user-input mode); a literal-mode
-// guard keeps its old source only for switching back and never highlights or runs.
-struct ExecutionGuard
-{
-    std::optional<SourcePort> source;
-    BindingMode               mode = BindingMode::Upstream;
-    bool operator==(const ExecutionGuard &) const = default;
-};
-
 struct TypeSnapshot
 {
     TypeMap initParams;
@@ -108,7 +98,6 @@ struct NodeDefinition
     std::map<PortId, PortTypeReference>              outputTypeSources;
     std::map<PortId, std::string>                    outputTypeErrors;
     std::optional<ExpressionConfig>                  expression;
-    std::optional<ExecutionGuard>                    executionGuard;
     std::optional<TypeSpec>                          selectType;
     std::uint64_t                                    executionRevision = 0;
     QJsonObject                                      unresolved;

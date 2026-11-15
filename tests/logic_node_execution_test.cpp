@@ -348,9 +348,6 @@ void guardAndSelect()
     auto providerNode = node(3, provider, 0);
     auto work         = node(2, counter, 1);
     work.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{3, 2}};
-    // A guard left on a fixed tool is a legacy configuration: preserved, but the tool
-    // still runs and decides on its own.
-    work.executionGuard = ExecutionGuard{SourcePort{1, 2}};
     ProjectDefinition project;
     project.flows.front().nodes = {source, providerNode, work};
 
@@ -425,18 +422,7 @@ void projectRoundtrip()
     conditionConfig.program.front().exposed = false;
     require(editor.setExpressionConfig("flow_1", conditionId, conditionConfig, condition),
             "condition configuration commit failed");
-    bool guardRejected = false;
-    try
-    {
-        editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, 3}}, condition);
-    }
-    catch (const ContractError &)
-    {
-        guardRejected = true;
-    }
-    require(guardRejected, "an Int output cannot act as an execution guard");
-    require(editor.setExecutionGuard("flow_1", conditionId, ExecutionGuard{SourcePort{expressionId, 4}}, condition),
-            "Boolean guard binding failed");
+
     const auto selectId = editor.addNode("flow_1", select, {0, 2});
     require(editor.setSelectType("flow_1", selectId, {Type::Float}, select), "select type commit failed");
 
@@ -452,9 +438,7 @@ void projectRoundtrip()
     require(nodes.at(0).expression && nodes.at(0).expression->program.size() == 2,
             "expression program did not survive the roundtrip");
     require(nodes.at(0).expression->nextPortId == 5, "port sequence lost");
-    require(nodes.at(1).executionGuard && nodes.at(1).executionGuard->source
-                && nodes.at(1).executionGuard->source->port == 4,
-            "execution guard did not survive the roundtrip");
+
     require(nodes.at(2).selectType && *nodes.at(2).selectType == TypeSpec{Type::Float},
             "select type did not survive the roundtrip");
 }

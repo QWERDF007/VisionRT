@@ -689,6 +689,13 @@ FocusScope {
                 ColumnLayout {
                     id: hoverColumn
                     anchors.fill: parent; anchors.margins: 8; spacing: 3
+                    QuiText {
+                        Layout.fillWidth: true
+                        text: root.hoverNode ? root.hoverNode.title : ""
+                        wrapMode: Text.Wrap
+                        font: Theme.titleFont
+                        color: Theme.textPrimary
+                    }
                     Repeater {
                         model: root.hoverNode ? root.hoverNode.timingPhases : []
                         RowLayout {

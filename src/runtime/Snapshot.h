@@ -11,16 +11,12 @@
 #include <stop_token>
 
 namespace visionrt {
-// Host-owned terminal state for one round. Skipped and Blocked never consume a
-// tool error code; they publish Missing outputs plus this disposition.
 enum class NodeDisposition
 {
     Pending,
     Running,
     Succeeded,
     Failed,
-    Skipped,
-    Blocked,
     Canceled
 };
 

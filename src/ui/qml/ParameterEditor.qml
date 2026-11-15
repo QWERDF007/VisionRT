@@ -13,10 +13,9 @@ ColumnLayout {
     objectName: "parameter_" + parameter.id
     readonly property bool isMeta: !!parameter.isMeta
     readonly property bool alwaysUpstream: parameter.type === "Image"
-    readonly property bool guardRow: parameter.editor === "guard"
     readonly property bool conditionRow: parameter.editor === "condition" || parameter.editor === "condition_upstream"
     // The source button only reports the input mode. It never infers the mode from a
-    // source, from the guard text or from this round's success.
+    // source, from a retained binding or this round's success.
     readonly property bool upstream: parameter.inputMode === "upstream"
     // Condition rows edit the single `condition` port, ordinary rows their own port.
     readonly property string bindingPort: root.conditionRow ? "condition" : root.parameter.id
@@ -134,7 +133,7 @@ ColumnLayout {
                 QuiTextIconButton {
                     id: toggleAction
                     objectName: "parameterActions"
-                    visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.guardRow || root.conditionRow)
+                    visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.conditionRow)
                     Layout.preferredWidth: Theme.paramActionBtnWidth
                     Layout.fillHeight: true
                     radius: Theme.radiusSmall
@@ -154,26 +153,21 @@ ColumnLayout {
                         : (hovered ? Theme.iconPrimary : Theme.sourceButtonIdleIcon)
 
                     onClicked: {
-                        if (root.guardRow) {
-                            app.setExecutionGuardMode(root.nodeId, !root.upstream)
-                        } else if (root.conditionRow) {
+                        if (root.conditionRow) {
                             app.setConditionMode(root.nodeId, !root.upstream)
                         } else {
                             app.setParameterMode(root.parameter.id, !root.upstream)
                         }
                     }
 
-                    Accessible.name: root.guardRow ? "执行条件输入来源"
-                                   : root.conditionRow ? "条件公式输入来源" : "参数输入来源"
+                    Accessible.name: root.conditionRow ? "条件公式输入来源" : "参数输入来源"
                     Accessible.checkable: true
                     Accessible.checked: root.upstream
 
                     QuiToolTip {
                         visible: toggleAction.hovered
                         text: {
-                            if (root.guardRow) {
-                                return root.upstream ? "切换为始终执行（用户输入）" : "绑定上层输入（执行条件）"
-                            }
+
                             if (root.conditionRow) {
                                 return root.upstream ? "切换为条件公式" : "使用上层布尔值"
                             }
@@ -415,7 +409,6 @@ ColumnLayout {
             readOnly: !root.parameter.isSingleFormula
             font: Theme.monoFont
             actionText: {
-                if (root.parameter.editor === "guard") return "设置执行条件"
                 if (root.parameter.editor === "select_type") return "选择合流类型"
                 if (root.parameter.editor === "condition") return "编辑条件公式"
                 return "编辑公式"
@@ -453,9 +446,7 @@ ColumnLayout {
             onActionRequested: {
                 let p = root.getPanel()
                 if (!p) return
-                if (root.parameter.editor === "guard") {
-                    p.openGuardEditor(root.nodeId)
-                } else if (root.parameter.editor === "select_type") {
+                if (root.parameter.editor === "select_type") {
                     p.openSelectTypeEditor(root.nodeId)
                 } else {
                     p.openExpressionEditor(root.nodeId, field.text,

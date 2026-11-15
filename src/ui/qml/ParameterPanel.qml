@@ -230,7 +230,6 @@ QuiSplitView {
     WorkbenchDialog { id: roiNotice; title: "输入 ROI 编辑"; message: "请选择具有区域输入的节点，然后选择要编辑的参数。"; useNegativeButton: false; positiveText: "关闭" }
 
     Loader { id: expressionEditorLoader; active: false; source: "ExpressionEditor.qml" }
-    Loader { id: guardEditorLoader; active: false; source: "GuardEditor.qml" }
     Loader { id: selectTypeEditorLoader; active: false; source: "SelectTypeEditor.qml" }
 
     function openExpressionEditor(nodeId, draftText, hasDraft) {
@@ -247,11 +246,7 @@ QuiSplitView {
         if (expressionEditorLoader.item) invoke()
         else Qt.callLater(invoke)
     }
-    function openGuardEditor(nodeId) {
-        if (!guardEditorLoader.active) guardEditorLoader.active = true
-        if (guardEditorLoader.item) guardEditorLoader.item.openFor(nodeId)
-        else Qt.callLater(function() { if (guardEditorLoader.item) guardEditorLoader.item.openFor(nodeId) })
-    }
+
     function openSelectTypeEditor(nodeId) {
         if (!selectTypeEditorLoader.active) selectTypeEditorLoader.active = true
         if (selectTypeEditorLoader.item) selectTypeEditorLoader.item.openFor(nodeId)

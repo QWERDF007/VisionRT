@@ -41,7 +41,7 @@ PortId floorId(PortStage stage) noexcept
 }
 
 void validateNumericPortValue(const PortValue& val, Type type, const std::string& fieldName, PortId portId) {
-    const auto where = " on port " + portLabel(portId);
+    const auto where = "，参数：" + portLabel(portId);
     if (type == Type::Int) {
         if (!std::holds_alternative<std::int64_t>(val)) {
             throw ContractError(fieldName + " type mismatch (expected Int)" + where);
@@ -99,34 +99,34 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
                                 + std::to_string(port.id));
         }
         if (port.nameZh.empty()) {
-            throw ContractError("Port name_zh must not be empty: " + portLabel(port.id));
+            throw ContractError("Port name_zh must not be empty: " + port.nameZh);
         }
 
         if (port.typeFrom) {
             if (!output)
-                throw ContractError("type_from requires a business output: " + portLabel(port.id));
+                throw ContractError("type_from requires a business output: " + port.nameZh);
             if (!isMissing(port.defaultValue) || !port.editor.empty() || port.minimum || port.maximum || port.step
                 || port.decimals || !port.options.empty() || !port.optionsProvider.empty() || port.image
                 || port.alignment || port.sameGeometryAs || !port.colorOrder.empty()
                 || port.imageVisible)
-                throw ContractError("type_from cannot have concrete value or display attributes: " + portLabel(port.id));
+                throw ContractError("type_from cannot have concrete value or display attributes: " + port.nameZh);
             continue;
         }
         validateTypeSpec(port.type);
 
         if (output) {
-            if (!port.editor.empty()) throw ContractError("editor is not an output field: " + portLabel(port.id));
-            if (port.minimum.has_value()) throw ContractError("constraints.min is not an output field: " + portLabel(port.id));
-            if (port.maximum.has_value()) throw ContractError("constraints.max is not an output field: " + portLabel(port.id));
-            if (port.step.has_value()) throw ContractError("ui.step is not an output field: " + portLabel(port.id));
-            if (port.decimals.has_value()) throw ContractError("ui.decimals is not an output field: " + portLabel(port.id));
-            if (!port.options.empty()) throw ContractError("constraints.options is not an output field: " + portLabel(port.id));
-            if (!port.optionsProvider.empty()) throw ContractError("ui.options_provider is not an output field: " + portLabel(port.id));
+            if (!port.editor.empty()) throw ContractError("editor is not an output field: " + port.nameZh);
+            if (port.minimum.has_value()) throw ContractError("constraints.min is not an output field: " + port.nameZh);
+            if (port.maximum.has_value()) throw ContractError("constraints.max is not an output field: " + port.nameZh);
+            if (port.step.has_value()) throw ContractError("ui.step is not an output field: " + port.nameZh);
+            if (port.decimals.has_value()) throw ContractError("ui.decimals is not an output field: " + port.nameZh);
+            if (!port.options.empty()) throw ContractError("constraints.options is not an output field: " + port.nameZh);
+            if (!port.optionsProvider.empty()) throw ContractError("ui.options_provider is not an output field: " + port.nameZh);
             if (port.alignment)
-                throw ContractError("relations.alignment applies to inputs: " + portLabel(port.id));
+                throw ContractError("relations.alignment applies to inputs: " + port.nameZh);
         } else {
             if (!port.colorOrder.empty())
-                throw ContractError("display.color_order applies only to outputs: " + portLabel(port.id));
+                throw ContractError("display.color_order applies only to outputs: " + port.nameZh);
         }
 
         if (!port.editor.empty()) {
@@ -135,27 +135,27 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             const std::set<std::string> validEditors
                 = {"number", "text", "bool", "switch", "recursive", "path", "array", "roi", "rect"};
             if (!validEditors.contains(port.editor)) {
-                throw ContractError("Unknown editor: " + port.editor + " on port " + portLabel(port.id));
+                throw ContractError("不支持的参数编辑器：" + port.editor + "，参数：" + port.nameZh);
             }
         }
 
         const bool pathEditor = port.editor == "path";
         if (port.editor == "rect" && port.type.type != Type::ROI)
-            throw ContractError("矩形编辑器要求 ROI 类型端口：" + portLabel(port.id));
+            throw ContractError("矩形编辑器要求 ROI 类型端口：" + port.nameZh);
         if (pathEditor && port.type != TypeSpec{Type::String})
-            throw ContractError("路径编辑器要求 String 类型端口：" + portLabel(port.id));
+            throw ContractError("路径编辑器要求 String 类型端口：" + port.nameZh);
 
         if (!port.tab.empty()) {
             const auto tabs = toolTabs();
             if (std::find(tabs.begin(), tabs.end(), port.tab) == tabs.end()) {
-                throw ContractError("Unknown tab: " + port.tab + " on port " + portLabel(port.id));
+                throw ContractError("不支持的参数标签页：" + port.tab + "，参数：" + port.nameZh);
             }
         }
 
         const bool numeric = (port.type.type == Type::Int || port.type.type == Type::Float);
         if (!numeric) {
             if (port.minimum.has_value() || port.maximum.has_value() || port.step.has_value() || port.decimals.has_value()) {
-                throw ContractError("Numeric constraints (min, max, step, decimals) require an Int or Float port: " + portLabel(port.id));
+                throw ContractError("Numeric constraints (min, max, step, decimals) require an Int or Float port: " + port.nameZh);
             }
             if (!isMissing(port.defaultValue)) {
                 validateValue(port.type, port.defaultValue);
@@ -169,27 +169,27 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             }
             if (port.minimum.has_value() && port.maximum.has_value()) {
                 if (lessNumber(*port.maximum, *port.minimum, port.type.type)) {
-                    throw ContractError("min must not exceed max on port: " + portLabel(port.id));
+                    throw ContractError("最小值不能大于最大值：" + port.nameZh);
                 }
             }
             if (port.step.has_value()) {
                 validateNumericPortValue(*port.step, port.type.type, "step", port.id);
                 const PortValue zero = port.type.type == Type::Int ? PortValue{std::int64_t{0}} : PortValue{0.0};
                 if (!lessNumber(zero, *port.step, port.type.type)) {
-                    throw ContractError("step must be positive on port: " + portLabel(port.id));
+                    throw ContractError("步长必须大于零：" + port.nameZh);
                 }
             }
             if (port.decimals.has_value() && *port.decimals < 0) {
-                throw ContractError("decimals must be non-negative on port: " + portLabel(port.id));
+                throw ContractError("小数位数不能为负数：" + port.nameZh);
             }
             if (!isMissing(port.defaultValue)) {
                 validateNumericPortValue(port.defaultValue, port.type.type, "default", port.id);
                 if (port.minimum.has_value() && lessNumber(port.defaultValue, *port.minimum, port.type.type)) {
-                    throw ContractError("Default is less than min on port: " + portLabel(port.id)
+                    throw ContractError("默认值小于允许的最小值：" + port.nameZh
                                         + "（类型空值不满足约束时必须显式声明 default）");
                 }
                 if (port.maximum.has_value() && lessNumber(*port.maximum, port.defaultValue, port.type.type)) {
-                    throw ContractError("Default exceeds max on port: " + portLabel(port.id));
+                    throw ContractError("默认值大于允许的最大值：" + port.nameZh);
                 }
             }
         }
@@ -198,10 +198,10 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             if (numeric) {
                 validateNumericPortValue(opt, port.type.type, "option", port.id);
                 if (port.minimum.has_value() && lessNumber(opt, *port.minimum, port.type.type)) {
-                    throw ContractError("Option is less than min on port: " + portLabel(port.id));
+                    throw ContractError("Option is less than min on port: " + port.nameZh);
                 }
                 if (port.maximum.has_value() && lessNumber(*port.maximum, opt, port.type.type)) {
-                    throw ContractError("Option exceeds max on port: " + portLabel(port.id));
+                    throw ContractError("Option exceeds max on port: " + port.nameZh);
                 }
             } else {
                 validateValue(port.type, opt);
@@ -211,36 +211,36 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             const bool found = std::any_of(port.options.begin(), port.options.end(),
                 [&](const auto& opt) { return equalValues(opt, port.defaultValue); });
             if (!found) {
-                throw ContractError("default value is not one of declared options on port: " + portLabel(port.id));
+                throw ContractError("默认值不在可选范围内：" + port.nameZh);
             }
         }
 
         if (!port.optionsProvider.empty() && port.optionsProvider != "platform.gpu_devices") {
-            throw ContractError("Unknown options_provider: " + port.optionsProvider + " on port " + portLabel(port.id));
+            throw ContractError("不支持的选项来源：" + port.optionsProvider + "，参数：" + port.nameZh);
         }
 
         if (port.image && port.type.type != Type::ROI)
-            throw ContractError("relations.image requires an ROI port: " + portLabel(port.id));
+            throw ContractError("relations.image requires an ROI port: " + port.nameZh);
 
         if (port.alignment && (stage != PortStage::Inputs || port.type.type != Type::ROI))
-            throw ContractError("relations.alignment requires an ROI input: " + portLabel(port.id));
+            throw ContractError("relations.alignment requires an ROI input: " + port.nameZh);
 
         if (!port.colorOrder.empty()) {
             if (port.type.type != Type::Image)
             {
-                throw ContractError("display.color_order requires an Image output: " + portLabel(port.id));
+                throw ContractError("display.color_order requires an Image output: " + port.nameZh);
             }
             const std::set<std::string> validColors = {"Gray", "BGR", "BGRA", "RGB", "RGBA"};
             if (!validColors.contains(port.colorOrder)) {
-                throw ContractError("Unknown color_order: " + port.colorOrder + " on port " + portLabel(port.id));
+                throw ContractError("不支持的图像颜色顺序：" + port.colorOrder + "，参数：" + port.nameZh);
             }
         }
 
         if (port.imageVisible && port.type.type != Type::Image)
-            throw ContractError("display.visible requires an Image port: " + portLabel(port.id));
+            throw ContractError("display.visible requires an Image port: " + port.nameZh);
 
         if (port.sameGeometryAs && port.type.type != Type::Image)
-            throw ContractError("relations.same_geometry_as requires an Image output: " + portLabel(port.id));
+            throw ContractError("relations.same_geometry_as requires an Image output: " + port.nameZh);
     }
 }
 
@@ -390,19 +390,7 @@ bool isInjectedInput(NodeModel model, PortId id) noexcept
     return model == NodeModel::Fixed && id == kUpstreamStatusPort;
 }
 
-bool supportsExecutionGuard(NodeModel model) noexcept
-{
-    switch (model)
-    {
-    case NodeModel::Expression:
-    case NodeModel::Condition:
-    case NodeModel::Select:
-        return true;
-    case NodeModel::Fixed:
-        return false;
-    }
-    return false;
-}
+
 
 std::span<const std::string_view> toolTabs() noexcept {
     static constexpr std::array<std::string_view, 4> tabs{"基本输入", "预处理", "检测", "结果处理"};
@@ -837,7 +825,7 @@ void validateToolDefinition(const ToolDefinition& def) {
             {
                 if (list == &def.outputs && port.image->stage == PortStage::Outputs
                     && port.image->id == port.id)
-                    throw ContractError("relations.image must not reference itself: " + portLabel(port.id));
+                    throw ContractError("relations.image must not reference itself: " + port.nameZh);
                 requireImage(*port.image, "relations.image");
             }
             if (port.sameGeometryAs)
@@ -875,7 +863,7 @@ void validateToolDefinition(const ToolDefinition& def) {
         const auto *target = findPort(def, *port.alignment);
         if (!target || target->id == port.id || target->typeFrom
             || target->type != TypeSpec{Type::Array, DType::Float64, 3})
-            throw ContractError("relations.alignment 必须引用另一个 Array(float64, rank=3) 输入：" + portLabel(port.id));
+            throw ContractError("relations.alignment 必须引用另一个 Array(float64, rank=3) 输入：" + port.nameZh);
     }
 
     const auto requireParameter = [&](PortId id, const char *label)

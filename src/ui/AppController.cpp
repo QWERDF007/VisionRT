@@ -1742,12 +1742,6 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     else if (snapshot)
         switch (disposition)
         {
-        case NodeDisposition::Skipped:
-            stateText = "skipped";
-            break;
-        case NodeDisposition::Blocked:
-            stateText = "blocked";
-            break;
         case NodeDisposition::Canceled:
             stateText = "cancelled";
             break;
@@ -1777,11 +1771,11 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
                    || disposition == NodeDisposition::Canceled;
     row.timingText    = timingText.total;
     row.timingPhases  = phases;
-    row.statusCode    = diagnostic.status.code;
-    row.statusMessage = workbench::q(diagnostic.status.message);
-    row.statusDetail  = workbench::q(diagnostic.status.detail);
-    if (!running && (presentation.instance(node.id) || diagnostic.phase == NodePhase::Release
-                     || (stateText == "idle" && diagnostic.status.code != hostCode(ErrorCode::NotExecuted) && !diagnostic.status)))
+    row.statusCode    = diagnostic ? QVariant::fromValue<qlonglong>(diagnostic->status.code) : QVariant{};
+    row.statusMessage = diagnostic ? workbench::q(diagnostic->status.message) : QString{};
+    row.statusDetail  = diagnostic ? workbench::q(diagnostic->status.detail) : QString{};
+    if (!running && diagnostic && (presentation.instance(node.id) || diagnostic->phase == NodePhase::Release
+                     || (stateText == "idle" && !diagnostic->status)))
         row.state = "failed";
     if (const auto *lifecycleDiagnostic = presentation.lifecycle(node.id))
     {

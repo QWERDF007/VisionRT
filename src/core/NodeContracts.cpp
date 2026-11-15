@@ -27,7 +27,7 @@ TypeMap resolvedOutputTypes(const ToolDefinition &contract)
     for (const auto &port : contract.outputs)
     {
         if (port.typeFrom)
-            throw ContractError("输出类型尚未解析：" + portLabel(port.id));
+            throw ContractError("输出类型尚未解析：" + port.nameZh);
         result.insert_or_assign(port.id, port.type);
     }
     return result;
@@ -281,7 +281,7 @@ ToolDefinition nodeContract(const NodeDefinition &node, const ToolDefinition &de
             if (type == node.signatures.outputs.end())
             {
                 const auto error = node.outputTypeErrors.find(port.id);
-                throw ContractError("输出类型无法解析：" + node.title() + "." + portLabel(port.id) + "："
+                throw ContractError("输出类型无法解析：" + node.title() + "." + port.nameZh + "："
                                     + (error == node.outputTypeErrors.end() ? "未配置类型来源" : error->second));
             }
             port.type = type->second;

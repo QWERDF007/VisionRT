@@ -46,7 +46,6 @@ NodeId                nodeId(const QString &text);
 const PortDefinition *port(const std::vector<PortDefinition> &ports, PortId id);
 
 // Controller-owned parameter rows carry a negative row id: they open an editor, they are not a port.
-inline constexpr int kGuardRow     = -1;
 inline constexpr int kExpressionRow = -2;
 inline constexpr int kConditionRow = -3;
 inline constexpr int kSelectTypeRow = -4;
@@ -293,6 +292,7 @@ struct AppController::Impl : PresentationHost
     const FlowDefinition *currentFlow() const override;
     const ToolDefinition *effectiveTool() const override;
     const PortDefinition *parameter(PortId id, bool initialization) const override;
+    std::string parameterLabel(PortId id, bool initialization) const;
     const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
                                                                       const NodeDefinition &node) const override;
     Availability toolAvailability(std::string_view id) const override { return registry.availability(id); }

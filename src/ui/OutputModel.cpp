@@ -338,17 +338,16 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     {
         if (snapshot)
             status = NodeDiagnostic{snapshot->node, snapshot->toolId, snapshot->phase, snapshot->status};
-        else
-            status = NodeDiagnostic{0, {}, NodePhase::Prepare, makeStatus(ErrorCode::NotExecuted, "未执行")};
+
     }
     beginResetModel();
     rows_.clear();
     auto add = [&](PortId id, std::string name, TypeSpec type, bool system)
     {
         PortValue value = Missing{};
-        if (id == kStatusCodePort)
+        if (id == kStatusCodePort && status)
             value = status->status.code;
-        else if (id == kStatusMessagePort)
+        else if (id == kStatusMessagePort && status)
             value = status->status.message;
         else if (snapshot)
             if (const auto found = snapshot->outputs.find(id); found != snapshot->outputs.end())
@@ -417,15 +416,15 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
     endResetModel();
 }
 
-void OutputModel::setStatus(const NodeDiagnostic &status)
+void OutputModel::setStatus(std::optional<NodeDiagnostic> status)
 {
     for (int index = 0; index < rowCount(); ++index)
     {
         auto &row = rows_[index];
         if (!row.system)
             continue;
-        const PortValue value = row.id == kStatusCodePort ? PortValue{status.status.code}
-                                                        : PortValue{status.status.message};
+        const PortValue value = !status ? PortValue{Missing{}} : row.id == kStatusCodePort ? PortValue{status->status.code}
+                                                        : PortValue{status->status.message};
         if (equalValues(row.captured.value, value))
             continue;
         row.captured.value = value;

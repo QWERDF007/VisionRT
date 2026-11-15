@@ -447,14 +447,7 @@ QVariantList AppController::parameters() const
 
         // Explicit execution conditions exist on the logical models only; a fixed
         // tool exposes its real upstream_status input instead.
-        if (supportsExecutionGuard(tool->nodeModel))
-            addMeta(workbench::kGuardRow, QStringLiteral("执行条件"), QStringLiteral("guard"),
-                    executionGuardText(), false,
-                    QVariantMap{{"inputMode", node->executionGuard
-                                                  && node->executionGuard->mode == BindingMode::Upstream
-                                              ? "upstream"
-                                              : "literal"},
-                                {"source", executionGuardText()}});
+
 
         if (tool->nodeModel == NodeModel::Expression)
         {
@@ -553,9 +546,7 @@ QVariantList AppController::parameters() const
                 continue;
             add(id, type, true, nullptr);
         }
-        if (tool && supportsExecutionGuard(tool->nodeModel))
-            addMeta(workbench::kGuardRow, QStringLiteral("执行条件"), QStringLiteral("guard"),
-                    executionGuardText(), false);
+
         for (const auto &[id, type] : node->signatures.inputs) add(id, type, false, nullptr);
     }
     impl_->parameterRows     = result;

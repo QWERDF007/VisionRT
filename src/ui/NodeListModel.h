@@ -64,7 +64,7 @@ public:
         bool         missing          = false;
         bool         defMissing       = false;
         bool         implUnavailable  = false;
-        std::int64_t statusCode       = 0;
+        QVariant     statusCode;
         QString      statusMessage;
         QString      statusDetail;
         QString      lifecycleMessage;

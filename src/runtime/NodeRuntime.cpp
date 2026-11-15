@@ -1,7 +1,6 @@
 #include "core/Error.h"
 #include "core/InputNormalizer.h"
 #include "core/NodeContracts.h"
-#include "core/StatusCodes.h"
 #include "runtime/RuntimeInternal.h"
 
 #include <core/ToolValueValidation.h>
@@ -259,7 +258,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
 
     ToolResult      result;
     NodeDisposition disposition  = NodeDisposition::Running;
-    std::string     gateMessage;
     auto            phase            = NodePhase::Prepare;
     // The framework's own verdict for this node. It is never derived from a tool's business status:
     // a tool that ran and answered is a success even when it reports a non-zero code.
@@ -269,13 +267,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
     bool            diagnosticPublished = false;
     bool            enteredExecute   = false;
 
-    // The UI's running window for this node, as a scope: it opens once the guard and input
-    // preparation passed and the node is about to create, initialize or execute the tool, and it
-    // closes when this function returns. The snapshot is published before that return, so the
-    // window always ends against a readable result instead of the previous round's one. A skipped
-    // or blocked node never calls enter(), which is what keeps gated cards from turning green.
-    // The polled `active` flag and the event describe this one window, so the flag is moved first
-    // and then announced: a window reacting to the announcement can never read the old value.
+    // Execution activity spans instance creation, initialization and execution.
+    // Publish the snapshot before closing the window.
     struct ExecutionWindow
     {
         std::atomic<bool>                &active;
@@ -307,71 +300,6 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
         NodeActivityEvent{context->generation, context->session, context->round, 0, id,
                           ActivityKind::EnteredExecution}};
 
-    // Host gate: only an explicitly configured logical condition can skip a node.
-    // Upstream business status never gates a normal tool; the tool decides.
-    if (config.executionGuard && config.executionGuard->mode == BindingMode::Upstream
-        && supportsExecutionGuard(definition->nodeModel))
-    {
-        const auto &guard = *config.executionGuard;
-        if (!guard.source)
-        {
-            // Upstream mode without a bound source is a parameter error, not "always execute".
-            disposition = NodeDisposition::Blocked;
-            gateMessage = "执行条件尚未选择上层来源";
-        }
-        else
-        {
-            const auto upstream = frozen.runtimes.at(guard.source->node)->slot.latest();
-            const bool current  = upstream && upstream->generation == context->generation
-                               && upstream->session == context->session && upstream->round == context->round;
-            const PortValue *published = nullptr;
-            if (current)
-            {
-                const auto found = upstream->outputs.find(guard.source->port);
-                if (found != upstream->outputs.end())
-                    published = &found->second;
-            }
-            const auto *flag = published ? std::get_if<bool>(published) : nullptr;
-            if (!current || upstream->disposition == NodeDisposition::Skipped
-                || upstream->disposition == NodeDisposition::Blocked)
-            {
-                disposition = NodeDisposition::Blocked;
-                gateMessage = "执行条件在本轮不可用，节点已阻塞";
-            }
-            else if (!flag)
-            {
-                disposition = NodeDisposition::Blocked;
-                gateMessage = "执行条件必须是布尔值，节点已阻塞";
-            }
-            else if (!*flag)
-            {
-                // The user configured this logical control; a false flag is its normal result.
-                disposition = NodeDisposition::Skipped;
-                gateMessage = "执行条件为假";
-            }
-        }
-    }
-    const auto publishTerminal = [&](std::string message)
-    {
-        snapshot->disposition         = disposition;
-        snapshot->status              = {kNotExecutedStatus, std::move(message)};
-        snapshot->toolResultPublished = false;
-        snapshot->phase               = NodePhase::Prepare;
-        for (const auto &port : definition->outputs)
-            if (!isReservedPort(PortStage::Outputs, port.id))
-                snapshot->outputs.emplace(port.id, Missing{});
-        snapshot->outputs.emplace(kStatusCodePort, kNotExecutedStatus);
-        snapshot->outputs.emplace(kStatusMessagePort, snapshot->status.message);
-        // A gated node never entered a stage, so it has no execution window at all.
-        snapshot->timing.totalMs = 0.0;
-        slot.publish(std::move(snapshot));
-    };
-
-    if (disposition != NodeDisposition::Running)
-    {
-        publishTerminal(gateMessage);
-        return;
-    }
     try
     {
         Values           inputs;
@@ -426,12 +354,8 @@ void NodeRuntime::run(const std::shared_ptr<const RoundContext> &context)
             prepareTimer.stop();
             windowEnd = Clock::now();
         }
-        if (disposition != NodeDisposition::Running)
-        {
-            publishTerminal(gateMessage);
-            return;
-        }
-        // The UI's running state starts here: the guard and input preparation passed and the node
+
+        // The UI's running state starts here: input preparation passed and the node
         // is about to create/initialize/execute the tool. The RAII scope ends it on every exit path.
         executionWindow.enter();
         double deferredCreateMs = 0.0;

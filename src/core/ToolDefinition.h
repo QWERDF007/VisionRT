@@ -162,9 +162,6 @@ std::string categoryPath(const ToolDefinition& def);
 // Tool ids name declaration files, so anything that could leave a directory is rejected here.
 void validateIdentifier(const std::string& value, bool isPort);
 
-// Execution conditions belong to the logical node models only. A future model
-// never inherits the privilege by accident.
-bool supportsExecutionGuard(NodeModel model) noexcept;
 
 // Canonical host-provided ports. Input 0 carries the upstream status; outputs 0 and 1 carry the
 // status envelope. They are materialised by normalisation and never written by tool declarations.

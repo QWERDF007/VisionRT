@@ -420,14 +420,7 @@ CopiedNodes duplicateNodes(std::span<const NodeDefinition *const> selected, Node
             else
                 binding.source->node = mapped->second;
         }
-        if (node.executionGuard && node.executionGuard->source)
-        {
-            const auto mapped = result.mapping.find(node.executionGuard->source->node);
-            if (mapped == result.mapping.end())
-                node.executionGuard.reset();
-            else
-                node.executionGuard->source->node = mapped->second;
-        }
+
         result.nodes.push_back(std::move(node));
     }
     return result;
@@ -569,40 +562,7 @@ BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, Po
     return {BindingError::None, {}};
 }
 
-BindingCheck validateGuard(const FlowDefinition &flow, const SourcePort &source, NodeId targetNodeId,
-                           const PositionLookup &positions)
-{
-    if (source.node == targetNodeId)
-        return {BindingError::Self, "执行条件不能引用节点自身"};
-    const NodeDefinition *sourceNode = nullptr;
-    const NodeDefinition *targetNode = nullptr;
-    for (const auto &node : flow.nodes)
-    {
-        if (node.id == source.node)
-            sourceNode = &node;
-        if (node.id == targetNodeId)
-            targetNode = &node;
-    }
-    if (!sourceNode || !targetNode)
-        return {BindingError::OtherFlow, "执行条件的源节点或目标节点不属于当前流程"};
-    GridPoint sourcePos = sourceNode->position;
-    GridPoint targetPos = targetNode->position;
-    if (positions)
-    {
-        if (auto p = positions(source.node))
-            sourcePos = *p;
-        if (auto p = positions(targetNodeId))
-            targetPos = *p;
-    }
-    if (sourcePos.y >= targetPos.y)
-        return {BindingError::SameOrUpperRow, "执行条件只能引用上级节点（上游 Y 必须严格小于下游 Y）"};
-    const auto output = sourceNode->signatures.outputs.find(source.port);
-    if (output == sourceNode->signatures.outputs.end())
-        return {BindingError::MissingPort, "执行条件的源输出端口不存在：" + portLabel(source.port)};
-    if (output->second != TypeSpec{Type::Bool})
-        return {BindingError::TypeMismatch, "执行条件必须引用 Bool 输出：" + portLabel(source.port)};
-    return {BindingError::None, {}};
-}
+
 
 std::vector<CandidateInput> candidateInputsWithState(const FlowDefinition &flow, const SourcePort &source)
 {
@@ -645,19 +605,7 @@ std::vector<DependencyEdge> dependencyEdges(const FlowDefinition &flow)
     const auto relations = portRelations(flow);
     if (!relations.errors.empty())
         throw ContractError(relations.errors.front());
-    auto edges = deriveEdges(relations);
-    for (const auto &node : flow.nodes)
-    {
-        if (!node.executionGuard || !node.executionGuard->source)
-            continue;
-        const auto check = validateGuard(flow, *node.executionGuard->source, node.id);
-        if (!check)
-            throw ContractError("执行条件无效：" + check.message);
-        edges.emplace_back(node.executionGuard->source->node, node.id);
-    }
-    std::sort(edges.begin(), edges.end());
-    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
-    return edges;
+    return deriveEdges(relations);
 }
 
 PortRelations portRelations(const FlowDefinition &flow)
@@ -1003,34 +951,7 @@ bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, Expr
     return true;
 }
 
-bool ProjectEditor::setExecutionGuard(std::string_view flowId, NodeId id, std::optional<ExecutionGuard> guard,
-                                     const ToolDefinition &tool)
-{
-    requireIdle();
-    ProjectEditor edit(project_);
-    auto         &target = edit.flow(flowId);
-    auto         &node   = findNode(target, id);
-    requireEditable(node);
-    if (node.executionGuard == guard)
-        return false;
-    if (guard && !supportsExecutionGuard(tool.nodeModel))
-        throw ContractError("该工具不支持执行条件：" + node.toolId);
-    if (guard && guard->mode == BindingMode::Upstream && guard->source)
-    {
-        const auto check = validateGuard(target, *guard->source, id);
-        if (!check)
-            throw ContractError(check.message);
-    }
-    node.executionGuard = std::move(guard);
-    if (hasDependencyCycle(target))
-        throw ContractError("执行条件形成依赖循环");
-    requireIncrement(node.executionRevision);
-    requireIncrement(target.structureRevision);
-    ++node.executionRevision;
-    ++target.structureRevision;
-    commit(std::move(edit.project_));
-    return true;
-}
+
 
 bool ProjectEditor::setConditionMode(std::string_view flowId, NodeId id, BindingMode mode,
                                     const ToolDefinition &tool)

@@ -53,8 +53,6 @@ BindingCheck validateBinding(const FlowDefinition &flow, NodeId sourceNodeId, Po
 
 // A guard is a Bool control dependency with the same row/ownership rules as data
 // edges. It never carries images, arrays or ROI values.
-BindingCheck validateGuard(const FlowDefinition &flow, const SourcePort &source, NodeId targetNodeId,
-                           const PositionLookup &positions = {});
 
 struct CandidateInput
 {
@@ -148,9 +146,6 @@ public:
     // One transaction for switching a condition node between its formula and
     // upstream-Bool source. Inactive bindings stay stored for switching back.
     bool setConditionMode(std::string_view flowId, NodeId node, BindingMode mode, const ToolDefinition &tool);
-    // The object is the input mode: absent means user input (always execute).
-    bool setExecutionGuard(std::string_view flowId, NodeId node, std::optional<ExecutionGuard> guard,
-                           const ToolDefinition &tool);
     bool setSelectType(std::string_view flowId, NodeId node, TypeSpec type, const ToolDefinition &tool);
 
     std::size_t             referenceCount(std::string_view flowId, const SourcePort &source) const;

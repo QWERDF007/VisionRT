@@ -641,24 +641,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 node.expression = std::move(expression);
             }
             if (raw.contains("execution_guard"))
-            {
-                const auto guard = map(raw.value("execution_guard"), "execution_guard");
-                ExecutionGuard parsed;
-                if (guard.contains("mode"))
-                {
-                    const auto mode = text(guard.value("mode"), "guard.mode");
-                    if (mode == "literal")
-                        parsed.mode = BindingMode::Literal;
-                    else if (mode != "upstream")
-                        invalid("执行条件模式无效：" + mode);
-                }
-                const auto source = guard.value("source");
-                if (source.isObject())
-                    parsed.source = SourcePort{sequence(source.toObject().value("node_seq"), "guard.source.node_seq"),
-                                               portId(source.toObject().value("port_id"), "guard.source.port_id")};
-
-                node.executionGuard = std::move(parsed);
-            }
+                throw ContractError("工程包含已移除的宿主执行条件 execution_guard，请改用普通参数连接");
             if (raw.contains("select_type"))
                 node.selectType = ValueJson::decodeType(map(raw.value("select_type"), "select_type"));
             if (!definition)
@@ -674,9 +657,6 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 reconcileNode(result, flow, node, *definition, savedInputLiterals, changes);
                 if (changes.declarationChanged)
                     updateFor(*definition, savedVersion).nodes.push_back(node.title());
-                if (node.executionGuard && !supportsExecutionGuard(definition->nodeModel))
-                    diagnose(result, ProjectStorageCode::LegacyExecutionGuard, flow, node, "execution_guard",
-                             "普通工具不再支持执行条件，原配置已保留但不再执行；请改用上层工具状态输入重新配置");
             }
             flow.nodes.push_back(std::move(node));
         }
@@ -834,7 +814,6 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                     raw.insert("retired_init_params", retired);
                 }
                 raw.remove("expression_config");
-                raw.remove("execution_guard");
                 raw.remove("select_type");
                 if (node.expression)
                 {
@@ -858,17 +837,7 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                                            {"variables", variables},
                                            {"program", program}});
                 }
-                if (node.executionGuard)
-                {
-                    QJsonObject guard{{"mode", node.executionGuard->mode == BindingMode::Upstream ? "upstream"
-                                                                                                  : "literal"}};
-                    if (node.executionGuard->source)
-                        guard.insert("source", QJsonObject{
-                                                   {"node_seq", QString::number(node.executionGuard->source->node)},
-                                                   { "port_id", static_cast<double>(node.executionGuard->source->port)}
-                    });
-                    raw.insert("execution_guard", guard);
-                }
+
                 if (node.selectType)
                     raw.insert("select_type", ValueJson::encodeType(*node.selectType));
                 raw.insert("init_params", parameters);

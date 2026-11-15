@@ -86,8 +86,6 @@ const char *storageCodeName(ProjectStorageCode code)
         return "layout_conflict";
     case ProjectStorageCode::RangeWarning:
         return "range_warning";
-    case ProjectStorageCode::LegacyExecutionGuard:
-        return "legacy_execution_guard";
     }
     std::terminate();
 }
@@ -185,10 +183,6 @@ QString dispositionName(NodeDisposition disposition)
         return QStringLiteral("succeeded");
     case NodeDisposition::Failed:
         return QStringLiteral("failed");
-    case NodeDisposition::Skipped:
-        return QStringLiteral("skipped");
-    case NodeDisposition::Blocked:
-        return QStringLiteral("blocked");
     case NodeDisposition::Canceled:
         return QStringLiteral("canceled");
     }

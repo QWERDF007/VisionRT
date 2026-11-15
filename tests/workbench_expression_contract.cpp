@@ -185,33 +185,6 @@ try
     require(app.applyExpressionConfig(guardSource, {}, guardProgram(QStringLiteral("布尔结果"))),
             "guard source program could not be applied");
     settle();
-    // Execution conditions belong to the logical node models; a fixed measuring tool
-    // exposes its own upstream_status input instead.
-    app.addNode("EvaluateExpression", 8, 6);
-    settle();
-    const auto guarded = app.selectedNode();
-    require(!guarded.isEmpty(), "guarded node is missing");
-    require(app.applyExecutionGuard(guarded, guardSource, 2), "dynamic Bool guard could not be applied");
-    settle();
-    for (int refresh = 0; refresh < 50; ++refresh)
-    {
-        require(app.executionGuardText().contains(QStringLiteral("布尔结果")),
-                "dynamic guard name was not readable after refresh");
-        app.parameters();
-    }
-    app.selectNode(guardSource);
-    require(app.applyExpressionConfig(guardSource, {}, guardProgram(QStringLiteral("布尔结果改"))),
-            "guard source rename could not be applied");
-    settle();
-    app.selectNode(guarded);
-    require(app.executionGuardText().contains(QStringLiteral("布尔结果改")),
-            "guard text kept the old dynamic port name");
-    app.renameNode(guardSource, QStringLiteral("门控源"));
-    settle();
-    app.selectNode(guarded);
-    require(app.executionGuardText().contains(QStringLiteral("门控源")),
-            "guard text kept the old source title");
-
     // A dynamic output connected to an ordinary downstream input must resolve its label from the
     // materialised contract on every refresh; the row may never keep a pointer into a temporary.
     app.addNode("EvaluateExpression", 9, 0);

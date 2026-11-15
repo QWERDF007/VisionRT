@@ -483,9 +483,9 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
     require(card->isVisible(), "hover card item is not visible");
     require(!card->hasActiveFocus(), "hover card took keyboard focus");
     const QStringList content = texts();
-    // Exactly three timing rows: preprocessing, API and post-processing.
-    require(content.size() == 6, "hover card must contain only three timing rows");
-    require(!content.contains(first.value("title").toString()), "hover card must contain only timing rows");
+    // Title plus exactly three timing rows: preprocessing, API and post-processing.
+    require(content.size() == 7, "hover card does not contain the tool name and three timing rows");
+    require(content.contains(first.value("title").toString()), "hover card lost the tool name");
     require(content.contains(QStringLiteral("预处理")) && content.contains(QStringLiteral("API"))
                 && content.contains(QStringLiteral("后处理")),
             "hover card lost a timing row");
@@ -869,4 +869,3 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
               << (api == QSGRendererInterface::Direct3D11 ? "Direct3D11" : "other")
               << " (api=" << api << "), QtRendering and screen-sized selection border verified.\n";
 }
-

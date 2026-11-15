@@ -313,11 +313,7 @@ ReceiveOutcome NodeReader::receive(const ReceiveRequest &request, ReceiveCursor 
         if (output == snapshot->outputs.end() || isMissing(output->second))
         {
             outcome.disposition = ReceiveDisposition::Missing;
-            outcome.message     = snapshot->disposition == NodeDisposition::Skipped
-                                    ? "源节点本轮已跳过，没有可用值：" + snapshot->status.message
-                                : snapshot->disposition == NodeDisposition::Blocked
-                                    ? "源节点本轮被阻塞，没有可用值：" + snapshot->status.message
-                                    : "源节点没有发布该端口的可用值：" + snapshot->status.message;
+            outcome.message = "源节点没有发布该端口的可用值：" + snapshot->status.message;
             return outcome;
         }
         try

@@ -1,6 +1,6 @@
 // A node's execution window is the only live fact the window receives about running work. These
 // contracts pin when it opens, that it stays open across parallel branches and rounds, that every
-// exit path closes it, and that a gated node never opens one at all.
+// exit path closes it, and that input values never gate the host execution window.
 
 #include "core/NodeContracts.h"
 #include "runtime/RuntimeEngine.h"
@@ -72,48 +72,6 @@ ToolDefinition intTool(std::string id)
     tool.kind    = ToolKind::Cpp;
     tool.outputs = {{2, "值", {Type::Int}}};
     return tool;
-}
-
-// A logical node: only the condition model can carry an execution guard, and only a node that
-// publishes a Bool can be the guard's source. The model requires a python_class declaration, so the
-// fixture registers one and gives it a host-side implementation.
-ToolDefinition branchTool()
-{
-    ToolDefinition tool;
-    tool.nameEn    = "test.activity.branch";
-    tool.nameZh    = "条件分支";
-    tool.version   = "1";
-    tool.kind      = ToolKind::PythonClass;
-    tool.nodeModel = NodeModel::Condition;
-    tool.entry     = PythonEntry{"test", "activity/branch.py", "BranchTool"};
-    PortDefinition mode;
-    mode.id           = kConditionModePort;
-    mode.nameZh       = "条件来源";
-    mode.type         = {Type::String};
-    mode.defaultValue = std::string{"formula"};
-    mode.options      = {std::string{"formula"}, std::string{"upstream"}};
-    tool.initParams   = {{kVariablesInitPort, "变量", {Type::Array, DType::String, 2}},
-                         {kProgramInitPort, "公式", {Type::Array, DType::String, 2}}};
-    tool.initParams.push_back(std::move(mode));
-    tool.outputs      = {{kStatusCodePort, "状态码", {Type::Int}},
-                         {kStatusMessagePort, "状态消息", {Type::String}},
-                         {2, "成立", {Type::Bool}},
-                         {3, "否则", {Type::Bool}},
-                         {4, "成立分支状态", {Type::Int}},
-                         {5, "否则分支状态", {Type::Int}}};
-    return tool;
-}
-
-void installBranch(ToolRegistry &registry, const ToolDefinition &tool, std::function<ToolResult(const Values &)> run)
-{
-    registry.addDefinition(tool);
-    registry.setPythonImplementation(tool.nameEn,
-                                     [run]()
-                                     {
-                                         auto instance = std::make_unique<Function>();
-                                         instance->run  = run;
-                                         return instance;
-                                     });
 }
 
 NodeDefinition node(NodeId id, const ToolDefinition &tool)
@@ -349,38 +307,50 @@ void failedNodeStillClosesItsWindow()
             "the failed node did not close its window");
 }
 
-// A skipped node never enters the algorithm, so it must never look like it did.
-void gatedNodeNeverEntersExecution()
+// Boolean outputs and nonzero business statuses are ordinary tool data.
+void falseOutputDoesNotGateExecution()
 {
     RuntimeEngine    engine(2);
     ToolRegistry     registry;
     std::atomic<int> executions{0};
-    const auto       branch = branchTool();
-    installBranch(registry, branch,
-                  [&](const Values &)
+    auto branch = intTool("test.activity.data");
+    branch.inputs = {{1, "条件值", {Type::Bool}, true}};
+    branch.outputs = {{2, "条件值", {Type::Bool}}};
+    normalizeToolDefinition(branch);
+    install(registry, branch,
+                  [&](const Values &inputs)
                   {
-                      executions.fetch_add(1);
-                      return toolResult({{2, false}, {3, true}, {4, std::int64_t{0}}, {5, std::int64_t{0}}}, {});
+                      if (executions.fetch_add(1) == 1)
+                      {
+                          require(!std::get<bool>(inputs.at(1)), "false input was changed by host");
+                          require(std::get<std::int64_t>(inputs.at(0)) == 23, "business status was changed by host");
+                      }
+                      return toolResult({{2, false}}, {23, "工具业务结果"});
                   });
 
     auto source = node(1, branch);
     auto gated  = node(2, branch);
-    gated.executionGuard = ExecutionGuard{SourcePort{1, 2}};
+    source.position = {0, 0};
+    gated.position = {0, 1};
+    gated.inputs[1] = {BindingMode::Upstream, Missing{}, SourcePort{1, 2}};
+    gated.inputs[0] = {BindingMode::Upstream, Missing{}, SourcePort{1, 0}};
+
     ProjectDefinition project;
     project.flows.front().nodes = {source, gated};
 
     start(engine, project, registry, RunMode::Once, "gated run did not start");
     const auto completed = finish(engine);
-    require(executions.load() == 1, "a skipped node still executed its tool");
-    require(snapshot(completed, 1)->disposition == NodeDisposition::Succeeded, "the guard source did not succeed");
-    require(snapshot(completed, 2)->disposition == NodeDisposition::Skipped, "a false guard did not skip the node");
+    require(executions.load() == 2, "a false output must not prevent tool execution");
+    require(snapshot(completed, 2)->status.code == 23, "tool business status was not preserved");
+    require(snapshot(completed, 1)->disposition == NodeDisposition::Succeeded, "the source tool did not execute");
+    require(snapshot(completed, 2)->disposition == NodeDisposition::Succeeded, "a false output must remain ordinary data");
 
     const auto events = drainAll(engine);
     require(countKind(events, 1, ActivityKind::EnteredExecution) == 1,
             "the executed guard source reported no window");
-    require(countKind(events, 2, ActivityKind::EnteredExecution) == 0
-                && countKind(events, 2, ActivityKind::LeftExecution) == 0,
-            "a skipped node published an execution window");
+    require(countKind(events, 2, ActivityKind::EnteredExecution) == 1
+                && countKind(events, 2, ActivityKind::LeftExecution) == 1,
+            "the downstream tool did not publish an execution window");
 }
 
 } // namespace
@@ -392,7 +362,7 @@ try
     std::cout << "2\n"; loopRoundsKeepTheirOwnWindow();
     std::cout << "3\n"; newRunStartsFromAnEmptyMailbox();
     std::cout << "4\n"; failedNodeStillClosesItsWindow();
-    std::cout << "5\n"; gatedNodeNeverEntersExecution();
+    std::cout << "5\n"; falseOutputDoesNotGateExecution();
     std::cout << "node activity contracts passed\n";
     return 0;
 }

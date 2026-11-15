@@ -17,9 +17,6 @@ enum class ProjectStorageCode
     DuplicateFlowName,
     LayoutConflict,
     RangeWarning,
-    // A guard saved while the tool still accepted execution conditions. The current node model
-    // no longer applies it: the value is kept, and the user reconfigures it as a state input.
-    LegacyExecutionGuard
 };
 
 struct ProjectStorageDiagnostic

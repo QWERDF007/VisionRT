@@ -63,36 +63,7 @@ QVariantMap typeMap(const TypeSpec &type)
 }
 } // namespace
 
-QString AppController::executionGuardText() const
-{
-    const auto *node = impl_->currentNode();
-    if (!node || !node->executionGuard || node->executionGuard->mode != BindingMode::Upstream
-        || !node->executionGuard->source)
-        return {};
-    const auto &guardSource = *node->executionGuard->source;
-    const auto *source   = impl_->findNode(guardSource.node);
-    const auto *tool     = source ? impl_->registry.find(source->toolId) : nullptr;
-    QString     portName = workbench::q(portLabel(guardSource.port));
-    if (source && tool)
-    {
-        const PortDefinition *port = workbench::port(tool->outputs, guardSource.port);
-        // The materialized contract owns the port storage, so it must outlive every read of `port`.
-        std::optional<ToolDefinition> contract;
-        if (!port)
-            try
-            {
-                contract = nodeContract(*source, *tool);
-                port     = workbench::port(contract->outputs, guardSource.port);
-            }
-            catch (const ContractError &)
-            {
-                port = nullptr;
-            }
-        if (port)
-            portName = workbench::q(port->nameZh);
-    }
-    return (source ? workbench::q(source->title()) : QString::number(guardSource.node)) + "-" + portName;
-}
+
 
 QString AppController::nodeModel() const
 {
@@ -250,42 +221,7 @@ bool AppController::applySingleExpression(const QString &nodeId, const QString &
     return ok;
 }
 
-QVariantList AppController::guardCandidates(const QString &nodeId) const
-{
-    QVariantList result;
-    const auto   id = workbench::nodeId(nodeId);
-    const auto  *target = impl_->findNode(id);
-    if (!target)
-        return result;
-    for (const auto &flow : impl_->editor.project().flows)
-    {
-        if (flow.id != impl_->flow.toStdString())
-            continue;
-        {
-            for (const auto &node : flow.nodes)
-            {
-                const auto *tool = impl_->registry.find(node.toolId);
-                if (!tool || node.id == id || node.position.y >= target->position.y)
-                    continue;
-                const auto contract = nodeContract(node, *tool);
-                for (const auto &port : contract.outputs)
-                {
-                    if (port.type != TypeSpec{Type::Bool})
-                        continue;
-                    const bool selected = target->executionGuard && target->executionGuard->source
-                                       && target->executionGuard->source->node == node.id
-                                       && target->executionGuard->source->port == port.id;
-                    result.push_back(QVariantMap{{"node", QString::number(node.id)},
-                                                 {"title", workbench::q(node.title())},
-                                                 {"port", static_cast<uint>(port.id)},
-                                                 {"portName", workbench::q(port.nameZh)},
-                                                 {"selected", selected}});
-                }
-            }
-        }
-    }
-    return result;
-}
+
 
 bool AppController::setConditionMode(const QString &nodeId, bool upstream)
 {
@@ -310,73 +246,9 @@ bool AppController::setConditionMode(const QString &nodeId, bool upstream)
     return ok;
 }
 
-bool AppController::setExecutionGuardMode(const QString &nodeId, bool upstream)
-{
-    const auto id = workbench::nodeId(nodeId);
-    if (!impl_->idle())
-        return false;
-    const auto *tool = impl_->registry.find(impl_->currentNode() ? impl_->currentNode()->toolId : std::string{});
-    if (!tool || !supportsExecutionGuard(tool->nodeModel))
-        return false;
-    // The mode is the only thing this transaction changes; a retained source stays
-    // available for switching back.
-    std::optional<ExecutionGuard> guard;
-    const auto *current = impl_->currentNode();
-    if (current && current->executionGuard)
-        guard = current->executionGuard;
-    else if (upstream)
-        guard = ExecutionGuard{};
-    if (guard)
-        guard->mode = upstream ? BindingMode::Upstream : BindingMode::Literal;
-    const bool ok = impl_->command(
-        [&]
-        {
-            return impl_->editor.setExecutionGuard(impl_->flow.toStdString(), id, std::move(guard), *tool);
-        },
-        true);
-    if (ok)
-    {
-        impl_->publishNodesChanged();
-        emit parametersChanged();
-    }
-    return ok;
-}
 
-bool AppController::applyExecutionGuard(const QString &nodeId, const QString &sourceNode, int port)
-{
-    const auto id = workbench::nodeId(nodeId);
-    if (!impl_->idle())
-        return false;
-    const auto *tool = impl_->currentTool();
-    if (!tool || !supportsExecutionGuard(tool->nodeModel))
-        return false;
-    std::optional<ExecutionGuard> guard;
-    if (!sourceNode.isEmpty())
-    {
-        guard = ExecutionGuard{SourcePort{workbench::nodeId(sourceNode), static_cast<PortId>(port)}};
-        guard->mode = BindingMode::Upstream;
-    }
-    else if (const auto *current = impl_->currentNode(); current && current->executionGuard)
-    {
-        // Unbinding drops the source only; the node stays in upstream mode and the mode
-        // highlight must not be replaced by a colour that pretends the mode changed.
-        guard         = current->executionGuard;
-        guard->source.reset();
-        guard->mode = BindingMode::Upstream;
-    }
-    const bool ok = impl_->command(
-        [&]
-        {
-            return impl_->editor.setExecutionGuard(impl_->flow.toStdString(), id, std::move(guard), *tool);
-        },
-        true);
-    if (ok)
-    {
-        impl_->publishNodesChanged();
-        emit parametersChanged();
-    }
-    return ok;
-}
+
+
 
 QVariantMap AppController::selectType(const QString &nodeId) const
 {

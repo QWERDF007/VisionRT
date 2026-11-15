@@ -100,16 +100,6 @@ std::optional<std::string> upstreamValidityError(
             return "上游节点 " + node.title() + " 的参数已修改，请先重新运行该节点";
         // Reuse does not require a successful business status: a failed publication with
         // valid outputs is a legitimate, current input.
-        if (snapshot->disposition == NodeDisposition::Skipped || snapshot->disposition == NodeDisposition::Blocked)
-            return "上游节点 " + node.title() + " 本轮未执行，请先运行该节点";
-        if (node.executionGuard && node.executionGuard->mode == BindingMode::Upstream
-            && node.executionGuard->source)
-        {
-            const auto guard = runtimes.find(node.executionGuard->source->node);
-            const auto flag  = guard == runtimes.end() ? ResultSlot::Snapshot{} : guard->second->slot.latest();
-            if (!flag || flag->generation != generation)
-                return "节点 " + node.title() + " 的执行条件在本轮不可用，请先运行条件来源";
-        }
         if (snapshot->toolId != node.toolId)
             return "上游节点 " + node.title() + " 的工具已变化，请先重新运行该节点";
         const auto *definition = frozen.registry.find(node.toolId);

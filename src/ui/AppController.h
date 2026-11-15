@@ -63,7 +63,6 @@ class AppController : public QObject
     Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
     Q_PROPERTY(QString aboutText READ aboutText NOTIFY aboutTextChanged)
     Q_PROPERTY(visionrt::ToolEditorController *toolEditor READ toolEditor CONSTANT)
-    Q_PROPERTY(QString executionGuardText READ executionGuardText NOTIFY parametersChanged)
     Q_PROPERTY(QString conditionMode READ conditionMode NOTIFY parametersChanged)
     Q_PROPERTY(bool easyTouchEnabled READ easyTouchEnabled WRITE setEasyTouchEnabled NOTIFY assistChanged)
     // The tool editor lists the declarations shipped with the installation only when this is on.
@@ -219,10 +218,7 @@ public:
     Q_INVOKABLE bool         applyExpressionConfig(const QString &node, const QVariantList &variables,
                                                    const QVariantList &program);
     Q_INVOKABLE bool         applySingleExpression(const QString &node, const QString &text);
-    Q_INVOKABLE QVariantList guardCandidates(const QString &node) const;
-    Q_INVOKABLE bool         applyExecutionGuard(const QString &node, const QString &sourceNode, int port);
     // Mode switch is one transaction; binding a source is a separate one.
-    Q_INVOKABLE bool         setExecutionGuardMode(const QString &node, bool upstream);
     Q_INVOKABLE bool         setConditionMode(const QString &node, bool upstream);
     Q_INVOKABLE QVariantMap  selectType(const QString &node) const;
     Q_INVOKABLE bool         applySelectType(const QString &node, const QString &type, const QString &dtype,
@@ -234,7 +230,6 @@ public:
     Q_INVOKABLE QVariantMap  nodeRecord(const QString &id) const;
     Q_INVOKABLE QPointF      nodePosition(const QString &id) const;
     Q_INVOKABLE QVariantList nodePositions() const;
-    QString                  executionGuardText() const;
     QString                  nodeModel() const;
     QString                  conditionMode() const;
     bool                     easyTouchEnabled() const;

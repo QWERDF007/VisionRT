@@ -39,7 +39,7 @@ void validateToolValue(const PortDefinition &port, const PortValue &value)
     }
     catch (const ContractError &error)
     {
-        throw ContractError(portLabel(port.id) + " 的值类型不匹配（期望 " + typeName(port.type.type) + "，实际 "
+        throw ContractError(port.nameZh + " 的值类型不匹配（期望 " + typeName(port.type.type) + "，实际 "
                             + typeName(typeOf(value)->type) + "）：" + error.what());
     }
 
@@ -47,23 +47,23 @@ void validateToolValue(const PortDefinition &port, const PortValue &value)
         && std::none_of(port.options.begin(), port.options.end(),
                         [&](const auto &option) { return equalValues(option, value); }))
     {
-        throw ContractError(portLabel(port.id) + " 的值不在允许的选项内");
+        throw ContractError(port.nameZh + " 的值不在允许的选项内");
     }
 
     if (port.minimum || port.maximum)
     {
         if (port.type.type == Type::Float && !std::isfinite(std::get<double>(value)))
         {
-            throw ContractError(portLabel(port.id) + " 的值必须为有限数值");
+            throw ContractError(port.nameZh + " 的值必须为有限数值");
         }
         if (port.minimum && lessNumber(value, *port.minimum, port.type.type))
         {
-            throw ContractError(portLabel(port.id) + " 的值 " + numberText(value) + " 小于最小值 "
+            throw ContractError(port.nameZh + " 的值 " + numberText(value) + " 小于最小值 "
                                 + numberText(*port.minimum));
         }
         if (port.maximum && lessNumber(*port.maximum, value, port.type.type))
         {
-            throw ContractError(portLabel(port.id) + " 的值 " + numberText(value) + " 大于最大值 "
+            throw ContractError(port.nameZh + " 的值 " + numberText(value) + " 大于最大值 "
                                 + numberText(*port.maximum));
         }
     }
@@ -129,7 +129,7 @@ ToolStatus validateToolExecution(const std::vector<PortDefinition> &ports, Value
                 outputs.insert_or_assign(port.id, Missing{});
                 continue;
             }
-            throw ContractError("工具未发布输出端口：" + portLabel(port.id));
+            throw ContractError("工具未发布输出端口：" + port.nameZh);
         }
         validateToolOutput(port, found->second, status);
     }

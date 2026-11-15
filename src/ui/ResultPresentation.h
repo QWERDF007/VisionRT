@@ -78,7 +78,7 @@ public:
     // Shared owner for consumers that keep the snapshot (assist contexts), never a deep copy.
     ResultSlot::Snapshot        sharedSnapshot(NodeId node) const;
     bool                        active(NodeId node) const;
-    NodeDiagnostic              status(const NodeDefinition &node) const;
+    std::optional<NodeDiagnostic> status(const NodeDefinition &node) const;
     std::size_t                 snapshotCount() const noexcept { return snapshots_.size(); }
     const NodeDiagnostic       *lifecycle(NodeId node) const;
     // Shared owner for consumers that pass the diagnostic into the output model.

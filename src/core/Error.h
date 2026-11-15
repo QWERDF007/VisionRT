@@ -14,22 +14,9 @@ namespace visionrt {
 
 enum class ErrorCode : std::int64_t
 {
-    Ok                  = 0,
-    Internal            = -1,
-    InvalidArgument     = -2,
-    Busy                = -3,
-    NotFound            = -4,
-    Cancelled           = -5,
-    NotExecuted         = -6,
-    FailedPrecondition  = -7,
-    ReadbackMismatch    = -8,
-    Timeout             = -9,
-    IoError             = -10,
-    PluginLoadFailed    = -11,
-    PythonUnavailable   = -12,
-    DataInvalid         = -13,
-    ResourceUnavailable = -14,
-    Unsupported         = -15
+#define VISIONRT_ERROR(name, code, message) name = code,
+#include "core/Errors.def"
+#undef VISIONRT_ERROR
 };
 
 std::string_view defaultMessage(ErrorCode code) noexcept;
