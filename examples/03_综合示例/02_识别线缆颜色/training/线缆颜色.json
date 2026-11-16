@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "kind": "color_samples",
+  "records": [
+    {
+      "id": "sample-1",
+      "label": "purple",
+      "image": "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png",
+      "regions": [
+        [
+          800.0,
+          635.0,
+          160.0,
+          100.0,
+          6.6
+        ]
+      ]
+    },
+    {
+      "id": "sample-2",
+      "label": "red",
+      "image": "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png",
+      "regions": [
+        [
+          800.0,
+          801.0,
+          160.0,
+          100.0,
+          6.6
+        ]
+      ]
+    },
+    {
+      "id": "sample-3",
+      "label": "blue",
+      "image": "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png",
+      "regions": [
+        [
+          800.0,
+          998.0,
+          160.0,
+          100.0,
+          6.6
+        ]
+      ]
+    },
+    {
+      "id": "sample-4",
+      "label": "yellow",
+      "image": "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png",
+      "regions": [
+        [
+          800.0,
+          1162.0,
+          160.0,
+          100.0,
+          6.6
+        ]
+      ]
+    },
+    {
+      "id": "sample-5",
+      "label": "purple",
+      "image": "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png",
+      "regions": [
+        [
+          800.0,
+          1373.0,
+          160.0,
+          100.0,
+          6.6
+        ]
+      ]
+    }
+  ]
+}

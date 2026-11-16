@@ -14,6 +14,14 @@
 
 namespace visionrt {
 
+// Which owner the edited regions belong to. A training record is not a node input, so the viewport
+// carries the distinction instead of the controller guessing from a port number.
+enum class RoiTargetKind
+{
+    Input,
+    Training
+};
+
 struct RoiEditTarget
 {
     std::uint64_t nodeSeq = 0;
@@ -21,6 +29,7 @@ struct RoiEditTarget
     int           imageIndex = 0;
     int           roiIndex   = -1; // -1 appends a new ROI; existing edits/deletion use an index.
     std::uint64_t session = 0;
+    RoiTargetKind kind    = RoiTargetKind::Input;
     bool          operator==(const RoiEditTarget &) const = default;
 };
 
@@ -59,6 +68,11 @@ public:
     // For a shared converter serving the main view and all visible thumbnails.
     void setDisplayFrame(const DisplayFrame &frame);
     void clearImage(quint64 requestId);
+    // Shows a host-owned picture (the selected training record) without consuming the result
+    // pipeline's request identity; the next result frame replaces it in the ordinary way.
+    void setHostImage(const QImage &image);
+    // The full-resolution picture on screen. Training saves exactly these pixels, never a thumbnail.
+    QImage displayedImage() const { return display_; }
     void setGeneration(quint64 generation);
     void setOverlays(RegionGroup inputs, RegionGroup outputs);
     // Caller freezes the matching background and performs the project edit command.
@@ -172,6 +186,7 @@ signals:
     void assistLeave();
     void assistClicked(const QPointF &imagePoint, bool append);
     void assistCanceled();
+    void contextMenuRequested(const QPointF &position);
     void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::EncodedRegion &roi);
     void roiDeleted(const visionrt::RoiEditTarget &target);
     void roiEditCanceled();

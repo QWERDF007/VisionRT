@@ -208,6 +208,35 @@ int AppController::activeRoiParameter() const
     return impl_->roiSession.active() ? static_cast<int>(impl_->roiSession.input()) : 0;
 }
 
+bool AppController::shapeToolsAvailable() const
+{
+    if (!impl_->editingAllowed())
+        return false;
+    return impl_->trainingMode ? impl_->training->selected() >= 0 : impl_->roiSession.active();
+}
+
+int AppController::drawShape() const
+{
+    if (!shapeToolsAvailable())
+        return 0;
+    auto *viewport = impl_->presentation.viewport();
+    return viewport ? viewport->drawShape() : 0;
+}
+
+void AppController::setDrawShape(int shape)
+{
+    if (shape < 0 || shape > 5 || !shapeToolsAvailable())
+        return;
+    // A training record is a list of rectangles whatever the tool does with them, so the palette
+    // offers only the rectangle there instead of collecting regions the asset cannot store.
+    if (impl_->trainingMode && shape != 0 && shape != 2)
+        return;
+    auto *viewport = impl_->presentation.viewport();
+    if (!viewport)
+        return;
+    viewport->setDrawShape(shape);
+}
+
 int AppController::activeRoiShape() const
 {
     auto *viewport = impl_->presentation.viewport();

@@ -133,7 +133,6 @@ public:
     THEME_COLOR_PROP(treeItemSelectedText)
     THEME_COLOR_PROP(treeItemSelectedIcon)
     THEME_COLOR_PROP(treeItemSelectedIndicator)
-    THEME_COLOR_PROP(treeItemUnavailableText)
 
     // 底部参数面板标签页（基本输入、预处理、检测、结果处理）
     THEME_COLOR_PROP(tabBarBg)
@@ -155,7 +154,6 @@ public:
     THEME_COLOR_PROP(paramGroupHeaderBg)
     THEME_COLOR_PROP(paramGroupHeaderText)
     THEME_COLOR_PROP(paramRowHoverBg)
-    THEME_COLOR_PROP(paramLabelText)
     // 参数字段文本的唯一来源：名称与取值同色，不再分叉成 label/editor 两套
     THEME_COLOR_PROP(parameterTextColor)
     THEME_COLOR_PROP(paramEditorBorder)
@@ -164,10 +162,8 @@ public:
     THEME_COLOR_PROP(paramInputReadOnlyBg)
     THEME_COLOR_PROP(paramActionActiveBg)
     THEME_COLOR_PROP(paramActionHoverBg)
-    THEME_COLOR_PROP(bindingInactiveColor)
     // 输入来源按钮：选中态只表示输入模式，绑定是否有效由来源框单独诊断
     THEME_COLOR_PROP(sourceButtonActiveBackground)
-    THEME_COLOR_PROP(sourceButtonActiveBorder)
     THEME_COLOR_PROP(sourceButtonActiveIcon)
     THEME_COLOR_PROP(sourceButtonIdleIcon)
 
@@ -180,7 +176,6 @@ public:
     THEME_COLOR_PROP(iconMuted)
     THEME_COLOR_PROP(iconSecondary)
     THEME_COLOR_PROP(error)
-    THEME_COLOR_PROP(success)
     THEME_COLOR_PROP(warning)
     THEME_COLOR_PROP(disabledText)
     THEME_COLOR_PROP(tooltipBg)
@@ -188,7 +183,6 @@ public:
     // 设置窗口左导航：选中项浅蓝底与强调文字，与工具树的选中语义区分开
     THEME_COLOR_PROP(navItemActiveBg)
     THEME_COLOR_PROP(navItemActiveText)
-    THEME_COLOR_PROP(assistHintText)
     THEME_COLOR_PROP(zoomText)
 
     // 图像视口自绘 ROI（仅显示，不改变业务坐标）
@@ -200,7 +194,6 @@ public:
     THEME_COLOR_PROP(nodeStateGray)
     THEME_COLOR_PROP(nodeStateGreen)
     THEME_COLOR_PROP(nodeStateRed)
-    THEME_COLOR_PROP(nodeStateOrange)
     THEME_COLOR_PROP(nodeHeaderGray)
     THEME_COLOR_PROP(nodeHeaderGreen)
     THEME_COLOR_PROP(nodeHeaderRed)
@@ -297,6 +290,7 @@ public:
     THEME_INT_PROP(toolbarWidth)
     THEME_INT_PROP(toolbarButtonSize)
     THEME_INT_PROP(thumbnailPanelWidth)
+    THEME_INT_PROP(trainingPanelWidth)
     THEME_INT_PROP(thumbnailRowHeight)
     THEME_INT_PROP(thumbnailImageHeight)
     THEME_INT_PROP(tooltipWidth)
@@ -306,8 +300,6 @@ public:
     // 全局字号、图标与圆角
     THEME_INT_PROP(fontSizeCaption)
     THEME_INT_PROP(fontSizeSmall)
-    THEME_INT_PROP(fontSizeBase)
-    THEME_INT_PROP(fontSizeMedium)
     THEME_INT_PROP(iconSizeTiny)
     THEME_INT_PROP(iconSizeSmall)
     THEME_INT_PROP(iconSizeBase)
@@ -317,12 +309,6 @@ public:
     // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
     THEME_FONT_PROP(titleFont)
     THEME_FONT_PROP(monoFont)
-
-    // 语义图标（字体 glyph），业务组件不直接选码点
-    THEME_INT_PROP(iconZoomIn)
-    THEME_INT_PROP(iconZoomOut)
-    THEME_INT_PROP(iconOneToOne)
-    THEME_INT_PROP(iconEasyTouch)
 
     THEME_REAL_PROP(sourceButtonDisabledOpacity)
 

@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QFontMetricsF>
+#include <QFontInfo>
 #include <QProcess>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -177,6 +179,76 @@ try
         collectByClass(toolbars.front(), "QuiTextIconButton", headerButtons);
         require(headerButtons.size() >= 6, "layout header controls are incomplete");
         requireDisjoint(headerButtons, "header controls overlap");
+        auto *fileMenu = window->findChild<QObject *>("fileMenu");
+        auto *recentMenu = window->findChild<QObject *>("recentMenu");
+        require(fileMenu && recentMenu, "file and recent project menus are missing");
+        QMetaObject::invokeMethod(fileMenu, "open");
+        QMetaObject::invokeMethod(recentMenu, "open");
+        require(QTest::qWaitFor([&] { return recentMenu->property("opened").toBool(); }, 1000),
+                "recent project submenu did not open");
+        for (int index = 0; index < recentMenu->property("count").toInt(); ++index)
+        {
+            QQuickItem *entry = nullptr;
+            QMetaObject::invokeMethod(recentMenu, "itemAt", Qt::DirectConnection,
+                                      Q_RETURN_ARG(QQuickItem *, entry), Q_ARG(int, index));
+            require(entry != nullptr, "recent project menu entry is missing");
+            require(entry->width() >= QFontMetricsF(entry->property("font").value<QFont>())
+                                         .horizontalAdvance(entry->property("text").toString())
+                                         + entry->property("leftPadding").toDouble() + entry->property("rightPadding").toDouble(),
+                    "recent project submenu clips a full path");
+        }
+        require(window->grabWindow().save(QStringLiteral(VISIONRT_SOURCE_DIR "/build/evidence/recent_paths_menu_%1.png")
+                                             .arg(QString::number(scale, 'f', 1))), "recent menu screenshot could not be saved");
+        QMetaObject::invokeMethod(recentMenu, "close");
+        QMetaObject::invokeMethod(fileMenu, "close");
+        require(QTest::qWaitFor([&] { return !fileMenu->property("visible").toBool(); }, 1000), "file menu did not close");
+        QQmlComponent pathMenuComponent(&engine);
+        pathMenuComponent.setData(R"(
+            import QtQuick
+            import quickui
+            QuiMenu {
+                animationEnabled: false
+                QuiMenuItem {
+                    objectName: "fullPathEntry"
+                    text: "F:/Projects/VisionRT/examples/03_综合示例/02_识别线缆颜色/识别线缆颜色.vrt.json"
+                }
+            }
+        )", QUrl());
+        std::unique_ptr<QObject> pathMenu(pathMenuComponent.createWithInitialProperties(
+            {{"parent", QVariant::fromValue(window->contentItem())}}));
+        require(pathMenu != nullptr, pathMenuComponent.errorString().toStdString());
+        auto *pathEntry = pathMenu->findChild<QQuickItem *>("fullPathEntry");
+        require(pathEntry != nullptr, "full path menu entry is missing");
+        QMetaObject::invokeMethod(pathMenu.get(), "open");
+        const auto fitsPath = [&] {
+            const auto font = pathEntry->property("font").value<QFont>();
+            return pathEntry->width() >= QFontMetricsF(font).horizontalAdvance(pathEntry->property("text").toString())
+                       + pathEntry->property("leftPadding").toDouble() + pathEntry->property("rightPadding").toDouble();
+        };
+        require(QTest::qWaitFor(fitsPath, 1000),
+                "menu width clips the full project path: menu=" + std::to_string(pathMenu->property("width").toDouble())
+                    + " content=" + std::to_string(pathMenu->property("contentWidth").toDouble())
+                    + " item=" + std::to_string(pathEntry->width())
+                    + " implicit=" + std::to_string(pathEntry->implicitWidth()));
+        const auto oldWidth = pathMenu->property("width").toDouble();
+        pathEntry->setProperty("text", pathEntry->property("text").toString() + QStringLiteral("/更多.json"));
+        require(QTest::qWaitFor([&] { return fitsPath() && pathMenu->property("width").toDouble() > oldWidth; }, 1000),
+                "menu width did not follow a longer path");
+        const auto longWidth = pathMenu->property("width").toDouble();
+        auto pathFont = pathEntry->property("font").value<QFont>();
+        pathFont.setPixelSize(QFontInfo(pathFont).pixelSize() + 4);
+        pathEntry->setProperty("font", pathFont);
+        require(QTest::qWaitFor([&] { return fitsPath() && pathMenu->property("width").toDouble() > longWidth; }, 1000),
+                "menu width did not follow the text font: width=" + std::to_string(pathMenu->property("width").toDouble())
+                    + " content=" + std::to_string(pathMenu->property("contentWidth").toDouble())
+                    + " implicit=" + std::to_string(pathEntry->implicitWidth()));
+        const auto pathShot = QStringLiteral(VISIONRT_SOURCE_DIR "/build/evidence/full_path_menu_%1.png")
+                                  .arg(QString::number(scale, 'f', 1));
+        require(window->grabWindow().save(pathShot), "full path menu screenshot could not be saved");
+        pathEntry->setProperty("text", QStringLiteral("F:/短路径.vrt.json"));
+        require(QTest::qWaitFor([&] { return fitsPath() && pathMenu->property("width").toDouble() < oldWidth; }, 1000),
+                "menu kept the previous long path width");
+        QMetaObject::invokeMethod(pathMenu.get(), "close");
         const auto shot = QStringLiteral(VISIONRT_SOURCE_DIR "/build/evidence/workbench_layout_%1.png")
                               .arg(QString::number(scale, 'f', 1));
         require(window->grabWindow().save(shot), "layout screenshot could not be saved");

@@ -223,9 +223,6 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
                          if (!outcome.valid)
                          {
                              clearAssistPreview();
-                             setAssistHint(outcome.quality.isEmpty()
-                                               ? QStringLiteral("未找到有效目标")
-                                               : QStringLiteral("未找到有效目标：") + outcome.quality);
                              return;
                          }
                          assistPreviewRois    = outcome.preview;
@@ -405,11 +402,17 @@ const PortDefinition *AppController::Impl::parameter(PortId id, bool initializat
     return tool ? workbench::port(initialization ? tool->initParams : tool->inputs, id) : nullptr;
 }
 
+bool AppController::Impl::editingAllowed() const
+{
+    return state == RuntimeState::Idle && !presentation.draining() && !operations.active()
+        && !operations.isClosing();
+}
+
 bool AppController::Impl::idle()
 {
     if (operations.isClosing())
         return false;
-    if (state == RuntimeState::Idle && !operations.active())
+    if (editingAllowed())
         return true;
     report(QStringLiteral("当前任务尚未结束，配置编辑不可用"), LogSource::Ui);
     return false;
@@ -422,7 +425,7 @@ void AppController::Impl::setState(RuntimeState value)
         return;
     state = value;
     if (auto *viewport = presentation.viewport())
-        viewport->setReadOnly(state != RuntimeState::Idle || !roiSession.active());
+        viewport->setReadOnly(state != RuntimeState::Idle || (!roiSession.active() && !trainingMode));
     refreshAssist();
     emit q->runtimeChanged();
 }
@@ -444,6 +447,12 @@ void AppController::Impl::pruneDeletedNodes()
             existing.insert(node.id);
     const auto kept = presentation.snapshotCount();
     presentation.retain(existing);
+    if (training && !existing.contains(training->node()))
+    {
+        leaveTraining();
+        training = nullptr;
+    }
+    std::erase_if(trainingViews, [&](const auto &entry) { return !existing.contains(entry.first); });
     if (presentation.snapshotCount() != kept)
     {
         if (roiSession.active() && !existing.contains(roiSession.node()))
@@ -481,6 +490,8 @@ void AppController::Impl::changed(bool structure)
     if (!currentNode() && !selected.isEmpty())
     {
         finishRoi();
+        leaveTraining();
+        training = nullptr;
         selected.clear();
         emit q->selectionChanged();
     }
@@ -945,6 +956,9 @@ void AppController::Impl::advancePending()
         replacementCommitted = true;
         ++projectEpoch;
         flow = editor.project().flows.empty() ? QString{} : workbench::q(editor.project().flows.front().id);
+        leaveTraining();
+        training = nullptr;
+        trainingViews.clear();
         selected.clear();
         clipboard.reset();
         emit q->pasteChanged();
@@ -1362,7 +1376,11 @@ AppController::AppController(std::size_t workers, const QString &applicationDire
     : QObject(parent)
     , impl_(std::make_unique<Impl>(this, workers, applicationDirectory))
 {
-    // The model notifies its own rows; no cache behind the nodes property can go stale.
+    // Training availability is a function of the selected tool, so every selection change refreshes
+    // it through the one signal instead of each command remembering to announce it.
+    connect(this, &AppController::selectionChanged, this, &AppController::trainingChanged);
+    connect(this, &AppController::trainingChanged, this, &AppController::resultsChanged);
+    connect(this, &AppController::runtimeChanged, this, &AppController::resultsChanged);
 }
 
 AppController::~AppController() = default;
@@ -1585,7 +1603,7 @@ bool AppController::runtimeBusy() const
 bool AppController::workspaceEnabled() const
 {
     // Idle, not draining and not closing: the same conditions the editing commands already enforce.
-    return !busy() && !impl_->operations.isClosing();
+    return impl_->editingAllowed();
 }
 
 bool AppController::stopEnabled() const
@@ -1836,6 +1854,8 @@ void AppController::selectFlow(const QString &id)
         if (q(flow.id) == id)
         {
             impl_->finishRoi();
+            impl_->leaveTraining();
+            impl_->training = nullptr;
             impl_->flow = id;
             impl_->selected.clear();
             impl_->wireState.clear();
@@ -1865,10 +1885,18 @@ void AppController::selectNode(const QString &id)
             return;
     }
     impl_->finishRoi();
+    impl_->leaveTraining();
+    impl_->training = nullptr;
     impl_->selected = id;
     emit selectionChanged();
     emit parametersChanged();
     impl_->updateResults();
+    if (!id.isEmpty())
+    {
+        const auto view = impl_->trainingViews.find(workbench::nodeId(id));
+        if (view != impl_->trainingViews.end() && view->second.visible && trainingAvailable())
+            setTrainingMode(true);
+    }
 }
 
 void AppController::filterTools(const QString &text)

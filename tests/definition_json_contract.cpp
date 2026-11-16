@@ -316,6 +316,47 @@ try
         assert(refused && parseToolDefinitionFile(target.toStdWString()).nameZh == "写入后的声明");
     }
 
+    // Training is optional and capability-driven: the declaration names the session kind and the
+    // initialization parameter that carries the asset path. A reference to a missing or non-string
+    // parameter, or an unknown kind, is refused instead of producing a tab with nothing behind it.
+    auto trainable          = emitted;
+    trainable["init_params"] = QJsonArray{
+        QJsonObject{{"id", 0}, {"name_en", "asset"}, {"name_zh", "训练数据"}, {"type", "string"}}};
+    trainable["training"] = QJsonObject{{"kind", "color_samples"}, {"asset_param", 0}};
+    const auto trained = parseToolDefinitionJson(QJsonDocument(trainable).toJson().toStdString());
+    assert(trained.training && trained.training->kind == TrainingKind::ColorSamples
+           && trained.training->assetParam == 0);
+    const auto trainedRoundTrip
+        = parseToolDefinitionJson(emitNormalizedToolJson(trained));
+    assert(trainedRoundTrip.training && trainedRoundTrip.training->assetParam == 0);
+
+    trainable["training"] = QJsonObject{{"kind", "color_samples"}, {"asset_param", 7}};
+    rejectObject(trainable);
+    trainable["training"] = QJsonObject{{"kind", "color_samples"}, {"asset_param", 0}};
+    trainable["init_params"] = QJsonArray{
+        QJsonObject{{"id", 0}, {"name_en", "asset"}, {"name_zh", "训练数据"}, {"type", "int"}}};
+    rejectObject(trainable);
+    trainable["init_params"] = QJsonArray{
+        QJsonObject{{"id", 0}, {"name_en", "asset"}, {"name_zh", "训练数据"}, {"type", "string"}}};
+    trainable["training"] = QJsonObject{{"kind", "unknown"}, {"asset_param", 0}};
+    rejectObject(trainable);
+
+    // Both session kinds round-trip; the host decides which editor to show from this value alone.
+    trainable["training"] = QJsonObject{{"kind", "straight_edges"}, {"asset_param", 0}};
+    const auto edges = parseToolDefinitionJson(QJsonDocument(trainable).toJson().toStdString());
+    assert(edges.training && edges.training->kind == TrainingKind::StraightEdges);
+    const auto edgesRoundTrip = parseToolDefinitionJson(emitNormalizedToolJson(edges));
+    assert(edgesRoundTrip.training && edgesRoundTrip.training->kind == TrainingKind::StraightEdges);
+
+    // A session that is edited by point and click names its assistant in the same block; the host
+    // reports a missing helper at run time, so the declaration only has to survive the round trip.
+    trainable["training"] = QJsonObject{
+        {"kind", "straight_edges"}, {"asset_param", 0}, {"helper", "PickStraightEdge"}};
+    const auto assisted = parseToolDefinitionJson(QJsonDocument(trainable).toJson().toStdString());
+    assert(assisted.training && assisted.training->helper == "PickStraightEdge");
+    const auto assistedRoundTrip = parseToolDefinitionJson(emitNormalizedToolJson(assisted));
+    assert(assistedRoundTrip.training && assistedRoundTrip.training->helper == "PickStraightEdge");
+
     std::cout << "Qt JSON tool declarations preserve values and derive system outputs\n";
     return 0;
 }

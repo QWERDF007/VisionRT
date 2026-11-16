@@ -69,6 +69,9 @@ public:
     ResultPresentation &operator=(const ResultPresentation &) = delete;
 
     void setRuntime(RuntimeEngine *runtime) noexcept { runtime_ = runtime; }
+    // The training view owns the viewport while it is open. Result polling keeps filling the output
+    // table, but must not replace the reference picture or the rectangles the user is editing.
+    void setSuspended(bool value) noexcept { suspended_ = value; }
     void setGeneration(std::uint64_t generation) noexcept { generation_ = generation; }
     // Release completion is part of the drain condition; the controller forwards its helper state.
     void setExternalBusy(std::function<bool()> busy) { externalBusy_ = std::move(busy); }
@@ -163,6 +166,9 @@ private:
         QString name;
     };
     std::vector<ImageChoice> imageChoices() const;
+    // Keeps the panel on a real image: a node without a usable selection adopts the first offered
+    // port that already carries images, so switching nodes never lands on an empty canvas.
+    void ensureImageSelection(const NodeDefinition &node, const ResultSlot::Snapshot &snapshot);
 
     PresentationHost &host_;
     OutputModel      &outputs_;
@@ -177,8 +183,9 @@ private:
 
     std::optional<PortRef> imageSelection_;
     // The node the current selection was made for. A node that has never been shown picks its first
-    // offered image; a node whose chosen port disappeared stays empty instead of picking another.
-    // Both are optional: node 0 is a real node, so 0 cannot mean "none".
+    // offered image; a port that disappeared is replaced by the first one still carrying images
+    // instead of leaving the viewport empty. Both are optional: node 0 is a real node, so 0 cannot
+    // mean "none".
     std::optional<NodeId> selectionNode_;
     int      index_    = 0;
     int      count_    = 0;
@@ -187,6 +194,7 @@ private:
     RegionGroup                  displayInputs_;
     RegionGroup                  displayOutputs_;
     std::optional<RoiEditTarget> displayRoiTarget_;
+    bool                         suspended_ = false;
     QPointer<ImageViewport>              viewport_;
     std::vector<QPointer<ImageViewport>> thumbnails_;
     std::vector<QPointer<ImageViewport>> displayTargets_;

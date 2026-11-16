@@ -757,63 +757,33 @@ Window {
                     }
 
                     // 取消按钮
-                    Rectangle {
+                    QuiButton {
                         id: cancelBtn
+                        objectName: "cancelBtn"
                         Layout.preferredWidth: 72
                         Layout.preferredHeight: 32
-                        radius: Theme.radiusSmall
-                        border.color: QuiColor.Border
-                        border.width: 1
-                        color: cancelMouse.containsMouse ? Theme.buttonHoverBg : Theme.surfaceBg
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "取消"
-                            font.pixelSize: 13
-                            color: Theme.textPrimary
-                        }
-
-                        MouseArea {
-                            id: cancelMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (root.controller && root.controller.isDirty)
-                                    discardDialog.open()
-                                else
-                                    root.close()
-                            }
+                        text: "取消"
+                        onClicked: {
+                            if (root.controller && root.controller.isDirty)
+                                discardDialog.open()
+                            else
+                                root.close()
                         }
                     }
 
-                    // 保存按钮 (始终保持主题高亮色 Theme.highlight)
-                    Rectangle {
+                    // 保存按钮
+                    QuiButton {
                         id: saveBtn
+                        objectName: "saveBtn"
                         Layout.preferredWidth: 72
                         Layout.preferredHeight: 32
-                        radius: Theme.radiusSmall
-                        color: saveMouse.containsMouse ? Qt.lighter(Theme.highlight, 1.1) : Theme.highlight
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "保存"
-                            font.pixelSize: 13
-                            font.bold: true
-                            color: "#FFFFFF"
-                        }
-
-                        MouseArea {
-                            id: saveMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (root.controller) {
-                                    root.controller.saveAll()
-                                    root.controller.cancelAll()
-                                    root.close()
-                                }
+                        text: "保存"
+                        highlighted: true
+                        onClicked: {
+                            if (root.controller) {
+                                root.controller.saveAll()
+                                root.controller.cancelAll()
+                                root.close()
                             }
                         }
                     }

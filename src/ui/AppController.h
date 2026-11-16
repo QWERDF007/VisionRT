@@ -44,6 +44,19 @@ class AppController : public QObject
     Q_PROPERTY(QVariantList parameterTabs READ parameterTabs CONSTANT)
     Q_PROPERTY(QVariantList imageOutputs READ imageOutputs NOTIFY resultsChanged)
     Q_PROPERTY(QVariantMap roiEditor READ roiEditor NOTIFY resultsChanged)
+    // Training is an optional tool capability. When the selected tool declares none, every one of
+    // these stays empty and the image panel keeps its ordinary processing layout.
+    // Shape palette of the image toolbar: it only acts while regions are editable, either in the
+    // project ROI editor or in a training record.
+    Q_PROPERTY(bool shapeToolsAvailable READ shapeToolsAvailable NOTIFY resultsChanged)
+    Q_PROPERTY(int drawShape READ drawShape NOTIFY resultsChanged)
+    Q_PROPERTY(bool trainingAvailable READ trainingAvailable NOTIFY trainingChanged)
+    Q_PROPERTY(bool trainingMode READ trainingMode WRITE setTrainingMode NOTIFY trainingChanged)
+    Q_PROPERTY(QString trainingKind READ trainingKind NOTIFY trainingChanged)
+    Q_PROPERTY(QVariantList trainingRecords READ trainingRecords NOTIFY trainingChanged)
+    Q_PROPERTY(QString selectedTrainingRecord READ selectedTrainingRecord NOTIFY trainingChanged)
+    Q_PROPERTY(bool trainingSavable READ trainingSavable NOTIFY trainingChanged)
+    Q_PROPERTY(bool canAddTrainingImage READ canAddTrainingImage NOTIFY resultsChanged)
     Q_PROPERTY(int activeRoiParameter READ activeRoiParameter NOTIFY resultsChanged)
     Q_PROPERTY(int activeRoiShape READ activeRoiShape NOTIFY resultsChanged)
     Q_PROPERTY(int imageIndex READ imageIndex WRITE setImageIndex NOTIFY resultsChanged)
@@ -83,7 +96,6 @@ class AppController : public QObject
     Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
     Q_PROPERTY(QString assistDisabledReason READ assistDisabledReason NOTIFY assistChanged)
-    Q_PROPERTY(QString assistHint READ assistHint NOTIFY assistChanged)
     Q_PROPERTY(QVariantList assistPreview READ assistPreview NOTIFY assistChanged)
     // Newest first, already labelled for a menu: text plus full-path tooltip. It is pure UI state,
     // so it never dirties the project and never becomes a second opening entry point.
@@ -110,7 +122,29 @@ public:
     QVariantList        parameterTabs() const;
     QVariantList        imageOutputs() const;
     QVariantMap         roiEditor() const;
+    bool                trainingAvailable() const;
+    bool                trainingMode() const;
+    void                setTrainingMode(bool value);
+    QString             trainingKind() const;
+    QVariantList        trainingRecords() const;
+    QString             selectedTrainingRecord() const;
+    bool                trainingDirty() const;
+    bool                trainingSavable() const;
+    bool                canAddTrainingImage() const;
+    // Adds the image currently presented by the main viewport to the selected tool's training set.
+    // It writes the picture beside the asset and switches to the training view with the new record.
+    Q_INVOKABLE bool    addTrainingImage();
+    Q_INVOKABLE void    selectTrainingRecord(const QString &id);
+    Q_INVOKABLE void    removeTrainingRecord(const QString &id);
+    Q_INVOKABLE void    setTrainingLabel(const QString &id, const QString &label);
+    // Commits the edited records to the tool's asset and reloads the node, so the next run rebuilds
+    // the model from exactly what the window shows.
+    Q_INVOKABLE void    applyTraining();
     int                 activeRoiParameter() const;
+    bool                shapeToolsAvailable() const;
+    int                 drawShape() const;
+    // Switches the active editor between selecting and drawing one shape; 0 selects.
+    Q_INVOKABLE void    setDrawShape(int shape);
     int                 activeRoiShape() const;
     int                 imageIndex() const;
     int                 imageCount() const;
@@ -257,7 +291,6 @@ public:
     bool                     assistAvailable() const;
     bool                     assistActive() const;
     QString                  assistDisabledReason() const;
-    QString                  assistHint() const;
     QVariantList             assistPreview() const;
     QVariantList             recentProjects() const;
     Q_INVOKABLE QVariantList toolDefinitions() const;
@@ -268,6 +301,7 @@ public:
     Q_INVOKABLE bool         assistClick(double x, double y, bool append);
     Q_INVOKABLE void         assistCancel();
 signals:
+    void trainingChanged();
     void projectChanged();
     void recentProjectsChanged();
     void nodesChanged();

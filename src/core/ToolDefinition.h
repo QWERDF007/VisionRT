@@ -85,6 +85,26 @@ struct PythonEntry
     bool                  operator==(const PythonEntry &) const = default;
 };
 
+// What a tool can be trained on. The host owns the training session and the asset file; the
+// declaration only names which session it can run and which initialization parameter carries the
+// asset path. A tool without this block has no training UI at all.
+enum class TrainingKind
+{
+    ColorSamples,
+    // Two reference edges with their search bands; the tool derives a rigid pose from them.
+    StraightEdges
+};
+
+struct TrainingSpec
+{
+    TrainingKind kind       = TrainingKind::ColorSamples;
+    PortId       assetParam = 0;
+    // Assistant that turns one click on the picture into a record geometry, named by the same
+    // mechanism as a tool interaction helper. Empty means the session is edited by hand only.
+    std::string  helper;
+    bool         operator==(const TrainingSpec &) const = default;
+};
+
 // A dynamic output type names three initialisation parameters by reference.
 struct PortTypeReference {
     PortRef flowParameter;
@@ -131,6 +151,7 @@ struct ToolDefinition {
     NodeModel                          nodeModel  = NodeModel::Fixed;
     ToolVisibility                     visibility = ToolVisibility::Normal;
     std::optional<InteractionMapping>  interaction;
+    std::optional<TrainingSpec>        training;
     std::filesystem::path              definitionPath;
     // Derived from the declaration's directory inside its root, never read from the file.
     std::vector<std::string>           categories;

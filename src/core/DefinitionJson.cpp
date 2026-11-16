@@ -288,7 +288,7 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
         const auto root = document.json().object();
         json::fields(root,
                      {"name_en", "name_zh", "version", "implementation", "ui", "init_params", "inputs", "outputs",
-                      "node_model", "interaction"},
+                      "node_model", "interaction", "training"},
                      "工具声明");
         ToolDefinition definition;
         definition.nameEn  = json::text(root.value("name_en"), "name_en");
@@ -368,6 +368,23 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
                 definition.nodeModel = NodeModel::Select;
             else
                 throw ContractError("未知 node_model：" + model);
+        }
+        if (root.contains("training"))
+        {
+            const auto item = json::object(root.value("training"), "training");
+            json::fields(item, {"kind", "asset_param", "helper"}, "training");
+            const auto kind = json::text(item.value("kind"), "training.kind");
+            TrainingSpec spec;
+            if (kind == "color_samples")
+                spec.kind = TrainingKind::ColorSamples;
+            else if (kind == "straight_edges")
+                spec.kind = TrainingKind::StraightEdges;
+            else
+                throw ContractError("未知 training.kind：" + kind);
+            spec.assetParam = portId(item.value("asset_param"), "training.asset_param");
+            if (const auto helper = item.find("helper"); helper != item.end())
+                spec.helper = json::text(*helper, "training.helper");
+            definition.training = spec;
         }
         if (root.contains("interaction"))
         {
@@ -519,6 +536,23 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
             break;
         }
         root.insert("node_model", model);
+    }
+    if (definition.training)
+    {
+        const char *kind = "color_samples";
+        switch (definition.training->kind)
+        {
+        case TrainingKind::ColorSamples:
+            break;
+        case TrainingKind::StraightEdges:
+            kind = "straight_edges";
+            break;
+        }
+        QJsonObject training{{"kind", kind},
+                             {"asset_param", static_cast<double>(definition.training->assetParam)}};
+        if (!definition.training->helper.empty())
+            training.insert("helper", QString::fromStdString(definition.training->helper));
+        root.insert("training", training);
     }
     if (definition.interaction)
     {

@@ -811,6 +811,14 @@ void validateToolDefinition(const ToolDefinition& def) {
     validatePorts(def.inputs, PortStage::Inputs);
     validatePorts(def.outputs, PortStage::Outputs);
 
+    if (def.training)
+    {
+        const auto *asset = findPort(def.initParams, def.training->assetParam);
+        if (!asset || asset->type != TypeSpec{Type::String})
+            throw ContractError("training.asset_param must reference a String initialization parameter: "
+                                + def.nameEn);
+    }
+
     const auto requireImage = [&](const PortRef &reference, const char *context)
     {
         const auto *target = findPort(def, reference);

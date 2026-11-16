@@ -53,7 +53,7 @@ ColumnLayout {
             objectName: "parameterLabel"
             text: root.parameter.name; Layout.preferredWidth: root.labelWidth
             Layout.alignment: Qt.AlignVCenter
-            font: Theme.parameterFont
+            font: QuiFont.Body
             color: Theme.parameterTextColor
             elide: Text.ElideRight
             MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
@@ -249,7 +249,6 @@ ColumnLayout {
             id: groupCombo
             flat: true
             property var bindingContext: ({})
-            font: root.editorFont
             objectName: "parameterUpstream"
             implicitHeight: Theme.paramEditorHeight
             savedValue: root.currentUpstreamValue()
@@ -342,7 +341,6 @@ ColumnLayout {
         id: boolEditor
         QuiComboBox {
             flat: true
-            font: root.editorFont
             implicitHeight: Theme.paramEditorHeight
             readonly property bool isRecursive: root.parameter.editor === "recursive"
             model: isRecursive ? ["不递归", "递归"] : ["是", "否"]
@@ -382,7 +380,6 @@ ColumnLayout {
         QuiComboBox {
             id: choice
             flat: true
-            font: root.editorFont
             implicitHeight: Theme.paramEditorHeight
             model: root.parameter.options
             textRole: "label"

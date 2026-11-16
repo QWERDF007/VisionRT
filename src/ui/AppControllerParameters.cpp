@@ -41,9 +41,20 @@ bool AppController::Impl::applyParameter(PortId id, bool initialization, PortVal
     else if (signature->second.type == Type::Float && !isMissing(value)
              && !std::isfinite(std::get<double>(value)))
         throw ContractError("数值参数必须为有限值");
-    return initialization
+    const auto nodeId = node->id;
+    const auto *spec = initialization ? trainingSpec() : nullptr;
+    const bool trainingAsset = spec && spec->assetParam == id;
+    const bool changed = initialization
              ? editor.setInitParam(flow.toStdString(), node->id, id, std::move(value))
              : editor.setLiteral(flow.toStdString(), node->id, id, std::move(value));
+    if (changed && trainingAsset)
+    {
+        leaveTraining();
+        training = nullptr;
+        trainingViews.erase(nodeId);
+        emit q->trainingChanged();
+    }
+    return changed;
 }
 
 bool AppController::setParameter(int port, bool initialization, const QString &text, bool jsonInput)

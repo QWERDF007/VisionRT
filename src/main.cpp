@@ -106,6 +106,7 @@ int main(int argc, char *argv[])
     parser.addOption({"demo-file-menu", "Open the file menu on startup for verification"});
     parser.addOption({"demo-settings", "Open the settings window on startup for verification"});
     parser.addOption({"demo-select", "Select first category on startup for verification"});
+    parser.addOption({"demo-training", "Switch the selected node to its training view for verification"});
     parser.addOption({"run-once", "Execute pipeline once on startup"});
     parser.addOption({"python-report", "Write the Python environment evidence report to a file and exit", "path"});
     parser.process(application);
@@ -201,6 +202,21 @@ int main(int argc, char *argv[])
             &engine, &QQmlApplicationEngine::objectCreationFailed, &application, [] { QCoreApplication::exit(1); },
             Qt::QueuedConnection);
         engine.loadFromModule("VisionRT", "Main");
+
+        if (parser.isSet("demo-training"))
+        {
+            auto *timer = new QTimer(&controller);
+            timer->setInterval(300);
+            QObject::connect(timer, &QTimer::timeout, &controller, [&controller, timer]() {
+                if (controller.trainingMode())
+                {
+                    timer->stop();
+                    return;
+                }
+                controller.setTrainingMode(true);
+            });
+            timer->start();
+        }
 
         if (parser.isSet("screenshot"))
         {

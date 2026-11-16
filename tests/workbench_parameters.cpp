@@ -6,6 +6,7 @@
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
+#include <quickui/Font.h>
 
 #include <QFile>
 #include <QFileInfo>
@@ -312,7 +313,7 @@ void parameterEditorsContract()
         return QString{};
     };
     require(!app.setParameter(99, false, "1"), "unknown parameter was accepted");
-    require(app.diagnostic() == QStringLiteral("参数不存在：端口 99"),
+    require(app.diagnostic() == QStringLiteral("参数不存在：未声明的参数（编号 99）"),
             "parameter rejection lost its precise Chinese reason and stable port ID");
     for (const auto &raw : {QString{}, QStringLiteral("null"), QStringLiteral("~"), QStringLiteral("[1]"),
                             QStringLiteral("\"原始引号\"\n中文")})
@@ -579,9 +580,11 @@ void parameterEditorsContract()
         auto *combo = comboBox(row);
         require(combo != nullptr, "Bool/enum parameter did not use a dropdown");
         require(combo->height() == theme->paramEditorHeight(), "dropdown height differs from numeric field");
-        require(combo->property("font").value<QFont>() == theme->parameterFont(),
-                "dropdown font differs from numeric field");
+        require(combo->property("font").value<QFont>() == quickui::QuiFont::getInstance()->Body(),
+                "dropdown did not use default QuiFont.Body");
         auto *label = findItem(findItem, row, "parameterLabel");
+        require(label && label->property("font").value<QFont>() == quickui::QuiFont::getInstance()->Body(),
+                "parameterLabel did not use default QuiFont.Body");
         auto *pathLabel = findItem(findItem, pathRow, "parameterLabel");
         auto *actions = findItem(findItem, row, "parameterActions");
         auto *pathActions = findItem(findItem, pathRow, "parameterActions");

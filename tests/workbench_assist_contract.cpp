@@ -7,6 +7,7 @@
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
+#include "log/LogModel.h"
 
 #include <QDir>
 #include <QFile>
@@ -133,7 +134,10 @@ try
     }
     require(stripes.save(images + "/2.png"), "assist stripe image could not be written");
 
+    require(LogService::instance().start({}, root + "/logs/assist.log"), "assist log did not start");
     AppController app(2, root);
+    app.setLogViewActive(true);
+    auto *history = qobject_cast<LogModel *>(app.logModel());
     const auto    settle = [&]
     { require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "assist operation did not settle"); };
     // A management synchronize starts on the runtime thread shortly after a project edit. Let it
@@ -179,14 +183,14 @@ try
 
     require(QTest::qWaitFor([&] { return app.assistActive(); }, 5000),
             "smart point selection did not become available after the image was cached: "
-                + app.assistHint().toStdString());
-    require(app.assistHint().contains(QStringLiteral("单击")), "assist hint is missing its click guidance");
+                + app.assistDisabledReason().toStdString());
+    require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("单击")); }, 2000), "assist guidance did not reach the log");
 
     // Hover only previews: candidate visible, project untouched.
     const auto parametersBefore = app.parameters();
-    require(app.assistHover(160.0, 120.0), "hover over the circle was rejected: " + app.assistHint().toStdString());
+    require(app.assistHover(160.0, 120.0), "hover over the circle was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
-            "hover produced no candidate: " + app.assistHint().toStdString());
+            "hover produced no candidate: " + app.assistDisabledReason().toStdString());
     require(!app.dirty(), "a hover preview must not dirty the project");
     const auto preview = app.assistPreview().front().toList();
     require(preview.size() == 4 && static_cast<int>(preview.at(0).toDouble()) == 3,
@@ -199,7 +203,7 @@ try
     QSignalSpy projectChanges(&app, &AppController::projectChanged);
     require(app.assistClick(160.0, 120.0, false), "circle click was rejected");
     require(QTest::qWaitFor([&] { return app.dirty(); }, 10000),
-            "the click did not commit a ROI: " + app.assistHint().toStdString());
+            "the click did not commit a ROI: " + app.assistDisabledReason().toStdString());
     stable();
     require(projectChanges.count() == 1, "a proposal must raise exactly one project transaction");
     auto       rows = app.parameters();
@@ -230,8 +234,8 @@ try
     stable();
     require(app.assistHover(60.0, 60.0), "hover over the second circle was rejected");
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
-            "hover produced no candidate for the second circle: " + app.assistHint().toStdString());
-    require(app.assistClick(60.0, 60.0, true), "append click was rejected: " + app.assistHint().toStdString());
+            "hover produced no candidate for the second circle: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(60.0, 60.0, true), "append click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 2; }, 10000),
             "Ctrl+click did not append the second candidate");
     stable();
@@ -244,8 +248,8 @@ try
     stable();
     require(app.assistHover(200.0, 80.0), "hover over the second image was rejected");
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
-            "hover produced no candidate on the second image: " + app.assistHint().toStdString());
-    require(app.assistClick(200.0, 80.0, false), "second image click was rejected: " + app.assistHint().toStdString());
+            "hover produced no candidate on the second image: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(200.0, 80.0, false), "second image click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 3; }, 10000),
             "the second image proposal was not committed");
     stable();
@@ -266,14 +270,14 @@ try
     require(app.setParameter(kAlignmentInput, false, "[[[1,0,10],[0,1,5],[0,0,1]]]", true),
             "assist alignment literal was rejected");
     stable();
-    require(app.assistHover(160.0, 120.0), "hover with alignment was rejected: " + app.assistHint().toStdString());
+    require(app.assistHover(160.0, 120.0), "hover with alignment was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
-            "hover with alignment produced no candidate: " + app.assistHint().toStdString());
+            "hover with alignment produced no candidate: " + app.assistDisabledReason().toStdString());
     const auto alignedPreview = app.assistPreview().front().toList();
     require(std::abs(alignedPreview.at(1).toDouble() - 160.0) <= 1.5
                 && std::abs(alignedPreview.at(2).toDouble() - 120.0) <= 1.5,
             "the preview must stay in current-image coordinates");
-    require(app.assistClick(160.0, 120.0, false), "aligned click was rejected: " + app.assistHint().toStdString());
+    require(app.assistClick(160.0, 120.0, false), "aligned click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return app.dirty(); }, 10000), "the aligned click was not committed");
     stable();
     require(app.save(root + "/assist.json"), "aligned assist project could not be saved");
@@ -286,7 +290,7 @@ try
 
     // Editing a parameter invalidates the preview that was learned from the old configuration.
     require(app.assistHover(160.0, 120.0),
-            ("hover for the staleness check was rejected: " + app.assistHint()).toStdString());
+            ("hover for the staleness check was rejected: " + app.assistDisabledReason()).toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate for the staleness check");
     require(app.setParameter(kSearchHalfWidthInput, false, "6"), "parameter edit was rejected");
@@ -319,13 +323,13 @@ try
     app.setImageIndex(2);
     stable();
     require(QTest::qWaitFor([&] { return app.assistActive(); }, 5000),
-            "row spacing assist did not become available: " + app.assistHint().toStdString());
-    require(app.assistHover(160.0, 120.0), "row spacing hover was rejected: " + app.assistHint().toStdString());
+            "row spacing assist did not become available: " + app.assistDisabledReason().toStdString());
+    require(app.assistHover(160.0, 120.0), "row spacing hover was rejected: " + app.assistDisabledReason().toStdString());
     const bool rowPreview = QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000);
-    require(rowPreview, "row spacing hover produced no candidate: " + app.assistHint().toStdString());
-    require(app.assistClick(160.0, 120.0, false), "row spacing click was rejected: " + app.assistHint().toStdString());
+    require(rowPreview, "row spacing hover produced no candidate: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(160.0, 120.0, false), "row spacing click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 1; }, 10000),
-            "row spacing proposal was not committed: " + app.assistHint().toStdString());
+            "row spacing proposal was not committed: " + app.assistDisabledReason().toStdString());
     stable();
     const auto rowWidths = app.parameters();
     require(numericValue(rowOf(rowWidths, kWidthMaxInput).value("literal").toString()) < 1000000.0,
@@ -353,7 +357,7 @@ try
             "the downstream image could not be selected");
     settle();
     require(!app.assistClick(160.0, 120.0, false), "an upstream ROI click must be refused");
-    require(app.assistHint().contains(QStringLiteral("上游")), "the upstream refusal must explain itself");
+    require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("上游")); }, 2000), "the upstream refusal must reach the log");
 
     app.assistCancel();
     require(app.assistPreview().isEmpty(), "cancel left a candidate visible");

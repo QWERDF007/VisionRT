@@ -338,23 +338,14 @@ void ResultPresentation::updateResults()
             connectable = host_.refreshConnectable(*flow, *node);
         outputs_.setResult(tool, snapshot, references, connectable, &node->signatures.outputs,
                            lifecycleShared(node->id), status(*node));
-        // The viewport starts empty and only ever shows a port the user chose: selecting the first
-        // offered image on the user's behalf would present a port they never asked for. A selection
-        // survives while its real port is still offered; a hidden or removed port leaves the view
-        // empty instead of being replaced by another image.
-        const auto choices = imageChoices();
-        if (!selectionNode_ || *selectionNode_ != node->id)
+        // A node opens on a real image rather than an empty canvas; an explicit choice survives
+        // while its port is still offered.
+        if (selectionNode_ != std::optional<NodeId>{node->id})
         {
-            imageSelection_.reset();
             selectionNode_ = node->id;
-        }
-        else if (!choices.empty() && imageSelection_
-                 && std::none_of(choices.begin(), choices.end(),
-                                 [&](const ImageChoice &choice) { return choice.ref == *imageSelection_; }))
-            // An empty candidate list means the catalog could not answer — a run in flight, a
-            // contract still resolving — and that is not a reason to drop the user's port. Only a
-            // list that answers without the chosen port withdraws it.
             imageSelection_.reset();
+        }
+        ensureImageSelection(*node, snapshot);
     }
     updateDisplay();
     host_.resultsChanged();
@@ -362,7 +353,7 @@ void ResultPresentation::updateResults()
 
 void ResultPresentation::applyOverlays()
 {
-    if (!viewport_)
+    if (!viewport_ || suspended_)
         return;
     viewport_->setOverlays(displayInputs_, displayOutputs_);
     if (displayRoiTarget_)
@@ -390,7 +381,7 @@ const PortValue *ResultPresentation::resolvedInput(const NodeDefinition &node, P
 
 void ResultPresentation::updateDisplay()
 {
-    if (!readsAllowed())
+    if (suspended_ || !readsAllowed())
         return;
     if (roi_.active())
     {
@@ -411,14 +402,6 @@ void ResultPresentation::updateDisplay()
         }
     }
 
-    // The selector lists real ports only. When the selected port is no longer offered it is dropped,
-    // never replaced: the viewport goes empty rather than showing a port the user did not choose.
-    const auto choices = imageChoices();
-    if (!roi_.active() && imageSelection_
-        && std::none_of(choices.begin(), choices.end(),
-                        [&](const ImageChoice &choice) { return choice.ref == *imageSelection_; }))
-        imageSelection_.reset();
-
     const auto           *node = host_.selectedNode();
     const auto           *tool = host_.effectiveTool();
     const DataRef<Image> *batch = nullptr;
@@ -431,6 +414,10 @@ void ResultPresentation::updateDisplay()
     int selectedIndex = index_;
     if (node)
         snapshot = displaySnapshot(*node);
+    // The selector lists real ports only, and the panel stays on one of them: a withdrawn port is
+    // replaced by the first offered image that carries data instead of leaving the viewport empty.
+    if (node)
+        ensureImageSelection(*node, snapshot);
     const PortDefinition *selectedPort = nullptr;
     if (!roi_.active() && imageSelection_ && tool)
     {
@@ -643,6 +630,35 @@ std::vector<ResultPresentation::ImageChoice> ResultPresentation::imageChoices() 
     // listed when the author offers it. Nothing hidden is added here: the session owns the
     // background it displays, and the selector must never expose another input.
     return choices;
+}
+
+void ResultPresentation::ensureImageSelection(const NodeDefinition &node, const ResultSlot::Snapshot &snapshot)
+{
+    if (roi_.active())
+        return;
+    // An empty choice list means the catalog cannot answer yet — a run in flight, a contract still
+    // resolving — and that is not a reason to drop the user's port.
+    const auto choices = imageChoices();
+    if (choices.empty())
+        return;
+    if (imageSelection_ && std::any_of(choices.begin(), choices.end(),
+                                       [&](const ImageChoice &choice) { return choice.ref == *imageSelection_; }))
+        return;
+    // Prefer a port that already carries images: a declared but still empty output would show a
+    // name with a blank canvas, which is the state this default exists to avoid.
+    const auto carriesImages = [&](const ImageChoice &choice)
+    {
+        if (choice.ref.stage == PortStage::Outputs)
+        {
+            const auto *batch = images(snapshot, choice.ref.id);
+            return batch && !batch->get().empty();
+        }
+        const auto *value = resolvedInput(node, choice.ref.id);
+        const auto *batch = value ? std::get_if<DataRef<Image>>(value) : nullptr;
+        return batch && !batch->get().empty();
+    };
+    const auto available = std::find_if(choices.begin(), choices.end(), carriesImages);
+    imageSelection_      = (available != choices.end() ? available : choices.begin())->ref;
 }
 
 QVariantList ResultPresentation::imageOutputs() const

@@ -31,6 +31,10 @@ struct AssistContext
     std::uint64_t        executionRevision = 0;
     int                  imageIndex        = 0;
     ResultSlot::Snapshot source;
+    // Training view: the proposal belongs to one record of this session instead of a node input, so
+    // the node identity above stays empty and the session serial is what must still match.
+    std::uint64_t trainingSerial = 0;
+    int           trainingRecord = -1;
     bool operator==(const AssistContext &) const = default;
 };
 

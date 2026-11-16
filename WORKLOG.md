@@ -4,7 +4,7 @@
 
 ## ⏳ 待你裁决
 
-（暂无待裁决事项）
+- 2026-11-16：推送被自动审批阻止，需要确认 GitHub 目的地 `QWERDF007/VisionRT`（dev）和 `QWERDF007/QuickUI`（main）为可信仓库并允许上传源码。证据见「汇总提交训练与工作台 UI 改动」。
 
 ---
 
@@ -29,6 +29,176 @@
 **下一步**
 - ...
 -->
+
+### 2026-11-16 — 汇总提交训练与工作台 UI 改动
+
+**目标**
+- 提交并推送训练、图像区模块拆分、菜单及其他弹窗与参数 UI 改动，包括 QuickUI 子模块。
+
+**当前状态**
+- 已完成：汇总训练会话、工具声明与示例，图像区五模块、EasyTouch 日志、完整路径菜单、按钮统一及参数默认字体；具体实现证据见前述任务条目。
+- QuickUI 本地提交为 `7f96248`；主仓通过 gitlink 引用该提交。
+- 未完成：推送。自动审批以 GitHub 目的地可信性未获明确确认为由，阻止 `git -C 3rdparty/QuickUI push origin main`；需要用户确认两个远程目的地，未尝试绕过审批。
+
+**验证证据**
+- `cmake --build build --target VisionRT workbench_contract workbench_layout_contract workbench_training_contract tool_editor_dialog_test training_session_contract definition_json_contract example_pipelines_contract` → 通过。
+- `ctest --test-dir build -R '^(training_session|definition_json|workbench_parameters|workbench_layout|workbench_training|example_pipelines)_contract$|^tool_editor_dialog_test$' --output-on-failure` → 7/7 通过。
+- 父仓及 QuickUI 的 `git -c core.whitespace=cr-at-eol diff --check` → 通过；提交前两仓均与远程分支一致。
+- 远程：VisionRT `https://github.com/QWERDF007/VisionRT.git` 的 dev，QuickUI `https://github.com/QWERDF007/QuickUI` 的 main。
+
+**下一步**
+- 用户确认目的地可信后，先推送 QuickUI main，再推送 VisionRT dev，核对两仓远程提交并清除顶部待裁决项。
+
+### 2026-11-16 — 统一弹窗按钮为 QuiButton 与 2px 边框规范
+
+**目标**
+- 统一弹窗按钮组件规范，消除手写 Rectangle 按钮，统一使用 `QuiButton`；
+- `QuiButton` 边框宽度固定为 2px，普通边框使用 `QuiColor.Border`，高亮或获得焦点时使用 `QuiColor.Highlight`，文字颜色使用 `QuiColor.FontPrimary`，背景色使用 `QuiColor.Button`；
+- `CustomToolDialog` 的取消与保存按钮统一为 `QuiButton`，`QuiContentDialog` 的确认按钮默认启用 `highlighted: true`。
+
+**当前状态**
+- 已完成：重构 `3rdparty/QuickUI/src/controls/QuiButton.qml` 背景为 `Rectangle`，边框宽度 `2px`，边框颜色根据 `highlighted || activeFocus` 在 `QuiColor.Highlight` 与 `QuiColor.Border` 间切换，文字颜色统一为 `QuiColor.FontPrimary`，背景色明确为 `QuiColor.Button`（并提供 `backgroundColor` 别名与浅色悬停按压微调）。
+- 已完成：更新 `3rdparty/QuickUI/src/controls/QuiContentDialog.qml`，确认按钮明确设置 `highlighted: true`。
+- 已完成：更新 `src/ui/qml/CustomToolDialog.qml`，底部取消和保存按钮由手写 `Rectangle` 替换为 `QuiButton`，保存按钮设置 `highlighted: true`。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → 编译链接成功。
+- `tools/build.cmd ctest --test-dir build -R "^tool_editor_dialog_test$" --output-on-failure` → 1/1 Test Passed（1.06s）。
+- `tools/build.cmd ctest --test-dir build -R "^workbench_parameters_contract$" --output-on-failure` → 1/1 Test Passed（4.96s）。
+
+**下一步**
+- 本轮无待办。
+
+### 2026-11-16 — 最近打开工程菜单完整路径宽度
+
+**目标**
+- 最近打开工程子菜单按完整路径的自然宽度展开，消除右侧裁切。
+
+**当前状态**
+- 已完成：QuickUI 菜单项将文字、图标与左右预留空间的自然尺寸传给控件；菜单内容宽度统一取菜单项自然宽度的最大值。保留原有最小尺寸，不添加固定路径宽度或另一套文本测量。
+- 已完成：布局契约验证真实最近工程子菜单、长中文路径、文字增长与缩短、字体变化；更新文档索引。
+
+**验证证据**
+- 修复前 `ctest --test-dir build -R '^workbench_layout_contract$' --output-on-failure` → 在完整路径宽度断言失败，菜单 150px、contentWidth 为 0、菜单项自然宽度 638px。
+- `cmake --build build --target VisionRT workbench_layout_contract` → 通过。用户关闭程序后，结束其残留进程才释放 DLL。
+- 修复后布局契约 → 通过，覆盖 100%、150%、200% 缩放；`workbench_training_contract` → 通过，训练右键菜单正常。
+- 实际最近工程菜单截图：`build/evidence/recent_paths_menu_1.0.png`、`recent_paths_menu_1.5.png`、`recent_paths_menu_2.0.png`；长路径及字体场景见同目录 `full_path_menu_*.png`。
+- 父仓与 QuickUI 的 `git -c core.whitespace=cr-at-eol diff --check` → 通过；未运行全量测试。
+
+**下一步**
+- 本轮无待办。
+
+### 2026-11-16 — ResultsPanel 按职责拆分
+
+**目标**
+- 将图像区按模式切换、缩略图、训练记录、工具栏和主视口拆为独立 QML，保持既有外观和交互。
+
+**当前状态**
+- 已完成：新增 `ResultsModeTabs`、`ResultsThumbnails`、`ResultsTrainingRecords`、`ResultsImageToolbar`、`ResultsImageView`，`ResultsPanel.qml` 从 512 行缩减到 75 行，仅组装布局、共享菜单与模块连接。
+- 已完成：各模块显式接收同一 `controller`；工具栏通过信号操作主视口，视口内部对象保持私有且始终常驻。没有新增 C++ 接口、状态副本或加载机制。
+- 已完成：新增工具栏缩放、1:1、适应窗口及切换前后视口实例保持的真实点击断言，更新方案文档的模块索引。
+
+**验证证据**
+- 重构前补充 `workbench_training_contract` 断言并运行通过；拆分后 `cmake --build build --target VisionRT workbench_training_contract workbench_layout_contract workbench_assist_contract viewport_contract assist_viewport_contract` 相关目标构建通过。
+- `ctest --test-dir build -R '^(workbench_training|workbench_layout|workbench_assist|viewport|assist_viewport)_contract$' --output-on-failure` → 5/5 通过，覆盖真实线缆、框选、菜单、草稿与三种窗口尺寸及系统缩放，QML 无警告。
+- `VisionRT.exe --project <部署示例> --select-node 2 --demo-training --screenshot build/evidence/modular_results_training.png` → 退出码 0，实际程序截图正常，新模块资源完整；本次启动日志无 QML 警告。
+- `git -c core.whitespace=cr-at-eol diff --check` → 通过；未运行全量测试。
+
+**下一步**
+- 本轮无待办。
+
+### 2026-11-16 — 图像训练区收敛与工具栏统一
+
+**目标**
+- 对齐颜色识别修订方案，移除图像区 EasyTouch 说明和训练状态提示，统一工具栏组件及图标。
+
+**当前状态**
+- 已完成：EasyTouch 操作指南和明确点击失败进入现有界面日志；删除 `assistHint`、图像提示和闲置主题属性，悬停未命中不逐帧写日志。
+- 已完成：训练底部按钮文字恢复可读，删除红色背景和调试输出；QuickUI 实心按钮采用 Highlight。工具栏统一 `QuiTextIconButton` 与 `QuiFontIcon`，删除自绘形状图标。
+- 已完成：修正绘制按钮首次点击、训练模式真实鼠标预选与主视口右键菜单；训练栏保留编号、标签、区域数量和操作按钮，无“待应用”文字或强调标记。
+- 已完成：按节点保留唯一训练会话和草稿；切换不自动应用，更换资产、删除节点和替换工程清理对应会话；运行期间禁止训练编辑，按钮和菜单共用 `canAddTrainingImage`。
+- 已完成：文档维护实现和测试索引。颜色训练 EasyTouch 助手不在本轮范围，手工矩形已验证。
+
+**验证证据**
+- `cmake --build build --target VisionRT workbench_training_contract workbench_assist_contract workbench_assist_release_contract workbench_layout_contract training_session_contract example_pipelines_contract workbench_flows_contract workbench_interaction_contract viewport_contract assist_viewport_contract` → 构建通过。
+- `ctest --test-dir build -R '^(training_session|workbench_training|workbench_assist|workbench_assist_release|workbench_layout|example_pipelines|workbench_flows|workbench_interaction|viewport|assist_viewport)_contract$' --output-on-failure` → 10/10 通过；最终空选中退出修正后重新构建并运行 `workbench_training_contract` → 通过。
+- 真实 `cable_11` 验证覆盖鼠标悬停、替换、Ctrl 追加、应用、手工框选、运行编辑限制、右键菜单、草稿恢复及资产切换；QML 无警告。测试资源使用临时绝对路径，不改部署示例。
+- 截图：`build/evidence/training_1548x960.png`、`training_1280x800.png`、`training_960x540.png`；布局契约覆盖 100%、150%、200% 系统缩放。
+- 最终 `VisionRT.exe --project <部署示例> --select-node 2 --demo-training --screenshot build/evidence/final_straight_training.png` → 退出码 0；实际程序截图确认无图像提示、红色调试背景或状态文案，本次启动日志仅记录工程打开和 EasyTouch 操作指南，无 QML 警告。
+- `git -c core.whitespace=cr-at-eol diff --check` 与 QuickUI 同项检查 → 通过。构建重新配置及测试需要沙箱外运行 Python/Qt；使用账本已有 MSVC、Windows SDK 环境，不运行全量测试。
+
+**下一步**
+- 本轮无待办；后续颜色训练智能点选需独立提供工具助手。
+
+### 2026-11-16 — 训练页只保留应用按钮，点选失败改走日志
+
+**目标**
+- 训练页底部回到方案规定的单一【应用训练数据】按钮，去掉自造的状态文案；EasyTouch 在训练中的失败不再占用图像区一行文字，改写界面日志。
+
+**当前状态**
+- 已完成：删除 `AppController::trainingStatus` 属性、getter 与成员，`ResultsPanel.qml` 训练页底部只剩应用按钮。
+- 已完成：未应用修改按方案 5.1 落到选中训练记录行，`AppController::trainingDirty` 驱动「，待应用」后缀与强调色。
+- 已完成：训练侧资产读写、保存、节点重载失败写 `LogLevel::Error`；点选未命中、上下文失效、参考边超限写 `LogLevel::Warn`；应用成功写 `Info`，来源统一 `LogSource::Ui`。
+- 未完成：无。
+
+**验证证据**
+- `cmake --build build --target VisionRT` → 71/71 链接通过。沙箱禁止 `reg.exe`，`tools/build.cmd` 的 vcvars 拿不到 UCRT，需显式导出 `INCLUDE`/`LIB`（MSVC 14.29.30133 + Windows Kits 10.0.19041.0）后再构建。
+- `build/bin/VisionRT.exe --screenshot F:/tmp/train_ui_verify.png` → 退出码 0，窗口正常渲染，无 QML 警告。
+- 未验证：训练页实际截图。命令行无法进入训练模式，需要在应用内打开 `examples/03_综合示例/02_识别线缆颜色` 后手动切到训练 Tab 复核。
+
+**下一步**
+- 手动打开示例工程的训练 Tab，确认底部只有【应用训练数据】，且点选未命中只在日志面板留一行「智能点选失败：…」。
+
+### 2026-11-16 — 直边训练走 EasyTouch 与图像工具栏形状调色板
+
+**目标**
+- 训练页不再自造"画矩形"开关：直边参考边改由 EasyTouch 在参考图上点选生成；图像工具栏补上矩形/多边形/圆形/线/点五个绘制按钮，供任何可编辑 ROI 复用。
+
+**当前状态**
+- 已完成：`TrainingSpec` 增加可选 `helper`（对齐工具声明 `PickStraightEdge`），训练资产格式不变。
+- 已完成：`assistContext/assistRequest/applyAssistOutcome/refreshAssist` 增加训练分支——助手收到参考图的灰度平面与光标，返回的旋转矩形按"单击替换、Ctrl+单击追加（上限两条）"写入当前训练记录；切换记录或退出训练会失效预览。
+- 已完成：`ImageViewport` 的点击路由改为"形色工具激活或点到已有矩形时归编辑，其余空白处归智能点选"；训练页的 EasyTouch 按钮不再被禁用。
+- 已完成：工具栏新增 `RoiShapeIcon` 五位形状图标与五个 `QuiToolButton`，只在有可编辑目标时启用（训练里仅矩形可用），图标未启用时降到 0.4 透明度；工具栏改为可滚动，避免按钮超出面板高度。
+- 已完成：示例工程 `examples/03_综合示例/02_识别线缆颜色`（读取 → 直边对齐 → 识别颜色）与两份训练资产，`images/` 与 `training/` 各一份 `cable_11.png`。
+- 未完成：颜色训练仍只能手工框选矩形（EasyTouch 只覆盖直边）。
+
+**验证证据**
+- `example_pipelines_contract` → 通过；`testShippedExamples` 中新增断言：姿态为单位矩阵（旋转 <1e-3、平移 <2px）、五根线依次 purple/red/blue/yellow/purple、分数 >0.3、分类比例 >0.8、中心与训练圆误差 <2px、找到的边为 segment。
+- `training_session_contract`、`definition_json_contract`（含 `training.helper` 回环）、`example_metadata_contract` → 通过。
+- 训练页截图 → 顶部显示"智能点选：单击放置参考边，Ctrl+单击追加，拖动矩形调整搜索框"，参考图上两条已训练参考边可视，底部只有【应用训练数据】。
+- 工具栏截图 → 适应/放大/缩小、矩形/多边形/圆形/线/点、EasyTouch、ROI、1:1 共 11 个按钮，图标清晰无裁切。
+
+**事故记录**
+- 本轮一次编译被外部中断，遗留陈旧目标文件导致 `AppController` 构造时崩溃；`ninja -t clean` 后全量重编即恢复。教训：中断过的构建必须先 clean，不能只增量。
+
+**下一步**
+- 颜色训练若也要点选，复用同一套助手协议新增一个颜色区域助手即可。
+
+### 2026-11-16 — 工具训练能力与颜色训练 UI
+
+**目标**
+- 按 `docs/VisionRT_颜色识别_修订方案` 的 P1 落地：工具声明可选训练能力、宿主训练会话、处理/训练两个文字 Tab、训练记录列表与应用训练数据；不新增 Contracts 训练契约，训练资产是唯一持久化状态。
+
+**当前状态**
+- 已完成声明层：`ToolDefinition` 新增 `TrainingSpec`（`kind`、`asset_param`），`DefinitionJson` 解析/回写并校验资产参数必须是 String 初始化参数；`definition_json_contract` 覆盖合法与三类拒绝用例。
+- 已完成会话层：`TrainingSession` 读写颜色训练资产（`schema_version`、`kind`、`records`，矩形以中心点编码），加入当前图时按全分辨率写 PNG 并落在资产同目录，支持改名、删除、选中、脏标记与不可应用校验。
+- 已完成控制器：训练可用性来自工具声明而非工具名；训练模式用主视口显示参考图并复用视口 ROI 编辑（`RoiEditTarget` 增加 `Training` 归属），训练期间挂起结果呈现，切换节点/流程/工程自动退出；应用训练写资产并调用新增的 `ProjectEditor::reloadNode` 让节点重跑初始化。
+- 已完成 UI：`ResultsPanel.qml` 仅在可训练工具出现 34px 窄文字 Tab 列（QuickUI `QuiTabButton`）；训练页为记录列表（QuickUI `QuiTextField`、`QuiTextIconButton`）加底部 `QuiFilledButton` 应用按钮；处理页保留原图像源下拉与缩略图，底部与右键菜单共用 `addTrainingImage`。无训练能力的工具完全不出现这些入口。
+- 已声明：VisionTools 的 `识别颜色.json` 增加 `training: {kind: color_samples, asset_param: 0}`，用当前宿主校验器验证通过。
+- 未完成：直边对齐训练 UI（边选取、Ctrl 追加、搜索框）本轮未做，`TrainingKind` 暂只有 `color_samples`；示例工程与真实 `cable_11` 端到端运行未做。
+
+**验证证据**
+- `cmake --build build --target training_session_contract definition_json_contract workbench_contract VisionRT` → 编译通过。
+- `bin/training_session_contract.exe` → 通过：新增记录落盘、空标签/空矩形不可应用、保存后重新打开读到同一记录与矩形、损坏资产报错而不被清空。
+- `bin/definition_json_contract.exe` → 通过：训练块解析、回写、缺失/非字符串资产参数与未知 kind 被拒。
+- `bin/visionrt_validate_tool.exe` 校验 `识别颜色.json` 与 `通过直边确定对齐.json` → 均 Valid tool definition。
+- `VisionRT.exe --screenshot` 启动一次 → 退出码 0，无 QML 警告，非训练工具的图像区布局与原来一致。
+- `bin/workbench_contract.exe` → 在「parameter rejection lost its precise Chinese reason and stable port ID」失败：实际消息为「参数不存在：未声明的参数（编号 99）」，`AppControllerParameters.cpp` 与 `tests/workbench_parameters.cpp` 本轮均无改动，判断为 HEAD 上已存在的过期断言；其前面的 Main.qml 实例化与 T-05 工具包契约均通过。
+- 未验证：训练 Tab 在真实可训练节点上的截图与端到端应用（需要把 VisionTools 包含 `vst_recognition.dll` 的新包部署进运行目录并组装示例工程）。
+
+**下一步**
+- 组装 `examples/03_综合示例/02_识别线缆颜色`（工程、图片、训练资产），打包 VisionTools 并部署到运行目录，按真实样本走一遍处理/训练/应用/运行。
+- 补直边对齐训练会话（两条参考边与搜索框），再扩展 `TrainingKind`。
 
 ### 2026-11-15 — 全局清理工具树与控制器中的过度设计
 

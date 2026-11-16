@@ -70,7 +70,6 @@ void Theme::initLightIndustrialPalette()
     treeItemSelectedText_      = QColor("#1677ff");  // 选中时文字蓝色高亮（参考 125712.png）
     treeItemSelectedIcon_      = QColor("#1677ff");  // 选中时图标蓝色高亮（参考 125712.png）
     treeItemSelectedIndicator_ = QColor(0, 0, 0, 0); // 通栏平滑无边框
-    treeItemUnavailableText_   = QColor("#cf222e");
 
     // 底部参数面板标签页（基本输入、预处理、检测、结果处理）
     tabBarBg_           = QColor("#f6f8fa");
@@ -92,19 +91,16 @@ void Theme::initLightIndustrialPalette()
     paramGroupHeaderBg_      = QColor("#f6f8fa");
     paramGroupHeaderText_    = QColor("#24292f");
     paramRowHoverBg_         = QColor("#f8fafd");
-    paramLabelText_          = QColor("#24292f");
-    parameterTextColor_      = paramLabelText_;
+    parameterTextColor_      = QColor("#24292f");
     paramEditorBorder_       = QColor("#d0d7de");
     paramEditorFocusBorder_  = QColor("#1677ff");
     paramEditorBg_           = QColor("#ffffff");
     paramInputReadOnlyBg_    = QColor("#f0f2f5");
     paramActionActiveBg_     = QColor(22, 119, 255, 26);  // rgba(22, 119, 255, 0.1)
     paramActionHoverBg_      = QColor(22, 119, 255, 38);  // rgba(22, 119, 255, 0.15)
-    bindingInactiveColor_    = QColor("#8c959f");
 
     // 输入来源按钮（选中态只表示输入模式）
     sourceButtonActiveBackground_ = QColor("#1677ff");
-    sourceButtonActiveBorder_     = QColor("#1677ff");
     sourceButtonActiveIcon_       = QColor("#ffffff");
     sourceButtonIdleIcon_         = QColor("#8c959f");
 
@@ -117,14 +113,12 @@ void Theme::initLightIndustrialPalette()
     iconMuted_     = QColor("#8c959f");
     iconSecondary_ = QColor("#57606a");
     error_         = QColor("#cf222e");
-    success_       = QColor("#1a7f37");
     warning_       = QColor("#9a6700");
     disabledText_  = QColor("#8c959f");
     tooltipBg_     = QColor("#ffffff");
     viewportBg_    = QColor("#eaebef");
     navItemActiveBg_   = QColor("#e7f5ff"); // 设置导航选中浅蓝底
     navItemActiveText_ = QColor("#0875d9"); // 设置导航选中强调文字
-    assistHintText_ = QColor("#0f6f6f");
     zoomText_      = QColor("#57606a");
 
     inputRoiColor_  = QColor(255, 220, 0);
@@ -135,7 +129,6 @@ void Theme::initLightIndustrialPalette()
     nodeStateGray_       = QColor("#8c959f");
     nodeStateGreen_      = QColor("#1a7f37");
     nodeStateRed_        = QColor("#cf222e");
-    nodeStateOrange_     = QColor("#e66b37");
     nodeHeaderGray_      = QColor("#dfe4ea");
     nodeHeaderGreen_     = QColor("#1a7f37");
     nodeHeaderRed_       = QColor("#ffebe9");
@@ -183,8 +176,6 @@ void Theme::initLightIndustrialPalette()
     // 全局字号、图标与圆角
     fontSizeCaption_ = 10;
     fontSizeSmall_   = 11;
-    fontSizeBase_    = 12;
-    fontSizeMedium_  = 13;
     iconSizeTiny_    = 10;
     iconSizeSmall_   = 12;
     iconSizeBase_    = 14;
@@ -195,6 +186,7 @@ void Theme::initLightIndustrialPalette()
     toolbarWidth_          = 32;
     toolbarButtonSize_     = 26;
     thumbnailPanelWidth_   = 116;
+    trainingPanelWidth_    = 220;
     thumbnailRowHeight_    = 86;
     thumbnailImageHeight_  = 60;
     tooltipWidth_          = 232;
@@ -206,17 +198,13 @@ void Theme::initLightIndustrialPalette()
     // 字体默认值：家族、字号、字重的唯一来源
     const QString family = QStringLiteral("Microsoft YaHei UI");
     titleFont_   = QFont(family, -1, QFont::DemiBold);
-    titleFont_.setPixelSize(fontSizeMedium_);
+    titleFont_.setPixelSize(13);
     monoFont_    = QFont(QStringLiteral("Consolas"), -1, QFont::Normal);
-    monoFont_.setPixelSize(fontSizeBase_);
+    monoFont_.setPixelSize(12);
     // 参数行的字体：家族与字号只在 Theme 定义，QML 不再各写 Qt.font({...})
     parameterFont_ = QFont(family, -1, QFont::Normal);
-    parameterFont_.setPixelSize(fontSizeBase_);
+    parameterFont_.setPixelSize(12);
 
-    iconZoomIn_     = 0xe8a3; // QuiFontIcon.ZoomIn
-    iconZoomOut_    = 0xe71f; // QuiFontIcon.ZoomOut
-    iconOneToOne_   = 0xeb9f; // QuiFontIcon.Photo2
-    iconEasyTouch_  = 0xe721; // QuiFontIcon.Search
 }
 
 } // namespace visionrt

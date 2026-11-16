@@ -32,15 +32,29 @@ void AppController::attachViewport(QObject *object)
         if (auto *previous = impl_->presentation.viewport())
             QObject::disconnect(previous, nullptr, this, nullptr);
         impl_->presentation.adoptViewport(target);
+        QObject::connect(target, &ImageViewport::imageChanged, this, &AppController::resultsChanged);
         QObject::connect(target, &ImageViewport::roiCommitted, this,
                          [this](const RoiEditTarget &key, const EncodedRegion &roi)
-                         { impl_->commitRoi(key, &roi); });
+                         {
+                             if (key.kind == RoiTargetKind::Training)
+                                 impl_->commitTrainingRoi(key, &roi);
+                             else
+                                 impl_->commitRoi(key, &roi);
+                         });
         QObject::connect(target, &ImageViewport::roiDeleted, this,
-                         [this](const RoiEditTarget &key) { impl_->commitRoi(key, nullptr); });
+                         [this](const RoiEditTarget &key)
+                         {
+                             if (key.kind == RoiTargetKind::Training)
+                                 impl_->commitTrainingRoi(key, nullptr);
+                             else
+                                 impl_->commitRoi(key, nullptr);
+                         });
         QObject::connect(target, &ImageViewport::roiSelected, this,
                          [this](int /*index*/, QPointF /*point*/)
                          {
-                             if (!impl_->idle())
+                             // A training rectangle belongs to the training session; clicking it
+                             // must not start a project input edit on the reference picture.
+                             if (!impl_->idle() || impl_->trainingMode)
                                  return;
                              const auto *node = impl_->currentNode();
                              const auto *tool = impl_->effectiveTool();
@@ -59,7 +73,15 @@ void AppController::attachViewport(QObject *object)
                                  }
                              }
                          });
-        QObject::connect(target, &ImageViewport::roiEditCanceled, this, &AppController::endRoiPreview);
+        QObject::connect(target, &ImageViewport::roiEditCanceled, this,
+                         [this]
+                         {
+                             // Leaving the window or pressing Esc ends the edit gesture, not the
+                             // training view; the record and its draft stay selected.
+                             if (impl_->trainingMode)
+                                 return;
+                             endRoiPreview();
+                         });
         QObject::connect(target, &ImageViewport::drawShapeChanged, this, [this] { emit resultsChanged(); });
     }
     impl_->updateDisplay();

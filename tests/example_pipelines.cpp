@@ -240,6 +240,43 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     assert((branchRadius.size() == 1 && branchRadius[0].size() == 1));
     assert((std::abs(branchRadius[0][0] - 50.0) < 0.5));
 
+    // Colour recognition: the reference picture is its own reference, so the pose must come back as
+    // the identity, and the five trained wire tips as their classes in wire order.
+    const auto cable = run(root / u8"03_综合示例" / u8"02_识别线缆颜色" / u8"识别线缆颜色.vrt.json", 3);
+    const auto pose  = nestedOf<std::vector<std::vector<std::vector<double>>>>(
+        std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
+    assert((pose.size() == 1 && pose[0].size() == 3 && pose[0][0].size() == 3));
+    assert((std::abs(pose[0][0][0] - 1.0) < 1e-3 && std::abs(pose[0][1][1] - 1.0) < 1e-3));
+    assert((std::abs(pose[0][0][1]) < 1e-3 && std::abs(pose[0][1][0]) < 1e-3));
+    assert((std::abs(pose[0][0][2]) < 2.0 && std::abs(pose[0][1][2]) < 2.0));
+    // The reference edges are reported back on the picture they were trained on.
+    const auto foundEdges = std::get<DataRef<ROI>>(snapshot(cable, 2)->outputs.at(3)).get();
+    assert((foundEdges.size() == 1 && foundEdges[0].size() == 2));
+    for (const auto &edge : foundEdges[0])
+        assert((RegionView(edge).kind() == RoiKind::Segment));
+
+    const auto colorResult = snapshot(cable, 3);
+    const auto colors = nestedOf<std::vector<std::vector<std::string>>>(std::get<Array>(colorResult->outputs.at(4)));
+    const auto scores = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(5)));
+    const auto ratios = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(6)));
+    const auto centerXs
+        = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(7)));
+    const auto centerYs
+        = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(8)));
+    assert((colors.size() == 1 && colors[0].size() == 5));
+    const std::vector<std::string> expected{"purple", "red", "blue", "yellow", "purple"};
+    assert((colors[0] == expected));
+    // Five wire tips at their trained positions: the same index keeps the same wire across every
+    // output, which is what a downstream rule indexes.
+    const std::vector<std::pair<float, float>> tips{{950.0F, 652.0F}, {950.0F, 819.0F}, {950.0F, 1019.0F},
+                                                    {950.0F, 1185.0F}, {950.0F, 1395.0F}};
+    for (std::size_t index = 0; index < expected.size(); ++index)
+    {
+        assert((scores[0][index] > 0.3F && ratios[0][index] > 0.8F));
+        assert((std::abs(centerXs[0][index] - tips[index].first) < 2.0F));
+        assert((std::abs(centerYs[0][index] - tips[index].second) < 2.0F));
+    }
+
     std::cout << "[SHIPPED EXAMPLES] installed projects loaded and executed with the installed images\n";
 }
 

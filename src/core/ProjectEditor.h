@@ -139,6 +139,9 @@ public:
     bool setLiteralBindings(std::string_view flowId, NodeId node,
                             std::span<const std::pair<PortId, PortValue>> values);
     bool setInitParam(std::string_view flowId, NodeId node, PortId parameter, PortValue value);
+    // Raises the node's execution revision without touching its configuration. Used when an
+    // external asset the node reads (trained data) changed and the tool must initialize again.
+    bool reloadNode(std::string_view flowId, NodeId node);
     // One transaction: validate the candidate configuration, materialise its
     // contract, verify bindings, then commit exactly one revision.
     bool setExpressionConfig(std::string_view flowId, NodeId node, ExpressionConfig config,

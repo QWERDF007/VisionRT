@@ -423,22 +423,19 @@ FocusScope {
             }
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
-                Rectangle {
+                QuiTextIconButton {
                     objectName: "flowAddButton"
                     Layout.preferredWidth: 24; Layout.preferredHeight: 24; radius: Theme.radiusSmall
                     Layout.alignment: Qt.AlignVCenter
-                    color: addMouse.containsMouse ? Theme.paramRowHoverBg : Theme.surfaceBg
-                    border.color: QuiColor.Border; border.width: 1
+                    text: "添加流程"
+                    iconSource: QuiFontIcon.Add
+                    iconSize: Theme.iconSizeSmall
+                    iconColor: Theme.iconSecondary
+                    normalColor: Theme.surfaceBg
+                    hoverColor: Theme.buttonHoverBg
+                    pressedColor: Theme.buttonPressedBg
                     enabled: app.workspaceEnabled
-                    QuiTextIcon {
-                        anchors.centerIn: parent
-                        iconSource: QuiFontIcon.Add; iconSize: Theme.iconSizeSmall; iconColor: Theme.iconSecondary
-                    }
-                    MouseArea {
-                        id: addMouse; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: { app.addFlow(""); surface.forceActiveFocus() }
-                    }
+                    onClicked: { app.addFlow(""); surface.forceActiveFocus() }
                 }
                 Flickable {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
@@ -491,19 +488,20 @@ FocusScope {
                                         font: QuiFont.Body
                                         color: flowTabItem.isActive ? QuiColor.Highlight : "#57606a"
                                     }
-                                    QuiTextIcon {
+                                    QuiTextIconButton {
+                                        objectName: "flowTabClose_" + flowTabItem.modelData.id
+                                        text: "删除流程"
+                                        implicitWidth: 16; implicitHeight: 16
                                         iconSource: QuiFontIcon.Cancel; iconSize: Theme.iconSizeTiny
-                                        iconColor: tabCloseMouse.containsMouse ? Theme.error : Theme.iconMuted
-                                        visible: true
+                                        iconColor: hovered ? Theme.error : Theme.iconMuted
+                                        normalColor: "transparent"
+                                        hoverColor: Theme.buttonHoverBg
+                                        pressedColor: Theme.buttonPressedBg
                                         opacity: app.flows.length > 1 ? 1.0 : 0.4
-                                        MouseArea {
-                                            id: tabCloseMouse; objectName: "flowTabClose_" + flowTabItem.modelData.id
-                                            anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
-                                            enabled: app.workspaceEnabled && app.flows.length > 1
-                                            onClicked: {
-                                                root.contextFlow = flowTabItem.modelData.id
-                                                deleteFlowDialog.open()
-                                            }
+                                        enabled: app.workspaceEnabled && app.flows.length > 1
+                                        onClicked: {
+                                            root.contextFlow = flowTabItem.modelData.id
+                                            deleteFlowDialog.open()
                                         }
                                     }
                                 }

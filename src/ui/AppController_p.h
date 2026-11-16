@@ -17,6 +17,7 @@
 #include "ui/ResultPresentation.h"
 #include "ui/RecentProjects.h"
 #include "ui/RoiEditSession.h"
+#include "ui/TrainingSession.h"
 #include "ui/LogHighlighter.h"
 #include "ui/ToolTreeModel.h"
 #include "ui/ToolEditorController.h"
@@ -38,6 +39,10 @@
 #include <variant>
 
 namespace visionrt {
+
+// One 8-bit gray plane from a QImage, which is what both the display path and the point-and-click
+// helpers work in. Defined beside the assist channel because that is its only consumer.
+cv::Mat grayPlane(const QImage &image);
 namespace workbench {
 QString               q(const std::string &text);
 QString               pathText(const std::filesystem::path &path);
@@ -219,7 +224,6 @@ struct AppController::Impl : PresentationHost
     std::string                           assistToolId;
     bool                                  assistEnabled = false;
     bool                                  easyTouchEnabled = UiPreferences::easyTouchEnabled();
-    QString                               assistHint;
     QString                               assistDisabledReason;
     ROI                                   assistPreviewRois;
     std::optional<AssistContext>          assistPreviewContext;
@@ -230,6 +234,7 @@ struct AppController::Impl : PresentationHost
     const NodeDefinition                *currentNode() const;
     const NodeDefinition                *findNode(NodeId id) const;
     const ToolDefinition                *currentTool() const;
+    bool                                 editingAllowed() const;
     bool                                 idle();
     bool                                 applyParameter(PortId id, bool initialization, PortValue value);
     // A host failure is a system event; the two interaction notes pass LogSource::Ui explicitly.
@@ -335,12 +340,41 @@ struct AppController::Impl : PresentationHost
     void      applyOverlays();
     PortValue        resolvedInput(const NodeDefinition &node, PortId input) const;
     void                 commitRoi(const RoiEditTarget &target, const EncodedRegion *value);
+
+    // Training belongs to the selected tool. The session holds the records and the asset path; the
+    // viewport shows them through the same ROI editor the processing view uses.
+    struct TrainingView
+    {
+        TrainingSession session;
+        bool visible = false;
+    };
+    std::map<NodeId, TrainingView> trainingViews;
+    TrainingSession *training = nullptr;
+    // Gray copy of the selected record's picture, cached for the point-and-click assistant: the
+    // helper receives pixels, and re-reading a multi-megabyte PNG per hover would stall the window.
+    cv::Mat         trainingAssistImage;
+    bool            trainingMode   = false;
+    quint64         trainingSerial = 0;
+    const TrainingSpec *trainingSpec() const;
+    // Binds the session to the selected node, reading its asset when the selection changes.
+    bool ensureTrainingSession();
+    // Ends the training view and restores the ordinary processing presentation.
+    void leaveTraining();
+    // Presents the selected record, or clears the viewport when the set is empty.
+    void showTrainingRecord();
+    void commitTrainingRoi(const RoiEditTarget &target, const EncodedRegion *value);
+    // Re-seats the viewport on the selected record's rectangles without reloading the picture.
+    void seatTrainingRegions();
+    // A proposal from the training view lands in the selected record, not in a node input.
+    void applyTrainingAssist(const AssistOutcome &outcome);
+    // Writes the configured asset path back to the node when the tool never had one.
+    bool ensureTrainingAsset();
     void      finishRoi();
     void      storageDiagnostics(const std::vector<ProjectStorageDiagnostic> &items);
 
     // Smart point selection.
     void                          refreshAssist();
-    void                          setAssistHint(const QString &text);
+    void                          publishAssistState(bool enabled, const QString &reason);
     void                          clearAssistPreview();
     std::optional<AssistContext>  assistContext(QString *reason) const;
     bool                          assistContextCurrent(const AssistContext &context) const;

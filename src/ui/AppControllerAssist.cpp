@@ -5,6 +5,8 @@
 #include "core/ToolValueValidation.h"
 #include "log/LogService.h"
 
+#include <QImage>
+
 #include <algorithm>
 #include <atomic>
 #include <utility>
@@ -145,6 +147,16 @@ void requireCompatible(const ToolDefinition &tool, const InteractionMapping &map
 }
 } // namespace
 
+cv::Mat grayPlane(const QImage &image)
+{
+    const QImage gray = image.convertToFormat(QImage::Format_Grayscale8);
+    if (gray.isNull())
+        return {};
+    const cv::Mat wrapped(gray.height(), gray.width(), CV_8UC1, const_cast<uchar *>(gray.constBits()),
+                          static_cast<std::size_t>(gray.bytesPerLine()));
+    return wrapped.clone();
+}
+
 std::optional<AssistContext> AppController::Impl::assistContext(QString *reason) const
 {
     const auto reject = [reason](const QString &text) -> std::optional<AssistContext>
@@ -155,6 +167,20 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     };
     if (reason)
         reason->clear();
+    if (trainingMode)
+    {
+        const auto *spec = trainingSpec();
+        if (!spec || spec->helper.empty())
+            return reject(QStringLiteral("该训练不支持智能点选"));
+        if (!training->active() || training->selected() < 0)
+            return reject(QStringLiteral("请先加入一张训练参考图"));
+        if (trainingAssistImage.empty())
+            return reject(QStringLiteral("训练参考图尚未就绪"));
+        AssistContext context;
+        context.trainingSerial = trainingSerial;
+        context.trainingRecord = training->selected();
+        return context;
+    }
     const auto *node = currentNode();
     const auto *tool = currentTool();
     if (!node || !tool)
@@ -212,6 +238,37 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
     const auto context = assistContext(reason);
     if (!context)
         return {};
+    if (context->trainingSerial != 0)
+    {
+        const auto *spec   = trainingSpec();
+        const auto *helper = spec && !spec->helper.empty() ? registry.find(spec->helper) : nullptr;
+        if (!helper)
+            return reject(QStringLiteral("辅助工具缺失：")
+                          + workbench::q(spec ? spec->helper : std::string{}));
+        Values inputs;
+        inputs.emplace(assist_ports::Images, DataRef<Image>(Image{trainingAssistImage}));
+        inputs.emplace(assist_ports::Cursor,
+                       Array::dense(DType::Float64, {2}, std::vector<double>{cursor.x(), cursor.y()}));
+        inputs.emplace(assist_ports::Phase, std::string(learn ? "learn" : "hover"));
+        inputs.emplace(assist_ports::SeedRois, DataRef<ROI>(ROI{}));
+        // A training picture is its own reference: the record is stored in these coordinates.
+        inputs.emplace(assist_ports::Alignment, Array::empty(DType::Float64, 3));
+        std::int64_t extent = 128;
+        if (const auto *port = workbench::port(helper->inputs, assist_ports::SearchExtent))
+            if (const auto *declared = std::get_if<std::int64_t>(&port->defaultValue))
+                extent = *declared;
+        inputs.emplace(assist_ports::SearchExtent, extent);
+        inputs = normalizeInputs(helper->inputs, std::move(inputs));
+
+        AssistRequest request;
+        request.context = *context;
+        request.inputs  = std::move(inputs);
+        request.learn   = learn;
+        request.append  = append;
+        if (reason)
+            reason->clear();
+        return request;
+    }
     const auto *node    = currentNode();
     const auto *tool    = currentTool();
     const auto *roiPort = tool ? firstRoiInput(*tool) : nullptr;
@@ -330,10 +387,15 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
 
 void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
 {
+    if (outcome.context.trainingSerial != 0)
+    {
+        applyTrainingAssist(outcome);
+        return;
+    }
     if (!assistContextCurrent(outcome.context))
     {
         clearAssistPreview();
-        setAssistHint(QStringLiteral("结果已更新，请重新选择"));
+        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("结果已更新，请重新选择"));
         return;
     }
     const auto *node    = currentNode();
@@ -344,7 +406,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
     if (!outcome.valid || outcome.proposal.empty() || outcome.proposal.front().empty())
     {
         clearAssistPreview();
-        setAssistHint(outcome.quality.isEmpty() ? QStringLiteral("未找到有效目标")
+        LogService::write(LogLevel::Warn, LogSource::Ui, outcome.quality.isEmpty() ? QStringLiteral("未找到有效目标")
                                                 : QStringLiteral("未找到有效目标：") + outcome.quality);
         return;
     }
@@ -354,7 +416,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
     if (binding->second.mode == BindingMode::Upstream || effectiveSource(binding->second))
     {
         clearAssistPreview();
-        setAssistHint(QStringLiteral("该参数由上游提供"));
+        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("该参数由上游提供"));
         return;
     }
     const auto &mapping = *tool->interaction;
@@ -362,7 +424,7 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
         if (!allowedKind(mapping, roiKind(std::span<const double>(record))))
         {
             clearAssistPreview();
-            setAssistHint(QStringLiteral("候选类型与工具声明不一致"));
+            LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("候选类型与工具声明不一致"));
             return;
         }
     try
@@ -408,22 +470,13 @@ void AppController::Impl::applyAssistOutcome(const AssistOutcome &outcome)
         if (!editor.setLiteralBindings(flow.toStdString(), node->id, edits))
             return;
         changed();
-        setAssistHint(QStringLiteral("已应用智能点选结果，运行后确认"));
+        LogService::write(LogLevel::Info, LogSource::Ui, QStringLiteral("已应用智能点选结果，运行后确认"));
     }
     catch (const std::exception &error)
     {
         clearAssistPreview();
-        report(error, QStringLiteral("智能点选提交失败"));
-        setAssistHint(QStringLiteral("智能点选结果未应用：") + QString::fromUtf8(error.what()));
+        LogService::write(LogLevel::Error, LogSource::Ui, QStringLiteral("智能点选结果未应用：") + QString::fromUtf8(error.what()));
     }
-}
-
-void AppController::Impl::setAssistHint(const QString &text)
-{
-    if (assistHint == text)
-        return;
-    assistHint = text;
-    emit q->assistChanged();
 }
 
 void AppController::Impl::clearAssistPreview()
@@ -439,18 +492,67 @@ void AppController::Impl::clearAssistPreview()
 
 bool AppController::Impl::assistRequestsAllowed() const
 {
-    return easyTouchEnabled && !operations.isClosing() && state == RuntimeState::Idle && !presentation.draining()
-        && !operations.active() && !roiSession.active() && readsAllowed();
+    return easyTouchEnabled && editingAllowed() && !roiSession.active() && readsAllowed();
+}
+
+void AppController::Impl::publishAssistState(bool enabled, const QString &reason)
+{
+    const bool changed = assistEnabled != enabled || assistDisabledReason != reason;
+    assistEnabled = enabled;
+    assistDisabledReason = reason;
+    if (!enabled && assist)
+        assist->invalidate();
+    if (assistPreviewContext && !assistContextCurrent(*assistPreviewContext))
+        clearAssistPreview();
+    if (auto *viewport = presentation.viewport())
+        viewport->setAssistActive(enabled);
+    if (!changed)
+        return;
+    if (enabled)
+        LogService::write(LogLevel::Info, LogSource::Ui,
+                          trainingMode ? QStringLiteral("智能点选：单击放置参考边，Ctrl+单击追加，拖动矩形调整搜索框")
+                                       : QStringLiteral("智能点选：移动鼠标预选，单击替换，Ctrl+单击追加，Esc 取消"));
+    else if (easyTouchEnabled && !reason.isEmpty())
+        LogService::write(LogLevel::Info, LogSource::Ui, reason);
+    emit q->assistChanged();
 }
 
 void AppController::Impl::refreshAssist()
 {
+    if (trainingMode)
+    {
+        const auto *spec   = trainingSpec();
+        const auto *helper = spec && !spec->helper.empty() ? registry.find(spec->helper) : nullptr;
+        QString     hint;
+        bool        enabled = false;
+        if (!editingAllowed())
+            hint = QStringLiteral("运行或管理操作期间暂不可用智能点选");
+        else if (!easyTouchEnabled)
+            hint = QStringLiteral("智能点选已关闭");
+        else if (!spec || spec->helper.empty())
+            hint = QStringLiteral("该训练由手工编辑，不支持智能点选");
+        else if (!helper)
+            hint = QStringLiteral("辅助工具缺失：") + workbench::q(spec->helper);
+        else if (!training->active() || trainingAssistImage.empty())
+            hint = QStringLiteral("请先加入一张训练参考图");
+        else
+        {
+            if (assistToolId != helper->nameEn || assist->helperId() != helper->nameEn)
+            {
+                assist->configure(std::make_shared<const ToolRegistry>(registry), *helper);
+                assistToolId = helper->nameEn;
+            }
+            enabled = true;
+        }
+        publishAssistState(enabled, hint);
+        return;
+    }
     QString     hint;
     bool        enabled  = false;
     const auto *node    = currentNode();
     const auto *tool    = currentTool();
     const auto *roiPort = tool ? firstRoiInput(*tool) : nullptr;
-    const bool  candidate = node && tool && tool->interaction && roiPort && state == RuntimeState::Idle
+    const bool  candidate = node && tool && tool->interaction && roiPort && editingAllowed()
                          && !operations.isClosing() && !roiSession.active() && readsAllowed();
     if (!easyTouchEnabled)
         hint = QStringLiteral("智能点选已关闭");
@@ -484,7 +586,6 @@ void AppController::Impl::refreshAssist()
                     assistToolId = tool->nameEn;
                 }
                 enabled = true;
-                hint    = QStringLiteral("智能点选：移动鼠标预选，单击替换，Ctrl+单击追加，Esc 取消");
             }
         }
     }
@@ -492,15 +593,7 @@ void AppController::Impl::refreshAssist()
         hint = QStringLiteral("智能点选需要已运行的图像输入");
     else if (node && tool && tool->interaction && (presentation.draining() || operations.active() || operations.isClosing()))
         hint = QStringLiteral("运行或排空期间不可用智能点选");
-    if (!enabled && assist)
-        assist->invalidate();
-    assistDisabledReason = hint;
-    if (assistPreviewContext && !assistContextCurrent(*assistPreviewContext))
-        clearAssistPreview();
-    assistEnabled = enabled;
-    if (auto *viewport = presentation.viewport())
-        viewport->setAssistActive(enabled);
-    setAssistHint(hint);
+    publishAssistState(enabled, hint);
 }
 
 bool AppController::assistActive() const
@@ -526,13 +619,14 @@ void AppController::setEasyTouchEnabled(bool enabled)
         // Drop the preview and every queued/in-flight request, then release the persistent
         // helper off the GUI thread. Committed ROI and recommended parameters stay untouched.
         impl_->clearAssistPreview();
-        impl_->setAssistHint(QStringLiteral("智能点选已关闭"));
         if (impl_->assist)
         {
             impl_->assist->cancel();
             impl_->assist->releaseSession();
         }
     }
+    LogService::write(LogLevel::Info, LogSource::Ui,
+                      enabled ? QStringLiteral("智能点选已开启") : QStringLiteral("智能点选已关闭"));
     impl_->refreshAssist();
     emit assistChanged();
 }
@@ -545,11 +639,6 @@ bool AppController::assistAvailable() const
 QString AppController::assistDisabledReason() const
 {
     return impl_->assistDisabledReason;
-}
-
-QString AppController::assistHint() const
-{
-    return impl_->assistHint;
 }
 
 QVariantList AppController::assistPreview() const
@@ -574,8 +663,7 @@ bool AppController::assistHover(double x, double y)
     auto    request = impl_->assistRequest(false, false, QPointF(x, y), &reason);
     if (!request)
     {
-        if (!reason.isEmpty())
-            impl_->setAssistHint(reason);
+        impl_->clearAssistPreview();
         return false;
     }
     impl_->assist->request(std::move(*request));
@@ -586,7 +674,7 @@ bool AppController::assistClick(double x, double y, bool append)
 {
     if (!impl_->assistRequestsAllowed() || !impl_->assistEnabled)
     {
-        impl_->setAssistHint(QStringLiteral("当前状态不可用智能点选"));
+        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("当前状态不可用智能点选"));
         return false;
     }
     QString reason;
@@ -594,13 +682,13 @@ bool AppController::assistClick(double x, double y, bool append)
     if (!request)
     {
         if (!reason.isEmpty())
-            impl_->setAssistHint(reason);
+            LogService::write(LogLevel::Warn, LogSource::Ui, reason);
         return false;
     }
     impl_->clearAssistPreview();
     if (!impl_->assist->request(std::move(*request)))
     {
-        impl_->setAssistHint(QStringLiteral("正在识别上一个候选，请稍候"));
+        LogService::write(LogLevel::Warn, LogSource::Ui, QStringLiteral("正在识别上一个候选，请稍候"));
         return false;
     }
     return true;

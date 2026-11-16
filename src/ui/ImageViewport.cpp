@@ -343,6 +343,22 @@ void ImageViewport::setDisplayFrame(const DisplayFrame &frame)
     applyFrame(frame);
 }
 
+void ImageViewport::setHostImage(const QImage &image)
+{
+    DisplayFrame frame;
+    frame.generation = generation_;
+    frame.requestId  = requestId_;
+    frame.image      = image;
+    if (image.isNull())
+    {
+        clearImage(requestId_);
+        return;
+    }
+    applyFrame(frame);
+    setStatus({});
+    update();
+}
+
 void ImageViewport::applyFrame(const DisplayFrame &frame)
 {
     if (frame.generation != generation_ || frame.requestId != requestId_)
@@ -738,12 +754,16 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
         }
         gesture_     = Gesture::Pan;
         panButton_   = event->button();
+        anchor_      = event->position();
         lastPointer_ = event->position();
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && assistActive_ && !canEdit() && hasImage()
-        && gesture_ == Gesture::None)
+    // While regions are editable, a press on one of them keeps selecting, moving or resizing it;
+    // only empty space belongs to the assistant. That is what lets a training view hold its picked
+    // bands and still accept the next point-and-click.
+    if (event->button() == Qt::LeftButton && drawShape_ == 0 && assistActive_ && hasImage() && gesture_ == Gesture::None
+        && (!canEdit() || hitRoi(itemToImage(event->position())) < 0))
     {
         // A click is only a selection if the pointer does not travel; beyond the drag threshold the
         // same press turns into a pan, so inspecting the image never commits a candidate.
@@ -945,9 +965,13 @@ void ImageViewport::mouseReleaseEvent(QMouseEvent *event)
     }
     if (gesture_ == Gesture::Pan && event->button() == panButton_)
     {
+        const bool contextMenu = panButton_ == Qt::RightButton
+            && (event->position() - anchor_).manhattanLength() <= QGuiApplication::styleHints()->startDragDistance();
         gesture_   = Gesture::None;
         panButton_ = Qt::NoButton;
         event->accept();
+        if (contextMenu)
+            emit contextMenuRequested(event->position());
         return;
     }
     if (event->button() == Qt::LeftButton && canEdit()
@@ -1096,7 +1120,7 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
 
 void ImageViewport::updateCursor()
 {
-    if ((drawShape_ > 0 && canEdit()) || (assistActive_ && hasImage() && !editing()))
+    if ((drawShape_ > 0 && canEdit()) || (assistActive_ && hasImage()))
         setCursor(QCursor(Qt::CrossCursor));
     else
         unsetCursor();
@@ -1105,7 +1129,7 @@ void ImageViewport::updateCursor()
 void ImageViewport::hoverEnterEvent(QHoverEvent *event)
 {
     updateCursor();
-    if (assistActive_ && hasImage() && !editing())
+    if (assistActive_ && hasImage() && drawShape_ == 0)
         emit assistHover(itemToImage(event->position()));
     QQuickItem::hoverEnterEvent(event);
 }
@@ -1113,7 +1137,7 @@ void ImageViewport::hoverEnterEvent(QHoverEvent *event)
 void ImageViewport::hoverMoveEvent(QHoverEvent *event)
 {
     updateCursor();
-    if (assistActive_ && hasImage() && !editing())
+    if (assistActive_ && hasImage() && drawShape_ == 0)
         emit assistHover(itemToImage(event->position()));
     QQuickItem::hoverMoveEvent(event);
 }

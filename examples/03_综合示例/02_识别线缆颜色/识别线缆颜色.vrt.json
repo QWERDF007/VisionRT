@@ -1,0 +1,467 @@
+{
+  "format_version": 7,
+  "project": {
+    "name": "识别线缆颜色",
+    "next_node_seq": "4",
+    "next_flow_seq": "2"
+  },
+  "flows": [
+    {
+      "flow_id": "flow_1",
+      "name": "识别线缆颜色",
+      "run_selected": true,
+      "nodes": [
+        {
+          "node_seq": "1",
+          "tool_id": "ReadImage",
+          "tool_name_snapshot": "图像读取",
+          "tool_version_snapshot": "1.0.0",
+          "alias": "读取线缆图片",
+          "pos": [
+            0,
+            0
+          ],
+          "init_params": [],
+          "type_snapshot": {
+            "init_params": [],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Bool"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 1
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Bool"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "literal",
+              "literal": "examples/03_综合示例/02_识别线缆颜色/images"
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": false
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": "循环"
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": "顺序（下一张）"
+            },
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 1
+            },
+            {
+              "port_id": 6,
+              "mode": "literal",
+              "literal": false
+            }
+          ]
+        },
+        {
+          "node_seq": "2",
+          "tool_id": "AlignStraightBorders",
+          "tool_name_snapshot": "通过直边确定对齐",
+          "tool_version_snapshot": "1.0.0",
+          "alias": "直边对齐",
+          "pos": [
+            0,
+            1
+          ],
+          "init_params": [
+            {
+              "port_id": 0,
+              "value": "examples/03_综合示例/02_识别线缆颜色/training/线缆对齐.json"
+            }
+          ],
+          "type_snapshot": {
+            "init_params": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "String"
+                }
+              }
+            ],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Float"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 3
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "ROI"
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 2,
+              "mode": "literal",
+              "literal": 30.0
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": 3
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": "any"
+            },
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 0.4
+            }
+          ]
+        },
+        {
+          "node_seq": "3",
+          "tool_id": "RecognizeColor",
+          "tool_name_snapshot": "识别颜色",
+          "tool_version_snapshot": "1.0.0",
+          "alias": "识别五芯颜色",
+          "pos": [
+            0,
+            2
+          ],
+          "init_params": [
+            {
+              "port_id": 0,
+              "value": "examples/03_综合示例/02_识别线缆颜色/training/线缆颜色.json"
+            }
+          ],
+          "type_snapshot": {
+            "init_params": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "String"
+                }
+              }
+            ],
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float64",
+                  "rank": 3
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Float"
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Float"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 0,
+                "type": {
+                  "type": "Int"
+                }
+              },
+              {
+                "port_id": 1,
+                "type": {
+                  "type": "String"
+                }
+              },
+              {
+                "port_id": 2,
+                "type": {
+                  "type": "Image"
+                }
+              },
+              {
+                "port_id": 3,
+                "type": {
+                  "type": "ROI"
+                }
+              },
+              {
+                "port_id": 4,
+                "type": {
+                  "type": "Array",
+                  "dtype": "string",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 5,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 7,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
+              },
+              {
+                "port_id": 8,
+                "type": {
+                  "type": "Array",
+                  "dtype": "float32",
+                  "rank": 2
+                }
+              }
+            ]
+          },
+          "inputs": [
+            {
+              "port_id": 1,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "1",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 2,
+              "mode": "upstream",
+              "literal": null,
+              "source": {
+                "node_seq": "2",
+                "port_id": 2
+              }
+            },
+            {
+              "port_id": 3,
+              "mode": "literal",
+              "literal": [
+                [
+                  [
+                    3,
+                    950.0,
+                    652.0,
+                    45.0
+                  ],
+                  [
+                    3,
+                    950.0,
+                    819.0,
+                    45.0
+                  ],
+                  [
+                    3,
+                    950.0,
+                    1019.0,
+                    45.0
+                  ],
+                  [
+                    3,
+                    950.0,
+                    1185.0,
+                    45.0
+                  ],
+                  [
+                    3,
+                    950.0,
+                    1395.0,
+                    45.0
+                  ]
+                ]
+              ]
+            },
+            {
+              "port_id": 4,
+              "mode": "literal",
+              "literal": 0.05
+            },
+            {
+              "port_id": 5,
+              "mode": "literal",
+              "literal": 0.5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

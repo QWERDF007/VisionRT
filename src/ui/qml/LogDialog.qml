@@ -121,15 +121,19 @@ Window {
             Layout.fillWidth: true
             spacing: 6
             Item { Layout.fillWidth: true }
-            QuiButton {
+            QuiTextIconButton {
                 objectName: "logCopyAll"
                 text: "复制全部"
+                iconSource: QuiFontIcon.Copy
+                display: AbstractButton.TextBesideIcon
                 enabled: app.logModel.count > 0
                 onClicked: app.copyAllLogs()
             }
-            QuiButton {
+            QuiTextIconButton {
                 objectName: "logClear"
                 text: "清空"
+                iconSource: QuiFontIcon.Clear
+                display: AbstractButton.TextBesideIcon
                 enabled: app.logModel.count > 0
                 onClicked: app.logModel.clear()
             }

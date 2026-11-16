@@ -872,6 +872,18 @@ bool ProjectEditor::setInitParam(std::string_view flowId, NodeId id, PortId para
     return true;
 }
 
+bool ProjectEditor::reloadNode(std::string_view flowId, NodeId id)
+{
+    requireIdle();
+    ProjectEditor edit(project_);
+    auto         &node = findNode(edit.flow(flowId), id);
+    requireEditable(node);
+    requireIncrement(node.executionRevision);
+    ++node.executionRevision;
+    commit(std::move(edit.project_));
+    return true;
+}
+
 bool ProjectEditor::setExpressionConfig(std::string_view flowId, NodeId id, ExpressionConfig config,
                                          const ToolDefinition &tool)
 {

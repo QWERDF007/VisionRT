@@ -83,6 +83,8 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 ## 界面约束
 
+菜单尺寸实现：[QuickUI 菜单](../3rdparty/QuickUI/src/controls/QuiMenu.qml)、[菜单项](../3rdparty/QuickUI/src/controls/QuiMenuItem.qml)；完整路径与系统缩放验收：[布局契约](../tests/workbench_layout_contract.cpp)。
+
 重构沿用用户确认的三张 VisionRT V3 截图作为外观基准，保持既有布局、配色、间距、边框、图标、控件与节点外观；不另建样式体系，不将结构重构变成视觉改版。
 
 运行态只改变节点卡片的标题底色、标题文字与 2px 边框（`#1a7f37` / 白色），不新增“执行中”、错误诊断或任何卡片文字，也不改变卡片尺寸、图标、版本与耗时区域；选中仍用独立蓝色虚线，运行绿框不被选中覆盖。

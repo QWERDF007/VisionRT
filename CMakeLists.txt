@@ -163,6 +163,9 @@ if(VISIONRT_BUILD_APP)
         src/ui/ResultPresentation.cpp
         src/ui/RoiEditSession.cpp
         src/ui/RoiEditSession.h
+        src/ui/TrainingSession.cpp
+        src/ui/TrainingSession.h
+        src/ui/AppControllerTraining.cpp
         src/ui/ProjectOperations.cpp
         src/ui/ProjectOperations.h
         src/ui/AppControllerMetadata.cpp
@@ -278,6 +281,7 @@ if(BUILD_TESTING)
     visionrt_contract(tool_registry_contract visionrt_core)
     visionrt_contract(port_value_validation_test visionrt_core)
     visionrt_contract(definition_json_contract visionrt_core)
+    visionrt_contract(training_session_contract visionrt_ui)
     visionrt_contract(tool_definition_validation_test visionrt_core)
     visionrt_contract(tools_package_contract visionrt_core)
     visionrt_contract(custom_tool_store_contract visionrt_core)
@@ -548,6 +552,12 @@ if(BUILD_TESTING)
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         visionrt_contract(workbench_layout_contract visionrt_ui)
+        visionrt_contract(workbench_training_contract visionrt_ui)
+        target_link_libraries(workbench_training_contract PRIVATE Qt6::Test)
+        target_compile_definitions(workbench_training_contract PRIVATE
+            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
         target_link_libraries(workbench_layout_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_layout_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
