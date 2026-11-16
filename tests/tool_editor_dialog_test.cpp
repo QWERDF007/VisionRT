@@ -109,6 +109,35 @@ try
 
     auto *saveButton = findByText(window->contentItem(), "保存");
     require(saveButton->isEnabled(), "a dirty editor must offer Save");
+    auto *cancelButton = window->findChild<QQuickItem *>("cancelBtn");
+    require(cancelButton != nullptr, "the editor did not render its cancel action");
+    window->requestActivate();
+    require(QTest::qWaitForWindowActive(window), "custom tool editor did not become active");
+    QTest::mouseMove(window, cancelButton->mapToScene(QPointF(cancelButton->width() / 2, cancelButton->height() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return cancelButton->property("hovered").toBool(); }, 1000),
+            "Cancel did not receive the mouse hover");
+    require(cancelButton->property("borderColor").value<QColor>() == quickui::QuiColor::getInstance()->Highlight(),
+            "Cancel does not highlight its border on hover");
+    auto *saveBackground = saveButton->property("background").value<QQuickItem *>();
+    require(saveBackground && saveBackground->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Highlight(),
+            "Save must have a filled highlight background");
+    require(saveButton->property("textColor").value<QColor>() == QColor(Qt::white),
+            "Save must use white text on its highlight background");
+    const auto saveNormalColor = saveBackground->property("color").value<QColor>();
+    QTest::mouseMove(window, saveButton->mapToScene(QPointF(saveButton->width() / 2, saveButton->height() / 2)).toPoint());
+    require(QTest::qWaitFor([&] { return saveButton->property("hovered").toBool(); }, 1000),
+            "Save did not receive the mouse hover");
+    require(saveBackground->property("color").value<QColor>() != saveNormalColor,
+            "Save does not change its background on hover");
+    require(!cancelButton->property("hovered").toBool()
+                && cancelButton->property("borderColor").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
+            "Cancel kept its hover border after the mouse left");
+    auto *footerSeparator = window->findChild<QQuickItem *>("footerSeparator");
+    require(footerSeparator && footerSeparator->isVisible() && footerSeparator->height() == 1
+                && footerSeparator->width() == window->width() - 2
+                && footerSeparator->mapToScene(QPointF()).y() < cancelButton->mapToScene(QPointF()).y()
+                && footerSeparator->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
+            "the footer must have a full-width one pixel separator above its buttons");
     controller.setCurrentToolName("图像阈值");
     controller.setCurrentToolId("custom.image.threshold");
     require(controller.inputModel()->addPort("阈值", "int", "128"), "editor could not add an input");

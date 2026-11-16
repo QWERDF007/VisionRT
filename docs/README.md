@@ -83,6 +83,16 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 ## 界面约束
 
+字体来源：[QuickUI 字体](../3rdparty/QuickUI/src/Font.cpp)；参数输入验证：[参数控件契约](../tests/workbench_parameters.cpp)。
+
+图标来源：[QuickUI 图标枚举](../3rdparty/QuickUI/src/include/quickui/IconsFont.h)；参数图标入口：[参数编辑器](../src/ui/qml/ParameterEditor.qml)。
+
+按钮实现：[普通按钮](../3rdparty/QuickUI/src/controls/QuiButton.qml)、[主按钮](../3rdparty/QuickUI/src/controls/QuiFilledButton.qml)；工具编辑器按钮与底栏验证：[窗口契约](../tests/tool_editor_dialog_test.cpp)。
+
+日志窗口：[界面](../src/ui/qml/LogDialog.qml)、[窗口交互契约](../tests/workbench_startup.cpp)。
+
+退出生命周期：[关闭状态](../src/ui/ProjectOperations.h)、[控制器](../src/ui/AppController.cpp)、[进程退出契约](../tests/workbench_exit_contract.cpp)。
+
 菜单尺寸实现：[QuickUI 菜单](../3rdparty/QuickUI/src/controls/QuiMenu.qml)、[菜单项](../3rdparty/QuickUI/src/controls/QuiMenuItem.qml)；完整路径与系统缩放验收：[布局契约](../tests/workbench_layout_contract.cpp)。
 
 重构沿用用户确认的三张 VisionRT V3 截图作为外观基准，保持既有布局、配色、间距、边框、图标、控件与节点外观；不另建样式体系，不将结构重构变成视觉改版。

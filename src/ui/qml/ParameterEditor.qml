@@ -28,7 +28,6 @@ ColumnLayout {
     readonly property real numberStep: parameter.step === undefined || parameter.step === "" ? 1 : Number(parameter.step)
     readonly property int decimalPlaces: parameter.decimals === undefined || parameter.decimals < 0 ? 6 : parameter.decimals
     readonly property int labelWidth: Theme.parameterLabelWidth
-    readonly property font editorFont: Theme.parameterFont
     spacing: Theme.parameterRowSpacing
 
     function getPanel() {
@@ -297,7 +296,6 @@ ColumnLayout {
         IntegerParameterEditor {
             parameterId: root.parameter.id
             flat: true
-            font: root.editorFont
             valueText: root.valueText
             canDecrement: root.parameter.canDecrement === true
             canIncrement: root.parameter.canIncrement === true
@@ -316,7 +314,6 @@ ColumnLayout {
         QuiSpinEditor {
             id: spin
             flat: true
-            font: root.editorFont
             label: ""
             decimals: root.decimalPlaces
             step: root.numberStep > 0 ? root.numberStep : 1
@@ -404,7 +401,6 @@ ColumnLayout {
             id: field
             flat: true
             readOnly: !root.parameter.isSingleFormula
-            font: Theme.monoFont
             actionText: {
                 if (root.parameter.editor === "select_type") return "选择合流类型"
                 if (root.parameter.editor === "condition") return "编辑条件公式"
@@ -501,15 +497,6 @@ ColumnLayout {
     }
 
     Component {
-        id: roiRectIconDelegate
-        RoiRectIcon {
-            anchors.centerIn: parent
-            iconSize: Theme.paramRoiIconSize
-            iconColor: parent && parent.iconColor ? parent.iconColor : Theme.textPrimary
-        }
-    }
-
-    Component {
         id: rectEditor
         ParameterTextField {
             id: field
@@ -517,7 +504,7 @@ ColumnLayout {
             readonly property bool hasRect: root.parameter.hasRect === true
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape === 2
 
-            leadingActionDelegate: roiRectIconDelegate
+            leadingActionIcon: QuiFontIcon.RectangularClipping
             leadingActionText: isDrawing ? "正在绘制..." : "画矩形"
             leadingActionActive: isDrawing
 
@@ -572,7 +559,7 @@ ColumnLayout {
             readonly property bool hasRois: count > 0
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape > 0
 
-            leadingActionDelegate: roiRectIconDelegate
+            leadingActionIcon: QuiFontIcon.RectangularClipping
             leadingActionText: isDrawing ? "正在绘制..." : "画矩形"
             leadingActionActive: isDrawing
 

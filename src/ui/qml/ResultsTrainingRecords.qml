@@ -124,7 +124,7 @@ ColumnLayout {
             anchors.top: parent.top
             anchors.margins: 6
             text: "应用训练数据"
-            font: Theme.parameterFont
+            font: QuiFont.Body
             normalColor: Theme.surfaceBg
             hoverColor: Theme.buttonHoverBg
             pressedColor: Theme.buttonPressedBg

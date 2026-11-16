@@ -54,7 +54,7 @@ Item {
                     leftPadding: 8
                     rightPadding: root.actionIcon > 0 ? 6 : 4
                     verticalAlignment: Text.AlignVCenter
-                    font: Theme.parameterFont
+                    font: QuiFont.Body
                     color: root.enabled ? Theme.parameterTextColor : Theme.disabledText
                     selectionColor: Theme.highlight
                     selectedTextColor: Theme.surfaceBg

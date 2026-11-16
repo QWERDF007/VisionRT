@@ -106,7 +106,7 @@ QuiPopup {
 
     Shortcut {
         enabled: root.opened && !root.applying
-        sequence: StandardKey.Cancel
+        sequences: [StandardKey.Cancel]
         onActivated: root.close()
     }
 
@@ -318,7 +318,7 @@ QuiPopup {
                             horizontalAlignment: Text.AlignRight
                             text: "显示内置工具"
                             color: Theme.textSecondary
-                            font: Theme.parameterFont
+                            font: QuiFont.Body
                         }
                         QuiToggleSwitch {
                             checked: root.draftBuiltins
@@ -342,7 +342,7 @@ QuiPopup {
                                 horizontalAlignment: Text.AlignRight
                                 text: "Python 环境"
                                 color: Theme.textSecondary
-                                font: Theme.parameterFont
+                                font: QuiFont.Body
                             }
                             ParameterTextField {
                                 id: pythonField
@@ -368,14 +368,14 @@ QuiPopup {
                             visible: root.pythonPending && !root.applying
                             text: "Python 环境在下次启动时生效。"
                             color: Theme.textSecondary
-                            font: Theme.parameterFont
+                            font: QuiFont.Body
                         }
                         QuiText {
                             x: 102
                             visible: root.applying
                             text: "正在检查所选 Python 环境..."
                             color: Theme.textSecondary
-                            font: Theme.parameterFont
+                            font: QuiFont.Body
                         }
                         // One status, read from the host: the check result is never re-derived here.
                         QuiText {
@@ -385,7 +385,7 @@ QuiPopup {
                             text: "当前环境：" + app.pythonEnvironmentText
                             color: root.environmentRejected ? Theme.error : Theme.textSecondary
                             wrapMode: Text.WordWrap
-                            font: Theme.parameterFont
+                            font: QuiFont.Body
                         }
                     }
 
@@ -399,7 +399,7 @@ QuiPopup {
                             horizontalAlignment: Text.AlignRight
                             text: "日志等级"
                             color: Theme.textSecondary
-                            font: Theme.parameterFont
+                            font: QuiFont.Body
                         }
                         QuiComboBox {
                             id: levelBox
@@ -417,7 +417,7 @@ QuiPopup {
                         text: root.errorText
                         color: Theme.error
                         wrapMode: Text.WordWrap
-                        font: Theme.parameterFont
+                        font: QuiFont.Body
                     }
                 }
             }

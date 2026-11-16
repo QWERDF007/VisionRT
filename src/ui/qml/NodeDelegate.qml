@@ -23,7 +23,9 @@ Rectangle {
     signal executeRequested()
     signal hoverEntered()
     signal hoverExited()
-    width: 156; height: 52; radius: 2
+    width: Theme.nodeWidth
+    height: Theme.nodeHeight
+    radius: 2
     antialiasing: true
     color: "#ffffff"
     objectName: "flowNode_" + nodeId
@@ -77,13 +79,13 @@ Rectangle {
                 Layout.fillWidth: true
                 elide: Text.ElideRight
                 renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 9 })
+                font: QuiFont.Caption
                 color: root.headerText
             }
             QuiText {
                 text: root.nodeVersion ? ("v" + String(root.nodeVersion).replace(/^v/i, "")) : "v1.0"
                 renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: 10 })
+                font: QuiFont.Caption
                 color: root.headerText
             }
         }
@@ -107,13 +109,13 @@ Rectangle {
             QuiText {
                 text: root.nodeTitle; Layout.fillWidth: true; elide: Text.ElideRight
                 renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeSmall })
+                font: QuiFont.Body
                 color: QuiColor.FontPrimary
             }
             QuiText {
                 text: root.nodeTimingText
                 renderType: Text.QtRendering
-                font: Qt.font({ family: "Microsoft YaHei UI", pixelSize: Theme.fontSizeCaption })
+                font: QuiFont.Caption
                 color: Theme.iconMuted
             }
         }

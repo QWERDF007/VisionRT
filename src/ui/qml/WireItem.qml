@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import quickui
 import VisionRT.Style 1.0
 
 Item {
@@ -41,7 +42,7 @@ Item {
         y: root.sourceY + 4
         text: "×" + root.connectionCount
         color: root.lineColor
-        font.pixelSize: Theme.fontSizeSmall
+        font: QuiFont.Caption
         scale: 1 / root.viewScale
         transformOrigin: Item.TopLeft
     }

@@ -10,7 +10,7 @@ import VisionRT.Style 1.0
 WorkbenchDialog {
     id: root
     title: "关于 VisionRT"
-    implicitWidth: Math.min(600, Window.window ? Window.window.width - 40 : 600)
+    implicitWidth: Math.min(600, (root.parent && root.parent.width) ? (root.parent.width - 40) : 600)
     useNeutralButton: true
     neutralText: "复制全部"
     useNegativeButton: false
@@ -52,7 +52,7 @@ WorkbenchDialog {
                         selectByMouse: true
                         textFormat: TextEdit.PlainText
                         wrapMode: TextEdit.NoWrap
-                        font: Theme.monoFont
+                        font: QuiFont.Body
                         color: Theme.textPrimary
                         background: null
                         topPadding: 12

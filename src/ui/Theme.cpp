@@ -136,6 +136,9 @@ void Theme::initLightIndustrialPalette()
     nodeHeaderTextGreen_ = QColor("#ffffff");
     nodeHeaderTextRed_   = QColor("#cf222e");
 
+    nodeWidth_ = 160;
+    nodeHeight_ = 60;
+
     // 顶部工具栏尺寸与间距
     menuBarHeight_      = 38;
     menuButtonHeight_   = 26;
@@ -173,9 +176,7 @@ void Theme::initLightIndustrialPalette()
     paramRoiIconSize_         = 16;
     paramActionIconSize_      = 13;
 
-    // 全局字号、图标与圆角
-    fontSizeCaption_ = 10;
-    fontSizeSmall_   = 11;
+    // 全局图标与圆角
     iconSizeTiny_    = 10;
     iconSizeSmall_   = 12;
     iconSizeBase_    = 14;
@@ -194,16 +195,6 @@ void Theme::initLightIndustrialPalette()
     roiHandleSize_         = 4;
 
     sourceButtonDisabledOpacity_ = 0.45;
-
-    // 字体默认值：家族、字号、字重的唯一来源
-    const QString family = QStringLiteral("Microsoft YaHei UI");
-    titleFont_   = QFont(family, -1, QFont::DemiBold);
-    titleFont_.setPixelSize(13);
-    monoFont_    = QFont(QStringLiteral("Consolas"), -1, QFont::Normal);
-    monoFont_.setPixelSize(12);
-    // 参数行的字体：家族与字号只在 Theme 定义，QML 不再各写 Qt.font({...})
-    parameterFont_ = QFont(family, -1, QFont::Normal);
-    parameterFont_.setPixelSize(12);
 
 }
 

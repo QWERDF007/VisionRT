@@ -30,6 +30,223 @@
 - ...
 -->
 
+### 2026-11-17 — 汇总提交并推送全部工作台改动
+
+**目标**
+- 提交并推送主仓库全部未提交改动，包括此前其他界面调整和 QuickUI 子模块修改。
+
+**当前状态**
+- 已完成：核对主仓库 dev 与 QuickUI 当前基线，fetch 后分别与 origin/dev 和 origin/main 一致；其余子模块均无未提交修改。
+- 已完成：QuickUI 公共按钮悬浮与禁用态边框提交 840962c，已推送至 origin/main。
+- 已完成：归集字体、固定节点尺寸、图标替换、工具栏按钮移除、弹窗按钮与分隔线、日志样式及退出生命周期改动和相关测试文档。复核时同步连线测试的旧节点下边界到 60px 高度。
+- 待完成：主仓库全部改动提交及 origin/dev 推送，随后记录最终提交结果。
+
+**验证证据**
+- 主仓库与 QuickUI 的 git rev-list --left-right --count HEAD...origin/<branch> → 提交前均为 0 0。
+- tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract workbench_exit_contract workbench_lifecycle_contract workbench_assist_release_contract workbench_training_contract workbench_status_contract tool_editor_dialog_test log_lifecycle_contract python_shutdown_contract → 通过。
+- ctest --test-dir build -R ^workbench_(exit|lifecycle|assist_release|status|training|parameters|paths|canvas|startup)_contract$|^(tool_editor_dialog_test|log_lifecycle_contract|python_shutdown_contract)$ --output-on-failure --no-tests=error → 12/12 通过；调整测试下边界后重新构建 workbench_contract 并重跑 workbench_canvas_contract → 通过。
+- 父仓与 QuickUI 的 git diff --check → 通过。既有 ROI、菜单布局和状态复制测试失败的基线证据见前述任务条目，本轮未扩展修复。
+- QuickUI：git commit -m fix：统一按钮悬浮与禁用态边框 → 840962c；git push origin HEAD:main → 7f96248..840962c 成功。
+
+**下一步**
+- 主仓库 git add -A 后提交并推送 origin/dev；记录父仓提交号及远程同步结果，保证主仓库和 QuickUI 工作区干净。
+
+### 2026-11-17 — 修复日志窗口阻止主程序退出
+
+**目标**
+- 修复关闭软件后窗口消失而进程仍驻留的问题，验证真实进程自行结束。
+
+**当前状态**
+- 已定位根因：LogDialog.qml 无条件拒绝关闭事件并隐藏，在主程序退出时也否决 Qt 的关闭流程。
+- 已完成：仅在手动关闭日志时保持隐藏复用；app.isClosing 时允许正常关闭，复用既有关闭状态，不新增退出路径。
+- 已完成：新增 workbench_exit_contract 独立子进程回归，实际启动 GUI 事件循环、日志服务和控制器，覆盖日志隐藏、日志打开、日志打开时菜单退出三种场景；6 项相关契约通过。
+- 已完成：部署至 E:/Softwares/VisionRT，1576 个文件校验通过；安装版宿主与 quickui.dll 的 SHA256 均匹配构建产物，安装版线缆示例运行并正常结束，标准错误为空。
+
+**验证证据**
+- 首次 workbench_exit_contract 复现：log-hidden 正常结束；log-visible 超时，输出 LAST_WINDOW_CLOSED、CLOSE_READY、main_visible=0，却没有 APPLICATION_QUITTING，确认仍停留在 GUI 事件循环。
+- 修改日志关闭事件处理后，同一测试通过；三个场景均正常结束子进程并进入 APPLICATION_QUITTING。
+- tools/build.cmd cmake --build build --config Release --target VisionRT workbench_exit_contract workbench_lifecycle_contract workbench_contract log_lifecycle_contract workbench_assist_release_contract python_shutdown_contract → 通过。
+- ctest --test-dir build -R ^(workbench_(exit|lifecycle|assist_release|startup)|log_lifecycle|python_shutdown)_contract$ --output-on-failure --no-tests=error → 6/6 通过，包含日志手动关闭再打开及资源释放屏障。
+- tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty → 退出码 0，1576 个文件校验通过；原始输出见 build/evidence/process_exit_deploy.log。
+- 安装版线缆示例 --run-once --screenshot → 退出码 0；build/evidence/process_exit_installed.png 为 453678 字节，标准错误为空，安装文件 hash 与构建产物匹配。此启动检查不替代上面的窗口关闭子进程契约。
+- git diff --check → 通过；退出行为来源与进程测试已加入 docs/README.md 索引。
+
+**下一步**
+- 直接使用 E:/Softwares/VisionRT/VisionRT.exe；本轮无待办。
+
+### 2026-11-17 — 禁用按钮不保留高亮边框
+
+**目标**
+- 修复日志清空后按钮已禁用仍显示蓝色边框的问题，并说明禁用与视觉置灰的来源。
+
+**当前状态**
+- 已完成：QuickUI QuiButton 的高亮边框条件统一增加 enabled 判断；禁用后使用普通边框色，原有 opacity 置灰保留。
+- 已完成：真实点击清空的窗口测试验证日志为空时两个按钮都禁用且边框不再高亮；禁用截图已查看。
+- 已完成：用户退出后清理无主窗口的残留进程 13468，并部署至 E:/Softwares/VisionRT；1576 个文件校验通过，安装版 quickui.dll 与构建产物 SHA256 相同。输出见 build/evidence/disabled_button_deploy.log。
+
+**验证证据**
+- 新增真实清空后的边框断言，workbench_startup_contract 在 disabled log action button retained a highlight border 失败；修正公共组件后通过。
+- tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract tool_editor_dialog_test → 通过，更新 build/bin/quickui.dll。
+- ctest --test-dir build -R ^workbench_startup_contract$|^tool_editor_dialog_test$ --output-on-failure --no-tests=error → 2/2 通过。
+- build/evidence/log_window_disabled.png 已复核：按钮禁用变淡，边框为灰色。父仓与 QuickUI 子模块 git diff --check 均通过。
+
+**下一步**
+- 禁用按钮修复已部署；进程残留修复见同日“修复日志窗口阻止主程序退出”条目。
+
+### 2026-11-17 — 日志窗口操作按钮统一样式
+
+**目标**
+- 仅修复日志窗口复制全部、清空按钮的边框与悬浮高亮，文字使用 QuiFont.Body，并部署至日常目录。
+
+**当前状态**
+- 已完成：LogDialog.qml 的两个按钮通过同一局部 LogActionButton 复用 QuiButton 边框和交互样式，保留字体图标，字体为 Body 16px。
+- 已完成：修正 Main.qml 将 QuiColor.Button 映射到透明菜单背景的问题，普通按钮改用 Theme.surfaceBg，使悬浮底色能够正常显示。
+- 已完成：编译、4 项定向窗口契约和正常/悬浮截图复核；文档补充日志窗口实现及交互契约索引。
+- 已完成：用户正常退出程序后部署至 E:/Softwares/VisionRT，1576 个文件与工具包校验通过；安装版 exe SHA256 与构建产物相同，运行本地示例退出码 0、标准错误为空。
+
+**验证证据**
+- 新增真实日志按钮验证后，workbench_startup_contract 先在 log action buttons must have visible default borders 失败；复用 QuiButton 后，边框通过但透明背景的悬浮断言失败；修正公共底色映射后通过。
+- tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract tool_editor_dialog_test workbench_training_contract → 通过。
+- ctest --test-dir build -R ^workbench_(startup|parameters|training)_contract$|^tool_editor_dialog_test$ --output-on-failure --no-tests=error → 4/4 通过；验证边框 2px、Body 字体、真实鼠标悬浮/移出恢复、点击复制与清空及原有滚动和跨行选择。
+- build/evidence/log_window.png、log_button_hover_logCopyAll.png 与 log_button_hover_logClear.png 为真实窗口证据；正常和悬浮截图已查看。
+- E:/Softwares/Anaconda3/envs/py312/python.exe tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty → 退出码 0，1576 个文件校验通过；原始输出见 build/evidence/log_buttons_deploy.log。
+- 安装版线缆示例 --run-once --screenshot → 退出码 0，build/evidence/log_buttons_installed_smoke.png 为 454017 字节；标准错误为空，安装版 exe SHA256 匹配构建产物。
+- git diff --check → 通过。
+
+**下一步**
+- 直接启动 E:/Softwares/VisionRT/VisionRT.exe 验收；本轮无待办。
+
+### 2026-11-16 — ROI 绘制按钮统一使用 RectangularClipping
+
+**目标**
+- 将矩形与区域输入的绘制图标替换为 QuiFontIcon.RectangularClipping，并部署至日常目录。
+
+**当前状态**
+- 已完成：两个 ROI 编辑入口直接指定 RectangularClipping；ParameterTextField 复用 QuiTextIconButton 默认字体图标委托；删除 RoiRectIcon.qml 及无人使用的 leadingActionDelegate 属性和专用组件。
+- 已完成：编译、参数控件测试与截图复核；图标来源加入 docs/README.md 的实现索引。
+- 已完成：用户关闭程序后部署至 E:/Softwares/VisionRT，1575 个文件校验通过；安装版与构建 exe SHA256 相同。
+- 已知基线问题：workbench_roi_contract 在 Empty rectangle could not enter image drawing mode 失败；临时恢复替换前自绘组件和委托后，原测试在相同位置失败，随后已恢复本轮改动。未扩大范围修复该问题。
+
+**验证证据**
+- tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract → 通过，CMake 自动移除旧 QML 资源。
+- ctest --test-dir build -R ^workbench_(parameters|roi)_contract$ --output-on-failure --no-tests=error → parameters 通过，roi 在上述既有断言失败；替换前基线单独 roi 测试复现相同错误。
+- build/evidence/workbench_parameters_normal.png 已查看，区域输入的字体图标正常显示。rg 检查 src、tests、docs、CMakeLists.txt，无旧组件或委托引用。
+- tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty → 退出码 0，1575 个文件校验通过；输出见 build/evidence/rectangular_icon_deploy.log。
+- 安装版运行 ROI 定位与裁剪示例并截图 → 退出码 0，业务状态运行成功，标准错误为空；build/evidence/rectangular_icon_installed.png 为 97343 字节。
+- git diff --check → 通过。
+
+**下一步**
+- 直接启动 E:/Softwares/VisionRT/VisionRT.exe 使用更新后的图标；既有 ROI 测试问题另行定位。
+
+### 2026-11-16 — 工具编辑器按钮悬浮、保存填色与底栏分隔线
+
+**目标**
+- 恢复取消与保存按钮的悬浮反馈；保存使用蓝底白字；底部按钮栏上方显示分隔线，并部署到日常目录。
+
+**当前状态**
+- 已完成：QuickUI 普通按钮的边框包含 hovered 状态；工具编辑器保存按钮复用 QuiFilledButton；底栏添加 1px QuiColor.Border 分隔线。
+- 已完成：窗口契约验证取消悬浮及移出恢复、保存蓝底白字及悬浮变色、分隔线尺寸和位置、真实点击保存写入文件；真实截图已查看。
+- 已完成：编译并部署至 E:/Softwares/VisionRT，安装版宿主及 quickui.dll 与构建产物 SHA256 相同，运行本地线缆示例退出码 0。QuickUI 子模块改动保留在工作区，尚未提交。
+
+**验证证据**
+- 修复前 tool_editor_dialog_test 分别在 Cancel does not highlight its border on hover、Save must have a filled highlight background、the footer must have a full-width one pixel separator above its buttons 失败；各项修复后通过。
+- tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test workbench_contract workbench_training_contract → 通过。
+- ctest --test-dir build -R ^tool_editor_dialog_test$|^workbench_(parameters|training)_contract$ --output-on-failure --no-tests=error → 3/3 通过；窗口截图 build/evidence/custom_tool_footer_buttons.png 已复核。
+- tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty → 退出码 0，1575 个文件校验通过；原始输出见 build/evidence/footer_deploy.log。
+- 安装版线缆示例 --run-once --screenshot → 退出码 0，build/evidence/footer_deployed_smoke.png 为 454032 字节，标准错误为空；宿主与 QuickUI 的安装版 hash 均匹配。
+- 父仓及 QuickUI 子模块 git diff --check → 通过。
+
+**下一步**
+- 直接启动 E:/Softwares/VisionRT/VisionRT.exe 验收；本轮无待办。
+
+### 2026-11-16 — 部署字体与节点尺寸至日常目录
+
+**目标**
+- 将已验证的字体及固定节点尺寸改动部署至 E:/Softwares/VisionRT。
+
+**当前状态**
+- 已完成：通过项目打包入口部署宿主、QuickUI、运行依赖、示例及现有 VisionTools 工具包；1575 个文件与工具包校验通过。
+- 已完成：安装目录 VisionRT.exe 与 build/bin/VisionRT.exe 的 SHA256 一致；实际启动安装版并运行线缆颜色示例，退出码 0。
+- 已完成：查看安装版截图，确认路径输入使用 Body、节点标题条与耗时使用 Caption、节点名称使用 Body，固定节点尺寸正常。
+
+**验证证据**
+- E:/Softwares/Anaconda3/envs/py312/python.exe tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty → 退出码 0，package verification complete: 1575 files。
+- Get-FileHash -Algorithm SHA256：构建产物与安装版相同。发布校验记录见 build/evidence/package-evidence.json。
+- 安装版 VisionRT.exe --project <安装目录线缆颜色示例> --select-node 2 --run-once --screenshot-delay 3500 --screenshot <证据路径> → 退出码 0；build/evidence/deployed_font_node_160x60.png 为实际运行截图，454358 字节；标准错误为空。
+
+**下一步**
+- 直接启动 E:/Softwares/VisionRT/VisionRT.exe 使用本轮版本。
+
+### 2026-11-16 — 字体统一与流程节点固定尺寸
+
+**目标**
+- 删除 Theme 字体配置，复用 QuickUI 字体；流程节点固定为 160 × 60，正文名称使用 Body，标题条与耗时使用 Caption。
+
+**当前状态**
+- 已完成：删除 Theme 的字体属性、字号和初始化及全部引用；参数输入、输出表格与相关弹窗使用 QuiFont.Body；节点名称使用 Body，工具名称、版本、耗时及连线计数使用 Caption。
+- 已完成：节点尺寸由 Theme 单一来源提供，画布居中、适应窗口、框选和连线契约同步使用固定尺寸；没有自适应高度。
+- 已完成：Release 构建、6 项相关契约验证与实际窗口截图复核；文档增加字体实现和参数契约索引。
+- 已知基线问题：workbench_layout_contract 的最近工程完整路径断言、workbench_popups_contract 的当前节点状态复制断言在字体改动前也失败；本轮未修复。日常安装目录未部署本轮改动。
+
+**验证证据**
+- tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract workbench_status_contract workbench_training_contract tool_editor_dialog_test → 通过；最终字体微调后的 VisionRT、workbench_contract 和 workbench_status_contract 增量构建通过。
+- ctest --test-dir build -R ^workbench_(parameters|paths|status|training|canvas)_contract$|^tool_editor_dialog_test$ --output-on-failure --no-tests=error → 参数、路径、训练、画布、工具编辑器通过；最终单独重跑 workbench_status_contract 通过，验证固定 160 × 60、Body 16px、Caption 12px 及文字未溢出。
+- 字体改动前基线重跑 workbench_layout_contract 与 workbench_popups_contract → 两项相同断言失败，确认不是本轮引入。
+- build/evidence/workbench_parameters_normal.png 与 node-status-card.png 为真实窗口证据；参数截图已查看，节点文字均在固定卡片内。
+- rg 检查 src、tests、docs → 无 Theme 字体定义与引用残留；git diff --check → 通过。
+
+**下一步**
+- 本轮源码及 build/bin/VisionRT.exe 可交付；如需安装目录生效，按 tools/package_app.py 部署。既有菜单与状态复制测试问题另行处理。
+
+### 2026-11-16 — 移除图像工具栏形状绘制按钮组及对应测试
+
+**目标**
+- 移除图像区浮动工具栏中的形状绘制按钮组（矩形、多边形、圆形、线、点）及对应测试，重新编译并部署至 E:/Softwares/VisionRT。
+
+**当前状态**
+- 已完成：
+  - 修改 `src/ui/qml/ResultsImageToolbar.qml`：移除 5 个形状绘制按钮及多余分割线，保留图像缩放与智能点选之间的单分割线；
+  - 修复 `src/ui/qml/SettingsDialog.qml` 与 `src/ui/qml/AboutVisionRTDialog.qml` 潜在 QML 警告（Shortcut sequences 数组规范化与弹窗宽度的安全引用）；
+  - 修改 `tests/workbench_training_contract.cpp`：移除工具栏“矩形”按钮点击及状态切换的断言代码；
+  - Release 配置全量编译成功；
+  - 契约测试 `workbench_training_contract` 与 `training_session_contract` 全部通过；
+  - 全量重新打包部署至日常安装目录 E:/Softwares/VisionRT，1575 个文件校验全部通过；
+  - 运行态真实启动并完成截图验证（deploy_no_shape_buttons.png，退出码 0，54659 字节）。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release` -> 退出码 0。
+- `tools/build.cmd ctest --test-dir build -R workbench_training_contract --output-on-failure` -> 100% tests passed (6.77s)。
+- `tools/build.cmd ctest --test-dir build -R training_session_contract --output-on-failure` -> 100% tests passed (0.50s)。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty` -> package verification complete: 1575 files。
+- `Start-Process -FilePath "E:/Softwares/VisionRT/VisionRT.exe" -ArgumentList "--screenshot", "D:/tmp/deploy_no_shape_buttons.png" -Wait` -> 退出码 0，生成 54659 字节截图。
+
+**下一步**
+- 用户可直接启动 E:/Softwares/VisionRT/VisionRT.exe 验收移除形状按钮后的界面。
+
+
+### 2026-11-16 — 拉取最新代码、全量构建并部署至日常目录
+
+**目标**
+- 拉取 VisionRT 与 VisionTools 最新代码分支及子模块，全量编译构建（含新增识别模块算子与训练界面改动），并正式部署至 E:/Softwares/VisionRT。
+
+**当前状态**
+- 已完成：
+  - VisionRT 与 VisionTools 均已同步至 origin/dev 最新提交（VisionRT 为 582e72d，QuickUI 为 7f96248，VisionTools 为 97b8fc8）；
+  - VisionTools Release 配置构建成功，生成 25 个工具的算子包（VisionTools.zip 及 VisionTools.module_index.json），定向测试 4/4 通过；
+  - VisionRT Release 配置构建成功；
+  - 全量打包部署至日常安装目录 E:/Softwares/VisionRT，1575 个文件完整性与依赖校验全部通过；
+  - 运行态真实启动并完成截图验证（deploy_final_verify.png，退出码 0，55864 字节）。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release` -> 退出码 0。
+- `python D:/Project/VisionTools/tools/package_tools.py --build-dir D:/Project/VisionTools/build --profile rtx40-build --install-dir D:/Project/VisionTools/dist/VisionTools --zip-output D:/Project/VisionTools/dist/VisionTools.zip` -> 已打包 25 个工具。
+- `python tools/package_app.py --build-dir build --install-dir E:/Softwares/VisionRT --tools-package D:/Project/VisionTools/dist/VisionTools.zip --tools-index D:/Project/VisionTools/dist/VisionTools.module_index.json --allow-dirty` -> package verification complete: 1575 files。
+- `Start-Process -FilePath "E:/Softwares/VisionRT/VisionRT.exe" -ArgumentList "--screenshot", "D:/tmp/deploy_final_verify.png" -Wait` -> 退出码 0，生成 55864 字节截图。
+
+**下一步**
+- 用户可直接启动 E:/Softwares/VisionRT/VisionRT.exe 使用最新功能。
+
+
 ### 2026-11-16 — 汇总提交训练与工作台 UI 改动
 
 **目标**

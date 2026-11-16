@@ -22,7 +22,6 @@ Item {
     property string leadingActionText: ""
     property color leadingActionColor: Theme.textPrimary
     property bool leadingActionActive: false
-    property Component leadingActionDelegate: null
     property color backgroundColor: QuiColor.Transparent
 
     signal commitRequested()
@@ -65,11 +64,10 @@ Item {
 
             QuiTextIconButton {
                 id: leadingBtn
-                visible: root.leadingActionIcon > 0 || root.leadingActionDelegate !== null
+                visible: root.leadingActionIcon > 0
                 Layout.preferredWidth: Theme.paramActionBtnWidth
                 Layout.fillHeight: true
                 iconSource: root.leadingActionIcon
-                iconDelegate: root.leadingActionDelegate
                 iconSize: Theme.paramRoiIconSize
                 iconColor: root.leadingActionActive ? Theme.highlight : root.leadingActionColor
                 normalColor: root.leadingActionActive ? Theme.paramActionActiveBg : "transparent"
@@ -98,10 +96,10 @@ Item {
                 TextInput {
                     id: input
                     anchors.fill: parent
-                    leftPadding: root.leadingActionIcon > 0 || root.leadingActionDelegate !== null ? 6 : 8
+                    leftPadding: leadingBtn.visible ? 6 : 8
                     rightPadding: root.actionIcon > 0 ? 6 : 4
                     verticalAlignment: Text.AlignVCenter
-                    font: Theme.parameterFont
+                    font: QuiFont.Body
                     // One text colour for every parameter kind; a rejected draft is reported to the
                     // log and keeps its text instead of painting the field red.
                     color: root.enabled ? Theme.parameterTextColor : Theme.disabledText

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QColor>
-#include <QFont>
 #include <QObject>
 #include <QtGlobal>
 #include <QtQml>
@@ -27,26 +26,6 @@ public:                                                                    \
                                                                            \
 private:                                                                   \
     QColor Name##_;
-
-#define THEME_FONT_PROP(Name)                                             \
-    Q_PROPERTY(QFont Name READ Name WRITE set##Name NOTIFY Name##Changed) \
-public:                                                                   \
-    QFont Name() const                                                    \
-    {                                                                     \
-        return Name##_;                                                   \
-    }                                                                     \
-    void set##Name(const QFont &font)                                     \
-    {                                                                     \
-        if (Name##_ != font)                                              \
-        {                                                                 \
-            Name##_ = font;                                               \
-            Q_EMIT Name##Changed();                                       \
-        }                                                                 \
-    }                                                                     \
-    Q_SIGNAL void Name##Changed();                                        \
-                                                                          \
-private:                                                                  \
-    QFont Name##_;
 
 #define THEME_INT_PROP(Name)                                            \
     Q_PROPERTY(int Name READ Name WRITE set##Name NOTIFY Name##Changed) \
@@ -201,6 +180,9 @@ public:
     THEME_COLOR_PROP(nodeHeaderTextGreen)
     THEME_COLOR_PROP(nodeHeaderTextRed)
 
+    THEME_INT_PROP(nodeWidth)
+    THEME_INT_PROP(nodeHeight)
+
     // 顶部工具栏尺寸与间距
     THEME_INT_PROP(menuBarHeight)
     THEME_INT_PROP(menuButtonHeight)
@@ -258,22 +240,6 @@ public:
     }
     Q_SIGNAL void paramEditorHeightChanged();
 
-    // 参数字体（单一真相源：以 parameterFont QFont 为唯一状态）
-    Q_PROPERTY(QFont parameterFont READ parameterFont WRITE setparameterFont NOTIFY parameterFontChanged)
-    QFont parameterFont() const
-    {
-        return parameterFont_;
-    }
-    void setparameterFont(const QFont &font)
-    {
-        if (parameterFont_ != font)
-        {
-            parameterFont_ = font;
-            Q_EMIT parameterFontChanged();
-        }
-    }
-    Q_SIGNAL void parameterFontChanged();
-
     THEME_COLOR_PROP(logButtonHoverColor)
     THEME_INT_PROP(parameterLabelWidth)
     // 工具编辑卡片内标签列的宽度：卡片比参数面板窄，标签列不跟随参数面板的宽度
@@ -297,18 +263,12 @@ public:
     THEME_INT_PROP(roiStrokeWidth)
     THEME_INT_PROP(roiHandleSize)
 
-    // 全局字号、图标与圆角
-    THEME_INT_PROP(fontSizeCaption)
-    THEME_INT_PROP(fontSizeSmall)
+    // 全局图标与圆角
     THEME_INT_PROP(iconSizeTiny)
     THEME_INT_PROP(iconSizeSmall)
     THEME_INT_PROP(iconSizeBase)
     THEME_INT_PROP(radiusSmall)
     THEME_INT_PROP(radiusBase)
-
-    // 字体：整块 QFont 绑定，家族/字号/字重只在此定义
-    THEME_FONT_PROP(titleFont)
-    THEME_FONT_PROP(monoFont)
 
     THEME_REAL_PROP(sourceButtonDisabledOpacity)
 
@@ -316,7 +276,6 @@ private:
     void initLightIndustrialPalette();
 
     int parameterRowHeight_{32};
-    QFont parameterFont_;
 };
 
 void registerStyleModule();
@@ -324,7 +283,6 @@ Theme *themeForEngine(QQmlEngine *engine);
 
 #undef THEME_COLOR_PROP
 #undef THEME_INT_PROP
-#undef THEME_FONT_PROP
 #undef THEME_REAL_PROP
 
 } // namespace visionrt

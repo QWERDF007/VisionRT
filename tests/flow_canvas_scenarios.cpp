@@ -120,9 +120,9 @@ void flowCanvasContract()
     {
         auto *candidate = pending.takeLast();
         if (candidate->property("sourceX").isValid() && candidate->property("targetX").isValid()
-            && candidate->property("sourceX").toDouble() == 78
-            && candidate->property("sourceY").toDouble() == 52
-            && candidate->property("targetX").toDouble() == 78
+            && candidate->property("sourceX").toDouble() == 80
+            && candidate->property("sourceY").toDouble() == 60
+            && candidate->property("targetX").toDouble() == 80
             && candidate->property("targetY").toDouble() == 160)
             bypass = candidate;
         pending.append(candidate->childItems());
@@ -174,11 +174,11 @@ void flowCanvasContract()
         const auto start  = route[index - 1].toPointF();
         const auto finish = route[index].toPointF();
         require(start.x() == finish.x() || start.y() == finish.y(), "canvas route contains a diagonal segment");
-        if (start.x() == finish.x() && start.x() > 0 && start.x() < 156)
-            require(std::max(start.y(), finish.y()) <= 80 || std::min(start.y(), finish.y()) >= 132,
+        if (start.x() == finish.x() && start.x() > 0 && start.x() < 160)
+            require(std::max(start.y(), finish.y()) <= 80 || std::min(start.y(), finish.y()) >= 140,
                     "reader-to-crop wire crosses the intervening projection node");
-        if (start.y() == finish.y() && start.y() > 80 && start.y() < 132)
-            require(std::max(start.x(), finish.x()) <= 0 || std::min(start.x(), finish.x()) >= 156,
+        if (start.y() == finish.y() && start.y() > 80 && start.y() < 140)
+            require(std::max(start.x(), finish.x()) <= 0 || std::min(start.x(), finish.x()) >= 160,
                     "reader-to-crop wire crosses the intervening projection node");
         const auto middle   = (start + finish) / 2;
         const auto distance = clearance(middle);
@@ -830,9 +830,9 @@ void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, doubl
                                                            wire->property("sourceY").toDouble()));
         const QPointF wireTarget = wire->mapToScene(QPointF(wire->property("targetX").toDouble(),
                                                            wire->property("targetY").toDouble()));
-        require(QLineF(wireSource, source->mapToScene(QPointF(78, 52))).length() < 0.01,
+        require(QLineF(wireSource, source->mapToScene(QPointF(80, 60))).length() < 0.01,
                 "wire source is not aligned with its node after a zoomed drag");
-        require(QLineF(wireTarget, target->mapToScene(QPointF(78, 0))).length() < 0.01,
+        require(QLineF(wireTarget, target->mapToScene(QPointF(80, 0))).length() < 0.01,
                 "wire target is not aligned with its node after a zoomed drag");
         const auto bounds = source->mapRectToScene(source->boundingRect()).united(
             target->mapRectToScene(target->boundingRect()));

@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -189,6 +190,8 @@ class InitFailure:
             "status source did not enter running state");
     auto *sourceItem = findItem(canvas, "flowNode_" + source);
     require(sourceItem, "status source delegate is missing");
+    require(sourceItem->width() == 160 && sourceItem->height() == 60,
+            "node card must have the fixed 160 by 60 pixel size");
     require(QTest::qWaitFor([&] { return sourceItem->property("nodeState").toString() == "running"; }, 2000),
             "status source delegate did not reach running state");
     const auto *theme = themeForEngine(&engine);
@@ -233,6 +236,18 @@ class InitFailure:
     require(!stateOf(source).value("timingText").toString().isEmpty()
                 && stateOf(source).value("timingText").toString() != QStringLiteral("运行中"),
             "succeeded node has no timing");
+    for (auto *text : sourceItem->findChildren<QQuickItem *>())
+        if (text->isVisible() && !text->property("text").toString().isEmpty())
+        {
+            const auto value = text->property("text").toString();
+            const bool isTitle = value == sourceItem->property("nodeTitle").toString();
+            if (isTitle || value == sourceItem->property("nodeToolName").toString()
+                        || value == sourceItem->property("nodeTimingText").toString())
+                require(text->property("font").value<QFont>().pixelSize() == (isTitle ? 16 : 12),
+                        "node title must use Body and tool name and timing must use Caption");
+            require(sourceItem->boundingRect().contains(text->mapRectToItem(sourceItem, text->boundingRect())),
+                    "node text overflows its fixed-height card");
+        }
     require(QFile::remove(permission), "status permission file could not be removed");
     app.selectNode(source);
     require(app.setParameter(kModeInput, false, "fail"), "status source could not enter failure mode");

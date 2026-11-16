@@ -210,7 +210,7 @@ Rectangle {
                 text: "中文名:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             ParameterTextField {
@@ -235,7 +235,7 @@ Rectangle {
                 text: "英文名:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             ParameterTextField {
@@ -257,7 +257,7 @@ Rectangle {
                 text: "类型:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             QuiComboBox {
@@ -304,7 +304,7 @@ Rectangle {
                 text: "默认值:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             ParameterTextField {
@@ -355,7 +355,7 @@ Rectangle {
                 text: "默认值:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             QuiToggleSwitch {
@@ -378,7 +378,7 @@ Rectangle {
                 text: "下限:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             ParameterTextField {
@@ -400,7 +400,7 @@ Rectangle {
                 text: "上限:"
                 Layout.preferredWidth: Theme.cardLabelWidth
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             ParameterTextField {
@@ -423,7 +423,7 @@ Rectangle {
                 text: "图像区域显示:"
                 Layout.preferredWidth: Theme.cardLabelWidth + 24
                 horizontalAlignment: Text.AlignRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: Theme.textSecondary
             }
             QuiToggleSwitch {
@@ -444,7 +444,7 @@ Rectangle {
 
             Text {
                 text: root.advancedChecked ? "收起详情" : "更多设置"
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 color: advMouse.containsMouse ? Theme.highlight : Theme.textSecondary
 
                 MouseArea {
@@ -467,7 +467,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.typeToken === "string"
-                Label { text: "编辑方式:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
+                Label { text: "编辑方式:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: Theme.paramEditorHeight
@@ -491,7 +491,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("image")
-                Label { text: "关联图像:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
+                Label { text: "关联图像:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: Theme.paramEditorHeight
@@ -515,7 +515,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("alignment")
-                Label { text: "对齐关系:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
+                Label { text: "对齐关系:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: Theme.paramEditorHeight
@@ -539,7 +539,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 visible: root.showsRelation("same_geometry_as")
-                Label { text: "同几何:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
+                Label { text: "同几何:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: Theme.textSecondary }
                 QuiComboBox {
                     Layout.fillWidth: true
                     implicitHeight: Theme.paramEditorHeight
@@ -564,7 +564,7 @@ Rectangle {
                 spacing: 8
                 visible: !root.output && (root.typeToken === "int" || root.typeToken === "float"
                                          || root.typeToken === "string" || root.typeToken === "bool")
-                Label { text: "候选值:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: Theme.parameterFont; color: Theme.textSecondary }
+                Label { text: "候选值:"; Layout.preferredWidth: Theme.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: Theme.textSecondary }
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 50
@@ -579,7 +579,7 @@ Rectangle {
                         enabled: root.editable
                         text: model.optionsText
                         wrapMode: TextArea.Wrap
-                        font: Theme.parameterFont
+                        font: QuiFont.Body
                         color: Theme.textPrimary
                         onActiveFocusChanged: {
                             if (!activeFocus && text !== model.optionsText)

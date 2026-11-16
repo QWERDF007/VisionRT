@@ -117,7 +117,7 @@ ColumnLayout {
             anchors.fill: parent
             anchors.margins: 4
             text: "加入训练"
-            font: Theme.parameterFont
+            font: QuiFont.Body
             normalColor: Theme.surfaceBg
             hoverColor: Theme.buttonHoverBg
             pressedColor: Theme.buttonPressedBg

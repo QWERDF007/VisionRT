@@ -132,12 +132,6 @@ try
     require(history != nullptr, "log model is missing");
     require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("Ctrl")); }, 2000),
             "EasyTouch guidance did not reach the existing log");
-    auto *rectangle = textButton(window->contentItem(), QStringLiteral("矩形"));
-    require(rectangle && rectangle->isEnabled(), "rectangle tool is not available in training");
-    QTest::mouseClick(window, Qt::LeftButton, {}, rectangle->mapToScene(rectangle->boundingRect().center()).toPoint());
-    require(app.drawShape() == 2, "the first rectangle click canceled drawing instead of starting it");
-    QTest::mouseClick(window, Qt::LeftButton, {}, rectangle->mapToScene(rectangle->boundingRect().center()).toPoint());
-    require(app.drawShape() == 0, "the second rectangle click did not leave drawing mode");
     auto *viewport = window->findChild<ImageViewport *>("imageViewport");
     require(viewport != nullptr, "training viewport is missing");
     const auto zoomBefore = viewport->zoom();

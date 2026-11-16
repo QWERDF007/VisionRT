@@ -79,7 +79,7 @@ FocusScope {
     function hoverCardX() {
         let n = root.hoverNode
         if (!n) return 4
-        let right = root.nodeX(n.id) * root.zoom + root.panX + 156 * root.zoom + 10
+        let right = root.nodeX(n.id) * root.zoom + root.panX + Theme.nodeWidth * root.zoom + 10
         let left = root.nodeX(n.id) * root.zoom + root.panX - hoverCard.width - 10
         let maxX = Math.max(4, surface.width - hoverCard.width - 4)
         return Math.max(4, Math.min(maxX, right <= maxX ? right : left))
@@ -99,8 +99,8 @@ FocusScope {
         const p = app.nodePosition(id)
         if (p.x === 0 && p.y === 0 && !app.nodeRecord(id).id) return
         selection = [id]
-        panX = surface.width / 2 - (p.x * cellWidth + 78) * zoom
-        panY = surface.height / 2 - (p.y * cellHeight + 34) * zoom
+        panX = surface.width / 2 - (p.x * cellWidth + Theme.nodeWidth / 2) * zoom
+        panY = surface.height / 2 - (p.y * cellHeight + Theme.nodeHeight / 2) * zoom
         surface.forceActiveFocus()
     }
     function fit() {
@@ -111,7 +111,7 @@ FocusScope {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         for (let n of positions) {
             minX = Math.min(minX, n.x * cellWidth); minY = Math.min(minY, n.y * cellHeight)
-            maxX = Math.max(maxX, n.x * cellWidth + 156); maxY = Math.max(maxY, n.y * cellHeight + 52)
+            maxX = Math.max(maxX, n.x * cellWidth + Theme.nodeWidth); maxY = Math.max(maxY, n.y * cellHeight + Theme.nodeHeight)
         }
         zoom = Math.min(1.5, Math.max(1, surface.width - 64) / Math.max(1, maxX - minX), Math.max(1, surface.height - 64) / Math.max(1, maxY - minY))
         panX = surface.width / 2 - (minX + maxX) * zoom / 2
@@ -569,7 +569,7 @@ FocusScope {
                         let bottom = (Math.max(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
                         let ids = root.selection.slice()
                         for (let n of app.nodePositions())
-                            if (n.x * root.cellWidth + 156 >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + 52 >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
+                            if (n.x * root.cellWidth + Theme.nodeWidth >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + Theme.nodeHeight >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
                         root.selection = ids
                         if (ids.length) app.selectNode(ids[ids.length - 1])
                     } else if (mouse.button === Qt.RightButton && !root.moved) {
@@ -691,7 +691,7 @@ FocusScope {
                         Layout.fillWidth: true
                         text: root.hoverNode ? root.hoverNode.title : ""
                         wrapMode: Text.Wrap
-                        font: Theme.titleFont
+                        font: QuiFont.Body
                         color: Theme.textPrimary
                     }
                     Repeater {

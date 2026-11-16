@@ -5,7 +5,7 @@ import quickui
 import VisionRT.Style 1.0
 
 // One non-modal window, not a Popup: the log keeps living while it is hidden, can be minimized and
-// restored from the main window, and never blocks the workbench. Closing only hides it.
+// restored from the main window, and never blocks the workbench. Manual close only hides it.
 //
 // The body is a single read-only text area, so a selection can start in the middle of one line and
 // end in the middle of another. Every record is one logical line of that text; wrapping is a visual
@@ -41,9 +41,10 @@ Window {
         Qt.callLater(scrollToBottom)
     }
     onClosing: function(close) {
-        // Closing the window hides it; writing continues and the single instance stays available.
-        close.accepted = false
-        root.hide()
+        // Manual close keeps the reusable log window; application shutdown must be allowed through.
+        close.accepted = app.isClosing
+        if (!close.accepted)
+            root.hide()
     }
     onVisibleChanged: syncActive()
     onVisibilityChanged: syncActive()
@@ -111,6 +112,26 @@ Window {
         }
     }
 
+    component LogActionButton: QuiButton {
+        id: control
+        required property int iconSource
+        font: QuiFont.Body
+        focusPolicy: Qt.TabFocus
+
+        contentItem: RowLayout {
+            spacing: 6
+            QuiTextIcon {
+                iconSource: control.iconSource
+                iconColor: control.textColor
+            }
+            QuiText {
+                text: control.text
+                font: control.font
+                color: control.textColor
+            }
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 6
@@ -121,19 +142,17 @@ Window {
             Layout.fillWidth: true
             spacing: 6
             Item { Layout.fillWidth: true }
-            QuiTextIconButton {
+            LogActionButton {
                 objectName: "logCopyAll"
                 text: "复制全部"
                 iconSource: QuiFontIcon.Copy
-                display: AbstractButton.TextBesideIcon
                 enabled: app.logModel.count > 0
                 onClicked: app.copyAllLogs()
             }
-            QuiTextIconButton {
+            LogActionButton {
                 objectName: "logClear"
                 text: "清空"
                 iconSource: QuiFontIcon.Clear
-                display: AbstractButton.TextBesideIcon
                 enabled: app.logModel.count > 0
                 onClicked: app.logModel.clear()
             }

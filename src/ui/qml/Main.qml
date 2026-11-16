@@ -86,7 +86,7 @@ ApplicationWindow {
         QuiColor.Error = Theme.error
         QuiColor.FontPrimary = Theme.textPrimary
         QuiColor.FontCaption = Theme.textSecondary
-        QuiColor.Button = Theme.menuButtonBg
+        QuiColor.Button = Theme.surfaceBg
         QuiColor.CardBackground = Theme.paramEditorBg
         QuiColor.CardBorder = Theme.paramEditorBorder
         QuiColor.ItemHover = Theme.paramRowHoverBg

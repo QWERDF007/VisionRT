@@ -153,7 +153,7 @@ Rectangle {
             QuiText {
                 anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
-                font: Theme.parameterFont
+                font: QuiFont.Body
                 // Only a port with a legal, still free downstream input looks actionable. An existing
                 // connection keeps its reference count but never stands in for a new target.
                 color: cell.options.column === 0 && cell.options.connectable ? Theme.highlight : Theme.parameterTextColor

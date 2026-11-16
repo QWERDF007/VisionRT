@@ -5,6 +5,8 @@
 #include "ui/OutputModel.h"
 #include "ui/Theme.h"
 #include "ImageFixtures.h"
+#include <quickui/Color.h>
+#include <quickui/Font.h>
 
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -278,6 +280,40 @@ void startupProjectContract()
             QTest::qWait(100);
             auto *logQuick = qobject_cast<QQuickWindow *>(logWindow);
             require(logQuick != nullptr, "the log window is not a quick window");
+            logQuick->requestActivate();
+            require(QTest::qWaitForWindowActive(logQuick), "the log window did not become active");
+            for (const auto *name : {"logCopyAll", "logClear"})
+            {
+                auto *button = logWindow->findChild<QQuickItem *>(name);
+                require(button && button->isVisible() && button->isEnabled(), "a log action button is missing");
+                auto *background = button->property("background").value<QQuickItem *>();
+                auto *border = background ? background->property("border").value<QObject *>() : nullptr;
+                require(border && border->property("width").toInt() == 2
+                            && border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
+                        "log action buttons must have visible default borders");
+                require(button->property("font").value<QFont>() == quickui::QuiFont::getInstance()->Body(),
+                        "log action buttons must use QuiFont.Body");
+                const auto normalColor = background->property("color").value<QColor>();
+                QTest::mouseMove(logQuick, button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+                require(QTest::qWaitFor([&] { return button->property("hovered").toBool(); }, 1000),
+                        "log action button did not receive hover");
+                require(QTest::qWaitFor([&] {
+                    return border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Highlight()
+                        && background->property("color").value<QColor>() != normalColor;
+                }, 1000),
+                        std::string("log action button did not highlight on hover: ") + name
+                            + " border=" + border->property("color").value<QColor>().name().toStdString()
+                            + " normal=" + normalColor.name().toStdString()
+                            + " actual=" + background->property("color").value<QColor>().name().toStdString()
+                            + " hover=" + button->property("hoverColor").value<QColor>().name().toStdString());
+                require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_button_hover_%1.png")
+                                                       .arg(QString::fromLatin1(name))),
+                        "cannot capture the hovered log action button");
+                QTest::mouseMove(logQuick, QPoint(10, logQuick->height() - 10));
+                require(QTest::qWaitFor([&] { return !button->property("hovered").toBool(); }, 1000)
+                            && border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
+                        "log action button kept its hover border after the mouse left");
+            }
             require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_window.png")),
                     "cannot capture the log window");
             auto *logText = logWindow->findChild<QObject *>("logText");
@@ -318,14 +354,29 @@ void startupProjectContract()
             require(selection == logBody.mid(selectionStart, selectionEnd - selectionStart),
                     "log selection did not preserve cross-line character boundaries");
             const auto scrollBeforeCopy = flickable->property("contentY");
-            app.copyAllLogs();
+            auto *copyAllButton = logWindow->findChild<QQuickItem *>("logCopyAll");
+            QTest::mouseClick(logQuick, Qt::LeftButton, Qt::NoModifier,
+                              copyAllButton->mapToScene(QPointF(copyAllButton->width() / 2, copyAllButton->height() / 2)).toPoint());
             require(QGuiApplication::clipboard()->text() == logBody
                         && logText->property("selectedText").toString() == selection
                         && flickable->property("contentY") == scrollBeforeCopy,
                     "copy-all changed selection, scrolling, or log content");
-            require(QMetaObject::invokeMethod(app.logModel(), "clear"), "cannot clear window log history");
+            auto *clearButton = logWindow->findChild<QQuickItem *>("logClear");
+            QTest::mouseClick(logQuick, Qt::LeftButton, Qt::NoModifier,
+                              clearButton->mapToScene(QPointF(clearButton->width() / 2, clearButton->height() / 2)).toPoint());
             require(QTest::qWaitFor([&] { return logText->property("text").toString().isEmpty(); }, 1000),
                     "clearing log history did not clear the text area");
+            require(!copyAllButton->isEnabled() && !clearButton->isEnabled(),
+                    "empty log actions must be disabled");
+            for (auto *button : {copyAllButton, clearButton})
+            {
+                auto *background = button->property("background").value<QQuickItem *>();
+                auto *border = background->property("border").value<QObject *>();
+                require(border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
+                        "disabled log action button retained a highlight border");
+            }
+            require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_window_disabled.png")),
+                    "cannot capture disabled log action buttons");
             const auto oversized = visionrt::testing::oversizedBmp();
             const auto imagePath = directory.filePath(QStringLiteral("超尺寸图像.bmp"));
             QFile      oversizedFile(imagePath);

@@ -740,6 +740,17 @@ Window {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 48
 
+                Rectangle {
+                    objectName: "footerSeparator"
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 1
+                    anchors.rightMargin: 1
+                    height: Theme.separatorWidth
+                    color: QuiColor.Border
+                }
+
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
@@ -772,13 +783,12 @@ Window {
                     }
 
                     // 保存按钮
-                    QuiButton {
+                    QuiFilledButton {
                         id: saveBtn
                         objectName: "saveBtn"
                         Layout.preferredWidth: 72
                         Layout.preferredHeight: 32
                         text: "保存"
-                        highlighted: true
                         onClicked: {
                             if (root.controller) {
                                 root.controller.saveAll()

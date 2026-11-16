@@ -237,22 +237,24 @@ void parameterEditorsContract()
     auto *input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "Float parameter did not use the public spin editor");
     require(input->height() >= 28, "Float input did not inherit the parameter height");
-    require(input->property("font").value<QFont>() == theme->parameterFont(),
-            "Float input did not inherit the shared parameter font");
+    auto *fonts = quickui::QuiFont::getInstance();
+    const QFont bodyFont = fonts->Body();
+    require(input->property("font").value<QFont>().pixelSize() == 16,
+            "Float input must use the default 16 pixel body font");
 
     // Dynamic propagation: same numeric size (14) toggled between pointSizeF and pixelSize
     // verifies QFont unit semantics and dynamic propagation to real consumer item:
-    QFont ptFont = theme->parameterFont();
+    QFont ptFont = bodyFont;
     ptFont.setPointSizeF(14.0);
-    theme->setparameterFont(ptFont);
+    fonts->setBody(ptFont);
     QTest::qWait(50);
     const QFont actualPt = input->property("font").value<QFont>();
     require(std::abs(actualPt.pointSizeF() - 14.0) < 0.01 && actualPt.pixelSize() == -1,
             "Float input did not preserve point unit mode when assigned pointSizeF(14)");
 
-    QFont pxFont = theme->parameterFont();
+    QFont pxFont = bodyFont;
     pxFont.setPixelSize(14);
-    theme->setparameterFont(pxFont);
+    fonts->setBody(pxFont);
     QTest::qWait(50);
     const QFont actualPx = input->property("font").value<QFont>();
     require(actualPx.pixelSize() == 14 && actualPx.pointSizeF() < 0,
@@ -269,15 +271,7 @@ void parameterEditorsContract()
     theme->setparamEditorHeight(32);
     require(theme->parameterRowHeight() == 32, "parameterRowHeight must mirror paramEditorHeight");
 
-    // Fixed row height semantic: changing parameterFont unit must NOT alter the fixed parameterRowHeight
-    QFont ptCheck;
-    ptCheck.setPointSizeF(14.0);
-    theme->setparameterFont(ptCheck);
-    require(theme->parameterRowHeight() == 32, "fixed parameterRowHeight must not change when parameterFont unit changes");
-
-    // Reset font to default
-    pxFont.setPixelSize(12);
-    theme->setparameterFont(pxFont);
+    fonts->setBody(bodyFont);
 
     // Verify two engines have independent Theme singleton instances and mutate state without cross-pollution
     {
@@ -290,15 +284,11 @@ void parameterEditorsContract()
         theme2->setparameterRowHeight(48);
         theme2->setparameterLabelWidth(150);
         theme2->setlogButtonHoverColor(QColor("#123456"));
-        QFont customF;
-        customF.setPixelSize(20);
-        theme2->setparameterFont(customF);
 
         // Verify engine 1 Theme is completely unpolluted
         require(theme->parameterRowHeight() == 32, "engine 1 parameterRowHeight must remain 32");
         require(theme->parameterLabelWidth() != 150, "engine 1 parameterLabelWidth must not be mutated by engine 2");
         require(theme->logButtonHoverColor() != QColor("#123456"), "engine 1 logButtonHoverColor must not be mutated by engine 2");
-        require(theme->parameterFont().pixelSize() != 20, "engine 1 parameterFont must not be mutated by engine 2");
     }
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
@@ -333,6 +323,8 @@ void parameterEditorsContract()
     QTest::qWait(20);
     input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "integer parameter lost the shared field shell");
+    require(input->property("font").value<QFont>().pixelSize() == 16,
+            "integer input must use the default 16 pixel body font");
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     require(value(testing::parameters::Count) == "9007199254740994", "integer keyboard step lost precision or did not commit");
@@ -370,6 +362,8 @@ void parameterEditorsContract()
     };
     auto *pathInput = textInput(editor);
     require(pathInput != nullptr, "text parameter does not expose its editable input");
+    require(pathInput->property("font").value<QFont>().pixelSize() == 16,
+            "path input must use the default 16 pixel body font");
     pathInput->forceActiveFocus();
     const QString path = QStringLiteral("F:/测试 数据/含\"引号\"/图像.png");
     pathInput->setProperty("text", path);

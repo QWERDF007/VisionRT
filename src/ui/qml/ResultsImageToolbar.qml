@@ -83,65 +83,6 @@ Rectangle {
                 color: QuiColor.Border
                 Layout.alignment: Qt.AlignHCenter
             }
-            Repeater {
-                model: [
-                    {
-                        shape: 2,
-                        label: "矩形",
-                        icon: QuiFontIcon.RectangularClipping
-                    },
-                    {
-                        shape: 4,
-                        label: "多边形",
-                        icon: QuiFontIcon.FreeFormClipping
-                    },
-                    {
-                        shape: 3,
-                        label: "圆形",
-                        icon: QuiFontIcon.CircleRing
-                    },
-                    {
-                        shape: 1,
-                        label: "线",
-                        icon: QuiFontIcon.Remove
-                    },
-                    {
-                        shape: 5,
-                        label: "点",
-                        icon: QuiFontIcon.MapPin
-                    }
-                ]
-                delegate: QuiTextIconButton {
-                    required property var modelData
-                    implicitWidth: Theme.toolbarButtonSize
-                    implicitHeight: Theme.toolbarButtonSize
-                    Layout.alignment: Qt.AlignHCenter
-                    display: AbstractButton.IconOnly
-                    text: modelData.label
-                    radius: Theme.radiusSmall
-                    checkable: false
-                    checked: root.controller.drawShape === modelData.shape
-                    enabled: root.controller.shapeToolsAvailable && (!root.controller.trainingMode || modelData.shape === 2)
-                    opacity: enabled ? 1.0 : 0.4
-                    normalColor: checked ? QuiColor.ItemCheck : "transparent"
-                    hoverColor: Theme.buttonHoverBg
-                    pressedColor: Theme.buttonPressedBg
-                    iconColor: checked || hovered ? Theme.highlight : Theme.menuButtonIcon
-                    iconSource: modelData.icon
-                    iconSize: Theme.paramRoiIconSize
-                    onClicked: root.controller.setDrawShape(root.controller.drawShape === modelData.shape ? 0 : modelData.shape)
-                    Accessible.name: "绘制" + modelData.label
-                    Accessible.role: Accessible.RadioButton
-                    Accessible.checkable: true
-                    Accessible.checked: checked
-                }
-            }
-            Rectangle {
-                Layout.preferredWidth: 20
-                Layout.preferredHeight: Theme.separatorWidth
-                color: QuiColor.Border
-                Layout.alignment: Qt.AlignHCenter
-            }
             // Smart point selection: the button reports the user preference only. Availability
             // and pausing are explained in the tooltip, never by silently unchecking it.
             QuiTextIconButton {
