@@ -4,7 +4,7 @@
 
 ## ⏳ 待你裁决
 
-- 2026-11-16：推送被自动审批阻止，需要确认 GitHub 目的地 `QWERDF007/VisionRT`（dev）和 `QWERDF007/QuickUI`（main）为可信仓库并允许上传源码。证据见「汇总提交训练与工作台 UI 改动」。
+（暂无待裁决事项）
 
 ---
 
@@ -37,17 +37,17 @@
 
 **当前状态**
 - 已完成：汇总训练会话、工具声明与示例，图像区五模块、EasyTouch 日志、完整路径菜单、按钮统一及参数默认字体；具体实现证据见前述任务条目。
-- QuickUI 本地提交为 `7f96248`；主仓通过 gitlink 引用该提交。
-- 未完成：推送。自动审批以 GitHub 目的地可信性未获明确确认为由，阻止 `git -C 3rdparty/QuickUI push origin main`；需要用户确认两个远程目的地，未尝试绕过审批。
+- 已完成：用户确认推送后，QuickUI `7f96248` 已推送至 origin/main，VisionRT `13cb0ae` 已推送至 origin/dev；主仓通过 gitlink 引用对应子模块提交。
 
 **验证证据**
 - `cmake --build build --target VisionRT workbench_contract workbench_layout_contract workbench_training_contract tool_editor_dialog_test training_session_contract definition_json_contract example_pipelines_contract` → 通过。
 - `ctest --test-dir build -R '^(training_session|definition_json|workbench_parameters|workbench_layout|workbench_training|example_pipelines)_contract$|^tool_editor_dialog_test$' --output-on-failure` → 7/7 通过。
 - 父仓及 QuickUI 的 `git -c core.whitespace=cr-at-eol diff --check` → 通过；提交前两仓均与远程分支一致。
 - 远程：VisionRT `https://github.com/QWERDF007/VisionRT.git` 的 dev，QuickUI `https://github.com/QWERDF007/QuickUI` 的 main。
+- `git -C 3rdparty/QuickUI push origin main` → `4d6c70e..7f96248 main -> main`；`git push origin dev` → `2092b45..13cb0ae dev -> dev`，均退出码 0。
 
 **下一步**
-- 用户确认目的地可信后，先推送 QuickUI main，再推送 VisionRT dev，核对两仓远程提交并清除顶部待裁决项。
+- 本轮无待办。
 
 ### 2026-11-16 — 统一弹窗按钮为 QuiButton 与 2px 边框规范
 
