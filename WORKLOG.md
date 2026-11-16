@@ -39,7 +39,7 @@
 - 已完成：核对主仓库 dev 与 QuickUI 当前基线，fetch 后分别与 origin/dev 和 origin/main 一致；其余子模块均无未提交修改。
 - 已完成：QuickUI 公共按钮悬浮与禁用态边框提交 840962c，已推送至 origin/main。
 - 已完成：归集字体、固定节点尺寸、图标替换、工具栏按钮移除、弹窗按钮与分隔线、日志样式及退出生命周期改动和相关测试文档。复核时同步连线测试的旧节点下边界到 60px 高度。
-- 待完成：主仓库全部改动提交及 origin/dev 推送，随后记录最终提交结果。
+- 已完成：主仓库全部 30 个变更路径提交为 3c8c45e，并推送至 origin/dev；包括退出子进程测试、旧自绘图标删除和 QuickUI 新 gitlink。代码提交后两仓工作区干净，HEAD 与对应远程分支均一致。
 
 **验证证据**
 - 主仓库与 QuickUI 的 git rev-list --left-right --count HEAD...origin/<branch> → 提交前均为 0 0。
@@ -47,9 +47,11 @@
 - ctest --test-dir build -R ^workbench_(exit|lifecycle|assist_release|status|training|parameters|paths|canvas|startup)_contract$|^(tool_editor_dialog_test|log_lifecycle_contract|python_shutdown_contract)$ --output-on-failure --no-tests=error → 12/12 通过；调整测试下边界后重新构建 workbench_contract 并重跑 workbench_canvas_contract → 通过。
 - 父仓与 QuickUI 的 git diff --check → 通过。既有 ROI、菜单布局和状态复制测试失败的基线证据见前述任务条目，本轮未扩展修复。
 - QuickUI：git commit -m fix：统一按钮悬浮与禁用态边框 → 840962c；git push origin HEAD:main → 7f96248..840962c 成功。
+- VisionRT：git commit -m fix：统一工作台界面样式并修复日志窗口退出 → 3c8c45e；git push origin dev → 582e72d..3c8c45e 成功。
+- 两仓 git status --porcelain → 无输出；git rev-list --left-right --count HEAD...origin/<branch> → 均为 0 0。
 
 **下一步**
-- 主仓库 git add -A 后提交并推送 origin/dev；记录父仓提交号及远程同步结果，保证主仓库和 QuickUI 工作区干净。
+- 无代码待办；后续基于 VisionRT origin/dev 与 QuickUI origin/main 继续。最终账本维护随本次交付同步。
 
 ### 2026-11-17 — 修复日志窗口阻止主程序退出
 
