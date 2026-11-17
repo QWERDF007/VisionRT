@@ -12,7 +12,7 @@ Rectangle {
     property string selectedTool: ""
     signal toggleRequested()
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 5; spacing: 0
+        anchors.fill: parent; spacing: 0
         Rectangle {
             Layout.fillWidth: true; Layout.preferredHeight: 36; color: WorkbenchStyle.tabBarBg
             Rectangle {

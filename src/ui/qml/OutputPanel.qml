@@ -140,6 +140,7 @@ Rectangle {
             }
             resizableRows: false; resizableColumns: false
             rowHeight: 32; headerHeight: 32; showGridLines: true
+            border.width: 0
             rowColor: QuiColor.Button; zebraColor: QuiColor.Button
             selectedColor: QuiColor.ItemHover; selectedBorderColor: QuiColor.Highlight; hoverColor: QuiColor.ItemHover
         }

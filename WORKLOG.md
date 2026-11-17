@@ -30,6 +30,25 @@
 - ...
 -->
 
+### 2026-11-17 — 清理工具库、流程画布及输出表格边界色带
+
+**目标**
+- 修复截图 220204、220217、220324 所示面板背景与分隔线之间残留的外圈色带。
+
+**当前状态**
+- 已完成：[工具库](src/ui/qml/ToolLibrary.qml) 和[流程画布](src/ui/qml/FlowCanvas.qml) 去掉外层布局留白，背景铺至面板边界，内部控件留白保留；[输出表格](src/ui/qml/OutputPanel.qml) 在应用调用处关闭外框，内部网格线保留。
+- 已完成：[布局契约](tests/workbench_layout_contract.cpp) 覆盖流程背景贴边、工具库顶部贴边、输出表格左右及底部无重复外框，并检查三种缩放实际渲染；文档补充输出表格入口。
+- 本次未修改 QuickUI、分割线悬浮高亮和页签分隔线；已构建，未部署；修复及验证记录统一纳入本轮 `dev` 提交。
+
+**验证证据**
+- 新增检查实现前失败：`flow background must meet the panel boundaries without outer bands`；实现后 100%、150%、200% 缩放均通过。
+- `tools/build.cmd cmake --build build --config Release --target workbench_layout_contract` 及 `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract workbench_interaction_contract workbench_tooltree_contract` → 编译链接成功。
+- `ctest --test-dir build -R '^workbench_(layout|parameters|interaction|tooltree)_contract$' --output-on-failure --no-tests=error` → 4/4 通过。
+- `build/bin/VisionRT.exe --screenshot F:/Projects/VisionRT/build/evidence/panel_boundaries_flush_app.png --screenshot-delay 1200` → 退出码 0，已查看真实窗口截图；三种缩放截图见 `build/evidence/parameter_tabs_{1.0,1.5,2.0}.png`。
+
+**下一步**
+- 使用 `build/bin/VisionRT.exe` 验收；部署目录仍为此前版本。
+
 ### 2026-11-17 — 提交全部改动与推送状态
 
 **目标**

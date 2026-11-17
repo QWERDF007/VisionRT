@@ -237,11 +237,29 @@ try
         const int splitX = qFloor(resultsRect.left() * dpr);
         const int libraryY = qRound(sceneRect(library).center().y() * dpr);
         const int flowY = qRound(sceneRect(surface).center().y() * dpr);
+        const auto panelBackground = topBar->property("color").value<QColor>();
+        const auto surfaceRect = sceneRect(surface);
+        const auto flowRect = sceneRect(findItem(window->contentItem(), "flowCanvas"));
+        require(surfaceRect.left() == flowRect.left() && surfaceRect.right() == flowRect.right()
+                    && surfaceRect.bottom() == flowRect.bottom(),
+                "flow background must meet the panel boundaries without outer bands");
+        require(sceneRect(library->childItems().front()).top() == sceneRect(library).top(),
+                "tool library content must meet its top boundary without an outer band");
+        auto *outputTable = findItem(window->contentItem(), "outputTable");
+        require(outputTable != nullptr, "output table is missing");
+        const auto outputRect = sceneRect(outputTable);
+        const int outputY = qRound(outputRect.center().y() * dpr);
+        for (const int x : {qFloor(outputRect.left() * dpr), qCeil(outputRect.right() * dpr) - 1})
+            require(tabImage.pixelColor(x, outputY) == white,
+                    "output table must not add an outer frame beside panel boundaries");
+        require(tabImage.pixelColor(qRound(outputRect.center().x() * dpr),
+                                   qCeil(outputRect.bottom() * dpr) - 1) == white,
+                "output table must not add a bottom frame above the status separator");
         for (const int y : {libraryY, flowY})
         {
             require(tabImage.pixelColor(splitX - 1, y) == splitColor,
                     "main split boundary must retain its gray handle");
-            require(tabImage.pixelColor(splitX - qCeil(2 * dpr), y) == white
+            require(tabImage.pixelColor(splitX - qCeil(2 * dpr), y) == (y == flowY ? panelBackground : white)
                         && tabImage.pixelColor(splitX, y) == white,
                     "main split boundary must not include adjacent panel borders or background bands");
         }

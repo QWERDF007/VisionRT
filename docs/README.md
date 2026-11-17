@@ -93,7 +93,7 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 应用控件：[操作按钮](../src/ui/qml/WorkbenchActionButton.qml)、[参数操作](../src/ui/qml/ParameterActionButton.qml)、[输入外框](../src/ui/qml/ParameterFieldFrame.qml)、[参数下拉](../src/ui/qml/ParameterComboBox.qml)、[文本输入](../src/ui/qml/WorkbenchTextField.qml)、[分隔线](../src/ui/qml/WorkbenchSeparator.qml)。
 
-面板边界：[工作区分割](../src/ui/qml/Main.qml)、[结果面板](../src/ui/qml/ResultsPanel.qml)、[工具库](../src/ui/qml/ToolLibrary.qml)、[流程画布](../src/ui/qml/FlowCanvas.qml)；渲染验收见[布局契约](../tests/workbench_layout_contract.cpp)。
+面板边界：[工作区分割](../src/ui/qml/Main.qml)、[结果面板](../src/ui/qml/ResultsPanel.qml)、[工具库](../src/ui/qml/ToolLibrary.qml)、[流程画布](../src/ui/qml/FlowCanvas.qml)、[输出表格](../src/ui/qml/OutputPanel.qml)；渲染验收见[布局契约](../tests/workbench_layout_contract.cpp)。
 
 复用按钮：[基础按钮](../3rdparty/QuickUI/src/controls/QuiButtonBase.qml)、[普通按钮](../3rdparty/QuickUI/src/controls/QuiButton.qml)、[主按钮](../3rdparty/QuickUI/src/controls/QuiFilledButton.qml)；窗口尺寸与交互验证：[窗口契约](../tests/tool_editor_dialog_test.cpp)。
 
