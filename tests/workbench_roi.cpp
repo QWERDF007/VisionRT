@@ -341,7 +341,7 @@ void roiParameterContract()
     };
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
-    quickui::QuiColor::getInstance()->setPrimary(themeForEngine(&engine)->surfaceBg());
+    initializeUiStyle();
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQmlComponent component(&engine);

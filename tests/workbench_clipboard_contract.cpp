@@ -84,7 +84,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    registerStyleModule();
+    initializeUiStyle();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());

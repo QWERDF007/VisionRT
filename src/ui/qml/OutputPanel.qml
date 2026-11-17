@@ -57,32 +57,32 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.paramGroupHeaderBg
+            Layout.fillWidth: true; Layout.preferredHeight: 36; color: WorkbenchStyle.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: Theme.separatorWidth; color: QuiColor.Border
+                height: 1; color: QuiColor.Border
             }
             RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
+                anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
                 QuiText {
                     text: "输出参数"
                     font: QuiFont.Body
-                    color: Theme.paramGroupHeaderText
+                    color: QuiColor.FontPrimary
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
-                    Layout.preferredWidth: Theme.segmentButtonWidth; Layout.preferredHeight: Theme.segmentButtonHeight
-                    radius: Theme.radiusSmall; color: Theme.surfaceBg; border.color: Theme.highlight; border.width: 1
+                    Layout.preferredWidth: ParameterStyle.segmentButtonWidth; Layout.preferredHeight: 32
+                    radius: 3; color: QuiColor.Button; border.color: QuiColor.Highlight; border.width: 1
                     clip: true
                     Row {
                         anchors.fill: parent
                         Rectangle {
                             width: parent.width / 2; height: parent.height
-                            color: !root.relations ? Theme.highlight : "transparent"
+                            color: !root.relations ? QuiColor.Highlight : "transparent"
                             QuiText {
                                 anchors.centerIn: parent; text: "数据"
                                 font: QuiFont.Body
-                                color: !root.relations ? Theme.surfaceBg : Theme.highlight
+                                color: !root.relations ? QuiColor.Button : QuiColor.Highlight
                             }
                             MouseArea {
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -91,11 +91,11 @@ Rectangle {
                         }
                         Rectangle {
                             width: parent.width / 2; height: parent.height
-                            color: root.relations ? Theme.highlight : "transparent"
+                            color: root.relations ? QuiColor.Highlight : "transparent"
                             QuiText {
                                 anchors.centerIn: parent; text: "关系"
                                 font: QuiFont.Body
-                                color: root.relations ? Theme.surfaceBg : Theme.highlight
+                                color: root.relations ? QuiColor.Button : QuiColor.Highlight
                             }
                             MouseArea {
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -139,9 +139,9 @@ Rectangle {
                 return column === 0 ? col0 : column === 2 ? Math.max(180, table.width - col0 - 2) : 0
             }
             resizableRows: false; resizableColumns: false
-            rowHeight: Theme.parameterRowHeight; headerHeight: Theme.parameterRowHeight; showGridLines: true
-            rowColor: Theme.surfaceBg; zebraColor: Theme.paramPanelBg
-            selectedColor: Theme.paramRowHoverBg; selectedBorderColor: Theme.highlight; hoverColor: Theme.paramRowHoverBg
+            rowHeight: 32; headerHeight: 32; showGridLines: true
+            rowColor: QuiColor.Button; zebraColor: QuiColor.Button
+            selectedColor: QuiColor.ItemHover; selectedBorderColor: QuiColor.Highlight; hoverColor: QuiColor.ItemHover
         }
     }
     onRelationsChanged: table.forceLayout()
@@ -151,12 +151,12 @@ Rectangle {
             id: cell
             property var options: ({})
             QuiText {
-                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8
+                anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                 font: QuiFont.Body
                 // Only a port with a legal, still free downstream input looks actionable. An existing
                 // connection keeps its reference count but never stands in for a new target.
-                color: cell.options.column === 0 && cell.options.connectable ? Theme.highlight : Theme.parameterTextColor
+                color: cell.options.column === 0 && cell.options.connectable ? QuiColor.Highlight : QuiColor.FontPrimary
                 text: cell.options.column === 0 ? (cell.options.name || cell.options.display || "") + (!cell.options.system && root.relations ? " (" + (cell.options.count || 0) + ")" : "") : cell.options.display || ""
             }
             MouseArea {
@@ -244,10 +244,10 @@ Rectangle {
         Item {
             implicitWidth: 180
             implicitHeight: 32
-            QuiTextField {
+            WorkbenchTextField {
                 id: nameSearchField
                 anchors.fill: parent
-                anchors.margins: 4
+                anchors.margins: 5
                 placeholderText: "搜索工具或输入..."
                 text: nameMenu.search
                 onTextChanged: nameMenu.search = text

@@ -581,7 +581,7 @@ void outputCellReuseContract()
     QQmlEngine manyEngine;
     manyEngine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     manyEngine.rootContext()->setContextProperty("app", &manyApp);
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
     QQmlComponent manyComponent(&manyEngine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/OutputPanel.qml")));
     std::unique_ptr<QObject> manyOwner(manyComponent.create());
     if (!manyOwner) throw std::runtime_error(manyComponent.errorString().toStdString());

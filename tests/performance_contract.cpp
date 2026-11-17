@@ -1195,7 +1195,7 @@ void testGuiEventToPresentationLatency(AppController &app, const std::filesystem
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1372,7 +1372,7 @@ void testWorkbenchBrowsingLatency()
 
 int main(int argc, char **argv)
 {
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
     QGuiApplication qt(argc, argv);
 
     QTemporaryDir directory;

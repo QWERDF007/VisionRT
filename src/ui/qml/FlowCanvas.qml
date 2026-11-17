@@ -79,7 +79,7 @@ FocusScope {
     function hoverCardX() {
         let n = root.hoverNode
         if (!n) return 4
-        let right = root.nodeX(n.id) * root.zoom + root.panX + Theme.nodeWidth * root.zoom + 10
+        let right = root.nodeX(n.id) * root.zoom + root.panX + FlowStyle.nodeWidth * root.zoom + 10
         let left = root.nodeX(n.id) * root.zoom + root.panX - hoverCard.width - 10
         let maxX = Math.max(4, surface.width - hoverCard.width - 4)
         return Math.max(4, Math.min(maxX, right <= maxX ? right : left))
@@ -99,8 +99,8 @@ FocusScope {
         const p = app.nodePosition(id)
         if (p.x === 0 && p.y === 0 && !app.nodeRecord(id).id) return
         selection = [id]
-        panX = surface.width / 2 - (p.x * cellWidth + Theme.nodeWidth / 2) * zoom
-        panY = surface.height / 2 - (p.y * cellHeight + Theme.nodeHeight / 2) * zoom
+        panX = surface.width / 2 - (p.x * cellWidth + FlowStyle.nodeWidth / 2) * zoom
+        panY = surface.height / 2 - (p.y * cellHeight + FlowStyle.nodeHeight / 2) * zoom
         surface.forceActiveFocus()
     }
     function fit() {
@@ -111,7 +111,7 @@ FocusScope {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         for (let n of positions) {
             minX = Math.min(minX, n.x * cellWidth); minY = Math.min(minY, n.y * cellHeight)
-            maxX = Math.max(maxX, n.x * cellWidth + Theme.nodeWidth); maxY = Math.max(maxY, n.y * cellHeight + Theme.nodeHeight)
+            maxX = Math.max(maxX, n.x * cellWidth + FlowStyle.nodeWidth); maxY = Math.max(maxY, n.y * cellHeight + FlowStyle.nodeHeight)
         }
         zoom = Math.min(1.5, Math.max(1, surface.width - 64) / Math.max(1, maxX - minX), Math.max(1, surface.height - 64) / Math.max(1, maxY - minY))
         panX = surface.width / 2 - (minX + maxX) * zoom / 2
@@ -230,23 +230,23 @@ FocusScope {
         }
     }
     Rectangle {
-        anchors.fill: parent; color: QuiColor.Primary; border.color: "#d0d7de"; border.width: 1
+        anchors.fill: parent; color: QuiColor.Primary
     }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 1; spacing: 0
+        anchors.fill: parent; anchors.margins: 5; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.paramGroupHeaderBg
+            Layout.fillWidth: true; Layout.preferredHeight: 36; color: WorkbenchStyle.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: Theme.separatorWidth; color: QuiColor.Border
+                height: 1; color: QuiColor.Border
             }
             RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
+                anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
                 QuiText {
                     objectName: "flowTitle"
                     text: "流程图绘制区"
                     font: QuiFont.Body
-                    color: Theme.textPrimary
+                    color: QuiColor.FontPrimary
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
@@ -256,9 +256,9 @@ FocusScope {
                     color: "#ffffff"; radius: 3
                     border.color: search.activeFocus ? QuiColor.Highlight : "#c5ccd5"; border.width: 1
                     RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+                        anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Search; iconSize: Theme.iconSizeSmall; iconColor: Theme.iconMuted
+                            iconSource: QuiFontIcon.Search; iconSize: WorkbenchStyle.iconSizeSmall; iconColor: WorkbenchStyle.iconMuted
                         }
                         TextInput {
                             id: search; objectName: "flowSearch"
@@ -273,13 +273,13 @@ FocusScope {
                             Keys.onEscapePressed: { text = ""; surface.forceActiveFocus() }
                             Text {
                                 anchors.fill: parent; text: "搜索工具名"
-                                color: Theme.iconMuted; font: QuiFont.Body
+                                color: WorkbenchStyle.iconMuted; font: QuiFont.Body
                                 visible: !search.text && !search.activeFocus
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Clear; iconSize: Theme.iconSizeTiny; iconColor: Theme.iconMuted
+                            iconSource: QuiFontIcon.Clear; iconSize: WorkbenchStyle.iconSizeTiny; iconColor: WorkbenchStyle.iconMuted
                             visible: search.text.length > 0
                             MouseArea {
                                 anchors.fill: parent
@@ -296,7 +296,7 @@ FocusScope {
                     border.color: selectFlowPopup.visible ? QuiColor.Highlight : (dropdownMouse.containsMouse ? "#a0a8b4" : "#c5ccd5")
                     border.width: 1
                     RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 4
+                        anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
                         QuiText {
                             text: "选择流程:"
                             font: QuiFont.Body
@@ -316,8 +316,8 @@ FocusScope {
                         }
                         QuiTextIcon {
                             iconSource: selectFlowPopup.visible ? QuiFontIcon.ChevronUp : QuiFontIcon.ChevronDown
-                            iconSize: Theme.iconSizeTiny
-                            iconColor: selectFlowPopup.visible ? QuiColor.Highlight : Theme.iconSecondary
+                            iconSize: WorkbenchStyle.iconSizeTiny
+                            iconColor: selectFlowPopup.visible ? QuiColor.Highlight : QuiColor.FontDark
                         }
                     }
                     MouseArea {
@@ -354,7 +354,7 @@ FocusScope {
                             model: app.flows
                             clip: true
                             implicitHeight: contentHeight
-                            spacing: 2
+                            spacing: 5
                             ScrollBar.vertical: QuiScrollBar {}
                             delegate: Rectangle {
                                 id: flowRow
@@ -365,9 +365,9 @@ FocusScope {
                                 color: rowMouse.containsMouse ? "#f0f2f5" : "transparent"
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    spacing: 8
+                                    anchors.leftMargin: 5
+                                    anchors.rightMargin: 5
+                                    spacing: 5
                                     Rectangle {
                                         width: 14; height: 14; radius: 3
                                         color: modelData.selected ? QuiColor.Highlight : "#ffffff"
@@ -401,39 +401,31 @@ FocusScope {
                         }
                     }
                 }
-                QuiTextIconButton {
+                WorkbenchActionButton {
                     objectName: "flowFitButton"
                     iconSource: QuiFontIcon.FitPage
                     implicitWidth: 26; implicitHeight: 24
-                    radius: Theme.radiusSmall
-                    normalColor: Theme.menuButtonBg
-                    hoverColor: Theme.buttonHoverBg
-                    pressedColor: Theme.buttonPressedBg
-                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                    iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                     text: "适应全部节点"
                     onClicked: root.fit()
                 }
             }
         }
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.tabBarBg
+            Layout.fillWidth: true; Layout.preferredHeight: 36; color: WorkbenchStyle.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: Theme.separatorWidth; color: QuiColor.Border
+                height: 1; color: QuiColor.Border
             }
             RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
-                QuiTextIconButton {
+                anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
+                WorkbenchActionButton {
                     objectName: "flowAddButton"
-                    Layout.preferredWidth: 24; Layout.preferredHeight: 24; radius: Theme.radiusSmall
-                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 24; Layout.preferredHeight: 24; Layout.alignment: Qt.AlignVCenter
                     text: "添加流程"
                     iconSource: QuiFontIcon.Add
-                    iconSize: Theme.iconSizeSmall
-                    iconColor: Theme.iconSecondary
-                    normalColor: Theme.surfaceBg
-                    hoverColor: Theme.buttonHoverBg
-                    pressedColor: Theme.buttonPressedBg
+                    iconColor: QuiColor.FontDark
+                    normalColor: QuiColor.Button
                     enabled: app.workspaceEnabled
                     onClicked: { app.addFlow(""); surface.forceActiveFocus() }
                 }
@@ -443,7 +435,7 @@ FocusScope {
                     boundsMovement: Flickable.StopAtBounds
                     contentWidth: flowTabs.width; contentHeight: height
                     Row {
-                        id: flowTabs; height: parent.height; spacing: 4
+                        id: flowTabs; height: parent.height; spacing: 5
                         Repeater {
                             model: app.flows
                             Rectangle {
@@ -451,16 +443,16 @@ FocusScope {
                                 objectName: "flowTab_" + modelData.id
                                 required property var modelData
                                 readonly property bool isActive: app.currentFlow === modelData.id
-                                anchors.top: parent.top; anchors.topMargin: 4; anchors.bottom: parent.bottom
+                                anchors.top: parent.top; anchors.topMargin: 5; anchors.bottom: parent.bottom
                                 width: tabRow.width + 16
-                                radius: Theme.radiusSmall
-                                color: isActive ? Theme.tabActiveBg : Theme.tabBg
+                                radius: 3
+                                color: isActive ? QuiColor.Button : WorkbenchStyle.tabBarBg
                                 border.color: isActive ? QuiColor.Border : "#e1e4e8"
                                 border.width: 1
                                 Rectangle {
                                     visible: flowTabItem.isActive
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                    height: 2; color: Theme.highlight
+                                    height: 2; color: QuiColor.Highlight
                                 }
                                 MouseArea {
                                     anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -475,7 +467,7 @@ FocusScope {
                                 }
                                 RowLayout {
                                     id: tabRow
-                                    anchors.centerIn: parent; spacing: 6
+                                    anchors.centerIn: parent; spacing: 5
                                     Rectangle {
                                         objectName: "flowTabIndicator_" + flowTabItem.modelData.id
                                         width: 7; height: 7; radius: 3.5
@@ -488,15 +480,13 @@ FocusScope {
                                         font: QuiFont.Body
                                         color: flowTabItem.isActive ? QuiColor.Highlight : "#57606a"
                                     }
-                                    QuiTextIconButton {
+                                    WorkbenchActionButton {
                                         objectName: "flowTabClose_" + flowTabItem.modelData.id
                                         text: "删除流程"
                                         implicitWidth: 16; implicitHeight: 16
-                                        iconSource: QuiFontIcon.Cancel; iconSize: Theme.iconSizeTiny
-                                        iconColor: hovered ? Theme.error : Theme.iconMuted
+                                        iconSource: QuiFontIcon.Cancel; iconSize: WorkbenchStyle.iconSizeTiny
+                                        iconColor: hovered ? QuiColor.Error : WorkbenchStyle.iconMuted
                                         normalColor: "transparent"
-                                        hoverColor: Theme.buttonHoverBg
-                                        pressedColor: Theme.buttonPressedBg
                                         opacity: app.flows.length > 1 ? 1.0 : 0.4
                                         enabled: app.workspaceEnabled && app.flows.length > 1
                                         onClicked: {
@@ -569,7 +559,7 @@ FocusScope {
                         let bottom = (Math.max(root.pressPoint.y, mouse.y) - root.panY) / root.zoom
                         let ids = root.selection.slice()
                         for (let n of app.nodePositions())
-                            if (n.x * root.cellWidth + Theme.nodeWidth >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + Theme.nodeHeight >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
+                            if (n.x * root.cellWidth + FlowStyle.nodeWidth >= left && n.x * root.cellWidth <= right && n.y * root.cellHeight + FlowStyle.nodeHeight >= top && n.y * root.cellHeight <= bottom && ids.indexOf(n.id) < 0) ids.push(n.id)
                         root.selection = ids
                         if (ids.length) app.selectNode(ids[ids.length - 1])
                     } else if (mouse.button === Qt.RightButton && !root.moved) {
@@ -635,17 +625,17 @@ FocusScope {
                 visible: root.selectedConnection !== null
                 anchors.left: parent.left
                 anchors.bottom: parent.bottom
-                anchors.margins: 8
+                anchors.margins: 5
                 width: Math.min(420, parent.width - 16)
                 height: relationsColumn.implicitHeight + 16
                 color: "#ffffff"
                 border.color: "#d0d7de"
-                radius: Theme.radiusBase
+                radius: 4
                 ColumnLayout {
                     id: relationsColumn
                     anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 4
+                    anchors.margins: 5
+                    spacing: 5
                     QuiText {
                         Layout.fillWidth: true
                         font: QuiFont.Caption
@@ -675,24 +665,24 @@ FocusScope {
                 objectName: "nodeHoverCard"
                 visible: root.hoverCardVisible && root.hoverNode !== null
                 z: 30
-                width: Theme.tooltipWidth
+                width: FlowStyle.tooltipWidth
                 height: hoverColumn.implicitHeight + 16
                 x: root.hoverCardX()
                 y: root.hoverCardY()
-                radius: Theme.radiusBase
-                color: Theme.tooltipBg
+                radius: 4
+                color: QuiColor.ToolTip
                 border.color: QuiColor.Border
                 border.width: 1
                 enabled: false
                 ColumnLayout {
                     id: hoverColumn
-                    anchors.fill: parent; anchors.margins: 8; spacing: 3
+                    anchors.fill: parent; anchors.margins: 5; spacing: 5
                     QuiText {
                         Layout.fillWidth: true
                         text: root.hoverNode ? root.hoverNode.title : ""
                         wrapMode: Text.Wrap
                         font: QuiFont.Body
-                        color: Theme.textPrimary
+                        color: QuiColor.FontPrimary
                     }
                     Repeater {
                         model: root.hoverNode ? root.hoverNode.timingPhases : []
@@ -702,13 +692,13 @@ FocusScope {
                             QuiText {
                                 text: modelData.label
                                 font: QuiFont.Body
-                                color: Theme.textSecondary
+                                color: QuiColor.FontDark
                             }
                             Item { Layout.fillWidth: true }
                             QuiText {
                                 text: modelData.value
                                 font: QuiFont.Body
-                                color: Theme.textPrimary
+                                color: QuiColor.FontPrimary
                             }
                         }
                     }
@@ -733,10 +723,10 @@ FocusScope {
     }
     Rectangle {
         visible: search.text.length > 0 && search.activeFocus
-        z: 20; x: 4; y: Theme.tabBarHeight; width: parent.width - 8; height: Math.min(280, searchList.contentHeight + 8)
+        z: 20; x: 4; y: 36; width: parent.width - 8; height: Math.min(280, searchList.contentHeight + 8)
         color: QuiColor.Primary; border.color: QuiColor.Border; radius: 4
         ListView {
-            id: searchList; anchors.fill: parent; anchors.margins: 4; clip: true
+            id: searchList; anchors.fill: parent; anchors.margins: 5; clip: true
             boundsBehavior: Flickable.StopAtBounds
             boundsMovement: Flickable.StopAtBounds
             model: app.searchResults; currentIndex: root.searchIndex
@@ -792,7 +782,7 @@ FocusScope {
         title: root.nameOperation === "node" ? "节点备注" : "流程名称"
         positiveButtonEnabled: app.workspaceEnabled && root.nameDraft.trim().length > 0
         contentDelegate: Component {
-            QuiTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }
+            WorkbenchTextField { text: root.nameDraft; implicitHeight: 44; onTextEdited: root.nameDraft = text; Component.onCompleted: { forceActiveFocus(); selectAll() } }
         }
         onPositiveClicked: {
             if (root.nameOperation === "node") app.renameNode(root.contextNode, root.nameDraft)

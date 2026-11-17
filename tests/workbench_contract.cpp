@@ -816,7 +816,7 @@ void mainQmlContract(double scale)
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1821,7 +1821,7 @@ void shortWindowContract()
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1910,7 +1910,7 @@ void coreContracts()
 
 int main(int argc, char **argv)
 {
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
     // R50: Python runs only on an interpreter someone selected. This runner states the build
     // interpreter once, before any controller exists, so every scenario sees the same catalog the
     // application shows after the user saves that choice.

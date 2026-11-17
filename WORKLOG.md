@@ -30,6 +30,140 @@
 - ...
 -->
 
+### 2026-11-17 — 清理面板分割边界的重复边框与背景带
+
+**目标**
+- 消除横向和竖向分割线附近叠加的灰框及浅色背景带，保留拖动分隔线与悬浮高亮。
+
+**当前状态**
+- 已完成：[结果面板](src/ui/qml/ResultsPanel.qml) 移除外框及布局外边距，内容铺满面板；[工具库](src/ui/qml/ToolLibrary.qml) 和[流程画布](src/ui/qml/FlowCanvas.qml) 移除重复外框，保留内容留白。面板之间由现有 SplitView 绘制边界。
+- 已完成：[布局契约](tests/workbench_layout_contract.cpp) 验证真实渲染中图像贴近横向边界、主竖向分隔线两侧没有重复边框和背景带，覆盖三种缩放；[文档](docs/README.md) 补充实现索引。
+- 本次未修改 QuickUI、分割线交互和页签分隔线；已构建，未部署、未提交，此前改动保留。
+
+**验证证据**
+- 新增检查在实现前报错 `results viewport must meet its split boundaries without background bands`；实现后 100%、150%、200% 缩放均通过。
+- `tools/build.cmd cmake --build build --config Release --target workbench_layout_contract` 及 `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_interaction_contract workbench_assist_contract` → 编译链接通过。
+- `ctest --test-dir build -R '^workbench_(layout|parameters|interaction|assist)_contract$' --output-on-failure --no-tests=error` → 4/4 通过。
+- `build/bin/VisionRT.exe --screenshot F:/Projects/VisionRT/build/evidence/panel_boundaries_app.png --screenshot-delay 1200` → 退出码 0，已查看真实应用截图；三种缩放截图见 `build/evidence/parameter_tabs_{1.0,1.5,2.0}.png`。
+- `git -c safe.directory=F:/Projects/VisionRT -c core.whitespace=cr-at-eol diff --check` → 通过。
+
+**下一步**
+- 使用 `build/bin/VisionRT.exe` 验收；部署目录仍为此前版本。
+
+### 2026-11-17 — 参数页签恢复 2px 灰色分隔线
+
+**目标**
+- 恢复参数页签之间的灰色分隔线，按用户要求使用 2px。
+
+**当前状态**
+- 已完成：[ParameterPanel](src/ui/qml/ParameterPanel.qml) 在应用侧绘制 2px 右侧分隔线及未选中底线，保留蓝色选中指示条；限制页签内容绘制范围，避免窄面板下相邻文字覆盖分隔线。本次未修改 QuickUI。
+- 已完成：[布局契约](tests/workbench_layout_contract.cpp) 点击“检测”后检查灰线和蓝色指示条的实际渲染，覆盖三种缩放；文档已补充源码索引。
+- 已构建，未提交；已完成 tools/package_app.py 全量部署至 F:/tmp/VisionRT（624 个文件校验通过），真实环境截图验证退出码 0；此前未提交改动保留。
+
+**验证证据**
+- 新增渲染检查在修复前报错 `parameter tabs must have a 2px right separator`；修复后通过。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_layout_contract` → 编译链接通过；后续测试交互调整后单独重编布局契约通过。
+- `ctest --test-dir build -R '^workbench_(layout|parameters)_contract$' --output-on-failure --no-tests=error` → 2/2 通过；布局契约覆盖 100%、150%、200% 缩放，结果见 `build/Testing/Temporary/LastTest.log`。
+- 渲染截图：`build/evidence/parameter_tabs_{1.0,1.5,2.0}.png`，已查看 100% 截图。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\VisionTools.zip --tools-index F:\Projects\VisionTools\dist\VisionTools.module_index.json --allow-dirty` → 退出码 0，624 files verified。
+- `VisionRT.exe --screenshot F:\tmp\deploy_verify.png --screenshot-delay 1500` → 退出码 0，成功生成 56,870 字节截图。
+
+**下一步**
+- 本轮部署已就绪，等待用户验收与反馈。
+
+### 2026-11-17 — 工作台样式分模块与应用侧尺寸统一
+
+**目标**
+- 统一工具栏、参数表单及操作控件尺寸和 5px 布局间距；项目样式由 VisionRT 负责，保留 QuickUI 内置默认值。
+
+**当前状态**
+- 已完成：Theme.cpp 保留唯一应用样式初始化入口，按工作台、参数、工具树、图像结果、流程划分只读样式；旧 Theme 对象及别名接口已清理。
+- 已完成：主工具栏、参数 Tab 和折叠栏按 36px 布局；应用普通图标操作为 28px、参数内操作及单行字段为 32px，操作图标为 20px；执行按钮 80px，分隔线由 VisionRT 的 WorkbenchSeparator 负责。
+- 已完成：应用侧组件覆盖项目所需样式；QuickUI 本轮只补充折叠栏 headerPadding/toggle 与步进尺寸配置入口，原默认值保持。此前按钮、对话框改动保留。
+- 已完成：布局、参数、运行状态、交互、训练、工具树、退出及辅助窗口回归；文档已更新实现索引。
+- 未提交；已完成 tools/package_app.py 全量部署至 F:/tmp/VisionRT（624 个文件校验通过），真实环境截图验证退出码 0；此前未提交成果保留。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test workbench_contract workbench_layout_contract workbench_status_contract workbench_exit_contract workbench_interaction_contract workbench_training_contract workbench_tooltree_contract` → 编译链接通过。
+- `ctest --test-dir build -R '^(tool_editor_dialog_test|workbench_(parameters|layout|status|startup|exit|interaction|training|tooltree)_contract)$' --output-on-failure --no-tests=error` → 9/9 通过；完整结果见 `build/evidence/style_application_boundary.log`。
+- 已直接核对 QuickUI 源码：QuiExpander 仍为 45px 栏高及 15px 左留白；步进按钮宽 28px、图标 12px、内部留白 1px。应用调用处单独配置；未保留锁定库默认值的回归断言。
+- 布局契约覆盖主工具栏实际 36px 高、菜单实际 5px 间距、视口竖栏 36px 宽及六个 28px/20px 操作；在 100%、150%、200% 缩放分别通过。
+- 辅助窗口同样在三个缩放比例通过，截图见 `build/evidence/style_app_{editor,settings}_{1,1_5,2}.png`；代表性截图已查看。
+- 构建版 `VisionRT.exe --screenshot .../style_final_app.png --screenshot-delay 1200` → 退出码 0，标准错误为空。
+- 主仓 `git -c core.whitespace=cr-at-eol diff --check`、QuickUI `git diff --check` → 通过。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\VisionTools.zip --tools-index F:\Projects\VisionTools\dist\VisionTools.module_index.json --allow-dirty` → 退出码 0，624 files verified。
+- `VisionRT.exe --screenshot F:\tmp\deploy_verify.png --screenshot-delay 1500` → 退出码 0，成功生成 56,931 字节截图。
+
+**下一步**
+- 本轮部署已就绪，等待用户验收与反馈。
+
+### 2026-11-17 — 统一设置与自定义工具窗口
+
+**目标**
+- 两个页面统一为模态 Window，共用字体、文字颜色、32px 按钮及窗口外壳。
+
+**当前状态**
+- 已完成：SettingsWindow、CustomToolWindow 复用 WorkbenchWindow；主窗口关系、打开置前、拖动、关闭及应用退出统一处理，旧 Popup 和旧文件移除。
+- 已完成：标题 BodyStrong，字段与操作 Body，说明及编号 Caption；文字消费 QuiColor.FontPrimary / FontDark，主题映射在 Main.qml。普通、实心与图标按钮复用 QuickUI QuiButtonBase 的 32px 默认高度；应用与保存均为 QuiFilledButton。
+- 已完成：目录树及操作提取到 ToolCatalogPane；相关确认复用 WorkbenchDialog，目录输入通过公共 initialFocusItem 获得焦点。文档仅补充实现与验证入口索引。
+- 已完成：保留原有 Theme.cpp、ParameterPanel.qml 及此前账本改动；未提交。
+- 已完成：执行 tools/package_app.py 全量部署至 F:/tmp/VisionRT（624 个文件校验通过），真实环境截图验证退出码 0。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test workbench_contract workbench_exit_contract python_environment_contract`（按修改分次构建）→ 均通过。
+- 新增模态断言先在 `editor must block its owner window` 失败；实现后通过。新增全控件高度断言发现输入框内按钮被布局压为 30px，保留公共隐式最小高度后通过。
+- `ctest --test-dir build -R '^(tool_editor_dialog_test|workbench_(startup|parameters|exit)_contract|python_environment_contract)$' --output-on-failure --no-tests=error` → 5/5 通过；退出契约覆盖日志、设置、自定义工具及有未保存工具的窗口。
+- 窗口契约覆盖字段字体与颜色绑定、按钮高度与交互、设置应用/取消、真实目录输入、放弃修改及异步检查期间拒绝关闭；补充标题栏拖动测试后单项通过。
+- `QT_SCALE_FACTOR=1 / 1.5 / 2` 下窗口契约均通过，截图见 `build/evidence/unified_{editor,settings}_{1,1_5,2}.png`；已检查代表性截图的文字、对齐、滚动及底栏。取证曾在重新打开窗口后立即截图时偶发崩溃，改为等待 exposed 与 frameSwapped 后连续 10 次通过。
+- 主仓 `git -c core.whitespace=cr-at-eol diff --check` 与 QuickUI `git diff --check` → 通过；src/tests/docs 无旧窗口名称引用。CTest 使用 F:/tmp 夹具，重配置需要项目 Python，相关命令已提权运行。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\VisionTools.zip --tools-index F:\Projects\VisionTools\dist\VisionTools.module_index.json --allow-dirty` → 退出码 0，624 files verified。
+- `VisionRT.exe --screenshot F:\tmp\deploy_verify.png --screenshot-delay 1500` → 退出码 0，成功生成 51,118 字节截图。
+
+**下一步**
+- 本轮部署已就绪，等待用户体验与反馈。
+
+### 2026-11-17 — 参数面板分组标题高度调整为 32px
+
+**目标**
+- 将参数面板分组标题高度 `Theme.paramGroupHeaderHeight` 从 28px 调整为 32px，以完全包容 30px 高的展开图标按钮。
+
+**当前状态**
+- 已完成：更新 `src/ui/Theme.cpp` 将 `paramGroupHeaderHeight_` 设为 32。
+- 已完成：重编 `visionrt_ui`、`VisionRT` 与 `workbench_contract`，保持 CRLF 行尾。
+- 已完成：通过 `tools/package_app.py` 全量部署到 `F:/tmp/VisionRT`（624 个文件校验通过）。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract` → 编译链接成功。
+- `tools/build.cmd ctest --test-dir build -R "^workbench_parameters_contract$" --output-on-failure` → 1/1 Test Passed（5.39s）。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\VisionTools.zip --tools-index F:\Projects\VisionTools\dist\VisionTools.module_index.json --allow-dirty` → 退出码 0，624 files verified。
+- `VisionRT.exe --screenshot F:\tmp\deploy_verify.png --screenshot-delay 1500` → 退出码 0，成功生成 51,123 字节截图。
+
+**下一步**
+- 本轮无待办。
+
+### 2026-11-17 — 全流程拉取构建与部署至 F:/tmp/VisionRT
+
+**目标**
+- 拉取 VisionRTContracts、VisionTools 与 VisionRT 最新代码及子模块；
+- 构建 VisionTools 并打包生成独立工具包（含 25 个工具）；
+- 构建 VisionRT Release 并完整部署至 `F:/tmp/VisionRT`。
+
+**当前状态**
+- 已完成：三仓代码拉取与子模块同步（Contracts main `76bc8b6`、VisionTools dev `554c27f`、VisionRT dev `1789048`、QuickUI `840962c`）。
+- 已完成：VisionTools Release 构建，并通过 `package_tools.py --profile rtx40-build` 打包出包含 25 个工具的 `dist/VisionTools.zip`。
+- 已完成：VisionRT Release 编译链接成功生成 `bin/VisionRT.exe`。
+- 已完成：通过 `tools/package_app.py` 全量部署到 `F:/tmp/VisionRT`，622 个文件完整校验通过。
+- 已完成：部署目录可执行文件运行与截图验证通过。
+
+**验证证据**
+- `pwsh -Command "Set-Location F:\Projects\VisionTools; python tools\package_tools.py --profile rtx40-build"` → 退出码 0，打包 25 个工具生成 `F:\Projects\VisionTools\dist\VisionTools.zip`（410,584,868 字节）。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT` → 退出码 0，成功生成 `bin\VisionRT.exe`。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:\Projects\VisionTools\dist\VisionTools.zip --tools-index F:\Projects\VisionTools\dist\VisionTools.module_index.json --allow-dirty` → 退出码 0，`tools package verification passed successfully`，`package verification complete: 622 files`。
+- `Start-Process -FilePath "F:\tmp\VisionRT\VisionRT.exe" -ArgumentList @("--screenshot", "F:\tmp\deploy_verify.png", "--screenshot-delay", "1500") -Wait -PassThru` → 退出码 0，生成 51,116 字节截图。
+
+**下一步**
+- 本轮无待办。
+
 ### 2026-11-17 — 汇总提交并推送全部工作台改动
 
 **目标**

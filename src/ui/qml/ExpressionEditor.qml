@@ -157,7 +157,7 @@ Dialog {
         required property var rowData
         required property int rowIndex
         required property bool programRow
-        spacing: 4
+        spacing: 5
         ComboBox {
             id: typeCombo
             Layout.preferredWidth: 110
@@ -186,7 +186,7 @@ Dialog {
         }
         QuiText {
             Layout.preferredWidth: 150
-            color: Theme.textSecondary
+            color: QuiColor.FontDark
             font: Qt.font({ pixelSize: 11 })
             elide: Text.ElideRight
             text: root.rowDescription(typeRow.rowData)
@@ -196,12 +196,12 @@ Dialog {
     onOpened: Qt.callLater(function() { contentItem.focus = true })
 
     contentItem: ColumnLayout {
-        spacing: 8
+        spacing: 5
 
         QuiText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: Theme.textSecondary
+            color: QuiColor.FontDark
             text: conditionMode
                 ? "条件公式必须返回布尔值；结果为真执行成立分支，为假执行否则分支，公式错误不会自动落入否则分支。"
                 : "变量端口由稳定标识区分；结果公式按顺序求值，隐藏结果只供后续公式使用，不输出端口。"
@@ -218,9 +218,9 @@ Dialog {
 
             ColumnLayout {
                 width: scroller.availableWidth
-                spacing: 8
+                spacing: 5
 
-                QuiText { text: "输入变量"; font: Qt.font({ pixelSize: 13, bold: true }); color: Theme.textPrimary }
+                QuiText { text: "输入变量"; font: Qt.font({ pixelSize: 13, bold: true }); color: QuiColor.FontPrimary }
                 Repeater {
                     model: root.variables
                     RowLayout {
@@ -253,7 +253,7 @@ Dialog {
                 }
                 Button { text: "添加变量"; onClicked: root.addVariable(); enabled: !root.conditionMode || root.variables.length < 64 }
 
-                QuiText { text: "公式列表"; font: Qt.font({ pixelSize: 13, bold: true }); color: Theme.textPrimary }
+                QuiText { text: "公式列表"; font: Qt.font({ pixelSize: 13, bold: true }); color: QuiColor.FontPrimary }
                 Repeater {
                     model: root.program
                     RowLayout {
@@ -299,7 +299,7 @@ Dialog {
         QuiText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: Theme.textSecondary
+            color: QuiColor.FontDark
             font: Qt.font({ pixelSize: 11 })
             text: "函数：abs min max sum len round sqrt sin cos tan atan2 floor ceil mean median std "
                   + "is_empty is_missing all_nonempty any v_add v_sub v_mul v_div v_gt v_ge v_lt v_le v_eq select concat。"

@@ -27,8 +27,8 @@ ColumnLayout {
     readonly property real maximumValue: parameter.maximum === undefined || parameter.maximum === "" ? Infinity : Number(parameter.maximum)
     readonly property real numberStep: parameter.step === undefined || parameter.step === "" ? 1 : Number(parameter.step)
     readonly property int decimalPlaces: parameter.decimals === undefined || parameter.decimals < 0 ? 6 : parameter.decimals
-    readonly property int labelWidth: Theme.parameterLabelWidth
-    spacing: Theme.parameterRowSpacing
+    readonly property int labelWidth: ParameterStyle.parameterLabelWidth
+    spacing: 5
 
     function getPanel() {
         if (root.panel) return root.panel
@@ -45,15 +45,15 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 6
-        implicitHeight: Theme.parameterRowHeight
+        spacing: 5
 
         QuiText {
             objectName: "parameterLabel"
             text: root.parameter.name; Layout.preferredWidth: root.labelWidth
-            Layout.alignment: Qt.AlignVCenter
+            Layout.fillHeight: true
+            verticalAlignment: Text.AlignVCenter
             font: QuiFont.Body
-            color: Theme.parameterTextColor
+            color: QuiColor.FontPrimary
             elide: Text.ElideRight
             MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
             QuiToolTip {
@@ -67,27 +67,14 @@ ColumnLayout {
             }
         }
 
-        Rectangle {
+        ParameterFieldFrame {
             id: controlFrame
             Layout.fillWidth: true
             Layout.minimumWidth: 70
-            Layout.preferredHeight: Theme.paramEditorHeight
             Layout.alignment: Qt.AlignVCenter
-            radius: 4
-            color: frameHover.hovered ? Theme.paramRowHoverBg : Theme.paramEditorBg
+            hovered: frameHover.hovered
+            inputItem: editorLoader.item && editorLoader.item.inputItem ? editorLoader.item.inputItem : editorLoader.item
             clip: true
-
-            // Validation never paints the field red: an unnormalisable draft stays visible and is
-            // reported to the log, while the committed value keeps its own state.
-            readonly property color frameBorderColor: (frameHover.hovered || isEditorFocused)
-                    ? Theme.paramEditorFocusBorder : Theme.paramEditorBorder
-
-            readonly property bool isEditorFocused: {
-                if (!editorLoader.item) return false
-                if (editorLoader.item.activeFocus) return true
-                if (editorLoader.item.inputItem && editorLoader.item.inputItem.activeFocus) return true
-                return false
-            }
 
             HoverHandler {
                 id: frameHover
@@ -126,30 +113,27 @@ ColumnLayout {
                     visible: toggleAction.visible
                     Layout.preferredWidth: 1
                     Layout.fillHeight: true
-                    color: Theme.paramEditorBorder
+                    color: QuiColor.CardBorder
                 }
 
-                QuiTextIconButton {
+                ParameterActionButton {
                     id: toggleAction
                     objectName: "parameterActions"
                     visible: !root.parameter.init && !root.alwaysUpstream && (!root.isMeta || root.conditionRow)
-                    Layout.preferredWidth: Theme.paramActionBtnWidth
                     Layout.fillHeight: true
-                    radius: Theme.radiusSmall
                     padding: 0
                     verticalPadding: 0
                     horizontalPadding: 0
                     focusPolicy: Qt.NoFocus
                     enabled: root.editable
-                    opacity: root.editable ? 1.0 : Theme.sourceButtonDisabledOpacity
+                    opacity: root.editable ? 1.0 : ParameterStyle.sourceButtonDisabledOpacity
                     normalColor: "transparent"
-                    hoverColor: Theme.paramRowHoverBg
-                    pressedColor: Qt.darker(Theme.paramRowHoverBg, 1.05)
+                    hoverColor: QuiColor.ItemHover
+                    pressedColor: Qt.darker(QuiColor.ItemHover, 1.05)
                     iconSource: QuiFontIcon.Upload
-                    iconSize: Theme.paramToggleIconSize
                     iconColor: root.upstream
-                        ? Theme.sourceButtonActiveBackground
-                        : (hovered ? Theme.iconPrimary : Theme.sourceButtonIdleIcon)
+                        ? QuiColor.Highlight
+                        : (hovered ? QuiColor.FontPrimary : WorkbenchStyle.iconMuted)
 
                     onClicked: {
                         if (root.conditionRow) {
@@ -177,15 +161,6 @@ ColumnLayout {
                 }
             }
 
-            Rectangle {
-                id: borderOverlay
-                anchors.fill: parent
-                radius: 4
-                color: "transparent"
-                border.width: 1
-                border.color: controlFrame.frameBorderColor
-                z: 10
-            }
 
             QuiFileFolderDialog {
                 id: pathPicker
@@ -249,7 +224,7 @@ ColumnLayout {
             flat: true
             property var bindingContext: ({})
             objectName: "parameterUpstream"
-            implicitHeight: Theme.paramEditorHeight
+            implicitHeight: 32
             savedValue: root.currentUpstreamValue()
             Accessible.name: root.parameter.name
             displayText: root.parameter.source || ""
@@ -312,6 +287,9 @@ ColumnLayout {
     Component {
         id: floatEditor
         QuiSpinEditor {
+            buttonWidth: height
+            iconSize: 20
+            contentPadding: 0
             id: spin
             flat: true
             label: ""
@@ -336,9 +314,9 @@ ColumnLayout {
     }
     Component {
         id: boolEditor
-        QuiComboBox {
+        ParameterComboBox {
             flat: true
-            implicitHeight: Theme.paramEditorHeight
+            implicitHeight: 32
             readonly property bool isRecursive: root.parameter.editor === "recursive"
             model: isRecursive ? ["不递归", "递归"] : ["是", "否"]
             currentIndex: {
@@ -360,7 +338,7 @@ ColumnLayout {
             QuiToggleSwitch {
                 id: sw
                 anchors.left: parent.left
-                anchors.leftMargin: 8
+                anchors.leftMargin: 5
                 anchors.verticalCenter: parent.verticalCenter
                 checked: (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")
                 enabled: root.editable
@@ -374,10 +352,10 @@ ColumnLayout {
     }
     Component {
         id: choiceEditor
-        QuiComboBox {
+        ParameterComboBox {
             id: choice
             flat: true
-            implicitHeight: Theme.paramEditorHeight
+            implicitHeight: 32
             model: root.parameter.options
             textRole: "label"
             currentIndex: {
@@ -500,7 +478,7 @@ ColumnLayout {
         id: rectEditor
         ParameterTextField {
             id: field
-            backgroundColor: Theme.paramInputReadOnlyBg
+            backgroundColor: QuiColor.Hovered
             readonly property bool hasRect: root.parameter.hasRect === true
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape === 2
 
@@ -554,7 +532,7 @@ ColumnLayout {
         id: regionsEditor
         ParameterTextField {
             id: field
-            backgroundColor: Theme.paramInputReadOnlyBg
+            backgroundColor: QuiColor.Hovered
             readonly property int count: root.parameter.roiCount !== undefined ? root.parameter.roiCount : 0
             readonly property bool hasRois: count > 0
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape > 0

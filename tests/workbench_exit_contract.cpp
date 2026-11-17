@@ -4,6 +4,7 @@
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/Theme.h"
+#include "ui/ToolEditorController.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -34,7 +35,7 @@ try
         testsupport::useBuildInterpreter();
         QGuiApplication application(argc, argv);
         QQuickStyle::setStyle("Basic");
-        visionrt::registerStyleModule();
+        visionrt::initializeUiStyle();
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
         visionrt::testing::WorkbenchInstallation installation;
         require(visionrt::LogService::instance().start(visionrt::LogConfig{}, installation.directory() + "/logs/exit.log"),
@@ -62,12 +63,18 @@ try
             std::cout << "APPLICATION_QUITTING" << std::endl;
         });
         const std::string scenario = argv[2];
-        const bool showLog = scenario != "log-hidden";
+        const bool showLog = scenario == "log-visible" || scenario == "menu-log-visible";
         QTimer::singleShot(0, window, [&] {
             if (showLog)
             {
                 auto *log = window->findChild<QObject *>("logWindow");
                 require(log && QMetaObject::invokeMethod(log, "showAndRaise"), "exit fixture could not open the log window");
+            }
+            if (scenario == "settings-visible" || scenario == "editor-visible" || scenario == "editor-dirty")
+            {
+                auto *auxiliary = window->findChild<QObject *>(scenario == "settings-visible" ? "settingsWindow" : "customToolWindow");
+                require(auxiliary && QMetaObject::invokeMethod(auxiliary, "openDialog"), "cannot open modal auxiliary window");
+                if (scenario == "editor-dirty") require(controller.toolEditor()->addTool("退出契约"), "cannot create dirty editor");
             }
             std::cout << "REQUEST_WINDOW_CLOSE log=" << showLog << std::endl;
             if (scenario == "menu-log-visible")
@@ -84,7 +91,7 @@ try
     }
 
     QCoreApplication application(argc, argv);
-    for (const auto *scenario : {"log-hidden", "log-visible", "menu-log-visible"})
+    for (const auto *scenario : {"log-hidden", "log-visible", "menu-log-visible", "settings-visible", "editor-visible", "editor-dirty"})
     {
         QProcess child;
         child.setProcessChannelMode(QProcess::MergedChannels);

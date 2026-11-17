@@ -17,9 +17,9 @@ ColumnLayout {
             objectName: "trainingRecords"
             enabled: root.controller.workspaceEnabled
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: 5
             clip: true
-            spacing: 4
+            spacing: 5
             boundsBehavior: Flickable.StopAtBounds
             boundsMovement: Flickable.StopAtBounds
             model: root.controller.trainingRecords
@@ -33,18 +33,18 @@ ColumnLayout {
                 width: trainingList.width - 8
                 height: 58
                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                color: modelData.selected ? Theme.treeItemSelectedBg : Theme.surfaceBg
-                border.color: modelData.selected ? Theme.highlight : QuiColor.Border
+                color: modelData.selected ? ToolTreeStyle.treeItemSelectedBg : QuiColor.Button
+                border.color: modelData.selected ? QuiColor.Highlight : QuiColor.Border
                 border.width: modelData.selected ? 2 : 1
-                radius: Theme.radiusSmall
+                radius: 3
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 4
-                    spacing: 4
+                    anchors.margins: 5
+                    spacing: 5
                     QuiText {
                         text: String(recordRow.index).padStart(2, "0")
                         font: QuiFont.Caption
-                        color: Theme.textSecondary
+                        color: QuiColor.FontDark
                     }
                     Item {
                         Layout.preferredWidth: 44
@@ -65,7 +65,7 @@ ColumnLayout {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
-                        QuiTextField {
+                        WorkbenchTextField {
                             Layout.fillWidth: true
                             visible: recordRow.labelled
                             text: modelData.label
@@ -81,24 +81,21 @@ ColumnLayout {
                             text: modelData.label
                             elide: Text.ElideRight
                             font: QuiFont.Caption
-                            color: Theme.textPrimary
+                            color: QuiColor.FontPrimary
                         }
                         QuiText {
                             text: modelData.regions + (recordRow.labelled ? " 个区域" : " 条参考边")
                             font: QuiFont.Caption
-                            color: Theme.textSecondary
+                            color: QuiColor.FontDark
                         }
                     }
-                    QuiTextIconButton {
+                    WorkbenchActionButton {
                         text: "删除训练记录"
                         iconSource: QuiFontIcon.Delete
-                        iconSize: Theme.iconSizeSmall
                         implicitWidth: 20
                         implicitHeight: 20
-                        display: AbstractButton.IconOnly
                         normalColor: "transparent"
-                        hoverColor: Theme.buttonHoverBg
-                        iconColor: hovered ? Theme.error : Theme.textSecondary
+                        iconColor: hovered ? QuiColor.Error : QuiColor.FontDark
                         onClicked: root.controller.removeTrainingRecord(modelData.id)
                         Accessible.name: "删除训练记录"
                     }
@@ -110,25 +107,25 @@ ColumnLayout {
             visible: trainingList.count === 0
             text: "训练集为空"
             font: QuiFont.Body
-            color: Theme.textSecondary
+            color: QuiColor.FontDark
         }
     }
     Rectangle {
         Layout.fillWidth: true
         Layout.preferredHeight: applyTrainingButton.implicitHeight + 12
-        color: Theme.surfaceBg
+        color: QuiColor.Button
         QuiButton {
             id: applyTrainingButton
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 6
+            anchors.margins: 5
             text: "应用训练数据"
             font: QuiFont.Body
-            normalColor: Theme.surfaceBg
-            hoverColor: Theme.buttonHoverBg
-            pressedColor: Theme.buttonPressedBg
-            textColor: enabled ? Theme.highlight : Theme.disabledText
+            normalColor: QuiColor.Button
+            hoverColor: QuiColor.Hovered
+            pressedColor: QuiColor.ItemPress
+            textColor: enabled ? QuiColor.Highlight : WorkbenchStyle.iconMuted
             opacity: 1
             enabled: root.controller.trainingSavable && !root.controller.runtimeBusy && root.controller.workspaceEnabled
             onClicked: root.controller.applyTraining()

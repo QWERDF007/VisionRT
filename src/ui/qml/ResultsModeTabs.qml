@@ -9,19 +9,19 @@ Rectangle {
 
     visible: root.controller.trainingAvailable
     implicitWidth: 34
-    color: Theme.surfaceBg
+    color: QuiColor.Button
     Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        width: Theme.separatorWidth
+        width: 1
         color: QuiColor.Border
     }
     Column {
         anchors.top: parent.top
-        anchors.topMargin: 4
+        anchors.topMargin: 5
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 2
+        spacing: 5
         QuiTabButton {
             objectName: "trainingProcessTab"
             text: "处理"
@@ -34,13 +34,13 @@ Rectangle {
             })
             display: AbstractButton.TextOnly
             showIndicator: false
-            radius: Theme.radiusSmall
+            radius: 3
             normalColor: "transparent"
-            hoverColor: Theme.buttonHoverBg
-            checkedColor: Theme.sourceButtonActiveBackground
-            normalTextColor: Theme.textPrimary
-            checkedTextColor: Theme.sourceButtonActiveIcon
-            hoverTextColor: Theme.textPrimary
+            hoverColor: QuiColor.Hovered
+            checkedColor: QuiColor.Highlight
+            normalTextColor: QuiColor.FontPrimary
+            checkedTextColor: QuiColor.White
+            hoverTextColor: QuiColor.FontPrimary
             checked: !root.controller.trainingMode
             enabled: root.controller.workspaceEnabled
             onClicked: root.controller.trainingMode = false
@@ -58,13 +58,13 @@ Rectangle {
             })
             display: AbstractButton.TextOnly
             showIndicator: false
-            radius: Theme.radiusSmall
+            radius: 3
             normalColor: "transparent"
-            hoverColor: Theme.buttonHoverBg
-            checkedColor: Theme.sourceButtonActiveBackground
-            normalTextColor: Theme.textPrimary
-            checkedTextColor: Theme.sourceButtonActiveIcon
-            hoverTextColor: Theme.textPrimary
+            hoverColor: QuiColor.Hovered
+            checkedColor: QuiColor.Highlight
+            normalTextColor: QuiColor.FontPrimary
+            checkedTextColor: QuiColor.White
+            hoverTextColor: QuiColor.FontPrimary
             checked: root.controller.trainingMode
             enabled: root.controller.workspaceEnabled
             onClicked: root.controller.trainingMode = true

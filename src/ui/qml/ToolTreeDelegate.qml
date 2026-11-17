@@ -6,7 +6,7 @@ import QtQml.Models
 import quickui
 import VisionRT.Style 1.0
 
-// Shared tool tree delegate used by both ToolLibrary and CustomToolDialog.
+// Shared tool tree delegate used by both ToolLibrary and CustomToolWindow.
 // Provides identical semantic category icons, selection styling, and interaction.
 Item {
     id: root
@@ -67,42 +67,42 @@ Item {
     signal contextMenuRequested(var mouse, var itemModel)
 
     implicitWidth: treeView ? treeView.width : 200
-    implicitHeight: Theme.treeRowHeight
+    implicitHeight: ToolTreeStyle.treeRowHeight
 
     Rectangle {
         anchors.fill: parent
         color: root.isSelected
-               ? Theme.treeItemSelectedBg
+               ? ToolTreeStyle.treeItemSelectedBg
                : root.isHovered
-                 ? Theme.treeItemHoverBg
+                 ? ToolTreeStyle.treeItemHoverBg
                  : "transparent"
         Rectangle {
             anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
             width: 2
-            color: Theme.treeItemSelectedIndicator
-            visible: root.isSelected && Theme.treeItemSelectedIndicator.a > 0
+            color: QuiColor.Transparent
+            visible: root.isSelected && QuiColor.Transparent.a > 0
         }
     }
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 7 + root.depth * Theme.treeIndent
-        anchors.rightMargin: 8
-        spacing: 6
+        anchors.leftMargin: 5 + root.depth * ToolTreeStyle.treeIndent
+        anchors.rightMargin: 5
+        spacing: 5
 
         Item {
-            Layout.preferredWidth: Theme.treeArrowWidth
-            Layout.preferredHeight: Theme.treeRowHeight
+            Layout.preferredWidth: ToolTreeStyle.treeArrowWidth
+            Layout.preferredHeight: ToolTreeStyle.treeRowHeight
             visible: root.hasChildren
             QuiTextIcon {
                 anchors.centerIn: parent
                 iconSource: root.expanded ? QuiFontIcon.ChevronDownSmall : QuiFontIcon.ChevronRightSmall
-                iconSize: Theme.treeArrowSize
+                iconSize: ToolTreeStyle.treeArrowSize
                 iconColor: root.isSelected
-                           ? Theme.treeItemSelectedText
+                           ? QuiColor.Highlight
                            : root.isHovered
-                             ? Theme.treeArrowHoverColor
-                             : Theme.treeArrowColor
+                             ? QuiColor.Highlight
+                             : ToolTreeStyle.treeArrowColor
             }
             MouseArea {
                 anchors.fill: parent
@@ -129,17 +129,17 @@ Item {
                 if (d.indexOf("示例") >= 0 || d.indexOf("demo") >= 0 || d.indexOf("例") >= 0) return QuiFontIcon.FolderOpen
                 return QuiFontIcon.Settings
             }
-            iconSize: Theme.treeFolderIconSize
-            iconColor: root.isSelected ? Theme.treeItemSelectedIcon : Theme.treeFolderIconColor
+            iconSize: ToolTreeStyle.treeFolderIconSize
+            iconColor: root.isSelected ? QuiColor.Highlight : QuiColor.Highlight
         }
 
         QuiText {
             visible: !root.hasChildren
             text: "◇"
-            Layout.preferredWidth: Theme.treeArrowWidth
+            Layout.preferredWidth: ToolTreeStyle.treeArrowWidth
             horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: Theme.treeLeafIconSize
-            color: root.isSelected ? Theme.treeItemSelectedIcon : Theme.treeLeafIconColor
+            font.pixelSize: ToolTreeStyle.treeLeafIconSize
+            color: root.isSelected ? QuiColor.Highlight : QuiColor.Highlight
         }
 
         QuiText {
@@ -147,7 +147,7 @@ Item {
             Layout.fillWidth: true
             elide: Text.ElideRight
             font: QuiFont.Body
-            color: root.isSelected ? Theme.treeItemSelectedText : Theme.treeItemText
+            color: root.isSelected ? QuiColor.Highlight : QuiColor.FontPrimary
         }
     }
 
@@ -163,16 +163,16 @@ Item {
         Drag.hotSpot.x: 12; Drag.hotSpot.y: 16
         Rectangle {
             anchors.fill: parent
-            radius: Theme.radiusSmall
-            color: Theme.treeItemSelectedBg
-            border.color: Theme.highlight
+            radius: 3
+            color: ToolTreeStyle.treeItemSelectedBg
+            border.color: QuiColor.Highlight
             opacity: 0.95
         }
         QuiText {
             anchors.centerIn: parent
             text: root.displayName
             font: QuiFont.Body
-            color: Theme.treeItemSelectedText
+            color: QuiColor.Highlight
         }
     }
 

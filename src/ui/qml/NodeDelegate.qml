@@ -23,8 +23,8 @@ Rectangle {
     signal executeRequested()
     signal hoverEntered()
     signal hoverExited()
-    width: Theme.nodeWidth
-    height: Theme.nodeHeight
+    width: FlowStyle.nodeWidth
+    height: FlowStyle.nodeHeight
     radius: 2
     antialiasing: true
     color: "#ffffff"
@@ -34,19 +34,19 @@ Rectangle {
     readonly property bool isError: root.nodeState === "failed" || root.nodeMissing === true
     readonly property bool runningNow: root.nodeState === "running"
     readonly property color headerBg: {
-        if (root.runningNow) return Theme.nodeHeaderGreen
-        if (root.nodeState === "failed") return Theme.nodeHeaderRed
-        return Theme.nodeHeaderGray
+        if (root.runningNow) return FlowStyle.nodeStateGreen
+        if (root.nodeState === "failed") return FlowStyle.nodeHeaderRed
+        return FlowStyle.nodeHeaderGray
     }
     readonly property color headerText: {
-        if (root.runningNow) return Theme.nodeHeaderTextGreen
-        if (root.nodeState === "failed") return Theme.nodeHeaderTextRed
-        return Theme.nodeHeaderTextGray
+        if (root.runningNow) return QuiColor.White
+        if (root.nodeState === "failed") return QuiColor.Error
+        return QuiColor.FontDark
     }
 
     // The running border is its own layer: selecting a node must not hide that it is running.
-    border.color: root.runningNow ? Theme.nodeStateGreen
-                                  : (root.selected ? "transparent" : (root.isError ? Theme.nodeStateRed : "#c0c6cf"))
+    border.color: root.runningNow ? FlowStyle.nodeStateGreen
+                                  : (root.selected ? "transparent" : (root.isError ? QuiColor.Error : "#c0c6cf"))
     border.width: root.runningNow ? 2 : (root.selected ? 0 : 1)
 
     function getIcon(title, category) {
@@ -100,8 +100,8 @@ Rectangle {
             Layout.preferredWidth: 16; Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
             iconSource: root.getIcon(root.nodeToolName, root.nodeCategory || "")
-            iconSize: Theme.iconSizeBase
-            iconColor: root.isError ? Theme.nodeStateRed : (root.nodeState === "running" ? Theme.nodeStateGreen : Theme.nodeStateGray)
+            iconSize: 20
+            iconColor: root.isError ? QuiColor.Error : (root.nodeState === "running" ? FlowStyle.nodeStateGreen : FlowStyle.nodeStateGray)
             renderType: Text.QtRendering
         }
         ColumnLayout {
@@ -116,7 +116,7 @@ Rectangle {
                 text: root.nodeTimingText
                 renderType: Text.QtRendering
                 font: QuiFont.Caption
-                color: Theme.iconMuted
+                color: WorkbenchStyle.iconMuted
             }
         }
     }

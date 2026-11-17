@@ -59,7 +59,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
-    registerStyleModule();
+    initializeUiStyle();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());

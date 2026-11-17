@@ -4,6 +4,7 @@
 #include "core/NodeContracts.h"
 #include "ui/AppController.h"
 #include "ui/Theme.h"
+#include <quickui/Color.h>
 #include "ui/OutputModel.h"
 #include <quickui/Color.h>
 
@@ -58,7 +59,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    registerStyleModule();
+    initializeUiStyle();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     const auto                     root  = installation.directory();
@@ -194,7 +195,7 @@ class InitFailure:
             "node card must have the fixed 160 by 60 pixel size");
     require(QTest::qWaitFor([&] { return sourceItem->property("nodeState").toString() == "running"; }, 2000),
             "status source delegate did not reach running state");
-    const auto *theme = themeForEngine(&engine);
+    auto *flowStyle = engine.singletonInstance<QObject *>(qmlTypeId("VisionRT.Style", 1, 0, "FlowStyle"));
     // The status border is its own layer: a selected node keeps it, because selection is drawn as a
     // separate dashed outline and must never hide that the node is running.
     const auto borderOf = [](QQuickItem *item)
@@ -205,18 +206,18 @@ class InitFailure:
     {
         auto *pen = borderOf(item);
         require(pen && pen->property("width").toDouble() == 2
-                    && pen->property("color").value<QColor>() == theme->nodeStateGreen(),
+                    && pen->property("color").value<QColor>() == flowStyle->property("nodeStateGreen").value<QColor>(),
                 message);
     };
     const auto requireIdleBorder = [&](QQuickItem *item, const char *message)
     {
         auto *pen = borderOf(item);
         require(pen && pen->property("width").toDouble() == 1
-                    && pen->property("color").value<QColor>() != theme->nodeStateGreen(),
+                    && pen->property("color").value<QColor>() != flowStyle->property("nodeStateGreen").value<QColor>(),
                 message);
     };
-    requireColor(sourceItem, "headerBg", theme->nodeHeaderGreen(), "running header is not green");
-    requireColor(sourceItem, "headerText", theme->nodeHeaderTextGreen(), "running header text is not green");
+    requireColor(sourceItem, "headerBg", flowStyle->property("nodeStateGreen").value<QColor>(), "running header is not green");
+    requireColor(sourceItem, "headerText", quickui::QuiColor::getInstance()->White(), "running header text is not green");
     // A run owns the workspace: the selection cannot move while it is active, so the running node
     // keeps its own selection and its status colours.
     app.selectNode(neighbour);
@@ -226,7 +227,7 @@ class InitFailure:
     write(permission, "allow");
     idle();
     require(stateOf(source).value("state").toString() == "succeeded", "status source did not succeed");
-    requireColor(sourceItem, "headerBg", theme->nodeHeaderGray(), "succeeded header is not neutral");
+    requireColor(sourceItem, "headerBg", flowStyle->property("nodeHeaderGray").value<QColor>(), "succeeded header is not neutral");
     // The border belongs to the status layer, so it is checked again once selection moved away and
     // the card shows its own neutral outline.
     app.selectNode(neighbour);
@@ -256,8 +257,8 @@ class InitFailure:
     idle();
     require(stateOf(source).value("state").toString() == "failed", "status source did not fail");
     require(stateOf(source).value("statusMessage").toString().contains("受控失败"), "failure message is missing");
-    requireColor(sourceItem, "headerBg", theme->nodeHeaderRed(), "failed header is not red");
-    requireColor(sourceItem, "headerText", theme->nodeHeaderTextRed(), "failed header text is not red");
+    requireColor(sourceItem, "headerBg", flowStyle->property("nodeHeaderRed").value<QColor>(), "failed header is not red");
+    requireColor(sourceItem, "headerText", quickui::QuiColor::getInstance()->Error(), "failed header text is not red");
     require(app.setParameter(kModeInput, false, "wait"), "status source could not return to wait mode");
     idle();
     app.addFlow("接收流程");
@@ -294,7 +295,7 @@ class InitFailure:
     require(stateOf(receiver).value("statusCode").toInt() == -5
                 && stateOf(receiver).value("statusMessage").toString().contains("运行已取消"),
             "cancelled receiver lost its message");
-    requireColor(receiverItem, "headerBg", theme->nodeHeaderGray(), "cancelled header is not neutral");
+    requireColor(receiverItem, "headerBg", flowStyle->property("nodeHeaderGray").value<QColor>(), "cancelled header is not neutral");
 
     std::cout << "WORKBENCH_STATUS_PASS\n";
     app.selectFlow(sourceFlow);

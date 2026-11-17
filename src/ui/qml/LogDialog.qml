@@ -17,7 +17,7 @@ Window {
     flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint
            | Qt.WindowCloseButtonHint
     modality: Qt.NonModal
-    color: Theme.surfaceBg
+    color: QuiColor.Button
     width: 880
     height: 420
     minimumWidth: 520
@@ -89,7 +89,7 @@ Window {
     }
 
     Component.onCompleted: {
-        app.attachLogHighlighter(logText.textDocument, Theme.warning, Theme.error)
+        app.attachLogHighlighter(logText.textDocument, WorkbenchStyle.warning, QuiColor.Error)
         rebuild()
     }
 
@@ -119,7 +119,7 @@ Window {
         focusPolicy: Qt.TabFocus
 
         contentItem: RowLayout {
-            spacing: 6
+            spacing: 5
             QuiTextIcon {
                 iconSource: control.iconSource
                 iconColor: control.textColor
@@ -134,13 +134,13 @@ Window {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 6
-        spacing: 6
+        anchors.margins: 5
+        spacing: 5
 
         RowLayout {
             id: toolbar
             Layout.fillWidth: true
-            spacing: 6
+            spacing: 5
             Item { Layout.fillWidth: true }
             LogActionButton {
                 objectName: "logCopyAll"
@@ -175,8 +175,8 @@ Window {
                 wrapMode: TextEdit.Wrap
                 width: scroll.availableWidth
                 font: QuiFont.Body
-                color: Theme.textPrimary
-                selectionColor: Theme.highlight
+                color: QuiColor.FontPrimary
+                selectionColor: QuiColor.Highlight
                 selectedTextColor: "#ffffff"
                 background: null
             }

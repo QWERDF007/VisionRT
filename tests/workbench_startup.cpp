@@ -34,7 +34,7 @@ void startupProjectContract()
             throw std::runtime_error(message);
     };
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
     for (const bool projectReadyBeforeWindow : {false, true})
     {
         visionrt::testing::WorkbenchInstallation installation;

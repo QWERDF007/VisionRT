@@ -20,7 +20,7 @@ Item {
     property string secondaryActionText: ""
     property int leadingActionIcon: 0
     property string leadingActionText: ""
-    property color leadingActionColor: Theme.textPrimary
+    property color leadingActionColor: QuiColor.FontPrimary
     property bool leadingActionActive: false
     property color backgroundColor: QuiColor.Transparent
 
@@ -31,7 +31,7 @@ Item {
     signal leadingActionRequested()
 
     implicitWidth: 200
-    implicitHeight: Theme.parameterRowHeight
+    implicitHeight: fieldFrame.implicitHeight
 
     function finishEditing() {
         if (root.enabled && !root.readOnly && !input.inputMethodComposing)
@@ -48,30 +48,30 @@ Item {
         id: hover
     }
 
-    QuiTextBoxBackground {
+    ParameterFieldFrame {
+        id: fieldFrame
         anchors.fill: parent
         inputItem: input
         hovered: hover.hovered
         invalid: root.invalid
         border.width: root.flat ? 0 : 1
-        radius: root.flat ? 0 : Theme.radiusBase
-        color: root.flat ? "transparent" : (root.backgroundColor !== QuiColor.Transparent ? root.backgroundColor : (hover.hovered ? Theme.paramRowHoverBg : Theme.paramEditorBg))
+        radius: root.flat ? 0 : 4
+        color: root.flat ? "transparent" : (root.backgroundColor !== QuiColor.Transparent ? root.backgroundColor : (hover.hovered ? QuiColor.ItemHover : QuiColor.CardBackground))
 
         RowLayout {
             anchors.fill: parent
-            anchors.margins: root.flat ? 0 : 1
+            anchors.margins: 0
             spacing: 0
 
-            QuiTextIconButton {
+            ParameterActionButton {
                 id: leadingBtn
                 visible: root.leadingActionIcon > 0
-                Layout.preferredWidth: Theme.paramActionBtnWidth
+                Layout.preferredWidth: implicitWidth
                 Layout.fillHeight: true
                 iconSource: root.leadingActionIcon
-                iconSize: Theme.paramRoiIconSize
-                iconColor: root.leadingActionActive ? Theme.highlight : root.leadingActionColor
-                normalColor: root.leadingActionActive ? Theme.paramActionActiveBg : "transparent"
-                hoverColor: Theme.paramActionHoverBg
+                iconColor: root.leadingActionActive ? QuiColor.Highlight : root.leadingActionColor
+                normalColor: root.leadingActionActive ? ParameterStyle.paramActionActiveBg : "transparent"
+                hoverColor: ParameterStyle.paramActionHoverBg
                 focusPolicy: Qt.NoFocus
                 text: root.leadingActionText
                 enabled: root.enabled && !root.readOnly
@@ -84,7 +84,7 @@ Item {
                 visible: leadingBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                color: Theme.paramEditorBorder
+                color: QuiColor.CardBorder
             }
 
             Rectangle {
@@ -102,9 +102,9 @@ Item {
                     font: QuiFont.Body
                     // One text colour for every parameter kind; a rejected draft is reported to the
                     // log and keeps its text instead of painting the field red.
-                    color: root.enabled ? Theme.parameterTextColor : Theme.disabledText
-                    selectionColor: Theme.highlight
-                    selectedTextColor: "#ffffff"
+                    color: root.enabled ? QuiColor.FontPrimary : WorkbenchStyle.iconMuted
+                    selectionColor: QuiColor.Highlight
+                    selectedTextColor: QuiColor.White
                     selectByMouse: true
                     readOnly: root.readOnly
                     enabled: root.enabled
@@ -132,18 +132,17 @@ Item {
                 visible: secondaryBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                color: Theme.paramEditorBorder
+                color: QuiColor.CardBorder
             }
 
-            QuiTextIconButton {
+            ParameterActionButton {
                 id: secondaryBtn
                 visible: root.secondaryActionIcon > 0
-                Layout.preferredWidth: Theme.paramActionBtnWidth
+                Layout.preferredWidth: implicitWidth
                 Layout.fillHeight: true
                 iconSource: root.secondaryActionIcon
-                iconSize: Theme.paramActionIconSize
                 normalColor: "transparent"
-                hoverColor: Theme.paramRowHoverBg
+                hoverColor: QuiColor.ItemHover
                 focusPolicy: Qt.NoFocus
                 text: root.secondaryActionText
                 enabled: root.enabled && !root.readOnly
@@ -156,18 +155,17 @@ Item {
                 visible: trailingBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                color: Theme.paramEditorBorder
+                color: QuiColor.CardBorder
             }
 
-            QuiTextIconButton {
+            ParameterActionButton {
                 id: trailingBtn
                 visible: root.actionIcon > 0
-                Layout.preferredWidth: Theme.paramActionBtnWidth
+                Layout.preferredWidth: implicitWidth
                 Layout.fillHeight: true
                 iconSource: root.actionIcon
-                iconSize: Theme.paramActionIconSize
                 normalColor: "transparent"
-                hoverColor: Theme.paramRowHoverBg
+                hoverColor: QuiColor.ItemHover
                 focusPolicy: Qt.NoFocus
                 text: root.actionText
                 enabled: root.enabled && !root.readOnly

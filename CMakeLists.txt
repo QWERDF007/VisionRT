@@ -184,6 +184,8 @@ if(VISIONRT_BUILD_APP)
         src/ui/ToolPortListModel.h
         src/ui/ToolEditorController.cpp
         src/ui/ToolEditorController.h)
+    qt_add_resources(visionrt_ui visionrt_styles PREFIX "/visionrt/style" BASE "src/ui/style"
+        FILES src/ui/style/WorkbenchStyle.qml src/ui/style/ParameterStyle.qml src/ui/style/ToolTreeStyle.qml src/ui/style/ResultsStyle.qml src/ui/style/FlowStyle.qml)
     target_link_libraries(visionrt_ui PUBLIC
         visionrt_runtime visionrt_python_host visionrt_viewport visionrt_log
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)

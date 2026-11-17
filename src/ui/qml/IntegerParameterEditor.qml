@@ -4,6 +4,10 @@ import VisionRT.Style 1.0
 
 QuiStepperField {
     id: root
+    buttonWidth: implicitHeight
+    iconSize: 20
+    contentPadding: 0
+    flat: true
 
     property string valueText: ""
     property string parameterId: ""
@@ -17,7 +21,7 @@ QuiStepperField {
 
     property string _lastValue: ""
 
-    implicitHeight: Theme.paramEditorHeight
+    implicitHeight: 32
     canDecrease: enabled && !readOnly && canDecrement
     canIncrease: enabled && !readOnly && canIncrement
     onTextEdited: invalid = false

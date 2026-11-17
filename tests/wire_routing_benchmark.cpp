@@ -75,7 +75,7 @@ try
 {
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
-    visionrt::registerStyleModule();
+    visionrt::initializeUiStyle();
     QGuiApplication    application(argc, argv);
     QCommandLineParser parser;
     parser.addHelpOption();

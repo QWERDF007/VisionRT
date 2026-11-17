@@ -31,16 +31,16 @@ WorkbenchDialog {
                 y: 16
                 width: parent.width - 32
                 height: parent.height - 32
-                color: Theme.surfaceBg
+                color: QuiColor.Button
                 border.color: QuiColor.Border
                 border.width: 1
-                radius: Theme.radiusSmall
+                radius: 3
                 clip: true
 
                 BoundedScrollView {
                     id: scrollView
                     anchors.fill: parent
-                    anchors.margins: 1
+                    anchors.margins: 5
                     ScrollBar.horizontal.policy: ScrollBar.AsNeeded
                     ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
@@ -53,7 +53,7 @@ WorkbenchDialog {
                         textFormat: TextEdit.PlainText
                         wrapMode: TextEdit.NoWrap
                         font: QuiFont.Body
-                        color: Theme.textPrimary
+                        color: QuiColor.FontPrimary
                         background: null
                         topPadding: 12
                         leftPadding: 14

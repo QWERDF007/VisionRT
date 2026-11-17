@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
             openProject();
         }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-        visionrt::registerStyleModule();
+        visionrt::initializeUiStyle();
         (void)quickui::QuiColor::getInstance();
         QQmlApplicationEngine engine;
         engine.addImportPath(QCoreApplication::applicationDirPath());

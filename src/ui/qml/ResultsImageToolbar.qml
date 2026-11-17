@@ -6,141 +6,95 @@ import VisionRT.Style 1.0
 
 Rectangle {
     id: root
+    objectName: "imageToolbar"
     required property QtObject controller
     signal fitRequested
     signal zoomRequested(real factor)
     signal oneToOneRequested
     signal roiRequested
 
-    implicitWidth: Theme.toolbarWidth
-    color: Theme.surfaceBg
+    implicitWidth: 36
+    color: QuiColor.Button
     Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        width: Theme.separatorWidth
+        width: 1
         color: QuiColor.Border
     }
     Flickable {
         id: imageToolbar
         anchors.fill: parent
         contentWidth: width
-        contentHeight: toolbarColumn.implicitHeight + 8
+        contentHeight: toolbarColumn.implicitHeight + 2 * 5
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: QuiScrollBar {
         }
         ColumnLayout {
             id: toolbarColumn
+            objectName: "viewportActions"
+            y: 5
             width: imageToolbar.width
-            spacing: 4
+            spacing: 5
             enabled: root.controller.workspaceEnabled
-            QuiTextIconButton {
+            WorkbenchActionButton {
                 text: "适应窗口"
                 iconSource: QuiFontIcon.FitPage
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
-                radius: Theme.radiusSmall
-                display: AbstractButton.IconOnly
-                normalColor: Theme.menuButtonBg
-                hoverColor: Theme.buttonHoverBg
-                pressedColor: Theme.buttonPressedBg
-                iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                 onClicked: root.fitRequested()
             }
-            QuiTextIconButton {
+            WorkbenchActionButton {
                 text: "放大"
                 iconSource: QuiFontIcon.ZoomIn
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
-                radius: Theme.radiusSmall
-                display: AbstractButton.IconOnly
-                normalColor: Theme.menuButtonBg
-                hoverColor: Theme.buttonHoverBg
-                pressedColor: Theme.buttonPressedBg
-                iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                 onClicked: root.zoomRequested(1.25)
             }
-            QuiTextIconButton {
+            WorkbenchActionButton {
                 text: "缩小"
                 iconSource: QuiFontIcon.ZoomOut
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
-                radius: Theme.radiusSmall
-                display: AbstractButton.IconOnly
-                normalColor: Theme.menuButtonBg
-                hoverColor: Theme.buttonHoverBg
-                pressedColor: Theme.buttonPressedBg
-                iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                 onClicked: root.zoomRequested(0.8)
             }
-            Rectangle {
-                Layout.preferredWidth: 20
-                Layout.preferredHeight: Theme.separatorWidth
-                color: QuiColor.Border
-                Layout.alignment: Qt.AlignHCenter
-            }
+            WorkbenchSeparator { orientation: Qt.Horizontal; Layout.alignment: Qt.AlignHCenter }
             // Smart point selection: the button reports the user preference only. Availability
             // and pausing are explained in the tooltip, never by silently unchecking it.
-            QuiTextIconButton {
+            WorkbenchActionButton {
                 objectName: "easyTouchToggle"
                 text: root.controller.easyTouchEnabled ? (root.controller.assistAvailable ? "智能点选（EasyTouch）：已开启" : "智能点选（EasyTouch）：已开启，" + (root.controller.assistDisabledReason || "当前不可用")) : "智能点选（EasyTouch）：已关闭"
                 iconSource: QuiFontIcon.Search
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
                 Layout.alignment: Qt.AlignHCenter
-                display: AbstractButton.IconOnly
-                radius: Theme.radiusSmall
                 checkable: false
                 checked: root.controller.easyTouchEnabled
-                normalColor: checked ? Theme.sourceButtonActiveBackground : Theme.menuButtonBg
-                hoverColor: checked ? Qt.lighter(Theme.sourceButtonActiveBackground, 1.15) : Theme.buttonHoverBg
-                pressedColor: checked ? Qt.darker(Theme.sourceButtonActiveBackground, 1.15) : Theme.buttonPressedBg
-                iconColor: checked ? Theme.sourceButtonActiveIcon : (hovered ? Theme.highlight : Theme.menuButtonIcon)
+                normalColor: checked ? QuiColor.Highlight : QuiColor.Transparent
+                hoverColor: checked ? Qt.lighter(QuiColor.Highlight, 1.15) : QuiColor.Hovered
+                pressedColor: checked ? Qt.darker(QuiColor.Highlight, 1.15) : QuiColor.ItemPress
+                iconColor: checked ? QuiColor.White : (hovered ? QuiColor.Highlight : QuiColor.FontPrimary)
                 Accessible.name: "智能点选（EasyTouch）"
                 Accessible.role: Accessible.CheckBox
                 Accessible.checkable: true
                 Accessible.checked: root.controller.easyTouchEnabled
                 onClicked: root.controller.setEasyTouchEnabled(!root.controller.easyTouchEnabled)
             }
-            Rectangle {
-                Layout.preferredWidth: 20
-                Layout.preferredHeight: Theme.separatorWidth
-                color: QuiColor.Border
-                Layout.alignment: Qt.AlignHCenter
-            }
-            QuiTextIconButton {
+            WorkbenchSeparator { orientation: Qt.Horizontal; Layout.alignment: Qt.AlignHCenter }
+            WorkbenchActionButton {
                 text: "编辑输入 ROI"
                 iconSource: QuiFontIcon.Crop
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
                 Layout.alignment: Qt.AlignHCenter
-                radius: Theme.radiusSmall
-                display: AbstractButton.IconOnly
-                normalColor: Theme.menuButtonBg
-                hoverColor: Theme.buttonHoverBg
-                pressedColor: Theme.buttonPressedBg
-                iconColor: enabled ? (hovered ? Theme.highlight : Theme.menuButtonIcon) : Theme.disabledText
+                iconColor: enabled ? (hovered ? QuiColor.Highlight : QuiColor.FontPrimary) : WorkbenchStyle.iconMuted
                 enabled: !root.controller.runtimeBusy && root.controller.selectedNode.length > 0 && !root.controller.trainingMode
                 opacity: enabled ? 1.0 : 0.4
                 Accessible.name: "编辑输入 ROI"
                 onClicked: root.roiRequested()
             }
-            QuiTextIconButton {
+            WorkbenchActionButton {
                 text: "1:1 像素显示"
                 iconSource: QuiFontIcon.Photo2
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
                 Layout.alignment: Qt.AlignHCenter
-                radius: Theme.radiusSmall
-                display: AbstractButton.IconOnly
-                normalColor: Theme.menuButtonBg
-                hoverColor: Theme.buttonHoverBg
-                pressedColor: Theme.buttonPressedBg
-                iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                 onClicked: root.oneToOneRequested()
             }
         }

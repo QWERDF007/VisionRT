@@ -12,7 +12,7 @@ Item {
     readonly property real sourceY: route.length ? route[0].y : 0
     readonly property real targetX: route.length ? route[route.length - 1].x : 0
     readonly property real targetY: route.length ? route[route.length - 1].y : 0
-    property color lineColor: Theme.iconMuted
+    property color lineColor: WorkbenchStyle.iconMuted
     property real lineWidth: 1.5
     property real viewScale: 1
     property int connectionCount: 1

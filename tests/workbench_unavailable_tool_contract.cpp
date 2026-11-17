@@ -112,7 +112,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    registerStyleModule();
+    initializeUiStyle();
     testing::WorkbenchInstallation installation;
     const auto package = std::filesystem::path(installation.directory().toStdWString()) / "tools-package";
     const auto script  = package / "python/custom/examples/roi_geometry/tool.py";

@@ -6,9 +6,7 @@ import VisionRT.Style 1.0
 
 Rectangle {
     id: root
-    color: Theme.windowBg
-    border.color: QuiColor.Border
-    border.width: 1
+    color: QuiColor.Button
     signal roiRequested()
 
     QuiMenu {
@@ -29,16 +27,16 @@ Rectangle {
     }
 
     RowLayout {
-        anchors.fill: parent; anchors.margins: 1; spacing: 0
+        anchors.fill: parent; spacing: 0
         ResultsModeTabs {
             controller: app
             Layout.preferredWidth: implicitWidth
             Layout.fillHeight: true
         }
         Rectangle {
-            Layout.preferredWidth: app.trainingMode ? Theme.trainingPanelWidth : Theme.thumbnailPanelWidth
+            Layout.preferredWidth: app.trainingMode ? ResultsStyle.trainingPanelWidth : ResultsStyle.thumbnailPanelWidth
             Layout.fillHeight: true
-            color: Theme.surfaceBg
+            color: QuiColor.Button
             ResultsThumbnails {
                 anchors.fill: parent
                 controller: app
@@ -52,7 +50,7 @@ Rectangle {
             }
             Rectangle {
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                width: Theme.separatorWidth; color: QuiColor.Border
+                width: 1; color: QuiColor.Border
             }
         }
         ResultsImageToolbar {

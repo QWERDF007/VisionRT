@@ -6,39 +6,37 @@ import VisionRT.Style 1.0
 
 Rectangle {
     id: root
-    color: Theme.surfaceBg
-    border.color: QuiColor.Border
-    border.width: 1
+    color: QuiColor.Button
     property bool expanded: false
     property string selectedKey: ""
     property string selectedTool: ""
     signal toggleRequested()
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 1; spacing: 0
+        anchors.fill: parent; anchors.margins: 5; spacing: 0
         Rectangle {
-            Layout.fillWidth: true; Layout.preferredHeight: Theme.tabBarHeight; color: Theme.tabBarBg
+            Layout.fillWidth: true; Layout.preferredHeight: 36; color: WorkbenchStyle.tabBarBg
             Rectangle {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: Theme.separatorWidth; color: QuiColor.Border
+                height: 1; color: QuiColor.Border
             }
             RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 6
+                anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
                 QuiText {
                     text: "工具库"
                     font: QuiFont.Body
-                    color: Theme.textPrimary
+                    color: QuiColor.FontPrimary
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle {
                     visible: root.expanded
                     Layout.preferredWidth: Math.min(200, root.width - 120)
                     Layout.preferredHeight: 24
-                    color: Theme.paramEditorBg; radius: Theme.radiusSmall
-                    border.color: filterInput.activeFocus ? Theme.paramEditorFocusBorder : Theme.paramEditorBorder; border.width: 1
+                    color: QuiColor.CardBackground; radius: 3
+                    border.color: filterInput.activeFocus ? QuiColor.Highlight : QuiColor.CardBorder; border.width: 1
                     RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+                        anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 5
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Search; iconSize: Theme.iconSizeSmall; iconColor: Theme.textSecondary
+                            iconSource: QuiFontIcon.Search; iconSize: WorkbenchStyle.iconSizeSmall; iconColor: QuiColor.FontDark
                         }
                         TextInput {
                             id: filterInput
@@ -55,13 +53,13 @@ Rectangle {
                             }
                             Text {
                                 anchors.fill: parent; text: "搜索工具名"
-                                color: Theme.iconMuted; font: QuiFont.Body
+                                color: WorkbenchStyle.iconMuted; font: QuiFont.Body
                                 visible: !filterInput.text && !filterInput.activeFocus
                                 verticalAlignment: Text.AlignVCenter
                             }
                         }
                         QuiTextIcon {
-                            iconSource: QuiFontIcon.Clear; iconSize: Theme.iconSizeTiny; iconColor: Theme.iconMuted
+                            iconSource: QuiFontIcon.Clear; iconSize: WorkbenchStyle.iconSizeTiny; iconColor: WorkbenchStyle.iconMuted
                             visible: filterInput.text.length > 0
                             MouseArea {
                                 anchors.fill: parent
@@ -70,27 +68,19 @@ Rectangle {
                         }
                     }
                 }
-                QuiTextIconButton {
+                WorkbenchActionButton {
                     visible: root.expanded
                     iconSource: QuiFontIcon.Refresh
                     implicitWidth: 24; implicitHeight: 24
-                    radius: Theme.radiusSmall
-                    normalColor: Theme.menuButtonBg
-                    hoverColor: Theme.buttonHoverBg
-                    pressedColor: Theme.buttonPressedBg
-                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                    iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                     text: "刷新 Python 工具"
                     enabled: app.workspaceEnabled; onClicked: app.refreshPython()
                 }
-                QuiTextIconButton {
+                WorkbenchActionButton {
                     objectName: "toolLibraryToggle"
                     iconSource: root.expanded ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
                     implicitWidth: 24; implicitHeight: 24
-                    radius: Theme.radiusSmall
-                    normalColor: Theme.menuButtonBg
-                    hoverColor: Theme.buttonHoverBg
-                    pressedColor: Theme.buttonPressedBg
-                    iconColor: hovered ? Theme.highlight : Theme.menuButtonIcon
+                    iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                     text: root.expanded ? "折叠工具库" : "展开工具库"
                     onClicked: root.toggleRequested()
                 }
@@ -102,7 +92,7 @@ Rectangle {
             visible: root.expanded
             Layout.fillWidth: true; Layout.fillHeight: true
             model: app.toolModel; displayRole: "display"
-            radius: 0; border.width: 0; cellHeight: Theme.treeRowHeight
+            radius: 0; border.width: 0; cellHeight: ToolTreeStyle.treeRowHeight
             delegate: ToolTreeDelegate {
                 treeView: tree.view
                 selectedKey: root.selectedKey

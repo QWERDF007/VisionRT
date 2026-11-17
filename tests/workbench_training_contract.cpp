@@ -58,7 +58,7 @@ try
 {
     QGuiApplication application(argc, argv);
     QQuickStyle::setStyle("Basic");
-    registerStyleModule();
+    initializeUiStyle();
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
     testing::WorkbenchInstallation installation;
     const auto root = std::filesystem::path(installation.directory().toStdWString());

@@ -13,19 +13,19 @@ ColumnLayout {
     spacing: 0
     Rectangle {
         Layout.fillWidth: true
-        Layout.preferredHeight: Theme.tabBarHeight
-        color: Theme.tabBarBg
+        Layout.preferredHeight: 36
+        color: WorkbenchStyle.tabBarBg
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Theme.separatorWidth
+            height: 1
             color: QuiColor.Border
         }
         QuiComboBox {
             id: outputChoice
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: 5
             model: root.controller.imageOutputs
             textRole: "name"
             valueRole: "id"
@@ -48,9 +48,9 @@ ColumnLayout {
             id: thumbnails
             visible: root.controller.imageCount > 0
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: 5
             clip: true
-            spacing: 6
+            spacing: 5
             boundsBehavior: Flickable.StopAtBounds
             boundsMovement: Flickable.StopAtBounds
             model: root.controller.imageCount
@@ -60,37 +60,37 @@ ColumnLayout {
             delegate: Rectangle {
                 required property int index
                 width: thumbnails.width - 8
-                height: Theme.thumbnailRowHeight
+                height: ResultsStyle.thumbnailRowHeight
                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                color: index === root.controller.imageIndex ? Theme.treeItemSelectedBg : Theme.surfaceBg
-                border.color: index === root.controller.imageIndex ? Theme.highlight : QuiColor.Border
+                color: index === root.controller.imageIndex ? ToolTreeStyle.treeItemSelectedBg : QuiColor.Button
+                border.color: index === root.controller.imageIndex ? QuiColor.Highlight : QuiColor.Border
                 border.width: index === root.controller.imageIndex ? 2 : 1
-                radius: Theme.radiusSmall
+                radius: 3
                 ImageViewport {
                     id: thumbnail
                     property int thumbnailIndex: index
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.margins: 4
-                    height: Theme.thumbnailImageHeight
+                    anchors.margins: 5
+                    height: ResultsStyle.thumbnailImageHeight
                     readOnly: true
                     enabled: false
-                    inputRoiColor: Theme.inputRoiColor
-                    outputRoiColor: Theme.outputRoiColor
-                    assistRoiColor: Theme.assistRoiColor
-                    roiStrokeWidth: Theme.roiStrokeWidth
-                    roiHandleSize: Theme.roiHandleSize
+                    inputRoiColor: ResultsStyle.inputRoiColor
+                    outputRoiColor: ResultsStyle.outputRoiColor
+                    assistRoiColor: ResultsStyle.assistRoiColor
+                    roiStrokeWidth: ResultsStyle.roiStrokeWidth
+                    roiHandleSize: ResultsStyle.roiHandleSize
                     Component.onCompleted: root.controller.attachViewport(thumbnail)
                     onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
                 }
                 QuiText {
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 3
+                    anchors.bottomMargin: 5
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: index
                     font: QuiFont.Caption
-                    color: Theme.textPrimary
+                    color: QuiColor.FontPrimary
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -112,16 +112,16 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 36
         visible: root.controller.trainingAvailable
-        color: Theme.surfaceBg
+        color: QuiColor.Button
         QuiButton {
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: 5
             text: "加入训练"
             font: QuiFont.Body
-            normalColor: Theme.surfaceBg
-            hoverColor: Theme.buttonHoverBg
-            pressedColor: Theme.buttonPressedBg
-            textColor: enabled ? Theme.highlight : Theme.disabledText
+            normalColor: QuiColor.Button
+            hoverColor: QuiColor.Hovered
+            pressedColor: QuiColor.ItemPress
+            textColor: enabled ? QuiColor.Highlight : WorkbenchStyle.iconMuted
             opacity: 1
             enabled: root.controller.canAddTrainingImage
             onClicked: root.controller.addTrainingImage()

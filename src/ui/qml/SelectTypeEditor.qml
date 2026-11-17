@@ -87,10 +87,10 @@ Dialog {
     readonly property string previewDescription: app.typeDescription(selectedTypeName, selectedTypeName === "Array" ? selectedDtypeName : "", selectedTypeName === "Array" ? selectedRank : -1)
 
     contentItem: ColumnLayout {
-        spacing: 10
+        spacing: 5
         RowLayout {
-            spacing: 8
-            QuiText { text: "数据类型"; color: Theme.textSecondary }
+            spacing: 5
+            QuiText { text: "数据类型"; color: QuiColor.FontDark }
             ComboBox {
                 id: typeBox
                 Layout.preferredWidth: 180
@@ -99,27 +99,27 @@ Dialog {
             }
         }
         RowLayout {
-            spacing: 8
+            spacing: 5
             visible: root.selectedTypeName === "Array"
-            QuiText { text: "元素类型"; color: Theme.textSecondary }
+            QuiText { text: "元素类型"; color: QuiColor.FontDark }
             ComboBox {
                 id: dtypeBox
                 Layout.preferredWidth: 140
                 model: root.dtypeList
                 textRole: "label"
             }
-            QuiText { text: "数组维度"; color: Theme.textSecondary }
+            QuiText { text: "数组维度"; color: QuiColor.FontDark }
             SpinBox { id: rankBox; from: 1; to: 4 }
         }
         RowLayout {
-            spacing: 8
-            QuiText { text: "类型预览："; font: Qt.font({ bold: true }); color: Theme.textPrimary }
-            QuiText { text: root.previewDescription; color: Theme.highlight; font: Qt.font({ bold: true }) }
+            spacing: 5
+            QuiText { text: "类型预览："; font: Qt.font({ bold: true }); color: QuiColor.FontPrimary }
+            QuiText { text: root.previewDescription; color: QuiColor.Highlight; font: Qt.font({ bold: true }) }
         }
         QuiText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: Theme.textSecondary
+            color: QuiColor.FontDark
             font: Qt.font({ pixelSize: 11 })
             text: "合流的两条输入与输出使用同一类型；未选中的分支必须是跳过或被阻塞，不能回退到另一侧。"
         }
