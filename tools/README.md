@@ -7,7 +7,7 @@
 | CMake 依赖默认路径 | [ConfigDependencyDefaults](../cmake/ConfigDependencyDefaults.cmake) |
 | 开发环境运行库链接 | [link_dependencies.py](link_dependencies.py) |
 | 依赖路径与严格 JSON 读取 | [dependency_utils.py](dependency_utils.py) |
-| 宿主发布、工具 ZIP 部署与校验 | [package_app.py](package_app.py) |
+| 宿主发布、工具 ZIP 部署与校验 | [package_app.py](package_app.py)、[PE依赖闭包与模块清单](runtime_dependencies.py) |
 | 发布证据汇总（提交三元组、环境报告、安装包证据） | [release_evidence.py](release_evidence.py) |
 | 工具声明与包语义校验 | [Qt 校验器](visionrt_validate_tool.cpp)、[ToolPackage](../src/core/ToolPackage.cpp) |
 | 部署事务与资源反例 | [test_package_app.py](../tests/test_package_app.py) |
@@ -30,7 +30,7 @@ build\bin\visionrt_validate_tool.exe --package <工具包目录>
 build\bin\visionrt_validate_tool.exe --package <工具包目录> --load
 ```
 
-阶段和可用状态以 [ToolRegistry](../src/core/ToolRegistry.h)、[PluginLoader](../src/plugins/PluginLoader.h) 和 [CLI](visionrt_validate_tool.cpp) 为准；真实模块验证见 [注册契约](../tests/module_registration_contract.cpp)。
+阶段和可用状态以 [ToolRegistry](../src/core/include/core/ToolRegistry.h)、[PluginLoader](../src/plugins/include/plugins/PluginLoader.h) 和 [CLI](visionrt_validate_tool.cpp) 为准；真实模块验证见 [注册契约](../tests/module_registration_contract.cpp)。
 
 将工具包部署到既有安装目录：
 
@@ -38,13 +38,13 @@ build\bin\visionrt_validate_tool.exe --package <工具包目录> --load
 python tools\package_app.py --deploy-tools-only --install-dir F:\tmp\VisionRT --tools-package <VisionTools.zip> --tools-index <VisionTools.module_index.json> --validator build\bin\visionrt_validate_tool.exe
 ```
 
-部署先在暂存包执行严格 JSON lint 和真实宿主校验，通过后才替换工具目录；不加载模型。依赖默认值只在清单维护，部署 Python 环境来自构建缓存的 `VISIONRT_PYTHON_HOME`。参数与目录保护规则以脚本为准。
+部署先在暂存包执行严格 JSON lint 和真实宿主校验，通过后才替换工具目录；不加载模型。依赖默认值只在清单维护；运行时Python环境入口见[后端](../src/python/include/python/PythonBackend.h)。参数与目录保护规则以脚本为准。
 
 本机交付部署目录约定为 `F:\tmp\VisionRT`，不使用用户目录或系统盘；用户工具、偏好与日志都在软件目录内，`--force-clean` 只替换程序文件并保留 `custom-tools`、`logs`、`ui-preferences.json`。
 
 打包验证同时读文件树和 PE 导入表：目录里不能出现 `python3*.dll`、`python.exe`、`python/Lib`、`python/DLLs`，从 `VisionRT.exe` 出发沿随包模块走一遍导入链，链上任何模块静态导入 `python3*.dll` 都会拒绝（桥接被显式加载，不在启动链上，它的导入会被记录而不是报错）。验证通过后写出 `build/evidence/package-evidence.json`（可用 `--evidence` 指定），记录导入链、桥是否存在、每个产品二进制的导入表与外带运行时扫描结果，供发布归档。
 
-工具包必须是 schema 6：旧构建目录里的 `tools-package` 可能仍是 schema 5/4，宿主校验器会拒绝；当前可用来源是 `F:\Projects\VisionTools\dist\visiontools-deploy.zip` 与其 `.module_index.json`。
+工具包格式与验证入口以[校验器](visionrt_validate_tool.cpp)及[包模型](../src/core/include/core/ToolPackage.h)为准；本地集成资源路径见构建缓存的`VISIONRT_TEST_TOOLS_PACKAGE`。
 
 发布证据汇总（提交三元组 + 构建事实 + 安装包证据 + 各环境报告）：
 

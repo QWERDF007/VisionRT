@@ -59,7 +59,7 @@ int main(int argc, char **argv)
             if (load)
             {
                 visionrt::ToolRegistry registry;
-                registry.setPluginLoader(std::make_shared<visionrt::PluginLoader>());
+                registry.setNativeProvider(std::make_shared<visionrt::PluginLoader>());
                 registry.registerPackage(visionrt::readToolsPackage(path));
                 registry.loadNativeImplementations();
                 bool available = true;

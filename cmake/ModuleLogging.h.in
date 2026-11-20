@@ -1,0 +1,11 @@
+#pragma once
+
+#include "@module@/Export.h"
+#include <memory>
+
+namespace spdlog { class logger; }
+
+namespace visionrt::@module@ {
+@export_macro@ void registerLogger(const std::shared_ptr<spdlog::logger> &logger);
+@export_macro@ void unregisterLogger();
+}

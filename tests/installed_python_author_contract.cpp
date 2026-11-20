@@ -4,7 +4,7 @@
 #include "core/ToolPackage.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 
@@ -57,7 +57,7 @@ try
     const auto packageRoot = std::filesystem::absolute(std::filesystem::path(argv[1]));
     const auto package     = readToolsPackage(packageRoot);
     ToolRegistry registry;
-    registry.setPluginLoader(std::make_shared<PluginLoader>());
+    registry.setNativeProvider(std::make_shared<PluginLoader>());
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 

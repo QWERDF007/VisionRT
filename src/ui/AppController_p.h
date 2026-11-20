@@ -14,7 +14,7 @@
 #include "ui/NodeListModel.h"
 #include "ui/OutputModel.h"
 #include "ui/ProjectOperations.h"
-#include "ui/ResultPresentation.h"
+#include "ResultPresentation.h"
 #include "ui/RecentProjects.h"
 #include "ui/RoiEditSession.h"
 #include "ui/TrainingSession.h"

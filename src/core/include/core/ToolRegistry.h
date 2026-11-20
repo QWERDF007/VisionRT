@@ -1,0 +1,136 @@
+#pragma once
+
+#include "core/Export.h"
+
+#include "core/Error.h"
+#include "core/PythonLoadState.h"
+#include "core/NativeImplementationProvider.h"
+#include "visionrt/contracts/Registry.h"
+
+#include <stdexcept>
+#include <string_view>
+
+namespace visionrt {
+
+VISIONRT_CORE_API ToolDefinition parseDefinition(const std::filesystem::path &path, bool builtin);
+
+class VISIONRT_CORE_API RegistryError : public std::runtime_error
+{
+public:
+    RegistryError(ToolAvailability reason, std::string message)
+        : RegistryError(reason, makeStatus(codeFor(reason), std::move(message)))
+    {
+    }
+
+    RegistryError(ToolAvailability reason, ToolStatus status)
+        : std::runtime_error(status.message)
+        , reason(reason)
+        , status(std::move(status))
+    {
+    }
+
+    // The reason already names the failure class, so the message-only constructor derives the code
+    // from it. One number for every "cannot create" made a missing tool indistinguishable from a
+    // busy runtime; a caller has to be able to branch on NotFound without reading the message.
+    static ErrorCode codeFor(ToolAvailability reason) noexcept
+    {
+        switch (reason)
+        {
+        case ToolAvailability::Available:
+            return ErrorCode::Ok;
+        case ToolAvailability::DefinitionMissing:
+            return ErrorCode::NotFound;
+        case ToolAvailability::ImplementationNotLoaded:
+            return ErrorCode::FailedPrecondition;
+        case ToolAvailability::ImplementationUnavailable:
+            return ErrorCode::ResourceUnavailable;
+        }
+        return ErrorCode::Internal;
+    }
+
+    ToolAvailability reason;
+    ToolStatus       status;
+};
+
+struct ToolsPackage;
+
+// Mutate only between runs; definitions and their factories form a runtime snapshot.
+class VISIONRT_CORE_API ToolRegistry : public IToolRegistry
+{
+public:
+    struct NativeFactory
+    {
+        decltype(ToolFactoryDescriptor::create)  create;
+        decltype(ToolFactoryDescriptor::destroy) destroy;
+    };
+
+    ToolStatus add(const ToolFactoryDescriptor &descriptor) noexcept override;
+
+    const std::map<std::string, NativeFactory, std::less<>> &nativeFactories() const noexcept
+    {
+        return nativeFactories_;
+    }
+
+    const ToolStatus &registrationStatus() const noexcept
+    {
+        return registrationStatus_;
+    }
+
+    void registerPackage(const ToolsPackage &package);
+    void loadNativeImplementations() const;
+    void addDefinition(ToolDefinition definition);
+    void replaceDefinition(ToolDefinition definition);
+    void validateContract(const ToolDefinition &definition) const;
+    void registerCpp(ToolDefinition contract, ToolFactory factory);
+    void setPythonImplementation(std::string toolId, ToolFactory factory, ToolStatus status = {});
+
+    using HostBindingFactory
+        = std::function<std::unique_ptr<IToolInstance>(const ToolDefinition &, const HostToolContext &)>;
+    void registerHostBinding(std::string bindingName, HostBindingFactory factory);
+
+    const ToolDefinition            *find(std::string_view id) const;
+    Availability                     availability(std::string_view id) const;
+    std::unique_ptr<IToolInstance>   create(std::string_view id, const HostToolContext &host = {}) const;
+    std::unique_ptr<IToolInstance>   create(const ToolDefinition &definition, const HostToolContext &host = {}) const;
+
+    const std::vector<ToolDefinition> &definitions() const noexcept
+    {
+        return definitions_;
+    }
+
+    void setNativeProvider(std::shared_ptr<NativeImplementationProvider> loader)
+    {
+        nativeProvider_ = std::move(loader);
+    }
+
+    const std::shared_ptr<NativeImplementationProvider> &nativeProvider() const noexcept
+    {
+        return nativeProvider_;
+    }
+
+private:
+    std::map<std::string, NativeFactory, std::less<>> nativeFactories_;
+    ToolStatus                                        registrationStatus_;
+
+    struct CppImplementation
+    {
+        ToolDefinition contract;
+        ToolFactory    factory;
+    };
+
+    struct PythonImplementation
+    {
+        ToolFactory                      factory;
+        PythonFactoryResolver            resolve;
+        std::shared_ptr<PythonLoadState> loadState;
+    };
+
+    std::shared_ptr<NativeImplementationProvider>                            nativeProvider_;
+    std::vector<ToolDefinition>                              definitions_;
+    std::map<std::string, std::size_t, std::less<>>          index_;
+    std::map<std::string, CppImplementation, std::less<>>    cpp_;
+    std::map<std::string, PythonImplementation, std::less<>> python_;
+    std::map<std::string, HostBindingFactory, std::less<>>   hostBindingExecutors_;
+};
+
+} // namespace visionrt

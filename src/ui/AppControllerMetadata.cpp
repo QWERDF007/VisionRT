@@ -1,4 +1,4 @@
-#include "ui/AppController_p.h"
+#include "AppController_p.h"
 #include "core/NodeContracts.h"
 #include "ui/DisplayTypes.h"
 

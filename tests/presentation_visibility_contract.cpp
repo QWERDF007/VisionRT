@@ -5,7 +5,7 @@
 
 #include "core/ProjectEditor.h"
 #include "ui/OutputModel.h"
-#include "ui/ResultPresentation.h"
+#include "ResultPresentation.h"
 #include "ui/RoiEditSession.h"
 
 #include <QCoreApplication>

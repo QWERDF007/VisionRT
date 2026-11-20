@@ -1,4 +1,5 @@
 #include "core/NodeContracts.h"
+#include "tools/ReceiveTool.h"
 
 #include <visionrt/contracts/Parameters.h>
 #include "runtime/Receiver.h"

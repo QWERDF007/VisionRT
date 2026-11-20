@@ -1,8 +1,8 @@
 #include "common/Version.h"
 
-#include <visionrt/common/VersionDef.h>
-#include <visionrt/common/detail/BuildTime.h>
-#include <visionrt/common/detail/VersionUtils.h>
+#include <common/VersionDef.h>
+#include <common/detail/BuildTime.h>
+#include <common/detail/VersionUtils.h>
 
 namespace visionrt {
 

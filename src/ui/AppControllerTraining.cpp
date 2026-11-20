@@ -1,4 +1,4 @@
-#include "ui/AppController_p.h"
+#include "AppController_p.h"
 
 #include "core/ToolPaths.h"
 #include "log/LogService.h"

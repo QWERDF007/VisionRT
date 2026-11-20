@@ -5,6 +5,14 @@
 #include "ui/ImageViewport.h"
 #include "ui/UiTypes.h"
 #include "ui/UiPreferences.h"
+#include "common/LoggerBinding.h"
+#include "common/Logging.h"
+#include "core/Logging.h"
+#include "plugins/Logging.h"
+#include "python/Logging.h"
+#include "runtime/Logging.h"
+#include "tools/Logging.h"
+#include "ui/Logging.h"
 
 #include <quickui/Color.h>
 
@@ -136,6 +144,15 @@ int main(int argc, char *argv[])
         {
             ~LogShutdown() { visionrt::LogService::instance().shutdown(); }
         } logShutdown;
+        visionrt::LoggerBinding moduleLoggers(visionrt::LogService::instance().sharedLogger(), {
+            {visionrt::common::registerLogger, visionrt::common::unregisterLogger},
+            {visionrt::core::registerLogger, visionrt::core::unregisterLogger},
+            {visionrt::plugins::registerLogger, visionrt::plugins::unregisterLogger},
+            {visionrt::python::registerLogger, visionrt::python::unregisterLogger},
+            {visionrt::runtime::registerLogger, visionrt::runtime::unregisterLogger},
+            {visionrt::tools::registerLogger, visionrt::tools::unregisterLogger},
+            {visionrt::ui::registerLogger, visionrt::ui::unregisterLogger}
+        });
         QMetaObject::Connection startupConnection;
         visionrt::AppController controller(workers, QCoreApplication::applicationDirPath());
         if (parser.isSet("python-report"))

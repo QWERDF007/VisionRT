@@ -30,6 +30,72 @@
 - ...
 -->
 
+### 2026-11-20 — 0.2.0部署与临时文件清理
+
+**目标**
+- 将版本升级为用户指定的0.2.0，部署到F:/tmp/VisionRT，并清理F:/tmp中的VisionRT临时产物。
+
+**当前状态**
+- 已完成：版本在根CMake的project声明统一维护；版本契约从CMake接收预期版本，避免测试再维护一份版本值。MSVC统一启用标准预处理器，修复版本宏将多个分量作为单个逗号表达式传递的问题。
+- 已完成：正式安装目录F:/tmp/VisionRT已更新为0.2.0，9个产品DLL与构建元数据一致；实际启动和原生图像读取示例通过。
+- 已完成：保留原有Python选择、工具编辑权限和最近工程；旧设置一次性转为当前schema及日志等级格式。3个原日志文件的原始内容前缀保持不变。
+- 已完成：390个临时条目移入系统回收站，包含80个临时目录和310个临时文件；正式安装目录及其他项目目录保留。永久删除命令被执行工具以blocked by policy拒绝，未提供具体规则，随后采用可恢复的回收站方式完成清理。
+- 已完成：旧验证证据归档到build/evidence/deployment-0.2.0/previous-evidence；两条预览目录链接移至preserved/preview-links，源码与VisionTools目标保持可用。F:/tmp不再保留VisionRT临时前缀条目。未提交或推送。
+
+**验证证据**
+- 版本契约先对0.2.0期望复现旧DLL返回版本不符；补充版本宏算例进一步复现MSVC传统预处理器将多个参数合并。证据：build/evidence/deployment-0.2.0/version-red.log、version-macros.i。启用/Zc:preprocessor后，重建VisionRT、校验器及受影响测试通过，日志：build/evidence/deployment-0.2.0/build.log。
+- `ctest --test-dir build -C Release -R '^(version_contract|dll_consumer_contract|ui_preferences_contract|workbench_popups_contract)$' --output-on-failure --no-tests=error`为4/4通过；日志：build/evidence/deployment-0.2.0/tests.log。未运行全量测试。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --allow-dirty --tools-package F:/tmp/visionrt-dll-tools.zip --evidence build/evidence/deployment-0.2.0/package.json`通过；日志：build/evidence/deployment-0.2.0/deploy.log。工具ZIP在部署验证后随临时产物移入回收站，可复用的源工具包仍位于build/bin/tools-package。
+- 安装态`VisionRT.exe --version`输出VisionRT 0.2.0；环境报告确认未配置Python且未加载桥接；实际原生示例退出0、stderr为空，100%截图已目视核对。证据位于build/evidence/deployment-0.2.0的version.out、environment.json、native.png及native.err。
+- 安装包最终验证、9个模块版本和产物时间、原日志内容与设置保留、链接目标校验、390项清理及剩余临时项扫描全部通过。唯一汇总证据：build/evidence/deployment-0.2.0/verification.json；清单与逐项结果：cleanup-plan.json、cleanup-results.json；安装证据：package.json。
+
+**下一步**
+- 本轮完成；正式入口为F:/tmp/VisionRT/VisionRT.exe，部署证据保留在build/evidence/deployment-0.2.0。此前日志中的F:/tmp临时证据路径已清理，相关根目录验证文件查阅本轮previous-evidence归档。
+
+### 2026-11-20 — 按目录拆分生产 DLL
+
+**目标**
+- 落实已确认的9个模块DLL、统一日志与按需Python桥接，保留现有Color、Size、Def重构。
+
+**当前状态**
+- 已完成：各模块独立CMake、公共include/模块名和生成导出头；core通过NativeImplementationProvider调用plugins；Error归core，分支和接收工具归tools，传输与接收预检留runtime；计时能力契约归core；解释器、值转换和包加载器归python_bridge；UI与NO_PLUGIN QML归单个UI DLL，样式单例实现归UI cpp。
+- 已完成：LogService持有共享logger、线程池和sinks，模块各自注册registry，应用作用域与桥接加载/卸载管理绑定；部署从EXE与桥接依赖闭包收集DLL，模块清单及各自构建时间由CMake目标派生；测试编排迁到tests/CMakeLists.txt，文档索引已同步。
+- 已完成：libavoid断言使用标准assert，解除Debug构建对MFC的依赖；该改动位于adaptagrams子模块，必须随本轮交付保留。QuickUI、VisionTools和Contracts未修改。
+- 已完成：验证后的便携目录为F:/tmp/VisionRT-dll-verified；使用已通过真实校验的build/bin/tools-package快照F:/tmp/visionrt-dll-tools.zip，现有VisionTools旧发行ZIP缺少当前声明schema，不能用于本轮验证。F:/tmp/VisionRT-dll-modules是未完成的首次打包目录，不作为交付。
+- 未提交或推送；本轮无待用户裁决事项。
+
+**验证证据**
+- 真实DLL消费测试先复现EXE与DLL内LogService地址不同；共享库实现后通过。共享logger测试先失败于缺少sharedLogger，再验证registry注册/注销、级别共享、文件/窗口、关闭排空与重启。构建日志：F:/tmp/visionrt-dll-common-log-build.log、F:/tmp/visionrt-dll-logging-red.log、F:/tmp/visionrt-dll-logging-green.log。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT dll_consumer_contract version_contract --parallel 8`通过，日志：F:/tmp/visionrt-dll-final-build.log；Debug的VisionRT和dll_consumer_contract构建通过，日志：F:/tmp/visionrt-dll-debug-delivery-build.log。
+- 最终46项定向ctest覆盖DLL API、异常与元对象、C++/QML单例、日志、插件、Python、所有权与读回、原生/跨语言安装链、训练、设置和弹窗。F:/tmp/visionrt-dll-final-test.log中41项通过，5个旧EXE因测试目标迁目录而未重建，返回0xc0000139；显式重建这5个目标后，`ctest --test-dir build -C Release --rerun-failed --output-on-failure --no-tests=error`为5/5通过，日志：F:/tmp/visionrt-dll-stale-consumers-build.log、F:/tmp/visionrt-dll-final-rerun.log。46项均已验证通过；未运行全量测试。
+- `ctest --test-dir build-dll-debug -C Debug -R '^dll_consumer_contract$' --output-on-failure --no-tests=error`为1/1通过，日志：F:/tmp/visionrt-dll-debug-final-test.log；BUILD_APP=OFF配置通过，日志：F:/tmp/visionrt-dll-headless-configure.log。
+- `tools/build.cmd cmake --install build --prefix F:/tmp/visionrt-dll-sdk`通过；仓库外F:/tmp/visionrt-installed-consumer使用安装头和导入库独立配置、编译后运行，输出Installed host DLL consumer passed。日志：F:/tmp/visionrt-dll-install.log、F:/tmp/visionrt-installed-consumer-configure.log、F:/tmp/visionrt-installed-consumer-build.log。
+- `tools/build.cmd cmake -DDESTINATION=F:/tmp/VisionRT-cmake-dll -P build/Deploy-Release.cmake`通过，日志：F:/tmp/visionrt-dll-cmake-deploy.log；Python打包及最终刷新验证通过，日志：F:/tmp/visionrt-dll-package-final.log、F:/tmp/visionrt-dll-package-refresh.log；证据：F:/tmp/visionrt-dll-package-evidence.json。Release、Debug及两种部署目录均验证9个模块的元数据时间等于对应DLL时间；启动链无CPython，便携包无解释器和测试DLL。
+- 实际安装目录未配置Python报告退出3、phase为unconfigured且未加载解释器；配置所选环境后报告退出0、phase为ready，桥接和CPython均实际加载。原生图像读取和Python图像统计运行并截图退出0、stderr为空；100%缩放图已目视核对，无新增外观断言。证据：F:/tmp/visionrt-dll-unconfigured.json、F:/tmp/visionrt-dll-ready.json、F:/tmp/visionrt-dll-native.png、F:/tmp/visionrt-dll-python.png。
+- 文档源码链接、禁止字符扫描、Windows CRLF口径的父仓与adaptagrams `git diff --check`通过；旧生产目标和旧加载器接口引用无残留。
+
+**下一步**
+- 本轮完成。后续维护入口为各模块CMake和公共头；提交时先处理adaptagrams子模块的assertions.h改动，再更新父仓gitlink，并保留本轮开始前的样式重构。
+
+### 2026-11-20 — 样式默认值拆分与自动属性
+
+**目标**
+- 新增Color.cpp和Size.cpp，颜色及尺寸改用本地自动属性宏。
+
+**当前状态**
+- 已完成：从QuickUI的Def.h提取自动属性实现到src/ui/Def.h，宏使用VISIONRT_Q_PROPERTY_AUTO前缀，提供读写、去重赋值和变更通知；未引入QuickUI导出定义和按钮枚举。
+- 已完成：VisionRTColor和VisionRTSize均使用自动属性，默认值分别集中在各自cpp构造函数中；删除旧尺寸枚举及手写颜色getter，CMake已注册新实现文件。QML通过原有同名属性读取，C++通过单例实例getter访问。
+- 已完成：README分别索引属性声明、默认值及宏实现。未新增外观断言，未提交或推送。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract workbench_status_contract workbench_interaction_contract tool_editor_dialog_test` → 构建通过；日志：F:/tmp/visionrt-style-auto-property-build.log。
+- `ctest --test-dir build -C Release -R '^(workbench_canvas_contract|workbench_status_contract|workbench_interaction_contract|tool_editor_dialog_test|workbench_popups_contract)$' --output-on-failure --no-tests=error` → 5/5通过；日志：F:/tmp/visionrt-style-auto-property-test.log。
+- 100%缩放下实际示例、训练、设置和自定义工具窗口截图成功，进程退出0、stderr为空，已目视核对主窗口显示；日志：F:/tmp/visionrt-style-auto-property-capture.out及.err，截图位于F:/tmp/visionrt-ui-shots。
+- README界面源码链接、新增字符扫描及Windows CRLF口径的git diff --check通过。
+
+**下一步**
+- 本轮完成；默认值维护Color.cpp、Size.cpp，属性实现维护本地Def.h。
+
 ### 2026-11-20 — 节点专用配色与应用样式单例
 
 **目标**

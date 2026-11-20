@@ -6,17 +6,37 @@ if(NOT DEFINED DESTINATION)
     set(DESTINATION "@CMAKE_BINARY_DIR@/dist/VisionRT")
 endif()
 file(MAKE_DIRECTORY "${DESTINATION}")
-if(EXISTS "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRT.exe")
-    set(host_executable "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/VisionRT.exe")
-elseif(EXISTS "@CMAKE_BINARY_DIR@/bin/VisionRT.exe")
-    set(host_executable "@CMAKE_BINARY_DIR@/bin/VisionRT.exe")
-else()
-    set(host_executable "@CMAKE_BINARY_DIR@/VisionRT.exe")
+set(host_executable "$<TARGET_FILE:VisionRT>")
+set(bridge_library "$<TARGET_FILE:visionrt_python_bridge>")
+file(COPY "${host_executable}" "${bridge_library}" DESTINATION "${DESTINATION}")
+
+file(GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES "${host_executable}"
+    LIBRARIES "${bridge_library}"
+    DIRECTORIES "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@" "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
+    RESOLVED_DEPENDENCIES_VAR dependencies UNRESOLVED_DEPENDENCIES_VAR unresolved
+    PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*" "[Pp][Yy][Tt][Hh][Oo][Nn]3.*" "[Vv][Cc][Rr][Uu][Nn][Tt][Ii][Mm][Ee]140.*" "[Mm][Ss][Vv][Cc][Pp]140.*" "[Uu][Cc][Rr][Tt][Bb][Aa][Ss][Ee].*"
+    POST_EXCLUDE_REGEXES ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\\\][Ss][Yy][Ss][Tt][Ee][Mm]32.*")
+if(unresolved)
+    message(FATAL_ERROR "Unresolved portable runtime dependencies: ${unresolved}")
 endif()
-file(COPY "${host_executable}" DESTINATION "${DESTINATION}")
-# Python 桥接模块不参与链接，随程序一起部署；解释器本身由用户环境提供，安装目录不携带运行时。
-file(COPY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/visionrt_python_bridge.dll" DESTINATION "${DESTINATION}")
-execute_process(COMMAND "@VISIONRT_WINDEPLOYQT@" --release --no-translations
+file(COPY ${dependencies} DESTINATION "${DESTINATION}")
+file(READ "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/visionrt-modules.json" modules)
+string(JSON module_count LENGTH "${modules}" modules)
+math(EXPR last_module "${module_count} - 1")
+foreach(index RANGE ${last_module})
+    string(JSON library GET "${modules}" modules ${index} library)
+    string(JSON metadata GET "${modules}" modules ${index} metadata)
+    if(NOT EXISTS "${DESTINATION}/${library}")
+        message(FATAL_ERROR "Module is outside the dependency closure: ${library}")
+    endif()
+    file(COPY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/${metadata}" DESTINATION "${DESTINATION}")
+endforeach()
+file(COPY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/visionrt-modules.json"
+    "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/build_info.json"
+    "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@/contracts-build-info.json"
+    DESTINATION "${DESTINATION}")
+execute_process(COMMAND "@VISIONRT_WINDEPLOYQT@" "$<IF:$<CONFIG:Debug>,--debug,--release>" --no-translations
     --qmldir "@CMAKE_SOURCE_DIR@/src/ui/qml"
     --qmlimport "@VISIONRT_QUICKUI_QML_ROOT@"
     --dir "${DESTINATION}" "${DESTINATION}/VisionRT.exe"
@@ -34,17 +54,6 @@ if(EXISTS "@CMAKE_SOURCE_DIR@/examples")
         PATTERN "__pycache__" EXCLUDE)
 endif()
 
-file(GET_RUNTIME_DEPENDENCIES
-    EXECUTABLES "${DESTINATION}/VisionRT.exe"
-    LIBRARIES "${DESTINATION}/visionrt_python_bridge.dll"
-    DIRECTORIES "@VISIONRT_OPENCV_BIN@" "@VISIONRT_QT_BIN@" "@VISIONRT_QUICKUI_QML_ROOT@/quickui"
-    RESOLVED_DEPENDENCIES_VAR dependencies UNRESOLVED_DEPENDENCIES_VAR unresolved
-    PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*" "[Pp][Yy][Tt][Hh][Oo][Nn]3.*" "[Vv][Cc][Rr][Uu][Nn][Tt][Ii][Mm][Ee]140.*" "[Mm][Ss][Vv][Cc][Pp]140.*" "[Uu][Cc][Rr][Tt][Bb][Aa][Ss][Ee].*"
-    POST_EXCLUDE_REGEXES ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\\\][Ss][Yy][Ss][Tt][Ee][Mm]32.*")
-if(unresolved)
-    message(FATAL_ERROR "Unresolved portable runtime dependencies: ${unresolved}")
-endif()
-file(COPY ${dependencies} DESTINATION "${DESTINATION}")
 file(WRITE "${DESTINATION}/qt.conf" "[Paths]\nPrefix=.\nPlugins=.\nQmlImports=qml\n")
 file(MAKE_DIRECTORY "${DESTINATION}/licenses")
 file(COPY "@CMAKE_SOURCE_DIR@/LICENSE" DESTINATION "${DESTINATION}/licenses/VisionRT")

@@ -501,7 +501,7 @@ void incompleteInstallation(ToolRegistry &completeRegistry)
 {
     ToolRegistry registry;
     registry.addDefinition(*completeRegistry.find("PreprocessImage"));
-    registry.setPluginLoader(completeRegistry.pluginLoader());
+    registry.setNativeProvider(completeRegistry.nativeProvider());
     assert((registry.availability("ReadImage").state == ToolAvailability::DefinitionMissing));
     cv::Mat pixels(1, 2, CV_8UC1);
     pixels.at<unsigned char>(0, 0) = 127;
@@ -525,7 +525,7 @@ int main(int argc, char **argv)
     {
         assert((argc == 2));
         ToolRegistry registry;
-        registry.setPluginLoader(std::make_shared<PluginLoader>());
+        registry.setNativeProvider(std::make_shared<PluginLoader>());
         registry.registerPackage(readToolsPackage(std::filesystem::u8path(argv[1])));
         registry.loadNativeImplementations();
         readImages(registry);

@@ -1,7 +1,7 @@
 #include "core/Error.h"
 #include "core/InputNormalizer.h"
 #include "core/NodeContracts.h"
-#include "runtime/RuntimeInternal.h"
+#include "RuntimeInternal.h"
 
 #include <core/ToolValueValidation.h>
 

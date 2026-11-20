@@ -1,6 +1,6 @@
 #include "core/DefinitionJson.h"
 #include "core/ToolRegistry.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 

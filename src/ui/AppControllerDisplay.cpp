@@ -1,4 +1,4 @@
-#include "ui/AppController_p.h"
+#include "AppController_p.h"
 
 #include <algorithm>
 

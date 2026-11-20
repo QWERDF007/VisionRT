@@ -1,4 +1,4 @@
-#include "AboutReport.h"
+#include "ui/AboutReport.h"
 
 #include <QDateTime>
 #include <QLatin1Char>

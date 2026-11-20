@@ -1,5 +1,11 @@
 #include "plugins/PluginLoader.h"
-#include "python/PythonInterop.h"
+
+#ifdef _WIN32
+#    define NOMINMAX
+#    define WIN32_LEAN_AND_MEAN
+#    include <windows.h>
+#endif
+#include "python_bridge/PythonInterop.h"
 #include "ToolResultAssertions.h"
 
 #include <pybind11/embed.h>

@@ -1,4 +1,4 @@
-#include "python/PythonInterop.h"
+#include "python_bridge/PythonInterop.h"
 #include "ToolResultAssertions.h"
 
 #include <pybind11/embed.h>

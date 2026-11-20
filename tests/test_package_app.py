@@ -60,7 +60,18 @@ def write_pe(path: Path, imports: tuple[str, ...] = (), delay_imports: tuple[str
     path.write_bytes(bytes(image))
 
 
-def install_examples(root: Path) -> None:
+def write_modules(root: Path, names: tuple[str, ...] = ("visionrt_python_bridge",)) -> None:
+    entries = []
+    for name in names:
+        metadata = f"{name}-build-info.json"
+        entries.append({"component": name, "library": f"{name}.dll", "metadata": metadata})
+        (root / metadata).write_text(json.dumps({"schema_version": 1, "component": name,
+            "version": "1.0", "commit": "abc", "dirty": False, "built_at_epoch": 100}), encoding="utf-8")
+    (root / "visionrt-modules.json").write_text(json.dumps({"schema_version": 1, "modules": entries}), encoding="utf-8")
+
+
+def install_fixture_assets(root: Path) -> None:
+    write_modules(root)
     """Copies the shipped examples into a fixture installation, as real packaging does."""
     shutil.copytree(package_app.REPO_ROOT / "examples", root / "examples", dirs_exist_ok=True)
 
@@ -86,8 +97,9 @@ class ToolsDeploymentContract(unittest.TestCase):
         (self.source / "bin/plugin.dll").write_bytes(b"metadata-only module")
         (self.source / "bin/runtime.dll").write_bytes(b"runtime dependency")
         self.definition = {
+            "schema_version": 1,
             "name_en": "test.plugin", "name_zh": "部署测试",
-            "version": "1.0.0", "implementation": {"kind": "cpp"},
+            "version": "1.0.0", "implementation": {"kind": 0},
         }
         self.index = {
             "schema_version": 1, "variant": "cpu",
@@ -278,7 +290,7 @@ class InstallationContract(unittest.TestCase):
             (root / "contracts-build-info.json").write_text(
                 '{"schema_version": 1, "component": "VisionRTContracts", "version": "0.1.0", "commit": "def", "dirty": false, "built_at_epoch": 1793082712}\n',
                 encoding="utf-8")
-            install_examples(root)
+            install_fixture_assets(root)
             package_app.verify_package(root, require_qt=False)
             for name in ("quickui.dll", "visionrt_python_bridge.dll", "build_info.json", "contracts-build-info.json"):
                 with self.subTest(name=name):
@@ -519,7 +531,15 @@ class InstallationContract(unittest.TestCase):
             root = Path(temporary)
             build = root / "build"
             (build / "bin").mkdir(parents=True)
-            (build / "bin" / "visionrt_python_bridge.dll").write_bytes(b"bridge")
+            write_modules(build / "bin", ("visionrt_ui", "visionrt_core", "visionrt_common", "visionrt_python_bridge", "visionrt_python"))
+            write_pe(build / "bin" / "VisionRT.exe", imports=("visionrt_ui.dll",))
+            write_pe(build / "bin" / "visionrt_ui.dll", imports=("visionrt_core.dll",))
+            write_pe(build / "bin" / "visionrt_core.dll", imports=("visionrt_common.dll",))
+            write_pe(build / "bin" / "visionrt_common.dll")
+            write_pe(build / "bin" / "visionrt_python_bridge.dll", imports=("visionrt_python.dll", "python312.dll"))
+            write_pe(build / "bin" / "visionrt_python.dll", imports=("visionrt_core.dll",))
+            write_pe(build / "bin" / "visionrt_obsolete.dll")
+            write_pe(build / "bin" / "python312.dll")
             install = root / "install"
             install.mkdir()
 
@@ -527,6 +547,12 @@ class InstallationContract(unittest.TestCase):
 
             self.assertTrue((install / "visionrt_python_bridge.dll").is_file(),
                             "packaging dropped the Python bridge")
+            self.assertTrue((install / "visionrt_ui.dll").is_file())
+            self.assertTrue((install / "visionrt_core.dll").is_file())
+            self.assertTrue((install / "visionrt_common.dll").is_file())
+            self.assertTrue((install / "visionrt_python.dll").is_file())
+            self.assertFalse((install / "visionrt_obsolete.dll").exists())
+            self.assertFalse((install / "python312.dll").exists())
 
 
 class PeImportContract(unittest.TestCase):
@@ -565,7 +591,7 @@ class PeImportContract(unittest.TestCase):
             write_pe(root / "visionrt_python_bridge.dll", imports=("python312.dll",))
             for name in (package_app.MARKER_FILE, "quickui.dll"):
                 (root / name).touch()
-            install_examples(root)
+            install_fixture_assets(root)
 
             package_app.verify_package(root, require_qt=False, allow_dirty=True)
 
@@ -826,7 +852,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
         (install_dir / "visionrt_python_bridge.dll").touch()
-        install_examples(install_dir)
+        install_fixture_assets(install_dir)
 
         # 1. Unknown commit -> rejected
         (install_dir / "build_info.json").write_text(
@@ -869,7 +895,7 @@ class BuildMetadataScriptContract(unittest.TestCase):
         (install_dir / package_app.MARKER_FILE).touch()
         (install_dir / "quickui.dll").touch()
         (install_dir / "visionrt_python_bridge.dll").touch()
-        install_examples(install_dir)
+        install_fixture_assets(install_dir)
 
         # Missing host build_info.json
         (install_dir / "contracts-build-info.json").write_text(

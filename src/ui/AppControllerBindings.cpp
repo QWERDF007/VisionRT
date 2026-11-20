@@ -1,6 +1,6 @@
 #include "ui/OutputModel.h"
 #include "core/NodeContracts.h"
-#include "ui/AppController_p.h"
+#include "AppController_p.h"
 #include "log/LogService.h"
 
 namespace visionrt {

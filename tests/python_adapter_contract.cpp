@@ -2,11 +2,11 @@
 #include "core/Error.h"
 #include "ToolResultAssertions.h"
 #include "core/ToolRegistry.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 #include <pybind11/embed.h>
 
-#include "runtime/Snapshot.h"
+#include "core/ExecutionMetrics.h"
 
 #include <QTemporaryDir>
 #include <cassert>

@@ -172,7 +172,7 @@ int main()
 
     auto         loader = std::make_shared<PluginLoader>();
     ToolRegistry modules;
-    modules.setPluginLoader(loader);
+    modules.setNativeProvider(loader);
     auto unavailable                        = package(definition("test.missing.dll"));
     unavailable.tools.front().moduleLibrary = "nonexistent-module.dll";
     unavailable.tools.push_back({host, {}});

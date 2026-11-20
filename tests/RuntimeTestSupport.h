@@ -4,7 +4,7 @@
 // performance assertion: callers want "this must finish", not a fixed sleep.
 
 #include "core/ToolRegistry.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "runtime/RuntimeEngine.h"
 
 #include <cassert>

@@ -3,10 +3,11 @@
 // to run the tool examples. The fixture builds its own tools package under a temporary root.
 
 #include "core/NodeContracts.h"
+#include "tools/ReceiveTool.h"
 #include "core/ProjectStorage.h"
 #include "core/ToolPackage.h"
 #include "plugins/PluginLoader.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 #include "runtime/Receiver.h"
 #include "runtime/RuntimeEngine.h"
@@ -229,7 +230,7 @@ void runPackageReplacement(PythonRuntime &python)
         auto       loader1 = std::make_shared<PluginLoader>();
         ToolRegistry registry1;
         registerReceiveTools(registry1);
-        registry1.setPluginLoader(loader1);
+        registry1.setNativeProvider(loader1);
         registry1.registerPackage(pkg1);
         registry1.loadNativeImplementations();
         setupPython(registry1, python);
@@ -546,7 +547,7 @@ void runPackageReplacement(PythonRuntime &python)
     auto       loader2 = std::make_shared<PluginLoader>();
     ToolRegistry registry2;
     registerReceiveTools(registry2);
-    registry2.setPluginLoader(loader2);
+    registry2.setNativeProvider(loader2);
     registry2.registerPackage(pkg2);
     registry2.loadNativeImplementations();
     setupPython(registry2, python);

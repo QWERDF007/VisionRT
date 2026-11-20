@@ -2,7 +2,7 @@
 #include "ToolResultAssertions.h"
 #include "core/Error.h"
 #include "core/ToolRegistry.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 
 #include <pybind11/embed.h>

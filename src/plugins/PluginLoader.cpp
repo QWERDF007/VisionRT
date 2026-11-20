@@ -1,8 +1,10 @@
 #include "plugins/PluginLoader.h"
+#include "LoadedModule.h"
 
 #include "core/JsonFields.h"
 
 #include <algorithm>
+#include <set>
 
 #ifndef NOMINMAX
 #    define NOMINMAX
@@ -46,6 +48,22 @@ void PluginLoader::registerPackage(const ToolsPackage &package)
     std::lock_guard lock(mutex_);
     failures_.clear();
     index_ = std::move(index);
+}
+
+void PluginLoader::loadImplementations(std::span<const std::string_view> toolIds)
+{
+    std::set<std::filesystem::path> paths;
+    for (const auto toolId : toolIds)
+    {
+        const auto path = resolveModulePath(toolId);
+        if (!path.empty())
+            paths.insert(path);
+    }
+    for (const auto &path : paths)
+    {
+        ToolStatus status;
+        loadModule(path, status);
+    }
 }
 
 std::filesystem::path PluginLoader::resolveModulePath(std::string_view toolId) const

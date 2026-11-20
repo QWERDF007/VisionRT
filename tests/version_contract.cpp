@@ -4,27 +4,23 @@
 
 #include "common/Version.h"
 
-#include <visionrt/common/VersionDef.h>
+#include <common/VersionDef.h>
 
 #include <cassert>
 #include <iostream>
 
 using namespace visionrt;
 
-int main()
+int main(int argc, char **argv)
 {
+    assert(argc == 3);
     // 1. 验证版本宏
-    static_assert(VISIONRT_VERSION_MAJOR == 0, "Major version should be 0");
-    static_assert(VISIONRT_VERSION_MINOR == 1, "Minor version should be 1");
-    static_assert(VISIONRT_VERSION_PATCH == 0, "Patch version should be 0");
-    static_assert(VISIONRT_VERSION_TWEAK == 0, "Tweak version should be 0");
-
-    assert(VISIONRT_VERSION >= VISIONRT_MAKE_VERSION(0, 1, 0));
-    assert(VISIONRT_VERSION_API_AT_LEAST(0, 1));
+    static_assert(VISIONRT_MAKE_VERSION(1, 2, 3, 4) == 1020304U);
+    static_assert(VISIONRT_MAKE_VERSION(1, 2, 3) == 1020300U);
 
     // 2. 验证接口返回
     const std::string version_str = GetVersionString();
-    assert(version_str == "0.1.0");
+    assert(version_str == argv[1]);
 
     const std::string branch_str = GetBranchString();
     assert(!branch_str.empty());
@@ -42,10 +38,12 @@ int main()
 
     // 3. 验证结构体
     VersionInfo info = GetVersion();
-    assert(info.major == 0);
-    assert(info.minor == 1);
-    assert(info.patch == 0);
-    assert(info.tweak == 0);
+    assert(info.major == VISIONRT_VERSION_MAJOR);
+    assert(info.minor == VISIONRT_VERSION_MINOR);
+    assert(info.patch == VISIONRT_VERSION_PATCH);
+    assert(info.tweak == VISIONRT_VERSION_TWEAK);
+    assert(VISIONRT_VERSION_API_AT_LEAST(info.major, info.minor));
+    assert(!VISIONRT_VERSION_API_AT_LEAST(info.major + 1, 0));
     assert(info.version_string == version_str);
     assert(info.branch == branch_str);
     assert(info.commit == commit_str);
@@ -55,7 +53,7 @@ int main()
     // 4. 验证 Contracts 版本：版本与提交来自 Contracts 自己的仓库，构建时刻由构建产物元数据提供，
     //    这里不伪造时间戳。
     ComponentBuildInfo contracts = GetContractsVersion();
-    assert(contracts.version == "0.1.0");
+    assert(contracts.version == argv[2]);
     assert(!contracts.commit.empty());
     assert(contracts.commit.length() == 40);
     assert(contracts.built_at_epoch == 0);

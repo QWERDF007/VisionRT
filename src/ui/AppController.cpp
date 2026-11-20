@@ -1,4 +1,5 @@
 #include "common/Version.h"
+#include "tools/ReceiveTool.h"
 #include "log/LogService.h"
 #include "core/DefinitionJson.h"
 #include "core/ExampleProject.h"
@@ -6,8 +7,8 @@
 #include "core/Sequence.h"
 #include "core/ToolPaths.h"
 #include "runtime/Receiver.h"
-#include "runtime/SelectTool.h"
-#include "ui/AppController_p.h"
+#include "tools/SelectTool.h"
+#include "AppController_p.h"
 #include "ui/AboutReport.h"
 #include "ui/DurationText.h"
 #include "ui/Diagnostics.h"
@@ -130,7 +131,7 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     UiPreferences::loadSettings(settings, &settingsFailure);
 
     pluginLoader = std::make_shared<PluginLoader>();
-    registry.setPluginLoader(pluginLoader);
+    registry.setNativeProvider(pluginLoader);
     registerReceiveTools(registry);
     registerSelectTools(registry);
     loadComponentBuildInfo();

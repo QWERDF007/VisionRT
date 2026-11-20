@@ -107,7 +107,7 @@ int main(int argc, char **argv)
             }
         }
         ToolRegistry registry;
-        registry.setPluginLoader(std::make_shared<PluginLoader>());
+        registry.setNativeProvider(std::make_shared<PluginLoader>());
         registry.registerPackage(readToolsPackage(std::filesystem::path(arguments.at(1).toStdU16String())));
         registry.loadNativeImplementations();
         ProjectStorage storage(registry);

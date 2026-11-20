@@ -1,12 +1,12 @@
-#include "UiTypes.h"
-#include "Color.h"
-#include "Size.h"
+#include "ui/UiTypes.h"
+#include "ui/Color.h"
+#include "ui/Size.h"
 #include "core/ToolDefinition.h"
 #include "runtime/RuntimeEngine.h"
 #include "runtime/Snapshot.h"
 #include "python/PythonEnvironment.h"
 #include "log/LogLevel.h"
-#include "UiState.h"
+#include "ui/UiState.h"
 #include "UiEnums.h"
 #include <QQmlEngine>
 #include <quickui/Color.h>

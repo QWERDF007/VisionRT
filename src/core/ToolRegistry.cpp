@@ -1,10 +1,9 @@
 #include "core/ToolRegistry.h"
 
 #include "core/DefinitionJson.h"
-#include "plugins/PluginLoader.h"
+#include "core/ToolPackage.h"
 
 #include <algorithm>
-#include <set>
 
 namespace visionrt {
 namespace {
@@ -90,8 +89,8 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
             throw ContractError("工具包内 name_en 重复：" + definition.nameEn);
         definitions.push_back(std::move(definition));
     }
-    if (pluginLoader_)
-        pluginLoader_->registerPackage(package);
+    if (nativeProvider_)
+        nativeProvider_->registerPackage(package);
     definitions_ = std::move(definitions);
     index_       = std::move(index);
     python_.clear();
@@ -99,21 +98,13 @@ void ToolRegistry::registerPackage(const ToolsPackage &package)
 
 void ToolRegistry::loadNativeImplementations() const
 {
-    if (!pluginLoader_)
+    if (!nativeProvider_)
         return;
-    std::set<std::filesystem::path> paths;
+    std::vector<std::string_view> toolIds;
     for (const auto &definition : definitions_)
         if (definition.kind == ToolKind::Cpp && !cpp_.contains(definition.nameEn))
-        {
-            const auto path = pluginLoader_->resolveModulePath(definition.nameEn);
-            if (!path.empty())
-                paths.insert(path);
-        }
-    for (const auto &path : paths)
-    {
-        ToolStatus status;
-        pluginLoader_->loadModule(path, status);
-    }
+            toolIds.push_back(definition.nameEn);
+    nativeProvider_->loadImplementations(toolIds);
 }
 
 void ToolRegistry::addDefinition(ToolDefinition definition)
@@ -224,8 +215,8 @@ Availability ToolRegistry::availability(std::string_view id) const
     {
         if (cpp_.contains(definition->nameEn))
             return {ToolAvailability::Available, {}};
-        if (pluginLoader_)
-            return pluginLoader_->availability(definition->nameEn);
+        if (nativeProvider_)
+            return nativeProvider_->availability(definition->nameEn);
         return {
             ToolAvailability::ImplementationUnavailable,
             makeStatus(ErrorCode::ResourceUnavailable, "C++ 实现不可用：" + definition->nameEn,
@@ -292,8 +283,8 @@ std::unique_ptr<IToolInstance> ToolRegistry::create(const ToolDefinition &defini
                                     "工具工厂返回空实例：" + std::string(id));
             return instance;
         }
-        if (pluginLoader_)
-            return pluginLoader_->createAdapter(definition.nameEn);
+        if (nativeProvider_)
+            return nativeProvider_->createAdapter(definition.nameEn);
     }
     const auto it = python_.find(id);
     if (it == python_.end() || !it->second.factory)

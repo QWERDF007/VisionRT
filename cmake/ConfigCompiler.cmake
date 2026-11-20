@@ -6,7 +6,7 @@ if(MSVC)
     # /bigobj: 增加目标文件中的节数
     # /permissive-: 启用严格标准一致性模式
     # /Zc:__cplusplus: 报告正确的 C++ 标准版本宏
-    add_compile_options(/utf-8 /W4 /permissive- /Zc:__cplusplus /bigobj)
+    add_compile_options(/utf-8 /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /bigobj)
     # MSVC 统一使用动态运行库，避免跨库链接冲突
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 else()

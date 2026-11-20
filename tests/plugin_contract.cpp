@@ -1,4 +1,3 @@
-#include "ui/UiState.h"
 #ifdef NDEBUG
 #    undef NDEBUG
 #endif
@@ -8,6 +7,12 @@
 #include "ToolResultAssertions.h"
 #include "core/DefinitionJson.h"
 #include "plugins/PluginLoader.h"
+
+#ifdef _WIN32
+#    define NOMINMAX
+#    define WIN32_LEAN_AND_MEAN
+#    include <windows.h>
+#endif
 
 #include <core/ToolPackage.h>
 
@@ -20,6 +25,7 @@ using namespace visionrt;
 
 #include "runtime/RuntimeEngine.h"
 #if defined(VISIONRT_BUILD_APP)
+#    include "ui/UiState.h"
 #    include "ui/AppController.h"
 #    include "ui/OutputModel.h"
 #endif
@@ -268,7 +274,7 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
         auto       loader     = std::make_shared<PluginLoader>();
         loader->registerModule(definition.nameEn, modulePath);
         ToolRegistry registry;
-        registry.setPluginLoader(loader);
+        registry.setNativeProvider(loader);
         registry.addDefinition(definition);
         registry.loadNativeImplementations();
 
@@ -311,7 +317,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     loader->registerModule("test.plugin.function", modulePath);
 
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
 
     ToolDefinition def;
     def.nameEn           = "test.plugin.function";
@@ -552,7 +558,7 @@ void packageRegistration(const std::filesystem::path &modulePath)
 
     auto         loader = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
 
     assert(registry.find("test.plugin.counter") != nullptr);
@@ -1159,7 +1165,7 @@ void registryIntegration(const std::filesystem::path &modulePath)
     loader->registerModule("test.plugin.counter", modulePath);
 
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
 
     ToolDefinition def;
     def.nameEn           = "test.plugin.counter";
@@ -1340,7 +1346,7 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
 
     auto         loader = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
 
     registry.loadNativeImplementations();

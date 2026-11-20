@@ -5,7 +5,7 @@
 #include "core/ProjectEditor.h"
 #include "core/ProjectStorage.h"
 #include "runtime/RuntimeEngine.h"
-#include "runtime/SelectTool.h"
+#include "tools/SelectTool.h"
 #include "ToolResultAssertions.h"
 
 #include <atomic>

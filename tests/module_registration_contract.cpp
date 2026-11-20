@@ -23,7 +23,7 @@ try
     loader->registerModule("test.registration.second", path);
     assert(loader->loadedModuleCount() == 0);
     ToolRegistry catalog;
-    catalog.setPluginLoader(loader);
+    catalog.setNativeProvider(loader);
     ToolsPackage package;
     for (const char *id : {"test.registration.first", "test.registration.second", "not.registered"})
     {
@@ -60,8 +60,8 @@ try
     ToolStatus status;
     auto       module = loader->loadModule(path, status);
     assert(module && status);
-    assert(module->registry.nativeFactories().size() == 2);
-    assert(module->registry.nativeFactories().contains("test.registration.first"));
+    assert(loader->availability("test.registration.first").state == ToolAvailability::Available);
+    assert(loader->availability("test.registration.second").state == ToolAvailability::Available);
     assert(loader->loadedModuleCount() == 1);
     assert(loader->loadModule(path, status) == module);
     QLibrary probe(QString::fromLocal8Bit(argv[1]));
@@ -135,7 +135,7 @@ try
     std::weak_ptr<const LoadedModule> ownership = module;
     assert(probe.unload());
     module.reset();
-    catalog.setPluginLoader({});
+    catalog.setNativeProvider({});
     loader.reset();
     assert(!ownership.expired());
     assert(retained->initialize({}));

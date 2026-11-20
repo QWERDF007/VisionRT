@@ -612,6 +612,12 @@ bool LogService::running() const
     return impl_->running.load(std::memory_order_acquire);
 }
 
+std::shared_ptr<spdlog::logger> LogService::sharedLogger() const
+{
+    std::shared_lock lock(impl_->writeMutex);
+    return impl_->logger;
+}
+
 bool LogService::fileSinkReady() const
 {
     return impl_->fileReady;

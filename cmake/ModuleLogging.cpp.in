@@ -1,0 +1,23 @@
+#include "@module@/Logging.h"
+#include <spdlog/spdlog.h>
+
+namespace visionrt::@module@ {
+namespace {
+std::shared_ptr<spdlog::logger> previous;
+std::shared_ptr<spdlog::logger> registered;
+}
+
+void registerLogger(const std::shared_ptr<spdlog::logger> &logger)
+{
+    previous = spdlog::default_logger();
+    registered = logger;
+    spdlog::set_default_logger(logger);
+}
+
+void unregisterLogger()
+{
+    spdlog::drop(registered->name());
+    spdlog::set_default_logger(std::move(previous));
+    registered.reset();
+}
+}

@@ -7,7 +7,7 @@
 #include "core/ToolPackage.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 #include "runtime/RuntimeEngine.h"
 
@@ -228,7 +228,7 @@ def execute(inputs):
                                    std::filesystem::copy_options::overwrite_existing);
     }
     ToolRegistry  registry;
-    registry.setPluginLoader(std::make_shared<PluginLoader>());
+    registry.setNativeProvider(std::make_shared<PluginLoader>());
     registry.registerPackage(augmented);
     registry.loadNativeImplementations();
     for (const auto &loaded : python.refresh(registry.definitions()))

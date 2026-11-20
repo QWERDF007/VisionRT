@@ -3,7 +3,7 @@
 #include "ToolResultAssertions.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
-#include "python/PythonRuntime.h"
+#include "python_bridge/PythonRuntime.h"
 #include "TestPythonEnvironment.h"
 #include "runtime/Receiver.h"
 #include "runtime/RuntimeEngine.h"
@@ -50,7 +50,7 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
     setupPython(registry, python);
@@ -157,7 +157,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 
@@ -295,7 +295,7 @@ void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
     setupPython(registry, python);
@@ -489,7 +489,7 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 
@@ -529,7 +529,7 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
 
@@ -647,7 +647,7 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
     setupPython(registry, python);
@@ -738,7 +738,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     const auto package = visionrt::readToolsPackage(toolsPkg);
     auto       loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     registry.registerPackage(package);
     registry.loadNativeImplementations();
     setupPython(registry, python);
@@ -822,7 +822,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     loader->registerModule("test.plugin.fail_init", pluginDll);
 
     ToolRegistry registry;
-    registry.setPluginLoader(loader);
+    registry.setNativeProvider(loader);
     setupPython(registry, python);
 
     // Register plugin counter tool

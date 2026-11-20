@@ -1,7 +1,8 @@
 #include "python/PythonBackend.h"
 
 #include "core/Error.h"
-#include "python/PythonBridgeApi.h"
+#include "python_bridge/PythonBridgeApi.h"
+#include "log/LogService.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -25,7 +26,7 @@ namespace visionrt
 {
 namespace
 {
-constexpr const wchar_t *kBridgeFileName = L"visionrt_python_bridge.dll";
+constexpr const wchar_t *kBridgeFileName = VISIONRT_PYTHON_BRIDGE_FILENAME;
 constexpr std::size_t    kErrorSize      = 1024;
 
 QString bridgePath()
@@ -126,6 +127,8 @@ struct PythonBackend::Api
     decltype(&vrt_python_prepare_shutdown) prepareShutdown = nullptr;
     decltype(&vrt_python_active_references) activeReferences = nullptr;
     decltype(&vrt_python_close_ready)      closeReady       = nullptr;
+    decltype(&vrt_python_register_logger)  registerLogger   = nullptr;
+    decltype(&vrt_python_unregister_logger) unregisterLogger = nullptr;
 };
 
 struct PythonBackend::Impl
@@ -133,6 +136,7 @@ struct PythonBackend::Impl
     Api                     api;
     void                   *handle = nullptr;
     HMODULE                 module = nullptr;
+    bool                    loggerRegistered = false;
     std::wstring            dllPath;
     PythonEnvironmentStatus status;
 
@@ -204,14 +208,21 @@ bool PythonBackend::loadModule(QString *error)
     impl_->api.activeReferences
         = reinterpret_cast<decltype(impl_->api.activeReferences)>(resolve("vrt_python_active_references"));
     impl_->api.closeReady = reinterpret_cast<decltype(impl_->api.closeReady)>(resolve("vrt_python_close_ready"));
+    impl_->api.registerLogger = reinterpret_cast<decltype(impl_->api.registerLogger)>(resolve("vrt_python_register_logger"));
+    impl_->api.unregisterLogger = reinterpret_cast<decltype(impl_->api.unregisterLogger)>(resolve("vrt_python_unregister_logger"));
     if (!impl_->api.create || !impl_->api.destroy || !impl_->api.refresh || !impl_->api.factory
         || !impl_->api.destroyFactory || !impl_->api.prepareShutdown || !impl_->api.activeReferences
-        || !impl_->api.closeReady)
+        || !impl_->api.closeReady || !impl_->api.registerLogger || !impl_->api.unregisterLogger)
     {
         FreeLibrary(module);
         return fail(QStringLiteral("Python 桥接组件不完整，请重新安装"));
     }
     impl_->module = module;
+    if (const auto logger = LogService::instance().sharedLogger())
+    {
+        impl_->api.registerLogger(logger);
+        impl_->loggerRegistered = true;
+    }
     return true;
 }
 
@@ -219,6 +230,11 @@ void PythonBackend::releaseModule()
 {
     if (!impl_->module)
         return;
+    if (impl_->loggerRegistered)
+    {
+        impl_->api.unregisterLogger();
+        impl_->loggerRegistered = false;
+    }
     FreeLibrary(impl_->module);
     impl_->module = nullptr;
     impl_->api    = {};
@@ -418,7 +434,7 @@ PythonRuntimeFacts PythonBackend::runtimeFacts() const
         const bool binary = key.size() > 4 && (key.substr(key.size() - 4) == L".dll" || key.substr(key.size() - 4) == L".pyd");
         const bool python = binary && key.rfind(L"python", 0) == 0;
         const bool numpy  = binary && key.rfind(L"numpy", 0) == 0;
-        const bool bridge = key == L"visionrt_python_bridge.dll";
+        const bool bridge = key == lowerAscii(kBridgeFileName);
         if (!python && !numpy && !bridge)
             continue;
         facts.modules.emplace_back(utf8Text(QString::fromStdWString(name)),

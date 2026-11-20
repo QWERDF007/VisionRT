@@ -1,4 +1,4 @@
-#include "ui/ResultPresentation.h"
+#include "ResultPresentation.h"
 
 #include <QClipboard>
 #include <QGuiApplication>

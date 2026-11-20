@@ -1,4 +1,4 @@
-#include "ui/AppController_p.h"
+#include "AppController_p.h"
 #include "core/ValueJson.h"
 
 #include "core/InputNormalizer.h"
