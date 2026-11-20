@@ -1,0 +1,7 @@
+#AOCI-ROOT-MANIFEST: 1
+#Format-Version: cognition-volumes/v1
+#Locale: zh-CN
+#Project: VisionRT是基于C++20、Qt Quick和Taskflow的工业视觉低代码平台，以可视化流程组合原生与Python工具，提供类型化端口、并发执行、图像和ROI交互及训练数据编辑。
+#Global-Invariants: 工具声明与Contracts决定端口类型和生命周期，初始化、输入、输出编号空间独立；缺失业务值保持Missing，工具业务失败与框架执行失败分开；工程配置经ProjectEditor提交，执行使用冻结配置及带代际身份的不可变快照；GUI通过有界通道读回，排空读者及Owner后释放运行资源；Python仅使用用户选择且探测通过的外部环境，发行包不携带解释器；用户工具、偏好、日志归安装目录，部署按产品文件所有权保留用户数据。
+#Volume: id=meta kind=meta path=aoci.meta.txt format=meta-v1 depends=- state=enabled
+#Volume: id=code kind=code path=aoci.code.txt format=object-fras-v2 depends=meta state=enabled

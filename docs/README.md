@@ -6,6 +6,7 @@
 
 - 工具契约以代码为准：[工具接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[声明读写](../src/core/DefinitionJson.cpp)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)、[工具树分类](../src/core/ToolDefinition.cpp)。
 - [任务账本](../WORKLOG.md)：实际进度与验证记录。
+- AOCI 认知资产入口：[Root](../aoci.txt)、[Meta](../aoci.meta.txt)、[Code](../aoci.code.txt)；本机宿主配置以 [Codex MCP](../.codex/config.toml) 为准，扫描、索引与面板验证见任务账本。
 
 ## 实现与版本入口
 

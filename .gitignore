@@ -90,3 +90,7 @@ docs/*.visual-check.*
 docs/VisionRT_R49_完整开发方案_统一组件与路径/
 docs/VisionRT_R50_设置入口与持久化修订/
 docs/VisionRT_颜色识别_修订方案/
+
+# AOCI agent host integration (machine-bound; do not commit)
+.codex/config.toml
+.codex/config.toml.backup.*

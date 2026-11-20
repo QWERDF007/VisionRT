@@ -1,0 +1,3729 @@
+{
+  "version": 1,
+  "created_at": "2026-11-20T13:34:27Z",
+  "updated_at": "2026-11-20T14:03:41Z",
+  "files": {
+    ".clang-format": {
+      "role": "index",
+      "sha256": "2aaa4b3c1aaef0377633cfd67cb3e8b41c438b6f9e887d083333cc433b970384",
+      "size": 2931,
+      "normalized_sha256": "2aaa4b3c1aaef0377633cfd67cb3e8b41c438b6f9e887d083333cc433b970384"
+    },
+    ".gitattributes": {
+      "role": "index",
+      "sha256": "f80a265ad02e0479291b641abf2ba24d67ea42e3352bd8b23b374327e61e507e",
+      "size": 20,
+      "normalized_sha256": "f80a265ad02e0479291b641abf2ba24d67ea42e3352bd8b23b374327e61e507e"
+    },
+    ".gitignore": {
+      "role": "index",
+      "sha256": "bb865962f5621f1899c5b2f958f8edb30f6ec7b34016a35798826e70afcc6dc2",
+      "size": 1220,
+      "normalized_sha256": "bb865962f5621f1899c5b2f958f8edb30f6ec7b34016a35798826e70afcc6dc2"
+    },
+    ".gitmodules": {
+      "role": "index",
+      "sha256": "79dcd1377cde50d53a194a0b69a38d246220678d1a493bec24714204fbc3c779",
+      "size": 760,
+      "normalized_sha256": "79dcd1377cde50d53a194a0b69a38d246220678d1a493bec24714204fbc3c779"
+    },
+    "AGENTS.md": {
+      "role": "index",
+      "sha256": "a32ee15e32087c483148eaedf4ff0599346db2655675141b7d1ac11dc43da069",
+      "size": 21383,
+      "normalized_sha256": "a32ee15e32087c483148eaedf4ff0599346db2655675141b7d1ac11dc43da069"
+    },
+    "CMakeLists.txt": {
+      "role": "index",
+      "sha256": "7230c7080b58ab296b4d12252b1ab5aa0dfff596de40d8add04201154961d45d",
+      "size": 6006,
+      "normalized_sha256": "7230c7080b58ab296b4d12252b1ab5aa0dfff596de40d8add04201154961d45d"
+    },
+    "CMakePresets.json": {
+      "role": "index",
+      "sha256": "08ad225c539b14a6bd229584908fe3c26226a3a5e2a4582a879007488217fa1a",
+      "size": 1086,
+      "normalized_sha256": "08ad225c539b14a6bd229584908fe3c26226a3a5e2a4582a879007488217fa1a"
+    },
+    "LICENSE": {
+      "role": "index",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "size": 11357,
+      "normalized_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    "README.md": {
+      "role": "index",
+      "sha256": "c2dda6460edd0f98d3688ad4231d7be3cc05c785c70a224c24601153710378b5",
+      "size": 439,
+      "normalized_sha256": "c2dda6460edd0f98d3688ad4231d7be3cc05c785c70a224c24601153710378b5"
+    },
+    "WORKLOG.md": {
+      "role": "index",
+      "sha256": "3be34b5390683edca60cc28c697c22885ee05e44623b5a90657ac4612f7762c7",
+      "size": 466064,
+      "normalized_sha256": "3be34b5390683edca60cc28c697c22885ee05e44623b5a90657ac4612f7762c7"
+    },
+    "aoci.code.txt": {
+      "role": "index",
+      "sha256": "5300610224cd2c1fca7c631fe4d3e8d4efe0a1d0f8d34626a39719a22ebc8751",
+      "size": 69805,
+      "normalized_sha256": "5300610224cd2c1fca7c631fe4d3e8d4efe0a1d0f8d34626a39719a22ebc8751"
+    },
+    "aoci.meta.txt": {
+      "role": "index",
+      "sha256": "5ccd06dd2198435423141174e4f3eaed7e7645644070e0b5cc2e20dbc889172a",
+      "size": 2187,
+      "normalized_sha256": "5ccd06dd2198435423141174e4f3eaed7e7645644070e0b5cc2e20dbc889172a"
+    },
+    "aoci.txt": {
+      "role": "index",
+      "sha256": "045c5abec4734a880ccd4582bb4b5c5e05abd5e36e0008d645b6d9cbad4533ad",
+      "size": 1044,
+      "normalized_sha256": "045c5abec4734a880ccd4582bb4b5c5e05abd5e36e0008d645b6d9cbad4533ad"
+    },
+    "build-contracts/tests/CMakeFiles/test_array_contract.dir/test_array_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "dc1c01b48da52bf4194c3131f4e11631daa6a746ca09a87117d0018ecf77cc07",
+      "size": 7778185
+    },
+    "build-contracts/tests/CMakeFiles/test_data_ref_contract.dir/test_data_ref_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "d038adb6c3e4444f1cb71354e02045becf542ef5d916345bde609cf9127454c6",
+      "size": 646844
+    },
+    "build-contracts/tests/CMakeFiles/test_sdk_function_tool.dir/test_sdk_function_tool.cpp.obj": {
+      "role": "observe",
+      "sha256": "e906975f164abca87dd691ff8e873e3477fc8376becf486df849189035cb1bcb",
+      "size": 2459991
+    },
+    "build-contracts/tests/CMakeFiles/test_sdk_parameters.dir/test_sdk_parameters.cpp.obj": {
+      "role": "observe",
+      "sha256": "f3ca45a95797486af07321b0d58cd531cb955ddb031402ef4c79da38ec431f89",
+      "size": 4094337
+    },
+    "build-contracts/tests/CMakeFiles/test_sdk_value_contract.dir/test_sdk_value_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "fdd8350363158f2385aaa6ea1d81074b80bebf0f277d1596e9b9a961c55f4212",
+      "size": 3844233
+    },
+    "build-contracts/tests/CTestTestfile.cmake": {
+      "role": "observe",
+      "sha256": "7092ae6dca19684dfdaa159ee9593376037be83af5066952a6a0535ad319ed5d",
+      "size": 3434,
+      "normalized_sha256": "6e52ccb27506d6f87c1069d7cd6cd91ef134c0c0460f639cb709a692dca1f77d"
+    },
+    "build-contracts/tests/cmake_install.cmake": {
+      "role": "observe",
+      "sha256": "f64c1ed835fbd0c79a07e39fc0b862fb25417b4cd42c7dfbe95fdf2c91e8c59d",
+      "size": 1069,
+      "normalized_sha256": "d4696fed24c70817a08f8d5a811a55265edf57cf9f70401394d8de61a1d8d849"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "0d0cc7ff905afcc90f2a6cb78a01f8a125138e5717844947130bb333e9eff802",
+      "size": 4315,
+      "normalized_sha256": "0d0cc7ff905afcc90f2a6cb78a01f8a125138e5717844947130bb333e9eff802"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c533c5c8245c50db9e4a67c9e32849629507c4359bed2158a8b6b6cf82bd9a2a",
+      "size": 3789,
+      "normalized_sha256": "c533c5c8245c50db9e4a67c9e32849629507c4359bed2158a8b6b6cf82bd9a2a"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "fa9872f050c2cfb5c8b63c741e1ea3a1c9c474e60c0f0afd20d6ad8de2817aac",
+      "size": 3559,
+      "normalized_sha256": "fa9872f050c2cfb5c8b63c741e1ea3a1c9c474e60c0f0afd20d6ad8de2817aac"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c71139b9569392237fbd9298fcb78f7a0f1f85b93ae0311855f485f631b6d4e8",
+      "size": 4569,
+      "normalized_sha256": "c71139b9569392237fbd9298fcb78f7a0f1f85b93ae0311855f485f631b6d4e8"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8a1f9eb8db4a67f41b06aa1739a8913b7336c1d65407aed87d38a06bc3562c66",
+      "size": 3305,
+      "normalized_sha256": "8a1f9eb8db4a67f41b06aa1739a8913b7336c1d65407aed87d38a06bc3562c66"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "06005c6b2eb2403ddfc68adf369fa8eb78cfb63c3b2dc88fa65bfe533bd15eb9",
+      "size": 4061,
+      "normalized_sha256": "06005c6b2eb2403ddfc68adf369fa8eb78cfb63c3b2dc88fa65bfe533bd15eb9"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/CTestTestfile.cmake": {
+      "role": "observe",
+      "sha256": "607325596f1317277f284fbd559fe0dc28db418b869a0739fe6e5ab1ee3c28bd",
+      "size": 4006,
+      "normalized_sha256": "679df61440d795bdb15fad5ecf84ad2cacd94b90874f9a604c48c94eec949726"
+    },
+    "build-dll-debug/3rdparty/VisionRTContracts/tests/cmake_install.cmake": {
+      "role": "observe",
+      "sha256": "b78941be44f85e7361d242a1553eb9fc1cea7b18d4cc4eb2a4eeb4863f3776c9",
+      "size": 1084,
+      "normalized_sha256": "50114cd703b8d1791555494c71e08ac31bab60c008d770e174d5c32ff6d18f39"
+    },
+    "build-dll-debug/tests/CMakeFiles/assist_viewport_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "fbbfba94dec71d26ffe56b1ab2da2981fd9ff8efb7eadaac785bedcf93eefad0",
+      "size": 19829,
+      "normalized_sha256": "fbbfba94dec71d26ffe56b1ab2da2981fd9ff8efb7eadaac785bedcf93eefad0"
+    },
+    "build-dll-debug/tests/CMakeFiles/cpu_tools_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "f775b4772dcfe8cd36dbdb0c991ca99a8977306175092c5957b49e3ca17205c8",
+      "size": 10970,
+      "normalized_sha256": "f775b4772dcfe8cd36dbdb0c991ca99a8977306175092c5957b49e3ca17205c8"
+    },
+    "build-dll-debug/tests/CMakeFiles/custom_tool_store_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ac994ea7264afa9d8d0a650577e7332c8cd36c6abb39b90cbf87bef8165cced1",
+      "size": 7337,
+      "normalized_sha256": "ac994ea7264afa9d8d0a650577e7332c8cd36c6abb39b90cbf87bef8165cced1"
+    },
+    "build-dll-debug/tests/CMakeFiles/definition_json_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c8b735d08133ebabef6627d4c42258ebf882f06d41811577208a0837ef45f0ce",
+      "size": 6906,
+      "normalized_sha256": "c8b735d08133ebabef6627d4c42258ebf882f06d41811577208a0837ef45f0ce"
+    },
+    "build-dll-debug/tests/CMakeFiles/display_conversion_benchmark_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ea3920f5d137a61aee7359ee6820752721bb68ed0d5a6c47713581f388f2b262",
+      "size": 15409,
+      "normalized_sha256": "ea3920f5d137a61aee7359ee6820752721bb68ed0d5a6c47713581f388f2b262"
+    },
+    "build-dll-debug/tests/CMakeFiles/display_reader_drain_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ea512ea72254380fe7f0b80e6f2eb8b4203257b69893a3241024070009d627da",
+      "size": 19642,
+      "normalized_sha256": "ea512ea72254380fe7f0b80e6f2eb8b4203257b69893a3241024070009d627da"
+    },
+    "build-dll-debug/tests/CMakeFiles/display_storage_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "82b2c46871e2d6ac50259d81208be3fc2a4032b194643093beead0ff0a2dd58b",
+      "size": 15162,
+      "normalized_sha256": "82b2c46871e2d6ac50259d81208be3fc2a4032b194643093beead0ff0a2dd58b"
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/dll_consumer_contract.cpp.obj": {
+      "role": "observe",
+      "sha256": "6e225434553830fa1902194b999edb6b5d220a6d41c3005caa76dee7c3e52b48",
+      "size": 623685
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/dll_consumer_contract_autogen/mocs_compilation.cpp.obj": {
+      "role": "observe",
+      "sha256": "9a5517e8679b340bdcab9053064e48081482cdc3a8159339a67d06be60734754",
+      "size": 892
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/embed.manifest": {
+      "role": "observe",
+      "sha256": "be8918559280a2e74748bf8f6238b568ed7cbf75183b2180a6a8a979a1ebf243",
+      "size": 406,
+      "normalized_sha256": "531b41aa28b24f319b16b9dec9160656248064cd5263625dc13b00301ac4cdbe"
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/intermediate.manifest": {
+      "role": "observe",
+      "sha256": "4bb79dcea0a901f7d9eac5aa05728ae92acb42e0cb22e5dd14134f4421a3d8df",
+      "size": 381,
+      "normalized_sha256": "9ba3db1d132aead1b9c6a5033da960cf775630b44bbb214cfc70e15a85295b37"
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/manifest.rc": {
+      "role": "observe",
+      "sha256": "474699c3599f39cdcefb4bc8d5a0d5c9acf89f477f95640532e168cb358ea638",
+      "size": 186,
+      "normalized_sha256": "acdb50bf3fa7287fdee279c28e2538e80d69e0e6deac47214ee50587e88b9c86"
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/manifest.res": {
+      "role": "observe",
+      "sha256": "215b9d4f3f5df87dd63db022aa1c5af1ccbfd18973ca451508398a9338945d94",
+      "size": 472
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract.dir/vc140.pdb": {
+      "role": "observe",
+      "sha256": "2594519c6561ed23dbbbe8592ee6fd8497ab9c5e87b52d56a124e56ec6e27221",
+      "size": 4435968
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b71733661f45d21b466a57032f4c5271452ad306669884be9cd5bd26988bcf41",
+      "size": 7816,
+      "normalized_sha256": "b71733661f45d21b466a57032f4c5271452ad306669884be9cd5bd26988bcf41"
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract_autogen.dir/AutogenUsed.txt": {
+      "role": "observe",
+      "sha256": "66efa8f6e1a252a56cf4d849be98f1803f5152a08ed20561dd1ce65a42d915d5",
+      "size": 69,
+      "normalized_sha256": "66efa8f6e1a252a56cf4d849be98f1803f5152a08ed20561dd1ce65a42d915d5"
+    },
+    "build-dll-debug/tests/CMakeFiles/dll_consumer_contract_autogen.dir/ParseCache.txt": {
+      "role": "observe",
+      "sha256": "b2065f7ab6e5163dcf991e30fde4da85a13d06edaf0e4f50b73adc2cdc68dd9c",
+      "size": 106,
+      "normalized_sha256": "d7cb87e6239012e155617b87a2180b98ed35b203ed692610479aa59590e9c128"
+    },
+    "build-dll-debug/tests/CMakeFiles/edge_hierarchy_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ba8c608e247d6e58c17f2576ed9e47dd68164acee8f195e9d704540bf7a4c466",
+      "size": 10404,
+      "normalized_sha256": "ba8c608e247d6e58c17f2576ed9e47dd68164acee8f195e9d704540bf7a4c466"
+    },
+    "build-dll-debug/tests/CMakeFiles/example_metadata_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "09cfa10ac47e0a5e3c7e952f193374a5e71627bb59d096a4eeea371d2ef03e65",
+      "size": 11121,
+      "normalized_sha256": "09cfa10ac47e0a5e3c7e952f193374a5e71627bb59d096a4eeea371d2ef03e65"
+    },
+    "build-dll-debug/tests/CMakeFiles/example_pipelines_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e39f55436e5dd00ec743cf86b1bb14fc1fd7d24f8ed397d17117239b18ab6bec",
+      "size": 26738,
+      "normalized_sha256": "e39f55436e5dd00ec743cf86b1bb14fc1fd7d24f8ed397d17117239b18ab6bec"
+    },
+    "build-dll-debug/tests/CMakeFiles/example_project_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "91e634fc2bcc5e20d039822022cad944f4830cc8cbb0fc9ff3b77ea1c0c3f6ee",
+      "size": 23611,
+      "normalized_sha256": "91e634fc2bcc5e20d039822022cad944f4830cc8cbb0fc9ff3b77ea1c0c3f6ee"
+    },
+    "build-dll-debug/tests/CMakeFiles/gpu_tools_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b20f6e8f9a7fa23feb6ceafda958224da04fb27c1934bab5723c1a0421f29084",
+      "size": 11476,
+      "normalized_sha256": "b20f6e8f9a7fa23feb6ceafda958224da04fb27c1934bab5723c1a0421f29084"
+    },
+    "build-dll-debug/tests/CMakeFiles/installed_pipeline_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "d87a502c77d203019fa27986b99faec122857b75f455f31cc5df351328566b4e",
+      "size": 12440,
+      "normalized_sha256": "d87a502c77d203019fa27986b99faec122857b75f455f31cc5df351328566b4e"
+    },
+    "build-dll-debug/tests/CMakeFiles/installed_python_author_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "2a5a5176fbc1b6caac9408525f94bbdcc7470671f1141df66666dcea304670bb",
+      "size": 12690,
+      "normalized_sha256": "2a5a5176fbc1b6caac9408525f94bbdcc7470671f1141df66666dcea304670bb"
+    },
+    "build-dll-debug/tests/CMakeFiles/libavoid_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "61b2fd480ef2f6aacd2173cb9a2ef31458366b6e44de65fe97b662be786e1066",
+      "size": 14032,
+      "normalized_sha256": "61b2fd480ef2f6aacd2173cb9a2ef31458366b6e44de65fe97b662be786e1066"
+    },
+    "build-dll-debug/tests/CMakeFiles/log_aggregation_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "9e2e6c7adf582aedcc60fbf845406ad055bf2e04e738dae70794d9aa6a58d8f5",
+      "size": 8243,
+      "normalized_sha256": "9e2e6c7adf582aedcc60fbf845406ad055bf2e04e738dae70794d9aa6a58d8f5"
+    },
+    "build-dll-debug/tests/CMakeFiles/log_level_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "0a320386d0e5c57c638baae691b79ee860d22df7492d2a495f3d504f85b7a8b8",
+      "size": 8599,
+      "normalized_sha256": "0a320386d0e5c57c638baae691b79ee860d22df7492d2a495f3d504f85b7a8b8"
+    },
+    "build-dll-debug/tests/CMakeFiles/log_lifecycle_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "2938d8c5b12ae14cf31620c9b1aab15f2d89713e9645dc8ec6eab2cb0c6992ac",
+      "size": 8431,
+      "normalized_sha256": "2938d8c5b12ae14cf31620c9b1aab15f2d89713e9645dc8ec6eab2cb0c6992ac"
+    },
+    "build-dll-debug/tests/CMakeFiles/log_text_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "99233875bdb1c5410bb22b38fdb3ac7a63a8923f633ba174ee168fc6325c9fd6",
+      "size": 7997,
+      "normalized_sha256": "99233875bdb1c5410bb22b38fdb3ac7a63a8923f633ba174ee168fc6325c9fd6"
+    },
+    "build-dll-debug/tests/CMakeFiles/logic_node_execution_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "f5b6bba5a7dceca27bcaae848bb2508106c6204ee3984a34cb52946694b91e10",
+      "size": 10329,
+      "normalized_sha256": "f5b6bba5a7dceca27bcaae848bb2508106c6204ee3984a34cb52946694b91e10"
+    },
+    "build-dll-debug/tests/CMakeFiles/module_registration_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "20786fa4439d37d8431315877099da9d64327d71d5d1fc79cfd3832f4e90e831",
+      "size": 25099,
+      "normalized_sha256": "20786fa4439d37d8431315877099da9d64327d71d5d1fc79cfd3832f4e90e831"
+    },
+    "build-dll-debug/tests/CMakeFiles/native_value_lifetime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "49e15dfedcd81ef9f5a46b445b9899fa11404d00a7ee6a5e75fbb777550ce9fb",
+      "size": 25535,
+      "normalized_sha256": "49e15dfedcd81ef9f5a46b445b9899fa11404d00a7ee6a5e75fbb777550ce9fb"
+    },
+    "build-dll-debug/tests/CMakeFiles/node_activity_mailbox_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "de9705fef3e0e419571179cd0f3e2bc0447688f9bca99962a894f588ab32068b",
+      "size": 12679,
+      "normalized_sha256": "de9705fef3e0e419571179cd0f3e2bc0447688f9bca99962a894f588ab32068b"
+    },
+    "build-dll-debug/tests/CMakeFiles/node_list_model_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c93014577e7082b9d5803c9b1bd48ff3d7e92b30f30108e9e046794ac85210a4",
+      "size": 17743,
+      "normalized_sha256": "c93014577e7082b9d5803c9b1bd48ff3d7e92b30f30108e9e046794ac85210a4"
+    },
+    "build-dll-debug/tests/CMakeFiles/output_text_readback_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8fc9fcb3cfa28622d71abd79e1343777cd5dd82cba14a0141127b3280e9ab44c",
+      "size": 19897,
+      "normalized_sha256": "8fc9fcb3cfa28622d71abd79e1343777cd5dd82cba14a0141127b3280e9ab44c"
+    },
+    "build-dll-debug/tests/CMakeFiles/output_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "d7cf5c17c164af7df3bdb39156bffd49bad39b37684eadee4a90aa7f66095072",
+      "size": 15554,
+      "normalized_sha256": "d7cf5c17c164af7df3bdb39156bffd49bad39b37684eadee4a90aa7f66095072"
+    },
+    "build-dll-debug/tests/CMakeFiles/package_replacement_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1d76a3eaf35aaef686ed96d49e8fe67522d9e18daffab7609f63eb019e96c48f",
+      "size": 26993,
+      "normalized_sha256": "1d76a3eaf35aaef686ed96d49e8fe67522d9e18daffab7609f63eb019e96c48f"
+    },
+    "build-dll-debug/tests/CMakeFiles/performance_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ece126c9074c7bb91f82dfb32ae03a6ac69a2260c54e3d6fcd07c411ac4eb4d2",
+      "size": 24453,
+      "normalized_sha256": "ece126c9074c7bb91f82dfb32ae03a6ac69a2260c54e3d6fcd07c411ac4eb4d2"
+    },
+    "build-dll-debug/tests/CMakeFiles/plugin_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "253d4cc01bef1190117b111a905684a0f9f8d9ccbf577fe22f1efdb243a9e88a",
+      "size": 27122,
+      "normalized_sha256": "253d4cc01bef1190117b111a905684a0f9f8d9ccbf577fe22f1efdb243a9e88a"
+    },
+    "build-dll-debug/tests/CMakeFiles/presentation_visibility_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1019cfa3c29e031e1874f06aa6957755bfd60e13af1969994b4c91074ba69fb2",
+      "size": 18047,
+      "normalized_sha256": "1019cfa3c29e031e1874f06aa6957755bfd60e13af1969994b4c91074ba69fb2"
+    },
+    "build-dll-debug/tests/CMakeFiles/project_editor_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "06b6b49be5c465e11b63b34a317b7398f0eeccc5aae4dc848154c7f81b697f19",
+      "size": 9888,
+      "normalized_sha256": "06b6b49be5c465e11b63b34a317b7398f0eeccc5aae4dc848154c7f81b697f19"
+    },
+    "build-dll-debug/tests/CMakeFiles/project_storage_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "a11a913ba546b423d1cd77302b47960b30d5cde76b4b979fed70ce5e12992635",
+      "size": 10506,
+      "normalized_sha256": "a11a913ba546b423d1cd77302b47960b30d5cde76b4b979fed70ce5e12992635"
+    },
+    "build-dll-debug/tests/CMakeFiles/project_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "d8fb5b414585bc5aa5cf56e522e28fd439f38b1bc28c043d5ac5941763cb7e71",
+      "size": 10694,
+      "normalized_sha256": "d8fb5b414585bc5aa5cf56e522e28fd439f38b1bc28c043d5ac5941763cb7e71"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_adapter_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "137ee61e85299fd6a204ebc77ffd1512534f6663f6bdb9b06dcbe19542d476ed",
+      "size": 9759,
+      "normalized_sha256": "137ee61e85299fd6a204ebc77ffd1512534f6663f6bdb9b06dcbe19542d476ed"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_array_lifetime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "a35da808f3e39431a770be5bf6a856218e6e81788d2f2a7de95fbd9c358a451d",
+      "size": 26113,
+      "normalized_sha256": "a35da808f3e39431a770be5bf6a856218e6e81788d2f2a7de95fbd9c358a451d"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_environment_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ec49e67c007a22a45e525b2bfab20176914cdfa944090b9fdc2bf1afc5dddee3",
+      "size": 18605,
+      "normalized_sha256": "ec49e67c007a22a45e525b2bfab20176914cdfa944090b9fdc2bf1afc5dddee3"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_loading_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "eb2172d6416edbf6878267e3cbbd59ddbe3cfc007173d2f24a7a8895230039e9",
+      "size": 9557,
+      "normalized_sha256": "eb2172d6416edbf6878267e3cbbd59ddbe3cfc007173d2f24a7a8895230039e9"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_probe_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8335928e08783da069c8752ca274b81ff5b654cac66615ba3a41093912bd29ca",
+      "size": 9055,
+      "normalized_sha256": "8335928e08783da069c8752ca274b81ff5b654cac66615ba3a41093912bd29ca"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_shutdown_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "75842187e7bb261e8a4c2157c3029f8b39b0956abdd60a3f1916181ef3788a46",
+      "size": 9969,
+      "normalized_sha256": "75842187e7bb261e8a4c2157c3029f8b39b0956abdd60a3f1916181ef3788a46"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_tools_execution_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "a550c437e16c3fe552a4dadb4924645621a13e0a607e2634bcebc15a936eb165",
+      "size": 12014,
+      "normalized_sha256": "a550c437e16c3fe552a4dadb4924645621a13e0a607e2634bcebc15a936eb165"
+    },
+    "build-dll-debug/tests/CMakeFiles/python_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "2238bc86bae2886a76cb4a91d2ab9a039821ae1083584a57172e2cc0ade970a7",
+      "size": 9028,
+      "normalized_sha256": "2238bc86bae2886a76cb4a91d2ab9a039821ae1083584a57172e2cc0ade970a7"
+    },
+    "build-dll-debug/tests/CMakeFiles/recent_projects_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "f7e3aaf7c6cdd10e72399030842053a9f44ff03bbce6f171f353ea28a76c0fce",
+      "size": 23000,
+      "normalized_sha256": "f7e3aaf7c6cdd10e72399030842053a9f44ff03bbce6f171f353ea28a76c0fce"
+    },
+    "build-dll-debug/tests/CMakeFiles/result_readback_barrier_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "3aab062b1377da03af2876d241e6de7ade62571ab2837a409c15a42d26863da5",
+      "size": 13527,
+      "normalized_sha256": "3aab062b1377da03af2876d241e6de7ade62571ab2837a409c15a42d26863da5"
+    },
+    "build-dll-debug/tests/CMakeFiles/roi_view_benchmark_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "99b5630c0b1fb5e480d2113b1597fb352953ed55c89dc21920791b6946348397",
+      "size": 7973,
+      "normalized_sha256": "99b5630c0b1fb5e480d2113b1597fb352953ed55c89dc21920791b6946348397"
+    },
+    "build-dll-debug/tests/CMakeFiles/runtime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6f64385ea76a47fe9f7fb41be9bec94eee5e681c9e035efd868591d050e34bd6",
+      "size": 12288,
+      "normalized_sha256": "6f64385ea76a47fe9f7fb41be9bec94eee5e681c9e035efd868591d050e34bd6"
+    },
+    "build-dll-debug/tests/CMakeFiles/runtime_diagnostics_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b6a5120704cb08d7b010cc6d12bfcd4007fb90c4696ef5833201eea4fe821331",
+      "size": 13115,
+      "normalized_sha256": "b6a5120704cb08d7b010cc6d12bfcd4007fb90c4696ef5833201eea4fe821331"
+    },
+    "build-dll-debug/tests/CMakeFiles/runtime_hotpath_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "094030e0cc1b9a27de4fd2ce6bbe8d6a85d5de92421b2c96339540212ebc547c",
+      "size": 20708,
+      "normalized_sha256": "094030e0cc1b9a27de4fd2ce6bbe8d6a85d5de92421b2c96339540212ebc547c"
+    },
+    "build-dll-debug/tests/CMakeFiles/runtime_node_activity_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "d013eef69b3461ed9d7a022987a9f0da076e6424fa1674827e7a58a9af85adbe",
+      "size": 12495,
+      "normalized_sha256": "d013eef69b3461ed9d7a022987a9f0da076e6424fa1674827e7a58a9af85adbe"
+    },
+    "build-dll-debug/tests/CMakeFiles/runtime_python_lazy_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "5b475ca5bedca622c15d54c0df18c3127fa158ddf011762d9037449d03b344bf",
+      "size": 13382,
+      "normalized_sha256": "5b475ca5bedca622c15d54c0df18c3127fa158ddf011762d9037449d03b344bf"
+    },
+    "build-dll-debug/tests/CMakeFiles/runtime_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "11dff93e0b25aee5c666bffa856d1a09d369148cff85109c2b5f3895d4460b1c",
+      "size": 13268,
+      "normalized_sha256": "11dff93e0b25aee5c666bffa856d1a09d369148cff85109c2b5f3895d4460b1c"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dep_a_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e72f28266e0b62b1ed65bf2269182a6b921b93d8416fcd179349b0cd497cc8fc",
+      "size": 22346,
+      "normalized_sha256": "e72f28266e0b62b1ed65bf2269182a6b921b93d8416fcd179349b0cd497cc8fc"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dep_b_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "621b68b1aee9c9aaedff5b6c46cb69c8606c8d928073688f1741d5ad22d7ddf5",
+      "size": 22522,
+      "normalized_sha256": "621b68b1aee9c9aaedff5b6c46cb69c8606c8d928073688f1741d5ad22d7ddf5"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/embed.manifest": {
+      "role": "observe",
+      "sha256": "be8918559280a2e74748bf8f6238b568ed7cbf75183b2180a6a8a979a1ebf243",
+      "size": 406,
+      "normalized_sha256": "531b41aa28b24f319b16b9dec9160656248064cd5263625dc13b00301ac4cdbe"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/intermediate.manifest": {
+      "role": "observe",
+      "sha256": "4bb79dcea0a901f7d9eac5aa05728ae92acb42e0cb22e5dd14134f4421a3d8df",
+      "size": 381,
+      "normalized_sha256": "9ba3db1d132aead1b9c6a5033da960cf775630b44bbb214cfc70e15a85295b37"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/manifest.rc": {
+      "role": "observe",
+      "sha256": "02757dbe20ef5fb24db36dc1553111d2c653ae347f38845ac680d0d384bf8cbb",
+      "size": 182,
+      "normalized_sha256": "6d85dac3ae3e8cddbf9fe1e0b9e51799eab0ddb0e02c9f27a4beff0ea47cc3d4"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/manifest.res": {
+      "role": "observe",
+      "sha256": "b16afbd1f40da446441b9fa2f30bd0be4bb90e9d3969c9b93e5c12b82d34e2b9",
+      "size": 472
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/test_dll_consumer_autogen/mocs_compilation.cpp.obj": {
+      "role": "observe",
+      "sha256": "9a1847e1844688dc9df87c91fae061a2e294f8086a1a889edbea53f95e00ed86",
+      "size": 880
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/test_dll_consumer_logging.cpp.obj": {
+      "role": "observe",
+      "sha256": "a14f30e02a0c9dec28348340db1cafc6fc56bf483df8d1911f72616b062ae54a",
+      "size": 231059
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer.dir/vc140.pdb": {
+      "role": "observe",
+      "sha256": "0634cc96d432b54a6d41b3585dc61ba04ef6e5d95e71fb535468b7af4cb3b6bb",
+      "size": 3575808
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b3b0a74feedd25bc766650a6a8a8e1446c634816355eb7e06f1c135157d25087",
+      "size": 7653,
+      "normalized_sha256": "b3b0a74feedd25bc766650a6a8a8e1446c634816355eb7e06f1c135157d25087"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer_autogen.dir/AutogenUsed.txt": {
+      "role": "observe",
+      "sha256": "99591f6b1ed0300d10ca355cd5a79d247f5567963f3bf170ee6093f3bb68c139",
+      "size": 69,
+      "normalized_sha256": "99591f6b1ed0300d10ca355cd5a79d247f5567963f3bf170ee6093f3bb68c139"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_dll_consumer_autogen.dir/ParseCache.txt": {
+      "role": "observe",
+      "sha256": "d4b7074f57b1585e0c497b8b9a1e62a839f29d11f4c168520708ba21c7289c42",
+      "size": 232,
+      "normalized_sha256": "ba6a63b01da9511a25a524061409c504c29b5989ee3d7cfbbccd4c4a813ecfd7"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_plugin_a_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "f3af297e938a2a18564f0bdbcd6f1e622872961bc5cb08c9147ee6d190f60bbc",
+      "size": 22867,
+      "normalized_sha256": "f3af297e938a2a18564f0bdbcd6f1e622872961bc5cb08c9147ee6d190f60bbc"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_plugin_b_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "734e8c37603b6ee3288e95b702430f4037b20107ca52fd44945c19763894cc54",
+      "size": 23049,
+      "normalized_sha256": "734e8c37603b6ee3288e95b702430f4037b20107ca52fd44945c19763894cc54"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_plugin_legacy_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b36cf35f09816af940118a077960fb4561f7a33b29d2d5d9530b0f47dbd1cbb9",
+      "size": 23292,
+      "normalized_sha256": "b36cf35f09816af940118a077960fb4561f7a33b29d2d5d9530b0f47dbd1cbb9"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_plugin_module_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e92c9d77c9519b97792dc3cdc5e20fb165e137be6e6129cd85d7c4f6b709bac7",
+      "size": 22359,
+      "normalized_sha256": "e92c9d77c9519b97792dc3cdc5e20fb165e137be6e6129cd85d7c4f6b709bac7"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_plugin_value_lifetime_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ff1cd6bc747ef7ccb87e57c15196bba733bed01cb83a898ba368edb110163c0f",
+      "size": 24796,
+      "normalized_sha256": "ff1cd6bc747ef7ccb87e57c15196bba733bed01cb83a898ba368edb110163c0f"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_registration_collision_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6f901f4bc706ad3b13e5aea606edff591afce3edc6ea1b7b3d4703292de1b521",
+      "size": 24380,
+      "normalized_sha256": "6f901f4bc706ad3b13e5aea606edff591afce3edc6ea1b7b3d4703292de1b521"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_registration_duplicate_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "bc457ae9f64f19381a0d8dcb075df2905a0dfd7afe0c87475131f24670389b1f",
+      "size": 23805,
+      "normalized_sha256": "bc457ae9f64f19381a0d8dcb075df2905a0dfd7afe0c87475131f24670389b1f"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_registration_null_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "9256f933c0a97b8061bfaeb053a6b036a4aa896cbf00546146509b2a1a824cf9",
+      "size": 24172,
+      "normalized_sha256": "9256f933c0a97b8061bfaeb053a6b036a4aa896cbf00546146509b2a1a824cf9"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_registration_short_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "99f2dfa5c3256d846cc9707f9dbda64ed67b0c7f8fdc2d3c1d828e4ace0e1f6a",
+      "size": 23973,
+      "normalized_sha256": "99f2dfa5c3256d846cc9707f9dbda64ed67b0c7f8fdc2d3c1d828e4ace0e1f6a"
+    },
+    "build-dll-debug/tests/CMakeFiles/test_registration_valid_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6660dcb00c264572a1d63485f547d87d5f623deabd6b489eb9ea683782aeca18",
+      "size": 23534,
+      "normalized_sha256": "6660dcb00c264572a1d63485f547d87d5f623deabd6b489eb9ea683782aeca18"
+    },
+    "build-dll-debug/tests/CMakeFiles/tool_discovery_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "65bd47029073517447d67807534fe6f02efd09bd335270dba1b5c10c94280541",
+      "size": 9686,
+      "normalized_sha256": "65bd47029073517447d67807534fe6f02efd09bd335270dba1b5c10c94280541"
+    },
+    "build-dll-debug/tests/CMakeFiles/tool_editor_controller_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "2f86a2ec51ee3573c62d98a1e389c25d4a0fee3edd0529242e8a63f4884093c4",
+      "size": 18730,
+      "normalized_sha256": "2f86a2ec51ee3573c62d98a1e389c25d4a0fee3edd0529242e8a63f4884093c4"
+    },
+    "build-dll-debug/tests/CMakeFiles/tool_editor_dialog_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "95c9d20b38027ad1628a260b482acd701f6ef8a1255517e45c2aae0f88588963",
+      "size": 19013,
+      "normalized_sha256": "95c9d20b38027ad1628a260b482acd701f6ef8a1255517e45c2aae0f88588963"
+    },
+    "build-dll-debug/tests/CMakeFiles/tool_port_list_model_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1f4bf71993ad91ab60c062678fb7dd7f492227706e08cb96cd2b4f149bb878bf",
+      "size": 17990,
+      "normalized_sha256": "1f4bf71993ad91ab60c062678fb7dd7f492227706e08cb96cd2b4f149bb878bf"
+    },
+    "build-dll-debug/tests/CMakeFiles/tool_registry_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "75c7394e8b028bc9af37b44efc7dcad819c468f751fdf3c60a30c6358b9568e8",
+      "size": 6798,
+      "normalized_sha256": "75c7394e8b028bc9af37b44efc7dcad819c468f751fdf3c60a30c6358b9568e8"
+    },
+    "build-dll-debug/tests/CMakeFiles/tools_package_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c331221b209f3970c451ed2020d9e72060cf714ce34cf8ba25cdeeb6e758c5bc",
+      "size": 7094,
+      "normalized_sha256": "c331221b209f3970c451ed2020d9e72060cf714ce34cf8ba25cdeeb6e758c5bc"
+    },
+    "build-dll-debug/tests/CMakeFiles/training_session_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "eb4a103bf6196ecc7245c90eae59a98a01dbf7e792f3fddf78ea17abc352998a",
+      "size": 14975,
+      "normalized_sha256": "eb4a103bf6196ecc7245c90eae59a98a01dbf7e792f3fddf78ea17abc352998a"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_completion_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "3f30ebb293c6d5235a8a153400883e46087bf192166968d75a148c7008a7a376",
+      "size": 19662,
+      "normalized_sha256": "3f30ebb293c6d5235a8a153400883e46087bf192166968d75a148c7008a7a376"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_notifications_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b719f33da642fe3eb27c7a8b82b82c8ac036974791b9f78066d2c34314737a08",
+      "size": 18049,
+      "normalized_sha256": "b719f33da642fe3eb27c7a8b82b82c8ac036974791b9f78066d2c34314737a08"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_preferences_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "fbddd4d9fd451cee01de00be46a2889c8f3f238ea29b1e4e072c50b152175992",
+      "size": 23196,
+      "normalized_sha256": "fbddd4d9fd451cee01de00be46a2889c8f3f238ea29b1e4e072c50b152175992"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_receiver_identity_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "fa2c40920d9a82d9ba083a0e8d61d7a5f3a83e1accef4dc1c463e0c82731c8b0",
+      "size": 17983,
+      "normalized_sha256": "fa2c40920d9a82d9ba083a0e8d61d7a5f3a83e1accef4dc1c463e0c82731c8b0"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_result_isolation_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "9f4184df60f5b34cd7c7f7a6812fe1f7896a5680b02b57b5dc9cdf0fa6355b5d",
+      "size": 23209,
+      "normalized_sha256": "9f4184df60f5b34cd7c7f7a6812fe1f7896a5680b02b57b5dc9cdf0fa6355b5d"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_storage_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "b3e4d6c07ae4d8fa126967a9f76099c7be25f67eda6cf5b8e05f899dacc370e8",
+      "size": 24148,
+      "normalized_sha256": "b3e4d6c07ae4d8fa126967a9f76099c7be25f67eda6cf5b8e05f899dacc370e8"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_unc_paths_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "398e94fc8c8034c2ef6591f05d6fca04c875f801a0fbddd1f04ac3978cd28007",
+      "size": 19506,
+      "normalized_sha256": "398e94fc8c8034c2ef6591f05d6fca04c875f801a0fbddd1f04ac3978cd28007"
+    },
+    "build-dll-debug/tests/CMakeFiles/ui_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8548f6a9ec314d6e81bd58f8533d2f4a779b76e5b48711f457948da491fb70cd",
+      "size": 17482,
+      "normalized_sha256": "8548f6a9ec314d6e81bd58f8533d2f4a779b76e5b48711f457948da491fb70cd"
+    },
+    "build-dll-debug/tests/CMakeFiles/value_bridge_benchmark_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "207e697185c5cdaa339067d70ba5a5031b5ff044879caf2230ccb16b8aaac1e4",
+      "size": 16016,
+      "normalized_sha256": "207e697185c5cdaa339067d70ba5a5031b5ff044879caf2230ccb16b8aaac1e4"
+    },
+    "build-dll-debug/tests/CMakeFiles/value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "cb7ace335447e0a56f624d95d75ff03720e4b31feb96a372ab05a0778119deb8",
+      "size": 6442,
+      "normalized_sha256": "cb7ace335447e0a56f624d95d75ff03720e4b31feb96a372ab05a0778119deb8"
+    },
+    "build-dll-debug/tests/CMakeFiles/value_json_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "71c1f46f286f7adee135f5d1e3de231c25feb6f36017008ecaf535252f4ed076",
+      "size": 7478,
+      "normalized_sha256": "71c1f46f286f7adee135f5d1e3de231c25feb6f36017008ecaf535252f4ed076"
+    },
+    "build-dll-debug/tests/CMakeFiles/version_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "2061f524896950612ad005fd00343ee8ae524c24063fedca3bbaccc3de84867f",
+      "size": 5899,
+      "normalized_sha256": "2061f524896950612ad005fd00343ee8ae524c24063fedca3bbaccc3de84867f"
+    },
+    "build-dll-debug/tests/CMakeFiles/viewport_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "71d2a456dafa0eb34bcca72feaa1802b79c0b459508ef83186532a396214b07e",
+      "size": 16506,
+      "normalized_sha256": "71d2a456dafa0eb34bcca72feaa1802b79c0b459508ef83186532a396214b07e"
+    },
+    "build-dll-debug/tests/CMakeFiles/viewport_lifetime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "0c5488d5c197299eb31de2ed5f29d920a90a93e7bc953a01867a44fd9c9062d1",
+      "size": 16984,
+      "normalized_sha256": "0c5488d5c197299eb31de2ed5f29d920a90a93e7bc953a01867a44fd9c9062d1"
+    },
+    "build-dll-debug/tests/CMakeFiles/visionrt_python_testing_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "5a37791cc628fdb526d2772a3fa3d855b2fbfe23d03938bd907cdad5f3741b2e",
+      "size": 6340,
+      "normalized_sha256": "5a37791cc628fdb526d2772a3fa3d855b2fbfe23d03938bd907cdad5f3741b2e"
+    },
+    "build-dll-debug/tests/CMakeFiles/wire_router_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "cee439c1a0f2a558875026806914e7564ad376a4fdc4ad6a95820f962e70e6e9",
+      "size": 16134,
+      "normalized_sha256": "cee439c1a0f2a558875026806914e7564ad376a4fdc4ad6a95820f962e70e6e9"
+    },
+    "build-dll-debug/tests/CMakeFiles/wire_routing_benchmark_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c743e52ab8ee78522ae7c438d924f6cb7fc1b9cc4fc88a38f4867c0cad075dab",
+      "size": 17128,
+      "normalized_sha256": "c743e52ab8ee78522ae7c438d924f6cb7fc1b9cc4fc88a38f4867c0cad075dab"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_assist_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8455abe6877b63151a001546c2013783f93a046ec50c6af4733f58a31025d40e",
+      "size": 21991,
+      "normalized_sha256": "8455abe6877b63151a001546c2013783f93a046ec50c6af4733f58a31025d40e"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_assist_release_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c3eda57188125931b0bf5df70d1bd8d8e7f20c11ccf795a2e9f189688e7ff8cd",
+      "size": 21372,
+      "normalized_sha256": "c3eda57188125931b0bf5df70d1bd8d8e7f20c11ccf795a2e9f189688e7ff8cd"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_clipboard_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e423e7eeff258fff3bf22dd45806c6d9ee3da281e3ff7db61c3a1f3840a4642c",
+      "size": 21275,
+      "normalized_sha256": "e423e7eeff258fff3bf22dd45806c6d9ee3da281e3ff7db61c3a1f3840a4642c"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8ae38d2648dbca8a56e7845e96aecba0d2c2d5df1b17d00c96c4da620c9bf7f0",
+      "size": 25123,
+      "normalized_sha256": "8ae38d2648dbca8a56e7845e96aecba0d2c2d5df1b17d00c96c4da620c9bf7f0"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_exit_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ecabf3677f8657d47ae56b79ab003190977d071f996786a96b92b8242173fe48",
+      "size": 23360,
+      "normalized_sha256": "ecabf3677f8657d47ae56b79ab003190977d071f996786a96b92b8242173fe48"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_expression_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "faae79199f08f981b109ac46d1d4f24adb5299b49e28ef2a9fa358a0286f0a7d",
+      "size": 20661,
+      "normalized_sha256": "faae79199f08f981b109ac46d1d4f24adb5299b49e28ef2a9fa358a0286f0a7d"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_flows_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6fd836ab5cfe462fe709fd0d401a649c3e81a2f5e5cdc8fcb322608d201a126b",
+      "size": 20655,
+      "normalized_sha256": "6fd836ab5cfe462fe709fd0d401a649c3e81a2f5e5cdc8fcb322608d201a126b"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_interaction_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "54ec7e405a5a6d9bd791fe4e2c54b08da7d0847334f3750838592e21c90e68d4",
+      "size": 21709,
+      "normalized_sha256": "54ec7e405a5a6d9bd791fe4e2c54b08da7d0847334f3750838592e21c90e68d4"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_lifecycle_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "5e2a85a919d20060ced70600bcf8a0a6f8e022aecb311493af4a12ff27701c4e",
+      "size": 23199,
+      "normalized_sha256": "5e2a85a919d20060ced70600bcf8a0a6f8e022aecb311493af4a12ff27701c4e"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_publication_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "2b0b1e51b118a492ee443cbdfbd7ba0a677f4ebc6f18917ad0a3dfc4688fb8ef",
+      "size": 22789,
+      "normalized_sha256": "2b0b1e51b118a492ee443cbdfbd7ba0a677f4ebc6f18917ad0a3dfc4688fb8ef"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_status_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "bdfd9b49abe4eb567cea2de058e8b833427bb96db6fda3c29ea779c8810719c6",
+      "size": 21463,
+      "normalized_sha256": "bdfd9b49abe4eb567cea2de058e8b833427bb96db6fda3c29ea779c8810719c6"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_tooltree_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "dede2fc38384fe67f659e26fd933dd3903414c8f2b0de53dbe4219f7f2b3bd24",
+      "size": 22329,
+      "normalized_sha256": "dede2fc38384fe67f659e26fd933dd3903414c8f2b0de53dbe4219f7f2b3bd24"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_training_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6b6c6f783f4139ba80c5ac78a842381eab8e9d7a58038bbabb3ba25d50d89366",
+      "size": 22608,
+      "normalized_sha256": "6b6c6f783f4139ba80c5ac78a842381eab8e9d7a58038bbabb3ba25d50d89366"
+    },
+    "build-dll-debug/tests/CMakeFiles/workbench_unavailable_tool_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6dcfb78baf6ca4f1200498e1743ef6332137b79a67328836d9ca7896dbd34a1a",
+      "size": 22603,
+      "normalized_sha256": "6dcfb78baf6ca4f1200498e1743ef6332137b79a67328836d9ca7896dbd34a1a"
+    },
+    "build-dll-debug/tests/CTestTestfile.cmake": {
+      "role": "observe",
+      "sha256": "62de629fcdbf741d94ea4ac64eed2189eb81fee4824135ce5451fa76dc3ad527",
+      "size": 658852,
+      "normalized_sha256": "d558dc682b8f83f46e267125ac6bac6d6b519c1c13d90a8770a60bf43502269d"
+    },
+    "build-dll-debug/tests/cmake_install.cmake": {
+      "role": "observe",
+      "sha256": "6513167967c79d4d5e912dec08974dc67857ffa43f8644197930631ca9c60021",
+      "size": 1057,
+      "normalized_sha256": "a32d833954639438b637067914465af0fe59bb57a9a5b4d763f8969a7e06c1f8"
+    },
+    "build-dll-debug/tests/dll_consumer_contract_autogen/deps": {
+      "role": "observe",
+      "sha256": "6d0f576e56004dabb682704f810cc2affab09ddd30ced59fecd46a1c6f13aa7f",
+      "size": 2911,
+      "normalized_sha256": "6d0f576e56004dabb682704f810cc2affab09ddd30ced59fecd46a1c6f13aa7f"
+    },
+    "build-dll-debug/tests/dll_consumer_contract_autogen/mocs_compilation.cpp": {
+      "role": "observe",
+      "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
+      "size": 173,
+      "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
+    },
+    "build-dll-debug/tests/dll_consumer_contract_autogen/timestamp": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "build-dll-debug/tests/include/test_consumer/Export.h": {
+      "role": "observe",
+      "sha256": "2f738d8ba36ec7cc5ae427f22381317b51021c1fba194cb75637711e593f0b1e",
+      "size": 1319,
+      "normalized_sha256": "423522a2df1a9d38ae03f0c5c45897a758d1f8e183b632f5b8118787fa81a145"
+    },
+    "build-dll-debug/tests/include/test_consumer/Logging.h": {
+      "role": "observe",
+      "sha256": "01858ed71df6f7d960a64d0d8852e1c38f930363f30e3b8e5049b55babf20b17",
+      "size": 299,
+      "normalized_sha256": "112d856d3b9d6f79f851bc795b6acce9df9db87aca7259048dc963957db0164e"
+    },
+    "build-dll-debug/tests/test_dll_consumer_autogen/deps": {
+      "role": "observe",
+      "sha256": "be44c46be087286d13924e62aab7ebe1f735c4e3d610187267e7c067cdaee2cf",
+      "size": 3037,
+      "normalized_sha256": "be44c46be087286d13924e62aab7ebe1f735c4e3d610187267e7c067cdaee2cf"
+    },
+    "build-dll-debug/tests/test_dll_consumer_autogen/mocs_compilation.cpp": {
+      "role": "observe",
+      "sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412",
+      "size": 173,
+      "normalized_sha256": "3a980c470f20620fec75ec0a390d792f1dcc9ba7d99f4ec5fc30ff04b3b16412"
+    },
+    "build-dll-debug/tests/test_dll_consumer_autogen/timestamp": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "build-dll-debug/tests/test_dll_consumer_logging.cpp": {
+      "role": "observe",
+      "sha256": "be74f2c077a0a06eb51ba945d964140885790ed7653b7e3d37ae4758a56ad78b",
+      "size": 546,
+      "normalized_sha256": "6c8f7b7c90338cf396dafe829e398a69c9917ef036e52753dfa9fac1d1e7fbbf"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/parameter_mapping_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "657201fd672bd0ab95c319844f733e1e31cd45ffdcaf999ae95ea7b1f3b6e26e",
+      "size": 4363,
+      "normalized_sha256": "657201fd672bd0ab95c319844f733e1e31cd45ffdcaf999ae95ea7b1f3b6e26e"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_array_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e6a3255a596879e63e03493513fcc3b40389d4ddcef7a2132bf550c54121f25b",
+      "size": 3825,
+      "normalized_sha256": "e6a3255a596879e63e03493513fcc3b40389d4ddcef7a2132bf550c54121f25b"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_data_ref_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e866186158feccd5111018c5c85a7b59cd7c36b61928734ec4f3791ebb5c2eeb",
+      "size": 3589,
+      "normalized_sha256": "e866186158feccd5111018c5c85a7b59cd7c36b61928734ec4f3791ebb5c2eeb"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_roi_view_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "7c54513e65b068ab19b9e32c7bf318796502e5b9080227997321cd9cf75314e9",
+      "size": 4623,
+      "normalized_sha256": "7c54513e65b068ab19b9e32c7bf318796502e5b9080227997321cd9cf75314e9"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/test_sdk_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "63e67a9d4e99edb6de559a848fa22f9f137ebcf1fbe86c1e25d1b504a8cda225",
+      "size": 3329,
+      "normalized_sha256": "63e67a9d4e99edb6de559a848fa22f9f137ebcf1fbe86c1e25d1b504a8cda225"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CMakeFiles/tool_registration_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "f862c62fe40bf2ebbaf8cda37ec3833587f30eab9a7e7a6a28fe32356a5318a7",
+      "size": 4103,
+      "normalized_sha256": "f862c62fe40bf2ebbaf8cda37ec3833587f30eab9a7e7a6a28fe32356a5318a7"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/CTestTestfile.cmake": {
+      "role": "observe",
+      "sha256": "8c500ac1ebbf02f2915dde94b606aca5d7bdccc6c6dc441186b39dec0ea31c9a",
+      "size": 4032,
+      "normalized_sha256": "e39a9b7810e2e76fd658f17980dfb804a6720b1e3d6a6e1fecac550c94b193c4"
+    },
+    "build-dll-headless/3rdparty/VisionRTContracts/tests/cmake_install.cmake": {
+      "role": "observe",
+      "sha256": "90b6ebd17e48e443d872ca46be7b83331e51651bf9d8f9001f24333bb7244106",
+      "size": 1086,
+      "normalized_sha256": "8a4d2374114db44e8ab34689d93d91a15a3fbc741e3a8ba5749852878bb73015"
+    },
+    "build-dll-headless/tests/CMakeFiles/cpu_tools_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6c0f93becf52042f97d386f98050a42c1ae97d77f42d955f1a25731841395f30",
+      "size": 10602,
+      "normalized_sha256": "6c0f93becf52042f97d386f98050a42c1ae97d77f42d955f1a25731841395f30"
+    },
+    "build-dll-headless/tests/CMakeFiles/custom_tool_store_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8cb75296fe839ee2d1b3a8eb4a47edf2f15a6f1148a1be19493b081ca2a24188",
+      "size": 6858,
+      "normalized_sha256": "8cb75296fe839ee2d1b3a8eb4a47edf2f15a6f1148a1be19493b081ca2a24188"
+    },
+    "build-dll-headless/tests/CMakeFiles/definition_json_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8f2294895a5f348f5f9b390ca01a8ba7caade850e38d6a1b392840ff89b27966",
+      "size": 6415,
+      "normalized_sha256": "8f2294895a5f348f5f9b390ca01a8ba7caade850e38d6a1b392840ff89b27966"
+    },
+    "build-dll-headless/tests/CMakeFiles/edge_hierarchy_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "921d0bdfb742aba55c0b574c417ec7b7b53c18b22bac27a45d3ef465e2db0f8d",
+      "size": 10018,
+      "normalized_sha256": "921d0bdfb742aba55c0b574c417ec7b7b53c18b22bac27a45d3ef465e2db0f8d"
+    },
+    "build-dll-headless/tests/CMakeFiles/example_metadata_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "78b1a941cecde3bcb08755e4b17f2418632191855e98b48d7a69aa35d4743c9c",
+      "size": 10756,
+      "normalized_sha256": "78b1a941cecde3bcb08755e4b17f2418632191855e98b48d7a69aa35d4743c9c"
+    },
+    "build-dll-headless/tests/CMakeFiles/example_pipelines_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "38b4f2ab3a01b48976c893eb5e19bc20dedb6a3d280057f032bca7ae9728e8cf",
+      "size": 17317,
+      "normalized_sha256": "38b4f2ab3a01b48976c893eb5e19bc20dedb6a3d280057f032bca7ae9728e8cf"
+    },
+    "build-dll-headless/tests/CMakeFiles/gpu_tools_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1274ec7ebb17d27cc00fd3e6003dce064eb63b2d6a8f7ee0e55e5b2122d1490e",
+      "size": 11123,
+      "normalized_sha256": "1274ec7ebb17d27cc00fd3e6003dce064eb63b2d6a8f7ee0e55e5b2122d1490e"
+    },
+    "build-dll-headless/tests/CMakeFiles/installed_pipeline_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "7ceb3113c3c3d684929c6dbc1345cb74cf3a26daf9eafcb289fd6a90aab2d941",
+      "size": 12105,
+      "normalized_sha256": "7ceb3113c3c3d684929c6dbc1345cb74cf3a26daf9eafcb289fd6a90aab2d941"
+    },
+    "build-dll-headless/tests/CMakeFiles/installed_python_author_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1d11242f9744739b1d3d29b7051d795be7894bcdd4baf4d18794f99bcf416304",
+      "size": 12361,
+      "normalized_sha256": "1d11242f9744739b1d3d29b7051d795be7894bcdd4baf4d18794f99bcf416304"
+    },
+    "build-dll-headless/tests/CMakeFiles/log_aggregation_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "40b128fd1722a94ac3a01874de8650362dc952064a660138ab6d1c633ede2411",
+      "size": 7785,
+      "normalized_sha256": "40b128fd1722a94ac3a01874de8650362dc952064a660138ab6d1c633ede2411"
+    },
+    "build-dll-headless/tests/CMakeFiles/log_level_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "3aca046c53593a691399bf75f5b076773ac9e40cc2944898bdef79f58c02cd81",
+      "size": 8153,
+      "normalized_sha256": "3aca046c53593a691399bf75f5b076773ac9e40cc2944898bdef79f58c02cd81"
+    },
+    "build-dll-headless/tests/CMakeFiles/log_lifecycle_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c4b8013c170e084183c4dd4808c5b9bf4b387d16206f5377d6e8eeed5d7ad671",
+      "size": 7979,
+      "normalized_sha256": "c4b8013c170e084183c4dd4808c5b9bf4b387d16206f5377d6e8eeed5d7ad671"
+    },
+    "build-dll-headless/tests/CMakeFiles/log_text_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6fe3fd7fe1e2f81bad1496117b3b06ebeb4e9de5f7dd877585e693b2f36b06d3",
+      "size": 7533,
+      "normalized_sha256": "6fe3fd7fe1e2f81bad1496117b3b06ebeb4e9de5f7dd877585e693b2f36b06d3"
+    },
+    "build-dll-headless/tests/CMakeFiles/logic_node_execution_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "3f55d5201d23d780010fd9dbe4b014b2cc760db75fe311763fd92335444491a5",
+      "size": 9940,
+      "normalized_sha256": "3f55d5201d23d780010fd9dbe4b014b2cc760db75fe311763fd92335444491a5"
+    },
+    "build-dll-headless/tests/CMakeFiles/module_registration_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "d4717b0d1021aa5af9a18c260969af2e2499dbf13ee021e3d4dc5430284126fb",
+      "size": 15639,
+      "normalized_sha256": "d4717b0d1021aa5af9a18c260969af2e2499dbf13ee021e3d4dc5430284126fb"
+    },
+    "build-dll-headless/tests/CMakeFiles/native_value_lifetime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "0f6a5f0ef4f73bb96d9bd245921146b81649d2ac8be6af69ddeb79cc1a4b76db",
+      "size": 16087,
+      "normalized_sha256": "0f6a5f0ef4f73bb96d9bd245921146b81649d2ac8be6af69ddeb79cc1a4b76db"
+    },
+    "build-dll-headless/tests/CMakeFiles/node_activity_mailbox_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1f1b49b74803416049cabe4be474f17b84a53ad51acfe365c052ad55f4ae9ba3",
+      "size": 12359,
+      "normalized_sha256": "1f1b49b74803416049cabe4be474f17b84a53ad51acfe365c052ad55f4ae9ba3"
+    },
+    "build-dll-headless/tests/CMakeFiles/package_replacement_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "39b6111b10819269b681bec456e75116ae5b1306f4fd123358cd32ec6def198e",
+      "size": 17581,
+      "normalized_sha256": "39b6111b10819269b681bec456e75116ae5b1306f4fd123358cd32ec6def198e"
+    },
+    "build-dll-headless/tests/CMakeFiles/plugin_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e18392262c8c60923f062a366c0321f0a37bd46e9af667c95ff668bbf07c1d12",
+      "size": 17065,
+      "normalized_sha256": "e18392262c8c60923f062a366c0321f0a37bd46e9af667c95ff668bbf07c1d12"
+    },
+    "build-dll-headless/tests/CMakeFiles/project_editor_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "393544719329c05c1f7aeb9f801382a308e1e606264a4d95eaac3c13b159921e",
+      "size": 9487,
+      "normalized_sha256": "393544719329c05c1f7aeb9f801382a308e1e606264a4d95eaac3c13b159921e"
+    },
+    "build-dll-headless/tests/CMakeFiles/project_storage_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "3bd8cdf745d0e411519ba8d9b0b59e9e65dc35ea51cd759762e32b4cf1265eee",
+      "size": 10123,
+      "normalized_sha256": "3bd8cdf745d0e411519ba8d9b0b59e9e65dc35ea51cd759762e32b4cf1265eee"
+    },
+    "build-dll-headless/tests/CMakeFiles/project_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "7ce144fef561bda588e75bd2df5b35b49fd62769000194d760fb4ec43fe53767",
+      "size": 10317,
+      "normalized_sha256": "7ce144fef561bda588e75bd2df5b35b49fd62769000194d760fb4ec43fe53767"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_adapter_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "bdd7368fbcfddb1b78a51df7c4b44857aa02be361285c59e7898474d77a82b1f",
+      "size": 9346,
+      "normalized_sha256": "bdd7368fbcfddb1b78a51df7c4b44857aa02be361285c59e7898474d77a82b1f"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_array_lifetime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1002aece7bf07cba1cbdc8f0799149f84fb85be0d44bef52c985c62a49c73eb0",
+      "size": 16677,
+      "normalized_sha256": "1002aece7bf07cba1cbdc8f0799149f84fb85be0d44bef52c985c62a49c73eb0"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_loading_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "6c7a531e58f1913e6467734e233e0c8ff4fb15e394a9d023b6362b4895c1c29a",
+      "size": 9138,
+      "normalized_sha256": "6c7a531e58f1913e6467734e233e0c8ff4fb15e394a9d023b6362b4895c1c29a"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_probe_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "730ca1f752dd23a3e48c21797faefe3319e2e586b674dd4bb15b0fbe7a72a4d4",
+      "size": 8627,
+      "normalized_sha256": "730ca1f752dd23a3e48c21797faefe3319e2e586b674dd4bb15b0fbe7a72a4d4"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_shutdown_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "75cbbbc9ab7d10cea5649f714fa875fc0cfd5db385694d9ddd9f0f15ca855c76",
+      "size": 9562,
+      "normalized_sha256": "75cbbbc9ab7d10cea5649f714fa875fc0cfd5db385694d9ddd9f0f15ca855c76"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_tools_execution_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "eb302566d2df798ed77e06815dcef549d26f137746bbce9e280e12226ed6d44a",
+      "size": 11667,
+      "normalized_sha256": "eb302566d2df798ed77e06815dcef549d26f137746bbce9e280e12226ed6d44a"
+    },
+    "build-dll-headless/tests/CMakeFiles/python_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1002eb5e0ddc18e2fb95931973b9b0bcbd3f815de75ceff21eca679cf63e2703",
+      "size": 8597,
+      "normalized_sha256": "1002eb5e0ddc18e2fb95931973b9b0bcbd3f815de75ceff21eca679cf63e2703"
+    },
+    "build-dll-headless/tests/CMakeFiles/result_readback_barrier_test_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "7bba5cb2fef32f1054a3c1b986bd9468e6af70d1014417d55d6d2b0b71ad37a3",
+      "size": 13231,
+      "normalized_sha256": "7bba5cb2fef32f1054a3c1b986bd9468e6af70d1014417d55d6d2b0b71ad37a3"
+    },
+    "build-dll-headless/tests/CMakeFiles/roi_view_benchmark_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "472000c3ab61df35648538759ce5fab8716ffa7ad121eb54a060f861b50b192f",
+      "size": 7507,
+      "normalized_sha256": "472000c3ab61df35648538759ce5fab8716ffa7ad121eb54a060f861b50b192f"
+    },
+    "build-dll-headless/tests/CMakeFiles/runtime_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "188839f673f0e9a1ce24545e8804adb7bc1b07bf867858560f6848bd29213428",
+      "size": 11959,
+      "normalized_sha256": "188839f673f0e9a1ce24545e8804adb7bc1b07bf867858560f6848bd29213428"
+    },
+    "build-dll-headless/tests/CMakeFiles/runtime_diagnostics_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "4a46f7ba173af0cfc5aaeca780a8208cd382e1c7de774fb842f8a6910f3a5b9e",
+      "size": 12807,
+      "normalized_sha256": "4a46f7ba173af0cfc5aaeca780a8208cd382e1c7de774fb842f8a6910f3a5b9e"
+    },
+    "build-dll-headless/tests/CMakeFiles/runtime_node_activity_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "99469dc5b77a15533af0b83e5e7c851bedb17b5aafcb19a87ce0907186512fe0",
+      "size": 12169,
+      "normalized_sha256": "99469dc5b77a15533af0b83e5e7c851bedb17b5aafcb19a87ce0907186512fe0"
+    },
+    "build-dll-headless/tests/CMakeFiles/runtime_python_lazy_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "0a7bb192a1cdf22c049f8a4cec24c188c17293b9e8f7d43796de47da4acd183f",
+      "size": 13074,
+      "normalized_sha256": "0a7bb192a1cdf22c049f8a4cec24c188c17293b9e8f7d43796de47da4acd183f"
+    },
+    "build-dll-headless/tests/CMakeFiles/runtime_value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "736ac68a476bb43470f90d39264edaa7377534b871cdccdab264cce8d3da311b",
+      "size": 12966,
+      "normalized_sha256": "736ac68a476bb43470f90d39264edaa7377534b871cdccdab264cce8d3da311b"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_dep_a_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "ed56abe270d099f6c7eeb115a3cbb8cbf7b3652cea9349776c5dd576d1c8c143",
+      "size": 12800,
+      "normalized_sha256": "ed56abe270d099f6c7eeb115a3cbb8cbf7b3652cea9349776c5dd576d1c8c143"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_dep_b_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "a66b227b74247591cd32b3b914a278558b7516f9735ca42d25d9b3cf3af68af9",
+      "size": 12982,
+      "normalized_sha256": "a66b227b74247591cd32b3b914a278558b7516f9735ca42d25d9b3cf3af68af9"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_plugin_a_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "88f4702457eb29b96d6f9033f3c54d265dfd898d06af34504f4756c6e26fabdc",
+      "size": 13333,
+      "normalized_sha256": "88f4702457eb29b96d6f9033f3c54d265dfd898d06af34504f4756c6e26fabdc"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_plugin_b_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "490ddc0a3044d3a48bb1ab8912ab41f5a3c5c9888e0876e24eef2960f3d868c8",
+      "size": 13521,
+      "normalized_sha256": "490ddc0a3044d3a48bb1ab8912ab41f5a3c5c9888e0876e24eef2960f3d868c8"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_plugin_legacy_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "8565ad6c0c597423e01d7ba3e8c29fcc1252db60a4f9e91fb51dbc0e151193e5",
+      "size": 13770,
+      "normalized_sha256": "8565ad6c0c597423e01d7ba3e8c29fcc1252db60a4f9e91fb51dbc0e151193e5"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_plugin_module_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "9f315321eab7ed7bd2368188d3fbf2a807fb1aba631ef90b04ada9c34720f188",
+      "size": 12807,
+      "normalized_sha256": "9f315321eab7ed7bd2368188d3fbf2a807fb1aba631ef90b04ada9c34720f188"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_plugin_value_lifetime_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "1d53f53ba8433af76de203a4dc60fdf2ea2a319b37657dbd16409ec1d1bcb916",
+      "size": 15316,
+      "normalized_sha256": "1d53f53ba8433af76de203a4dc60fdf2ea2a319b37657dbd16409ec1d1bcb916"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_registration_collision_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c3fd150d223b1d5eeedc4f4fc01d4a8e3b1235e45aa69abc3651a0725859d095",
+      "size": 14888,
+      "normalized_sha256": "c3fd150d223b1d5eeedc4f4fc01d4a8e3b1235e45aa69abc3651a0725859d095"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_registration_duplicate_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "d97084ecd8f5530252d643830ce42c45d30e61a62cc0b690c4a762217bbb8567",
+      "size": 14295,
+      "normalized_sha256": "d97084ecd8f5530252d643830ce42c45d30e61a62cc0b690c4a762217bbb8567"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_registration_null_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "572aa22658c09c8784c74b54686535ba7947eb8b4ecee64cf86c5d830c8e8651",
+      "size": 14674,
+      "normalized_sha256": "572aa22658c09c8784c74b54686535ba7947eb8b4ecee64cf86c5d830c8e8651"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_registration_short_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "e90bc66c34f53b1160b9372636ec77b0a2c5799d3bc6a88e15018ca37aa5ce47",
+      "size": 14469,
+      "normalized_sha256": "e90bc66c34f53b1160b9372636ec77b0a2c5799d3bc6a88e15018ca37aa5ce47"
+    },
+    "build-dll-headless/tests/CMakeFiles/test_registration_valid_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "7f6e53c4b2e750e997fc70e69fff5337ac88afff0af7093c9f3d8c855fe7eef5",
+      "size": 14018,
+      "normalized_sha256": "7f6e53c4b2e750e997fc70e69fff5337ac88afff0af7093c9f3d8c855fe7eef5"
+    },
+    "build-dll-headless/tests/CMakeFiles/tool_discovery_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "26e44b2ceb728d1b31bb5424504fdbd817cb6db1e259123a99bc75b701a1de4b",
+      "size": 9279,
+      "normalized_sha256": "26e44b2ceb728d1b31bb5424504fdbd817cb6db1e259123a99bc75b701a1de4b"
+    },
+    "build-dll-headless/tests/CMakeFiles/tool_registry_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "c3391a23eb1b8f322b86faeb17860688cbdfb826d215ed3725aff76658f468a4",
+      "size": 6304,
+      "normalized_sha256": "c3391a23eb1b8f322b86faeb17860688cbdfb826d215ed3725aff76658f468a4"
+    },
+    "build-dll-headless/tests/CMakeFiles/tools_package_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "7ca6b888a7a60f411776101f02c704a2258c4283545d02c8306bb8375b1d9616",
+      "size": 6609,
+      "normalized_sha256": "7ca6b888a7a60f411776101f02c704a2258c4283545d02c8306bb8375b1d9616"
+    },
+    "build-dll-headless/tests/CMakeFiles/value_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "41c72622a56efb5bcd05b82642d25bdf374f139ab4fc652b680ee6f7b12da2f7",
+      "size": 5939,
+      "normalized_sha256": "41c72622a56efb5bcd05b82642d25bdf374f139ab4fc652b680ee6f7b12da2f7"
+    },
+    "build-dll-headless/tests/CMakeFiles/value_json_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "37876cfe410c14b2b8ed366aff0d747ca25c1c901a2fd0d3410fcca78739954c",
+      "size": 7005,
+      "normalized_sha256": "37876cfe410c14b2b8ed366aff0d747ca25c1c901a2fd0d3410fcca78739954c"
+    },
+    "build-dll-headless/tests/CMakeFiles/version_contract_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "f58ff6dec360c8e5b8f60e85d0999cb6554ed5d004862d760d87f2e673e0b5b5",
+      "size": 5370,
+      "normalized_sha256": "f58ff6dec360c8e5b8f60e85d0999cb6554ed5d004862d760d87f2e673e0b5b5"
+    },
+    "build-dll-headless/tests/CMakeFiles/visionrt_python_testing_autogen.dir/AutogenInfo.json": {
+      "role": "observe",
+      "sha256": "06f4ca64b283330e1598ec5c5e284d753856885b7c2b34489e2eac8741ad26c9",
+      "size": 6219,
+      "normalized_sha256": "06f4ca64b283330e1598ec5c5e284d753856885b7c2b34489e2eac8741ad26c9"
+    },
+    "build-dll-headless/tests/CTestTestfile.cmake": {
+      "role": "observe",
+      "sha256": "6269940c641965129597f2046d03d76248fa9691df5e881290cd226701b4c9a9",
+      "size": 312952,
+      "normalized_sha256": "66d5f1594556e40ce6096a2741a7ec62aa2fd0945e88946e3fe4bdd02da23280"
+    },
+    "build-dll-headless/tests/cmake_install.cmake": {
+      "role": "observe",
+      "sha256": "69f574b78e7344444ad078a49571653aca2f472b0d2a58d248108dedd79ac793",
+      "size": 1059,
+      "normalized_sha256": "85e0e7e5c7a86b707869d70b846f1e91a78637e83695a9fa1ae543bcbce7b2d4"
+    },
+    "cmake/AddModule.cmake": {
+      "role": "index",
+      "sha256": "76db59f52d88d28e171306e9d1ee9e6951d5e8d00af03d15f3596a8c07ff2ffd",
+      "size": 4232,
+      "normalized_sha256": "76db59f52d88d28e171306e9d1ee9e6951d5e8d00af03d15f3596a8c07ff2ffd"
+    },
+    "cmake/AddTest.cmake": {
+      "role": "index",
+      "sha256": "8517a59877acea98fd53efe23f366812bba01573dc36692b1918c61bd236ef1b",
+      "size": 7745,
+      "normalized_sha256": "8517a59877acea98fd53efe23f366812bba01573dc36692b1918c61bd236ef1b"
+    },
+    "cmake/Config3rdparty.cmake": {
+      "role": "index",
+      "sha256": "86b71202f8e58bb4c64166d6ca17b57b65ba342ef79a7eb5a1c61695212548d9",
+      "size": 180,
+      "normalized_sha256": "86b71202f8e58bb4c64166d6ca17b57b65ba342ef79a7eb5a1c61695212548d9"
+    },
+    "cmake/ConfigBuildTree.cmake": {
+      "role": "index",
+      "sha256": "cfe25b82315c48537ad30457913b87c029cb06063ae92af1f5ba74d1c9ae5658",
+      "size": 1099,
+      "normalized_sha256": "cfe25b82315c48537ad30457913b87c029cb06063ae92af1f5ba74d1c9ae5658"
+    },
+    "cmake/ConfigCompiler.cmake": {
+      "role": "index",
+      "sha256": "5db1c9c73651357d74ef98faa1fc1cd40126271fc66e8c7ca804b7454e77f648",
+      "size": 639,
+      "normalized_sha256": "5db1c9c73651357d74ef98faa1fc1cd40126271fc66e8c7ca804b7454e77f648"
+    },
+    "cmake/ConfigDependencyDefaults.cmake": {
+      "role": "index",
+      "sha256": "eb318f42306618402473ad988f1122e0d6901425f38eca25d100decd9feea291",
+      "size": 3651,
+      "normalized_sha256": "eb318f42306618402473ad988f1122e0d6901425f38eca25d100decd9feea291"
+    },
+    "cmake/ConfigLibavoid.cmake": {
+      "role": "index",
+      "sha256": "0c6f78fc1201e7d5a7ed623c5c921352c649b9506a26c1afeedd5d1349cd2645",
+      "size": 812,
+      "normalized_sha256": "0c6f78fc1201e7d5a7ed623c5c921352c649b9506a26c1afeedd5d1349cd2645"
+    },
+    "cmake/ConfigOpenCV.cmake": {
+      "role": "index",
+      "sha256": "0194a53d8df6e3a91471073b0c688770103219ccff34aa031bcafec5a3b7aaf4",
+      "size": 2562,
+      "normalized_sha256": "0194a53d8df6e3a91471073b0c688770103219ccff34aa031bcafec5a3b7aaf4"
+    },
+    "cmake/ConfigPython.cmake": {
+      "role": "index",
+      "sha256": "c4c3bd26ce07dc493fbd2aa2e854de0a82c19237dd48ed9c57f2bda3c51b13b9",
+      "size": 1085,
+      "normalized_sha256": "c4c3bd26ce07dc493fbd2aa2e854de0a82c19237dd48ed9c57f2bda3c51b13b9"
+    },
+    "cmake/ConfigQT.cmake": {
+      "role": "index",
+      "sha256": "2c219688f51f8363f9180ecbc69b708bcc6afd9c1d832e04a86396b874aa529b",
+      "size": 1213,
+      "normalized_sha256": "2c219688f51f8363f9180ecbc69b708bcc6afd9c1d832e04a86396b874aa529b"
+    },
+    "cmake/ConfigQuickUI.cmake": {
+      "role": "index",
+      "sha256": "304a6bdbcee06e52ec6627f560dd027e47a848aed001fdb28b51848d2c5a2365",
+      "size": 973,
+      "normalized_sha256": "304a6bdbcee06e52ec6627f560dd027e47a848aed001fdb28b51848d2c5a2365"
+    },
+    "cmake/ConfigSpdlog.cmake": {
+      "role": "index",
+      "sha256": "815410b78a5f197043a64291f70a611af930a8265d1ab12e8ec3c02e1e8c2346",
+      "size": 759,
+      "normalized_sha256": "815410b78a5f197043a64291f70a611af930a8265d1ab12e8ec3c02e1e8c2346"
+    },
+    "cmake/ConfigVersion.cmake": {
+      "role": "index",
+      "sha256": "fb77281e81a6beb5c512b80ad6ce72f1cf611d0e94d707bfad5b3500a6c4e177",
+      "size": 7692,
+      "normalized_sha256": "fb77281e81a6beb5c512b80ad6ce72f1cf611d0e94d707bfad5b3500a6c4e177"
+    },
+    "cmake/Deploy.cmake.in": {
+      "role": "index",
+      "sha256": "619df7020205f0991e7e393c5c2a64b474b8f050199d8170d4d83f28429c065f",
+      "size": 3380,
+      "normalized_sha256": "619df7020205f0991e7e393c5c2a64b474b8f050199d8170d4d83f28429c065f"
+    },
+    "cmake/GetGitRevisionDescription.cmake": {
+      "role": "index",
+      "sha256": "53ed64785ddc64e43d66afa00c0cc59aa19d6c36d43d4c3af29552d148fd76c4",
+      "size": 8056,
+      "normalized_sha256": "53ed64785ddc64e43d66afa00c0cc59aa19d6c36d43d4c3af29552d148fd76c4"
+    },
+    "cmake/GetGitRevisionDescription.cmake.in": {
+      "role": "index",
+      "sha256": "4b138b61c7ca5b94cd06755aae21673d1b9d88484f58131774371092822de9f6",
+      "size": 1846,
+      "normalized_sha256": "4b138b61c7ca5b94cd06755aae21673d1b9d88484f58131774371092822de9f6"
+    },
+    "cmake/ModuleLogging.cpp.in": {
+      "role": "index",
+      "sha256": "53253b0a068ef65a6b55d98b2991833818737e82f7084c5bbd9ed4ec46819ea1",
+      "size": 513,
+      "normalized_sha256": "53253b0a068ef65a6b55d98b2991833818737e82f7084c5bbd9ed4ec46819ea1"
+    },
+    "cmake/ModuleLogging.h.in": {
+      "role": "index",
+      "sha256": "9bf560b89839b6bf687885fbac2011ac840d4d7fea566c08ea7dc698b17b3e33",
+      "size": 254,
+      "normalized_sha256": "9bf560b89839b6bf687885fbac2011ac840d4d7fea566c08ea7dc698b17b3e33"
+    },
+    "cmake/PrintConfig.cmake": {
+      "role": "index",
+      "sha256": "2e9c8f26fff237b17748bc7b6a570b1b5797f135b8fb42a9bd6c30572f5294b7",
+      "size": 1074,
+      "normalized_sha256": "2e9c8f26fff237b17748bc7b6a570b1b5797f135b8fb42a9bd6c30572f5294b7"
+    },
+    "cmake/VersionBuildTime.h.in": {
+      "role": "index",
+      "sha256": "8a57d0094ee7bd9a640b15fbc25b3a5bc8011fda7c51976d2a99a876e7dcd8cf",
+      "size": 118,
+      "normalized_sha256": "8a57d0094ee7bd9a640b15fbc25b3a5bc8011fda7c51976d2a99a876e7dcd8cf"
+    },
+    "cmake/VersionDef.h.in": {
+      "role": "index",
+      "sha256": "b99d7be8356153ad624ac760479623f278d2d60b878bb1b5e061dde17112c151",
+      "size": 6386,
+      "normalized_sha256": "b99d7be8356153ad624ac760479623f278d2d60b878bb1b5e061dde17112c151"
+    },
+    "cmake/VersionUtils.h.in": {
+      "role": "index",
+      "sha256": "71a74299ec6afbf35c2598a625947b21eb63583294d35fbed2dd54eb252b42e7",
+      "size": 421,
+      "normalized_sha256": "71a74299ec6afbf35c2598a625947b21eb63583294d35fbed2dd54eb252b42e7"
+    },
+    "cmake/WriteBuildInfo.cmake": {
+      "role": "index",
+      "sha256": "ddef8b161f98acc410b83459ac1fbde62b9369e9ec560044b3b6ebbfa6f32fdf",
+      "size": 5716,
+      "normalized_sha256": "ddef8b161f98acc410b83459ac1fbde62b9369e9ec560044b3b6ebbfa6f32fdf"
+    },
+    "cmake/check_git_workspace.py": {
+      "role": "index",
+      "sha256": "8ccdf660fcf70dc8479734f17bb3413c85b83b411cc68cf82e6320b85ef29b25",
+      "size": 3819,
+      "normalized_sha256": "8ccdf660fcf70dc8479734f17bb3413c85b83b411cc68cf82e6320b85ef29b25"
+    },
+    "docs/README.md": {
+      "role": "index",
+      "sha256": "22587e63aae94973e5f49ddf19d69d2ad9a05b41a43e40319a83d0e557a7a63b",
+      "size": 31313,
+      "normalized_sha256": "22587e63aae94973e5f49ddf19d69d2ad9a05b41a43e40319a83d0e557a7a63b"
+    },
+    "docs/VisionRT_EasyTouch与训练实施方案.md": {
+      "role": "index",
+      "sha256": "5a3ba15f651f41f3a0db1641c4374a9d219d3621d994e0c31032ea44a320b790",
+      "size": 42195,
+      "normalized_sha256": "5a3ba15f651f41f3a0db1641c4374a9d219d3621d994e0c31032ea44a320b790"
+    },
+    "examples/01_基础入门/01_图像读取/README.md": {
+      "role": "index",
+      "sha256": "d7ef37c81476291e4d0ffe476db6023505d3015a2a8367587cf3a081eebdc39d",
+      "size": 372,
+      "normalized_sha256": "d7ef37c81476291e4d0ffe476db6023505d3015a2a8367587cf3a081eebdc39d"
+    },
+    "examples/01_基础入门/01_图像读取/images/input_01.png": {
+      "role": "index",
+      "sha256": "aef7d27115019bbb14ac7392356ed4716bcb6861277634c4470830c0bdb3bc8d",
+      "size": 411
+    },
+    "examples/01_基础入门/01_图像读取/images/input_02.png": {
+      "role": "index",
+      "sha256": "c806f65958f73049251a99881b33893fe43cfca18daae14b19e3375650cd527b",
+      "size": 717
+    },
+    "examples/01_基础入门/01_图像读取/图像读取.vrt.json": {
+      "role": "index",
+      "sha256": "cb05889008a46733091a1b454d8f5893b78091f164177376c1555eaa24b5275f",
+      "size": 3452,
+      "normalized_sha256": "dad3ff50cf0a7f182b70ebd2955764b179f3915161a4f8822ccb211115602dc1"
+    },
+    "examples/02_工具示例/01_ROI定位与裁剪/README.md": {
+      "role": "index",
+      "sha256": "0b0b5f3b6f771f0c69eeef4c1a9aa79fce2fdb7d9baef1edd15d556ef3255d81",
+      "size": 454,
+      "normalized_sha256": "0b0b5f3b6f771f0c69eeef4c1a9aa79fce2fdb7d9baef1edd15d556ef3255d81"
+    },
+    "examples/02_工具示例/01_ROI定位与裁剪/ROI定位与裁剪.vrt.json": {
+      "role": "index",
+      "sha256": "876b05b91937b7bf5837c72256decdd64501ad119832685ea31312964af40aea",
+      "size": 8569,
+      "normalized_sha256": "c7c41ce00090ee0707e65639b1ed59aa0b08a91121e760b9843760f8fc0749e3"
+    },
+    "examples/02_工具示例/01_ROI定位与裁剪/images/input_01.png": {
+      "role": "index",
+      "sha256": "0aa23480a35d13535338579d381dda07ebdc9d932c6ec111072e7d2ba15a049f",
+      "size": 583
+    },
+    "examples/02_工具示例/02_图像预处理/README.md": {
+      "role": "index",
+      "sha256": "318e0896ed4d516a5a0db6eee0333aad76cd47892628d5f3371b2b6ce6b63ad2",
+      "size": 476,
+      "normalized_sha256": "318e0896ed4d516a5a0db6eee0333aad76cd47892628d5f3371b2b6ce6b63ad2"
+    },
+    "examples/02_工具示例/02_图像预处理/images/input_01.png": {
+      "role": "index",
+      "sha256": "524e6aa5d22d4b341003dc2c8166e86dcdb289996a992ac01943126769f51d16",
+      "size": 764
+    },
+    "examples/02_工具示例/02_图像预处理/图像预处理.vrt.json": {
+      "role": "index",
+      "sha256": "a336b3076eb67d60f9ca6a376467a30e0e93bc093c946add963330f763da8423",
+      "size": 8066,
+      "normalized_sha256": "fbd92aca54d053613ff599e4151cdf73690d7a9fe699d3878a90d5052a1c14d0"
+    },
+    "examples/02_工具示例/03_圆测量/README.md": {
+      "role": "index",
+      "sha256": "17e04cd3d53f332d8afb2b35034a205a44fa50107d67a1ed2fcb1fafc7e4c37e",
+      "size": 373,
+      "normalized_sha256": "17e04cd3d53f332d8afb2b35034a205a44fa50107d67a1ed2fcb1fafc7e4c37e"
+    },
+    "examples/02_工具示例/03_圆测量/images/input_01.png": {
+      "role": "index",
+      "sha256": "8c2c935b348b15d8b51a13006defb4467c0c12eec37102c7e67fa7cadd598265",
+      "size": 645
+    },
+    "examples/02_工具示例/03_圆测量/圆测量.vrt.json": {
+      "role": "index",
+      "sha256": "dfcc9931f06d2c80894ab7461346595ba0f12467f6b797739c2228359862f444",
+      "size": 11374,
+      "normalized_sha256": "28e66f822445d51ffac0044b566b334011f120baf6153e54c22bffa52a2f6191"
+    },
+    "examples/02_工具示例/04_行间距测量/README.md": {
+      "role": "index",
+      "sha256": "8fb35b5101516c1375fe18ceb58ba68f339169c4781bc887702fcd19664c676b",
+      "size": 409,
+      "normalized_sha256": "8fb35b5101516c1375fe18ceb58ba68f339169c4781bc887702fcd19664c676b"
+    },
+    "examples/02_工具示例/04_行间距测量/images/input_01.png": {
+      "role": "index",
+      "sha256": "5d26d7c1ad2e4a72e15d4ace5eb9981be67f9ec84991d07169b1d29ab03ccc02",
+      "size": 450
+    },
+    "examples/02_工具示例/04_行间距测量/行间距测量.vrt.json": {
+      "role": "index",
+      "sha256": "17fa52075dc9ee7fb460deb3dad13a99216bb23f1f9f9c6205763345e95304ec",
+      "size": 10319,
+      "normalized_sha256": "6a0014519de8bfdda8a1c77a864b1cce4aef5924966f6568adf3257c50b14e8d"
+    },
+    "examples/03_综合示例/01_多分支视觉检测/README.md": {
+      "role": "index",
+      "sha256": "c9f5cb6fd51469a680c2baf2a81df5eb2b002abcfa2b9a104475696f2a9d9f83",
+      "size": 518,
+      "normalized_sha256": "c9f5cb6fd51469a680c2baf2a81df5eb2b002abcfa2b9a104475696f2a9d9f83"
+    },
+    "examples/03_综合示例/01_多分支视觉检测/images/input_01.png": {
+      "role": "index",
+      "sha256": "4c20ee55cb45eb49011a58b54e35698a81147e956f352ad54ff90428b8466bb9",
+      "size": 785
+    },
+    "examples/03_综合示例/01_多分支视觉检测/多分支视觉检测.vrt.json": {
+      "role": "index",
+      "sha256": "e0dcb293a1dd0d079a1b4bbde5a8f18de0a3b8666dc9f7d7df327fa24760790c",
+      "size": 18364,
+      "normalized_sha256": "97e90bd1065ca277185abdb36c5e01b074585a4e2cc76a366ccecab46820e346"
+    },
+    "examples/03_综合示例/02_识别线缆颜色/README.md": {
+      "role": "index",
+      "sha256": "f447282dbc1b20ea1627ea133fab78aa5fd4b6ca0455c0b94d5af3523144ed3c",
+      "size": 3772,
+      "normalized_sha256": "f447282dbc1b20ea1627ea133fab78aa5fd4b6ca0455c0b94d5af3523144ed3c"
+    },
+    "examples/03_综合示例/02_识别线缆颜色/images/cable_11.png": {
+      "role": "index",
+      "sha256": "06377bc16bfa83cf4656d81a3214290a2e6f01bdc8a28dce95b129924e047d01",
+      "size": 2409497
+    },
+    "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png": {
+      "role": "index",
+      "sha256": "06377bc16bfa83cf4656d81a3214290a2e6f01bdc8a28dce95b129924e047d01",
+      "size": 2409497
+    },
+    "examples/03_综合示例/02_识别线缆颜色/training/线缆对齐.json": {
+      "role": "index",
+      "sha256": "57c301c614e9739e820f9c4c627d4762d38d8c1a57f2a240cfe8ad89600dc504",
+      "size": 707,
+      "normalized_sha256": "eeb7e05114b3f883da5a6e66d8d057ce5619d1c069150d488b380c4fdcb6e910"
+    },
+    "examples/03_综合示例/02_识别线缆颜色/training/线缆颜色.json": {
+      "role": "index",
+      "sha256": "296520c45147a50fa06c2aa34a0d46706714c11fa3d462dfc523b8a13d1902d1",
+      "size": 1521,
+      "normalized_sha256": "9ed41a66f24ffdad2e332c2c67c4e8961388d134524cb1589a8ba29b72875498"
+    },
+    "examples/03_综合示例/02_识别线缆颜色/识别线缆颜色.vrt.json": {
+      "role": "index",
+      "sha256": "60855d323dbd469a8fc9b48bdf95b331975d2f5a7eb3d0230988b6dc345213fe",
+      "size": 11261,
+      "normalized_sha256": "9a2fe922f82e78a2d80d7f2563c6fd1c5658481b4153564a9951fd9a2598a141"
+    },
+    "examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json": {
+      "role": "index",
+      "sha256": "6837eb5d8aac7547d79edc61ed12ecb142f11ee596feb2f782e7122e24a250d0",
+      "size": 12133,
+      "normalized_sha256": "a7adc217197e002ad53716699eaa3a5a87efcb7b5554e171179f1fd723fc71b9"
+    },
+    "examples/04_扩展示例/01_Python图像统计/README.md": {
+      "role": "index",
+      "sha256": "d85b6ce34a09e08d5ddd6f69f845ebdca5ccdf0ad91968bf8b6b7edc817f8cd4",
+      "size": 724,
+      "normalized_sha256": "d85b6ce34a09e08d5ddd6f69f845ebdca5ccdf0ad91968bf8b6b7edc817f8cd4"
+    },
+    "examples/04_扩展示例/01_Python图像统计/images/input_01.png": {
+      "role": "index",
+      "sha256": "a20ee729afdc4bec75454b2cee3c62c3bc095759744bdbc0f2d8853aafac5cda",
+      "size": 536
+    },
+    "examples/04_扩展示例/01_Python图像统计/images/input_02.png": {
+      "role": "index",
+      "sha256": "4f0521e8299dcfc4ce0f74289ed9fb2b660801d8dfbd7f112b8712cc1d868b3b",
+      "size": 409
+    },
+    "examples/04_扩展示例/02_逻辑表达式与条件分支/README.md": {
+      "role": "index",
+      "sha256": "9513e2078a3e1d59a2256ba614ceb07cf93c1bdabf749d5010103dc459cefa23",
+      "size": 858,
+      "normalized_sha256": "9513e2078a3e1d59a2256ba614ceb07cf93c1bdabf749d5010103dc459cefa23"
+    },
+    "examples/04_扩展示例/02_逻辑表达式与条件分支/images/input_01.png": {
+      "role": "index",
+      "sha256": "a20ee729afdc4bec75454b2cee3c62c3bc095759744bdbc0f2d8853aafac5cda",
+      "size": 536
+    },
+    "examples/04_扩展示例/02_逻辑表达式与条件分支/images/input_02.png": {
+      "role": "index",
+      "sha256": "4f0521e8299dcfc4ce0f74289ed9fb2b660801d8dfbd7f112b8712cc1d868b3b",
+      "size": 409
+    },
+    "examples/04_扩展示例/02_逻辑表达式与条件分支/逻辑表达式与条件分支.vrt.json": {
+      "role": "index",
+      "sha256": "cca257c2fa7e2ab5450c8e34c1c70b9d9d5720c5d286f082d6ecd593f465042e",
+      "size": 10294,
+      "normalized_sha256": "e15f2e76068fbda826f0a80817b6aca630349ffeae70448f9d22fd3b6f9f0bc1"
+    },
+    "examples/04_扩展示例/03_GPU目标检测/GPU目标检测.vrt.json": {
+      "role": "index",
+      "sha256": "e2e10a18fef1d2e83d9800c65508db0571784b2e35d4ef798d2321cc1a06c9e5",
+      "size": 13372,
+      "normalized_sha256": "d485b495766140fd70ecfa61e5f470528b574562f42884bd0f1ef40e1c33da3a"
+    },
+    "examples/04_扩展示例/03_GPU目标检测/README.md": {
+      "role": "index",
+      "sha256": "bd75cdbd9c8b00e8cebcf58e0761c3e708ae7d1d40ed4fc19250cc8546dba8c7",
+      "size": 871,
+      "normalized_sha256": "bd75cdbd9c8b00e8cebcf58e0761c3e708ae7d1d40ed4fc19250cc8546dba8c7"
+    },
+    "examples/04_扩展示例/04_错误诊断/README.md": {
+      "role": "index",
+      "sha256": "c5e0a0d3a804329f7d721be4e6c42f2f1bf17ff828d05a42a09cc8ca409eaa19",
+      "size": 663,
+      "normalized_sha256": "c5e0a0d3a804329f7d721be4e6c42f2f1bf17ff828d05a42a09cc8ca409eaa19"
+    },
+    "examples/04_扩展示例/04_错误诊断/images/input_01.png": {
+      "role": "index",
+      "sha256": "a20ee729afdc4bec75454b2cee3c62c3bc095759744bdbc0f2d8853aafac5cda",
+      "size": 536
+    },
+    "examples/04_扩展示例/04_错误诊断/images/input_02.png": {
+      "role": "index",
+      "sha256": "4f0521e8299dcfc4ce0f74289ed9fb2b660801d8dfbd7f112b8712cc1d868b3b",
+      "size": 409
+    },
+    "examples/04_扩展示例/04_错误诊断/错误诊断.vrt.json": {
+      "role": "index",
+      "sha256": "784357d4566a7b1323c8b0b5dbf7fcf355538375df5f229d1fec04763bb043a1",
+      "size": 11581,
+      "normalized_sha256": "c4270339682c9a3d67b9a81783d01365a70a4b0afe6a62d44b08da22d5e4de11"
+    },
+    "examples/README.md": {
+      "role": "index",
+      "sha256": "68c175e43142ee9ce9b95abb7328ca0373206f315451a28ec3ce298c13a00ffd",
+      "size": 3412,
+      "normalized_sha256": "68c175e43142ee9ce9b95abb7328ca0373206f315451a28ec3ce298c13a00ffd"
+    },
+    "src/common/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "cd8d0d6c5b5ec3863fe60e546f3285d368b1be56fae96b1bc38a75fbf67087cf",
+      "size": 159,
+      "normalized_sha256": "cd8d0d6c5b5ec3863fe60e546f3285d368b1be56fae96b1bc38a75fbf67087cf"
+    },
+    "src/common/Version.cpp": {
+      "role": "index",
+      "sha256": "02c3548241a042da5928172c2ba6860ec225fd2efc7ee1c4114aa6cab1345210",
+      "size": 1657,
+      "normalized_sha256": "02c3548241a042da5928172c2ba6860ec225fd2efc7ee1c4114aa6cab1345210"
+    },
+    "src/common/include/common/LoggerBinding.h": {
+      "role": "index",
+      "sha256": "0381166d29843c04c7b264e067a15f0100ea80e491bef20736e02f863a5e7c39",
+      "size": 902,
+      "normalized_sha256": "0381166d29843c04c7b264e067a15f0100ea80e491bef20736e02f863a5e7c39"
+    },
+    "src/common/include/common/Singleton.h": {
+      "role": "index",
+      "sha256": "03036f29674fe8a20a10ee7a15ac787a2e32765595c3438188168a6420035897",
+      "size": 251,
+      "normalized_sha256": "03036f29674fe8a20a10ee7a15ac787a2e32765595c3438188168a6420035897"
+    },
+    "src/common/include/common/Version.h": {
+      "role": "index",
+      "sha256": "0a36ac827ae632eafbfd3bb94f04900af6436390e655ba77d76621f13264a723",
+      "size": 1614,
+      "normalized_sha256": "0a36ac827ae632eafbfd3bb94f04900af6436390e655ba77d76621f13264a723"
+    },
+    "src/core/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "b6ba7cc61374a4b3139a9bb5536d9afbc14cd60073c035226bb6d7da2a0767ec",
+      "size": 434,
+      "normalized_sha256": "b6ba7cc61374a4b3139a9bb5536d9afbc14cd60073c035226bb6d7da2a0767ec"
+    },
+    "src/core/CustomToolStore.cpp": {
+      "role": "index",
+      "sha256": "a2bb1da9da6802857cefe3098fab03098c92305061058bc0485502543c6058bd",
+      "size": 15459,
+      "normalized_sha256": "a2bb1da9da6802857cefe3098fab03098c92305061058bc0485502543c6058bd"
+    },
+    "src/core/DefinitionJson.cpp": {
+      "role": "index",
+      "sha256": "bb89d18caa1e23d090b2758c3cf42bce25e526753de60fa07731b14f8bed34a3",
+      "size": 26076,
+      "normalized_sha256": "bb89d18caa1e23d090b2758c3cf42bce25e526753de60fa07731b14f8bed34a3"
+    },
+    "src/core/Error.cpp": {
+      "role": "index",
+      "sha256": "f74e035b74a6a3dd6af7acc4cc34950da7f8c1118ba6efbcde75bc4a22c5a9df",
+      "size": 321,
+      "normalized_sha256": "f74e035b74a6a3dd6af7acc4cc34950da7f8c1118ba6efbcde75bc4a22c5a9df"
+    },
+    "src/core/ExampleProject.cpp": {
+      "role": "index",
+      "sha256": "b5baa6bc9d47dbe073d516b511e5ad278a6430acf4f2319e2c56ba2f46bfff73",
+      "size": 1564,
+      "normalized_sha256": "b5baa6bc9d47dbe073d516b511e5ad278a6430acf4f2319e2c56ba2f46bfff73"
+    },
+    "src/core/InputNormalizer.cpp": {
+      "role": "index",
+      "sha256": "3a8c6268e89e3978a35fdd67cf94fd2ace5faf02d16230696a27aab76df05d20",
+      "size": 4534,
+      "normalized_sha256": "3a8c6268e89e3978a35fdd67cf94fd2ace5faf02d16230696a27aab76df05d20"
+    },
+    "src/core/ModuleIndex.cpp": {
+      "role": "index",
+      "sha256": "aa0c438d082f078bdc84df449799f5e74d52e2e0909b46e1696035bd7b84505c",
+      "size": 3169,
+      "normalized_sha256": "aa0c438d082f078bdc84df449799f5e74d52e2e0909b46e1696035bd7b84505c"
+    },
+    "src/core/NodeContracts.cpp": {
+      "role": "index",
+      "sha256": "cf6b4cc34f51cbff19e59c171ca346244be1e73647075113a86c5ef3d99116b0",
+      "size": 13588,
+      "normalized_sha256": "cf6b4cc34f51cbff19e59c171ca346244be1e73647075113a86c5ef3d99116b0"
+    },
+    "src/core/ProjectEditor.cpp": {
+      "role": "index",
+      "sha256": "48f59cdc4f3882e2c82a6a7ef8649011dea2a2b76999aca910f4734b799f5802",
+      "size": 53993,
+      "normalized_sha256": "48f59cdc4f3882e2c82a6a7ef8649011dea2a2b76999aca910f4734b799f5802"
+    },
+    "src/core/ProjectStorage.cpp": {
+      "role": "index",
+      "sha256": "2eddefcbc2472ebe06dae3ef38b18044dadfcb93cc5dc5dee9dc3fe03f0508c1",
+      "size": 52617,
+      "normalized_sha256": "2eddefcbc2472ebe06dae3ef38b18044dadfcb93cc5dc5dee9dc3fe03f0508c1"
+    },
+    "src/core/ProjectValues.cpp": {
+      "role": "index",
+      "sha256": "d72202dfc300a43b440074f0f8a3c8d8a80acb828d7c94c489ad923ffabb57a9",
+      "size": 1129,
+      "normalized_sha256": "d72202dfc300a43b440074f0f8a3c8d8a80acb828d7c94c489ad923ffabb57a9"
+    },
+    "src/core/ToolDefinition.cpp": {
+      "role": "index",
+      "sha256": "8c8d1a6cab6b4e3aab87072af57c7e58113e72ba498bc4a4dd6fda39a3311388",
+      "size": 37016,
+      "normalized_sha256": "8c8d1a6cab6b4e3aab87072af57c7e58113e72ba498bc4a4dd6fda39a3311388"
+    },
+    "src/core/ToolPackage.cpp": {
+      "role": "index",
+      "sha256": "f03b8a63874ca72c01d13a73c1b64779ebad6c479b76349d5f8a4635f3f76d76",
+      "size": 7165,
+      "normalized_sha256": "f03b8a63874ca72c01d13a73c1b64779ebad6c479b76349d5f8a4635f3f76d76"
+    },
+    "src/core/ToolRegistry.cpp": {
+      "role": "index",
+      "sha256": "40ac951568c04344d4bfd860cf4bfa6e8bb63c60ed2f7164aeb2d147704b8a00",
+      "size": 12779,
+      "normalized_sha256": "40ac951568c04344d4bfd860cf4bfa6e8bb63c60ed2f7164aeb2d147704b8a00"
+    },
+    "src/core/ToolValueValidation.cpp": {
+      "role": "index",
+      "sha256": "1ba2bcb0c3c27ed39302af68415e16870b3336098d2343b7c065d61953833d1e",
+      "size": 4975,
+      "normalized_sha256": "1ba2bcb0c3c27ed39302af68415e16870b3336098d2343b7c065d61953833d1e"
+    },
+    "src/core/ValueJson.cpp": {
+      "role": "index",
+      "sha256": "c54d7ded84d809b8df8e438ffe60e6d56eac6d27c7f49c2e8f1805ffaea7ab22",
+      "size": 17471,
+      "normalized_sha256": "c54d7ded84d809b8df8e438ffe60e6d56eac6d27c7f49c2e8f1805ffaea7ab22"
+    },
+    "src/core/ValueJsonDocument.cpp": {
+      "role": "index",
+      "sha256": "7630ace338a78e875ffae6229b6bd4eedb91d48a224313b81fa78c77575fe1cd",
+      "size": 3696,
+      "normalized_sha256": "7630ace338a78e875ffae6229b6bd4eedb91d48a224313b81fa78c77575fe1cd"
+    },
+    "src/core/include/core/CustomToolStore.h": {
+      "role": "index",
+      "sha256": "4915290bdcb72eaf00fd5531c9417c31d6f291fb1e87b889f32333757ee45e02",
+      "size": 2726,
+      "normalized_sha256": "4915290bdcb72eaf00fd5531c9417c31d6f291fb1e87b889f32333757ee45e02"
+    },
+    "src/core/include/core/DefinitionJson.h": {
+      "role": "index",
+      "sha256": "eec5ea4d56e89a5c0060f8188526b35efe16bc946f5425aafe8539491a2a4772",
+      "size": 895,
+      "normalized_sha256": "eec5ea4d56e89a5c0060f8188526b35efe16bc946f5425aafe8539491a2a4772"
+    },
+    "src/core/include/core/Error.h": {
+      "role": "index",
+      "sha256": "498c52502e0902ca699d9342e55b09e937a97b4d9c61d294ed31f279792ae0fd",
+      "size": 2434,
+      "normalized_sha256": "498c52502e0902ca699d9342e55b09e937a97b4d9c61d294ed31f279792ae0fd"
+    },
+    "src/core/include/core/Errors.def": {
+      "role": "index",
+      "sha256": "e5658b31380585d5cdb9b051dc386779de905cedb13a0c3ec80ec54ac3451205",
+      "size": 822,
+      "normalized_sha256": "e5658b31380585d5cdb9b051dc386779de905cedb13a0c3ec80ec54ac3451205"
+    },
+    "src/core/include/core/ExampleProject.h": {
+      "role": "index",
+      "sha256": "5c9f42ab6b31fe32cd540efa6c9e663f15906fb0c9b63081a1ddb1da98256bb5",
+      "size": 821,
+      "normalized_sha256": "5c9f42ab6b31fe32cd540efa6c9e663f15906fb0c9b63081a1ddb1da98256bb5"
+    },
+    "src/core/include/core/ExecutionMetrics.h": {
+      "role": "index",
+      "sha256": "b0877b419a70d966e9422041202491cd383d9a4e4adffa9311cf5dacf2aaf7e4",
+      "size": 1491,
+      "normalized_sha256": "b0877b419a70d966e9422041202491cd383d9a4e4adffa9311cf5dacf2aaf7e4"
+    },
+    "src/core/include/core/InputNormalizer.h": {
+      "role": "index",
+      "sha256": "921a9a2100ee778ab88d81e3f8b7179347f8a9f641069d5ef767eae7598a2661",
+      "size": 1609,
+      "normalized_sha256": "921a9a2100ee778ab88d81e3f8b7179347f8a9f641069d5ef767eae7598a2661"
+    },
+    "src/core/include/core/JsonFields.h": {
+      "role": "index",
+      "sha256": "90523f7d119bf67b3f5d33fcba9a414f5a1cdfc118c96546838280795478f8b4",
+      "size": 2899,
+      "normalized_sha256": "90523f7d119bf67b3f5d33fcba9a414f5a1cdfc118c96546838280795478f8b4"
+    },
+    "src/core/include/core/ModuleIndex.h": {
+      "role": "index",
+      "sha256": "af46543dd4c06732834aa9de8984c79c4b9dbc20243ede890b40c66a4f9cae10",
+      "size": 727,
+      "normalized_sha256": "af46543dd4c06732834aa9de8984c79c4b9dbc20243ede890b40c66a4f9cae10"
+    },
+    "src/core/include/core/NativeImplementationProvider.h": {
+      "role": "index",
+      "sha256": "65e27906617c5f5ac6dc854b75fb96b3bdfa955fe0f68e287787fe1eb27934c6",
+      "size": 790,
+      "normalized_sha256": "65e27906617c5f5ac6dc854b75fb96b3bdfa955fe0f68e287787fe1eb27934c6"
+    },
+    "src/core/include/core/NodeContracts.h": {
+      "role": "index",
+      "sha256": "01c7e8be54a46fcbcd6d60068c1eb36190202c031df4de5c52568a41fdd93739",
+      "size": 2280,
+      "normalized_sha256": "01c7e8be54a46fcbcd6d60068c1eb36190202c031df4de5c52568a41fdd93739"
+    },
+    "src/core/include/core/Project.h": {
+      "role": "index",
+      "sha256": "912bb41fdd417e16e320bc6828f63b121eb10dc312ae3c37a7eb0c78ca08f85d",
+      "size": 4074,
+      "normalized_sha256": "912bb41fdd417e16e320bc6828f63b121eb10dc312ae3c37a7eb0c78ca08f85d"
+    },
+    "src/core/include/core/ProjectEditor.h": {
+      "role": "index",
+      "sha256": "09ee631603f3493ca60392f686a9b7c3e7c0ab8d2d8fa96e938a31e693a3742e",
+      "size": 6802,
+      "normalized_sha256": "09ee631603f3493ca60392f686a9b7c3e7c0ab8d2d8fa96e938a31e693a3742e"
+    },
+    "src/core/include/core/ProjectStorage.h": {
+      "role": "index",
+      "sha256": "246f994bab2efcfc2a0d85fd7056dca4a154bed9d144df65a7ab2997d0fbe04c",
+      "size": 2391,
+      "normalized_sha256": "246f994bab2efcfc2a0d85fd7056dca4a154bed9d144df65a7ab2997d0fbe04c"
+    },
+    "src/core/include/core/PythonLoadState.h": {
+      "role": "index",
+      "sha256": "7eb6f85a34fcf329736944a0f043113670a6cd7feb1b3be35b6425e5eb4ef82e",
+      "size": 1440,
+      "normalized_sha256": "7eb6f85a34fcf329736944a0f043113670a6cd7feb1b3be35b6425e5eb4ef82e"
+    },
+    "src/core/include/core/Sequence.h": {
+      "role": "index",
+      "sha256": "870ec80a8b071cbd95bf46868aeb031e769df836946135696a48c8080ec9e20e",
+      "size": 943,
+      "normalized_sha256": "870ec80a8b071cbd95bf46868aeb031e769df836946135696a48c8080ec9e20e"
+    },
+    "src/core/include/core/Tool.h": {
+      "role": "index",
+      "sha256": "244bb0ad529a919813b0a3927c6eb4b9fbe18e248687cd6236265f409f0bda09",
+      "size": 1586,
+      "normalized_sha256": "244bb0ad529a919813b0a3927c6eb4b9fbe18e248687cd6236265f409f0bda09"
+    },
+    "src/core/include/core/ToolDefinition.h": {
+      "role": "index",
+      "sha256": "9dc1f2310afa457f25daf584dbdec2d98659a546642cd1ec225cade72a0e88c8",
+      "size": 9641,
+      "normalized_sha256": "9dc1f2310afa457f25daf584dbdec2d98659a546642cd1ec225cade72a0e88c8"
+    },
+    "src/core/include/core/ToolPackage.h": {
+      "role": "index",
+      "sha256": "a4980c692b42965f92f2e29be840e13b594e39b7ff810f32ce27c3a5635db455",
+      "size": 946,
+      "normalized_sha256": "a4980c692b42965f92f2e29be840e13b594e39b7ff810f32ce27c3a5635db455"
+    },
+    "src/core/include/core/ToolPaths.h": {
+      "role": "index",
+      "sha256": "6c85e491a14c436d4fa26ff4501242123bf081a48eb01fb44d2b878963918238",
+      "size": 2179,
+      "normalized_sha256": "6c85e491a14c436d4fa26ff4501242123bf081a48eb01fb44d2b878963918238"
+    },
+    "src/core/include/core/ToolRegistry.h": {
+      "role": "index",
+      "sha256": "3224b9a78ee9284314b19c40dcf37c672650687b628be172d81544fd832957db",
+      "size": 4687,
+      "normalized_sha256": "3224b9a78ee9284314b19c40dcf37c672650687b628be172d81544fd832957db"
+    },
+    "src/core/include/core/ToolValueValidation.h": {
+      "role": "index",
+      "sha256": "e83d99bb62706251c4fb394669c7cb271f091bdfb984b3411b41bae34db1375b",
+      "size": 838,
+      "normalized_sha256": "e83d99bb62706251c4fb394669c7cb271f091bdfb984b3411b41bae34db1375b"
+    },
+    "src/core/include/core/ValueJson.h": {
+      "role": "index",
+      "sha256": "5c5b67dc0229598fa094858c6fdcea79289a63d38ffd7b11416b41d9e1e49087",
+      "size": 1422,
+      "normalized_sha256": "5c5b67dc0229598fa094858c6fdcea79289a63d38ffd7b11416b41d9e1e49087"
+    },
+    "src/log/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "cb245677e567c6d03011ab5fb6a7169b93449b2af5c43d92fbd95bc19d170c77",
+      "size": 714,
+      "normalized_sha256": "cb245677e567c6d03011ab5fb6a7169b93449b2af5c43d92fbd95bc19d170c77"
+    },
+    "src/log/LogLevel.cpp": {
+      "role": "index",
+      "sha256": "ec2b64e849711db1d0c4f1edab94842aab4b2987c7a02fc01dc0d4e1e2fe252e",
+      "size": 868,
+      "normalized_sha256": "ec2b64e849711db1d0c4f1edab94842aab4b2987c7a02fc01dc0d4e1e2fe252e"
+    },
+    "src/log/LogModel.cpp": {
+      "role": "index",
+      "sha256": "b9ebe7b7814356189fe32e7f99c85bb806e06ba30e2ab2fe6c4de3432c2a6d3a",
+      "size": 2858,
+      "normalized_sha256": "b9ebe7b7814356189fe32e7f99c85bb806e06ba30e2ab2fe6c4de3432c2a6d3a"
+    },
+    "src/log/LogService.cpp": {
+      "role": "index",
+      "sha256": "da9b040ec6e77afdae1f1bbe712fd5f48832911fc9cf169a02b144805a8446d4",
+      "size": 34592,
+      "normalized_sha256": "da9b040ec6e77afdae1f1bbe712fd5f48832911fc9cf169a02b144805a8446d4"
+    },
+    "src/log/include/log/LogLevel.h": {
+      "role": "index",
+      "sha256": "e56f549902bb117593872c7a9cde6ed66bc9bd7d5aff46b87634e24f44415c25",
+      "size": 804,
+      "normalized_sha256": "e56f549902bb117593872c7a9cde6ed66bc9bd7d5aff46b87634e24f44415c25"
+    },
+    "src/log/include/log/LogModel.h": {
+      "role": "index",
+      "sha256": "3d40c84836a86947132aa95c0ef63456d008a417b79bad609a5f4c185430688f",
+      "size": 1572,
+      "normalized_sha256": "3d40c84836a86947132aa95c0ef63456d008a417b79bad609a5f4c185430688f"
+    },
+    "src/log/include/log/LogService.h": {
+      "role": "index",
+      "sha256": "c06652d22952acdfa67317effc077b3cb49b5fd46775a11e40237bf3d041e2fd",
+      "size": 7874,
+      "normalized_sha256": "c06652d22952acdfa67317effc077b3cb49b5fd46775a11e40237bf3d041e2fd"
+    },
+    "src/main.cpp": {
+      "role": "index",
+      "sha256": "20eff1208ff957f3b7530e4d35977b08641ea3847bcb72ad3ba3c996884ecf47",
+      "size": 13600,
+      "normalized_sha256": "20eff1208ff957f3b7530e4d35977b08641ea3847bcb72ad3ba3c996884ecf47"
+    },
+    "src/plugins/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "d8d674ce0720e6b019c32d1ad9cf5762a5f3aeca5059f733835679e1c0d959f1",
+      "size": 89,
+      "normalized_sha256": "d8d674ce0720e6b019c32d1ad9cf5762a5f3aeca5059f733835679e1c0d959f1"
+    },
+    "src/plugins/LoadedModule.h": {
+      "role": "index",
+      "sha256": "5b074cb3e149a18f2fbd04c778a9d0af70739dceb84c52f698f1801f63dbd641",
+      "size": 892,
+      "normalized_sha256": "5b074cb3e149a18f2fbd04c778a9d0af70739dceb84c52f698f1801f63dbd641"
+    },
+    "src/plugins/PluginLoader.cpp": {
+      "role": "index",
+      "sha256": "88e6868f7975688c9b4a53380ff719310ca1a02f6b4e0f8ee071b7d3d161f313",
+      "size": 15932,
+      "normalized_sha256": "88e6868f7975688c9b4a53380ff719310ca1a02f6b4e0f8ee071b7d3d161f313"
+    },
+    "src/plugins/include/plugins/PluginLoader.h": {
+      "role": "index",
+      "sha256": "d5b28e222b3d4652ae97104edd8507c6b6bee3d0eef0cd6b314731eb55ee537f",
+      "size": 2863,
+      "normalized_sha256": "d5b28e222b3d4652ae97104edd8507c6b6bee3d0eef0cd6b314731eb55ee537f"
+    },
+    "src/python/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "56daa20e611a111d3cc1263c1e970126346f8c506c4810140bd5497c3777a95a",
+      "size": 554,
+      "normalized_sha256": "56daa20e611a111d3cc1263c1e970126346f8c506c4810140bd5497c3777a95a"
+    },
+    "src/python/PythonBackend.cpp": {
+      "role": "index",
+      "sha256": "87609201fcde2541df6d80a03a0eea9f24734102621d825d6d4034adb31ac69c",
+      "size": 17170,
+      "normalized_sha256": "87609201fcde2541df6d80a03a0eea9f24734102621d825d6d4034adb31ac69c"
+    },
+    "src/python/PythonProbe.cpp": {
+      "role": "index",
+      "sha256": "65584d2448a012ae02a7e22be60a2d9c75ad20dcd11cdd77b459b511b0a3fd4e",
+      "size": 14394,
+      "normalized_sha256": "65584d2448a012ae02a7e22be60a2d9c75ad20dcd11cdd77b459b511b0a3fd4e"
+    },
+    "src/python/include/python/PythonBackend.h": {
+      "role": "index",
+      "sha256": "d78327bbd14fc76a5440bc4d1f45cae745f14a9697d31a83bfa9e0886fe19b59",
+      "size": 3649,
+      "normalized_sha256": "d78327bbd14fc76a5440bc4d1f45cae745f14a9697d31a83bfa9e0886fe19b59"
+    },
+    "src/python/include/python/PythonEnvironment.h": {
+      "role": "index",
+      "sha256": "7cbf9e9bfa969113086fa98509e3402af0acc2ce581b248ee86a7a25ae370abe",
+      "size": 4238,
+      "normalized_sha256": "7cbf9e9bfa969113086fa98509e3402af0acc2ce581b248ee86a7a25ae370abe"
+    },
+    "src/python/include/python/PythonProbe.h": {
+      "role": "index",
+      "sha256": "c1418d8466382cda3bb2b7fd4b23178ddce36ce3d8bd45e00e93c2c2e06b6d44",
+      "size": 2632,
+      "normalized_sha256": "c1418d8466382cda3bb2b7fd4b23178ddce36ce3d8bd45e00e93c2c2e06b6d44"
+    },
+    "src/python_bridge/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "5c093961e8bc76ddf6c93e69a069df6c6d182baa1d24d98903201bfecf8dca44",
+      "size": 621,
+      "normalized_sha256": "5c093961e8bc76ddf6c93e69a069df6c6d182baa1d24d98903201bfecf8dca44"
+    },
+    "src/python_bridge/PythonBridge.cpp": {
+      "role": "index",
+      "sha256": "54dd7ec9cc1df16aa11e1d85ccac697cc57b82ffcc87466fcf47c52d416011fd",
+      "size": 3983,
+      "normalized_sha256": "54dd7ec9cc1df16aa11e1d85ccac697cc57b82ffcc87466fcf47c52d416011fd"
+    },
+    "src/python_bridge/PythonImages.cpp": {
+      "role": "index",
+      "sha256": "ba63e162d56a5bbd52c2a30b2701ccfcfa1e835dc605b69ebcf21d3fa8ee4cfc",
+      "size": 11859,
+      "normalized_sha256": "ba63e162d56a5bbd52c2a30b2701ccfcfa1e835dc605b69ebcf21d3fa8ee4cfc"
+    },
+    "src/python_bridge/PythonImages.h": {
+      "role": "index",
+      "sha256": "2a9e3889a74b687427947de28b5a35a1663cbb4bbac32a43d5a69942bca4ffca",
+      "size": 254,
+      "normalized_sha256": "2a9e3889a74b687427947de28b5a35a1663cbb4bbac32a43d5a69942bca4ffca"
+    },
+    "src/python_bridge/PythonInterop.cpp": {
+      "role": "index",
+      "sha256": "6775dc5bba3d9458f1414359db84f64316bb2a546c9d1d725e5a91d826e9ce6e",
+      "size": 13841,
+      "normalized_sha256": "6775dc5bba3d9458f1414359db84f64316bb2a546c9d1d725e5a91d826e9ce6e"
+    },
+    "src/python_bridge/PythonLoader.h.in": {
+      "role": "index",
+      "sha256": "6acbea5bf8d18084e0915742c12bc3c76e805d3e21afe6fa2526705ba85ebd3c",
+      "size": 143,
+      "normalized_sha256": "6acbea5bf8d18084e0915742c12bc3c76e805d3e21afe6fa2526705ba85ebd3c"
+    },
+    "src/python_bridge/PythonRuntime.cpp": {
+      "role": "index",
+      "sha256": "17f985079a0d880e94f387c0c6847c9f0eb63b49624ca9c36911b1dff7c9ef2c",
+      "size": 33572,
+      "normalized_sha256": "17f985079a0d880e94f387c0c6847c9f0eb63b49624ca9c36911b1dff7c9ef2c"
+    },
+    "src/python_bridge/PythonStorage.cpp": {
+      "role": "index",
+      "sha256": "a545ac62c17b85c04724b82117430f0679f27d110c15d31d4c54e7ba58a13055",
+      "size": 1725,
+      "normalized_sha256": "a545ac62c17b85c04724b82117430f0679f27d110c15d31d4c54e7ba58a13055"
+    },
+    "src/python_bridge/include/python_bridge/PythonBridgeApi.h": {
+      "role": "index",
+      "sha256": "7a34de5d26866170b1c5502130c1468dc04ef0b044d24ac1568ba8182dda4f48",
+      "size": 2567,
+      "normalized_sha256": "7a34de5d26866170b1c5502130c1468dc04ef0b044d24ac1568ba8182dda4f48"
+    },
+    "src/python_bridge/include/python_bridge/PythonInterop.h": {
+      "role": "index",
+      "sha256": "11ed48ea34d8b7e88d473327a2a9b3f19641d715b5c822e8656cda5c9ad99516",
+      "size": 386,
+      "normalized_sha256": "11ed48ea34d8b7e88d473327a2a9b3f19641d715b5c822e8656cda5c9ad99516"
+    },
+    "src/python_bridge/include/python_bridge/PythonRuntime.h": {
+      "role": "index",
+      "sha256": "27bb1aea6f707af6889940d3a1a092c4c222c0bb8cc25d94c797f0dc82e620f2",
+      "size": 1187,
+      "normalized_sha256": "27bb1aea6f707af6889940d3a1a092c4c222c0bb8cc25d94c797f0dc82e620f2"
+    },
+    "src/python_bridge/include/python_bridge/PythonStorage.h": {
+      "role": "index",
+      "sha256": "0607bced68d059e9b1560b9d6a2cbaa589e8a770ffa03b895be69d9822caddcf",
+      "size": 522,
+      "normalized_sha256": "0607bced68d059e9b1560b9d6a2cbaa589e8a770ffa03b895be69d9822caddcf"
+    },
+    "src/python_bridge/managed_packages.py": {
+      "role": "index",
+      "sha256": "3283c57c1504c5990a6401da4487df4dee446f5fa1c05739c205f9c3417ddad9",
+      "size": 3712,
+      "normalized_sha256": "3283c57c1504c5990a6401da4487df4dee446f5fa1c05739c205f9c3417ddad9"
+    },
+    "src/runtime/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "de5cf74a02cdedf487bca4524a8101ada48ad975cddc527d9b48eb40bea5c00c",
+      "size": 159,
+      "normalized_sha256": "de5cf74a02cdedf487bca4524a8101ada48ad975cddc527d9b48eb40bea5c00c"
+    },
+    "src/runtime/NodeRuntime.cpp": {
+      "role": "index",
+      "sha256": "b4bb5cb35f9d8f12e5c26d0c5ec77168813d5fd363d6de2c348bf86655d3be49",
+      "size": 22416,
+      "normalized_sha256": "b4bb5cb35f9d8f12e5c26d0c5ec77168813d5fd363d6de2c348bf86655d3be49"
+    },
+    "src/runtime/Receiver.cpp": {
+      "role": "index",
+      "sha256": "9a75ca08d56f84425fa9de7448f3c1552c0fff6c6577189834fca37b0a9f8342",
+      "size": 10911,
+      "normalized_sha256": "9a75ca08d56f84425fa9de7448f3c1552c0fff6c6577189834fca37b0a9f8342"
+    },
+    "src/runtime/RuntimeEngine.cpp": {
+      "role": "index",
+      "sha256": "d58e25d6b06fbfb2d9bf94c3b3698c1254c595dedd9888d1e1bd992f9ee4560d",
+      "size": 42023,
+      "normalized_sha256": "d58e25d6b06fbfb2d9bf94c3b3698c1254c595dedd9888d1e1bd992f9ee4560d"
+    },
+    "src/runtime/RuntimeInternal.h": {
+      "role": "index",
+      "sha256": "afd66b799d98f9f7d20e661b1096f75e3420c332f245c05956f7b152cecdb113",
+      "size": 4478,
+      "normalized_sha256": "afd66b799d98f9f7d20e661b1096f75e3420c332f245c05956f7b152cecdb113"
+    },
+    "src/runtime/include/runtime/NodeActivity.h": {
+      "role": "index",
+      "sha256": "ea2ad5eed91dd546bb8a94dbff00de60e568ea30faa1249757eb4df7779a2280",
+      "size": 3210,
+      "normalized_sha256": "ea2ad5eed91dd546bb8a94dbff00de60e568ea30faa1249757eb4df7779a2280"
+    },
+    "src/runtime/include/runtime/Receiver.h": {
+      "role": "index",
+      "sha256": "14c4a4546f7b0addf56af00b8bbe229e60bbb968944e5b26145c9be83670c7d0",
+      "size": 1421,
+      "normalized_sha256": "14c4a4546f7b0addf56af00b8bbe229e60bbb968944e5b26145c9be83670c7d0"
+    },
+    "src/runtime/include/runtime/RuntimeEngine.h": {
+      "role": "index",
+      "sha256": "f2c6dce97889083fbfdcfc375c02289d15971e23aa88b04911ea956955842e92",
+      "size": 4764,
+      "normalized_sha256": "f2c6dce97889083fbfdcfc375c02289d15971e23aa88b04911ea956955842e92"
+    },
+    "src/runtime/include/runtime/Snapshot.h": {
+      "role": "index",
+      "sha256": "5bd1028de7aa6d8be03fb44781882a5f0e3aa5b50e1c832fa2f6933ecfee39ea",
+      "size": 3676,
+      "normalized_sha256": "5bd1028de7aa6d8be03fb44781882a5f0e3aa5b50e1c832fa2f6933ecfee39ea"
+    },
+    "src/tools/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "1523b13a79a0c0b12e3b2061d937eeb54e11c3ee856a4fc5448011c2b982cde2",
+      "size": 104,
+      "normalized_sha256": "1523b13a79a0c0b12e3b2061d937eeb54e11c3ee856a4fc5448011c2b982cde2"
+    },
+    "src/tools/ReceiveTool.cpp": {
+      "role": "index",
+      "sha256": "23d3280029f768245ba759e6deeb6b91fc3adc5134204c55db26841d98bbc93f",
+      "size": 3976,
+      "normalized_sha256": "23d3280029f768245ba759e6deeb6b91fc3adc5134204c55db26841d98bbc93f"
+    },
+    "src/tools/SelectTool.cpp": {
+      "role": "index",
+      "sha256": "04c1814f39ea92286bf2c31d41c9f630e0fa2e03ffe7c27418950015193df36a",
+      "size": 2582,
+      "normalized_sha256": "04c1814f39ea92286bf2c31d41c9f630e0fa2e03ffe7c27418950015193df36a"
+    },
+    "src/tools/include/tools/ReceiveTool.h": {
+      "role": "index",
+      "sha256": "61c7211918689d6bfaf81e0bbeb8c26230572cce002bda24422e0fc43ddf007c",
+      "size": 166,
+      "normalized_sha256": "61c7211918689d6bfaf81e0bbeb8c26230572cce002bda24422e0fc43ddf007c"
+    },
+    "src/tools/include/tools/SelectTool.h": {
+      "role": "index",
+      "sha256": "c758a8af8d60a5365a7fefba1ed65bc0096409f59ec6657e268f857fe963aad4",
+      "size": 343,
+      "normalized_sha256": "c758a8af8d60a5365a7fefba1ed65bc0096409f59ec6657e268f857fe963aad4"
+    },
+    "src/ui/AboutReport.cpp": {
+      "role": "index",
+      "sha256": "d598203087a1ab8f8f05187adff8f91c6f12e83b09f0a7dae7e36f1c7e771fee",
+      "size": 3385,
+      "normalized_sha256": "d598203087a1ab8f8f05187adff8f91c6f12e83b09f0a7dae7e36f1c7e771fee"
+    },
+    "src/ui/AppController.cpp": {
+      "role": "index",
+      "sha256": "74237084410def78e5344c212d598c382a7a56eeb09c193006e7adf5a7f64982",
+      "size": 81472,
+      "normalized_sha256": "74237084410def78e5344c212d598c382a7a56eeb09c193006e7adf5a7f64982"
+    },
+    "src/ui/AppControllerAssist.cpp": {
+      "role": "index",
+      "sha256": "b212870de0cdcbb819a303071326f0d5f681d0dcfc569af3356e67e9061ac2e1",
+      "size": 31281,
+      "normalized_sha256": "b212870de0cdcbb819a303071326f0d5f681d0dcfc569af3356e67e9061ac2e1"
+    },
+    "src/ui/AppControllerBindings.cpp": {
+      "role": "index",
+      "sha256": "bd5d099831aea29eb152557af25b832c90268e2c20f9e31c3af1a679c3f8fadd",
+      "size": 12657,
+      "normalized_sha256": "bd5d099831aea29eb152557af25b832c90268e2c20f9e31c3af1a679c3f8fadd"
+    },
+    "src/ui/AppControllerDiagnostics.cpp": {
+      "role": "index",
+      "sha256": "9c6cebfc07813c36f5afa2594ed51ebf8b83e5095ff366f588652f208d7f3dd3",
+      "size": 5058,
+      "normalized_sha256": "9c6cebfc07813c36f5afa2594ed51ebf8b83e5095ff366f588652f208d7f3dd3"
+    },
+    "src/ui/AppControllerDisplay.cpp": {
+      "role": "index",
+      "sha256": "7a42ede903f5c03a7ec9eb5d1828f5b6c2f62fa8727ac20a480dee038a4ec709",
+      "size": 5014,
+      "normalized_sha256": "7a42ede903f5c03a7ec9eb5d1828f5b6c2f62fa8727ac20a480dee038a4ec709"
+    },
+    "src/ui/AppControllerExpression.cpp": {
+      "role": "index",
+      "sha256": "70018363c750156995a0c96d977335b9d00237a3cf14044436dfafff561d0702",
+      "size": 9162,
+      "normalized_sha256": "70018363c750156995a0c96d977335b9d00237a3cf14044436dfafff561d0702"
+    },
+    "src/ui/AppControllerMetadata.cpp": {
+      "role": "index",
+      "sha256": "9441239ee063ba8a1ab1356ca2a95f2da154fb08d8921a42ec54625d3a0a8bce",
+      "size": 28048,
+      "normalized_sha256": "9441239ee063ba8a1ab1356ca2a95f2da154fb08d8921a42ec54625d3a0a8bce"
+    },
+    "src/ui/AppControllerParameters.cpp": {
+      "role": "index",
+      "sha256": "f55403b334b7f75bb252596f7372bbd151c791418996fb2179b0bbe7532dc3c3",
+      "size": 6337,
+      "normalized_sha256": "f55403b334b7f75bb252596f7372bbd151c791418996fb2179b0bbe7532dc3c3"
+    },
+    "src/ui/AppControllerReadback.cpp": {
+      "role": "index",
+      "sha256": "a739cd6513313251cd9313b5118901009fc75385c8b270566ec29d0f7a431ca4",
+      "size": 1035,
+      "normalized_sha256": "a739cd6513313251cd9313b5118901009fc75385c8b270566ec29d0f7a431ca4"
+    },
+    "src/ui/AppControllerRoi.cpp": {
+      "role": "index",
+      "sha256": "c29e8d10c45c794291ff5c5156db96b65d3716283599e37f3ea2b6edc4ed8960",
+      "size": 10959,
+      "normalized_sha256": "c29e8d10c45c794291ff5c5156db96b65d3716283599e37f3ea2b6edc4ed8960"
+    },
+    "src/ui/AppControllerRouting.cpp": {
+      "role": "index",
+      "sha256": "ecc99abec58c98b5e1014b4cf96d734800621ab37236e1031f99af4be86bbdab",
+      "size": 2725,
+      "normalized_sha256": "ecc99abec58c98b5e1014b4cf96d734800621ab37236e1031f99af4be86bbdab"
+    },
+    "src/ui/AppControllerTraining.cpp": {
+      "role": "index",
+      "sha256": "27e90abdf0209659b548131e1df8dc79c8b01d45964118fc1d7686a6ed75c7f8",
+      "size": 14744,
+      "normalized_sha256": "27e90abdf0209659b548131e1df8dc79c8b01d45964118fc1d7686a6ed75c7f8"
+    },
+    "src/ui/AppController_p.h": {
+      "role": "index",
+      "sha256": "1cc2abcd5d84d981f794d3aa1251b3227b33ceb0b3ec9fe72827e1ed4257ff8c",
+      "size": 20475,
+      "normalized_sha256": "1cc2abcd5d84d981f794d3aa1251b3227b33ceb0b3ec9fe72827e1ed4257ff8c"
+    },
+    "src/ui/AssistPreview.cpp": {
+      "role": "index",
+      "sha256": "187a6dee383da54a7df040364dc0e62a2a7031a3f8a3f40023bbe3722fed1127",
+      "size": 12836,
+      "normalized_sha256": "187a6dee383da54a7df040364dc0e62a2a7031a3f8a3f40023bbe3722fed1127"
+    },
+    "src/ui/CMakeLists.txt": {
+      "role": "index",
+      "sha256": "a1cb70429ed83820fcefdab8d5ebbcf2b9c74698735c85df66998fafd25212f7",
+      "size": 2692,
+      "normalized_sha256": "a1cb70429ed83820fcefdab8d5ebbcf2b9c74698735c85df66998fafd25212f7"
+    },
+    "src/ui/Color.cpp": {
+      "role": "index",
+      "sha256": "2d4b5fbdee90d06692ba65f39c4458b66a1b09583a06c72f2cc0462dc08213a8",
+      "size": 777,
+      "normalized_sha256": "2d4b5fbdee90d06692ba65f39c4458b66a1b09583a06c72f2cc0462dc08213a8"
+    },
+    "src/ui/Diagnostics.cpp": {
+      "role": "index",
+      "sha256": "3984c20b2b6f0ef5ac608231b3887d5a35e1a68bc064d8c9b6198bfd739f6448",
+      "size": 6907,
+      "normalized_sha256": "3984c20b2b6f0ef5ac608231b3887d5a35e1a68bc064d8c9b6198bfd739f6448"
+    },
+    "src/ui/DisplayConverter.cpp": {
+      "role": "index",
+      "sha256": "9b9a233e3ba943227d98c193f0852979469c1326e12bd4b022cc982036baaaa0",
+      "size": 13061,
+      "normalized_sha256": "9b9a233e3ba943227d98c193f0852979469c1326e12bd4b022cc982036baaaa0"
+    },
+    "src/ui/DisplayTypes.cpp": {
+      "role": "index",
+      "sha256": "1dccad79a6be95729f4c3ee6c32ce9d5ffafdbdbfa77cb4d9793843fa130da77",
+      "size": 1852,
+      "normalized_sha256": "1dccad79a6be95729f4c3ee6c32ce9d5ffafdbdbfa77cb4d9793843fa130da77"
+    },
+    "src/ui/DurationText.cpp": {
+      "role": "index",
+      "sha256": "b3168f3aa3b374d68c206fe262d828b53a3ff496081b750838e9230499696287",
+      "size": 4765,
+      "normalized_sha256": "b3168f3aa3b374d68c206fe262d828b53a3ff496081b750838e9230499696287"
+    },
+    "src/ui/ImageViewport.cpp": {
+      "role": "index",
+      "sha256": "95498c8eaa906c4a1fa5efafbb730c0cc4c4eb5e9591acde2fcea453115b6216",
+      "size": 38171,
+      "normalized_sha256": "95498c8eaa906c4a1fa5efafbb730c0cc4c4eb5e9591acde2fcea453115b6216"
+    },
+    "src/ui/LogHighlighter.cpp": {
+      "role": "index",
+      "sha256": "b8216cbbd03ecf8cd2a24f35ef5ed14d33e7969b5444257ca32c44d3f85a753d",
+      "size": 822,
+      "normalized_sha256": "b8216cbbd03ecf8cd2a24f35ef5ed14d33e7969b5444257ca32c44d3f85a753d"
+    },
+    "src/ui/NodeListModel.cpp": {
+      "role": "index",
+      "sha256": "27f90ad99f33e63bfb9f52aa6cc7e7ed7a3dfae83367e8091fde47fdb300ca63",
+      "size": 12104,
+      "normalized_sha256": "27f90ad99f33e63bfb9f52aa6cc7e7ed7a3dfae83367e8091fde47fdb300ca63"
+    },
+    "src/ui/OutputModel.cpp": {
+      "role": "index",
+      "sha256": "1595a368126434d64e2c37d0350624c703e502f3eaf82eeaae75660565f46982",
+      "size": 19910,
+      "normalized_sha256": "1595a368126434d64e2c37d0350624c703e502f3eaf82eeaae75660565f46982"
+    },
+    "src/ui/ProjectOperations.cpp": {
+      "role": "index",
+      "sha256": "1bc4a627142c3f3b0436fcccbbbf8273e490781aaf78d1de657722c5e2b9e74d",
+      "size": 1879,
+      "normalized_sha256": "1bc4a627142c3f3b0436fcccbbbf8273e490781aaf78d1de657722c5e2b9e74d"
+    },
+    "src/ui/RecentProjects.cpp": {
+      "role": "index",
+      "sha256": "92d40c0d5c0561ba2572794aa0585683599b8fe37db9204dcf81a6a6f9759f5a",
+      "size": 6182,
+      "normalized_sha256": "92d40c0d5c0561ba2572794aa0585683599b8fe37db9204dcf81a6a6f9759f5a"
+    },
+    "src/ui/ResultPresentation.cpp": {
+      "role": "index",
+      "sha256": "531f5f626b4a586ed6f88d93f6ffffc2b5727dc5b12906cbc2225ded76abcb90",
+      "size": 36057,
+      "normalized_sha256": "531f5f626b4a586ed6f88d93f6ffffc2b5727dc5b12906cbc2225ded76abcb90"
+    },
+    "src/ui/ResultPresentation.h": {
+      "role": "index",
+      "sha256": "d05a1d761d3a9bda50362b0bbbdabdc77120c6680ac6551b796f4ff2c709d32a",
+      "size": 10193,
+      "normalized_sha256": "d05a1d761d3a9bda50362b0bbbdabdc77120c6680ac6551b796f4ff2c709d32a"
+    },
+    "src/ui/RoiEditSession.cpp": {
+      "role": "index",
+      "sha256": "afa8c7c795a0f6ecf5069b56b9bf4da90ec628695c055f01bab6ffac9324abed",
+      "size": 6352,
+      "normalized_sha256": "afa8c7c795a0f6ecf5069b56b9bf4da90ec628695c055f01bab6ffac9324abed"
+    },
+    "src/ui/Size.cpp": {
+      "role": "index",
+      "sha256": "de12a06fcad92f70c0341fab9788121922397d279a47bd65f6f62bf622b19fe2",
+      "size": 745,
+      "normalized_sha256": "de12a06fcad92f70c0341fab9788121922397d279a47bd65f6f62bf622b19fe2"
+    },
+    "src/ui/ToolEditorController.cpp": {
+      "role": "index",
+      "sha256": "4793b6f6f93096b6991248eef39f7f76ceb971a18c8d38ca839c965539f5b9b4",
+      "size": 48739,
+      "normalized_sha256": "4793b6f6f93096b6991248eef39f7f76ceb971a18c8d38ca839c965539f5b9b4"
+    },
+    "src/ui/ToolPortListModel.cpp": {
+      "role": "index",
+      "sha256": "33d0233a3b71b70cd4c4f2de51aeb702c807160a1f3a477cc39a0fef200d7c00",
+      "size": 24848,
+      "normalized_sha256": "33d0233a3b71b70cd4c4f2de51aeb702c807160a1f3a477cc39a0fef200d7c00"
+    },
+    "src/ui/ToolTreeModel.cpp": {
+      "role": "index",
+      "sha256": "d9fe6560ae30b1ee4222f35a0cac4022b88f08a31361e57337ef25488060da3d",
+      "size": 7176,
+      "normalized_sha256": "d9fe6560ae30b1ee4222f35a0cac4022b88f08a31361e57337ef25488060da3d"
+    },
+    "src/ui/TrainingSession.cpp": {
+      "role": "index",
+      "sha256": "201c927a2f70d3a70727d4e46236b2c239c1d1a128128f33856f96ab78b4706b",
+      "size": 16186,
+      "normalized_sha256": "201c927a2f70d3a70727d4e46236b2c239c1d1a128128f33856f96ab78b4706b"
+    },
+    "src/ui/UiPreferences.cpp": {
+      "role": "index",
+      "sha256": "f042cf8b61f12ab278511e61b161f22366d6299885b13b78803d13e4132f85b3",
+      "size": 9683,
+      "normalized_sha256": "f042cf8b61f12ab278511e61b161f22366d6299885b13b78803d13e4132f85b3"
+    },
+    "src/ui/UiTypes.cpp": {
+      "role": "index",
+      "sha256": "24b5084b1c7a5e13cb72bf71d53301c231c8f38185a497c37ab82f372365d11a",
+      "size": 4172,
+      "normalized_sha256": "eda25efbb140646772e309b973335017c9c66b0b6cdc54dc5946718d2c293639"
+    },
+    "src/ui/WireRouter.cpp": {
+      "role": "index",
+      "sha256": "10172c7f33cf42c1d316f2110e737273f7963706dde2385eb9320fb00d68974c",
+      "size": 4469,
+      "normalized_sha256": "10172c7f33cf42c1d316f2110e737273f7963706dde2385eb9320fb00d68974c"
+    },
+    "src/ui/include/ui/AboutReport.h": {
+      "role": "index",
+      "sha256": "392b0e8a38a84d65b8d59c973e9e1f04fbd9f0ee9eb7a88dc5a92813467726af",
+      "size": 986,
+      "normalized_sha256": "392b0e8a38a84d65b8d59c973e9e1f04fbd9f0ee9eb7a88dc5a92813467726af"
+    },
+    "src/ui/include/ui/AppController.h": {
+      "role": "index",
+      "sha256": "301a5c4ca363121be8a606661c50a2ad5b49755b1a441c863b86b847ba7f91f2",
+      "size": 21576,
+      "normalized_sha256": "301a5c4ca363121be8a606661c50a2ad5b49755b1a441c863b86b847ba7f91f2"
+    },
+    "src/ui/include/ui/AssistPreview.h": {
+      "role": "index",
+      "sha256": "9dfabb338b16d3f3eb2c238c063c1dba566a02685a394bd3363a6ef24dc5a47c",
+      "size": 5960,
+      "normalized_sha256": "9dfabb338b16d3f3eb2c238c063c1dba566a02685a394bd3363a6ef24dc5a47c"
+    },
+    "src/ui/include/ui/Color.h": {
+      "role": "index",
+      "sha256": "0e45ea26e6f49d23723e18307f97571775d78eaa05287075632356ec51eb61d1",
+      "size": 719,
+      "normalized_sha256": "0e45ea26e6f49d23723e18307f97571775d78eaa05287075632356ec51eb61d1"
+    },
+    "src/ui/include/ui/Def.h": {
+      "role": "index",
+      "sha256": "caab63c3ee402457d851ba069f5364e87b78ee93548f65538bc634d45cdaa833",
+      "size": 1627,
+      "normalized_sha256": "caab63c3ee402457d851ba069f5364e87b78ee93548f65538bc634d45cdaa833"
+    },
+    "src/ui/include/ui/Diagnostics.h": {
+      "role": "index",
+      "sha256": "f3e20bdb80e19ab3ab79a56a24fef26f9c9f98fff8cdd3ec99c6560582d4bbc4",
+      "size": 1062,
+      "normalized_sha256": "f3e20bdb80e19ab3ab79a56a24fef26f9c9f98fff8cdd3ec99c6560582d4bbc4"
+    },
+    "src/ui/include/ui/DisplayConverter.h": {
+      "role": "index",
+      "sha256": "8ffafebf19b040c9fb5f622e8dd7cfbddf9ff9aadf69e41b5da09773b88fd95b",
+      "size": 2593,
+      "normalized_sha256": "8ffafebf19b040c9fb5f622e8dd7cfbddf9ff9aadf69e41b5da09773b88fd95b"
+    },
+    "src/ui/include/ui/DisplayTypes.h": {
+      "role": "index",
+      "sha256": "b3fb43fe82975d16f8aa4f321b4511713885f59d8ab5d240aba23893cbe82fb7",
+      "size": 269,
+      "normalized_sha256": "b3fb43fe82975d16f8aa4f321b4511713885f59d8ab5d240aba23893cbe82fb7"
+    },
+    "src/ui/include/ui/DurationText.h": {
+      "role": "index",
+      "sha256": "29d38d15a063a7e11a80d6212d650278c677948a98a1a0a369777b13ce90cf63",
+      "size": 1375,
+      "normalized_sha256": "29d38d15a063a7e11a80d6212d650278c677948a98a1a0a369777b13ce90cf63"
+    },
+    "src/ui/include/ui/ImageViewport.h": {
+      "role": "index",
+      "sha256": "32021fc24b725e44e789a4de868f89127d6c2f5dabe46371ac3d8a6f3bd9a4ad",
+      "size": 10544,
+      "normalized_sha256": "32021fc24b725e44e789a4de868f89127d6c2f5dabe46371ac3d8a6f3bd9a4ad"
+    },
+    "src/ui/include/ui/LogHighlighter.h": {
+      "role": "index",
+      "sha256": "d0ba2e963105d0160a55cbef1a624944f4b54aa1605b02bbe14ce067507a4708",
+      "size": 630,
+      "normalized_sha256": "d0ba2e963105d0160a55cbef1a624944f4b54aa1605b02bbe14ce067507a4708"
+    },
+    "src/ui/include/ui/NodeListModel.h": {
+      "role": "index",
+      "sha256": "3097d0bc1c8b25304dc0a1d3f96b14a645e212005b67d8732634f8b0ca2dfd20",
+      "size": 3449,
+      "normalized_sha256": "3097d0bc1c8b25304dc0a1d3f96b14a645e212005b67d8732634f8b0ca2dfd20"
+    },
+    "src/ui/include/ui/OutputModel.h": {
+      "role": "index",
+      "sha256": "799345c6bee7d4b0aa52d1b24b023b3bcf3d701814566ea5f92c73ef8c9146a2",
+      "size": 3150,
+      "normalized_sha256": "799345c6bee7d4b0aa52d1b24b023b3bcf3d701814566ea5f92c73ef8c9146a2"
+    },
+    "src/ui/include/ui/ProjectOperations.h": {
+      "role": "index",
+      "sha256": "d87668d9fbcf0d195ddbefa3723b87f1fb14e19985cdb856e92da1d4dec6d127",
+      "size": 3655,
+      "normalized_sha256": "d87668d9fbcf0d195ddbefa3723b87f1fb14e19985cdb856e92da1d4dec6d127"
+    },
+    "src/ui/include/ui/RecentProjects.h": {
+      "role": "index",
+      "sha256": "11119d36b33e9e42a9925511810c7b1cb9f3135e8ef71956a3911b89abc4578c",
+      "size": 2138,
+      "normalized_sha256": "11119d36b33e9e42a9925511810c7b1cb9f3135e8ef71956a3911b89abc4578c"
+    },
+    "src/ui/include/ui/RoiEditSession.h": {
+      "role": "index",
+      "sha256": "9159290ea0174300852d668b467f39a5ab40d2f3cb60f6017f913d642827c7b4",
+      "size": 3843,
+      "normalized_sha256": "9159290ea0174300852d668b467f39a5ab40d2f3cb60f6017f913d642827c7b4"
+    },
+    "src/ui/include/ui/Size.h": {
+      "role": "index",
+      "sha256": "12f075b28e832b51e8008019f65d155f4ebbfe4e745128de83c15718017d1db8",
+      "size": 977,
+      "normalized_sha256": "12f075b28e832b51e8008019f65d155f4ebbfe4e745128de83c15718017d1db8"
+    },
+    "src/ui/include/ui/ToolEditorController.h": {
+      "role": "index",
+      "sha256": "4dee7959bb49c2a9db7fe5a5661d3c227d8520714c7b1bde2ac045369a079daf",
+      "size": 8461,
+      "normalized_sha256": "4dee7959bb49c2a9db7fe5a5661d3c227d8520714c7b1bde2ac045369a079daf"
+    },
+    "src/ui/include/ui/ToolPortListModel.h": {
+      "role": "index",
+      "sha256": "9936cbab826d3ce0c8396d1d9647353824de3a993a8dce442159b6cecdde1c73",
+      "size": 4610,
+      "normalized_sha256": "9936cbab826d3ce0c8396d1d9647353824de3a993a8dce442159b6cecdde1c73"
+    },
+    "src/ui/include/ui/ToolTreeModel.h": {
+      "role": "index",
+      "sha256": "ecbad472c001ccac7832bcbbf4d7e34f74eef678451165a3671026a08cc10ab4",
+      "size": 2150,
+      "normalized_sha256": "ecbad472c001ccac7832bcbbf4d7e34f74eef678451165a3671026a08cc10ab4"
+    },
+    "src/ui/include/ui/TrainingSession.h": {
+      "role": "index",
+      "sha256": "cad4b819eaa44cc3955f8c8af21709dfc49babf2acd785e00d2f3cd7f4dc921b",
+      "size": 3454,
+      "normalized_sha256": "cad4b819eaa44cc3955f8c8af21709dfc49babf2acd785e00d2f3cd7f4dc921b"
+    },
+    "src/ui/include/ui/UiPreferences.h": {
+      "role": "index",
+      "sha256": "e8a96d8464cbb6d1c743a912d32c921793df855655bfb28de1108e3473d4a74b",
+      "size": 2924,
+      "normalized_sha256": "e8a96d8464cbb6d1c743a912d32c921793df855655bfb28de1108e3473d4a74b"
+    },
+    "src/ui/include/ui/UiState.h": {
+      "role": "index",
+      "sha256": "6a3336ae80222b6a8d124830542ec2c8f28fba6204c17bba5b8d30508fd0c56a",
+      "size": 400,
+      "normalized_sha256": "cd69df8ad60d085db18c2b368fe0b07112bfb90e92bf8aaf34acc42fe16c15c4"
+    },
+    "src/ui/include/ui/UiTypes.h": {
+      "role": "index",
+      "sha256": "4894d8df0625dc0a34cd6cfc931c6bce2e7777c5617940b967f5278845da715f",
+      "size": 100,
+      "normalized_sha256": "4894d8df0625dc0a34cd6cfc931c6bce2e7777c5617940b967f5278845da715f"
+    },
+    "src/ui/include/ui/WireRouter.h": {
+      "role": "index",
+      "sha256": "86052d50b1dc003bcf5240505d6fd780fac5f8874bb4ab023fda5c8a735b9a01",
+      "size": 892,
+      "normalized_sha256": "86052d50b1dc003bcf5240505d6fd780fac5f8874bb4ab023fda5c8a735b9a01"
+    },
+    "src/ui/qml/AboutVisionRTDialog.qml": {
+      "role": "index",
+      "sha256": "d203ea1584928c6a594be4d6e8053591cc9e598b06b5e9456a73439134270aaf",
+      "size": 3142,
+      "normalized_sha256": "d203ea1584928c6a594be4d6e8053591cc9e598b06b5e9456a73439134270aaf"
+    },
+    "src/ui/qml/BoundedScrollView.qml": {
+      "role": "index",
+      "sha256": "df1a8bc02a0b1d879213b832ad652964389d3734fbbe8b794887267a6f0bac9f",
+      "size": 715,
+      "normalized_sha256": "df1a8bc02a0b1d879213b832ad652964389d3734fbbe8b794887267a6f0bac9f"
+    },
+    "src/ui/qml/CustomToolWindow.qml": {
+      "role": "index",
+      "sha256": "2201421aa2b3042beee950730e60e603e955eb07805eb04d3a088a293862f834",
+      "size": 4944,
+      "normalized_sha256": "2201421aa2b3042beee950730e60e603e955eb07805eb04d3a088a293862f834"
+    },
+    "src/ui/qml/ExpressionEditor.qml": {
+      "role": "index",
+      "sha256": "0ecb57db3a347959403c9ecb21f5e48892cb6369301234adf0a85a2b400404a3",
+      "size": 14850,
+      "normalized_sha256": "0ecb57db3a347959403c9ecb21f5e48892cb6369301234adf0a85a2b400404a3"
+    },
+    "src/ui/qml/FlowCanvas.qml": {
+      "role": "index",
+      "sha256": "99d81d5ea8676e2201fad9bc6cab2b1e860b065797c75662e19edea18838e5d1",
+      "size": 29299,
+      "normalized_sha256": "99d81d5ea8676e2201fad9bc6cab2b1e860b065797c75662e19edea18838e5d1"
+    },
+    "src/ui/qml/FlowTabs.qml": {
+      "role": "index",
+      "sha256": "cfc92188fd3ceb9f72e5c3bbb7e134b07f3728af70a26789c24225cef249c9e8",
+      "size": 5628,
+      "normalized_sha256": "ee38fb3f066b6de2c29f32f71e08b0a3b1c1743e7ecfd01d1a6d930456f4f197"
+    },
+    "src/ui/qml/FlowToolbar.qml": {
+      "role": "index",
+      "sha256": "beebf19ffb070e9800469ffa8b26876ef54d377ee0bdcf9dc71ef307fe3b978e",
+      "size": 11661,
+      "normalized_sha256": "9f93dccb81e669b98cfb8067eb22470705ced5b02c4e35c93846e49c4da0fea2"
+    },
+    "src/ui/qml/IntegerParameterEditor.qml": {
+      "role": "index",
+      "sha256": "2a4d8ead3a52230afab614567cf0147e3cbaf95f5e03b92105855524b4a5f7ab",
+      "size": 1737,
+      "normalized_sha256": "2a4d8ead3a52230afab614567cf0147e3cbaf95f5e03b92105855524b4a5f7ab"
+    },
+    "src/ui/qml/LogDialog.qml": {
+      "role": "index",
+      "sha256": "72ae3ed3cc76ca14fbfec248e42d2a825282bae753f8873e5a19e1b4fbe932e2",
+      "size": 6062,
+      "normalized_sha256": "72ae3ed3cc76ca14fbfec248e42d2a825282bae753f8873e5a19e1b4fbe932e2"
+    },
+    "src/ui/qml/Main.qml": {
+      "role": "index",
+      "sha256": "b93d0eb781d1332241c511679b3dfaf1a833037757916600b2253d59bd1f6c10",
+      "size": 24203,
+      "normalized_sha256": "b93d0eb781d1332241c511679b3dfaf1a833037757916600b2253d59bd1f6c10"
+    },
+    "src/ui/qml/MainToolbar.qml": {
+      "role": "index",
+      "sha256": "2b3ad957069a7cd385a35ac3a88f3c31920b9b1e8e82fc0498109f1695cdb029",
+      "size": 4551,
+      "normalized_sha256": "362840ff8551b616aace971766f87031352efb618f14f2762d60ae401ae6d672"
+    },
+    "src/ui/qml/NodeDelegate.qml": {
+      "role": "index",
+      "sha256": "6de0c3d73abdc778fbbb60c274c0693568df162fc64e4f097b666cc565549108",
+      "size": 7066,
+      "normalized_sha256": "6de0c3d73abdc778fbbb60c274c0693568df162fc64e4f097b666cc565549108"
+    },
+    "src/ui/qml/OutputPanel.qml": {
+      "role": "index",
+      "sha256": "47a6af07da06a2941296d0cb1b6a0c47915a9c7579c7aeee9209b65ccf3c73bd",
+      "size": 16961,
+      "normalized_sha256": "47a6af07da06a2941296d0cb1b6a0c47915a9c7579c7aeee9209b65ccf3c73bd"
+    },
+    "src/ui/qml/ParameterActionButton.qml": {
+      "role": "index",
+      "sha256": "a5b7f923ced71f7a81f3a25b70163c7a717db5a6223f84beda179a50c9c83ce5",
+      "size": 138,
+      "normalized_sha256": "a5b7f923ced71f7a81f3a25b70163c7a717db5a6223f84beda179a50c9c83ce5"
+    },
+    "src/ui/qml/ParameterComboBox.qml": {
+      "role": "index",
+      "sha256": "ee8d9a4e7d48a0cf2549661ec49062b06fd9337b4f58e3beb23ebbf82a818a72",
+      "size": 538,
+      "normalized_sha256": "ee8d9a4e7d48a0cf2549661ec49062b06fd9337b4f58e3beb23ebbf82a818a72"
+    },
+    "src/ui/qml/ParameterDialogField.qml": {
+      "role": "index",
+      "sha256": "5ab202e560f743a13fcedc62df9491f1781028217249fbd17cf5c1cf6a91a670",
+      "size": 4848,
+      "normalized_sha256": "5ab202e560f743a13fcedc62df9491f1781028217249fbd17cf5c1cf6a91a670"
+    },
+    "src/ui/qml/ParameterEditor.qml": {
+      "role": "index",
+      "sha256": "26315a4ab9177e4b8dc8e00a1e9754533958e56198cb451ffde9ab5b0f53f9b0",
+      "size": 27412,
+      "normalized_sha256": "26315a4ab9177e4b8dc8e00a1e9754533958e56198cb451ffde9ab5b0f53f9b0"
+    },
+    "src/ui/qml/ParameterFieldFrame.qml": {
+      "role": "index",
+      "sha256": "2c9337ed8379119c29e1d5c2c1334eda524d8e17e4d1fc20635d01e6596d405a",
+      "size": 445,
+      "normalized_sha256": "2c9337ed8379119c29e1d5c2c1334eda524d8e17e4d1fc20635d01e6596d405a"
+    },
+    "src/ui/qml/ParameterPanel.qml": {
+      "role": "index",
+      "sha256": "e7a69abdbb7a78d244283e31d468da5e96ff951f18080c301230c39e6e99e8c3",
+      "size": 14376,
+      "normalized_sha256": "e7a69abdbb7a78d244283e31d468da5e96ff951f18080c301230c39e6e99e8c3"
+    },
+    "src/ui/qml/ParameterTextField.qml": {
+      "role": "index",
+      "sha256": "ab312ba26757dcb8ad3c37078b37b57274cb95c7e2871b196ea1158e40d2252e",
+      "size": 6742,
+      "normalized_sha256": "ab312ba26757dcb8ad3c37078b37b57274cb95c7e2871b196ea1158e40d2252e"
+    },
+    "src/ui/qml/ResultsImageToolbar.qml": {
+      "role": "index",
+      "sha256": "b3d9e73c350e807670330211aa440849ef6962b972b36db97482258739a0dc6b",
+      "size": 4644,
+      "normalized_sha256": "b3d9e73c350e807670330211aa440849ef6962b972b36db97482258739a0dc6b"
+    },
+    "src/ui/qml/ResultsImageView.qml": {
+      "role": "index",
+      "sha256": "929bfb0df6122f6a7339628c26fcc226bbe22c170a05aa4612da4a4ec4c5a3df",
+      "size": 2010,
+      "normalized_sha256": "929bfb0df6122f6a7339628c26fcc226bbe22c170a05aa4612da4a4ec4c5a3df"
+    },
+    "src/ui/qml/ResultsModeTabs.qml": {
+      "role": "index",
+      "sha256": "ee585d19dd1d76df27b562be9ab93163742c0bd488ca7f09119f7b4062aec1ce",
+      "size": 2342,
+      "normalized_sha256": "ee585d19dd1d76df27b562be9ab93163742c0bd488ca7f09119f7b4062aec1ce"
+    },
+    "src/ui/qml/ResultsPanel.qml": {
+      "role": "index",
+      "sha256": "b007c94da4c9a965a957aa9c5a86cdc2d2a00141ec387f3483bdc98fee30c1e8",
+      "size": 2346,
+      "normalized_sha256": "b007c94da4c9a965a957aa9c5a86cdc2d2a00141ec387f3483bdc98fee30c1e8"
+    },
+    "src/ui/qml/ResultsThumbnails.qml": {
+      "role": "index",
+      "sha256": "c2ceb83080381a0ec46cf1ab21a1e80eed6efea35c2a5f9f0f85d4a6e4adc1e1",
+      "size": 5532,
+      "normalized_sha256": "c2ceb83080381a0ec46cf1ab21a1e80eed6efea35c2a5f9f0f85d4a6e4adc1e1"
+    },
+    "src/ui/qml/ResultsTrainingRecords.qml": {
+      "role": "index",
+      "sha256": "5e70bdc7644451befc6932c436ad3824617636966cf794aca6473d367da69ab8",
+      "size": 3290,
+      "normalized_sha256": "5e70bdc7644451befc6932c436ad3824617636966cf794aca6473d367da69ab8"
+    },
+    "src/ui/qml/SelectTypeEditor.qml": {
+      "role": "index",
+      "sha256": "6bb74f3c24c296aaed2a40fff828615406c3b5fed22106f367b3f7be5944fabe",
+      "size": 6396,
+      "normalized_sha256": "6bb74f3c24c296aaed2a40fff828615406c3b5fed22106f367b3f7be5944fabe"
+    },
+    "src/ui/qml/SettingsContent.qml": {
+      "role": "index",
+      "sha256": "0be05cd5774cb89b8b935a20fda1c96a650c5dc2339ae797892235c4fe2544e2",
+      "size": 7338,
+      "normalized_sha256": "81f9ffcca0c26c85a6e9f4ea8507b1103097bfc1728efeade36000f806475be1"
+    },
+    "src/ui/qml/SettingsFieldRow.qml": {
+      "role": "index",
+      "sha256": "5a7f1764179c4c71e35224a55ae6362f6460db2a3913b6c58b7bac31892b8aa4",
+      "size": 923,
+      "normalized_sha256": "5a7f1764179c4c71e35224a55ae6362f6460db2a3913b6c58b7bac31892b8aa4"
+    },
+    "src/ui/qml/SettingsWindow.qml": {
+      "role": "index",
+      "sha256": "2a22112ee479c90e9d1c08f574a9f21602d95f71c488a72772fd262449d63d0f",
+      "size": 5649,
+      "normalized_sha256": "2a22112ee479c90e9d1c08f574a9f21602d95f71c488a72772fd262449d63d0f"
+    },
+    "src/ui/qml/ToolCatalogPane.qml": {
+      "role": "index",
+      "sha256": "1047783449ecaf091b183083aa56de32b52e7fe0af2c213da97c3454e40dd86a",
+      "size": 13154,
+      "normalized_sha256": "1047783449ecaf091b183083aa56de32b52e7fe0af2c213da97c3454e40dd86a"
+    },
+    "src/ui/qml/ToolFormLayout.qml": {
+      "role": "index",
+      "sha256": "769e703620d5c10bd318417c296beeb6b6c0c738411911315f199eaae0fa04bf",
+      "size": 393,
+      "normalized_sha256": "769e703620d5c10bd318417c296beeb6b6c0c738411911315f199eaae0fa04bf"
+    },
+    "src/ui/qml/ToolFormRow.qml": {
+      "role": "index",
+      "sha256": "a6b9a9d7fcd7559c8768a35b3643434292f5d761b3071475ff9bdf4254266095",
+      "size": 982,
+      "normalized_sha256": "a6b9a9d7fcd7559c8768a35b3643434292f5d761b3071475ff9bdf4254266095"
+    },
+    "src/ui/qml/ToolInformationPane.qml": {
+      "role": "index",
+      "sha256": "746cedb3d2597a57d54cf92185510388dc04f0663c5de73a11a12242b5242af6",
+      "size": 4517,
+      "normalized_sha256": "746cedb3d2597a57d54cf92185510388dc04f0663c5de73a11a12242b5242af6"
+    },
+    "src/ui/qml/ToolLibrary.qml": {
+      "role": "index",
+      "sha256": "66c0d5278b17e61469be8b4983ad2991112cfebc82cdccc7414f5768e9b13b15",
+      "size": 5597,
+      "normalized_sha256": "66c0d5278b17e61469be8b4983ad2991112cfebc82cdccc7414f5768e9b13b15"
+    },
+    "src/ui/qml/ToolPortCard.qml": {
+      "role": "index",
+      "sha256": "79bd4c007f423c3196d783ed0b1323131c486cd9dd0fc485c34c0011125b99f7",
+      "size": 21817,
+      "normalized_sha256": "79bd4c007f423c3196d783ed0b1323131c486cd9dd0fc485c34c0011125b99f7"
+    },
+    "src/ui/qml/ToolPortsPane.qml": {
+      "role": "index",
+      "sha256": "a2e6894acaf3e287be54068aa612be1e52cd892725f2d493925846634137551f",
+      "size": 2169,
+      "normalized_sha256": "1dde94d3830529dd261e6eb787bf8be56057b58d4e5e8fd197b2d2091e793588"
+    },
+    "src/ui/qml/ToolTreeDelegate.qml": {
+      "role": "index",
+      "sha256": "ad61658bbc4dc2f1f82436cdf6937b3be07116cfbe200c06e705e1075f2f2f64",
+      "size": 6515,
+      "normalized_sha256": "ad61658bbc4dc2f1f82436cdf6937b3be07116cfbe200c06e705e1075f2f2f64"
+    },
+    "src/ui/qml/WireItem.qml": {
+      "role": "index",
+      "sha256": "10ba220d8494f7d2bd2eb080b4ba48a5d469bdbe57917a7b3c9ea5f0c6a51c45",
+      "size": 2544,
+      "normalized_sha256": "10ba220d8494f7d2bd2eb080b4ba48a5d469bdbe57917a7b3c9ea5f0c6a51c45"
+    },
+    "src/ui/qml/WorkbenchActionButton.qml": {
+      "role": "index",
+      "sha256": "c61250258a154844b12f3d91d0afd088c68e1c04d709af803cfdb5ed8dbc09d9",
+      "size": 482,
+      "normalized_sha256": "c61250258a154844b12f3d91d0afd088c68e1c04d709af803cfdb5ed8dbc09d9"
+    },
+    "src/ui/qml/WorkbenchDialog.qml": {
+      "role": "index",
+      "sha256": "f29fb1984b827cd4d2359c7c4ec2a095bf480f205f8a42a3415a46d7a16905b6",
+      "size": 523,
+      "normalized_sha256": "f29fb1984b827cd4d2359c7c4ec2a095bf480f205f8a42a3415a46d7a16905b6"
+    },
+    "src/ui/qml/WorkbenchSeparator.qml": {
+      "role": "index",
+      "sha256": "6063086df1149e2f6563c25c07e6e5487975b1f17352e855da0a5f7191def963",
+      "size": 298,
+      "normalized_sha256": "6063086df1149e2f6563c25c07e6e5487975b1f17352e855da0a5f7191def963"
+    },
+    "src/ui/qml/WorkbenchTextField.qml": {
+      "role": "index",
+      "sha256": "f1db36b0eecff4519c9efc211cc66a6e8f7c706ae874ff4d2d0ab23f00f0d2e1",
+      "size": 314,
+      "normalized_sha256": "f1db36b0eecff4519c9efc211cc66a6e8f7c706ae874ff4d2d0ab23f00f0d2e1"
+    },
+    "src/ui/qml/WorkbenchWindow.qml": {
+      "role": "index",
+      "sha256": "885338a061abe500453caae755993ff75de0f4137ed16dd36bc92c7188191dc9",
+      "size": 1904,
+      "normalized_sha256": "885338a061abe500453caae755993ff75de0f4137ed16dd36bc92c7188191dc9"
+    },
+    "tests/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "be627952e952b1bac6a3310674244bb777296c49baaf15e79cc6be638d8984be",
+      "size": 37910,
+      "normalized_sha256": "be627952e952b1bac6a3310674244bb777296c49baaf15e79cc6be638d8984be"
+    },
+    "tests/ImageFixtures.h": {
+      "role": "observe",
+      "sha256": "e51de17ab1b829ea49f6ab8e0afbfc6a435be87b4475a4d2cd1a078c3657b001",
+      "size": 587,
+      "normalized_sha256": "e51de17ab1b829ea49f6ab8e0afbfc6a435be87b4475a4d2cd1a078c3657b001"
+    },
+    "tests/ParameterFixturePorts.h": {
+      "role": "observe",
+      "sha256": "802999d183df4d5ed04695af28d7b77216545f7cf1c943ba2512ad532eec89d2",
+      "size": 906,
+      "normalized_sha256": "802999d183df4d5ed04695af28d7b77216545f7cf1c943ba2512ad532eec89d2"
+    },
+    "tests/ProcessMemory.h": {
+      "role": "observe",
+      "sha256": "6780497f5502046a66b7adf5e9b0721defd90d92fcb8fac0ea226b1697e8b425",
+      "size": 869,
+      "normalized_sha256": "6780497f5502046a66b7adf5e9b0721defd90d92fcb8fac0ea226b1697e8b425"
+    },
+    "tests/RuntimeTestSupport.h": {
+      "role": "observe",
+      "sha256": "9863eb84b34e65c801a79377f3b01fb408325a0cca183c1a3fc5500a09193879",
+      "size": 1883,
+      "normalized_sha256": "9863eb84b34e65c801a79377f3b01fb408325a0cca183c1a3fc5500a09193879"
+    },
+    "tests/SettingsFileGuard.h": {
+      "role": "observe",
+      "sha256": "0714dc53904ff88fc3949b5651297bba40b1c57918f5ec1c45276983091281da",
+      "size": 834,
+      "normalized_sha256": "3a3d860c5a73e3bb581968f3df095563b648dc9b842f9cb25e029777c9ab94e5"
+    },
+    "tests/TestPythonConfiguration.h": {
+      "role": "observe",
+      "sha256": "52859c34b7fce4f4b63e6c8f86cd3a51f6cf06fb3175bc7fe646a2ef4e8d14b7",
+      "size": 638,
+      "normalized_sha256": "52859c34b7fce4f4b63e6c8f86cd3a51f6cf06fb3175bc7fe646a2ef4e8d14b7"
+    },
+    "tests/TestPythonEnvironment.cpp": {
+      "role": "observe",
+      "sha256": "49c16b3d825de88abf06f9baf0563d79fed57c0f20a5e271d001ead1de3f0591",
+      "size": 553,
+      "normalized_sha256": "49c16b3d825de88abf06f9baf0563d79fed57c0f20a5e271d001ead1de3f0591"
+    },
+    "tests/TestPythonEnvironment.h": {
+      "role": "observe",
+      "sha256": "b1166b0dea5455367f2ebce99a6be9bfbfdf18dec80b9ea62eda60333c42bd10",
+      "size": 562,
+      "normalized_sha256": "b1166b0dea5455367f2ebce99a6be9bfbfdf18dec80b9ea62eda60333c42bd10"
+    },
+    "tests/ToolResultAssertions.h": {
+      "role": "observe",
+      "sha256": "83a568cff296a65d648418c7f0772588d9600abe1ebc6482b1034602e270e849",
+      "size": 2304,
+      "normalized_sha256": "83a568cff296a65d648418c7f0772588d9600abe1ebc6482b1034602e270e849"
+    },
+    "tests/WorkbenchFixtures.h": {
+      "role": "observe",
+      "sha256": "fb19ff5d2506d9973c22cd3c2d895acfa5d4c9f4f6f120b742b8c6502c04f754",
+      "size": 1519,
+      "normalized_sha256": "fb19ff5d2506d9973c22cd3c2d895acfa5d4c9f4f6f120b742b8c6502c04f754"
+    },
+    "tests/assist_viewport_contract.cpp": {
+      "role": "observe",
+      "sha256": "32dab2d929ddcaa4b1c43aa10ee99c5998e54cd90592060cbbcf39c53d9d8063",
+      "size": 4094,
+      "normalized_sha256": "32dab2d929ddcaa4b1c43aa10ee99c5998e54cd90592060cbbcf39c53d9d8063"
+    },
+    "tests/build_incremental_contract.py": {
+      "role": "observe",
+      "sha256": "327d0f2b6effd24a1a92567a4e9b351722eac57ddb3559e517e369089eeafc3c",
+      "size": 4682,
+      "normalized_sha256": "327d0f2b6effd24a1a92567a4e9b351722eac57ddb3559e517e369089eeafc3c"
+    },
+    "tests/cpu_tools_contract.cpp": {
+      "role": "observe",
+      "sha256": "fc58011c6c136f921ca337c920642a4efeb7d775b294a711a8143f3f4ad70980",
+      "size": 23674,
+      "normalized_sha256": "fc58011c6c136f921ca337c920642a4efeb7d775b294a711a8143f3f4ad70980"
+    },
+    "tests/custom_tool_store_contract.cpp": {
+      "role": "observe",
+      "sha256": "e8670b07e9a35bd3a6ccf90c802b1fdc2223e1b0b66435bdf544b5cbf724de6a",
+      "size": 10830,
+      "normalized_sha256": "e8670b07e9a35bd3a6ccf90c802b1fdc2223e1b0b66435bdf544b5cbf724de6a"
+    },
+    "tests/definition_json_contract.cpp": {
+      "role": "observe",
+      "sha256": "fe4790b17c45dd6aa4abc7ae4dfe2766f88589d631b6627bbdc6a7b884e0b220",
+      "size": 2712,
+      "normalized_sha256": "fe4790b17c45dd6aa4abc7ae4dfe2766f88589d631b6627bbdc6a7b884e0b220"
+    },
+    "tests/dependency_manifest_contract.py": {
+      "role": "observe",
+      "sha256": "735423799ba18720003d75bee38e1515a8ab86054d8876037233322e33fa6c72",
+      "size": 2657,
+      "normalized_sha256": "735423799ba18720003d75bee38e1515a8ab86054d8876037233322e33fa6c72"
+    },
+    "tests/display_conversion_benchmark.cpp": {
+      "role": "observe",
+      "sha256": "174445b4b2f3b6d1454f908b131596d951c75b5badffbd60ecd73bb6a1e8eca7",
+      "size": 5984,
+      "normalized_sha256": "174445b4b2f3b6d1454f908b131596d951c75b5badffbd60ecd73bb6a1e8eca7"
+    },
+    "tests/display_reader_drain_test.cpp": {
+      "role": "observe",
+      "sha256": "386508c5d1499db3d46cbe4cba56830a2b44337127890d0f065cf199c825e524",
+      "size": 3426,
+      "normalized_sha256": "386508c5d1499db3d46cbe4cba56830a2b44337127890d0f065cf199c825e524"
+    },
+    "tests/display_storage_contract.cpp": {
+      "role": "observe",
+      "sha256": "083ef259b839b6e650bd2d2a8c1f1eb2426a0b39e36c7e8eadbb2d071a69c9fe",
+      "size": 9208,
+      "normalized_sha256": "083ef259b839b6e650bd2d2a8c1f1eb2426a0b39e36c7e8eadbb2d071a69c9fe"
+    },
+    "tests/dll_consumer_contract.cpp": {
+      "role": "observe",
+      "sha256": "b82ec5d5a7634a315fd5c5ffffd697ae766a6f0cdfffe66692c5e0629c91f9b8",
+      "size": 3344,
+      "normalized_sha256": "b82ec5d5a7634a315fd5c5ffffd697ae766a6f0cdfffe66692c5e0629c91f9b8"
+    },
+    "tests/edge_hierarchy_contract.cpp": {
+      "role": "observe",
+      "sha256": "02b5189cb1d1fe51fe8bfee17bc5e8fb80b4350ef83e07aa34eafa4ec10357a2",
+      "size": 10809,
+      "normalized_sha256": "02b5189cb1d1fe51fe8bfee17bc5e8fb80b4350ef83e07aa34eafa4ec10357a2"
+    },
+    "tests/example_metadata_contract.cpp": {
+      "role": "observe",
+      "sha256": "6a30108449fea75a2363095d97082b5861c09b063f75402cfffd74c40d593ba6",
+      "size": 3774,
+      "normalized_sha256": "6a30108449fea75a2363095d97082b5861c09b063f75402cfffd74c40d593ba6"
+    },
+    "tests/example_pipelines.cpp": {
+      "role": "observe",
+      "sha256": "2945d46b4b54a150f274554d153ab33d26ed9dbb52797f0354b031f26bac3a26",
+      "size": 49407,
+      "normalized_sha256": "2945d46b4b54a150f274554d153ab33d26ed9dbb52797f0354b031f26bac3a26"
+    },
+    "tests/example_project_contract.cpp": {
+      "role": "observe",
+      "sha256": "c50c8ba2a034090295e1680aa5066b02fb90c5a981ed0e5d858b356325c9342f",
+      "size": 5948,
+      "normalized_sha256": "c50c8ba2a034090295e1680aa5066b02fb90c5a981ed0e5d858b356325c9342f"
+    },
+    "tests/flow_canvas_scenarios.cpp": {
+      "role": "observe",
+      "sha256": "85bafa4d12e00cfffb6ebf50591a7a796184e62ca6b3fe154ceac454941023b1",
+      "size": 17826,
+      "normalized_sha256": "85bafa4d12e00cfffb6ebf50591a7a796184e62ca6b3fe154ceac454941023b1"
+    },
+    "tests/gpu_tools_contract.cpp": {
+      "role": "observe",
+      "sha256": "d6aff7ca1d3b957b88c1e126d7f3c95bacca38bd9a18138f578fe71a9af74d79",
+      "size": 14960,
+      "normalized_sha256": "d6aff7ca1d3b957b88c1e126d7f3c95bacca38bd9a18138f578fe71a9af74d79"
+    },
+    "tests/installed_pipeline_contract.cpp": {
+      "role": "observe",
+      "sha256": "9d866f1b0b8ac585ceabe46e98c8eb06a2f067e51b8a1e4f8dad2f1c567454d6",
+      "size": 21629,
+      "normalized_sha256": "9d866f1b0b8ac585ceabe46e98c8eb06a2f067e51b8a1e4f8dad2f1c567454d6"
+    },
+    "tests/installed_python_author_contract.cpp": {
+      "role": "observe",
+      "sha256": "5a9e53510bd95ce13d1eb78de26da6d8a5c6dd40a0c9b6bf4e580aba1e8a1b50",
+      "size": 5058,
+      "normalized_sha256": "5a9e53510bd95ce13d1eb78de26da6d8a5c6dd40a0c9b6bf4e580aba1e8a1b50"
+    },
+    "tests/libavoid_contract.cpp": {
+      "role": "observe",
+      "sha256": "c963e810463aef8163a68f4c8afea9f85ec2e7007a644343f48a0361750389d9",
+      "size": 2860,
+      "normalized_sha256": "c963e810463aef8163a68f4c8afea9f85ec2e7007a644343f48a0361750389d9"
+    },
+    "tests/log_aggregation_contract.cpp": {
+      "role": "observe",
+      "sha256": "87b380a31878d5efc751793536ccc5a9f4ee3a00b4e8dd30bf66cf9fb051622b",
+      "size": 23056,
+      "normalized_sha256": "87b380a31878d5efc751793536ccc5a9f4ee3a00b4e8dd30bf66cf9fb051622b"
+    },
+    "tests/log_level_contract.cpp": {
+      "role": "observe",
+      "sha256": "1e49025eccc266537a30429de2693a9bc32dbb2831339700fe64d2b615b11d0e",
+      "size": 4945,
+      "normalized_sha256": "1e49025eccc266537a30429de2693a9bc32dbb2831339700fe64d2b615b11d0e"
+    },
+    "tests/log_lifecycle_contract.cpp": {
+      "role": "observe",
+      "sha256": "b44ee34f1309c9c115a87e77f9fdfe290abdb58fa67f2a6d10396dfc875bf6e5",
+      "size": 17096,
+      "normalized_sha256": "b44ee34f1309c9c115a87e77f9fdfe290abdb58fa67f2a6d10396dfc875bf6e5"
+    },
+    "tests/log_test_support.h": {
+      "role": "observe",
+      "sha256": "21416dc87097d76f769ccb5c87e51343c33ded08ffaeaca44851de76d10d152c",
+      "size": 4822,
+      "normalized_sha256": "21416dc87097d76f769ccb5c87e51343c33ded08ffaeaca44851de76d10d152c"
+    },
+    "tests/log_text_contract.cpp": {
+      "role": "observe",
+      "sha256": "034d9bd58ba3bd8f86ceb4aeea77bc31d7977261fef4d600cb24de75ea67c7f5",
+      "size": 11901,
+      "normalized_sha256": "034d9bd58ba3bd8f86ceb4aeea77bc31d7977261fef4d600cb24de75ea67c7f5"
+    },
+    "tests/logic_node_execution_test.cpp": {
+      "role": "observe",
+      "sha256": "22c9f09c8e1ed50b8e0d1d7e4a09274d6386dcf28835004a366fdad5c6b4c255",
+      "size": 18788,
+      "normalized_sha256": "22c9f09c8e1ed50b8e0d1d7e4a09274d6386dcf28835004a366fdad5c6b4c255"
+    },
+    "tests/module_registration_contract.cpp": {
+      "role": "observe",
+      "sha256": "e6ada778c5cc27cb28a9ce4a1e9ed3b9dff8fd2a3207e09b3ef440562dbdb685",
+      "size": 6862,
+      "normalized_sha256": "e6ada778c5cc27cb28a9ce4a1e9ed3b9dff8fd2a3207e09b3ef440562dbdb685"
+    },
+    "tests/native_value_lifetime_contract.cpp": {
+      "role": "observe",
+      "sha256": "f3ed3f3c25431b87c4a634697dfd3bb319119de00f0b54f090f3f0971a762c3c",
+      "size": 3622,
+      "normalized_sha256": "f3ed3f3c25431b87c4a634697dfd3bb319119de00f0b54f090f3f0971a762c3c"
+    },
+    "tests/node_activity_mailbox_test.cpp": {
+      "role": "observe",
+      "sha256": "0f402fcb0d67e561e380309cbc70cc53ddd74f0876ebcce907bbfe8c2b7f0840",
+      "size": 2831,
+      "normalized_sha256": "0f402fcb0d67e561e380309cbc70cc53ddd74f0876ebcce907bbfe8c2b7f0840"
+    },
+    "tests/node_list_model_test.cpp": {
+      "role": "observe",
+      "sha256": "b7070668b4169b384f0b390106e73f55efc8e554aea284a8cf2c108d734314c7",
+      "size": 3806,
+      "normalized_sha256": "b7070668b4169b384f0b390106e73f55efc8e554aea284a8cf2c108d734314c7"
+    },
+    "tests/output_text_readback_test.cpp": {
+      "role": "observe",
+      "sha256": "b0d6e87b9611600ec2fd84416e5f6de787e8f3317a7b0586dc5c8d930bec46fc",
+      "size": 8403,
+      "normalized_sha256": "b0d6e87b9611600ec2fd84416e5f6de787e8f3317a7b0586dc5c8d930bec46fc"
+    },
+    "tests/output_value_contract.cpp": {
+      "role": "observe",
+      "sha256": "1c008ed524e0460b7ed4b3ca158039ff40175704d60fecf6aa76bb7e0c873446",
+      "size": 5490,
+      "normalized_sha256": "1c008ed524e0460b7ed4b3ca158039ff40175704d60fecf6aa76bb7e0c873446"
+    },
+    "tests/package_replacement_test.cpp": {
+      "role": "observe",
+      "sha256": "5dd10c5b1c874b3d77f25b131f981dfe3c65924e7ca72e4157fb868a39b49f0e",
+      "size": 19228,
+      "normalized_sha256": "5dd10c5b1c874b3d77f25b131f981dfe3c65924e7ca72e4157fb868a39b49f0e"
+    },
+    "tests/performance_contract.cpp": {
+      "role": "observe",
+      "sha256": "cbc92940a935aeb86385d767496cf8b38fdac7710c9116d62ddca531dc98e05c",
+      "size": 59295,
+      "normalized_sha256": "cbc92940a935aeb86385d767496cf8b38fdac7710c9116d62ddca531dc98e05c"
+    },
+    "tests/plugin_contract.cpp": {
+      "role": "observe",
+      "sha256": "44b6bae5c69d8f630c2be372a2c01c0f5c0635702b68638a750565ff62d0dec9",
+      "size": 57463,
+      "normalized_sha256": "44b6bae5c69d8f630c2be372a2c01c0f5c0635702b68638a750565ff62d0dec9"
+    },
+    "tests/presentation_visibility_contract.cpp": {
+      "role": "observe",
+      "sha256": "d85e78cdc75cbb24f0ab41ca90523cb32d079339929a7843e1d8b02f636997ad",
+      "size": 6125,
+      "normalized_sha256": "d85e78cdc75cbb24f0ab41ca90523cb32d079339929a7843e1d8b02f636997ad"
+    },
+    "tests/project_editor_contract.cpp": {
+      "role": "observe",
+      "sha256": "9861205de73960f4343364fd7abc8595bc8ef3b36479c991d02598d1094bc3e1",
+      "size": 30874,
+      "normalized_sha256": "9861205de73960f4343364fd7abc8595bc8ef3b36479c991d02598d1094bc3e1"
+    },
+    "tests/project_storage_contract.cpp": {
+      "role": "observe",
+      "sha256": "0db12a0f0da871f474b41c2aea354c8c7b3fa126d1a9be762cb4fa801fd71a8b",
+      "size": 48367,
+      "normalized_sha256": "0db12a0f0da871f474b41c2aea354c8c7b3fa126d1a9be762cb4fa801fd71a8b"
+    },
+    "tests/project_value_contract.cpp": {
+      "role": "observe",
+      "sha256": "e824a69a6230cf5f20e3e738ebc51378de4bfdd8f8a2e159ff26f403d22f7069",
+      "size": 13382,
+      "normalized_sha256": "e824a69a6230cf5f20e3e738ebc51378de4bfdd8f8a2e159ff26f403d22f7069"
+    },
+    "tests/python_adapter_contract.cpp": {
+      "role": "observe",
+      "sha256": "47d8718118661c41911e8c6eebe80e1be30459a51df016de9fc856597e26532e",
+      "size": 15060,
+      "normalized_sha256": "47d8718118661c41911e8c6eebe80e1be30459a51df016de9fc856597e26532e"
+    },
+    "tests/python_array_lifetime_contract.cpp": {
+      "role": "observe",
+      "sha256": "9c14438a916de4b267d6e898692d5166f16add734c4fed69e2081cc530ecc1ea",
+      "size": 3558,
+      "normalized_sha256": "9c14438a916de4b267d6e898692d5166f16add734c4fed69e2081cc530ecc1ea"
+    },
+    "tests/python_environment_contract.cpp": {
+      "role": "observe",
+      "sha256": "d0a7c18d95d053da15b90f36600bbd21fb0fc7f771ec501cbdaa2ab547012002",
+      "size": 9734,
+      "normalized_sha256": "d0a7c18d95d053da15b90f36600bbd21fb0fc7f771ec501cbdaa2ab547012002"
+    },
+    "tests/python_loading_contract.cpp": {
+      "role": "observe",
+      "sha256": "a4b9f846c4fb23e8da2d75b40b65217f6ab2763d49a0d6447ac653835f219cf8",
+      "size": 24979,
+      "normalized_sha256": "a4b9f846c4fb23e8da2d75b40b65217f6ab2763d49a0d6447ac653835f219cf8"
+    },
+    "tests/python_probe_contract.cpp": {
+      "role": "observe",
+      "sha256": "7420b2de2a89d43fcebc9abfd73231098a2bab5e4a364dd78ee6ac1764e2d14a",
+      "size": 4863,
+      "normalized_sha256": "7420b2de2a89d43fcebc9abfd73231098a2bab5e4a364dd78ee6ac1764e2d14a"
+    },
+    "tests/python_shutdown_contract.cpp": {
+      "role": "observe",
+      "sha256": "f1c41fb89342fc6bd91a1b027c7385f9458e717aac93cf45ac58f00c57978d71",
+      "size": 11291,
+      "normalized_sha256": "f1c41fb89342fc6bd91a1b027c7385f9458e717aac93cf45ac58f00c57978d71"
+    },
+    "tests/python_tools_execution_test.cpp": {
+      "role": "observe",
+      "sha256": "d46a699e4aa637fa7a0c0b8c04015608f7890e9722ada72e41cae3f345639d84",
+      "size": 13135,
+      "normalized_sha256": "d46a699e4aa637fa7a0c0b8c04015608f7890e9722ada72e41cae3f345639d84"
+    },
+    "tests/python_value_contract.cpp": {
+      "role": "observe",
+      "sha256": "ce1041cb42af15d95f911c722a930a9f4b3e4beb1783eef3809f9b774d34dc1e",
+      "size": 11697,
+      "normalized_sha256": "ce1041cb42af15d95f911c722a930a9f4b3e4beb1783eef3809f9b774d34dc1e"
+    },
+    "tests/recent_projects_contract.cpp": {
+      "role": "observe",
+      "sha256": "6d863965d497ed9d147d4e4bb6395539fe8696562fdd7c0bde4b1f65cc9034a6",
+      "size": 8603,
+      "normalized_sha256": "6d863965d497ed9d147d4e4bb6395539fe8696562fdd7c0bde4b1f65cc9034a6"
+    },
+    "tests/result_readback_barrier_test.cpp": {
+      "role": "observe",
+      "sha256": "7d57cd4ad358eb9dfcdab3ec541e426a397d43aa0025fe2e5f1dbf7224323036",
+      "size": 8397,
+      "normalized_sha256": "7d57cd4ad358eb9dfcdab3ec541e426a397d43aa0025fe2e5f1dbf7224323036"
+    },
+    "tests/roi_view_benchmark.cpp": {
+      "role": "observe",
+      "sha256": "bb860a85c740a328b2fd5b5df24a6872a9f62554d86f977ccb096ca13c35502d",
+      "size": 6464,
+      "normalized_sha256": "bb860a85c740a328b2fd5b5df24a6872a9f62554d86f977ccb096ca13c35502d"
+    },
+    "tests/runtime_contract.cpp": {
+      "role": "observe",
+      "sha256": "9987646dff95b6a40a358f898af70824418becb1c85f84784fb6cfd253994a5c",
+      "size": 73338,
+      "normalized_sha256": "9987646dff95b6a40a358f898af70824418becb1c85f84784fb6cfd253994a5c"
+    },
+    "tests/runtime_diagnostics_contract.cpp": {
+      "role": "observe",
+      "sha256": "b2ea6fdcd7cfa6e963453610dc11dedb60d7ff546480b5eabf5bc87742e49184",
+      "size": 12692,
+      "normalized_sha256": "b2ea6fdcd7cfa6e963453610dc11dedb60d7ff546480b5eabf5bc87742e49184"
+    },
+    "tests/runtime_hotpath_contract.cpp": {
+      "role": "observe",
+      "sha256": "a2f067ad8d876e431f055d9d40a2cacc41a0f5e114d3f84e0ee171f62464feb9",
+      "size": 4794,
+      "normalized_sha256": "a2f067ad8d876e431f055d9d40a2cacc41a0f5e114d3f84e0ee171f62464feb9"
+    },
+    "tests/runtime_node_activity_contract.cpp": {
+      "role": "observe",
+      "sha256": "ee331d3b148fa44fbf7945954c6028bb6d4aff970041b0821c5438225c7ed2e1",
+      "size": 14196,
+      "normalized_sha256": "ee331d3b148fa44fbf7945954c6028bb6d4aff970041b0821c5438225c7ed2e1"
+    },
+    "tests/runtime_python_lazy_contract.cpp": {
+      "role": "observe",
+      "sha256": "27239f143243f30405fead4352ed6b8a039df538e7757fc1ec64e11ed7ba5ee3",
+      "size": 5099,
+      "normalized_sha256": "27239f143243f30405fead4352ed6b8a039df538e7757fc1ec64e11ed7ba5ee3"
+    },
+    "tests/runtime_value_contract.cpp": {
+      "role": "observe",
+      "sha256": "9e99e236dc62a3cf6df08a027b6c5a8cabc8e01c2a2c86fa5e151c122871aa41",
+      "size": 24519,
+      "normalized_sha256": "9e99e236dc62a3cf6df08a027b6c5a8cabc8e01c2a2c86fa5e151c122871aa41"
+    },
+    "tests/test_build_metadata_integration.py": {
+      "role": "observe",
+      "sha256": "d8d5ebf2217cadae3c3fbfcf900cb3fcd7d2457ff5eca00578a72a9aa4eba28a",
+      "size": 13541,
+      "normalized_sha256": "076f7a16ff6df8f644a9d3cce0122361caa5ae1725de835827db903d04bff5cb"
+    },
+    "tests/test_package_app.py": {
+      "role": "observe",
+      "sha256": "84486d5e705a898d65bcc521fdf212246f9d1097d51344d3abf8951c69d8054a",
+      "size": 56120,
+      "normalized_sha256": "84486d5e705a898d65bcc521fdf212246f9d1097d51344d3abf8951c69d8054a"
+    },
+    "tests/test_plugin_module.cpp": {
+      "role": "observe",
+      "sha256": "f1ab2ad6c3dd15e770b34b04e22ff926a4e7fae9bb1eafa3c5a1bc01dd01ea15",
+      "size": 8191,
+      "normalized_sha256": "f1ab2ad6c3dd15e770b34b04e22ff926a4e7fae9bb1eafa3c5a1bc01dd01ea15"
+    },
+    "tests/test_release_evidence.py": {
+      "role": "observe",
+      "sha256": "4fbf609777dd015ba96418a7f82837c7c4807f17e89849be10cf36e3d97145e5",
+      "size": 8469,
+      "normalized_sha256": "4fbf609777dd015ba96418a7f82837c7c4807f17e89849be10cf36e3d97145e5"
+    },
+    "tests/tool_discovery_contract.cpp": {
+      "role": "observe",
+      "sha256": "1eff141a06718c0195243380887ae3c66e411366a75169072507d8c16c8da61e",
+      "size": 12799,
+      "normalized_sha256": "1eff141a06718c0195243380887ae3c66e411366a75169072507d8c16c8da61e"
+    },
+    "tests/tool_editor_controller_test.cpp": {
+      "role": "observe",
+      "sha256": "1ab739e71af1dd835943c41b331fd32bf5fb3220cced068f33fd0dec27e81d09",
+      "size": 10306,
+      "normalized_sha256": "1ab739e71af1dd835943c41b331fd32bf5fb3220cced068f33fd0dec27e81d09"
+    },
+    "tests/tool_editor_dialog_test.cpp": {
+      "role": "observe",
+      "sha256": "74de4a8704a71335c44f3a130f51e75060f8502fb2b9a872ce660d250eb34064",
+      "size": 12940,
+      "normalized_sha256": "74de4a8704a71335c44f3a130f51e75060f8502fb2b9a872ce660d250eb34064"
+    },
+    "tests/tool_port_list_model_test.cpp": {
+      "role": "observe",
+      "sha256": "0c3c724f0622aa8af22edd6f161375a8b924716c405fd835ac98e8e6e8541bc7",
+      "size": 14310,
+      "normalized_sha256": "0c3c724f0622aa8af22edd6f161375a8b924716c405fd835ac98e8e6e8541bc7"
+    },
+    "tests/tool_registry_contract.cpp": {
+      "role": "observe",
+      "sha256": "f3241facbb1f0c6d8310efcdebd951bba2e715536bfffacc5b4569d7897fae73",
+      "size": 7594,
+      "normalized_sha256": "f3241facbb1f0c6d8310efcdebd951bba2e715536bfffacc5b4569d7897fae73"
+    },
+    "tests/toolchain_support.py": {
+      "role": "observe",
+      "sha256": "34d3d18bc86278bad38c80b56af4687f063150d51d38b505e0a8586b519516bf",
+      "size": 865,
+      "normalized_sha256": "34d3d18bc86278bad38c80b56af4687f063150d51d38b505e0a8586b519516bf"
+    },
+    "tests/tools_package_contract.cpp": {
+      "role": "observe",
+      "sha256": "8eaba5df1320e4e93351dc9720eec89ec1a1e9a03c21982bd819d92f204b8873",
+      "size": 8180,
+      "normalized_sha256": "8eaba5df1320e4e93351dc9720eec89ec1a1e9a03c21982bd819d92f204b8873"
+    },
+    "tests/training_session_contract.cpp": {
+      "role": "observe",
+      "sha256": "3eee10fc6532cb6a10bddacd2a2c909621930e17ce7d1ee47c5d1c20c72e8d0e",
+      "size": 9469,
+      "normalized_sha256": "3eee10fc6532cb6a10bddacd2a2c909621930e17ce7d1ee47c5d1c20c72e8d0e"
+    },
+    "tests/ui_completion_contract.cpp": {
+      "role": "observe",
+      "sha256": "2cd10918ddfc228765e1b4fd5aea7f10ac508d6a9b98eaa6f3abb258f9e584ff",
+      "size": 9968,
+      "normalized_sha256": "2cd10918ddfc228765e1b4fd5aea7f10ac508d6a9b98eaa6f3abb258f9e584ff"
+    },
+    "tests/ui_notifications_contract.cpp": {
+      "role": "observe",
+      "sha256": "fdde561c170c8f072ab05496f907ed69f54f085fdf3bbaa5827d96346076def5",
+      "size": 11134,
+      "normalized_sha256": "fdde561c170c8f072ab05496f907ed69f54f085fdf3bbaa5827d96346076def5"
+    },
+    "tests/ui_preferences_contract.cpp": {
+      "role": "observe",
+      "sha256": "0e51557c3711cadfcd35fad1d4e076b98a4b79b8ba50a8892e9374a5c1875262",
+      "size": 7167,
+      "normalized_sha256": "0e51557c3711cadfcd35fad1d4e076b98a4b79b8ba50a8892e9374a5c1875262"
+    },
+    "tests/ui_receiver_identity_contract.cpp": {
+      "role": "observe",
+      "sha256": "0e2f99cc8c6a85dcc5b3af1652e20d0e355cbee8c25e5421043da97d8baba0fa",
+      "size": 21318,
+      "normalized_sha256": "0e2f99cc8c6a85dcc5b3af1652e20d0e355cbee8c25e5421043da97d8baba0fa"
+    },
+    "tests/ui_result_isolation_contract.cpp": {
+      "role": "observe",
+      "sha256": "9afdd1553d69c819ae36423d2e0c78c8a9c311040bddca183857205d48aea7fd",
+      "size": 15361,
+      "normalized_sha256": "9afdd1553d69c819ae36423d2e0c78c8a9c311040bddca183857205d48aea7fd"
+    },
+    "tests/ui_storage_contract.cpp": {
+      "role": "observe",
+      "sha256": "b538ddc975cadccb17fddba8e3ddf2517f025a430a20402b9277fa07c0f4666a",
+      "size": 11541,
+      "normalized_sha256": "b538ddc975cadccb17fddba8e3ddf2517f025a430a20402b9277fa07c0f4666a"
+    },
+    "tests/ui_unc_paths_contract.cpp": {
+      "role": "observe",
+      "sha256": "d356f9fac5d0396e48f5f6dc955045727b0e251c028899a4cfe737075f1795a8",
+      "size": 4596,
+      "normalized_sha256": "d356f9fac5d0396e48f5f6dc955045727b0e251c028899a4cfe737075f1795a8"
+    },
+    "tests/ui_value_contract.cpp": {
+      "role": "observe",
+      "sha256": "9f1bf6f2659ee51476366126bba7a04ae92762c45420129e9cec69277e49780b",
+      "size": 15774,
+      "normalized_sha256": "9f1bf6f2659ee51476366126bba7a04ae92762c45420129e9cec69277e49780b"
+    },
+    "tests/validator_cli_contract.py": {
+      "role": "observe",
+      "sha256": "6a8551d3c5a7353d9f97778e5d0f89a75f5e8b482601861a07f2d0b9d6a5bb55",
+      "size": 5646,
+      "normalized_sha256": "19f289e8a874c44bb3e46f7287ca2f369cf894083ed0a21cb85f817377bcca34"
+    },
+    "tests/value_bridge_benchmark.cpp": {
+      "role": "observe",
+      "sha256": "7d058ff8026b36dd68562c01d057adc35123bf1b596b421f6f5aac4d127e0354",
+      "size": 11883,
+      "normalized_sha256": "7d058ff8026b36dd68562c01d057adc35123bf1b596b421f6f5aac4d127e0354"
+    },
+    "tests/value_contract.cpp": {
+      "role": "observe",
+      "sha256": "d55091501c331a363b32c5570aea32f97fd602ba4f4e70219578f1bb60ef23fa",
+      "size": 5185,
+      "normalized_sha256": "d55091501c331a363b32c5570aea32f97fd602ba4f4e70219578f1bb60ef23fa"
+    },
+    "tests/value_json_contract.cpp": {
+      "role": "observe",
+      "sha256": "f53bd6d7a001091d0824dc04cbd8d797bfa582f1c0161f560608d213e732857f",
+      "size": 9500,
+      "normalized_sha256": "f53bd6d7a001091d0824dc04cbd8d797bfa582f1c0161f560608d213e732857f"
+    },
+    "tests/version_contract.cpp": {
+      "role": "observe",
+      "sha256": "0e6a812c44fa79e5c5b44c37f2098dbe38ed9642881e871904edbf25fe89e5f6",
+      "size": 2359,
+      "normalized_sha256": "0e6a812c44fa79e5c5b44c37f2098dbe38ed9642881e871904edbf25fe89e5f6"
+    },
+    "tests/viewport_contract.cpp": {
+      "role": "observe",
+      "sha256": "eef25cc2b9ddf16f3eed5097629b81f89675c9956379d3e3462e81b640d2ebdd",
+      "size": 26797,
+      "normalized_sha256": "eef25cc2b9ddf16f3eed5097629b81f89675c9956379d3e3462e81b640d2ebdd"
+    },
+    "tests/viewport_lifetime_contract.cpp": {
+      "role": "observe",
+      "sha256": "d2158097ec970136f0de1bd3b3c3e9521d8fd3133b86b6e75bddba7e94602531",
+      "size": 1857,
+      "normalized_sha256": "d2158097ec970136f0de1bd3b3c3e9521d8fd3133b86b6e75bddba7e94602531"
+    },
+    "tests/wire_router_contract.cpp": {
+      "role": "observe",
+      "sha256": "e95682c8dd70c0fe5b3187821ae9e08772ff2a42e51af9accfa5cda2e6007a5b",
+      "size": 4804,
+      "normalized_sha256": "e95682c8dd70c0fe5b3187821ae9e08772ff2a42e51af9accfa5cda2e6007a5b"
+    },
+    "tests/wire_routing_benchmark.cpp": {
+      "role": "observe",
+      "sha256": "19aa2e962f4849c3f982c1f38918d6b51d7b244a97cd93a1030de176cc64d202",
+      "size": 13216,
+      "normalized_sha256": "19aa2e962f4849c3f982c1f38918d6b51d7b244a97cd93a1030de176cc64d202"
+    },
+    "tests/workbench_assist_contract.cpp": {
+      "role": "observe",
+      "sha256": "dbce5df1c3c4b1eb6397397ec5921198c973c242f4ccbdf52de557aa27561033",
+      "size": 20249,
+      "normalized_sha256": "dbce5df1c3c4b1eb6397397ec5921198c973c242f4ccbdf52de557aa27561033"
+    },
+    "tests/workbench_assist_release_contract.cpp": {
+      "role": "observe",
+      "sha256": "9201d620c99ea88a691e3311bb4b9035cb10f062a6c93993eea5d982ce174843",
+      "size": 10324,
+      "normalized_sha256": "9201d620c99ea88a691e3311bb4b9035cb10f062a6c93993eea5d982ce174843"
+    },
+    "tests/workbench_cancellation.cpp": {
+      "role": "observe",
+      "sha256": "dcf658fea37d7bcd6e81c3f9b7a96a2482bc77f9e05a0415cc4ca4e0dba0c308",
+      "size": 11416,
+      "normalized_sha256": "dcf658fea37d7bcd6e81c3f9b7a96a2482bc77f9e05a0415cc4ca4e0dba0c308"
+    },
+    "tests/workbench_clipboard_contract.cpp": {
+      "role": "observe",
+      "sha256": "7c69e72e6f0662da137cd2b1b8c8ebaaefe310fe66a6f9a3af134be08be70882",
+      "size": 9612,
+      "normalized_sha256": "7c69e72e6f0662da137cd2b1b8c8ebaaefe310fe66a6f9a3af134be08be70882"
+    },
+    "tests/workbench_contract.cpp": {
+      "role": "observe",
+      "sha256": "928c3417be80683279ec1e32dce0f7cedf3872b62d98d9780c7fe1a0a7aa420c",
+      "size": 65651,
+      "normalized_sha256": "928c3417be80683279ec1e32dce0f7cedf3872b62d98d9780c7fe1a0a7aa420c"
+    },
+    "tests/workbench_exit_contract.cpp": {
+      "role": "observe",
+      "sha256": "949e9be0b3a2d0061256b7d5d6af2806f7a3771a55c3dc6f0648e19be49611cd",
+      "size": 5537,
+      "normalized_sha256": "949e9be0b3a2d0061256b7d5d6af2806f7a3771a55c3dc6f0648e19be49611cd"
+    },
+    "tests/workbench_expression_contract.cpp": {
+      "role": "observe",
+      "sha256": "f1cf127b35752f1c7e218c1cdd75f825937fe2dc1b3a167b66f216bc72f6acfd",
+      "size": 14744,
+      "normalized_sha256": "f1cf127b35752f1c7e218c1cdd75f825937fe2dc1b3a167b66f216bc72f6acfd"
+    },
+    "tests/workbench_flows_contract.cpp": {
+      "role": "observe",
+      "sha256": "af8eda82046ac69597080df08111eed2fdd7d6290d08b125475deac124e74d0d",
+      "size": 9484,
+      "normalized_sha256": "af8eda82046ac69597080df08111eed2fdd7d6290d08b125475deac124e74d0d"
+    },
+    "tests/workbench_interaction_contract.cpp": {
+      "role": "observe",
+      "sha256": "1bb337f49538a5bb7a6f844054805e8c890d9296b1a763b12cb03ea10e9c8314",
+      "size": 11028,
+      "normalized_sha256": "1bb337f49538a5bb7a6f844054805e8c890d9296b1a763b12cb03ea10e9c8314"
+    },
+    "tests/workbench_lifecycle_contract.cpp": {
+      "role": "observe",
+      "sha256": "c6e9a713acf7ee7ba694757ba3d556ac02f0be61752f95234f942f6ada53558d",
+      "size": 12353,
+      "normalized_sha256": "c6e9a713acf7ee7ba694757ba3d556ac02f0be61752f95234f942f6ada53558d"
+    },
+    "tests/workbench_parameter_states.cpp": {
+      "role": "observe",
+      "sha256": "4ebdef5bdc7c142740d0d037ed427245acd62f2aed2de81f25e1d20d6f9f8bb6",
+      "size": 7634,
+      "normalized_sha256": "4ebdef5bdc7c142740d0d037ed427245acd62f2aed2de81f25e1d20d6f9f8bb6"
+    },
+    "tests/workbench_parameters.cpp": {
+      "role": "observe",
+      "sha256": "c410b43f8bd1d9773484355d394509bdbbd940aef763a874ea9f329c3daf7bdd",
+      "size": 34983,
+      "normalized_sha256": "c410b43f8bd1d9773484355d394509bdbbd940aef763a874ea9f329c3daf7bdd"
+    },
+    "tests/workbench_paths.cpp": {
+      "role": "observe",
+      "sha256": "2c007ae7b7dbcfde8ca12b4875721e24a38df3b90cc73cc038f310af790c8d3c",
+      "size": 27908,
+      "normalized_sha256": "2c007ae7b7dbcfde8ca12b4875721e24a38df3b90cc73cc038f310af790c8d3c"
+    },
+    "tests/workbench_popups.cpp": {
+      "role": "observe",
+      "sha256": "67e5251bcfb8fb78333b3a322d4d79d0af293b34c1714649c49959d8965a787c",
+      "size": 34904,
+      "normalized_sha256": "67e5251bcfb8fb78333b3a322d4d79d0af293b34c1714649c49959d8965a787c"
+    },
+    "tests/workbench_publication_contract.cpp": {
+      "role": "observe",
+      "sha256": "073a75ff510bcaa38109bbf1f17d039ec7b160e26d3123b9397146a67c49552a",
+      "size": 8428,
+      "normalized_sha256": "073a75ff510bcaa38109bbf1f17d039ec7b160e26d3123b9397146a67c49552a"
+    },
+    "tests/workbench_roi.cpp": {
+      "role": "observe",
+      "sha256": "80ff99c6fa3a2ceb4ebedcf347951003f0c4eaac2d87821ae9766c4d69591ca5",
+      "size": 66479,
+      "normalized_sha256": "80ff99c6fa3a2ceb4ebedcf347951003f0c4eaac2d87821ae9766c4d69591ca5"
+    },
+    "tests/workbench_startup.cpp": {
+      "role": "observe",
+      "sha256": "e1b55ab83be75ce2bcf23672f46cf40e0bce7437526f630f77d6050d5950f16c",
+      "size": 28504,
+      "normalized_sha256": "e1b55ab83be75ce2bcf23672f46cf40e0bce7437526f630f77d6050d5950f16c"
+    },
+    "tests/workbench_status_contract.cpp": {
+      "role": "observe",
+      "sha256": "959eae818fab674e7070622d069b238b57e507716e66533d6ddbf11e9ec454d4",
+      "size": 13978,
+      "normalized_sha256": "959eae818fab674e7070622d069b238b57e507716e66533d6ddbf11e9ec454d4"
+    },
+    "tests/workbench_tooltree_contract.cpp": {
+      "role": "observe",
+      "sha256": "1844512b8d6223963183520037a3bab13fbe891b5e499d0c37d088dc92f962a2",
+      "size": 12508,
+      "normalized_sha256": "1844512b8d6223963183520037a3bab13fbe891b5e499d0c37d088dc92f962a2"
+    },
+    "tests/workbench_training_contract.cpp": {
+      "role": "observe",
+      "sha256": "b02478c739d6992440463861eccb7b61dc33b6f1846eb7ec7ef58f71e05c861b",
+      "size": 14174,
+      "normalized_sha256": "b02478c739d6992440463861eccb7b61dc33b6f1846eb7ec7ef58f71e05c861b"
+    },
+    "tests/workbench_unavailable_tool_contract.cpp": {
+      "role": "observe",
+      "sha256": "1f7db695936606e3b5b5020823aec00484a8dd8a3be72eb21b64a352a4ec0825",
+      "size": 10057,
+      "normalized_sha256": "1f7db695936606e3b5b5020823aec00484a8dd8a3be72eb21b64a352a4ec0825"
+    },
+    "tools/README.md": {
+      "role": "index",
+      "sha256": "67654230ec684856a2ff0cef395d452b2a01ed7a42a14db5f5a24c0b1b1bdaab",
+      "size": 5166,
+      "normalized_sha256": "67654230ec684856a2ff0cef395d452b2a01ed7a42a14db5f5a24c0b1b1bdaab"
+    },
+    "tools/archive_evidence.py": {
+      "role": "index",
+      "sha256": "ecb31621c5c24d3baabc3e4db9dc40b1e6ee88465bb0d23bc4a63010a17c0a2a",
+      "size": 1676,
+      "normalized_sha256": "ecb31621c5c24d3baabc3e4db9dc40b1e6ee88465bb0d23bc4a63010a17c0a2a"
+    },
+    "tools/build.cmd": {
+      "role": "index",
+      "sha256": "e2b144b44cefc0e095b96be25a0999f048fd16d9b153a9b290256eea87314fb8",
+      "size": 6436,
+      "normalized_sha256": "6c3e14a6b10b7ce9e73c8e05931befac471d98b307c528686f40f5cfd845060e"
+    },
+    "tools/dependencies.json": {
+      "role": "index",
+      "sha256": "cb1df9a11c29fcd1cd4c5a529ccd88b6f1022b48d0c081ba0b194bc401fa251d",
+      "size": 1052,
+      "normalized_sha256": "cb1df9a11c29fcd1cd4c5a529ccd88b6f1022b48d0c081ba0b194bc401fa251d"
+    },
+    "tools/dependency_utils.py": {
+      "role": "index",
+      "sha256": "4ba2f298d06c4e39bb39c355b8956b2a6bb01810293d0cc88976b8381f1b6efd",
+      "size": 13655,
+      "normalized_sha256": "4ba2f298d06c4e39bb39c355b8956b2a6bb01810293d0cc88976b8381f1b6efd"
+    },
+    "tools/link_dependencies.py": {
+      "role": "index",
+      "sha256": "b8a07daac0e68c0a69f444632539887dad8c466e9edcc59014c64a112bb08484",
+      "size": 7723,
+      "normalized_sha256": "b8a07daac0e68c0a69f444632539887dad8c466e9edcc59014c64a112bb08484"
+    },
+    "tools/package_app.py": {
+      "role": "index",
+      "sha256": "9a3212dbc5cb904dc910b63f0b1882d5efad1d9b915e52e5f1cca1f533e82461",
+      "size": 60345,
+      "normalized_sha256": "9a3212dbc5cb904dc910b63f0b1882d5efad1d9b915e52e5f1cca1f533e82461"
+    },
+    "tools/release_evidence.py": {
+      "role": "index",
+      "sha256": "711bce36f9fb4de8771c31061e43005b41932739f65f868058e1390cf17659be",
+      "size": 14066,
+      "normalized_sha256": "711bce36f9fb4de8771c31061e43005b41932739f65f868058e1390cf17659be"
+    },
+    "tools/runtime_dependencies.py": {
+      "role": "index",
+      "sha256": "a8c52b6882cfa004903901999c365a691e9a925bc818ac0856e8a083a8dca5f3",
+      "size": 7310,
+      "normalized_sha256": "a8c52b6882cfa004903901999c365a691e9a925bc818ac0856e8a083a8dca5f3"
+    },
+    "tools/verify_ui_notifications.cjs": {
+      "role": "index",
+      "sha256": "82692281f9f9dd0c46de93d7246b1fe710285dca30cc482cc4b587e13b581616",
+      "size": 4726,
+      "normalized_sha256": "82692281f9f9dd0c46de93d7246b1fe710285dca30cc482cc4b587e13b581616"
+    },
+    "tools/visionrt_validate_tool.cpp": {
+      "role": "index",
+      "sha256": "bd4dc7cf669d7e09a66a9306d58a2bf435884b933ceb208b502a50bc453d5159",
+      "size": 4618,
+      "normalized_sha256": "bd4dc7cf669d7e09a66a9306d58a2bf435884b933ceb208b502a50bc453d5159"
+    }
+  },
+  "managed_scope": {
+    "version": "managed-scope-baseline/v1",
+    "policy_identity": "e0f548d87fe5462c412a1c54409871a60ddf2ae5c30609258ff8739fdfcc8e76",
+    "observe_change_policy": "review_required",
+    "budget_policy_identity": "15e9b37a6c57e9bf03c9df3d0d049eb5b9a7f5540f9d34960408114e2538a32d",
+    "budget_policy": {
+      "version": "cognition-budget-policy/v1",
+      "mode": "enforce",
+      "whole_index": {
+        "target_tokens": 200000,
+        "warning_tokens": 300000,
+        "max_tokens": 400000
+      },
+      "r": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 25,
+          "max_tokens": 50
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 45,
+          "max_tokens": 90
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 90,
+          "max_tokens": 180
+        }
+      ],
+      "s": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 20,
+          "max_tokens": 40
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 40,
+          "max_tokens": 80
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 100,
+          "max_tokens": 200
+        }
+      ]
+    },
+    "apply_authorization_mode": "auto"
+  }
+}
