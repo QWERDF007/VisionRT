@@ -15,10 +15,8 @@ namespace visionrt {
 void registerUiTypes()
 {
     static const bool registered = [] {
-        qmlRegisterSingletonType<VisionRTColor>("VisionRT.Ui", 1, 0, "VisionRTColor",
-            [](QQmlEngine *, QJSEngine *) -> QObject * { return new VisionRTColor; });
-        qmlRegisterUncreatableMetaObject(VisionRTSize::staticMetaObject, "VisionRT.Ui", 1, 0,
-                                       "VisionRTSize", "Size constants");
+        qmlRegisterSingletonType<VisionRTColor>("VisionRT.Ui", 1, 0, "VisionRTColor", VisionRTColor::create);
+        qmlRegisterSingletonType<VisionRTSize>("VisionRT.Ui", 1, 0, "VisionRTSize", VisionRTSize::create);
         qmlRegisterUncreatableMetaObject(qml::ToolKind::staticMetaObject, "VisionRT.Ui", 1, 0, "ToolKind", "Enum values");
         qmlRegisterUncreatableMetaObject(qml::PortStage::staticMetaObject, "VisionRT.Ui", 1, 0, "PortStage", "Enum values");
         qmlRegisterUncreatableMetaObject(qml::NodeModel::staticMetaObject, "VisionRT.Ui", 1, 0, "NodeModel", "Enum values");

@@ -9,7 +9,16 @@ Item {
     required property var portsModel
     required property var types
     required property int stage
+    required property real labelWidth
     property bool editable: false
+    readonly property real implicitLabelWidth: {
+        let widest = 0;
+        for (const card of portView.contentItem.children) {
+            if (card instanceof ToolPortCard)
+                widest = Math.max(widest, card.implicitLabelWidth);
+        }
+        return widest;
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -60,6 +69,7 @@ Item {
                 types: root.types
                 editable: root.editable
                 stage: root.stage
+                labelWidth: root.labelWidth
             }
         }
     }

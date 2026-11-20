@@ -7,6 +7,7 @@ import VisionRT.Ui 1.0
 ToolBar {
     id: root
     required property var fileMenuObject
+    required property var settingsMenuObject
     required property var toolsMenuObject
     required property var helpMenuObject
     required property Action saveCommand
@@ -17,7 +18,6 @@ ToolBar {
     property bool stopping: false
     property bool busy: false
     property string statusText: ""
-    signal settingsRequested
     signal resetRequested
     function openFileMenu() {
         root.fileMenuObject.popup(fileBtn, 0, fileBtn.height);
@@ -27,7 +27,7 @@ ToolBar {
     }
     objectName: "mainToolbar"
     padding: 0
-    height: VisionRTSize.BarSize
+    height: VisionRTSize.HeaderSize
     background: Rectangle {
         color: QuiColor.Primary
         border.width: 1
@@ -59,7 +59,12 @@ ToolBar {
             iconSource: QuiFontIcon.Settings
             display: AbstractButton.TextBesideIcon
             enabled: root.workspaceEnabled
-            onClicked: root.settingsRequested()
+            onClicked: {
+                if (root.settingsMenuObject.visible)
+                    root.settingsMenuObject.dismiss();
+                else
+                    root.settingsMenuObject.popup(settingsBtn, 0, settingsBtn.height);
+            }
         }
         WorkbenchActionButton {
             id: toolsBtn

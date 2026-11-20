@@ -5,11 +5,13 @@ import quickui
 import VisionRT.Ui 1.0
 
 // Edits one port in the controller's current draft.
-Rectangle {
+QuiCard {
     id: root
 
     required property int index
     required property var model
+    required property real labelWidth
+    readonly property alias implicitLabelWidth: cardLayout.implicitLabelWidth
     property var portsModel: null
     property var listView: null
     property var types: []
@@ -30,10 +32,8 @@ Rectangle {
     readonly property real upperBound: root.model.maxValue !== "" && !isNaN(Number(root.model.maxValue)) ? Number(root.model.maxValue) : 2147483647
 
     implicitHeight: cardLayout.implicitHeight + 2 * cardLayout.anchors.margins
-    color: QuiColor.Primary
-    border.color: QuiColor.Border
-    border.width: 1
-    radius: 8
+    cardColor: QuiColor.Primary
+    borderColor: QuiColor.Border
 
     function sameType(a, b) {
         return a.type === b.type && a.dtype === b.dtype && a.rank === b.rank;
@@ -128,11 +128,10 @@ Rectangle {
         }
     }
 
-    ColumnLayout {
+    ToolFormLayout {
         id: cardLayout
         anchors.fill: parent
         anchors.margins: 5
-        spacing: 5
 
         // Header: Badge with port ID on the left, delete button on the right
         RowLayout {
@@ -209,18 +208,9 @@ Rectangle {
         }
 
         // Field 1: 中文名
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
-            Label {
-                text: "中文名:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "中文名:"
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
@@ -237,18 +227,9 @@ Rectangle {
         }
 
         // Field 2: 英文名
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
-            Label {
-                text: "英文名:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "英文名:"
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
@@ -263,18 +244,9 @@ Rectangle {
         }
 
         // Field 3: 类型
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
-            Label {
-                text: "类型:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "类型:"
             ParameterComboBox {
                 id: typeCombo
                 Layout.fillWidth: true
@@ -310,19 +282,10 @@ Rectangle {
         // missing value means, so the editor offers the same field in both directions. A path string
         // is edited in the same single picker the parameter panel uses, and a numeric default is
         // bounded by the same limits the contract stores.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "默认值:"
             visible: !root.isImage && root.portType !== PortType.Bool
-            Label {
-                text: "默认值:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
             ParameterTextField {
                 id: defaultField
                 Layout.fillWidth: true
@@ -365,20 +328,13 @@ Rectangle {
 
         // Field: 布尔类型默认值。A business output carries a default the same way an input does, and
         // the host-owned fixed ports stay read-only in both directions.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "默认值:"
             visible: root.portType === PortType.Bool
-            Label {
-                text: "默认值:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
             QuiToggleSwitch {
+                Layout.fillWidth: false
+                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                 enabled: root.editable && !root.fixed
                 checked: String(root.model.defaultValue) === "true"
                 clickListener: function () {
@@ -388,25 +344,13 @@ Rectangle {
                         });
                 }
             }
-            Item {
-                Layout.fillWidth: true
-            }
         }
 
         // Fields: 下限 & 上限 (Input parameters, numeric types, only for editable custom parameters)
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "下限:"
             visible: root.numeric && (!root.fixed || root.model.minValue !== "" || root.model.maxValue !== "")
-            Label {
-                text: "下限:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
@@ -420,19 +364,10 @@ Rectangle {
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "上限:"
             visible: root.numeric && (!root.fixed || root.model.minValue !== "" || root.model.maxValue !== "")
-            Label {
-                text: "上限:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
@@ -447,20 +382,13 @@ Rectangle {
         }
 
         // Field: 图像区域显示 (Image parameters only)
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 5
+        ToolFormRow {
+            labelWidth: root.labelWidth
+            label: "图像区域显示:"
             visible: root.isImage
-            Label {
-                text: "图像区域显示:"
-                Layout.preferredWidth: VisionRTSize.ParamLabelWidth + 24
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                font: QuiFont.Body
-                color: QuiColor.FontCaption
-            }
             QuiToggleSwitch {
+                Layout.fillWidth: false
+                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                 enabled: root.editable && !root.fixed
                 checked: root.model.showImage === true
                 clickListener: function () {
@@ -469,9 +397,6 @@ Rectangle {
                             showImage: !checked
                         });
                 }
-            }
-            Item {
-                Layout.fillWidth: true
             }
         }
 
@@ -498,22 +423,14 @@ Rectangle {
             }
         }
 
-        ColumnLayout {
+        ToolFormLayout {
             Layout.fillWidth: true
-            spacing: 5
             visible: root.advancedChecked && !root.fixed && root.hasAdvanced
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 5
+            ToolFormRow {
+                labelWidth: root.labelWidth
+                label: "编辑方式:"
                 visible: root.portType === PortType.String
-                Label {
-                    text: "编辑方式:"
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    font: QuiFont.Body
-                    color: QuiColor.FontCaption
-                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
@@ -534,17 +451,10 @@ Rectangle {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 5
+            ToolFormRow {
+                labelWidth: root.labelWidth
+                label: "关联图像:"
                 visible: root.showsRelation(RelationKind.Image)
-                Label {
-                    text: "关联图像:"
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    font: QuiFont.Body
-                    color: QuiColor.FontCaption
-                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
@@ -565,17 +475,10 @@ Rectangle {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 5
+            ToolFormRow {
+                labelWidth: root.labelWidth
+                label: "对齐关系:"
                 visible: root.showsRelation(RelationKind.Alignment)
-                Label {
-                    text: "对齐关系:"
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    font: QuiFont.Body
-                    color: QuiColor.FontCaption
-                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
@@ -596,17 +499,10 @@ Rectangle {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 5
+            ToolFormRow {
+                labelWidth: root.labelWidth
+                label: "同几何:"
                 visible: root.showsRelation(RelationKind.SameGeometry)
-                Label {
-                    text: "同几何:"
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    font: QuiFont.Body
-                    color: QuiColor.FontCaption
-                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
@@ -627,17 +523,10 @@ Rectangle {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 5
+            ToolFormRow {
+                labelWidth: root.labelWidth
+                label: "候选值:"
                 visible: !root.output && (root.portType === PortType.Int || root.portType === PortType.Float || root.portType === PortType.String || root.portType === PortType.Bool)
-                Label {
-                    text: "候选值:"
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    font: QuiFont.Body
-                    color: QuiColor.FontCaption
-                }
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 50

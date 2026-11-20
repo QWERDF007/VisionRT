@@ -499,7 +499,7 @@ FocusScope {
                         route: modelData.points
                         viewScale: root.zoom
                         connectionCount: modelData.count
-                        lineColor: modelData.error ? QuiColor.Error : root.selectedWire === modelData.source + ":" + modelData.target ? QuiColor.Highlight : root.selected(modelData.target) ? VisionRTColor.NodeOrange : root.selected(modelData.source) ? QuiColor.Highlight : QuiColor.Background
+                        lineColor: modelData.error ? QuiColor.Error : root.selectedWire === modelData.source + ":" + modelData.target ? VisionRTColor.NodeOutputLine : root.selected(modelData.target) ? VisionRTColor.NodeInputLine : root.selected(modelData.source) ? VisionRTColor.NodeOutputLine : VisionRTColor.NodeLine
                         opacity: root.selection.length && !root.selected(modelData.target) && !root.selected(modelData.source) ? 0.35 : 1
                         onActivated: {
                             root.hideHover();

@@ -19,6 +19,7 @@ WorkbenchWindow {
             anchors.fill: parent
 
             RowLayout {
+                id: columns
                 anchors.fill: parent
                 anchors.leftMargin: 5
                 anchors.rightMargin: 5
@@ -26,6 +27,7 @@ WorkbenchWindow {
                 anchors.bottomMargin: 0
                 spacing: 5
                 readonly property real columnUnit: (width - 6 * spacing - 3) / 5
+                readonly property real labelWidth: Math.max(toolInformation.implicitLabelWidth, inputPorts.implicitLabelWidth, outputPorts.implicitLabelWidth)
 
                 ToolCatalogPane {
                     Layout.preferredWidth: 2 * parent.columnUnit
@@ -40,9 +42,11 @@ WorkbenchWindow {
                 }
 
                 ToolInformationPane {
+                    id: toolInformation
                     Layout.preferredWidth: parent.columnUnit
                     Layout.fillHeight: true
                     controller: root.controller
+                    labelWidth: columns.labelWidth
                 }
 
                 Rectangle {
@@ -52,12 +56,14 @@ WorkbenchWindow {
                 }
 
                 ToolPortsPane {
+                    id: inputPorts
                     Layout.preferredWidth: parent.columnUnit
                     Layout.fillHeight: true
                     portsModel: root.controller && root.controller.hasTool ? root.controller.inputModel : null
                     types: root.controller ? root.controller.supportedTypes : []
                     editable: root.controller && root.controller.hasTool && root.controller.isEditable
                     stage: PortStage.Inputs
+                    labelWidth: columns.labelWidth
                 }
 
                 Rectangle {
@@ -67,12 +73,14 @@ WorkbenchWindow {
                 }
 
                 ToolPortsPane {
+                    id: outputPorts
                     Layout.preferredWidth: parent.columnUnit
                     Layout.fillHeight: true
                     portsModel: root.controller && root.controller.hasTool ? root.controller.outputModel : null
                     types: root.controller ? root.controller.supportedTypes : []
                     editable: root.controller && root.controller.hasTool && root.controller.isEditable
                     stage: PortStage.Outputs
+                    labelWidth: columns.labelWidth
                 }
             }
         }

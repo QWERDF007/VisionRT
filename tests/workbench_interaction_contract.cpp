@@ -112,6 +112,24 @@ def run(inputs):
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
     require(window && QTest::qWaitForWindowExposed(window), "interaction window was not exposed");
 
+    auto *settingsWindow = window->findChild<QQuickWindow *>("settingsWindow");
+    require(settingsWindow && !settingsWindow->isVisible(), "platform settings must start closed");
+    auto *settingsButton = toolbarButton(window, {QStringLiteral("设置")});
+    require(settingsButton != nullptr, "settings toolbar entry is missing");
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                     settingsButton->mapToScene(QPointF(settingsButton->width() / 2, settingsButton->height() / 2)).toPoint());
+    QQuickItem *platformSettings = nullptr;
+    require(waitFor([&] {
+        platformSettings = toolbarButton(window, {QStringLiteral("平台设置")});
+        return platformSettings != nullptr;
+    }, 2000), "settings must offer the platform settings menu item");
+    require(!settingsWindow->isVisible(), "opening the settings menu must keep the settings window closed");
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                     platformSettings->mapToScene(QPointF(platformSettings->width() / 2, platformSettings->height() / 2)).toPoint());
+    require(QTest::qWaitForWindowExposed(settingsWindow), "platform settings menu item did not open the existing window");
+    settingsWindow->close();
+    require(waitFor([&] { return !settingsWindow->isVisible(); }), "platform settings window did not close");
+
     app.addNode(QStringLiteral("test.interaction.gate"), 0, 0);
     require(waitFor([&] { return !app.busy() && app.nodes().size() == 1; }),
             "gate node was not added: nodes=" + std::to_string(app.nodes().size())

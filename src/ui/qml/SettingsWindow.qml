@@ -32,7 +32,6 @@ WorkbenchWindow {
     readonly property bool dirty: draftBuiltins !== applied.editBuiltins || draftLevel !== applied.loggingLevel || draftPython !== appliedPython
     readonly property bool pythonPending: draftPython !== appliedPython
     readonly property bool applying: app.settingsApplying
-    readonly property bool environmentRejected: app.pythonEnvironmentPhase === PythonEnvironmentPhase.Invalid || app.pythonEnvironmentPhase === PythonEnvironmentPhase.BackendFailed
 
     function load() {
         applied = app.settingsSnapshot();
@@ -102,12 +101,9 @@ WorkbenchWindow {
             anchors.fill: parent
             draftBuiltins: root.draftBuiltins
             draftLevel: root.draftLevel
-            draftPython: root.draftPython
             page: root.page
             applying: root.applying
             pythonPending: root.pythonPending
-            environmentRejected: root.environmentRejected
-            environmentText: app.pythonEnvironmentText
             errorText: root.errorText
             onBuiltinsEdited: function (value) {
                 root.draftBuiltins = value;

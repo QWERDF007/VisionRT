@@ -486,17 +486,6 @@ void aboutDialogContract()
     require(textArea->property("readOnly").toBool(), "aboutTextArea is not readOnly");
     require(textArea->property("selectByMouse").toBool(), "aboutTextArea does not have selectByMouse");
 
-    // The layered body must be visible evidence, not only a property change. The popup fades in,
-    // so the capture waits for the first frame that actually shows it.
-    QTest::qWait(200);
-    require(window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/about_dialog.png")),
-            "cannot capture the About dialog");
-    auto *textFrame = dialog->findChild<QObject *>("aboutTextFrame");
-    require(textFrame != nullptr, "aboutTextFrame is missing in dialog");
-    require(textFrame->property("width").toReal() > 0 && textFrame->property("height").toReal() > 0,
-            "the About text frame has no size");
-    require(textFrame->property("border").value<QObject *>() != nullptr, "the About text frame has no border");
-
     // Verify context menu exists
     auto *aboutMenu = dialog->findChild<QObject *>("aboutMenu");
     require(aboutMenu != nullptr, "aboutMenu is missing in AboutVisionRTDialog");

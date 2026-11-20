@@ -30,6 +30,227 @@
 - ...
 -->
 
+### 2026-11-20 — 节点专用配色与应用样式单例
+
+**目标**
+- 节点标题和连线接入专用颜色属性，顶部工具栏使用HeaderSize，并将Color和Size统一为应用自有单例；交付当前已授权的界面改动。
+
+**当前状态**
+- 已完成：VisionRTColor新增NodeGrey、NodeRed、NodeLine、NodeInputLine、NodeOutputLine；节点标题按默认、失败、运行状态选色，错误边框与图标复用NodeRed；连线按默认、选中输入、选中输出使用对应专用属性，删除旧NodeOrange。
+- 已完成：HeaderSize用于主工具栏；主窗口布局回退高度直接使用客户区高度。Singleton.h复制到src/common，使用visionrt命名空间与VISIONRT宏前缀；VisionRTColor、VisionRTSize均通过本地QML单例工厂注册，尺寸继续使用原有枚举入口。
+- 已完成：当前设置窗口、工具表单、菜单、缩略图及相关测试整理一并归档；文档仅维护源码索引，未新增外观断言。
+- QuickUI/main已提交并推送305eb578d55e978f9c6218f97f95d38ec4c6d58a，包含浅色调色板和输入控件禁用文字改动；父仓通过子模块指针引用。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract workbench_status_contract workbench_interaction_contract tool_editor_dialog_test` → 构建通过；日志：F:/tmp/visionrt-node-style-singleton-build.log。
+- `ctest --test-dir build -C Release -R '^(workbench_canvas_contract|workbench_status_contract|workbench_interaction_contract|tool_editor_dialog_test|workbench_popups_contract)$' --output-on-failure --no-tests=error` → 5/5通过，覆盖画布交互、节点运行和失败状态、菜单导航、设置编辑及弹窗复制关闭；日志：F:/tmp/visionrt-node-style-singleton-test.log。
+- 100%缩放下实际示例、训练、设置及自定义工具窗口截图成功，进程退出0、stderr为空，已目视核对主工具栏、节点标题与选中连线；日志：F:/tmp/visionrt-node-style-capture.out及.err，截图位于F:/tmp/visionrt-ui-shots。
+- README界面索引链接、暂存与未暂存改动的新增字符扫描、两仓Windows CRLF口径的git diff --check通过。
+
+**下一步**
+- 本轮功能完成；父仓与QuickUI的交付记录以dev、main分支的Git历史及远端HEAD为准。
+
+### 2026-11-20 — 缩略图序号移到图像卡片下方
+
+**目标**
+- 处理图像缩略图采用Background卡片背景，序号在卡片下方，选中框仅包围图像区域。
+
+**当前状态**
+- 已完成：ResultsThumbnails委托改为透明容器，独立图像卡片使用QuiColor.Background及直角外形；选中时绘制2px Highlight边框，序号在图像卡片外下方居中。行高由图像、内边距和序号自然高度派生，删除原来混合字号与固定补偿值的高度表达式。
+- 已完成：保留图像高度、序号字体和点选入口，README补充处理图像缩略图源码索引。未新增尺寸、颜色断言，未修改QuickUI，未提交或推送。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT` → 构建通过；日志：F:/tmp/visionrt-thumbnail-card-build.log。
+- 100%缩放下实际运行图像读取示例，点击卡片下方的序号1，确认控制器切到第二幅图像并截取两个选中状态；进程退出0、stderr为空。日志：F:/tmp/visionrt-thumbnail-card-capture.out及.err；截图：F:/tmp/visionrt-ui-shots/thumbnail-card.png、thumbnail-card-selected.png，已目视核对灰色卡片、外置序号与选中边框。
+- README界面源码索引检查、新增字符扫描和Windows CRLF口径的git diff --check通过。
+
+**下一步**
+- 本轮完成；处理图像缩略图布局维护入口为ResultsThumbnails.qml。
+
+### 2026-11-20 — 整理设置帮助菜单与关于弹窗
+
+**目标**
+- 删除工具作者说明入口及弹窗；设置菜单增加平台设置并打开原有Window；关于VisionRT弹窗背景使用Primary。
+
+**当前状态**
+- 已完成：删除Main.qml中的作者说明菜单项、内联弹窗及同样指向该弹窗的底部说明文档入口；帮助菜单保留关于VisionRT。
+- 已完成：MainToolbar增加settingsMenuObject，设置按钮先打开菜单；平台设置项调用现有SettingsWindow.openDialog，删除旧settingsRequested信号及连接。
+- 已完成：AboutVisionRTDialog使用bgColor: QuiColor.Primary，删除要求双层背景色不同的旧注释；关于弹窗测试删除尺寸、边框和截图文件断言，保留内容、选择、复制及关闭验证。
+- 已完成：实际菜单点击流程进入workbench_interaction_contract。文档更新现有README界面入口索引；工作区已有样式清单、图片及方案文件删除，本轮未重建这些文件。未修改QuickUI，未提交或推送。
+
+**验证证据**
+- 新菜单点击测试先失败于“settings must offer the platform settings menu item”，复现旧入口直接打开窗口；日志：F:/tmp/visionrt-settings-menu-red.log。
+- VisionRT、workbench_interaction_contract、tool_editor_dialog_test、workbench_contract构建通过；日志：F:/tmp/visionrt-menu-about-build.log、F:/tmp/visionrt-menu-about-popups-build.log。
+- `ctest --test-dir build -C Release -R '^(workbench_interaction_contract|tool_editor_dialog_test)$' --output-on-failure --no-tests=error` → 2/2通过，包含实际点击设置菜单及现有窗口的编辑、应用、取消；日志：F:/tmp/visionrt-menu-about-test.log。
+- `ctest --test-dir build -C Release -R '^workbench_popups_contract$' --output-on-failure --no-tests=error` → 1/1通过，包含关于弹窗的内容、复制与关闭；日志：F:/tmp/visionrt-menu-about-popups-test.log。
+- 100%缩放下实际窗口截图成功，进程退出0、stderr为空，已目视核对关于背景及底部入口移除；日志：F:/tmp/visionrt-menu-about-capture.out及.err，截图：F:/tmp/visionrt-ui-shots/about.png、main.png。
+- 作者说明、底部说明入口及旧设置信号的源码引用搜索无残留；README界面索引链接、新增字符扫描及Windows CRLF口径的git diff --check通过。
+
+**下一步**
+- 本轮完成；菜单入口在Main.qml与MainToolbar.qml，关于背景在AboutVisionRTDialog.qml使用处维护。
+
+### 2026-11-20 — 底部状态栏文字使用FontPrimary
+
+**目标**
+- 主窗口底部计时、说明文档及日志文字统一使用FontPrimary。
+
+**当前状态**
+- 已完成：计时和日志文字复用QuiText默认FontPrimary，说明文档普通状态改为FontPrimary并保留悬浮Highlight。样式清单补充状态栏配色，30张含状态栏的完整窗口红框图同步更新。
+- 未修改QuickUI，未新增外观断言，未提交或推送。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_status_contract` → 构建通过；日志：F:/tmp/visionrt-status-font-build.log。
+- `ctest --test-dir build -C Release -R '^workbench_status_contract$' --output-on-failure --no-tests=error` → 状态与计时功能1/1通过；日志：F:/tmp/visionrt-status-font-test.log。
+- 100%缩放下实际主窗口及各场景截图成功，进程退出0、stderr为空，已目视核对底部文字；日志：F:/tmp/visionrt-status-font-capture.out及.err，主窗口截图：F:/tmp/visionrt-ui-shots/main.png。
+- 文档41张完整图、源码链接及新增字符扫描通过；日志：F:/tmp/visionrt-status-font-doc-check.log。Windows CRLF口径的git diff --check通过。
+
+**下一步**
+- 本轮完成；状态栏文字入口为Main.qml的footer。
+
+### 2026-11-20 — 自定义工具三列表单统一对齐
+
+**目标**
+- 工具信息、输入参数和输出参数统一布局，标签对齐，文本框与下拉框等宽。
+
+**当前状态**
+- 已完成：用ToolFormRow封装标签、编辑区和32px基础行高，用ToolFormLayout汇总显示标签的自然宽度；CustomToolWindow将统一标签列宽传给三列，基础字段、高级设置及开关沿用同一对齐方式。
+- 已完成：删除ToolFieldLabel及端口字段重复的行布局；工具信息6项和端口13类字段复用表单行。保持原有字段权限、数据提交和卡片操作，本轮未修改QuickUI，未新增外观断言，未提交或推送。
+- 已完成：模块索引、样式清单和4张自定义工具完整红框图同步更新。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → 构建通过；日志：F:/tmp/visionrt-tool-form-build.log。
+- `ctest --test-dir build -C Release -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 工具编辑保存与窗口交互1/1通过；日志：F:/tmp/visionrt-tool-form-test.log。
+- 100%缩放下实际打开ReadImage、ReceiveFlowResult、MeasureCircle，目视核对三列字段、开关及展开的高级设置；截图进程均退出0、stderr为空。日志：F:/tmp/visionrt-tool-form-capture.out、F:/tmp/visionrt-tool-form-receive.out、F:/tmp/visionrt-tool-form-advanced.out及各自.err；截图：F:/tmp/visionrt-ui-shots/custom-tool.png、tool-form-receive.png、tool-form-advanced.png。
+- 文档41张完整图、源码链接和新增字符扫描通过；日志：F:/tmp/visionrt-tool-form-doc-check.log。Windows CRLF口径的git diff --check通过。
+
+**下一步**
+- 本轮完成；字段布局统一维护ToolFormRow，标签宽度汇总入口为ToolFormLayout和CustomToolWindow。
+
+### 2026-11-20 — 输入控件禁用文字统一FontDark
+
+**目标**
+- QuickUI文本输入、下拉框与步进框禁用文字使用FontDark，并补全浅色调色板的FontCaption。
+
+**当前状态**
+- 已完成：QuiTextField、QuiTextInput、QuiTextArea、QuiTextBox、QuiComboBox、QuiStepperField以及VisionRT的ParameterTextField使用FontDark禁用文字；支持占位文字的组件同步禁用色。只读字段保持正常文字色，未改变组件尺寸与交互权限。
+- 已完成：applyLightPalette显式定义FontCaption；样式清单与4张自定义工具完整红框图同步更新。未新增外观断言，未提交或推送。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → QuickUI和VisionRT构建通过；日志：F:/tmp/visionrt-disabled-font-build.log。
+- `ctest --test-dir build -C Release -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 工具编辑保存与窗口交互1/1通过；日志：F:/tmp/visionrt-disabled-font-test.log。
+- 实际自定义工具窗口截图退出0、stderr为空，已目视核对禁用下拉框文字与正常、只读字段；日志：F:/tmp/visionrt-disabled-font-capture.out、F:/tmp/visionrt-disabled-font-capture.err。
+- 文档41张完整图及源码链接校验通过；日志：F:/tmp/visionrt-disabled-font-doc-check.log。
+
+**下一步**
+- 本轮完成；输入控件禁用文字维护入口见docs/UI_STYLE_INVENTORY.md的QuickUI默认值表。
+
+### 2026-11-20 — 工具与端口字段标签统一自然宽度
+
+**目标**
+- 输入输出端口标签改用FontPrimary，取消固定120px标签宽度，按文字自然撑开。
+
+**当前状态**
+- 已完成：新增ToolFieldLabel，工具信息6项与端口13项标签复用同一组件，继承QuiText默认Body和FontPrimary；自然宽度由implicitWidth派生，不再使用ParamLabelWidth及图像标签额外宽度。
+- 已完成：清单与模块索引、4张自定义工具完整红框图同步更新。禁用下拉框与只读文本框的权限和显示规则保持原实现；未改QuickUI，未新增外观断言，未提交、推送或部署。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → 构建通过；日志：F:/tmp/visionrt-tool-natural-label-build.log。
+- `ctest --test-dir build -C Release -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 1/1通过，覆盖工具保存与窗口交互；日志：F:/tmp/visionrt-tool-natural-label-results.log。
+- 实际自定义工具窗口截图退出0、stderr为空，已目视核对自然宽标签、默认文字颜色及输入输出字段；日志：F:/tmp/visionrt-tool-natural-label-capture.out、F:/tmp/visionrt-tool-natural-label-capture.err。
+- 文档41张完整图与链接、git diff --check通过。
+
+**下一步**
+- 本轮标签样式完成；工具信息及端口标签统一通过ToolFieldLabel维护，禁用下拉框显示来源见QuiComboBox与ToolPortCard。
+
+### 2026-11-20 — 端口卡片复用QuickUI卡片外壳
+
+**目标**
+- 自定义工具的端口卡片复用现有QuiCard。
+
+**当前状态**
+- 已完成：ToolPortCard根组件由Rectangle改为QuiCard，删除重复的边框宽度与圆角设置；仅在VisionRT使用处配置Primary背景与Border边框色，端口编辑内容和交互仍由ToolPortCard封装。
+- 已完成：样式清单增加QuiCard来源与使用说明，自定义工具完整截图已同步；未修改QuickUI，未新增外观断言，未提交、推送或部署。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → 构建通过；日志：F:/tmp/visionrt-port-qui-card-build.log。
+- `ctest --test-dir build -C Release -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 1/1通过，覆盖工具编辑保存及窗口交互；日志：F:/tmp/visionrt-port-qui-card-results.log。
+- 实际自定义工具窗口截图退出0、stderr为空，已目视检查卡片和字段；日志：F:/tmp/visionrt-port-qui-card-capture.out、F:/tmp/visionrt-port-qui-card-capture.err。
+- 文档图片、链接与git diff --check通过。
+
+**下一步**
+- 本轮卡片复用完成；继续使用QuiCard公共外观API，不在端口业务组件中重复维护默认值。
+
+### 2026-11-20 — 工具信息标签采用默认文字颜色
+
+**目标**
+- 自定义工具窗口中的工具信息标签使用QuiColor.FontPrimary，并确认输入输出卡片样式来源。
+
+**当前状态**
+- 已完成：删除ToolInformationPane.FieldLabel的FontCaption覆盖，六个工具信息标签继承QuiText默认FontPrimary。输入输出端口卡片本轮仅核对样式，未修改。
+- 已完成：样式清单与4张自定义工具完整红框图同步更新；未修改QuickUI，未新增外观断言，未提交、推送或部署。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT` → 构建通过，最初程序占用exe导致链接拒绝，重试后成功；日志：F:/tmp/visionrt-tool-label-color-build.log。
+- 实际自定义工具窗口截图退出0、stderr为空，已目视确认工具信息标签采用主文字颜色；日志：F:/tmp/visionrt-tool-label-color-capture.out、F:/tmp/visionrt-tool-label-color-capture.err，截图：F:/tmp/visionrt-ui-shots/custom-tool.png。
+- 文档41张完整图、链接与git diff --check通过；日志：F:/tmp/visionrt-tool-label-color-doc-check.log。纯颜色调整未重复运行功能测试。
+
+**下一步**
+- 本轮工具信息标签配色完成；端口卡片标签与控件样式由ToolPortCard.qml定义。
+
+### 2026-11-20 — 三个设置页共用参数行布局
+
+**目标**
+- 工具、运行与日志设置统一标签对齐、宽度、行高、间距及普通文字样式。
+
+**当前状态**
+- 已完成：新增 SettingsFieldRow，三页复用同一参数行：标签宽120、左对齐，控件列宽420，行高32、间距5；开关在控件列内靠左居中。标签使用QuiFont.Body与QuiText默认FontPrimary，页标题统一Subtitle。
+- 已完成：移除工具、日志标签及普通检查提示的灰色覆盖；检查提示的起点由共用行的editorX派生，消除布局重复。设置窗口仍持有草稿并统一提交。
+- 已完成：文档索引、样式清单及三页完整红框图已更新；未修改QuickUI，未新增外观断言，未提交、推送或部署。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → 构建通过；日志：F:/tmp/visionrt-settings-rows-build.log。
+- `ctest --test-dir build -C Release -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 1/1通过，覆盖设置应用取消与窗口交互；日志：F:/tmp/visionrt-settings-rows-results.log。
+- 实际窗口分别切换工具、运行、日志页截图，退出0、stderr为空；已逐页目视确认标签、控件列及字体配色；日志：F:/tmp/visionrt-settings-rows-capture.out、F:/tmp/visionrt-settings-rows-capture.err，截图：F:/tmp/visionrt-ui-shots/settings*.png。
+- 文档41张完整红框图与链接检查、git diff --check通过；日志：F:/tmp/visionrt-settings-rows-doc-check.log。
+
+**下一步**
+- 本轮设置页统一完成；后续参数行使用SettingsFieldRow，不在各页重复维护尺寸与标签样式。
+
+### 2026-11-20 — Python环境标签采用默认文字颜色
+
+**目标**
+- Python环境标签使用默认 QuiColor.FontPrimary。
+
+**当前状态**
+- 已完成：删除该标签的 FontCaption 覆盖，直接继承 QuiText 默认颜色；保留 QuiFont.Body 和左对齐。文档及设置图同步更新，未修改 QuickUI。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT` → 构建通过；日志：F:/tmp/visionrt-settings-label-color-build.log。
+- 实际设置窗口截图退出0且stderr为空，已目视确认标签颜色；日志：F:/tmp/visionrt-settings-label-color-capture.err。纯颜色调整未新增或重复运行功能测试。
+- 文档图及链接、git diff --check通过。
+
+**下一步**
+- 本轮颜色修改完成，保持控件默认文字配色。
+
+### 2026-11-20 — 设置页导航宽度与文字整理
+
+**目标**
+- 新增160px导航宽度属性，调整设置页标题与Python环境标签，删除当前环境说明块。
+
+**当前状态**
+- 已完成：VisionRTSize 新增 NavbarWidth=160，设置导航使用该常量；页标题使用现有 QuiFont.Subtitle（20px、600字重），删除左侧蓝条及空的标题行容器。
+- 已完成：Python环境标签左对齐，正文及检查提示使用 QuiFont.Body；删除当前环境整块文字和闲置的状态属性、绑定及无用途的子组件草稿属性，草稿仍由窗口统一持有。
+- 已完成：样式方案、清单与3张设置窗口完整红框图同步更新。未修改 QuickUI，未增加尺寸或颜色断言测试；未提交、推送或部署。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tool_editor_dialog_test` → 构建通过；初次链接被正在运行的程序占用，用户关闭后通过，日志：F:/tmp/visionrt-settings-navbar-build.log。
+- `ctest --test-dir build -C Release -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 1/1通过，覆盖设置应用、取消、保存和环境检查错误反馈；日志：F:/tmp/visionrt-settings-navbar-results.log。
+- 实际设置窗口截图退出0，stderr为空；已目视检查导航、标题、标签及删除后的内容区；日志：F:/tmp/visionrt-settings-navbar-capture.out、F:/tmp/visionrt-settings-navbar-capture.err，截图：F:/tmp/visionrt-ui-shots/settings.png。
+- 完整图红框已采用NavbarWidth划分；文档链接、图片及 git diff --check 通过，日志：F:/tmp/visionrt-settings-navbar-doc-check.log。
+
+**下一步**
+- 本轮设置页修改已完成，按 docs/UI_STYLE_INVENTORY.md 对照当前图与属性入口。
+
 ### 2026-11-20 — 汇总样式与协议重构交付
 
 **目标**

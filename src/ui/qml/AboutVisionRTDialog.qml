@@ -5,11 +5,10 @@ import QtQuick.Window
 import quickui
 import VisionRT.Ui 1.0
 
-// The body is one plain-text block inside its own layered surface: the dialog background and the
-// text surface must be visibly different, otherwise the selectable area has no boundary.
 WorkbenchDialog {
     id: root
     title: "关于 VisionRT"
+    bgColor: QuiColor.Primary
     implicitWidth: Math.min(600, (root.parent && root.parent.width) ? (root.parent.width - 40) : 600)
     useNeutralButton: true
     neutralText: "复制全部"

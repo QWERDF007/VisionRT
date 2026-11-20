@@ -61,36 +61,40 @@ ColumnLayout {
             currentIndex: root.controller.imageIndex
             ScrollBar.vertical: QuiScrollBar {
             }
-            delegate: Rectangle {
+            delegate: Item {
                 required property int index
                 width: thumbnails.width - 8
-                height: VisionRTSize.ThumbnailHeight + QuiFont.Caption.pixelSize + 15
+                height: imageCard.height + indexLabel.implicitHeight
                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                color: QuiColor.Primary
-                border.color: index === root.controller.imageIndex ? QuiColor.Highlight : QuiColor.Border
-                border.width: index === root.controller.imageIndex ? 2 : 1
-                radius: 3
-                ImageViewport {
-                    id: thumbnail
-                    property int thumbnailIndex: index
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.margins: 5
-                    height: VisionRTSize.ThumbnailHeight
-                    readOnly: true
-                    enabled: false
-                    inputRoiColor: VisionRTColor.InputROI
-                    outputRoiColor: VisionRTColor.OutputROI
-                    assistRoiColor: VisionRTColor.InputROI
-                    roiStrokeWidth: 2
-                    roiHandleSize: 4
-                    Component.onCompleted: root.controller.attachViewport(thumbnail)
-                    onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
+                Rectangle {
+                    id: imageCard
+                    width: parent.width
+                    height: thumbnail.height + 2 * thumbnail.anchors.margins
+                    color: QuiColor.Background
+                    border.color: QuiColor.Highlight
+                    border.width: index === root.controller.imageIndex ? 2 : 0
+                    ImageViewport {
+                        id: thumbnail
+                        property int thumbnailIndex: index
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: 5
+                        height: VisionRTSize.ThumbnailHeight
+                        readOnly: true
+                        enabled: false
+                        inputRoiColor: VisionRTColor.InputROI
+                        outputRoiColor: VisionRTColor.OutputROI
+                        assistRoiColor: VisionRTColor.InputROI
+                        roiStrokeWidth: 2
+                        roiHandleSize: 4
+                        Component.onCompleted: root.controller.attachViewport(thumbnail)
+                        onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
+                    }
                 }
                 QuiText {
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 5
+                    id: indexLabel
+                    anchors.top: imageCard.bottom
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: index
                     font: QuiFont.Caption

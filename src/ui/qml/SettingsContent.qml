@@ -8,12 +8,9 @@ RowLayout {
     id: root
     property bool draftBuiltins: false
     property int draftLevel: LogLevel.Info
-    property string draftPython: ""
     property int page: SettingsPage.Runtime
     property bool applying: false
     property bool pythonPending: false
-    property bool environmentRejected: false
-    property string environmentText: ""
     property string errorText: ""
     signal builtinsEdited(bool value)
     signal levelEdited(int value)
@@ -27,7 +24,7 @@ RowLayout {
     spacing: 0
 
     Item {
-        Layout.preferredWidth: 150
+        Layout.preferredWidth: VisionRTSize.NavbarWidth
         Layout.fillHeight: true
 
         Rectangle {
@@ -78,7 +75,7 @@ RowLayout {
                             Layout.fillWidth: true
                             text: modelData.name
                             elide: Text.ElideRight
-                            color: root.page === modelData.key ? QuiColor.FontPrimary : QuiColor.FontPrimary
+                            color: QuiColor.FontPrimary
                             font: QuiFont.Body
                         }
                     }
@@ -107,44 +104,25 @@ RowLayout {
             anchors.topMargin: 5
             spacing: 5
 
-            Row {
-                spacing: 5
-                Rectangle {
-                    width: 3
-                    height: 16
-                    color: QuiColor.Highlight
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                QuiText {
-                    text: root.page === SettingsPage.Tools ? "工具设置" : root.page === SettingsPage.Logging ? "日志设置" : "运行设置"
-                    color: QuiColor.FontPrimary
-                    font: QuiFont.BodyStrong
-                }
+            QuiText {
+                text: root.page === SettingsPage.Tools ? "工具设置" : root.page === SettingsPage.Logging ? "日志设置" : "运行设置"
+                color: QuiColor.FontPrimary
+                font: QuiFont.Subtitle
             }
 
             // Tool settings: whether the declaration shipped with the installation is listed
             // by the custom tool window.
-            RowLayout {
+            SettingsFieldRow {
                 width: parent.width
                 visible: root.page === SettingsPage.Tools
-                spacing: 5
-                QuiText {
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    verticalAlignment: Text.AlignVCenter
-                    Layout.fillHeight: true
-                    text: "显示内置工具"
-                    color: QuiColor.FontCaption
-                    font: QuiFont.Body
-                }
+                label: "显示内置工具"
                 QuiToggleSwitch {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
                     checked: root.draftBuiltins
                     clickListener: function () {
                         root.builtinsEdited(!root.draftBuiltins);
                     }
-                }
-                Item {
-                    Layout.fillWidth: true
                 }
             }
 
@@ -154,23 +132,13 @@ RowLayout {
                 width: parent.width
                 visible: root.page === SettingsPage.Runtime
                 spacing: 5
-                RowLayout {
+                SettingsFieldRow {
+                    id: pythonRow
                     width: parent.width
-                    spacing: 5
-                    QuiText {
-                        Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                        Layout.alignment: Qt.AlignVCenter
-                        horizontalAlignment: Text.AlignRight
-                        verticalAlignment: Text.AlignVCenter
-                        Layout.fillHeight: true
-                        text: "Python 环境"
-                        color: QuiColor.FontCaption
-                        font: QuiFont.Body
-                    }
+                    label: "Python 环境"
                     ParameterTextField {
                         id: pythonField
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: 420
+                        anchors.fill: parent
                         flat: false
                         readOnly: root.applying
                         actionIcon: QuiFontIcon.Folder
@@ -182,59 +150,32 @@ RowLayout {
                             }
                         }
                     }
-                    Item {
-                        Layout.fillWidth: true
-                    }
                 }
                 QuiText {
-                    x: pythonField.x
+                    x: pythonRow.editorX
                     visible: root.pythonPending && !root.applying
                     text: "Python 环境在下次启动时生效。"
-                    color: QuiColor.FontCaption
-                    font: QuiFont.Caption
+                    font: QuiFont.Body
                 }
                 QuiText {
-                    x: pythonField.x
+                    x: pythonRow.editorX
                     visible: root.applying
                     text: "正在检查所选 Python 环境..."
-                    color: QuiColor.FontCaption
-                    font: QuiFont.Caption
-                }
-                // One status, read from the host: the check result is never re-derived here.
-                QuiText {
-                    x: pythonField.x
-                    width: parent.width - pythonField.x
-                    visible: !root.applying && !root.pythonPending
-                    text: "当前环境：" + root.environmentText
-                    color: root.environmentRejected ? QuiColor.Error : QuiColor.FontCaption
-                    wrapMode: Text.WordWrap
-                    font: QuiFont.Caption
+                    font: QuiFont.Body
                 }
             }
 
             // Log settings: one production threshold for the file and the window.
-            RowLayout {
+            SettingsFieldRow {
                 width: parent.width
                 visible: root.page === SettingsPage.Logging
-                spacing: 5
-                QuiText {
-                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
-                    horizontalAlignment: Text.AlignRight
-                    verticalAlignment: Text.AlignVCenter
-                    Layout.fillHeight: true
-                    text: "日志等级"
-                    color: QuiColor.FontCaption
-                    font: QuiFont.Body
-                }
+                label: "日志等级"
                 ParameterComboBox {
                     id: levelBox
-                    Layout.preferredWidth: 200
+                    anchors.fill: parent
                     model: root.levelNames
                     currentIndex: Math.max(0, root.levelKeys.indexOf(root.draftLevel))
                     onActivated: root.levelEdited(root.levelKeys[currentIndex])
-                }
-                Item {
-                    Layout.fillWidth: true
                 }
             }
 

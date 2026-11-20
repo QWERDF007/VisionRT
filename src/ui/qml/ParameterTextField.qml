@@ -101,7 +101,7 @@ Item {
                     font: QuiFont.Body
                     // One text colour for every parameter kind; a rejected draft is reported to the
                     // log and keeps its text instead of painting the field red.
-                    color: root.enabled ? QuiColor.FontPrimary : QuiColor.FontCaption
+                    color: root.enabled ? QuiColor.FontPrimary : QuiColor.FontDark
                     selectionColor: QuiColor.Highlight
                     selectedTextColor: QuiColor.White
                     selectByMouse: true

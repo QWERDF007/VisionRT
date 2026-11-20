@@ -36,20 +36,14 @@ Rectangle {
     readonly property color headerBg: {
         if (root.runningNow)
             return VisionRTColor.NodeGreen;
-        if (root.nodeState === NodeState.Failed)
-            return QuiColor.Error;
-        return QuiColor.Background;
+        if (root.isError)
+            return VisionRTColor.NodeRed;
+        return VisionRTColor.NodeGrey;
     }
-    readonly property color headerText: {
-        if (root.runningNow)
-            return QuiColor.White;
-        if (root.nodeState === NodeState.Failed)
-            return QuiColor.White;
-        return QuiColor.FontPrimary;
-    }
+    readonly property color headerText: root.runningNow || root.isError ? QuiColor.White : QuiColor.FontPrimary
 
     // The running border is its own layer: selecting a node must not hide that it is running.
-    border.color: root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? QuiColor.Error : QuiColor.Border)
+    border.color: root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? VisionRTColor.NodeRed : QuiColor.Border)
     border.width: root.runningNow ? 2 : 1
 
     function getIcon(title, category) {
@@ -124,7 +118,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             iconSource: root.getIcon(root.nodeToolName, root.nodeCategory || "")
             iconSize: VisionRTSize.IconSize
-            iconColor: root.isError ? QuiColor.Error : (root.nodeState === NodeState.Running ? VisionRTColor.NodeGreen : QuiColor.FontCaption)
+            iconColor: root.isError ? VisionRTColor.NodeRed : (root.runningNow ? VisionRTColor.NodeGreen : QuiColor.FontCaption)
             renderType: Text.QtRendering
         }
         ColumnLayout {
