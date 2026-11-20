@@ -83,10 +83,10 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 ## 界面约束
 
-- [整体 UI 样式清单](UI_STYLE_INVENTORY.md)：实际尺寸、字体、颜色、图标码位及完整窗口区域红框。
+- 菜单及对话框入口：[主窗口菜单](../src/ui/qml/Main.qml)、[菜单工具栏](../src/ui/qml/MainToolbar.qml)、[平台设置窗口](../src/ui/qml/SettingsWindow.qml)、[关于窗口](../src/ui/qml/AboutVisionRTDialog.qml)。
 - 样式入口：[应用尺寸](../src/ui/Size.h)、[专用颜色](../src/ui/Color.h)、[枚举与样式注册](../src/ui/UiTypes.cpp)、[QuickUI 字体](../3rdparty/QuickUI/src/Font.cpp)、[通用颜色](../3rdparty/QuickUI/src/Color.cpp)、[图标枚举](../3rdparty/QuickUI/src/include/quickui/IconsFont.h)。
 - 工作台组合：[主窗口](../src/ui/qml/Main.qml)、[顶部工具栏](../src/ui/qml/MainToolbar.qml)、[流程工具栏](../src/ui/qml/FlowToolbar.qml)、[流程页签](../src/ui/qml/FlowTabs.qml)、[流程画布](../src/ui/qml/FlowCanvas.qml)、[节点卡片](../src/ui/qml/NodeDelegate.qml)、[工具库](../src/ui/qml/ToolLibrary.qml)。
-- 辅助窗口：[原生窗口外壳](../src/ui/qml/WorkbenchWindow.qml)、[设置草稿与提交](../src/ui/qml/SettingsWindow.qml)、[设置内容](../src/ui/qml/SettingsContent.qml)、[自定义工具组合](../src/ui/qml/CustomToolWindow.qml)、[工具信息](../src/ui/qml/ToolInformationPane.qml)、[端口列](../src/ui/qml/ToolPortsPane.qml)、[端口卡片](../src/ui/qml/ToolPortCard.qml)、[目录树](../src/ui/qml/ToolCatalogPane.qml)。
+- 辅助窗口：[原生窗口外壳](../src/ui/qml/WorkbenchWindow.qml)、[设置草稿与提交](../src/ui/qml/SettingsWindow.qml)、[设置内容](../src/ui/qml/SettingsContent.qml)、[设置共用参数行](../src/ui/qml/SettingsFieldRow.qml)、[自定义工具组合](../src/ui/qml/CustomToolWindow.qml)、[工具信息](../src/ui/qml/ToolInformationPane.qml)、[工具表单行](../src/ui/qml/ToolFormRow.qml)、[工具表单布局](../src/ui/qml/ToolFormLayout.qml)、[端口列](../src/ui/qml/ToolPortsPane.qml)、[端口卡片](../src/ui/qml/ToolPortCard.qml)、[目录树](../src/ui/qml/ToolCatalogPane.qml)。
 - 应用控件：[操作按钮](../src/ui/qml/WorkbenchActionButton.qml)、[参数操作](../src/ui/qml/ParameterActionButton.qml)、[输入外框](../src/ui/qml/ParameterFieldFrame.qml)、[参数下拉](../src/ui/qml/ParameterComboBox.qml)、[文本输入](../src/ui/qml/WorkbenchTextField.qml)、[分隔线](../src/ui/qml/WorkbenchSeparator.qml)。
 - 参数与结果：[参数组合](../src/ui/qml/ParameterPanel.qml)、[字段编辑](../src/ui/qml/ParameterEditor.qml)、[结果组合](../src/ui/qml/ResultsPanel.qml)、[训练记录](../src/ui/qml/ResultsTrainingRecords.qml)、[输出表格](../src/ui/qml/OutputPanel.qml)、[日志窗口](../src/ui/qml/LogDialog.qml)。
 - 功能验收：[参数读写](../tests/workbench_parameters.cpp)、[窗口应用与取消](../tests/tool_editor_dialog_test.cpp)、[运行期交互](../tests/workbench_interaction_contract.cpp)、[训练](../tests/workbench_training_contract.cpp)、[退出](../tests/workbench_exit_contract.cpp)。外观按100%系统缩放、最大化主窗体人工检查；不维护尺寸、颜色或窄窗布局断言。
