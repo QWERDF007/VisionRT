@@ -30,6 +30,24 @@
 - ...
 -->
 
+### 2026-11-20 — 提交并推送0.2.0
+
+**目标**
+- 提交并推送已验证的0.2.0改动，保证父仓引用的子模块提交可从远端取得。
+
+**当前状态**
+- 已完成：父仓功能提交9766fff已推送至origin/dev，包含模块DLL拆分、样式自动属性、标准预处理器、版本及部署调整。
+- 已完成：adaptagrams修复8045a6b已推送至用户派生仓库QWERDF007/adaptagrams的visionrt分支；上游仓库无写权限，父仓.gitmodules已改为可取得修复的来源，并固定对应gitlink。
+- 已完成：文档增加子模块来源索引，暂存审查确认未包含构建、安装或临时验证产物；未修改其他子模块。
+
+**验证证据**
+- `git -c core.whitespace=cr-at-eol diff --cached --check`通过；此前功能和部署验证见下方两条日志，本轮未重复运行测试。
+- 子模块`git ls-remote --heads origin visionrt`返回8045a6b86206567d6e5e06a6ff21083f0a7e3a32，与本地HEAD一致。
+- 父仓`git push origin dev`成功；代码推送后的`git ls-remote --heads origin dev`返回9766fffe597e847cab56ddbe57004a421903c18d，`git rev-list --left-right --count HEAD...origin/dev`为0/0，`git status --short`为空。
+
+**下一步**
+- 功能代码已发布，后续从origin/dev继续；子模块的远端与跟踪分支以.gitmodules为准，本条记录随文档提交交付。
+
 ### 2026-11-20 — 0.2.0部署与临时文件清理
 
 **目标**
