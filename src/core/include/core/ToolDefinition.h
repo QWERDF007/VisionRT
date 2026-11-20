@@ -2,8 +2,9 @@
 
 #include "core/Export.h"
 
-#include "visionrt/contracts/Tool.h"
+#include "visionrt/contracts/Declaration.h"
 #include "visionrt/contracts/ProtocolEnums.h"
+#include "visionrt/contracts/Tool.h"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -15,24 +16,6 @@
 #include <vector>
 
 namespace visionrt {
-
-// A port reference is a stage plus a number: the same number may exist once per direction.
-struct PortRef
-{
-    PortStage stage = PortStage::Inputs;
-    PortId    id    = 0;
-    bool      operator==(const PortRef &) const = default;
-};
-
-// Helper port number -> the tool port it feeds (inputs) or proposes into (proposals).
-struct InteractionMapping
-{
-    std::string                 helperNameEn;
-    std::map<PortId, PortRef>   inputs;
-    std::map<PortId, PortRef>   proposals;
-    std::vector<RoiKind>        roiKinds;
-    bool operator==(const InteractionMapping &) const = default;
-};
 
 struct ToolRoots
 {
@@ -48,97 +31,16 @@ struct ToolSource
     bool       operator==(const ToolSource &) const = default;
 };
 
-struct PythonEntry
+struct ToolDefinition : ToolDeclaration
 {
-    std::filesystem::path package;
-    std::filesystem::path file;
-    std::string           symbol;
-    bool                  operator==(const PythonEntry &) const = default;
-};
-
-// What a tool can be trained on. The host owns the training session and the asset file; the
-// declaration only names which session it can run and which initialization parameter carries the
-// asset path. A tool without this block has no training UI at all.
-
-struct TrainingSpec
-{
-    TrainingKind kind       = TrainingKind::ColorSamples;
-    PortId       assetParam = 0;
-    // Assistant that turns one click on the picture into a record geometry, named by the same
-    // mechanism as a tool interaction helper. Empty means the session is edited by hand only.
-    std::string  helper;
-    bool         operator==(const TrainingSpec &) const = default;
-};
-
-// A dynamic output type names three initialisation parameters by reference.
-struct PortTypeReference {
-    PortRef flowParameter;
-    PortRef nodeParameter;
-    PortRef portParameter;
-    bool operator==(const PortTypeReference&) const = default;
-};
-
-// One declared parameter. `id` is its identity inside the tool and stage; the vector order is only
-// the display order, so moving a row never renumbers it. `nameEn` is an author note for readers and
-// migration diffs — nothing looks a port up by it.
-struct PortDefinition {
-    PortId      id = 0;
-    std::string nameZh;
-    TypeSpec    type;
-    // The declaration's explicit default, or the type's empty value materialised during
-    // normalisation. A host-owned status port and a type_from output keep it Missing.
-    PortValue defaultValue = Missing{};
-    std::string nameEn;
-    EditorKind editor = EditorKind::Default;
-    ParameterTab tab = ParameterTab::BasicInput;
-    std::string group;
-    std::optional<PortValue> step;
-    std::optional<int>       decimals;
-    OptionsProvider          optionsProvider = OptionsProvider::None;
-    std::optional<PortValue> minimum;
-    std::optional<PortValue> maximum;
-    std::vector<PortValue>   options;
-    std::optional<PortRef>   image;
-    std::optional<PortRef>   alignment;
-    std::optional<PortRef>   sameGeometryAs;
-    ColorOrder               colorOrder = ColorOrder::Automatic;
-    // Author's explicit choice to offer this Image port in the workbench image selector. Absent in
-    // the declaration means false: an image port never joins the selector without being named.
-    bool                     imageVisible = false;
-    std::optional<PortTypeReference> typeFrom;
-};
-
-struct ToolDefinition {
-    std::string                        nameEn;
-    std::string                        nameZh;
-    std::string                        version = "1.0.0";
-    ToolKind                           kind = ToolKind::Cpp;
-    NodeModel                          nodeModel  = NodeModel::Fixed;
-    ToolVisibility                     visibility = ToolVisibility::Normal;
-    std::optional<InteractionMapping>  interaction;
-    std::optional<TrainingSpec>        training;
     std::filesystem::path              definitionPath;
     // Derived from the declaration's directory inside its root, never read from the file.
     std::vector<std::string>           categories;
     ToolSource                         source;
-    std::string                        hostBinding;
-    PythonEntry                        entry;
-    std::vector<std::filesystem::path> resources;
-    std::vector<PortDefinition>        initParams;
-    std::vector<PortDefinition>        inputs;
-    std::vector<PortDefinition>        outputs;
-
-    bool derivesPorts() const noexcept
-    {
-        return nodeModel != NodeModel::Fixed;
-    }
 
     VISIONRT_CORE_API std::filesystem::path pythonPackage() const;
     VISIONRT_CORE_API std::filesystem::path pythonScript() const;
 };
-
-// "inputs.7" — diagnostics only. The number is the identity; the text never becomes one.
-VISIONRT_CORE_API std::string formatPortRef(const PortRef& reference);
 
 // The one Chinese breadcrumb of a tool ("预处理/图像处理"), used by the tool tree and node badges.
 VISIONRT_CORE_API std::string categoryPath(const ToolDefinition& def);
@@ -147,28 +49,10 @@ VISIONRT_CORE_API std::string categoryPath(const ToolDefinition& def);
 // Tool ids name declaration files, so anything that could leave a directory is rejected here.
 VISIONRT_CORE_API void validateIdentifier(const std::string& value, bool isPort);
 
-// Canonical host-provided ports. Input 0 carries the upstream status; outputs 0 and 1 carry the
-// status envelope. They are materialised by normalisation and never written by tool declarations.
-VISIONRT_CORE_API bool isReservedPort(PortStage stage, PortId id) noexcept;
-
-// The label, type and default of one host-owned port. Normalisation materialises a copy into a
-// declaration and the editor projects the same copy as a fixed row, so the two cannot drift apart.
-VISIONRT_CORE_API PortDefinition hostPort(PortStage stage, PortId id);
-
 // The inverse of normalisation for host ports: leaves exactly what the declaration authored. The
 // editor draft is a declaration, so it round-trips through this on load and never holds a second
 // copy of a fixed row the port model already projects.
 VISIONRT_CORE_API void stripHostPorts(ToolDefinition &def);
-
-// Input 0 is reserved for every model, but only a Fixed tool is handed the upstream status.
-VISIONRT_CORE_API bool isInjectedInput(NodeModel model, PortId id) noexcept;
-
-// Initialisation entries derived from the node model rather than edited directly. They are still
-// handed to the tool through nodeParameters(), but never become parameter rows.
-inline constexpr PortId kVariablesInitPort  = 0;
-inline constexpr PortId kProgramInitPort    = 1;
-inline constexpr PortId kConditionModePort  = 2;
-VISIONRT_CORE_API bool                    isDerivedInitParam(NodeModel model, PortId id) noexcept;
 
 // Fixed parameter pages shared by the validator and the workbench.
 VISIONRT_CORE_API std::span<const std::string_view> toolTabs() noexcept;

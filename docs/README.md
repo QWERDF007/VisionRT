@@ -2,9 +2,11 @@
 
 ## 当前方案
 
+- [EasyTouch 与训练开发规格](VisionRT_EasyTouch与训练实施方案.md)：三仓接口、训练资产和业务验收；实施顺序见[开发票据](easytouch-training/README.md)。
+
 - [MERLIC 线缆颜色示例分析](<D:/Project/MVTec MERLIC工具说明/示例工程/识别颜色/00_阅读索引.md>)：整体、四工具、样本训练、UI、调试验收与复用；参数及证据索引以该交付目录为准。
 
-- 工具契约以代码为准：[工具接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[声明读写](../src/core/DefinitionJson.cpp)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)、[工具树分类](../src/core/ToolDefinition.cpp)。
+- 工具契约以代码为准：[工具接口](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[声明读写](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)、[工具树分类](../src/core/ToolDefinition.cpp)。
 - [任务账本](../WORKLOG.md)：实际进度与验证记录。
 - AOCI 认知资产入口：[Root](../aoci.txt)、[Meta](../aoci.meta.txt)、[Code](../aoci.code.txt)；本机宿主配置以 [Codex MCP](../.codex/config.toml) 为准，扫描、索引与面板验证见任务账本。
 
@@ -98,7 +100,7 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 ## 安装与升级
 
-协议源定义：[公共枚举](../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h)、[类型结构](../3rdparty/VisionRTContracts/include/visionrt/contracts/TypeSpec.h)、[工具声明读写](../src/core/DefinitionJson.cpp)、[工程存储](../src/core/ProjectStorage.cpp)、[设置存储](../src/ui/UiPreferences.cpp)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)。只消费当前数字枚举格式，不提供历史格式兼容。QML 与 Python 的枚举从 C++ 定义[导出](../3rdparty/VisionRTContracts/tools/export_enums.py)。
+协议源定义：[公共枚举](../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h)、[类型结构](../3rdparty/VisionRTContracts/include/visionrt/contracts/TypeSpec.h)、[工具声明读写](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[工程存储](../src/core/ProjectStorage.cpp)、[设置存储](../src/ui/UiPreferences.cpp)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)。只消费当前数字枚举格式，不提供历史格式兼容。QML 与 Python 的枚举从 C++ 定义[导出](../3rdparty/VisionRTContracts/tools/export_enums.py)。
 
 安装清单只记录**本轮实际写入**的文件：exe、项目 DLL、依赖、windeployqt 产物、工具包与 `qt.conf` 都经 `InstallOwnership` 登记；`custom-tools/**`、`logs/**`、`ui-preferences.json` 永不进入清单。清单在验证通过后才写，失败不会留下宣称完成的记录。清理只删除旧清单内的文件；清单缺失、含用户路径、绝对路径、`..`、重复项或文件/目录冲突时整次拒绝，不删除任何文件。契约见 [test_package_app.py](../tests/test_package_app.py)（三代升级逐文件 hash、保护路径与越界负例）。
 
@@ -111,7 +113,7 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 | 作者函数与参数 SDK | [函数注册与适配](../3rdparty/VisionRTContracts/include/visionrt/contracts/FunctionTool.h)、[输入读取与输出组装](../3rdparty/VisionRTContracts/include/visionrt/contracts/Parameters.h)、[函数/类入口契约](../3rdparty/VisionRTContracts/tests/tool_registration_test.cpp)、[参数与状态契约](../3rdparty/VisionRTContracts/tests/parameter_mapping_test.cpp) |
 | 工程与工具注册 | [core](../src/core) |
 | 自定义工具编辑与存储 | [存储与模板/复制](../src/core/include/core/CustomToolStore.h)、[端口模型与改型/关系候选](../src/ui/include/ui/ToolPortListModel.h)、[编辑器控制器](../src/ui/include/ui/ToolEditorController.h)、[改型与删除对账](../src/core/include/core/ToolDefinition.h)、[编辑窗口](../src/ui/qml/CustomToolWindow.qml)、[存储契约](../tests/custom_tool_store_contract.cpp)、[端口模型契约](../tests/tool_port_list_model_test.cpp)、[控制器契约](../tests/tool_editor_controller_test.cpp) |
-| 工具声明 JSON | [DefinitionJson](../src/core/include/core/DefinitionJson.h)、[声明模型](../src/core/include/core/ToolDefinition.h)、[值约束](../src/core/include/core/ToolValueValidation.h)、[声明契约](../tests/definition_json_contract.cpp) |
+| 工具声明 JSON | [SDK 声明读写](../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[SDK 声明模型](../3rdparty/VisionRTContracts/include/visionrt/contracts/Declaration.h)、[宿主加载适配](../src/core/include/core/DefinitionJson.h)、[值约束](../src/core/include/core/ToolValueValidation.h)、[SDK 声明契约](../3rdparty/VisionRTContracts/tests/test_declaration_contract.cpp)、[宿主声明契约](../tests/definition_json_contract.cpp) |
 | 包索引、目录与交付校验 | [ModuleIndex](../src/core/include/core/ModuleIndex.h)、[ToolPackage](../src/core/include/core/ToolPackage.h)、[路径边界](../src/core/include/core/ToolPaths.h)、[双根发现契约](../tests/tool_discovery_contract.cpp)、[校验器](../tools/visionrt_validate_tool.cpp)、[JSON ZIP 部署、安装清单所有权与 PE 导入取证](../tools/package_app.py)、[部署、升级与导入表契约](../tests/test_package_app.py)、[真实构建集成](../tests/test_build_metadata_integration.py) |
 | 发布证据汇总与审计 | [release_evidence.py](../tools/release_evidence.py)、[审计规则](../tests/test_release_evidence.py)（`release_evidence_contract`，`package` 组） |
 | 值 JSON 编解码 | [ValueJson](../src/core/include/core/ValueJson.h)、[类型与数值契约](../tests/value_json_contract.cpp) |
