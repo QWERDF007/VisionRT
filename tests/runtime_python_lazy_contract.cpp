@@ -68,7 +68,7 @@ try
   "name_zh": "Lazy runtime",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "lazy",
     "file": "tool.py",
     "symbol": "execute"
@@ -78,15 +78,20 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     },
     {
       "id": 3,
       "name_en": "rois",
       "name_zh": "ROIs",
-      "type": "roi"
+      "type": {
+        "type": 6
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {

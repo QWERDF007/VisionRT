@@ -10,6 +10,15 @@
 #include <initializer_list>
 
 namespace visionrt::json {
+template<class Enum>
+Enum enumeration(const QJsonValue &value, Enum last, const QString &context)
+{
+    const auto number = value.toInteger(-1);
+    if (!value.isDouble() || value.toDouble() != number || number < 0 || number > static_cast<int>(last))
+        throw ContractError((context + "：未知枚举编码").toStdString());
+    return static_cast<Enum>(number);
+}
+
 inline QString pathText(const std::filesystem::path &path)
 {
     const auto text = path.generic_u8string();

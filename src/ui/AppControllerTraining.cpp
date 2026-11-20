@@ -281,13 +281,10 @@ void AppController::setTrainingMode(bool value)
     emit resultsChanged();
 }
 
-QString AppController::trainingKind() const
+TrainingKind AppController::trainingKind() const
 {
     const auto *spec = impl_->trainingSpec();
-    if (!spec)
-        return {};
-    return spec->kind == TrainingKind::StraightEdges ? QStringLiteral("straight_edges")
-                                                     : QStringLiteral("color_samples");
+    return spec ? spec->kind : TrainingKind::ColorSamples;
 }
 
 QVariantList AppController::trainingRecords() const

@@ -2,41 +2,37 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 WorkbenchWindow {
     id: root
     objectName: "settingsWindow"
     title: "平台设置"
-    width: 760
-    height: 512
-    minimumWidth: 640
-    minimumHeight: 420
+    width: 1280
+    height: 720
     closeEnabled: !applying
     // Applied state, reloaded whenever the window opens or an apply succeeds. The draft below is the
     // only thing the controls edit.
     property var applied: ({
             "editBuiltins": false,
-            "loggingLevel": "info",
+            "loggingLevel": LogLevel.Info,
             "pythonExecutable": ""
         })
     property bool draftBuiltins: false
-    property string draftLevel: "info"
+    property int draftLevel: LogLevel.Info
     property string draftPython: ""
-    property string page: "runtime"
+    property int page: SettingsPage.Runtime
     property string errorText: ""
-    property string errorField: ""
+    property int errorField: SettingsPage.None
     // The one commit asks the controller for an answer instead of receiving it: a changed
     // interpreter is checked off the GUI thread, so the outcome arrives as settingsApplied.
     property bool closeAfterApply: true
 
-    readonly property var levelKeys: ["trace", "debug", "info", "warn", "error", "critical", "off"]
-    readonly property var levelNames: ["跟踪", "调试", "信息", "警告", "错误", "严重", "关闭"]
     readonly property string appliedPython: applied.pythonExecutable ? applied.pythonExecutable : ""
     readonly property bool dirty: draftBuiltins !== applied.editBuiltins || draftLevel !== applied.loggingLevel || draftPython !== appliedPython
     readonly property bool pythonPending: draftPython !== appliedPython
     readonly property bool applying: app.settingsApplying
-    readonly property bool environmentRejected: app.pythonEnvironmentPhase === "invalid" || app.pythonEnvironmentPhase === "backendFailed"
+    readonly property bool environmentRejected: app.pythonEnvironmentPhase === PythonEnvironmentPhase.Invalid || app.pythonEnvironmentPhase === PythonEnvironmentPhase.BackendFailed
 
     function load() {
         applied = app.settingsSnapshot();
@@ -45,7 +41,7 @@ WorkbenchWindow {
         draftPython = appliedPython;
         errorText = app.settingsError;
         errorField = app.settingsErrorField;
-        page = errorField.length > 0 ? errorField : "runtime";
+        page = errorField !== SettingsPage.None ? errorField : SettingsPage.Runtime;
     }
 
     function openDialog() {
@@ -62,7 +58,7 @@ WorkbenchWindow {
         if (!accepted) {
             errorText = app.settingsError;
             errorField = app.settingsErrorField;
-            if (errorField.length > 0)
+            if (errorField !== SettingsPage.None)
                 page = errorField;
             return;
         }
@@ -70,7 +66,7 @@ WorkbenchWindow {
         draftPython = appliedPython;
         bodyItem.pythonText = draftPython;
         errorText = "";
-        errorField = "";
+        errorField = SettingsPage.None;
         if (closeAfterApply)
             close();
     }
@@ -89,7 +85,7 @@ WorkbenchWindow {
         if (!accepted) {
             errorText = app.settingsError;
             errorField = app.settingsErrorField;
-            if (errorField.length > 0)
+            if (errorField !== SettingsPage.None)
                 page = errorField;
         }
     }
@@ -102,235 +98,32 @@ WorkbenchWindow {
     }
 
     body: Component {
-        RowLayout {
-            property alias pythonText: pythonField.text
+        SettingsContent {
             anchors.fill: parent
-            spacing: 0
-
-            Item {
-                Layout.preferredWidth: 150
-                Layout.fillHeight: true
-
-                Rectangle {
-                    anchors.right: parent.right
-                    width: 1
-                    height: parent.height
-                    color: QuiColor.Border
-                }
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 5
-                    spacing: 5
-                    Repeater {
-                        model: [
-                            {
-                                "key": "builtins",
-                                "name": "工具设置",
-                                "icon": QuiFontIcon.DeveloperTools
-                            },
-                            {
-                                "key": "runtime",
-                                "name": "运行设置",
-                                "icon": QuiFontIcon.Equalizer
-                            },
-                            {
-                                "key": "logging",
-                                "name": "日志设置",
-                                "icon": QuiFontIcon.List
-                            }
-                        ]
-                        delegate: Rectangle {
-                            required property var modelData
-                            width: parent.width
-                            height: 40
-                            radius: 4
-                            color: root.page === modelData.key ? WorkbenchStyle.navItemActiveBg : "transparent"
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 5
-                                anchors.rightMargin: 5
-                                spacing: 5
-                                QuiTextIcon {
-                                    iconSource: modelData.icon
-                                    iconSize: 15
-                                    iconColor: root.page === modelData.key ? WorkbenchStyle.navItemActiveText : QuiColor.FontDark
-                                }
-                                QuiText {
-                                    Layout.fillWidth: true
-                                    text: modelData.name
-                                    elide: Text.ElideRight
-                                    color: root.page === modelData.key ? WorkbenchStyle.navItemActiveText : QuiColor.FontPrimary
-                                    font: QuiFont.Body
-                                }
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.page = modelData.key
-                            }
-                        }
-                    }
-                }
+            draftBuiltins: root.draftBuiltins
+            draftLevel: root.draftLevel
+            draftPython: root.draftPython
+            page: root.page
+            applying: root.applying
+            pythonPending: root.pythonPending
+            environmentRejected: root.environmentRejected
+            environmentText: app.pythonEnvironmentText
+            errorText: root.errorText
+            onBuiltinsEdited: function (value) {
+                root.draftBuiltins = value;
             }
-
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-
-                Column {
-                    id: form
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.leftMargin: 5
-                    anchors.rightMargin: 5
-                    anchors.topMargin: 5
-                    spacing: 5
-
-                    Row {
-                        spacing: 5
-                        Rectangle {
-                            width: 3
-                            height: 16
-                            color: QuiColor.Highlight
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        QuiText {
-                            text: root.page === "builtins" ? "工具设置" : root.page === "logging" ? "日志设置" : "运行设置"
-                            color: QuiColor.FontPrimary
-                            font: QuiFont.BodyStrong
-                        }
-                    }
-
-                    // Tool settings: whether the declaration shipped with the installation is listed
-                    // by the custom tool window.
-                    RowLayout {
-                        width: parent.width
-                        visible: root.page === "builtins"
-                        spacing: 5
-                        QuiText {
-                            Layout.preferredWidth: ParameterStyle.parameterLabelWidth
-                            horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                            text: "显示内置工具"
-                            color: QuiColor.FontDark
-                            font: QuiFont.Body
-                        }
-                        QuiToggleSwitch {
-                            checked: root.draftBuiltins
-                            clickListener: function () {
-                                root.draftBuiltins = !root.draftBuiltins;
-                            }
-                        }
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                    }
-
-                    // Runtime settings: the external interpreter, chosen through one file-or-folder
-                    // picker or typed. Empty means the next start runs without Python.
-                    Column {
-                        width: parent.width
-                        visible: root.page === "runtime"
-                        spacing: 5
-                        RowLayout {
-                            width: parent.width
-                            spacing: 5
-                            QuiText {
-                                Layout.preferredWidth: ParameterStyle.parameterLabelWidth
-                                Layout.alignment: Qt.AlignVCenter
-                                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                                text: "Python 环境"
-                                color: QuiColor.FontDark
-                                font: QuiFont.Body
-                            }
-                            ParameterTextField {
-                                id: pythonField
-                                Layout.fillWidth: true
-                                Layout.maximumWidth: 420
-                                flat: false
-                                readOnly: root.applying
-                                actionIcon: QuiFontIcon.Folder
-                                onActionRequested: pythonPicker.open()
-                                Connections {
-                                    target: pythonField.inputItem
-                                    function onTextEdited() {
-                                        root.draftPython = pythonField.text;
-                                        if (root.errorField === "runtime")
-                                            root.errorText = "";
-                                    }
-                                }
-                            }
-                            Item {
-                                Layout.fillWidth: true
-                            }
-                        }
-                        QuiText {
-                            x: pythonField.x
-                            visible: root.pythonPending && !root.applying
-                            text: "Python 环境在下次启动时生效。"
-                            color: QuiColor.FontDark
-                            font: QuiFont.Caption
-                        }
-                        QuiText {
-                            x: pythonField.x
-                            visible: root.applying
-                            text: "正在检查所选 Python 环境..."
-                            color: QuiColor.FontDark
-                            font: QuiFont.Caption
-                        }
-                        // One status, read from the host: the check result is never re-derived here.
-                        QuiText {
-                            x: pythonField.x
-                            width: parent.width - pythonField.x
-                            visible: !root.applying && !root.pythonPending
-                            text: "当前环境：" + app.pythonEnvironmentText
-                            color: root.environmentRejected ? QuiColor.Error : QuiColor.FontDark
-                            wrapMode: Text.WordWrap
-                            font: QuiFont.Caption
-                        }
-                    }
-
-                    // Log settings: one production threshold for the file and the window.
-                    RowLayout {
-                        width: parent.width
-                        visible: root.page === "logging"
-                        spacing: 5
-                        QuiText {
-                            Layout.preferredWidth: ParameterStyle.parameterLabelWidth
-                            horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                            text: "日志等级"
-                            color: QuiColor.FontDark
-                            font: QuiFont.Body
-                        }
-                        ParameterComboBox {
-                            id: levelBox
-                            Layout.preferredWidth: 200
-                            model: root.levelNames
-                            currentIndex: Math.max(0, root.levelKeys.indexOf(root.draftLevel))
-                            onActivated: root.draftLevel = root.levelKeys[currentIndex]
-                        }
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                    }
-
-                    QuiText {
-                        width: parent.width
-                        visible: root.errorText.length > 0
-                        text: root.errorText
-                        color: QuiColor.Error
-                        wrapMode: Text.WordWrap
-                        font: QuiFont.Body
-                    }
-                }
+            onLevelEdited: function (value) {
+                root.draftLevel = value;
             }
+            onPythonEdited: function (value) {
+                root.draftPython = value;
+                if (root.errorField === SettingsPage.Runtime)
+                    root.errorText = "";
+            }
+            onPageRequested: function (value) {
+                root.page = value;
+            }
+            onBrowsePythonRequested: pythonPicker.open()
         }
     }
     footer: Component {
@@ -373,7 +166,7 @@ WorkbenchWindow {
         onAccepted: function (path) {
             root.draftPython = path;
             bodyItem.pythonText = path;
-            if (root.errorField === "runtime")
+            if (root.errorField === SettingsPage.Runtime)
                 root.errorText = "";
         }
     }

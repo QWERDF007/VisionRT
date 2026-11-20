@@ -89,7 +89,7 @@ int main(int argc, char **argv)
     assert(constant.image.pixelColor(1, 1) == QColor(128, 128, 128));
     const auto color = cv::Mat(2, 2, CV_8UC3, cv::Scalar(1, 2, 3));
     assert(DisplayConverter::convert(color).image.pixelColor(0, 0) == QColor(3, 2, 1));
-    assert(DisplayConverter::convert(color, "RGB").image.pixelColor(0, 0) == QColor(1, 2, 3));
+    assert(DisplayConverter::convert(color, ColorOrder::RGB).image.pixelColor(0, 0) == QColor(1, 2, 3));
     const auto unsupported = DisplayConverter::convert(cv::Mat(2, 2, CV_8UC2, cv::Scalar(1, 2)));
     assert(unsupported.image.isNull() && !unsupported.error.isEmpty());
     DisplayConverter          converter;

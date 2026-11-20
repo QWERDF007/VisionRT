@@ -126,13 +126,13 @@ int main()
                     {"type", old}
                 });
             });
-    rejects([] { ValueJson::decodeType({{"type", "Int"}, {"rank", 1}}); });
+    rejects([] { ValueJson::decodeType({{"type", static_cast<int>(Type::Int)}, {"rank", 1}}); });
     rejects(
         []
         {
             ValueJson::decodeType({
                 { "type",   "Array"},
-                {"dtype", "float64"},
+                {"dtype", static_cast<int>(DType::Float64)},
                 { "rank",       1.5}
             });
         });
@@ -142,7 +142,7 @@ int main()
             {
                 ValueJson::decodeType({
                     { "type",  "Array"},
-                    {"dtype", "string"},
+                    {"dtype", static_cast<int>(DType::String)},
                     { "rank",     rank}
                 });
             });
@@ -150,7 +150,7 @@ int main()
         []
         {
             ValueJson::decodeType({
-                {"type", "Array"},
+                {"type", static_cast<int>(Type::Array)},
                 {"rank",       1}
             });
         });

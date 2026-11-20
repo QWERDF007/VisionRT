@@ -6,10 +6,11 @@
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include <quickui/Color.h>
 
 #include <QGuiApplication>
+#include <QJSValue>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -42,7 +43,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();
 
@@ -52,7 +53,7 @@ try
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "expression node did not synchronize");
     const auto nodeId = app.selectedNode();
     require(!nodeId.isEmpty(), "expression node is missing");
-    require(app.nodeModel() == "expression", "expression node did not expose its node model");
+    require(app.nodeModel() == NodeModel::Expression, "expression node did not expose its node model");
 
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
@@ -89,24 +90,16 @@ try
         return invoked && applied.toBool();
     };
 
-    // The type menu reuses the Chinese display names and offers uint8 for arrays.
-    QVariant label;
-    require(QMetaObject::invokeMethod(editor.get(), "typeLabel", Q_RETURN_ARG(QVariant, label), Q_ARG(QVariant, QStringLiteral("Int")))
-                && label.toString() == QStringLiteral("整数"),
-            "type menu must reuse the Chinese type names");
-    const auto dtypes = editor->property("dtypeValues").toStringList();
-    require(dtypes.contains(QStringLiteral("uint8")), "the dtype menu must offer uint8");
-
     // Switching a fresh row to Array must settle a valid shape in the same draft, otherwise the
     // displayed fallback and the committed configuration disagree.
     open();
     require(editor->property("nextSeq").toInt() == 2, "a fresh expression node must start after the host status ports");
     add();
     QMetaObject::invokeMethod(editor.get(), "changeType", Q_ARG(QVariant, 0), Q_ARG(QVariant, true),
-                              Q_ARG(QVariant, QStringLiteral("Array")));
+                              Q_ARG(QVariant, static_cast<int>(Type::Array)));
     auto row = programRows().at(0).toMap();
-    require(row.value("type").toString() == "Array", "the row did not switch to Array");
-    require(row.value("dtype").toString() == "float64" && row.value("rank").toInt() == 1,
+    require(row.value("type").toInt() == static_cast<int>(Type::Array), "the row did not switch to Array");
+    require(row.value("dtype").toInt() == static_cast<int>(DType::Float64) && row.value("rank").toInt() == 1,
             "switching to Array must write a legal dtype and rank into the draft");
     edit(0, "expression", QStringLiteral("[1.5, 2.5]"));
     require(commit(), "a row that only switched to Array must still be applicable");
@@ -114,7 +107,7 @@ try
     auto program = config.value("program").toList();
     require(program.size() == 1, "the committed program lost its row");
     auto committedRow = program.at(0).toMap();
-    require(committedRow.value("type").toString() == "Array" && committedRow.value("dtype").toString() == "float64"
+    require(committedRow.value("type").toInt() == static_cast<int>(Type::Array) && committedRow.value("dtype").toInt() == static_cast<int>(DType::Float64)
                 && committedRow.value("rank").toInt() == 1,
             "the committed configuration does not match the displayed type");
     require(config.value("nextPortId").toULongLong() == 3, "nextPortId must advance after committing port 2");
@@ -170,8 +163,7 @@ try
     require(programRows().size() == 19, "deleting from a long list failed");
     QMetaObject::invokeMethod(editor.get(), "close");
 
-    // A dynamic Bool output used as an execution guard must survive repeated refreshes and follow
-    // the result rename. The guard label borrows a materialised contract, never a temporary port.
+    // A condition row selects and commits a dynamic Bool output through the real QML selector.
     app.addNode("EvaluateExpression", 8, 0);
     settle();
     const auto guardSource = app.selectedNode();
@@ -179,12 +171,46 @@ try
     const auto guardProgram = [](const QString &name)
     {
         return QVariantList{QVariantMap{{"portId", 2u}, {"name", name}, {"symbol", "flag"},
-                                        {"expression", "True"}, {"type", "Bool"}, {"dtype", ""},
+                                        {"expression", "True"}, {"type", static_cast<int>(Type::Bool)}, {"dtype", ""},
                                         {"rank", -1}, {"exposed", true}}};
     };
     require(app.applyExpressionConfig(guardSource, {}, guardProgram(QStringLiteral("布尔结果"))),
             "guard source program could not be applied");
     settle();
+
+    app.addNode("ConditionalBranch", 8, 2);
+    settle();
+    const auto conditionNode = app.selectedNode();
+    require(app.setConditionMode(conditionNode, true), "condition did not switch to upstream mode");
+    settle();
+    QVariantMap conditionRow;
+    for (const auto &value : app.parameters())
+        if (value.toMap().value("editor").toInt() == static_cast<int>(EditorKind::ConditionUpstream))
+            conditionRow = value.toMap();
+    QQmlComponent conditionComponent(
+        &engine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/ParameterEditor.qml")));
+    std::unique_ptr<QObject> conditionEditor(conditionComponent.createWithInitialProperties(
+        {{"parameter", conditionRow}, {"nodeId", conditionNode}}));
+    require(conditionEditor != nullptr, "condition parameter editor could not be created");
+    QVariant bindingGroups;
+    require(QMetaObject::invokeMethod(conditionEditor.get(), "buildBindingGroups", Q_RETURN_ARG(QVariant, bindingGroups)),
+            "condition binding choices could not be opened");
+    const auto guardValue = guardSource + ":" + QString::number(kFirstExpressionPort);
+    bool guardListed = false;
+    for (const auto &group : bindingGroups.toList())
+        for (const auto &option : group.toMap().value("subOptions").toList())
+            guardListed |= option.toMap().value("value").toString() == guardValue;
+    require(guardListed, "the condition editor did not offer the upstream Bool output");
+    auto *upstream = conditionEditor->findChild<QObject *>(QStringLiteral("parameterUpstream"));
+    require(upstream != nullptr, "condition upstream selector is missing");
+    QMetaObject::invokeMethod(upstream, "aboutToOpen");
+    auto commitBinding = upstream->property("commitValue").value<QJSValue>();
+    const auto bound = commitBinding.call({QJSValue(guardValue)});
+    require(!bound.isError() && bound.toBool(),
+            "the condition selector could not commit the upstream binding");
+    settle();
+    conditionEditor.reset();
+
     // A dynamic output connected to an ordinary downstream input must resolve its label from the
     // materialised contract on every refresh; the row may never keep a pointer into a temporary.
     app.addNode("EvaluateExpression", 9, 0);
@@ -193,7 +219,7 @@ try
     const auto intProgram = [](const QString &name)
     {
         return QVariantList{QVariantMap{{"portId", 2u}, {"name", name}, {"symbol", "n"},
-                                        {"expression", "1"}, {"type", "Int"}, {"dtype", ""},
+                                        {"expression", "1"}, {"type", static_cast<int>(Type::Int)}, {"dtype", ""},
                                         {"rank", -1}, {"exposed", true}}};
     };
     require(app.applyExpressionConfig(intSource, {}, intProgram(QStringLiteral("计数结果"))),
@@ -244,7 +270,7 @@ try
     for (int refresh = 0; refresh < 100; ++refresh)
     {
         const auto row = sourceRow();
-        require(row.value("inputMode").toString() == QStringLiteral("upstream"),
+        require(row.value("inputMode").toInt() == static_cast<int>(BindingMode::Upstream),
                 "bound ordinary input lost its upstream mode");
         require(row.value("source").toString().contains(QStringLiteral("计数结果")),
                 "ordinary binding lost the dynamic port name");

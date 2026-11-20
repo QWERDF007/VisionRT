@@ -33,7 +33,7 @@ class ToolEditorController : public QObject
     Q_PROPERTY(QString currentToolId READ currentToolId WRITE setCurrentToolId NOTIFY currentToolChanged)
     Q_PROPERTY(bool isToolIdEditable READ isToolIdEditable NOTIFY currentToolChanged)
     Q_PROPERTY(QString currentToolName READ currentToolName WRITE setCurrentToolName NOTIFY currentToolChanged)
-    Q_PROPERTY(QString currentToolKind READ currentToolKind NOTIFY currentToolChanged)
+    Q_PROPERTY(visionrt::ToolKind currentToolKind READ currentToolKind NOTIFY currentToolChanged)
     Q_PROPERTY(QString currentToolCategory READ currentToolCategory WRITE setCurrentToolCategory NOTIFY currentToolChanged)
     Q_PROPERTY(QString currentToolVersion READ currentToolVersion WRITE setCurrentToolVersion NOTIFY currentToolChanged)
     Q_PROPERTY(QString currentToolFile READ currentToolFile WRITE setCurrentToolFile NOTIFY currentToolChanged)
@@ -68,7 +68,7 @@ public:
     bool         isToolIdEditable() const noexcept;
     QString      currentToolName() const;
     void         setCurrentToolName(const QString &value);
-    QString      currentToolKind() const;
+    ToolKind currentToolKind() const;
     QString      currentToolCategory() const;
     void         setCurrentToolCategory(const QString &value);
     QString      currentToolVersion() const;

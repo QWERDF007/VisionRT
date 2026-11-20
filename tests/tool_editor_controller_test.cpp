@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #include "core/CustomToolStore.h"
 #include "ui/AppController.h"
 #include "ui/ToolEditorController.h"
@@ -28,7 +29,7 @@ bool treeHasFolder(const QVariantList &nodes, const QString &path)
     for (const auto &item : nodes)
     {
         const auto map = item.toMap();
-        if (map.value("kind").toString() != QStringLiteral("folder"))
+        if (map.value("kind").toInt() != static_cast<int>(CatalogEntryKind::Folder))
             continue;
         if (map.value("path").toString() == path)
             return true;
@@ -43,7 +44,7 @@ bool treeHasTool(const QVariantList &nodes, const QString &name)
     for (const auto &item : nodes)
     {
         const auto map = item.toMap();
-        if (map.value("kind").toString() == QStringLiteral("tool")
+        if (map.value("kind").toInt() == static_cast<int>(CatalogEntryKind::Tool)
             && map.value("name").toString() == name)
             return true;
         if (treeHasTool(map.value("children").toList(), name))
@@ -67,15 +68,6 @@ int main(int argc, char **argv)
     controller.setCustomStore(&store);
 
     // 1. The editor offers exactly the type system it validates against.
-    const auto types = controller.supportedTypes();
-    assert(types.size() == 34);
-    for (const auto &item : types)
-    {
-        const auto map = item.toMap();
-        assert(!map.value("token").toString().isEmpty());
-        assert(!map.value("label").toString().isEmpty());
-    }
-
     // 2. Adding a tool produces a card immediately: no dialog, no file.
     assert(controller.addTool("自定义/图像"));
     assert(controller.isDirty());
@@ -97,10 +89,10 @@ int main(int argc, char **argv)
     // 3. Ports of both stages live in the same draft.
     auto *inputs  = controller.inputModel();
     auto *outputs = controller.outputModel();
-    assert(inputs->addPort("阈值", "int", "128"));
-    assert(inputs->addPort("输入图像", "image"));
+    assert(inputs->addPort("阈值", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "128"));
+    assert(inputs->addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
     assert(inputs->updatePort(2, {{"showImage", true}}));
-    assert(outputs->addPort("输出图像", "image"));
+    assert(outputs->addPort("输出图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
     assert(outputs->updatePort(2, {{"showImage", true}}));
 
     // 4. A declaration preview is the same normalised JSON the store writes.
@@ -131,12 +123,12 @@ int main(int argc, char **argv)
     assert(controller.addTool("自定义/图像"));
     assert(controller.currentToolName() == "新工具 2");
     controller.setCurrentToolId("custom.test.second");
-    assert(outputs->addPort("结果", "int"));
+    assert(outputs->addPort("结果", (QVariantMap{{"type", static_cast<int>(Type::Int)}})));
     assert(controller.isDirty());
 
     controller.selectKey("custom.test.threshold");
     assert(controller.currentToolId() == "custom.test.threshold");
-    assert(inputs->addPort("临时参数", "int", "0"));
+    assert(inputs->addPort("临时参数", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "0"));
     assert(controller.isDirty());
 
     controller.selectKey("custom.test.second");

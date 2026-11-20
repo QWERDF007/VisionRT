@@ -1,7 +1,7 @@
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/ToolTreeModel.h"
 
 #include <QAbstractItemModel>
@@ -112,7 +112,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     testing::WorkbenchInstallation installation;
     const auto package = std::filesystem::path(installation.directory().toStdWString()) / "tools-package";
     const auto script  = package / "python/custom/examples/roi_geometry/tool.py";

@@ -3,22 +3,22 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 ColumnLayout {
     id: root
     required property var parameter
     property string nodeId: app.selectedNode
-    property var panel: null
+    signal expressionEditorRequested(string node, string draft, bool hasDraft)
+    signal selectTypeEditorRequested(string node)
     objectName: "parameter_" + parameter.id
     readonly property bool isMeta: !!parameter.isMeta
-    readonly property bool alwaysUpstream: parameter.type === "Image"
-    readonly property bool conditionRow: parameter.editor === "condition" || parameter.editor === "condition_upstream"
+    readonly property bool alwaysUpstream: parameter.type === PortType.Image
+    readonly property bool conditionRow: parameter.editor === EditorKind.Condition || parameter.editor === EditorKind.ConditionUpstream
     // The source button only reports the input mode. It never infers the mode from a
     // source, from a retained binding or this round's success.
-    readonly property bool upstream: parameter.inputMode === "upstream"
-    // Condition rows edit the single `condition` port, ordinary rows their own port.
-    readonly property string bindingPort: root.conditionRow ? "condition" : root.parameter.id
+    readonly property bool upstream: parameter.inputMode === BindingMode.Upstream
+    readonly property int bindingPort: root.conditionRow ? root.parameter.bindingPort : root.parameter.id
     readonly property bool editable: root.enabled && nodeId === app.selectedNode && app.workspaceEnabled
     readonly property string valueText: parameter.valueText === undefined ? parameter.literal : parameter.valueText
     readonly property string parameterKey: nodeId + (parameter.init ? ":init:" : ":input:") + parameter.id
@@ -27,21 +27,15 @@ ColumnLayout {
     readonly property real maximumValue: parameter.maximum === undefined || parameter.maximum === "" ? Infinity : Number(parameter.maximum)
     readonly property real numberStep: parameter.step === undefined || parameter.step === "" ? 1 : Number(parameter.step)
     readonly property int decimalPlaces: parameter.decimals === undefined || parameter.decimals < 0 ? 6 : parameter.decimals
-    readonly property int labelWidth: ParameterStyle.parameterLabelWidth
+    readonly property int labelWidth: VisionRTSize.ParamLabelWidth
     spacing: 5
 
-    function getPanel() {
-        if (root.panel) return root.panel
-        let item = root.parent
-        while (item) {
-            if (typeof item.openExpressionEditor === "function") return item
-            item = item.parent
-        }
-        return null
+    function commit(text) {
+        return root.editable && app.setParameter(parameter.id, parameter.init, text);
     }
-
-    function commit(text) { return root.editable && app.setParameter(parameter.id, parameter.init, text) }
-    onParameterKeyChanged: { pathPicker.close() }
+    onParameterKeyChanged: {
+        pathPicker.close();
+    }
 
     RowLayout {
         Layout.fillWidth: true
@@ -49,19 +43,25 @@ ColumnLayout {
 
         QuiText {
             objectName: "parameterLabel"
-            text: root.parameter.name; Layout.preferredWidth: root.labelWidth
+            text: root.parameter.name
+            Layout.preferredWidth: root.labelWidth
             Layout.fillHeight: true
             verticalAlignment: Text.AlignVCenter
             font: QuiFont.Body
             color: QuiColor.FontPrimary
             elide: Text.ElideRight
-            MouseArea { id: nameHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+            MouseArea {
+                id: nameHover
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+            }
             QuiToolTip {
                 visible: nameHover.containsMouse && text.length > 0
                 text: {
-                    let name = root.parameter.name || ""
-                    let typeText = root.parameter.typeDisplay || root.parameter.typeDetail || root.parameter.type || ""
-                    return typeText.length > 0 ? (name + "（" + typeText + "）") : name
+                    let name = root.parameter.name || "";
+                    let typeText = root.parameter.typeDisplay || root.parameter.typeDetail || root.parameter.type || "";
+                    return typeText.length > 0 ? (name + "（" + typeText + "）") : name;
                 }
                 delay: 500
             }
@@ -93,18 +93,7 @@ ColumnLayout {
                         id: editorLoader
                         anchors.fill: parent
                         enabled: root.editable
-                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor
-                                       : root.isMeta ? metaEditor
-                                       : root.upstream ? upstreamEditor
-                                       : (root.parameter.options || []).length > 0 ? choiceEditor
-                                       : (root.parameter.type === "Bool" && (root.parameter.editor === "switch" || root.parameter.editor === "recursive")) ? toggleSwitchComponent
-                                       : root.parameter.type === "Bool" ? boolEditor
-                                       : root.parameter.type === "Int" ? integerEditor
-                                       : root.parameter.type === "Float" ? floatEditor
-                                       : (root.parameter.type === "ROI" && root.parameter.editor === "rect") ? rectEditor
-                                       : root.parameter.type === "ROI" ? regionsEditor
-                                       : root.parameter.type === "Array" ? arrayEditor
-                                       : textEditor
+                        sourceComponent: (root.isMeta && root.upstream && root.conditionRow) ? upstreamEditor : root.isMeta ? metaEditor : root.upstream ? upstreamEditor : (root.parameter.options || []).length > 0 ? choiceEditor : (root.parameter.type === PortType.Bool && (root.parameter.editor === EditorKind.Switch || root.parameter.editor === EditorKind.Recursive)) ? toggleSwitchComponent : root.parameter.type === PortType.Bool ? boolEditor : root.parameter.type === PortType.Int ? integerEditor : root.parameter.type === PortType.Float ? floatEditor : (root.parameter.type === PortType.ROI && root.parameter.editor === EditorKind.Rect) ? rectEditor : root.parameter.type === PortType.ROI ? regionsEditor : root.parameter.type === PortType.Array ? arrayEditor : textEditor
                     }
                 }
 
@@ -113,7 +102,7 @@ ColumnLayout {
                     visible: toggleAction.visible
                     Layout.preferredWidth: 1
                     Layout.fillHeight: true
-                    color: QuiColor.CardBorder
+                    color: QuiColor.Border
                 }
 
                 ParameterActionButton {
@@ -126,20 +115,18 @@ ColumnLayout {
                     horizontalPadding: 0
                     focusPolicy: Qt.NoFocus
                     enabled: root.editable
-                    opacity: root.editable ? 1.0 : ParameterStyle.sourceButtonDisabledOpacity
+                    opacity: root.editable ? 1.0 : 0.3
                     normalColor: "transparent"
                     hoverColor: QuiColor.ItemHover
                     pressedColor: Qt.darker(QuiColor.ItemHover, 1.05)
                     iconSource: QuiFontIcon.Upload
-                    iconColor: root.upstream
-                        ? QuiColor.Highlight
-                        : (hovered ? QuiColor.FontPrimary : WorkbenchStyle.iconMuted)
+                    iconColor: root.upstream ? QuiColor.Highlight : (hovered ? QuiColor.FontPrimary : QuiColor.FontCaption)
 
                     onClicked: {
                         if (root.conditionRow) {
-                            app.setConditionMode(root.nodeId, !root.upstream)
+                            app.setConditionMode(root.nodeId, !root.upstream);
                         } else {
-                            app.setParameterMode(root.parameter.id, !root.upstream)
+                            app.setParameterMode(root.parameter.id, !root.upstream);
                         }
                     }
 
@@ -150,71 +137,68 @@ ColumnLayout {
                     QuiToolTip {
                         visible: toggleAction.hovered
                         text: {
-
                             if (root.conditionRow) {
-                                return root.upstream ? "切换为条件公式" : "使用上层布尔值"
+                                return root.upstream ? "切换为条件公式" : "使用上层布尔值";
                             }
-                            return root.upstream ? "切换为直接输入" : "绑定上层输入"
+                            return root.upstream ? "切换为直接输入" : "绑定上层输入";
                         }
                         delay: 300
                     }
                 }
             }
 
-
             QuiFileFolderDialog {
                 id: pathPicker
                 title: "选择文件或文件夹"
                 currentFolder: root.valueText
                 dialogMode: QuiFileFolderDialog.DialogMode.FileOrFolder
-                onAccepted: (path) => {
+                onAccepted: path => {
                     if (root.editable)
-                        app.setParameterPath(root.parameter.id, root.parameter.init, path)
+                        app.setParameterPath(root.parameter.id, root.parameter.init, path);
                 }
             }
         }
-
     }
 
     function currentUpstreamValue() {
-        if (root.parameter.sourceNode && root.parameter.sourcePort) {
-            return String(root.parameter.sourceNode) + ":" + String(root.parameter.sourcePort)
+        if (root.parameter.sourceNode && root.parameter.sourcePort !== undefined) {
+            return String(root.parameter.sourceNode) + ":" + String(root.parameter.sourcePort);
         }
-        return ""
+        return "";
     }
 
     function buildBindingGroups() {
-        let candidates = app.bindingCandidates(app.portContext(root.bindingPort))
-        let groups = []
+        let candidates = app.bindingCandidates(app.portContext(root.bindingPort));
+        let groups = [];
         if (root.parameter.source) {
             groups.push({
                 label: "解除绑定",
                 value: "__unbind__",
                 subOptions: []
-            })
+            });
         }
         // An empty candidate list stays empty: no placeholder row is invented for it.
         if (!candidates || candidates.length === 0)
-            return groups
-        let nodeMap = {}
+            return groups;
+        let nodeMap = {};
         for (let i = 0; i < candidates.length; ++i) {
-            let c = candidates[i]
-            let key = String(c.node)
+            let c = candidates[i];
+            let key = String(c.node);
             if (!nodeMap[key]) {
                 let nodeEntry = {
                     label: c.title,
                     value: "",
                     subOptions: []
-                }
-                nodeMap[key] = nodeEntry
-                groups.push(nodeEntry)
+                };
+                nodeMap[key] = nodeEntry;
+                groups.push(nodeEntry);
             }
             nodeMap[key].subOptions.push({
                 label: c.name + (c.type ? " (" + c.type + ")" : ""),
                 value: String(c.node) + ":" + String(c.port)
-            })
+            });
         }
-        return groups
+        return groups;
     }
 
     Component {
@@ -224,33 +208,37 @@ ColumnLayout {
             flat: true
             property var bindingContext: ({})
             objectName: "parameterUpstream"
-            implicitHeight: 32
+            implicitHeight: VisionRTSize.ContentSize
             savedValue: root.currentUpstreamValue()
             Accessible.name: root.parameter.name
             displayText: root.parameter.source || ""
             optionGroups: root.buildBindingGroups()
             onAboutToOpen: {
-                bindingContext = app.portContext(root.bindingPort)
-                optionGroups = root.buildBindingGroups()
+                bindingContext = app.portContext(root.bindingPort);
+                optionGroups = root.buildBindingGroups();
             }
-            commitValue: function(val) {
-                if (!root.editable || !app.portContextCurrent(bindingContext)) return false
+            commitValue: function (val) {
+                if (!root.editable || !app.portContextCurrent(bindingContext))
+                    return false;
                 if (!val || val === "__unbind__") {
-                    return app.unbindInput(bindingContext)
+                    return app.unbindInput(bindingContext);
                 } else if (val !== "__none__") {
-                    let sep = val.indexOf(":")
+                    let sep = val.indexOf(":");
                     if (sep > 0) {
-                        let targetNode = val.slice(0, sep)
-                        let targetPort = val.slice(sep + 1)
-                        return app.bindInput(bindingContext, targetNode, targetPort)
+                        let targetNode = val.slice(0, sep);
+                        let targetPort = val.slice(sep + 1);
+                        return app.bindInput(bindingContext, targetNode, targetPort);
                     }
                 }
-                return false
+                return false;
             }
             function validateSession() {
-                if (popup.visible && (!root.editable || !app.portContextCurrent(bindingContext))) popup.close()
+                if (popup.visible && (!root.editable || !app.portContextCurrent(bindingContext)))
+                    popup.close();
             }
-            HoverHandler { id: upstreamHover }
+            HoverHandler {
+                id: upstreamHover
+            }
             QuiToolTip {
                 visible: upstreamHover.hovered && text.length > 0
                 text: root.parameter.source || ""
@@ -258,11 +246,21 @@ ColumnLayout {
             }
             Connections {
                 target: app
-                function onSelectionChanged() { groupCombo.validateSession() }
-                function onNodesChanged() { groupCombo.validateSession() }
-                function onParametersChanged() { groupCombo.validateSession() }
-                function onRuntimeChanged() { groupCombo.validateSession() }
-                function onResultsChanged() { groupCombo.validateSession() }
+                function onSelectionChanged() {
+                    groupCombo.validateSession();
+                }
+                function onNodesChanged() {
+                    groupCombo.validateSession();
+                }
+                function onParametersChanged() {
+                    groupCombo.validateSession();
+                }
+                function onRuntimeChanged() {
+                    groupCombo.validateSession();
+                }
+                function onResultsChanged() {
+                    groupCombo.validateSession();
+                }
             }
         }
     }
@@ -274,23 +272,24 @@ ColumnLayout {
             valueText: root.valueText
             canDecrement: root.parameter.canDecrement === true
             canIncrement: root.parameter.canIncrement === true
-            commitValue: function(text) { return root.commit(text) }
-            onRejected: function(text) {
-                app.logParameterDraftRejected(root.parameter.id + "：" + text)
+            commitValue: function (text) {
+                return root.commit(text);
             }
-            stepValue: function(direction, text) {
-                return root.editable
-                    && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text)
+            onRejected: function (text) {
+                app.logParameterDraftRejected(root.parameter.id + "：" + text);
+            }
+            stepValue: function (direction, text) {
+                return root.editable && app.stepIntegerParameter(root.parameter.id, root.parameter.init, direction, text);
             }
         }
     }
     Component {
         id: floatEditor
         QuiSpinEditor {
-            buttonWidth: height
-            iconSize: 20
-            contentPadding: 0
             id: spin
+            buttonWidth: height
+            iconSize: VisionRTSize.IconSize
+            contentPadding: 0
             flat: true
             label: ""
             decimals: root.decimalPlaces
@@ -298,17 +297,25 @@ ColumnLayout {
             minValue: root.minimumValue
             maxValue: root.maximumValue
             Component.onCompleted: spin.value = root.numberValue
-            commitValue: function(number) { return root.commit(String(number)) }
+            commitValue: function (number) {
+                return root.commit(String(number));
+            }
             // The shared editor repaints itself red on a rejected draft; parameter rows keep one
             // text colour and leave the draft in place for correction.
             onInvalidChanged: if (invalid) {
-                app.logParameterDraftRejected(root.parameter.id + "：" + text)
-                invalid = false
+                app.logParameterDraftRejected(root.parameter.id + "：" + text);
+                invalid = false;
             }
             Connections {
                 target: root
-                function onValueTextChanged() { spin.value = root.numberValue; spin.invalid = false }
-                function onParameterKeyChanged() { spin.value = root.numberValue; spin.invalid = false }
+                function onValueTextChanged() {
+                    spin.value = root.numberValue;
+                    spin.invalid = false;
+                }
+                function onParameterKeyChanged() {
+                    spin.value = root.numberValue;
+                    spin.invalid = false;
+                }
             }
         }
     }
@@ -316,17 +323,18 @@ ColumnLayout {
         id: boolEditor
         ParameterComboBox {
             flat: true
-            implicitHeight: 32
-            readonly property bool isRecursive: root.parameter.editor === "recursive"
+            implicitHeight: VisionRTSize.ContentSize
+            readonly property bool isRecursive: root.parameter.editor === EditorKind.Recursive
             model: isRecursive ? ["不递归", "递归"] : ["是", "否"]
             currentIndex: {
-                let val = (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")
-                if (isRecursive) return val ? 1 : 0
-                return val ? 0 : 1
+                let val = (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true");
+                if (isRecursive)
+                    return val ? 1 : 0;
+                return val ? 0 : 1;
             }
-            onActivated: function(index) {
-                let isTrue = isRecursive ? (index === 1) : (index === 0)
-                root.commit(isTrue ? "true" : "false")
+            onActivated: function (index) {
+                let isTrue = isRecursive ? (index === 1) : (index === 0);
+                root.commit(isTrue ? "true" : "false");
             }
         }
     }
@@ -342,10 +350,10 @@ ColumnLayout {
                 anchors.verticalCenter: parent.verticalCenter
                 checked: (root.parameter.literal === "true" || root.parameter.value === true || root.parameter.value === "true")
                 enabled: root.editable
-                clickListener: function() {
-                    let nextVal = !sw.checked
-                    sw.checked = nextVal
-                    root.commit(nextVal ? "true" : "false")
+                clickListener: function () {
+                    let nextVal = !sw.checked;
+                    sw.checked = nextVal;
+                    root.commit(nextVal ? "true" : "false");
                 }
             }
         }
@@ -355,17 +363,22 @@ ColumnLayout {
         ParameterComboBox {
             id: choice
             flat: true
-            implicitHeight: 32
+            implicitHeight: VisionRTSize.ContentSize
             model: root.parameter.options
             textRole: "label"
             currentIndex: {
                 for (let index = 0; index < model.length; ++index)
-                    if (model[index].value === root.valueText) return index
-                return -1
+                    if (model[index].value === root.valueText)
+                        return index;
+                return -1;
             }
             displayText: currentIndex < 0 ? root.valueText : model[currentIndex].label
-            onActivated: function(index) { root.commit(model[index].value) }
-            HoverHandler { id: choiceHover }
+            onActivated: function (index) {
+                root.commit(model[index].value);
+            }
+            HoverHandler {
+                id: choiceHover
+            }
             QuiToolTip {
                 visible: choiceHover.hovered && text.length > 0 && Boolean(choice.contentItem && (choice.contentItem.truncated || choice.contentItem.contentWidth > choice.contentItem.width))
                 text: choice.displayText || choice.currentText || ""
@@ -380,55 +393,64 @@ ColumnLayout {
             flat: true
             readOnly: !root.parameter.isSingleFormula
             actionText: {
-                if (root.parameter.editor === "select_type") return "选择合流类型"
-                if (root.parameter.editor === "condition") return "编辑条件公式"
-                return "编辑公式"
+                if (root.parameter.editor === EditorKind.Select)
+                    return "选择合流类型";
+                if (root.parameter.editor === EditorKind.Condition)
+                    return "编辑条件公式";
+                return "编辑公式";
             }
             property string committedText: ""
             // hasDraft records that the field holds user text, including an empty string. Without
             // it an empty draft is indistinguishable from "never edited" and would reload the old
             // formula on the next edit or cancel.
             property bool hasDraft: false
-            onTextChanged: if (inputItem.activeFocus) hasDraft = true
+            onTextChanged: if (inputItem.activeFocus)
+                hasDraft = true
             function sync(force) {
-                const currentText = root.parameter.displayText || ""
-                committedText = currentText
+                const currentText = root.parameter.displayText || "";
+                committedText = currentText;
                 // An existing draft survives parameter refreshes: clearing the field and opening
                 // the formula editor must not silently restore the committed formula.
                 if (force || (!inputItem.activeFocus && !hasDraft)) {
-                    text = committedText
-                    invalid = false
-                    hasDraft = false
+                    text = committedText;
+                    invalid = false;
+                    hasDraft = false;
                 }
             }
             Component.onCompleted: sync(true)
-            onCommitRequested: function(commitText) {
+            onCommitRequested: function (commitText) {
                 if (root.parameter.isSingleFormula) {
-                    let ok = app.applySingleExpression(root.nodeId, commitText)
-                    invalid = !ok
-                    if (ok) { committedText = commitText; hasDraft = false }
+                    let ok = app.applySingleExpression(root.nodeId, commitText);
+                    invalid = !ok;
+                    if (ok) {
+                        committedText = commitText;
+                        hasDraft = false;
+                    }
                 }
             }
             onCancelRequested: {
-                text = committedText
-                invalid = false
-                hasDraft = false
+                text = committedText;
+                invalid = false;
+                hasDraft = false;
             }
             onActionRequested: {
-                let p = root.getPanel()
-                if (!p) return
-                if (root.parameter.editor === "select_type") {
-                    p.openSelectTypeEditor(root.nodeId)
+                if (root.parameter.editor === EditorKind.Select) {
+                    root.selectTypeEditorRequested(root.nodeId);
                 } else {
-                    p.openExpressionEditor(root.nodeId, field.text,
-                                           field.hasDraft || field.text !== field.committedText)
+                    root.expressionEditorRequested(root.nodeId, field.text, field.hasDraft || field.text !== field.committedText);
                 }
             }
             Connections {
                 target: root
-                function onParameterChanged() { field.sync(false) }
-                function onValueTextChanged() { field.sync(false) }
-                function onParameterKeyChanged() { field.sync(true) }
+                function onParameterChanged() {
+                    field.sync(false);
+                }
+                function onValueTextChanged() {
+                    field.sync(false);
+                }
+                function onParameterKeyChanged() {
+                    field.sync(true);
+                }
             }
         }
     }
@@ -440,36 +462,40 @@ ColumnLayout {
             flat: true
             property string committedText: ""
             function sync(force) {
-                const dirty = text !== committedText
-                committedText = root.valueText
+                const dirty = text !== committedText;
+                committedText = root.valueText;
                 if (force || !inputItem.activeFocus || !dirty) {
-                    text = committedText
-                    invalid = false
+                    text = committedText;
+                    invalid = false;
                 }
             }
             Component.onCompleted: sync(true)
             // Path parameters use a unified picker dialog supporting both files and folders.
             // A path parameter has one picker: it selects a file or a folder in the same dialog.
-            actionIcon: root.parameter.editor === "path" ? QuiFontIcon.FolderOpen : 0
-            actionText: root.parameter.editor === "path" ? "选择路径" : ""
+            actionIcon: root.parameter.editor === EditorKind.Path ? QuiFontIcon.FolderOpen : 0
+            actionText: root.parameter.editor === EditorKind.Path ? "选择路径" : ""
             secondaryActionIcon: 0
             secondaryActionText: ""
             onCommitRequested: {
                 if (text === root.valueText) {
-                    invalid = false
-                    return
+                    invalid = false;
+                    return;
                 }
-                invalid = !root.commit(text)
+                invalid = !root.commit(text);
             }
             onCancelRequested: {
-                text = root.valueText
-                invalid = false
+                text = root.valueText;
+                invalid = false;
             }
             onActionRequested: pathPicker.open()
             Connections {
                 target: root
-                function onValueTextChanged() { field.sync(false) }
-                function onParameterKeyChanged() { field.sync(true) }
+                function onValueTextChanged() {
+                    field.sync(false);
+                }
+                function onParameterKeyChanged() {
+                    field.sync(true);
+                }
             }
         }
     }
@@ -491,18 +517,18 @@ ColumnLayout {
 
             onLeadingActionRequested: {
                 if (isDrawing) {
-                    app.endRoiPreview()
+                    app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, 2)
+                    app.startRoiDraw(root.parameter.id, 2);
                 }
             }
             onActionRequested: app.clearRoi(root.parameter.id)
 
             function sync(force) {
-                const currentText = hasRect ? (root.parameter.displayText || "[]") : "[]"
+                const currentText = hasRect ? (root.parameter.displayText || "[]") : "[]";
                 if (force || !inputItem.activeFocus) {
-                    text = currentText
-                    invalid = false
+                    text = currentText;
+                    invalid = false;
                 }
             }
 
@@ -510,20 +536,26 @@ ColumnLayout {
 
             onCommitRequested: {
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
-                    app.clearRoi(root.parameter.id)
-                    invalid = false
-                    return
+                    app.clearRoi(root.parameter.id);
+                    invalid = false;
+                    return;
                 }
-                invalid = !root.commit(text)
+                invalid = !root.commit(text);
             }
 
             onCancelRequested: sync(true)
 
             Connections {
                 target: root
-                function onParameterChanged() { field.sync(false) }
-                function onValueTextChanged() { field.sync(false) }
-                function onParameterKeyChanged() { field.sync(true) }
+                function onParameterChanged() {
+                    field.sync(false);
+                }
+                function onValueTextChanged() {
+                    field.sync(false);
+                }
+                function onParameterKeyChanged() {
+                    field.sync(true);
+                }
             }
         }
     }
@@ -546,9 +578,9 @@ ColumnLayout {
 
             onLeadingActionRequested: {
                 if (isDrawing) {
-                    app.endRoiPreview()
+                    app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, 2)
+                    app.startRoiDraw(root.parameter.id, 2);
                 }
             }
             onActionRequested: app.clearRoi(root.parameter.id)
@@ -584,10 +616,10 @@ ColumnLayout {
             }
 
             function sync(force) {
-                const currentText = hasRois ? ("[" + count + " 个区域]") : "[]"
+                const currentText = hasRois ? ("[" + count + " 个区域]") : "[]";
                 if (force || !inputItem.activeFocus) {
-                    text = currentText
-                    invalid = false
+                    text = currentText;
+                    invalid = false;
                 }
             }
 
@@ -595,11 +627,11 @@ ColumnLayout {
 
             onCommitRequested: {
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
-                    app.clearRoi(root.parameter.id)
-                    invalid = false
-                    return
+                    app.clearRoi(root.parameter.id);
+                    invalid = false;
+                    return;
                 }
-                invalid = !root.commit(text)
+                invalid = !root.commit(text);
             }
 
             onCancelRequested: sync(true)
@@ -607,9 +639,15 @@ ColumnLayout {
 
             Connections {
                 target: root
-                function onParameterChanged() { field.sync(false) }
-                function onValueTextChanged() { field.sync(false) }
-                function onParameterKeyChanged() { field.sync(true) }
+                function onParameterChanged() {
+                    field.sync(false);
+                }
+                function onValueTextChanged() {
+                    field.sync(false);
+                }
+                function onParameterKeyChanged() {
+                    field.sync(true);
+                }
             }
         }
     }
@@ -623,35 +661,35 @@ ColumnLayout {
             actionIcon: (text.length > 0 && text !== "[]") ? QuiFontIcon.Clear : 0
             actionText: "清空"
             onActionRequested: {
-                text = "[]"
-                committedText = "[]"
-                root.commit("[]")
+                text = "[]";
+                committedText = "[]";
+                root.commit("[]");
             }
 
             function sync(force) {
-                const currentText = (root.valueText && root.valueText !== "null") ? root.valueText : "[]"
-                committedText = currentText
+                const currentText = (root.valueText && root.valueText !== "null") ? root.valueText : "[]";
+                committedText = currentText;
                 if (force || !inputItem.activeFocus) {
-                    text = committedText
-                    invalid = false
+                    text = committedText;
+                    invalid = false;
                 }
             }
 
             Component.onCompleted: sync(true)
 
             onCommitRequested: {
-                let trimmed = text.trim()
+                let trimmed = text.trim();
                 if (trimmed === "" || trimmed === "[]" || trimmed === "null" || trimmed === "~") {
-                    trimmed = "[]"
-                    text = "[]"
+                    trimmed = "[]";
+                    text = "[]";
                 }
                 if (trimmed === committedText) {
-                    invalid = false
-                    return
+                    invalid = false;
+                    return;
                 }
-                invalid = !root.commit(trimmed)
+                invalid = !root.commit(trimmed);
                 if (!invalid) {
-                    committedText = trimmed
+                    committedText = trimmed;
                 }
             }
 
@@ -659,8 +697,12 @@ ColumnLayout {
 
             Connections {
                 target: root
-                function onValueTextChanged() { field.sync(false) }
-                function onParameterKeyChanged() { field.sync(true) }
+                function onValueTextChanged() {
+                    field.sync(false);
+                }
+                function onParameterKeyChanged() {
+                    field.sync(true);
+                }
             }
         }
     }

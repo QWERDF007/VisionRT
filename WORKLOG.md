@@ -30,6 +30,174 @@
 - ...
 -->
 
+### 2026-11-20 — 汇总样式与协议重构交付
+
+**目标**
+- 提交并推送 VisionRT、VisionTools 与共享 Contracts 的全部本轮变更。
+
+**当前状态**
+- 已完成：共享 Contracts 提交 e0af8c6 已推送 origin/main；QuickUI 调色板提交894fb73在远程main，两仓主工程引用已核对。
+- 本条与 VisionRT 的样式、QML模块、数字协议、示例、测试精简及文档截图一起提交，发布分支为origin/dev。保留用户提供的方案及其他文档。
+
+**验证证据**
+- 远程核对：两主仓 dev、Contracts main、QuickUI main 在操作前均与远程同步；两份 Contracts 内容与索引树一致。
+- 复用已完成证据：宿主91项、SDK7项、VisionTools8项通过；最新参数与输出修复3项通过，25工具包通过宿主校验。
+- 提交前各仓 git diff --check、新增字符检查通过；新文档43份，均为Markdown与SVG，没有构建产物或临时文件。
+
+**下一步**
+- 发布状态由 git status -sb、git ls-remote 与 Git 历史核对；不重复生成提交号清单。构建和测试证据见前述任务条目。
+
+### 2026-11-20 — 参数与输出标题底线对齐
+
+**目标**
+- 修复参数页签和输出标题底线仍错开1px的问题，并确认文件菜单的样式来源。
+
+**当前状态**
+- 已完成：输出标题栏改为栏内2px底线；输出表头在应用使用处覆盖横向表头委托，保留左右和底部网格，顶部边界由标题栏统一绘制。两侧标题栏继续高36。
+- 已完成：核对同一文字的真实像素位置一致，数据与关系模式标题及网格正常；清单和完整红框图同步更新，并补充菜单默认样式入口。
+- 未改 QuickUI，未新增尺寸、颜色断言测试，未提交、推送或部署；临时读数与截图保存在 F:/tmp。
+
+**验证证据**
+- 用户截图及实际空工程截图均复现底线低1px。F:/tmp/visionrt-output-align-empty-before.png 中，左侧灰线位于y623/624、右侧y624/625；修复后两侧均位于y623/624。临时将两侧文字设为相同内容后，字形范围与像素数一致；读数程序与图片：F:/tmp/visionrt-output-align.cpp、F:/tmp/visionrt-output-align-match-before.png、F:/tmp/visionrt-output-align-empty-after.png。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract` → 构建通过；最初exe被占用导致链接拒绝，程序退出后重试成功，日志：F:/tmp/visionrt-output-separator-build.log。
+- `ctest --test-dir build -C Release -R '^workbench_(parameters|output|popups)_contract$' --output-on-failure --no-tests=error` → 3/3通过；日志：F:/tmp/visionrt-output-separator-results.log。
+- 完整窗口截图与关系模式取证均退出0，stderr为空；文档图片、链接与 git diff --check 通过。日志：F:/tmp/visionrt-output-separator-capture.err、F:/tmp/visionrt-output-relations-after.err、F:/tmp/visionrt-output-separator-doc-check.log。
+
+**下一步**
+- 本轮对齐修复完成；文件菜单继续使用 QuiMenu/QuiMenuItem 默认样式，等待用户对菜单的后续要求。
+
+### 2026-11-20 — 主工具栏完整边框
+
+**目标**
+- 将顶部工具栏与整个工作区之间的边界统一放在工具栏上。
+
+**当前状态**
+- 已完成：MainToolbar 背景增加1px QuiColor.Border 完整外框，底边贯穿窗口全宽；删除 ToolLibrary 上一轮单独增加的顶线，避免重复边界。
+- 已完成：样式方案、清单及39张完整窗口红框图同步更新。未修改 QuickUI、未新增外观断言，未提交、推送或部署。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT` → 构建通过；日志：F:/tmp/visionrt-toolbar-frame-build.log。
+- 真实 Main.qml 在100%最大化下完成窗口截图，退出0且stderr为空；目视确认工具栏底边覆盖工具库、图像列表、竖向工具栏和视口全宽；日志：F:/tmp/visionrt-toolbar-frame-capture.out、F:/tmp/visionrt-toolbar-frame-capture.err。
+- 文档图片和链接检查通过，`git diff --check`通过；日志：F:/tmp/visionrt-toolbar-frame-doc-check.log。纯边框调整未重复运行功能测试。
+
+**下一步**
+- 本轮边框调整完成，按 docs/UI_STYLE_INVENTORY.md 对照当前完整图。
+
+### 2026-11-20 — 输出表头、文字渲染与工具库顶部边界
+
+**目标**
+- 输出表头使用 QuiColor.Primary，检查参数页签、执行和输出标题的高度与文字对齐，补齐工具库标题栏顶部边界。
+
+**当前状态**
+- 已完成：OutputPanel 在使用处覆盖表头白底；参数页签在使用处改用 QuiText，与执行按钮、输出标题保持同一字体与原生文字渲染。
+- 已完成：ToolLibrary 标题栏增加1px QuiColor.Border 顶线，上下边界明确；主工具栏背景保持原方案。
+- 已完成：样式清单与39张完整窗口红框图同步更新。未改 QuickUI 默认值，未新增尺寸或颜色断言测试，未提交、推送或部署。
+
+**验证证据**
+- F:/tmp/visionrt-ui-review/visionrt-output-align.exe 直接加载实际 Main.qml，100%最大化读数显示：两栏原本均高36，文字基线均为613；页签原为 QtRendering，执行与输出标题为 NativeRendering。调整后文字统一 NativeRendering，基线仍相同；读数：F:/tmp/visionrt-output-align-before.json、F:/tmp/visionrt-output-align-after.json。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT workbench_contract` 与最终 VisionRT 构建通过；日志：F:/tmp/visionrt-output-style-build.log、F:/tmp/visionrt-library-border-build.log。
+- `ctest --test-dir build -C Release -R '^workbench_(parameters|output|popups)_contract$' --output-on-failure --no-tests=error` → 3/3通过；工具树真实交互1/1通过。日志：F:/tmp/visionrt-output-style-results.log、F:/tmp/visionrt-library-border-results.log。
+- 真实完整窗口截图程序退出0，stderr为空；已目视核对表头、文字及工具库边界。文档图片与链接检查通过，`git diff --check`通过；日志：F:/tmp/visionrt-output-style-capture.err、F:/tmp/visionrt-output-style-doc-check.log。
+
+**下一步**
+- 本轮调整完成，后续按当前源码与 docs/UI_STYLE_INVENTORY.md 继续。
+
+### 2026-11-20 — 统一样式、QML 模块与数字枚举协议
+
+**目标**
+- 实施 `docs/样式修改方案.md`，完成已确认的破坏性协议重构、模块封装和功能测试精简；主窗体仅按100%系统缩放、最大化场景验证。
+
+**当前状态**
+- 已完成：删除 Theme 与五个 Style，统一使用应用 Color/Size 和 QuiColor/QuiFont；工具栏、图标、参数行、窗口及训练视图按方案整理。设置、自定义工具共用原生 Window 外壳，初始1280×720，应用按钮使用 QuiFilledButton。
+- 已完成：拆出 MainToolbar、FlowToolbar、FlowTabs、SettingsContent、ToolInformationPane、ToolPortsPane。窗口与 Controller 持有写入状态，参数编辑器用信号请求弹层，不再沿父级查找面板。
+- 已完成：公共有限状态由 Contracts 枚举定义，QML/Python 从 C++ 派生；声明、工程、训练资产与设置改为数字枚举，版本分别为1、8、2、1，不兼容旧格式；原生 ABI 布局不变。VisionTools 与两仓 Contracts 同步修改。
+- 已完成：删除布局、外观属性、静态声明和验证专用等无效测试，保留真实读写、执行、训练、窗口应用取消与退出流程。修复关闭确认中的保存被操作闸口拒绝，以及条件参数用字符串替代实际端口编号导致无法绑定上游的问题。
+- 已完成：更新样式清单和模块索引，包含23行尺寸、17行配色、40个图标引用及39张完整窗口红框图。截图无 QML 警告；参数图展示实际参数行。
+- 保留用户已有 QuickUI Color.cpp 调色板修改，折叠栏与步进组件默认值未改。未提交、未推送、未部署；独立工具包位于 F:/tmp/VisionTools-ui，开发构建目录的 tools-package 已同步。
+- 临时脚本、日志和截图均存放在 F:/tmp；构建产物位于 build。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT tests-backend tests-bridge tests-ui examples_runtime` → 构建通过；最后界面资源链接通过，日志：F:/tmp/visionrt-delivery-build.log、F:/tmp/visionrt-delivery-last-build.log。
+- `ctest --test-dir build -C Release -L '^(backend|bridge|ui)$' -j 1 --output-on-failure --no-tests=error` → 91/91通过，108.57秒；日志：F:/tmp/visionrt-delivery-results.log。
+- `tools/build.cmd ctest --test-dir build -C Release -L sdk -j 1 --output-on-failure --no-tests=error` → 7/7通过，包含真实隔离安装消费；日志：F:/tmp/visionrt-sdk-verified-results.log。
+- VisionTools 原生、Python和发行8项通过；SDK依赖调整后4项复验通过；25工具 rtx40-runtime 包通过真实宿主校验。日志：F:/tmp/visiontools-verified-results.log、F:/tmp/visiontools-sdk-verified-results.log、F:/tmp/visiontools-delivery-package.log。
+- 真实窗口截图程序退出0，stderr为空；样式文档图片、红框、链接、两仓 Contracts 副本和新增字符检查通过；日志：F:/tmp/visionrt-ui-capture.err、F:/tmp/visionrt-doc-verification.log。`git diff --check` 通过。
+
+**下一步**
+- 当前任务实现与验证完成。后续如提交，先提交 Contracts 共享变更，再更新 VisionRT/VisionTools 的 gitlink；构建和验证产物已可直接复核。
+
+### 2026-11-19 — 修复 QuickUI 调色板语法错误并全量构建部署
+
+**目标**
+- 修复 QuickUI 调色板编译错误，完成 VisionRT 构建并全量部署至 `F:/tmp/VisionRT`。
+
+**当前状态**
+- 已完成：修复 [Color.cpp](file:///F:/Projects/VisionRT/3rdparty/QuickUI/src/Color.cpp#L75) 中缺失的逗号语法错误。
+- 已完成：使用 MSVC 2019 Release 模式完成 VisionRT 重新编译链接，生成最新可执行文件与动态库。
+- 已完成：运行 [package_app.py](file:///F:/Projects/VisionRT/tools/package_app.py) 完成全量部署（625 个文件校验通过），并在真实环境运行截图验证。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --config Release --target VisionRT` -> 编译链接成功（退出码 0），生成 `build/bin/VisionRT.exe` 与 `build/bin/quickui.dll`。
+- `python tools/package_app.py --build-dir build --install-dir F:/tmp/VisionRT --tools-package F:/Projects/VisionTools/dist/VisionTools.zip --tools-index F:/Projects/VisionTools/dist/VisionTools.module_index.json --allow-dirty` -> 625 个文件校验通过，部署完成。
+- `Start-Process -FilePath 'F:/tmp/VisionRT/VisionRT.exe' -ArgumentList @('--screenshot', 'F:/tmp/deploy_verify.png', '--screenshot-delay', '1500') -Wait -PassThru` -> 进程退出码 0，生成有效验证截图 `F:/tmp/deploy_verify.png`（56253 字节）。
+
+**下一步**
+- 继续响应后续界面或功能调整。
+
+### 2026-11-18 — 速查表增加区域红框图并明确样式属性口径
+
+**目标**
+- 在尺寸和配色速查表每行直接展示完整界面及对应红框；控制属性仅列命名样式变量。
+
+**当前状态**
+- 已完成：[样式清单](docs/UI_STYLE_INVENTORY.md) 两张速查表新增图片列，内嵌可点击放大的完整截图，每张图仅显示本行需要的红框。
+- 已完成：尺寸速查仅列 FlowStyle、ResultsStyle、ParameterStyle、ToolTreeStyle 和 QuiFont 等实际使用的命名样式变量；未抽取变量的值如实标注，不列 Layout、anchors 等布局属性，不新增样式变量。
+- 已完成：新增处理缩略图列表 A9 红框，避免将处理缩略图区误指向训练记录区；应用及 QuickUI 源码未改。
+
+**验证证据**
+- `node build/check-quick-tables.cjs` → 42 行速查内容、46 个内嵌图片引用全部存在；表格列数及控制属性检查通过。
+- `node build/check-ui-doc-images.cjs` → 原有章节图片、SVG 嵌入尺寸和 Markdown 表格检查通过。
+
+**下一步**
+- 在 Markdown 预览中直接对照速查表图片列阅读；文档与图片尚未提交。
+
+### 2026-11-18 — 将完整红框截图贴入对应样式章节
+
+**目标**
+- 让每个 UI 分区章节直接显示完整截图和对应区域红框，阅读样式表时无需返回总览。
+
+**当前状态**
+- 已完成：[UI 样式清单](docs/UI_STYLE_INVENTORY.md) 在主窗口、工具库、流程画布、图像结果、训练、参数、设置、自定义工具、类型／表达式／日志／关于及公共窗口外壳章节直接嵌入完整标注图和编号表。
+- 主窗口相关章节复用完整主窗体图并保留 A0-A8 总览框；流程、图像和训练章节同时给出对应状态的完整图；辅助窗口章节直接显示设置、自定义工具和弹层完整图。
+- 本轮只修改文档和截图资产；用户已有的 `docs/cli_linux_x64.tar.gz.crdownload` 未处理。
+
+**验证证据**
+- `node build/check-ui-doc-images.cjs` → 17 个文档图片引用全部存在，SVG 内嵌 PNG 尺寸一致，红框标注和 Markdown 表格检查通过。
+- `node build/preview-ui-docs.cjs` → Edge 无头渲染成功，已查看总览图；图片未裁剪，红框和编号可见。
+- `git -c safe.directory=F:/Projects/VisionRT -c core.whitespace=cr-at-eol diff --check` → 通过。
+
+**下一步**
+- 在 Markdown 预览中直接按章节查看对应完整图；提交时纳入 `docs/UI_STYLE_INVENTORY.md`、`docs/images/ui-style/`、`docs/README.md` 和本账本。
+
+### 2026-11-18 — UI 样式清单补充完整截图与区域红框
+
+**目标**
+- 在整体 UI 样式清单中用完整截图和红框编号定位各区域，便于对照样式表。
+
+**当前状态**
+- 已完成：[样式清单](docs/UI_STYLE_INVENTORY.md) 增加主窗体总览和各章节定位说明；[图片目录](docs/images/ui-style) 包含主窗体、菜单、参数、训练、设置、自定义工具、表达式、类型、日志、关于共 10 张标注图。
+- 图片使用 SVG 内嵌真实完整 PNG 截图，叠加红框和编号，各图附编号对应表；没有裁剪或重绘截图内容。应用和 QuickUI 源码未改。
+- 已完成文档索引和图片渲染检查；文档与图片尚未提交。保留用户的 `docs/cli_linux_x64.tar.gz.crdownload`，未处理该下载文件。
+
+**验证证据**
+- `ctest --test-dir build -R '^tool_editor_dialog_test$' --output-on-failure --no-tests=error` → 1/1 通过，使用截图环境变量截取当前设置和自定义工具窗口。
+- `ctest --test-dir build -R '^workbench_(training|startup)_contract$' --output-on-failure --no-tests=error` → 2/2 通过，截取训练与日志；参数契约单独 1/1 通过并更新参数截图。
+- `VisionRT.exe --screenshot .../docs_main.png --screenshot-delay 1200` → 退出码 0；仅在 build 目录创建的临时取证程序加载实际 QML，截取表达式、类型与关于弹层，退出码 0。
+- 图片检查 → 10 张引用全部存在，SVG 原图尺寸与嵌入 PNG 一致，表格列数无异常；Edge 无头渲染成功，已检查 `build/evidence/ui-style-contact.png` 中的完整图和红框。
+
+**下一步**
+- 在 Markdown 预览中查看样式清单及各区图片；需要提交时只纳入文档、截图和本账本，不包含下载临时文件。
+
 ### 2026-11-17 — 清理工具库、流程画布及输出表格边界色带
 
 **目标**

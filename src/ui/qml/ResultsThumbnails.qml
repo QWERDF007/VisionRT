@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
 import VisionRT.View 1.0
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 ColumnLayout {
     id: root
@@ -13,8 +13,8 @@ ColumnLayout {
     spacing: 0
     Rectangle {
         Layout.fillWidth: true
-        Layout.preferredHeight: 36
-        color: WorkbenchStyle.tabBarBg
+        Layout.preferredHeight: VisionRTSize.BarSize
+        color: QuiColor.Primary
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
@@ -24,8 +24,12 @@ ColumnLayout {
         }
         QuiComboBox {
             id: outputChoice
-            anchors.fill: parent
-            anchors.margins: 5
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 5
+            anchors.rightMargin: 5
+            height: VisionRTSize.ContentSize
             model: root.controller.imageOutputs
             textRole: "name"
             valueRole: "id"
@@ -60,9 +64,9 @@ ColumnLayout {
             delegate: Rectangle {
                 required property int index
                 width: thumbnails.width - 8
-                height: ResultsStyle.thumbnailRowHeight
+                height: VisionRTSize.ThumbnailHeight + QuiFont.Caption.pixelSize + 15
                 anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                color: index === root.controller.imageIndex ? ToolTreeStyle.treeItemSelectedBg : QuiColor.Button
+                color: QuiColor.Primary
                 border.color: index === root.controller.imageIndex ? QuiColor.Highlight : QuiColor.Border
                 border.width: index === root.controller.imageIndex ? 2 : 1
                 radius: 3
@@ -73,14 +77,14 @@ ColumnLayout {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.margins: 5
-                    height: ResultsStyle.thumbnailImageHeight
+                    height: VisionRTSize.ThumbnailHeight
                     readOnly: true
                     enabled: false
-                    inputRoiColor: ResultsStyle.inputRoiColor
-                    outputRoiColor: ResultsStyle.outputRoiColor
-                    assistRoiColor: ResultsStyle.assistRoiColor
-                    roiStrokeWidth: ResultsStyle.roiStrokeWidth
-                    roiHandleSize: ResultsStyle.roiHandleSize
+                    inputRoiColor: VisionRTColor.InputROI
+                    outputRoiColor: VisionRTColor.OutputROI
+                    assistRoiColor: VisionRTColor.InputROI
+                    roiStrokeWidth: 2
+                    roiHandleSize: 4
                     Component.onCompleted: root.controller.attachViewport(thumbnail)
                     onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
                 }
@@ -110,18 +114,22 @@ ColumnLayout {
     }
     Rectangle {
         Layout.fillWidth: true
-        Layout.preferredHeight: 36
+        Layout.preferredHeight: VisionRTSize.BarSize
         visible: root.controller.trainingAvailable
         color: QuiColor.Button
         QuiButton {
-            anchors.fill: parent
-            anchors.margins: 5
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 5
+            anchors.rightMargin: 5
+            height: VisionRTSize.ButtonSize
             text: "加入训练"
             font: QuiFont.Body
             normalColor: QuiColor.Button
             hoverColor: QuiColor.Hovered
             pressedColor: QuiColor.ItemPress
-            textColor: enabled ? QuiColor.Highlight : WorkbenchStyle.iconMuted
+            textColor: enabled ? QuiColor.Highlight : QuiColor.FontCaption
             opacity: 1
             enabled: root.controller.canAddTrainingImage
             onClicked: root.controller.addTrainingImage()

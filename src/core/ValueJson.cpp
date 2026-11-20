@@ -334,30 +334,13 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
         if (field.key() != "type" && field.key() != "dtype" && field.key() != "rank")
             throw ContractError("TypeSpec 包含未知字段：" + field.key().toStdString());
     TypeSpec type;
-    const auto name = string(json.value("type"));
-    bool found = false;
-    for (int index = 0; index <= static_cast<int>(Type::ROI); ++index)
-        if (name == typeName(static_cast<Type>(index)))
-        {
-            type.type = static_cast<Type>(index);
-            found = true;
-            break;
-        }
-    if (!found)
-        throw ContractError("未知类型：" + name);
-    if (json.contains("dtype"))
-    {
-        const auto dtype = string(json.value("dtype"));
-        found = false;
-        for (int index = 0; index <= static_cast<int>(DType::String); ++index)
-            if (dtype == dtypeName(static_cast<DType>(index)))
-            {
-                type.dtype = static_cast<DType>(index);
-                found = true;
-                break;
-            }
-        if (!found)
-            throw ContractError("未知 dtype：" + dtype);
+    const auto code = integer(json.value("type"));
+    if (code < 0 || code > static_cast<int>(Type::ROI)) throw ContractError("未知类型编码");
+    type.type = static_cast<Type>(code);
+    if (json.contains("dtype")) {
+        const auto dtype = integer(json.value("dtype"));
+        if (dtype < 0 || dtype > static_cast<int>(DType::String)) throw ContractError("未知元素类型编码");
+        type.dtype = static_cast<DType>(dtype);
     }
     if (json.contains("rank"))
     {
@@ -373,10 +356,10 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
 QJsonObject ValueJson::encodeType(const TypeSpec &type)
 {
     validateTypeSpec(type);
-    QJsonObject json{{"type", typeName(type.type)}};
+    QJsonObject json{{"type", static_cast<int>(type.type)}};
     if (type.type == Type::Array)
     {
-        json.insert("dtype", dtypeName(*type.dtype));
+        json.insert("dtype", static_cast<int>(*type.dtype));
         json.insert("rank", type.rank);
     }
     return json;

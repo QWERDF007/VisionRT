@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Item {
     id: root
@@ -12,11 +12,11 @@ Item {
     readonly property real sourceY: route.length ? route[0].y : 0
     readonly property real targetX: route.length ? route[route.length - 1].x : 0
     readonly property real targetY: route.length ? route[route.length - 1].y : 0
-    property color lineColor: WorkbenchStyle.iconMuted
+    property color lineColor: QuiColor.Background
     property real lineWidth: 1.5
     property real viewScale: 1
     property int connectionCount: 1
-    signal activated()
+    signal activated
     Repeater {
         model: Math.max(0, root.route.length - 1)
         Item {
@@ -49,16 +49,32 @@ Item {
     Shape {
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
-            strokeColor: root.lineColor; strokeWidth: root.lineWidth; fillColor: "transparent"
-            capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
-            PathPolyline { path: root.route }
+            strokeColor: root.lineColor
+            strokeWidth: root.lineWidth
+            fillColor: "transparent"
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+            PathPolyline {
+                path: root.route
+            }
         }
         ShapePath {
-            strokeColor: "transparent"; fillColor: root.lineColor
-            startX: root.targetX; startY: root.targetY
-            PathLine { x: root.targetX - 4; y: root.targetY - 6 }
-            PathLine { x: root.targetX + 4; y: root.targetY - 6 }
-            PathLine { x: root.targetX; y: root.targetY }
+            strokeColor: "transparent"
+            fillColor: root.lineColor
+            startX: root.targetX
+            startY: root.targetY
+            PathLine {
+                x: root.targetX - 4
+                y: root.targetY - 6
+            }
+            PathLine {
+                x: root.targetX + 4
+                y: root.targetY - 6
+            }
+            PathLine {
+                x: root.targetX
+                y: root.targetY
+            }
         }
     }
 }

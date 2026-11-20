@@ -13,12 +13,6 @@
 
 namespace visionrt {
 using NodeId = std::uint64_t;
-enum class BindingMode
-{
-    Literal,
-    Upstream
-};
-
 struct SourcePort
 {
     NodeId node = 0;

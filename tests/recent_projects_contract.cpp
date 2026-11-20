@@ -1,3 +1,4 @@
+#include "SettingsFileGuard.h"
 #ifdef NDEBUG
 #    undef NDEBUG
 #endif
@@ -51,6 +52,7 @@ QStringList texts(const QVector<RecentProjectEntry> &entries)
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
+    visionrt::testing::SettingsFileGuard settingsFile;
     QCoreApplication::setOrganizationName(QStringLiteral("VisionRT"));
     QCoreApplication::setApplicationName(QStringLiteral("recent-projects-contract"));
     // Preferences live in the software directory; the fixture removes only its own file so a test

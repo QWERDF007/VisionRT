@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
@@ -159,7 +160,7 @@ class Tool:
     idle();
     app.runNode();
     idle();
-    require(stateOf(node).value("state").toString() == "failed", "publication failure did not fail");
+    require(stateOf(node).value("state").toInt() == static_cast<int>(NodeState::Failed), "publication failure did not fail");
     require(stateOf(node).value("statusMessage").toString().contains("受控发布失败"),
             "publication failure lost its message");
     const auto failedValue = outputs->capture(kValueOutput);

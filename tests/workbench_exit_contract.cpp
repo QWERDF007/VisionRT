@@ -3,7 +3,7 @@
 #include "log/LogService.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/ToolEditorController.h"
 
 #include <QCoreApplication>
@@ -35,7 +35,7 @@ try
         testsupport::useBuildInterpreter();
         QGuiApplication application(argc, argv);
         QQuickStyle::setStyle("Basic");
-        visionrt::initializeUiStyle();
+        visionrt::registerUiTypes();
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
         visionrt::testing::WorkbenchInstallation installation;
         require(visionrt::LogService::instance().start(visionrt::LogConfig{}, installation.directory() + "/logs/exit.log"),

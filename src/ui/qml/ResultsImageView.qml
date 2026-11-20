@@ -1,7 +1,7 @@
 import QtQuick
 import quickui
 import VisionRT.View 1.0
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Rectangle {
     id: root
@@ -18,7 +18,7 @@ Rectangle {
         viewport.fitOneToOne();
     }
 
-    color: ResultsStyle.viewportBg
+    color: QuiColor.Background
     ImageViewport {
         id: viewport
         objectName: "imageViewport"
@@ -26,11 +26,11 @@ Rectangle {
         readOnly: root.controller.runtimeBusy
         // Zoom, pan and ROI gestures are user input; a run owns the interaction.
         enabled: root.controller.workspaceEnabled
-        inputRoiColor: ResultsStyle.inputRoiColor
-        outputRoiColor: ResultsStyle.outputRoiColor
-        assistRoiColor: ResultsStyle.assistRoiColor
-        roiStrokeWidth: ResultsStyle.roiStrokeWidth
-        roiHandleSize: ResultsStyle.roiHandleSize
+        inputRoiColor: VisionRTColor.InputROI
+        outputRoiColor: VisionRTColor.OutputROI
+        assistRoiColor: VisionRTColor.InputROI
+        roiStrokeWidth: 2
+        roiHandleSize: 4
         Component.onCompleted: root.controller.attachViewport(viewport)
         onAssistHover: function (point) {
             root.controller.assistHover(point.x, point.y);
@@ -51,7 +51,7 @@ Rectangle {
         anchors.margins: 5
         text: viewport.hasImage ? Math.round(viewport.zoom * 100) + "%" : ""
         font: QuiFont.Body
-        color: QuiColor.FontDark
+        color: QuiColor.FontCaption
     }
     QuiText {
         anchors.bottom: parent.bottom
@@ -61,6 +61,6 @@ Rectangle {
         text: viewport.statusText
         visible: text.length > 0
         wrapMode: Text.Wrap
-        color: WorkbenchStyle.warning
+        color: QuiColor.Error
     }
 }

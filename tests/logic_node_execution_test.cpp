@@ -52,9 +52,9 @@ ToolDefinition conditionTool()
     PortDefinition mode;
     mode.id               = kConditionModePort;
     mode.nameZh         = "条件来源";
-    mode.type         = {Type::String};
-    mode.defaultValue = std::string{"formula"};
-    mode.options      = {std::string{"formula"}, std::string{"upstream"}};
+    mode.type         = {Type::Int};
+    mode.defaultValue = std::int64_t{0};
+    mode.options      = {std::int64_t{0}, std::int64_t{1}};
     tool.initParams.push_back(std::move(mode));
     // 条件分支的派生输出编号固定：成立 2、否则 3，两路状态 4、5。
     tool.outputs     = {{kStatusCodePort, "状态码", {Type::Int}},

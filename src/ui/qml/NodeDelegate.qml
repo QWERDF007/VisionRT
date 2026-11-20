@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Rectangle {
     id: root
@@ -12,7 +12,7 @@ Rectangle {
     required property string nodeTitle
     required property string nodeCategory
     required property string nodeVersion
-    required property string nodeStatus
+    required property int nodeStatus
     required property bool nodeMissing
     required property string nodeTimingText
     property bool selected: false
@@ -20,59 +20,75 @@ Rectangle {
     signal pointerPressed(var mouse, var item)
     signal pointerMoved(var mouse, var item)
     signal pointerReleased(var mouse, var item)
-    signal executeRequested()
-    signal hoverEntered()
-    signal hoverExited()
-    width: FlowStyle.nodeWidth
-    height: FlowStyle.nodeHeight
+    signal executeRequested
+    signal hoverEntered
+    signal hoverExited
+    width: VisionRTSize.NodeWidth
+    height: VisionRTSize.NodeHeight
     radius: 2
     antialiasing: true
-    color: "#ffffff"
+    color: QuiColor.Primary
     objectName: "flowNode_" + nodeId
 
-    readonly property string nodeState: root.nodeStatus || "idle"
-    readonly property bool isError: root.nodeState === "failed" || root.nodeMissing === true
-    readonly property bool runningNow: root.nodeState === "running"
+    readonly property int nodeState: root.nodeStatus
+    readonly property bool isError: root.nodeState === NodeState.Failed || root.nodeMissing === true
+    readonly property bool runningNow: root.nodeState === NodeState.Running
     readonly property color headerBg: {
-        if (root.runningNow) return FlowStyle.nodeStateGreen
-        if (root.nodeState === "failed") return FlowStyle.nodeHeaderRed
-        return FlowStyle.nodeHeaderGray
+        if (root.runningNow)
+            return VisionRTColor.NodeGreen;
+        if (root.nodeState === NodeState.Failed)
+            return QuiColor.Error;
+        return QuiColor.Background;
     }
     readonly property color headerText: {
-        if (root.runningNow) return QuiColor.White
-        if (root.nodeState === "failed") return QuiColor.Error
-        return QuiColor.FontDark
+        if (root.runningNow)
+            return QuiColor.White;
+        if (root.nodeState === NodeState.Failed)
+            return QuiColor.White;
+        return QuiColor.FontPrimary;
     }
 
     // The running border is its own layer: selecting a node must not hide that it is running.
-    border.color: root.runningNow ? FlowStyle.nodeStateGreen
-                                  : (root.selected ? "transparent" : (root.isError ? QuiColor.Error : "#c0c6cf"))
-    border.width: root.runningNow ? 2 : (root.selected ? 0 : 1)
+    border.color: root.runningNow ? VisionRTColor.NodeGreen : (root.isError ? QuiColor.Error : QuiColor.Border)
+    border.width: root.runningNow ? 2 : 1
 
     function getIcon(title, category) {
-        let t = (title + " " + category).toLowerCase()
-        if (t.indexOf("裁") >= 0 || t.indexOf("crop") >= 0 || t.indexOf("roi") >= 0) return QuiFontIcon.Crop
-        if (t.indexOf("读") >= 0 || t.indexOf("图") >= 0 || t.indexOf("image") >= 0) return QuiFontIcon.Camera
-        if (t.indexOf("检") >= 0 || t.indexOf("detect") >= 0 || t.indexOf("yolo") >= 0) return QuiFontIcon.Search
-        if (t.indexOf("示") >= 0 || t.indexOf("result") >= 0 || t.indexOf("view") >= 0) return QuiFontIcon.AllApps
-        if (t.indexOf("转") >= 0 || t.indexOf("convert") >= 0) return QuiFontIcon.Refresh
-        return QuiFontIcon.Settings
+        let t = (title + " " + category).toLowerCase();
+        if (t.indexOf("裁") >= 0 || t.indexOf("crop") >= 0 || t.indexOf("roi") >= 0)
+            return QuiFontIcon.Crop;
+        if (t.indexOf("读") >= 0 || t.indexOf("图") >= 0 || t.indexOf("image") >= 0)
+            return QuiFontIcon.Camera;
+        if (t.indexOf("检") >= 0 || t.indexOf("detect") >= 0 || t.indexOf("yolo") >= 0)
+            return QuiFontIcon.Search;
+        if (t.indexOf("示") >= 0 || t.indexOf("result") >= 0 || t.indexOf("view") >= 0)
+            return QuiFontIcon.AllApps;
+        if (t.indexOf("转") >= 0 || t.indexOf("convert") >= 0)
+            return QuiFontIcon.Refresh;
+        return QuiFontIcon.Settings;
     }
 
     // Tool identity stays independent of the editable node title.
     Rectangle {
         id: nodeHeader
-        anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.margins: 1
         height: 18
         radius: 1
         color: root.headerBg
         Rectangle {
-            anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
-            height: 2; color: parent.color
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 2
+            color: parent.color
         }
         RowLayout {
-            anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 4
+            anchors.fill: parent
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            spacing: 4
             QuiText {
                 objectName: "nodeToolName_" + root.nodeId
                 text: root.nodeToolName
@@ -93,21 +109,31 @@ Rectangle {
 
     // Body content: Icon directly placed on left, Title on top, Timing below
     RowLayout {
-        anchors.top: nodeHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-        anchors.leftMargin: 8; anchors.rightMargin: 8; anchors.topMargin: 2; anchors.bottomMargin: 4
+        anchors.top: nodeHeader.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 8
+        anchors.rightMargin: 8
+        anchors.topMargin: 2
+        anchors.bottomMargin: 4
         spacing: 8
         QuiTextIcon {
-            Layout.preferredWidth: 16; Layout.preferredHeight: 16
+            Layout.preferredWidth: 16
+            Layout.preferredHeight: 16
             Layout.alignment: Qt.AlignVCenter
             iconSource: root.getIcon(root.nodeToolName, root.nodeCategory || "")
-            iconSize: 20
-            iconColor: root.isError ? QuiColor.Error : (root.nodeState === "running" ? FlowStyle.nodeStateGreen : FlowStyle.nodeStateGray)
+            iconSize: VisionRTSize.IconSize
+            iconColor: root.isError ? QuiColor.Error : (root.nodeState === NodeState.Running ? VisionRTColor.NodeGreen : QuiColor.FontCaption)
             renderType: Text.QtRendering
         }
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 1
+            Layout.fillWidth: true
+            spacing: 1
             QuiText {
-                text: root.nodeTitle; Layout.fillWidth: true; elide: Text.ElideRight
+                text: root.nodeTitle
+                Layout.fillWidth: true
+                elide: Text.ElideRight
                 renderType: Text.QtRendering
                 font: QuiFont.Body
                 color: QuiColor.FontPrimary
@@ -116,7 +142,7 @@ Rectangle {
                 text: root.nodeTimingText
                 renderType: Text.QtRendering
                 font: QuiFont.Caption
-                color: WorkbenchStyle.iconMuted
+                color: QuiColor.FontCaption
             }
         }
     }
@@ -128,29 +154,54 @@ Rectangle {
         ShapePath {
             id: selectionPath
             readonly property real inset: 1 / Math.max(0.01, root.viewScale)
-            strokeColor: "#1887d8"
+            strokeColor: QuiColor.Highlight
             strokeWidth: 2 / Math.max(0.01, root.viewScale)
             strokeStyle: ShapePath.DashLine
             dashPattern: [4, 4]
             fillColor: "transparent"
-            startX: selectionPath.inset; startY: selectionPath.inset
-            PathLine { x: root.width - selectionPath.inset; y: selectionPath.inset }
-            PathLine { x: root.width - selectionPath.inset; y: root.height - selectionPath.inset }
-            PathLine { x: selectionPath.inset; y: root.height - selectionPath.inset }
-            PathLine { x: selectionPath.inset; y: selectionPath.inset }
+            startX: selectionPath.inset
+            startY: selectionPath.inset
+            PathLine {
+                x: root.width - selectionPath.inset
+                y: selectionPath.inset
+            }
+            PathLine {
+                x: root.width - selectionPath.inset
+                y: root.height - selectionPath.inset
+            }
+            PathLine {
+                x: selectionPath.inset
+                y: root.height - selectionPath.inset
+            }
+            PathLine {
+                x: selectionPath.inset
+                y: selectionPath.inset
+            }
         }
     }
 
     MouseArea {
-        id: pointer; anchors.fill: parent; hoverEnabled: true; preventStealing: true
+        id: pointer
+        anchors.fill: parent
+        hoverEnabled: true
+        preventStealing: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onPressed: function(mouse) { root.pointerPressed(mouse, root) }
-        onPositionChanged: function(mouse) {
-            if (pressed) root.pointerMoved(mouse, root)
-            else root.hoverEntered()
+        onPressed: function (mouse) {
+            root.pointerPressed(mouse, root);
         }
-        onReleased: function(mouse) { root.pointerReleased(mouse, root) }
-        onDoubleClicked: function(mouse) { if (mouse.button === Qt.LeftButton && app.workspaceEnabled) root.executeRequested() }
+        onPositionChanged: function (mouse) {
+            if (pressed)
+                root.pointerMoved(mouse, root);
+            else
+                root.hoverEntered();
+        }
+        onReleased: function (mouse) {
+            root.pointerReleased(mouse, root);
+        }
+        onDoubleClicked: function (mouse) {
+            if (mouse.button === Qt.LeftButton && app.workspaceEnabled)
+                root.executeRequested();
+        }
         onEntered: root.hoverEntered()
         onExited: root.hoverExited()
     }

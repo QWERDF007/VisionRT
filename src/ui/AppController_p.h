@@ -77,7 +77,7 @@ struct AppController::Impl : PresentationHost
     // Reason the last settings commit was refused; shown by the settings window and cleared by the
     // next successful apply.
     QString                     settingsError;
-    QString                     settingsErrorField;
+    SettingsPage                settingsErrorField = SettingsPage::None;
     // A draft whose interpreter is being checked. Exactly one commit is in flight: a second apply is
     // refused until the check answers, so no two probes overlap.
     std::optional<Settings>     pendingSettings;

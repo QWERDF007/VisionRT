@@ -57,7 +57,7 @@ try
   "name_zh": "大图存储",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "storage",
     "file": "tool.py",
     "symbol": "source"
@@ -66,32 +66,39 @@ try
     {
       "id": 1,
       "name_zh": "执行闸门",
-      "type": "string"
+      "type": {
+        "type": 3
+      }
     }
   ],
   "outputs": [
     {
       "id": 2,
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
-        "color_order": "BGR",
+        "color_order": 2,
         "visible": true
       }
     },
     {
       "id": 3,
       "name_zh": "对象编号",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })");
     write("tools/custom/storage/probe.json", R"({
   "name_en": "test.storage.probe",
   "name_zh": "存储计数",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "storage",
     "file": "tool.py",
     "symbol": "probe"
@@ -100,19 +107,28 @@ try
     {
       "id": 2,
       "name_zh": "分配",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     },
     {
       "id": 3,
       "name_zh": "释放",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     },
     {
       "id": 4,
       "name_zh": "存活",
-      "type": "vec_int"
+      "type": {
+        "type": 5,
+        "dtype": 2,
+        "rank": 1
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref
@@ -260,7 +276,7 @@ def probe(inputs):
     require(QTest::qWaitFor([&] { return QFile::exists(gate + ".entered"); }, 5000),
             "large-image execute did not enter its controlled gate");
     app.deleteNodes({lateNode});
-    require(app.runState() == "Stopping", "deleting an executing node did not request Stop");
+    require(app.runState() == RuntimeState::Stopping, "deleting an executing node did not request Stop");
     QTest::qWait(40);
     require(!QFile::exists(gate + ".returned") && app.nodes().size() == 2,
             "node was removed before its tool invocation could return");

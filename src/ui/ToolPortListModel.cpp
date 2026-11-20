@@ -16,11 +16,17 @@ PortValue parseEditorValue(const QString &text, const TypeSpec &type)
     return ValueJson::parse(text, type);
 }
 
-const char *relationLabel(const std::string &kind)
+QVariantMap referenceMap(const std::optional<PortRef> &reference)
 {
-    if (kind == "image")
+    if (!reference) return {};
+    return {{"stage", static_cast<int>(reference->stage)}, {"id", reference->id}};
+}
+
+const char *relationLabel(RelationKind kind)
+{
+    if (kind == RelationKind::Image)
         return "图像关联";
-    if (kind == "alignment")
+    if (kind == RelationKind::Alignment)
         return "对齐关系";
     return "同几何关系";
 }
@@ -112,7 +118,7 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         case IdRole:          return static_cast<quint32>(port.id);
         case NameZhRole:      return QString::fromStdString(port.nameZh);
         case NameEnRole:      return QString();
-        case TypeRole:        return QString::fromStdString(typeToken(port.type));
+        case TypeRole:        return ValueJson::encodeType(port.type).toVariantMap();
         case DisplayTypeRole: return displayTypeName(port.type);
         case DefaultValueRole:return isMissing(port.defaultValue) ? QString() : ValueJson::text(port.defaultValue, port.type);
         case IsFixedRole:     return true;
@@ -120,13 +126,13 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         case MaxRole:         return QString();
         case StepRole:        return QString();
         case DecimalsRole:    return QString();
-        case ImageRefRole:    return QString();
-        case AlignmentRefRole:return QString();
-        case SameGeometryRefRole: return QString();
+        case ImageRefRole:    return QVariantMap();
+        case AlignmentRefRole:return QVariantMap();
+        case SameGeometryRefRole: return QVariantMap();
         case OptionsTextRole: return QString();
-        case TabRole:         return QString::fromStdString(port.tab);
+        case TabRole:         return static_cast<int>(port.tab);
         case GroupRole:       return QString();
-        case EditorRole:      return QString();
+        case EditorRole:      return static_cast<int>(EditorKind::Default);
         }
         return {};
     }
@@ -150,7 +156,7 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
     case NameEnRole:
         return QString::fromStdString(port.nameEn);
     case TypeRole:
-        return QString::fromStdString(typeToken(port.type));
+        return ValueJson::encodeType(port.type).toVariantMap();
     case DisplayTypeRole:
         return displayTypeName(port.type);
     case DefaultValueRole:
@@ -166,11 +172,11 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
     case DecimalsRole:
         return port.decimals ? QString::number(*port.decimals) : QString();
     case ImageRefRole:
-        return port.image ? QString::fromStdString(formatPortRef(*port.image)) : QString();
+        return referenceMap(port.image);
     case AlignmentRefRole:
-        return port.alignment ? QString::fromStdString(formatPortRef(*port.alignment)) : QString();
+        return referenceMap(port.alignment);
     case SameGeometryRefRole:
-        return port.sameGeometryAs ? QString::fromStdString(formatPortRef(*port.sameGeometryAs)) : QString();
+        return referenceMap(port.sameGeometryAs);
     case OptionsTextRole:
     {
         QStringList lines;
@@ -179,11 +185,11 @@ QVariant ToolPortListModel::data(const QModelIndex &index, int role) const
         return lines.join(QLatin1Char('\n'));
     }
     case TabRole:
-        return QString::fromStdString(port.tab);
+        return static_cast<int>(port.tab);
     case GroupRole:
         return QString::fromStdString(port.group);
     case EditorRole:
-        return QString::fromStdString(port.editor);
+        return static_cast<int>(port.editor);
     case ShowImageRole:
         return port.imageVisible;
     }
@@ -197,7 +203,7 @@ QHash<int, QByteArray> ToolPortListModel::roleNames() const
         {IdRole,           "portId"},
         {NameZhRole,       "nameZh"},
         {NameEnRole,       "nameEn"},
-        {TypeRole,         "typeToken"},
+        {TypeRole,         "typeSpec"},
         {DisplayTypeRole,  "displayType"},
         {DefaultValueRole, "defaultValue"},
         {IsFixedRole,      "isFixed"},
@@ -216,7 +222,7 @@ QHash<int, QByteArray> ToolPortListModel::roleNames() const
     };
 }
 
-bool ToolPortListModel::addPort(const QString &nameZh, const QString &typeToken, const QString &defaultValue)
+bool ToolPortListModel::addPort(const QString &nameZh, const QVariantMap &type, const QString &defaultValue)
 {
     if (!acceptsEdits() || nameZh.trimmed().isEmpty())
         return false;
@@ -239,7 +245,7 @@ bool ToolPortListModel::addPort(const QString &nameZh, const QString &typeToken,
     port.nameZh = nameZh.trimmed().toStdString();
     try
     {
-        port.type = parseTypeToken(typeToken.toStdString());
+        port.type = ValueJson::decodeType(QJsonObject::fromVariantMap(type));
         port.defaultValue = defaultValue.isEmpty() ? portDefault(port) : parseEditorValue(defaultValue, port.type);
     }
     catch (const std::exception &error)
@@ -345,7 +351,7 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
 
     // A type change is not a field edit: it reconciles the whole declaration, so it has its own
     // entry point instead of a map key that would silently ignore values and relations.
-    if (properties.contains("typeToken"))
+    if (properties.contains("typeSpec"))
     {
         emit rejected(QStringLiteral("改变参数类型请使用类型选择"));
         return false;
@@ -363,7 +369,7 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
         }
         catch (const std::exception &error)
         {
-            throw ContractError(std::string(label) + " 不是合法的 " + typeToken(type) + " 值：" + error.what());
+            throw ContractError(std::string(label) + " 不是合法的 " + typeName(type.type) + " 值：" + error.what());
         }
     };
 
@@ -379,7 +385,7 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
         if (properties.contains("nameEn"))
             candidate.nameEn = properties.value("nameEn").toString().trimmed().toStdString();
         if (properties.contains("tab"))
-            candidate.tab = properties.value("tab").toString().trimmed().toStdString();
+            candidate.tab = static_cast<ParameterTab>(properties.value("tab").toInt());
         if (properties.contains("group"))
             candidate.group = properties.value("group").toString().trimmed().toStdString();
         if (properties.contains("defaultValue"))
@@ -411,51 +417,35 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
         }
         if (properties.contains("editor"))
         {
-            const std::string editor = properties.value("editor").toString().trimmed().toStdString();
-            if (!editor.empty())
-            {
-                const auto choices = editorChoices(candidate.type);
-                if (std::find(choices.begin(), choices.end(), std::string_view{editor}) == choices.end())
-                    throw ContractError("编辑器 " + editor + " 不能用于 " + typeToken(candidate.type) + " 参数");
-            }
+            const auto editor = static_cast<EditorKind>(properties.value("editor").toInt());
             candidate.editor = editor;
         }
-        const auto relation = [&candidate](const QVariant &value, const std::string &kind) -> std::optional<PortRef> {
-            const auto text = value.toString().trimmed();
-            if (text.isEmpty())
-                return std::nullopt;
-            PortRef reference;
-            try
-            {
-                reference = parsePortRef(text.toStdString());
-            }
-            catch (const std::exception &error)
-            {
-                throw ContractError(std::string(relationLabel(kind)) + "：" + error.what());
-            }
-            return reference;
+        const auto relation = [](const QVariant &value) -> std::optional<PortRef> {
+            const auto fields = value.toMap();
+            if (fields.isEmpty()) return std::nullopt;
+            return PortRef{static_cast<PortStage>(fields.value("stage").toInt()), fields.value("id").toUInt()};
         };
         // Each relation is checked against the declaration being edited, not only against a type
         // table: a reference the declaration would reject never reaches the draft.
         if (properties.contains("image"))
         {
-            auto reference = relation(properties.value("image"), "image");
+            auto reference = relation(properties.value("image"));
             if (reference)
-                requireRelationTarget(candidate, "image", *reference);
+                requireRelationTarget(candidate, RelationKind::Image, *reference);
             candidate.image = reference;
         }
         if (properties.contains("alignment"))
         {
-            auto reference = relation(properties.value("alignment"), "alignment");
+            auto reference = relation(properties.value("alignment"));
             if (reference)
-                requireRelationTarget(candidate, "alignment", *reference);
+                requireRelationTarget(candidate, RelationKind::Alignment, *reference);
             candidate.alignment = reference;
         }
         if (properties.contains("same_geometry_as"))
         {
-            auto reference = relation(properties.value("same_geometry_as"), "same_geometry_as");
+            auto reference = relation(properties.value("same_geometry_as"));
             if (reference)
-                requireRelationTarget(candidate, "same_geometry_as", *reference);
+                requireRelationTarget(candidate, RelationKind::SameGeometry, *reference);
             candidate.sameGeometryAs = reference;
         }
         if (properties.contains("options"))
@@ -485,7 +475,7 @@ bool ToolPortListModel::updatePort(int row, const QVariantMap &properties)
     return true;
 }
 
-QStringList ToolPortListModel::typeChangeImpact(int row, const QString &typeToken) const
+QStringList ToolPortListModel::typeChangeImpact(int row, const QVariantMap &type) const
 {
     QStringList impact;
     if (!draft_ || isFixedRow(row))
@@ -498,10 +488,10 @@ QStringList ToolPortListModel::typeChangeImpact(int row, const QString &typeToke
     if (businessIndex < 0 || businessIndex >= static_cast<int>(ports->size()))
         return impact;
 
-    TypeSpec type;
+    TypeSpec spec;
     try
     {
-        type = parseTypeToken(typeToken.toStdString());
+        spec = ValueJson::decodeType(QJsonObject::fromVariantMap(type));
     }
     catch (const std::exception &)
     {
@@ -513,7 +503,7 @@ QStringList ToolPortListModel::typeChangeImpact(int row, const QString &typeToke
     ToolDefinition copy = *draft_;
     try
     {
-        for (const auto &field : retypePort(copy, stage_, (*ports)[businessIndex].id, type))
+        for (const auto &field : retypePort(copy, stage_, (*ports)[businessIndex].id, spec))
             impact.append(QString::fromStdString(field));
     }
     catch (const std::exception &)
@@ -524,7 +514,7 @@ QStringList ToolPortListModel::typeChangeImpact(int row, const QString &typeToke
     return impact;
 }
 
-bool ToolPortListModel::changeType(int row, const QString &typeToken)
+bool ToolPortListModel::changeType(int row, const QVariantMap &type)
 {
     if (!acceptsEdits() || isFixedRow(row))
         return false;
@@ -536,10 +526,10 @@ bool ToolPortListModel::changeType(int row, const QString &typeToken)
     if (businessIndex < 0 || businessIndex >= static_cast<int>(ports->size()))
         return false;
 
-    TypeSpec type;
+    TypeSpec spec;
     try
     {
-        type = parseTypeToken(typeToken.toStdString());
+        spec = ValueJson::decodeType(QJsonObject::fromVariantMap(type));
     }
     catch (const std::exception &error)
     {
@@ -549,7 +539,7 @@ bool ToolPortListModel::changeType(int row, const QString &typeToken)
 
     try
     {
-        const auto clearedFields = retypePort(*draft_, stage_, (*ports)[businessIndex].id, type);
+        const auto clearedFields = retypePort(*draft_, stage_, (*ports)[businessIndex].id, spec);
         if (rowCount() > 0)
             emit dataChanged(index(0, 0), index(rowCount() - 1, 0));
         emit draftModified();
@@ -581,7 +571,7 @@ const PortDefinition *ToolPortListModel::findPort(PortStage stage, PortId id) co
     return found == ports.end() ? nullptr : &*found;
 }
 
-void ToolPortListModel::requireRelationTarget(const PortDefinition &port, const std::string &kind,
+void ToolPortListModel::requireRelationTarget(const PortDefinition &port, RelationKind kind,
                                               const PortRef &reference) const
 {
     const auto *target = findPort(reference.stage, reference.id);
@@ -589,13 +579,13 @@ void ToolPortListModel::requireRelationTarget(const PortDefinition &port, const 
         throw ContractError(std::string(relationLabel(kind)) + " 引用了不存在的参数：" + formatPortRef(reference));
 
     const bool self = reference.stage == stage_ && reference.id == port.id;
-    if (kind == "image" || kind == "same_geometry_as")
+    if (kind == RelationKind::Image || kind == RelationKind::SameGeometry)
     {
         if (self || target->type.type != Type::Image)
             throw ContractError(std::string(relationLabel(kind)) + " 必须指向图像参数：" + formatPortRef(reference));
         return;
     }
-    if (kind == "alignment")
+    if (kind == RelationKind::Alignment)
     {
         if (self || reference.stage != PortStage::Inputs
             || target->type != TypeSpec{Type::Array, DType::Float64, 3})
@@ -603,13 +593,13 @@ void ToolPortListModel::requireRelationTarget(const PortDefinition &port, const 
                                 + " 必须指向另一个 Array(float64, 3) 输入：" + formatPortRef(reference));
         return;
     }
-    if (self || reference.stage != stage_ || target->type != TypeSpec{Type::String} || port.editor != "path")
+    if (self || reference.stage != stage_ || target->type != TypeSpec{Type::String} || port.editor != EditorKind::Path)
         throw ContractError(std::string(relationLabel(kind))
                             + " 必须指向同阶段另一个 String 参数，且当前参数使用 path 编辑器："
                             + formatPortRef(reference));
 }
 
-QVariantList ToolPortListModel::relationCandidates(int row, const QString &kind) const
+QVariantList ToolPortListModel::relationCandidates(int row, RelationKind kind) const
 {
     QVariantList result;
     if (!draft_ || isFixedRow(row))
@@ -620,10 +610,6 @@ QVariantList ToolPortListModel::relationCandidates(int row, const QString &kind)
         return result;
     const int businessIndex = row - fixedRowCount();
     if (businessIndex < 0 || businessIndex >= static_cast<int>(ports->size()))
-        return result;
-
-    const std::string relation = kind.toStdString();
-    if (relation != "image" && relation != "alignment" && relation != "same_geometry_as")
         return result;
 
     const auto &port = (*ports)[businessIndex];
@@ -645,14 +631,14 @@ QVariantList ToolPortListModel::relationCandidates(int row, const QString &kind)
             const PortRef reference{stage, other.id};
             try
             {
-                requireRelationTarget(port, relation, reference);
+                requireRelationTarget(port, kind, reference);
             }
             catch (const ContractError &)
             {
                 continue;
             }
             QVariantMap item;
-            item.insert("ref", QString::fromStdString(formatPortRef(reference)));
+            item.insert("ref", referenceMap(reference));
             item.insert("label", QStringLiteral("%1：%2").arg(QString::fromUtf8(stageLabel(stage)),
                                                               QString::fromStdString(other.nameZh)));
             result.append(item);
@@ -663,40 +649,12 @@ QVariantList ToolPortListModel::relationCandidates(int row, const QString &kind)
 
 QVariantList ToolPortListModel::editorOptions(int row) const
 {
-    QVariantList result;
-    if (!draft_ || isFixedRow(row))
-        return result;
-
+    QVariantList result{QVariantMap{{"token", static_cast<int>(EditorKind::Default)}, {"label", "默认"}}};
     const auto *ports = portVector();
-    if (!ports)
-        return result;
-    const int businessIndex = row - fixedRowCount();
-    if (businessIndex < 0 || businessIndex >= static_cast<int>(ports->size()))
-        return result;
-
-    result.append(QVariantMap{{"token", QString()}, {"label", QStringLiteral("默认")}});
-    for (const auto choice : editorChoices((*ports)[businessIndex].type))
-    {
-        const auto token = QString::fromStdString(std::string(choice));
-        QString    label = token;
-        if (token == "number")
-            label = "数字";
-        else if (token == "text")
-            label = "文本";
-        else if (token == "path")
-            label = "路径";
-        else if (token == "bool" || token == "switch")
-            label = "开关";
-        else if (token == "roi")
-            label = "ROI 列表";
-        else if (token == "rect")
-            label = "矩形";
-        else if (token == "array")
-            label = "数组";
-        else if (token == "recursive")
-            label = "递归数组";
-        result.append(QVariantMap{{"token", token}, {"label", label}});
-    }
+    const int business = row - fixedRowCount();
+    if (!ports || business < 0 || business >= static_cast<int>(ports->size())) return result;
+    for (const auto editor : editorChoices((*ports)[business].type))
+        result.push_back(QVariantMap{{"token", static_cast<int>(editor)}, {"label", editorLabel(editor)}});
     return result;
 }
 
@@ -710,7 +668,7 @@ QVariantMap ToolPortListModel::portAt(int row) const
     map.insert("portId", data(idx, IdRole));
     map.insert("nameZh", data(idx, NameZhRole));
     map.insert("nameEn", data(idx, NameEnRole));
-    map.insert("typeToken", data(idx, TypeRole));
+    map.insert("typeSpec", data(idx, TypeRole));
     map.insert("displayType", data(idx, DisplayTypeRole));
     map.insert("defaultValue", data(idx, DefaultValueRole));
     map.insert("isFixed", data(idx, IsFixedRole));

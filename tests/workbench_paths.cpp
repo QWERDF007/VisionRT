@@ -1,5 +1,5 @@
 #include "ui/AppController.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "WorkbenchFixtures.h"
 #include <quickui/QuiNativeFileDialog.h>
 
@@ -78,7 +78,7 @@ void pathEditorsContract()
   "name_zh": "路径测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "Test",
     "file": "run.py",
     "symbol": "run"
@@ -86,25 +86,31 @@ void pathEditorsContract()
   "inputs": [
     {
       "name_zh": "文件",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "original file",
       "ui": {
-        "editor": "path"
+        "editor": 6
       },
       "id": 1
     },
     {
       "name_zh": "目录",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "original folder",
       "ui": {
-        "editor": "path"
+        "editor": 6
       },
       "id": 2
     },
     {
       "name_zh": "模式",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "file",
       "constraints": {
         "options": [
@@ -116,10 +122,12 @@ void pathEditorsContract()
     },
     {
       "name_zh": "动态路径",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "original path",
       "ui": {
-        "editor": "path"
+        "editor": 6
       },
       "id": 4
     }
@@ -127,10 +135,13 @@ void pathEditorsContract()
   "outputs": [
     {
       "name_zh": "模式输出",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
     const QString folderName = QStringLiteral("选择的目录 # %");
@@ -278,14 +289,14 @@ void pathEditorsContract()
     const auto editorKind = [&]
     {
         for (const auto &entry : app.parameters())
-            if (entry.toMap().value("id").toUInt() == kDynamicPath) return entry.toMap().value("editor").toString();
-        return QString{};
+            if (entry.toMap().value("id").toUInt() == kDynamicPath) return static_cast<EditorKind>(entry.toMap().value("editor").toInt());
+        return EditorKind::Default;
     };
     // There is one path editor: the mode value a tool reads is a business value, not a picker
     // selector, and a Missing mode cannot take the field out of it either.
-    require(app.setParameter(kModeInput, false, "file") && editorKind() == "path", "a path field lost its editor");
-    require(app.setParameter(kModeInput, false, "directory") && editorKind() == "path", "path mode changed the editor");
-    require(app.setParameter(kModeInput, false, "null", true) && editorKind() == "path",
+    require(app.setParameter(kModeInput, false, "file") && editorKind() == EditorKind::Path, "a path field lost its editor");
+    require(app.setParameter(kModeInput, false, "directory") && editorKind() == EditorKind::Path, "path mode changed the editor");
+    require(app.setParameter(kModeInput, false, "null", true) && editorKind() == EditorKind::Path,
             "Missing path mode must not remove the path editor");
     const auto localPath = root.filePath(QStringLiteral("文本 %2f # 路径.txt"));
     require(app.setParameterPath(kDynamicPath, false, QUrl::fromLocalFile(localPath)) && value(kDynamicPath) == localPath,
@@ -297,18 +308,18 @@ void pathEditorsContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto modeSource = app.selectedNode();
     app.selectNode(targetNode);
-    require(app.bindInput(app.portContext(kModeInput), modeSource, kModeValueOutput) && editorKind() == "path",
+    require(app.bindInput(app.portContext(kModeInput), modeSource, kModeValueOutput) && editorKind() == EditorKind::Path,
             "an unresolved upstream mode must not change the path editor");
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "upstream path mode did not finish execution");
-    require(editorKind() == "path", "upstream path mode fixture did not keep its path editor");
+    require(editorKind() == EditorKind::Path, "upstream path mode fixture did not keep its path editor");
     require(QTest::qWaitFor([&] { return findVisible([&](QQuickItem *item)
     {
         return item->property("text").toString() == QStringLiteral("选择路径")
             && item->metaObject()->indexOfSignal("clicked()") >= 0;
     }) != nullptr; }, 1000), "a new upstream snapshot did not keep the path picker");
     app.requestNew();
-    app.resolveUnsaved("discard");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().isEmpty(); }, 3000),
             "Path verification could not create a fresh unsaved project");
     app.addNode("test.paths", 0, 0);
@@ -482,7 +493,7 @@ void readImageToolUiContract()
     // Run pipeline once with the selected image file
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "pipeline execution with bus.jpg timed out");
-    require(app.runState() == QStringLiteral("Idle"), "pipeline execution failed to return to Idle");
+    require(app.runState() == RuntimeState::Idle, "pipeline execution failed to return to Idle");
     for (const auto &d : app.diagnostics()) {
         require(!d.contains(QStringLiteral("ReadImage")) && !d.contains(QStringLiteral("图像读取")),
                 "pipeline execution with bus.jpg produced node errors");
@@ -509,7 +520,7 @@ void readImageToolUiContract()
     // Run pipeline once with the selected image directory
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 10000), "pipeline execution with directory timed out");
-    require(app.runState() == QStringLiteral("Idle"), "directory pipeline execution failed to return to Idle");
+    require(app.runState() == RuntimeState::Idle, "directory pipeline execution failed to return to Idle");
     for (const auto &d : app.diagnostics()) {
         require(!d.contains(QStringLiteral("ReadImage")) && !d.contains(QStringLiteral("图像读取")),
                 "directory pipeline execution produced node errors");

@@ -11,48 +11,29 @@
 namespace visionrt {
 namespace workbench {
 namespace {
-QString kindName(ToolKind kind)
-{
-    switch (kind)
-    {
-    case ToolKind::Cpp:
-        return "cpp";
-    case ToolKind::Host:
-        return "host";
-    case ToolKind::PythonFunction:
-        return "python_function";
-    case ToolKind::PythonClass:
-        return "python_class";
-    }
-    return {};
-}
-
 QVariantMap portMetadata(const PortDefinition &port, PortStage stage)
 {
     QVariantMap row{
         {"id", static_cast<uint>(port.id)},
         {"name", q(port.nameZh)},
-        {"type", QString::fromLatin1(visionrt::typeName(port.type.type))},
+        {"type", static_cast<int>(port.type.type)},
         {"rank", port.type.rank},
-        {"dtype", QString{}},
         {"default", valueText(port.defaultValue, port.type)},
-        {"editor", q(port.editor)},
-        {"tab", q(port.tab)},
+        {"editor", static_cast<int>(port.editor)},
+        {"tab", static_cast<int>(port.tab)},
         {"group", q(port.group)},
         {"minimum", QString{}},
         {"maximum", QString{}},
         {"step", QString{}},
         {"decimals", port.decimals ? *port.decimals : -1},
-        {"optionsProvider", q(port.optionsProvider)},
-        {"colorOrder", q(port.colorOrder)},
+        {"optionsProvider", static_cast<int>(port.optionsProvider)},
+        {"colorOrder", static_cast<int>(port.colorOrder)},
         {"system", isReservedPort(stage, port.id)}
     };
     QVariantMap relations;
     const auto relationRef = [](const PortRef &reference)
     {
-        return QVariantMap{{"stage", reference.stage == PortStage::Init     ? "init"
-                                     : reference.stage == PortStage::Inputs ? "inputs"
-                                                                            : "outputs"},
+        return QVariantMap{{"stage", static_cast<int>(reference.stage)},
                            {"id", static_cast<uint>(reference.id)}};
     };
     if (port.image)
@@ -65,7 +46,7 @@ QVariantMap portMetadata(const PortDefinition &port, PortStage stage)
         row.insert("relations", relations);
     if (port.typeFrom)
     {
-        row["type"] = QStringLiteral("待解析");
+        row.remove("type");
         row.remove("rank");
         row["default"] = QString{};
         row["typeFrom"] = QVariantMap{
@@ -75,7 +56,7 @@ QVariantMap portMetadata(const PortDefinition &port, PortStage stage)
     }
     if (port.type.dtype)
     {
-        row["dtype"] = QString::fromLatin1(dtypeName(*port.type.dtype));
+        row["dtype"] = static_cast<int>(*port.type.dtype);
     }
     if (port.minimum)
         row["minimum"] = valueText(*port.minimum, port.type);
@@ -96,16 +77,13 @@ QVariantMap metadata(const ToolDefinition &definition)
         {            "id",                                                   q(definition.nameEn)},
         {        "nameZh",                                                q(definition.nameZh)},
         {       "version",                                                q(definition.version)},
-        {          "kind",                                            kindName(definition.kind)},
+        {          "kind",                                            static_cast<int>(definition.kind)},
         {      "category",                                q(categoryPath(definition))},
         {       "builtin",                      definition.source.origin == ToolOrigin::Builtin},
         {"definitionPath",                                  pathText(definition.definitionPath)},
         {   "hostBinding",                                            q(definition.hostBinding)},
-        {     "nodeModel", QString::fromLatin1(definition.nodeModel == NodeModel::Expression ? "expression"
-                                              : definition.nodeModel == NodeModel::Condition ? "condition"
-                                              : definition.nodeModel == NodeModel::Select    ? "select"
-                                                                                             : "fixed")},
-        {    "visibility",                                        definition.visibility == ToolVisibility::Assist},
+        {     "nodeModel", static_cast<int>(definition.nodeModel)},
+        {    "visibility", static_cast<int>(definition.visibility)},
         {         "entry", QVariantMap{{"package", pathText(definition.entry.package)},
  {"file", pathText(definition.entry.file)},
  {"symbol", q(definition.entry.symbol)}}                             }
@@ -167,7 +145,8 @@ QVariantList AppController::parameters() const
     auto add = [&](PortId id, const TypeSpec &type, bool initialization, const PortDefinition *declaration)
     {
         PortValue literal = Missing{};
-        QString   mode    = "literal", source;
+        BindingMode mode = BindingMode::Literal;
+        QString source;
         if (initialization)
         {
             const auto found = node->initParams.find(id);
@@ -177,7 +156,7 @@ QVariantList AppController::parameters() const
         else if (const auto found = node->inputs.find(id); found != node->inputs.end())
         {
             literal = found->second.literal;
-            mode    = found->second.mode == BindingMode::Literal ? "literal" : "upstream";
+            mode = found->second.mode;
             // Switching to manual input cancels the relation immediately; the stored source no
             // longer describes this row because it is not the effective binding.
             if (found->second.mode == BindingMode::Upstream && found->second.source)
@@ -267,12 +246,12 @@ QVariantList AppController::parameters() const
         // Every path parameter opens the same file-or-folder picker, so the editor kind is the
         // declaration itself. A path mode parameter stays a tool-owned value and no longer selects
         // a second picker.
-        QString editorKind = declaration ? q(declaration->editor) : QString{};
+        EditorKind editorKind = declaration ? declaration->editor : EditorKind::Default;
 
         QVariant rectMap;
         bool hasRect = false;
         QString rectDisplayText = QStringLiteral("[]");
-        const bool  rectangleEditor = type.type == Type::ROI && editorKind == "rect";
+        const bool  rectangleEditor = type.type == Type::ROI && editorKind == EditorKind::Rect;
         const auto *regions         = std::get_if<DataRef<ROI>>(&literal);
         if (rectangleEditor && regions && regions->get().size() == 1 && regions->get()[0].size() == 1)
         {
@@ -321,11 +300,10 @@ QVariantList AppController::parameters() const
         QVariantMap row{
             {             "id",                                                       static_cast<uint>(id)},
             {           "name",       declaration ? q(declaration->nameZh) : q(portLabel(id))},
-            {           "type",                                 QString::fromLatin1(typeName(type.type))},
+            {           "type",                                 static_cast<int>(type.type)},
             {     "typeDetail",                                                           typeText(type)},
             {    "typeDisplay",                                                    displayTypeName(type)},
             {           "init",                                                           initialization},
-            {           "mode",                                                                     mode},
             {        "literal",                         type.type == Type::Array ? arrayText : text},
             {      "valueText",               rectangleEditor && hasRect ? rectDisplayText
                : type.type == Type::Array ? arrayText
@@ -340,22 +318,22 @@ QVariantList AppController::parameters() const
             {     "sourceNode", hasSource ? QString::number(inputFound->second.source->node) : QString{}},
             {     "sourcePort",     hasSource ? static_cast<uint>(inputFound->second.source->port) : 0u},
             {          "title",                                                         q(node->title())},
-            {         "editor",                                                               editorKind},
-            {            "tab",       declaration ? q(declaration->tab) : QStringLiteral("基本输入")},
+            {         "editor",                                                               static_cast<int>(editorKind)},
+            {            "tab",       declaration ? static_cast<int>(declaration->tab) : static_cast<int>(ParameterTab::BasicInput)},
             {          "group",                          initialization ? QStringLiteral("初始化配置")
                           : declaration  ? q(declaration->group)
                           : QString{}                                    },
             {        "options",                                                                  options},
-            {"optionsProvider",                declaration ? q(declaration->optionsProvider) : QString{}},
+            {"optionsProvider",                declaration ? static_cast<int>(declaration->optionsProvider) : static_cast<int>(OptionsProvider::None)},
             {        "minimum",                                                                QString{}},
             {        "maximum",                                                                QString{}},
             {           "step",                                                                QString{}},
             {       "decimals",                                                                       -1},
             {   "canIncrement",                                                                    false},
             {   "canDecrement",                                                                    false},
-            {      "inputMode",                                                                    mode}
+            {      "inputMode",                                                                    static_cast<int>(mode)}
         };
-        if (type.type == Type::Int && (initialization || mode == "literal"))
+        if (type.type == Type::Int && (initialization || mode == BindingMode::Literal))
         {
             if (const auto *value = std::get_if<std::int64_t>(&literal))
             {
@@ -398,35 +376,34 @@ QVariantList AppController::parameters() const
         result.push_back(row);
     };
 
-    auto addMeta = [&](int id, const QString &name, const QString &editorKind,
+    auto addMeta = [&](int id, const QString &name, EditorKind editorKind,
                        const QString &displayText, bool isSingle = false, const QVariantMap &extras = {})
     {
         QVariantMap row{
             {             "id",                                                                    id},
             {           "name",                                                                  name},
-            {           "type",                                                  QStringLiteral("String")},
+            {           "type",                                                  static_cast<int>(Type::String)},
             {     "typeDetail",                                                  QStringLiteral("String")},
             {    "typeDisplay",                                                  QStringLiteral("宿主配置")},
             {           "init",                                                                 false},
-            {           "mode",                                               QStringLiteral("literal")},
             {        "literal",                                                           displayText},
             {      "valueText",                                                           displayText},
             {    "displayText",                                                           displayText},
             {          "title",                                                      workbench::q(node->title())},
-            {         "editor",                                                            editorKind},
-            {            "tab",                                                  QStringLiteral("基本输入")},
+            {         "editor",                                                            static_cast<int>(editorKind)},
+            {            "tab",                                                  static_cast<int>(ParameterTab::BasicInput)},
             {          "group",                                                             QString{}},
             {         "isMeta",                                                                  true},
             {"isSingleFormula",                                                              isSingle},
             {        "options",                                                         QVariantList{}},
-            {"optionsProvider",                                                             QString{}},
+            {"optionsProvider",                                  static_cast<int>(OptionsProvider::None)},
             {        "minimum",                                                             QString{}},
             {        "maximum",                                                             QString{}},
             {           "step",                                                             QString{}},
             {       "decimals",                                                                    -1},
             {   "canIncrement",                                                                 false},
             {   "canDecrement",                                                                 false},
-            {      "inputMode",                                                     QStringLiteral("literal")}
+            {      "inputMode",                                                     static_cast<int>(BindingMode::Literal)}
         };
         for (auto entry = extras.begin(); entry != extras.end(); ++entry)
             row.insert(entry.key(), entry.value());
@@ -481,7 +458,7 @@ QVariantList AppController::parameters() const
                 exprText = QString{};
                 isSingle = true;
             }
-            addMeta(workbench::kExpressionRow, QStringLiteral("表达式"), QStringLiteral("expression"),
+            addMeta(workbench::kExpressionRow, QStringLiteral("表达式"), EditorKind::Expression,
                     exprText, isSingle);
         }
         else if (tool->nodeModel == NodeModel::Condition)
@@ -492,7 +469,8 @@ QVariantList AppController::parameters() const
             const bool       upstream = conditionUsesUpstream(*node);
             const auto       found    = node->inputs.find(kConditionInputPort);
             const bool       bound    = found != node->inputs.end() && found->second.source.has_value();
-            QVariantMap      extras{{"inputMode", upstream ? "upstream" : "literal"}};
+            QVariantMap      extras{{"inputMode", static_cast<int>(upstream ? BindingMode::Upstream : BindingMode::Literal)},
+                                     {"bindingPort", static_cast<uint>(kConditionInputPort)}};
             if (bound)
             {
                 const auto &source = *found->second.source;
@@ -518,13 +496,13 @@ QVariantList AppController::parameters() const
                 extras.insert("sourcePort", static_cast<uint>(source.port));
             }
             addMeta(workbench::kConditionRow, QStringLiteral("条件公式"),
-                    upstream ? QStringLiteral("condition_upstream") : QStringLiteral("condition"), condText, true,
+                    upstream ? EditorKind::ConditionUpstream : EditorKind::Condition, condText, true,
                     extras);
         }
         else if (tool->nodeModel == NodeModel::Select)
         {
             QString selectText = node->selectType ? displayTypeName(*node->selectType) : QString{};
-            addMeta(workbench::kSelectTypeRow, QStringLiteral("合流类型"), QStringLiteral("select_type"),
+            addMeta(workbench::kSelectTypeRow, QStringLiteral("合流类型"), EditorKind::Select,
                     selectText, false);
         }
 

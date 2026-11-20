@@ -1,5 +1,5 @@
 {
-  "format_version": 7,
+  "format_version": 8,
   "project": {
     "name": "错误诊断",
     "next_node_seq": "5",
@@ -28,37 +28,37 @@
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               }
             ],
@@ -66,45 +66,45 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 1
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               }
             ]
@@ -112,32 +112,32 @@
           "inputs": [
             {
               "port_id": 5,
-              "mode": "literal",
+              "mode": 0,
               "literal": 2
             },
             {
               "port_id": 4,
-              "mode": "literal",
+              "mode": 0,
               "literal": "顺序（下一张）"
             },
             {
               "port_id": 1,
-              "mode": "literal",
+              "mode": 0,
               "literal": "examples/04_扩展示例/04_错误诊断/images"
             },
             {
               "port_id": 2,
-              "mode": "literal",
+              "mode": 0,
               "literal": false
             },
             {
               "port_id": 6,
-              "mode": "literal",
+              "mode": 0,
               "literal": false
             },
             {
               "port_id": 3,
-              "mode": "literal",
+              "mode": 0,
               "literal": "循环"
             }
           ]
@@ -159,13 +159,13 @@
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "ROI"
+                  "type": 6
                 }
               }
             ],
@@ -173,26 +173,26 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Array",
-                  "dtype": "float64",
+                  "type": 5,
+                  "dtype": 4,
                   "rank": 2
                 }
               }
@@ -201,7 +201,7 @@
           "inputs": [
             {
               "port_id": 1,
-              "mode": "upstream",
+              "mode": 1,
               "literal": null,
               "source": {
                 "node_seq": "1",
@@ -210,7 +210,7 @@
             },
             {
               "port_id": 2,
-              "mode": "literal",
+              "mode": 0,
               "literal": null
             }
           ]
@@ -272,61 +272,61 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 7,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 8,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 9,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               }
             ],
@@ -334,25 +334,25 @@
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Float"
+                  "type": 1
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Float"
+                  "type": 1
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               }
             ],
@@ -360,49 +360,49 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "ROI"
+                  "type": 6
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Array",
-                  "dtype": "float32",
+                  "type": 5,
+                  "dtype": 3,
                   "rank": 2
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Array",
-                  "dtype": "int64",
+                  "type": 5,
+                  "dtype": 2,
                   "rank": 2
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 2
                 }
               },
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               }
             ]
@@ -410,7 +410,7 @@
           "inputs": [
             {
               "port_id": 1,
-              "mode": "upstream",
+              "mode": 1,
               "literal": null,
               "source": {
                 "node_seq": "1",
@@ -419,17 +419,17 @@
             },
             {
               "port_id": 2,
-              "mode": "literal",
+              "mode": 0,
               "literal": 0.25
             },
             {
               "port_id": 3,
-              "mode": "literal",
+              "mode": 0,
               "literal": 0.45
             },
             {
               "port_id": 4,
-              "mode": "literal",
+              "mode": 0,
               "literal": 300
             }
           ]
@@ -457,7 +457,7 @@
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               }
             ],
@@ -465,7 +465,7 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               }
             ]
@@ -473,7 +473,7 @@
           "inputs": [
             {
               "port_id": 1,
-              "mode": "upstream",
+              "mode": 1,
               "literal": null,
               "source": {
                 "node_seq": "1",

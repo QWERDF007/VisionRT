@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #include "TestPythonConfiguration.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
@@ -55,7 +56,7 @@ try
   "name_zh": "图像源",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "fixture",
     "file": "tool.py",
     "symbol": "source"
@@ -64,41 +65,52 @@ try
     {
       "id": 2,
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
-        "color_order": "BGR",
+        "color_order": 2,
         "visible": true
       }
     },
     {
       "id": 3,
       "name_zh": "列表",
-      "type": "vec_vec_int"
+      "type": {
+        "type": 5,
+        "dtype": 2,
+        "rank": 2
+      }
     },
     {
       "id": 4,
       "name_zh": "轮次",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     },
     {
       "id": 5,
       "name_zh": "区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "relations": {
         "image": {
-          "stage": "outputs",
+          "stage": 2,
           "id": 2
         }
       }
     }
-  ]
+  ],
+  "schema_version": 1
 })");
     write("tools/custom/fixture/editor.json", R"({
   "name_en": "test.ui.editor",
   "name_zh": "图像编辑",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "fixture",
     "file": "tool.py",
     "symbol": "edit"
@@ -107,7 +119,9 @@ try
     {
       "id": 1,
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       }
@@ -115,14 +129,16 @@ try
     {
       "id": 2,
       "name_zh": "裁剪区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "default": [],
       "ui": {
-        "editor": "rect"
+        "editor": 9
       },
       "relations": {
         "image": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       }
@@ -130,14 +146,16 @@ try
     {
       "id": 3,
       "name_zh": "区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "default": [],
       "ui": {
-        "editor": "roi"
+        "editor": 8
       },
       "relations": {
         "image": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       }
@@ -147,18 +165,21 @@ try
     {
       "id": 2,
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       },
       "relations": {
         "same_geometry_as": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       }
     }
-  ]
+  ],
+  "schema_version": 1
 })");
     write("python/custom/fixture/tool.py",
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"
@@ -198,7 +219,7 @@ try
         return rows;
     };
     const auto originalNodes = stableNodes();
-    require(originalNodes.size() == 1 && originalNodes.front().toMap()["state"] == "idle",
+    require(originalNodes.size() == 1 && originalNodes.front().toMap()["state"].toInt() == static_cast<int>(NodeState::Idle),
             "initial node metadata is incorrect");
     QVariantList observedProjectNodes;
     const auto   projectObservation
@@ -232,7 +253,7 @@ try
     app.runNode();
     idle();
     const auto executedNodes = stableNodes();
-    require(executedNodes.front().toMap()["state"] == "succeeded" && originalNodes.front().toMap()["state"] == "idle",
+    require(executedNodes.front().toMap()["state"].toInt() == static_cast<int>(NodeState::Succeeded) && originalNodes.front().toMap()["state"].toInt() == static_cast<int>(NodeState::Idle),
             "node execution did not invalidate the metadata readback");
     auto *outputs = qobject_cast<OutputModel *>(app.outputModel());
     require(outputs != nullptr, "output model unavailable");
@@ -274,7 +295,7 @@ try
         QFile file(projectPath);
         require(file.open(QIODevice::ReadOnly), "saved project file unavailable");
         const auto saved = QJsonDocument::fromJson(file.readAll());
-        require(saved.isObject() && saved.object()["format_version"].toInt() == 7,
+        require(saved.isObject() && saved.object()["format_version"].toInt() == 8,
                 "idle save after the run produced an incomplete project");
     }
     app.addNode("test.ui.editor", 100, 100);
@@ -296,7 +317,7 @@ try
         return QVariantMap{};
     };
     const auto rectangle = parameter(kRectInput);
-    require(rectangle["type"] == "ROI" && rectangle["editor"] == "rect" && rectangle["hasRect"].toBool(),
+    require(rectangle["type"].toInt() == static_cast<int>(Type::ROI) && rectangle["editor"].toInt() == static_cast<int>(EditorKind::Rect) && rectangle["hasRect"].toBool(),
             "rectangle editor reintroduced a separate value type");
     const auto encoded = QJsonDocument::fromJson(rectangle["literal"].toString().toUtf8()).array();
     require(encoded.size() == 1 && encoded[0].toArray().size() == 1

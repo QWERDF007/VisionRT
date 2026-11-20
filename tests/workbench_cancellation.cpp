@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
 #include "core/ProjectEditor.h"
@@ -6,7 +7,7 @@
 #include "core/ToolPackage.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -117,7 +118,7 @@ def tail(inputs):
         AppController app(2, root);
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Cancellation catalog did not become ready");
         app.requestOpen(QString::fromStdU16String(project.path.u16string()));
-        app.resolveUnsaved(QStringLiteral("discard"));
+        app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 2; }, 5000),
                 "Cancellation project did not open: " + app.diagnostic().toStdString());
         require(!app.dirty(), "Saved cancellation project became dirty after loading");
@@ -144,7 +145,7 @@ def tail(inputs):
             const auto center = loop->mapToScene(QPointF(loop->width() / 2, loop->height() / 2)).toPoint();
             std::cout << "[CANCELLATION] click class=" << loop->metaObject()->className() << " at=" << center.x() << ","
                       << center.y() << " size=" << loop->width() << "," << loop->height()
-                      << " state=" << app.runState().toStdString() << std::endl;
+                      << " state=" << app.runStateText().toStdString() << std::endl;
             QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center, 0);
         };
         QElapsedTimer stopTimer;
@@ -152,13 +153,13 @@ def tail(inputs):
         QObject::connect(&app, &AppController::runtimeChanged, &app,
                          [&]
                          {
-                             if (stopTimer.isValid() && app.runState() == "Stopping" && signalMilliseconds < 0)
+                             if (stopTimer.isValid() && app.runState() == RuntimeState::Stopping && signalMilliseconds < 0)
                                  signalMilliseconds = stopTimer.elapsed();
                          });
         QSignalSpy closes(&app, &AppController::closeReady);
         clickLoop();
         require(QTest::qWaitFor([&] { return events().contains("execute:1"); }, 5000),
-                "Toolbar click did not start the actual Python gate; state=" + app.runState().toStdString()
+                "Toolbar click did not start the actual Python gate; state=" + app.runStateText().toStdString()
                     + "; diagnostic=" + app.diagnostic().toStdString()
                     + "; events=" + events().join(',').toStdString());
         stopTimer.start();
@@ -170,7 +171,7 @@ def tail(inputs):
                         for (auto *item : window->findChildren<QQuickItem *>())
                             stoppingVisible = stoppingVisible
                                            || (item->isVisible() && item->property("text").toString() == "Stopping");
-                        return stoppingVisible && app.runState() == "Stopping"
+                        return stoppingVisible && app.runState() == RuntimeState::Stopping
                             && loop->property("text").toString() == "等待本轮结束" && !loop->isEnabled();
                     },
                     1000),
@@ -181,7 +182,7 @@ def tail(inputs):
         clickLoop();
         QTest::keyClick(window, Qt::Key_F6);
         QTest::qWait(60);
-        require(app.busy() && app.runState() == "Stopping" && !events().contains("return:1")
+        require(app.busy() && app.runState() == RuntimeState::Stopping && !events().contains("return:1")
                     && !events().contains("release") && !events().contains("tail"),
                 "Stop destroyed an executing tool, dispatched its successor, or bypassed the gate");
         write(permission, "allow");
@@ -189,8 +190,8 @@ def tail(inputs):
         require(events().count("execute:1") == 1 && !events().contains("execute:2") && !events().contains("tail"),
                 "Stop started another round or executed the successor");
         const auto stoppedNodes = app.nodes();
-        require(stoppedNodes.front().toMap().value("state").toString() == "succeeded"
-                    && stoppedNodes.back().toMap().value("state").toString() == "idle",
+        require(stoppedNodes.front().toMap().value("state").toInt() == static_cast<int>(NodeState::Succeeded)
+                    && stoppedNodes.back().toMap().value("state").toInt() == static_cast<int>(NodeState::Idle),
                 "Stop erased a completed result or fabricated a successor execution state");
         std::cout << "[CANCELLATION] mouse_stop signal_ms=" << signalMilliseconds
                   << " displayed_ms=" << displayedMilliseconds << " successor_calls=0\n";
@@ -201,12 +202,12 @@ def tail(inputs):
         window->close();
         window->close();
         QTest::qWait(60);
-        require(window->isVisible() && app.runState() == "Stopping" && closes.isEmpty()
+        require(window->isVisible() && app.runState() == RuntimeState::Stopping && closes.isEmpty()
                     && !events().contains("return:2") && !events().contains("release"),
                 "Window closed or released the tool before uninterruptible execute returned");
         write(permission, "allow");
         require(QTest::qWaitFor([&] { return !window->isVisible() && !app.busy(); }, 5000),
-                "Window close did not finish after the gate returned; state=" + app.runState().toStdString()
+                "Window close did not finish after the gate returned; state=" + app.runStateText().toStdString()
                     + "; diagnostic=" + app.diagnostic().toStdString()
                     + "; events=" + events().join(',').toStdString());
         require(closes.size() == 1 && !events().contains("tail"),

@@ -1,4 +1,5 @@
 import QtQuick
+import VisionRT.Ui 1.0
 import QtQuick.Controls
 
 // ScrollView whose content stops exactly at the edges instead of bouncing past them.
@@ -10,9 +11,9 @@ ScrollView {
 
     function pinContent() {
         if (!contentItem)
-            return
-        contentItem.boundsBehavior = Flickable.StopAtBounds
-        contentItem.boundsMovement = Flickable.StopAtBounds
+            return;
+        contentItem.boundsBehavior = Flickable.StopAtBounds;
+        contentItem.boundsMovement = Flickable.StopAtBounds;
     }
 
     Component.onCompleted: pinContent()

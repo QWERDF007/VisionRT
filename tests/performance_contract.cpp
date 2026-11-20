@@ -15,7 +15,7 @@
 #include "ui/AppController.h"
 #include "ui/DisplayConverter.h"
 #include "ui/ImageViewport.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/ToolTreeModel.h"
 #include "ProcessMemory.h"
 
@@ -1195,7 +1195,7 @@ void testGuiEventToPresentationLatency(AppController &app, const std::filesystem
     }
 
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
 
     QQmlApplicationEngine engine;
     const auto            appDir = QCoreApplication::applicationDirPath();
@@ -1372,7 +1372,7 @@ void testWorkbenchBrowsingLatency()
 
 int main(int argc, char **argv)
 {
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
     QGuiApplication qt(argc, argv);
 
     QTemporaryDir directory;

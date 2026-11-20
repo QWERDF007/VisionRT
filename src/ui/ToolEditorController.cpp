@@ -1,10 +1,12 @@
 #include "ui/ToolEditorController.h"
+#include "core/ValueJson.h"
 
 #include "core/DefinitionJson.h"
 #include "core/Project.h"
 #include "core/ToolPaths.h"
 #include "ui/AppController.h"
 #include "ui/DisplayTypes.h"
+#include "ui/UiState.h"
 
 #include <QDesktopServices>
 #include <QDir>
@@ -20,18 +22,6 @@
 namespace visionrt {
 
 namespace {
-
-const char *toolKindString(ToolKind kind)
-{
-    switch (kind)
-    {
-    case ToolKind::Cpp:            return "cpp";
-    case ToolKind::Host:           return "host";
-    case ToolKind::PythonFunction: return "python_function";
-    case ToolKind::PythonClass:    return "python_class";
-    }
-    return "unknown";
-}
 
 bool sameReference(const std::optional<PortRef> &left, const std::optional<PortRef> &right)
 {
@@ -210,7 +200,7 @@ QVariantList ToolEditorController::buildTree() const
         QString     key;
         bool        editable = false;
         bool        draft = false;
-        std::string kind;
+        ToolKind    kind = ToolKind::PythonFunction;
     };
 
     std::map<std::string, ToolDefinition> allDefs;
@@ -246,7 +236,7 @@ QVariantList ToolEditorController::buildTree() const
         entry.key      = QString::fromStdString(key);
         entry.editable = toolEditable(draft.def, draft.saved.has_value());
         entry.draft    = true;
-        entry.kind     = toolKindString(draft.def.kind);
+        entry.kind     = draft.def.kind;
         tools.push_back(std::move(entry));
     }
     for (const auto &[id, def] : allDefs)
@@ -264,7 +254,7 @@ QVariantList ToolEditorController::buildTree() const
         entry.folder   = QString::fromStdString(categoryPath(def));
         entry.key      = QString::fromStdString(id);
         entry.editable = toolEditable(def, true);
-        entry.kind     = toolKindString(def.kind);
+        entry.kind     = def.kind;
         tools.push_back(std::move(entry));
     }
 
@@ -367,12 +357,12 @@ QVariantList ToolEditorController::buildTree() const
         for (const auto *tool : matching)
         {
             QVariantMap node;
-            node.insert("kind", QStringLiteral("tool"));
+            node.insert("kind", static_cast<int>(CatalogEntryKind::Tool));
             node.insert("name", tool->name);
             node.insert("toolId", QString::fromStdString(tool->id));
             node.insert("key", tool->key);
             node.insert("folder", tool->folder);
-            node.insert("toolKind", QString::fromStdString(tool->kind));
+            node.insert("toolKind", static_cast<int>(tool->kind));
             node.insert("editable", tool->editable);
             node.insert("draft", tool->draft);
             node.insert("children", QVariantList{});
@@ -405,7 +395,7 @@ QVariantList ToolEditorController::buildTree() const
         for (const auto &path : children)
         {
             QVariantMap node;
-            node.insert("kind", QStringLiteral("folder"));
+            node.insert("kind", static_cast<int>(CatalogEntryKind::Folder));
             node.insert("name", path.contains(QLatin1Char('/')) ? path.mid(path.lastIndexOf(QLatin1Char('/')) + 1)
                                                                 : path);
             node.insert("path", path);
@@ -582,10 +572,10 @@ void ToolEditorController::setCurrentToolName(const QString &value)
     }
 }
 
-QString ToolEditorController::currentToolKind() const
+ToolKind ToolEditorController::currentToolKind() const
 {
-    const Draft *draft = current();
-    return draft ? QString::fromLatin1(toolKindString(draft->def.kind)) : QString();
+    const auto *draft = current();
+    return draft ? draft->def.kind : ToolKind::PythonFunction;
 }
 
 bool ToolEditorController::isPython() const noexcept
@@ -851,7 +841,7 @@ QVariantList ToolEditorController::supportedTypes() const
     {
         const TypeSpec spec{.type = t};
         QVariantMap item;
-        item.insert("token", QString::fromStdString(typeToken(spec)));
+        item.insert("token", ValueJson::encodeType(spec).toVariantMap());
         item.insert("label", displayTypeName(spec));
         item.insert("rank", 0);
         item.insert("dtype", QString());
@@ -868,10 +858,10 @@ QVariantList ToolEditorController::supportedTypes() const
         {
             const TypeSpec spec{.type = Type::Array, .dtype = dt, .rank = rank};
             QVariantMap item;
-            item.insert("token", QString::fromStdString(typeToken(spec)));
+            item.insert("token", ValueJson::encodeType(spec).toVariantMap());
             item.insert("label", displayTypeName(spec));
             item.insert("rank", rank);
-            item.insert("dtype", QString::fromLatin1(dtypeName(dt)));
+            item.insert("dtype", static_cast<int>(dt));
             list.append(item);
         }
     }
@@ -949,7 +939,7 @@ bool ToolEditorController::addFolder(const QString &parentPath, const QString &n
         for (const auto &node : nodes)
         {
             const auto map = node.toMap();
-            if (map.value("kind").toString() != QStringLiteral("folder"))
+            if (map.value("kind").toInt() != static_cast<int>(CatalogEntryKind::Folder))
                 continue;
             if (map.value("path").toString() == wanted)
                 return true;

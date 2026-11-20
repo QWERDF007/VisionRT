@@ -40,11 +40,12 @@ int main(int argc, char **argv)
   "name_zh": "外部根工具",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "external",
     "file": "tool.py",
     "symbol": "execute"
-  }
+  },
+  "schema_version": 1
 })";
                 }
                 const auto overridden = readToolsPackage(

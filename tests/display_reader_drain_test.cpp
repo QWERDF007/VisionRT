@@ -36,7 +36,7 @@ try
     DisplayConverter converter;
     QSignalSpy      idle(&converter, &DisplayConverter::readersIdle);
     QSignalSpy      converted(&converter, &DisplayConverter::batchConverted);
-    converter.requestBatch(batch, QStringLiteral("Gray"), 1, 1);
+    converter.requestBatch(batch, ColorOrder::Gray, 1, 1);
     require(converter.isBusy(), "the display worker must start immediately");
 
     // This is exactly what AppController::Impl::beginDrain does before mutating runtime data.
@@ -69,7 +69,7 @@ try
 
     // A second request after the drain still works, which proves the invalidation was not a stop.
     QSignalSpy second(&converter, &DisplayConverter::batchConverted);
-    converter.requestBatch(batch, QStringLiteral("Gray"), 2, 2);
+    converter.requestBatch(batch, ColorOrder::Gray, 2, 2);
     QElapsedTimer secondTimer;
     secondTimer.start();
     while (second.isEmpty() && secondTimer.elapsed() < 10000)

@@ -52,6 +52,8 @@ public:
     bool           active() const noexcept { return action_ != Action::None; }
     const QString &path() const noexcept { return path_; }
 
+    bool acceptsSave() const noexcept { return !isClosing() && (!active() || awaitingDecision_); }
+
     bool approved() const noexcept { return approved_; }
     void approve() noexcept { approved_ = true; }
     bool awaitingDecision() const noexcept { return awaitingDecision_; }

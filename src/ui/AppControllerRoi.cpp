@@ -65,7 +65,7 @@ bool AppController::editRoi(int parameter, bool copyUpstream)
             throw ContractError("ROI 输入未声明关联图像：" + portLabel(port));
         const auto  imageValue = impl_->resolvedInput(*node, declaration->image->id);
         const auto *images     = std::get_if<DataRef<Image>>(&imageValue);
-        if (declaration->editor != "rect" && (!images || images->get().empty()))
+        if (declaration->editor != EditorKind::Rect && (!images || images->get().empty()))
             throw ContractError("ROI 输入 " + portLabel(port) + " 的关联图像 " + portLabel(declaration->image->id)
                                 + " 没有缓存，请先运行图像源或上游");
         auto roiValue = impl_->resolvedInput(*node, port);
@@ -83,7 +83,7 @@ bool AppController::editRoi(int parameter, bool copyUpstream)
         start.input           = port;
         start.flow            = impl_->flow;
         start.type            = declaration->type;
-        start.singleRectangle = declaration->editor == "rect";
+        start.singleRectangle = declaration->editor == EditorKind::Rect;
         start.original        = binding->second;
         start.background      = imageValue;
         start.draft           = copyProjectLiteral(roiValue);
@@ -91,7 +91,7 @@ bool AppController::editRoi(int parameter, bool copyUpstream)
         start.resultIndex     = impl_->presentation.imageIndex();
         start.view            = viewport->viewState();
         impl_->roiSession.begin(std::move(start));
-        if (declaration->editor == "rect")
+        if (declaration->editor == EditorKind::Rect)
             viewport->setDrawShape(std::get<DataRef<ROI>>(impl_->roiSession.draft()).get().empty() ? 2 : 0);
         impl_->updateDisplay();
         emit resultsChanged();

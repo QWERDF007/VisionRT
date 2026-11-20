@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Item {
     id: root
@@ -19,7 +19,7 @@ Item {
         function matchNode(node) {
             if (!filter)
                 return true;
-            if (node.kind === "tool") {
+            if (node.kind === CatalogEntryKind.Tool) {
                 const name = (node.name || "").toLowerCase();
                 const id = (node.toolId || "").toLowerCase();
                 return name.indexOf(filter) >= 0 || id.indexOf(filter) >= 0;
@@ -37,9 +37,8 @@ Item {
                 const node = list[i];
                 if (filter && !matchNode(node))
                     continue;
-                const isFolder = node.kind === "folder";
+                const isFolder = node.kind === CatalogEntryKind.Folder;
                 const hasChildren = (node.children || []).length > 0;
-
                 const isExpanded = filter ? true : (isFolder && root.expandedFolders[node.path] === true);
                 rows.push({
                     kind: node.kind,
@@ -50,7 +49,7 @@ Item {
                     stableKey: node.key || "",
                     toolId: node.toolId || "",
                     folder: node.folder || "",
-                    toolKind: node.toolKind || "",
+                    toolKind: node.toolKind ?? ToolKind.PythonFunction,
                     draft: node.draft === true,
                     depth: depth,
                     isFolder: isFolder,
@@ -122,9 +121,9 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: VisionRTSize.ContentSize
             radius: 3
-            color: QuiColor.CardBackground
+            color: QuiColor.Primary
             border.color: searchInput.activeFocus ? QuiColor.Highlight : QuiColor.Border
             border.width: 1
 
@@ -136,8 +135,8 @@ Item {
 
                 QuiTextIcon {
                     iconSource: QuiFontIcon.Search
-                    iconSize: 13
-                    iconColor: WorkbenchStyle.iconMuted
+                    iconSize: VisionRTSize.IconSize
+                    iconColor: QuiColor.FontCaption
                 }
 
                 TextInput {
@@ -157,7 +156,7 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         text: "搜索工具"
                         font: QuiFont.Body
-                        color: WorkbenchStyle.iconMuted
+                        color: QuiColor.FontCaption
                         visible: !searchInput.text && !searchInput.activeFocus
                     }
                 }
@@ -167,7 +166,7 @@ Item {
                     Layout.preferredWidth: implicitHeight
                     iconSource: QuiFontIcon.Cancel
                     normalColor: "transparent"
-                    iconColor: WorkbenchStyle.iconMuted
+                    iconColor: QuiColor.FontCaption
                     onClicked: searchInput.text = ""
                 }
             }
@@ -234,46 +233,46 @@ Item {
 
         QuiMenuItem {
             text: "修改二级目录"
-            visible: root.menuItem !== null && root.menuItem.kind === "folder" && root.menuItem.depth > 0
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Folder && root.menuItem.depth > 0
             onTriggered: root.openPrompt("rename", "", root.menuItem.path)
         }
         QuiMenuItem {
             text: "删除二级目录"
-            visible: root.menuItem !== null && root.menuItem.kind === "folder" && root.menuItem.depth > 0
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Folder && root.menuItem.depth > 0
             onTriggered: if (root.controller)
                 root.controller.removeFolder(root.menuItem.path)
         }
         QuiMenuItem {
             text: "添加二级目录"
-            visible: root.menuItem !== null && root.menuItem.kind === "folder" && root.menuItem.depth === 0
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Folder && root.menuItem.depth === 0
             onTriggered: root.openPrompt("addChild", root.menuItem.path, "")
         }
         QuiMenuItem {
             text: "添加工具"
-            visible: root.menuItem !== null && root.menuItem.kind === "folder"
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Folder
             onTriggered: if (root.controller)
                 root.controller.addTool(root.menuItem.path)
         }
         QuiMenuItem {
             text: "重命名目录"
-            visible: root.menuItem !== null && root.menuItem.kind === "folder" && root.menuItem.depth === 0
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Folder && root.menuItem.depth === 0
             onTriggered: root.openPrompt("rename", "", root.menuItem.path)
         }
         QuiMenuItem {
             text: "删除目录"
-            visible: root.menuItem !== null && root.menuItem.kind === "folder" && root.menuItem.depth === 0
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Folder && root.menuItem.depth === 0
             onTriggered: if (root.controller)
                 root.controller.removeFolder(root.menuItem.path)
         }
         QuiMenuItem {
             text: "同目录添加工具"
-            visible: root.menuItem !== null && root.menuItem.kind === "tool"
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Tool
             onTriggered: if (root.controller)
                 root.controller.addTool(root.menuItem.folder)
         }
         QuiMenuItem {
             text: "复制工具"
-            visible: root.menuItem !== null && root.menuItem.kind === "tool"
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Tool
             onTriggered: if (root.controller) {
                 root.controller.selectKey(root.menuItem.key);
                 root.controller.cloneTool(root.menuItem.key);
@@ -281,7 +280,7 @@ Item {
         }
         QuiMenuItem {
             text: "删除工具"
-            visible: root.menuItem !== null && root.menuItem.kind === "tool"
+            visible: root.menuItem !== null && root.menuItem.kind === CatalogEntryKind.Tool
             onTriggered: {
                 if (!root.controller)
                     return;
@@ -317,7 +316,7 @@ Item {
                 spacing: 5
                 QuiText {
                     text: "目录名称"
-                    color: QuiColor.FontDark
+                    color: QuiColor.FontCaption
                 }
                 ParameterTextField {
                     objectName: "folderNameField"

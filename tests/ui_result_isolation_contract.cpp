@@ -66,7 +66,7 @@ try
         {2, "图像", {Type::Image}}
     };
     // The workbench only offers an Image port that asks to be displayed; the fixture shows it.
-    image.outputs.front().colorOrder  = "BGR";
+    image.outputs.front().colorOrder  = ColorOrder::BGR;
     image.outputs.front().imageVisible = true;
     const auto declaration           = package + "tools/custom/isolation/image.json";
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(image)));
@@ -146,7 +146,7 @@ def scalar(inputs):
     const auto open       = [&](const char *name)
     {
         app.requestOpen(root + "/" + name + ".vrt.json");
-        app.resolveUnsaved("discard");
+        app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         idle();
         require(app.nodes().size() == 2, "isolation project did not load");
         app.selectNode(imageNode);
@@ -286,7 +286,7 @@ def scalar(inputs):
     const auto previousImageContext = app.portContext(kImagesOutput, true);
     image.entry.symbol              = "scalar";
     image.outputs.front().type      = {Type::Int};
-    image.outputs.front().colorOrder.clear();
+    image.outputs.front().colorOrder = ColorOrder::Automatic;
     // A retyped port cannot keep an Image display request; the declaration would be rejected.
     image.outputs.front().imageVisible = false;
     write(declaration, QByteArray::fromStdString(emitNormalizedToolJson(image)));

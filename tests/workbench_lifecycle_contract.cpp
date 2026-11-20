@@ -4,7 +4,7 @@
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 
 #include <QDir>
 #include <QFile>
@@ -41,7 +41,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     testing::WorkbenchInstallation installation;
     const auto                     root       = installation.directory();
     const auto                     script     = root + "/tools-package/python/custom/lifecycle/tool.py";
@@ -112,7 +112,7 @@ class Gate:
 )py");
     AppController app(1, root);
     const bool ready = QTest::qWaitFor([&] { return !app.busy(); }, 15000);
-    require(ready, ("lifecycle catalog did not become ready: " + app.runState() + " "
+    require(ready, ("lifecycle catalog did not become ready: " + app.runStateText() + " "
                     + app.diagnostics().join(QStringLiteral(" | ")))
                        .toStdString());
     app.addNode("test.lifecycle.gate", 0, 0);
@@ -165,7 +165,7 @@ class Gate:
         const int flowCount = app.flows().size();
         app.addFlow("rejected_flow");
         require(app.flows().size() == flowCount, "editing must be rejected during ClosePhase::Ready");
-        require(app.runState() == "Idle", "runState must remain Idle and not Running");
+        require(app.runState() == RuntimeState::Idle, "runState must remain Idle and not Running");
     });
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                       loop->mapToScene(QPointF(loop->width() / 2, loop->height() / 2)).toPoint(), 0);
@@ -173,11 +173,11 @@ class Gate:
             "lifecycle loop did not start the gate");
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                       loop->mapToScene(QPointF(loop->width() / 2, loop->height() / 2)).toPoint(), 0);
-    require(QTest::qWaitFor([&] { return app.runState() == "Stopping"; }, 2000),
+    require(QTest::qWaitFor([&] { return app.runState() == RuntimeState::Stopping; }, 2000),
             "lifecycle stop did not reach Stopping");
     write(permission, "allow");
-    require(QTest::qWaitFor([&] { return !app.busy() && app.runState() == "Idle"; }, 5000),
-            "lifecycle loop stop did not return to Idle; state=" + app.runState().toStdString() + "; events="
+    require(QTest::qWaitFor([&] { return !app.busy() && app.runState() == RuntimeState::Idle; }, 5000),
+            "lifecycle loop stop did not return to Idle; state=" + app.runStateText().toStdString() + "; events="
                 + events().join(',').toStdString());
 
     const auto nodeId = app.nodes().first().toMap().value("id").toString();
@@ -219,7 +219,7 @@ class Gate:
     // Release external owner - close should now proceed automatically
     captured.reset();
     require(QTest::qWaitFor([&] { return closes.size() == 1; }, 5000),
-            "lifecycle close did not finish after owner was released; state=" + app.runState().toStdString()
+            "lifecycle close did not finish after owner was released; state=" + app.runStateText().toStdString()
                 + "; events=" + events().join(',').toStdString());
     require(QTest::qWaitFor([&] { return !window->isVisible(); }, 5000),
             "lifecycle window did not hide after close");

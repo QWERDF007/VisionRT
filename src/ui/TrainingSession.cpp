@@ -18,7 +18,6 @@
 
 namespace visionrt {
 namespace {
-constexpr int kAssetVersion = 1;
 
 QString utf8Text(const std::filesystem::path &path)
 {
@@ -76,13 +75,7 @@ QString nextRecordId()
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-// The asset kind each session writes. A colour model labels rectangles with class names; a
-// straight-edge model turns each rectangle into one reference edge plus its search band.
-QString assetKind(TrainingKind kind)
-{
-    return kind == TrainingKind::StraightEdges ? QStringLiteral("straight_edges")
-                                               : QStringLiteral("color_samples");
-}
+
 
 bool readRegions(const QJsonArray &values, std::vector<EncodedRegion> &regions)
 {
@@ -192,8 +185,8 @@ void TrainingSession::load()
         return;
     }
     const auto root = document.object();
-    if (root.value("schema_version").toInt(0) != kAssetVersion
-        || root.value("kind").toString() != assetKind(start_.kind))
+    if (root.value("schema_version").toInt(0) != kTrainingAssetVersion
+        || root.value("kind").toInt(-1) != static_cast<int>(start_.kind))
     {
         error_ = QStringLiteral("训练数据格式不正确");
         return;
@@ -393,7 +386,7 @@ bool TrainingSession::save()
         return false;
     }
 
-    QJsonObject root{{"schema_version", kAssetVersion}, {"kind", assetKind(start_.kind)}};
+    QJsonObject root{{"schema_version", kTrainingAssetVersion}, {"kind", static_cast<int>(start_.kind)}};
     if (start_.kind == TrainingKind::StraightEdges)
     {
         QJsonArray segments;

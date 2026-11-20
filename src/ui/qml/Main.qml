@@ -4,12 +4,13 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Window
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 ApplicationWindow {
     id: window
     objectName: "visionrtWindow"
     visible: true
+    visibility: Window.Maximized
     title: app.title
     width: Math.min(1600, Screen.desktopAvailableWidth)
     height: Math.min(960, Screen.desktopAvailableHeight)
@@ -87,12 +88,12 @@ ApplicationWindow {
     Timer {
         interval: 600
         running: typeof demoMenu !== "undefined" && demoMenu === true
-        onTriggered: toolsMenu.popup(toolsBtn, 0, toolsBtn.height)
+        onTriggered: mainToolbar.openToolsMenu()
     }
     Timer {
         interval: 600
         running: typeof demoFileMenu !== "undefined" && demoFileMenu === true
-        onTriggered: fileMenu.popup(fileBtn, 0, fileBtn.height)
+        onTriggered: mainToolbar.openFileMenu()
     }
     Timer {
         interval: 600
@@ -158,7 +159,7 @@ ApplicationWindow {
     }
     Action {
         id: loopAction
-        text: app.runState === "Stopping" ? "等待本轮结束" : app.runState === "RunningLoop" ? "停止循环" : app.stopEnabled ? "停止运行" : "循环"
+        text: app.runState === RuntimeState.Stopping ? "等待本轮结束" : app.runState === RuntimeState.RunningLoop ? "停止循环" : app.stopEnabled ? "停止运行" : "循环"
         shortcut: "F6"
         // Stopping keeps the entry disabled: the request is already submitted. Idle offers a new
         // loop; every running mode offers the same stop.
@@ -170,131 +171,21 @@ ApplicationWindow {
         onActivated: window.focusSearch()
     }
 
-    header: ToolBar {
-        objectName: "mainToolbar"
-        padding: 0
-        height: 36
-        background: Rectangle {
-            color: QuiColor.Button
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                color: WorkbenchStyle.menuBarBorder
-            }
-        }
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 5
-            anchors.rightMargin: 5
-            spacing: 5
-
-            // Menus
-            WorkbenchActionButton {
-                id: fileBtn
-                text: "文件"
-                iconSource: QuiFontIcon.GlobalNavButton
-                display: AbstractButton.TextBesideIcon
-                normalColor: fileMenu.visible ? QuiColor.Highlight : QuiColor.Transparent
-                hoverColor: fileMenu.visible ? QuiColor.Highlight : QuiColor.Hovered
-                textColor: fileMenu.visible ? QuiColor.White : QuiColor.FontPrimary
-                iconColor: fileMenu.visible ? QuiColor.White : QuiColor.FontPrimary
-                enabled: app.workspaceEnabled
-                onClicked: {
-                    if (fileMenu.visible)
-                        fileMenu.dismiss();
-                    else
-                        fileMenu.popup(fileBtn, 0, fileBtn.height);
-                }
-            }
-            WorkbenchActionButton {
-                id: settingsBtn
-                text: "设置"
-                iconSource: QuiFontIcon.Settings
-                display: AbstractButton.TextBesideIcon
-                normalColor: settingsWindow.visible ? QuiColor.Highlight : QuiColor.Transparent
-                hoverColor: settingsWindow.visible ? QuiColor.Highlight : QuiColor.Hovered
-                textColor: settingsWindow.visible ? QuiColor.White : QuiColor.FontPrimary
-                iconColor: settingsWindow.visible ? QuiColor.White : QuiColor.FontPrimary
-                enabled: app.workspaceEnabled
-                onClicked: settingsWindow.openDialog()
-            }
-            WorkbenchActionButton {
-                id: toolsBtn
-                text: "工具"
-                iconSource: QuiFontIcon.AllApps
-                display: AbstractButton.TextBesideIcon
-                normalColor: toolsMenu.visible ? QuiColor.Highlight : QuiColor.Transparent
-                hoverColor: toolsMenu.visible ? QuiColor.Highlight : QuiColor.Hovered
-                textColor: toolsMenu.visible ? QuiColor.White : QuiColor.FontPrimary
-                iconColor: toolsMenu.visible ? QuiColor.White : QuiColor.FontPrimary
-                enabled: app.workspaceEnabled
-                onClicked: {
-                    if (toolsMenu.visible)
-                        toolsMenu.dismiss();
-                    else
-                        toolsMenu.popup(toolsBtn, 0, toolsBtn.height);
-                }
-            }
-            WorkbenchActionButton {
-                id: helpBtn
-                text: "帮助"
-                iconSource: QuiFontIcon.Help
-                display: AbstractButton.TextBesideIcon
-                normalColor: helpMenu.visible ? QuiColor.Highlight : QuiColor.Transparent
-                hoverColor: helpMenu.visible ? QuiColor.Highlight : QuiColor.Hovered
-                textColor: helpMenu.visible ? QuiColor.White : QuiColor.FontPrimary
-                iconColor: helpMenu.visible ? QuiColor.White : QuiColor.FontPrimary
-                onClicked: {
-                    if (helpMenu.visible)
-                        helpMenu.dismiss();
-                    else
-                        helpMenu.popup(helpBtn, 0, helpBtn.height);
-                }
-            }
-
-            WorkbenchSeparator { Layout.alignment: Qt.AlignVCenter }
-
-            // Actions & Execution
-            WorkbenchActionButton {
-                action: saveAction
-                text: "保存 (Ctrl+S)"
-                iconSource: QuiFontIcon.Save
-            }
-            WorkbenchActionButton {
-                action: runAction
-                text: "单次执行 (F5)"
-                iconSource: QuiFontIcon.Play
-            }
-            WorkbenchActionButton {
-                action: loopAction
-                text: loopAction.text
-                iconSource: app.stopEnabled || app.runState === "Stopping" ? QuiFontIcon.Stop : QuiFontIcon.RepeatAll
-                iconColor: app.stopEnabled || app.runState === "Stopping" ? QuiColor.Error : QuiColor.FontPrimary
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            QuiText {
-                text: app.runState
-                visible: app.busy
-                color: QuiColor.Highlight
-                font: QuiFont.Body
-            }
-
-            WorkbenchActionButton {
-                iconSource: QuiFontIcon.Refresh
-                text: "复位"
-                display: AbstractButton.TextBesideIcon
-                textColor: QuiColor.FontPrimary
-                enabled: app.workspaceEnabled
-                focusPolicy: Qt.TabFocus
-                onClicked: resetDialog.open()
-            }
-        }
+    header: MainToolbar {
+        id: mainToolbar
+        fileMenuObject: fileMenu
+        toolsMenuObject: toolsMenu
+        helpMenuObject: helpMenu
+        saveCommand: saveAction
+        runCommand: runAction
+        loopCommand: loopAction
+        workspaceEnabled: app.workspaceEnabled
+        stopEnabled: app.stopEnabled
+        stopping: app.runState === RuntimeState.Stopping
+        busy: app.busy
+        statusText: app.runStateText
+        onSettingsRequested: settingsWindow.openDialog()
+        onResetRequested: resetDialog.open()
     }
     QuiMenu {
         id: fileMenu
@@ -474,8 +365,8 @@ ApplicationWindow {
                 visible: window.leftExpanded
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                width: 14
-                height: 52
+                width: VisionRTSize.IconButtonSize
+                height: VisionRTSize.IconButtonSize
                 color: QuiColor.Button
                 border.color: QuiColor.Border
                 border.width: 1
@@ -496,7 +387,7 @@ ApplicationWindow {
                 id: collapsedBar
                 anchors.fill: parent
                 visible: !window.leftExpanded
-                color: WorkbenchStyle.tabBarBg
+                color: QuiColor.Primary
                 border.color: QuiColor.Border
                 border.width: 1
                 WorkbenchActionButton {
@@ -557,7 +448,7 @@ ApplicationWindow {
         }
     }
     footer: Rectangle {
-        height: 32
+        height: VisionRTSize.BarSize
         color: QuiColor.Button
         Rectangle {
             anchors.left: parent.left
@@ -581,13 +472,13 @@ ApplicationWindow {
                 spacing: 5
                 QuiTextIcon {
                     iconSource: QuiFontIcon.History
-                    iconSize: WorkbenchStyle.timingIconSize
-                    iconColor: QuiColor.FontDark
+                    iconSize: VisionRTSize.IconSize
+                    iconColor: QuiColor.FontCaption
                 }
                 QuiText {
                     text: app.timingText
                     font: QuiFont.Body
-                    color: QuiColor.FontDark
+                    color: QuiColor.FontCaption
                 }
                 HoverHandler {
                     id: timingHover
@@ -603,7 +494,7 @@ ApplicationWindow {
             QuiText {
                 text: "说明文档"
                 font: QuiFont.Body
-                color: docMouse.containsMouse ? QuiColor.Highlight : QuiColor.FontDark
+                color: docMouse.containsMouse ? QuiColor.Highlight : QuiColor.FontCaption
                 MouseArea {
                     id: docMouse
                     anchors.fill: parent
@@ -616,7 +507,7 @@ ApplicationWindow {
                 Layout.preferredHeight: 24
                 Layout.preferredWidth: logRow.width + 12
                 radius: 3
-                color: logMouse.containsMouse ? WorkbenchStyle.logButtonHoverColor : "transparent"
+                color: logMouse.containsMouse ? QuiColor.ItemHover : "transparent"
                 RowLayout {
                     id: logRow
                     anchors.centerIn: parent
@@ -624,13 +515,13 @@ ApplicationWindow {
                     width: implicitWidth
                     QuiTextIcon {
                         iconSource: QuiFontIcon.Document
-                        iconSize: WorkbenchStyle.iconSizeSmall
-                        iconColor: QuiColor.FontDark
+                        iconSize: VisionRTSize.IconSize
+                        iconColor: QuiColor.FontCaption
                     }
                     QuiText {
                         text: "日志"
                         font: QuiFont.Body
-                        color: QuiColor.FontDark
+                        color: QuiColor.FontCaption
                     }
                 }
                 MouseArea {
@@ -681,13 +572,13 @@ ApplicationWindow {
         defaultSuffix: "vrt.json"
         onAccepted: {
             if (window.unsavedSaving)
-                app.resolveUnsaved("save", window.localPath(selectedFile));
+                app.resolveUnsaved(UnsavedDecision.Save, window.localPath(selectedFile));
             else
                 app.save(window.localPath(selectedFile));
         }
         onRejected: {
             if (window.unsavedSaving) {
-                app.resolveUnsaved("cancel");
+                app.resolveUnsaved(UnsavedDecision.Cancel);
                 unsaved.close();
             }
             window.unsavedSaving = false;
@@ -703,16 +594,16 @@ ApplicationWindow {
         useNeutralButton: true
         onPositiveClickListener: function () {
             window.unsavedSaving = true;
-            app.resolveUnsaved("save");
+            app.resolveUnsaved(UnsavedDecision.Save);
         }
         onNegativeClickListener: function () {
             window.unsavedSaving = false;
-            app.resolveUnsaved("cancel");
+            app.resolveUnsaved(UnsavedDecision.Cancel);
             unsaved.close();
         }
         onNeutralClickListener: function () {
             window.unsavedSaving = false;
-            app.resolveUnsaved("discard");
+            app.resolveUnsaved(UnsavedDecision.Discard);
             unsaved.close();
         }
     }

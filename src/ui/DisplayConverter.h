@@ -1,6 +1,7 @@
 #pragma once
 
 #include <visionrt/contracts/Value.h>
+#include <visionrt/contracts/ProtocolEnums.h>
 
 #include <QImage>
 #include <QObject>
@@ -28,11 +29,11 @@ class DisplayConverter final : public QObject
     Q_OBJECT
 public:
     explicit DisplayConverter(QObject *parent = nullptr);
-    void requestBatch(DataRef<Image> images, QString colorOrder, quint64 requestId, quint64 generation);
+    void requestBatch(DataRef<Image> images, ColorOrder colorOrder, quint64 requestId, quint64 generation);
     ~DisplayConverter() override;
     void                invalidate(quint64 generation);
     void                waitForReads();
-    static DisplayFrame convert(const cv::Mat &image, const QString &colorOrder = {});
+    static DisplayFrame convert(const cv::Mat &image, ColorOrder colorOrder = ColorOrder::Automatic);
 
     bool isBusy() const noexcept
     {
@@ -54,7 +55,7 @@ private:
     struct Request
     {
         DataRef<Image>          images;
-        QString                 colorOrder;
+        ColorOrder colorOrder = ColorOrder::Automatic;
         quint64                 requestId;
         quint64                 generation;
         quint64                 serial;

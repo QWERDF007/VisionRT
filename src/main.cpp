@@ -3,7 +3,7 @@
 #include "log/LogModel.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/UiPreferences.h"
 
 #include <quickui/Color.h>
@@ -40,14 +40,14 @@ constexpr int kReportBudgetMs = 120000;
 // a machine without a desktop can still prove which interpreter is resident.
 int writePythonReport(visionrt::AppController &controller, const QString &path)
 {
-    if (controller.pythonEnvironmentPhase() == QStringLiteral("probing"))
+    if (controller.pythonEnvironmentPhase() == visionrt::PythonEnvironmentPhase::Probing)
     {
         QEventLoop loop;
         QTimer     poll;
         QObject::connect(&poll, &QTimer::timeout, &loop,
                          [&controller, &loop]
                          {
-                             if (controller.pythonEnvironmentPhase() != QStringLiteral("probing"))
+                             if (controller.pythonEnvironmentPhase() != visionrt::PythonEnvironmentPhase::Probing)
                                  loop.quit();
                          });
         poll.start(50);
@@ -181,14 +181,14 @@ int main(int argc, char *argv[])
                                      }
                                  }, Qt::SingleShotConnection);
                 controller.requestOpen(projectPath);
-                controller.resolveUnsaved("discard");
+                controller.resolveUnsaved(visionrt::UnsavedDecision::Discard);
             };
             startupConnection = QObject::connect(&controller, &visionrt::AppController::runtimeChanged,
                                                  &controller, openProject);
             openProject();
         }
         qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-        visionrt::initializeUiStyle();
+        visionrt::registerUiTypes();
         (void)quickui::QuiColor::getInstance();
         QQmlApplicationEngine engine;
         engine.addImportPath(QCoreApplication::applicationDirPath());

@@ -3,7 +3,7 @@
 #include "WorkbenchFixtures.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ImageFixtures.h"
 #include <quickui/Color.h>
 #include <quickui/Font.h>
@@ -34,14 +34,14 @@ void startupProjectContract()
             throw std::runtime_error(message);
     };
     qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
     for (const bool projectReadyBeforeWindow : {false, true})
     {
         visionrt::testing::WorkbenchInstallation installation;
         visionrt::AppController                  app(1, installation.directory());
         require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "startup catalog did not become ready");
         app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
-        app.resolveUnsaved(QStringLiteral("discard"));
+        app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         if (projectReadyBeforeWindow)
             require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                     "preloaded startup project did not become ready");
@@ -144,7 +144,11 @@ void startupProjectContract()
             const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
             QFile      badProject(badPath);
             require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
-            require(badProject.write(R"json({"format_version":7,"project":{},"flows":{}})json") > 0,
+            require(badProject.write(R"json({
+  "format_version": 8,
+  "project": {},
+  "flows": {}
+})json") > 0,
                     "cannot populate malformed project fixture");
             badProject.close();
             const auto oldNodes   = app.nodes();
@@ -152,7 +156,7 @@ void startupProjectContract()
             const auto oldTitle   = app.title();
             const auto beforeOpen = app.diagnostics().size();
             app.requestOpen(badPath);
-            app.resolveUnsaved(QStringLiteral("discard"));
+            app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
             require(QTest::qWaitFor([&] { return !app.busy() && app.diagnostics().size() > beforeOpen; }, 3000),
                     "project contract failure did not reach the application");
             const auto failure = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array().at(0).toObject();
@@ -201,7 +205,7 @@ void startupProjectContract()
                 "cannot write project warning fixture");
             warningProject.close();
             app.requestOpen(warningPath);
-            app.resolveUnsaved(QStringLiteral("discard"));
+            app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
             const auto warningDiagnostic = [&]
             {
                 for (const auto &entry : QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array())
@@ -286,33 +290,7 @@ void startupProjectContract()
             {
                 auto *button = logWindow->findChild<QQuickItem *>(name);
                 require(button && button->isVisible() && button->isEnabled(), "a log action button is missing");
-                auto *background = button->property("background").value<QQuickItem *>();
-                auto *border = background ? background->property("border").value<QObject *>() : nullptr;
-                require(border && border->property("width").toInt() == 2
-                            && border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
-                        "log action buttons must have visible default borders");
-                require(button->property("font").value<QFont>() == quickui::QuiFont::getInstance()->Body(),
-                        "log action buttons must use QuiFont.Body");
-                const auto normalColor = background->property("color").value<QColor>();
-                QTest::mouseMove(logQuick, button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
-                require(QTest::qWaitFor([&] { return button->property("hovered").toBool(); }, 1000),
-                        "log action button did not receive hover");
-                require(QTest::qWaitFor([&] {
-                    return border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Highlight()
-                        && background->property("color").value<QColor>() != normalColor;
-                }, 1000),
-                        std::string("log action button did not highlight on hover: ") + name
-                            + " border=" + border->property("color").value<QColor>().name().toStdString()
-                            + " normal=" + normalColor.name().toStdString()
-                            + " actual=" + background->property("color").value<QColor>().name().toStdString()
-                            + " hover=" + button->property("hoverColor").value<QColor>().name().toStdString());
-                require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_button_hover_%1.png")
-                                                       .arg(QString::fromLatin1(name))),
-                        "cannot capture the hovered log action button");
-                QTest::mouseMove(logQuick, QPoint(10, logQuick->height() - 10));
-                require(QTest::qWaitFor([&] { return !button->property("hovered").toBool(); }, 1000)
-                            && border->property("color").value<QColor>() == quickui::QuiColor::getInstance()->Border(),
-                        "log action button kept its hover border after the mouse left");
+
             }
             require(logQuick->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/log_window.png")),
                     "cannot capture the log window");

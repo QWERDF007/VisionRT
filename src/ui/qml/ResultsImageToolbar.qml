@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Rectangle {
     id: root
@@ -13,8 +13,8 @@ Rectangle {
     signal oneToOneRequested
     signal roiRequested
 
-    implicitWidth: 36
-    color: QuiColor.Button
+    implicitWidth: VisionRTSize.BarSize
+    color: QuiColor.Primary
     Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -59,7 +59,10 @@ Rectangle {
                 iconColor: hovered ? QuiColor.Highlight : QuiColor.FontPrimary
                 onClicked: root.zoomRequested(0.8)
             }
-            WorkbenchSeparator { orientation: Qt.Horizontal; Layout.alignment: Qt.AlignHCenter }
+            WorkbenchSeparator {
+                orientation: Qt.Horizontal
+                Layout.alignment: Qt.AlignHCenter
+            }
             // Smart point selection: the button reports the user preference only. Availability
             // and pausing are explained in the tooltip, never by silently unchecking it.
             WorkbenchActionButton {
@@ -69,8 +72,8 @@ Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 checkable: false
                 checked: root.controller.easyTouchEnabled
-                normalColor: checked ? QuiColor.Highlight : QuiColor.Transparent
-                hoverColor: checked ? Qt.lighter(QuiColor.Highlight, 1.15) : QuiColor.Hovered
+                normalColor: checked ? QuiColor.Highlight : QuiColor.Button
+                hoverColor: checked ? Qt.lighter(QuiColor.Highlight, 1.15) : QuiColor.ItemHover
                 pressedColor: checked ? Qt.darker(QuiColor.Highlight, 1.15) : QuiColor.ItemPress
                 iconColor: checked ? QuiColor.White : (hovered ? QuiColor.Highlight : QuiColor.FontPrimary)
                 Accessible.name: "智能点选（EasyTouch）"
@@ -79,12 +82,15 @@ Rectangle {
                 Accessible.checked: root.controller.easyTouchEnabled
                 onClicked: root.controller.setEasyTouchEnabled(!root.controller.easyTouchEnabled)
             }
-            WorkbenchSeparator { orientation: Qt.Horizontal; Layout.alignment: Qt.AlignHCenter }
+            WorkbenchSeparator {
+                orientation: Qt.Horizontal
+                Layout.alignment: Qt.AlignHCenter
+            }
             WorkbenchActionButton {
                 text: "编辑输入 ROI"
                 iconSource: QuiFontIcon.Crop
                 Layout.alignment: Qt.AlignHCenter
-                iconColor: enabled ? (hovered ? QuiColor.Highlight : QuiColor.FontPrimary) : WorkbenchStyle.iconMuted
+                iconColor: enabled ? (hovered ? QuiColor.Highlight : QuiColor.FontPrimary) : QuiColor.FontCaption
                 enabled: !root.controller.runtimeBusy && root.controller.selectedNode.length > 0 && !root.controller.trainingMode
                 opacity: enabled ? 1.0 : 0.4
                 Accessible.name: "编辑输入 ROI"

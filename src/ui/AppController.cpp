@@ -1145,7 +1145,7 @@ void AppController::Impl::finishPythonCheck()
                                     : QString::fromStdString(result.status.reason);
             pendingSettings.reset();
             settingsError      = reason;
-            settingsErrorField = QStringLiteral("runtime");
+            settingsErrorField = SettingsPage::Runtime;
             emit q->settingsChanged();
             emit q->settingsApplied(false);
             return;
@@ -1209,7 +1209,7 @@ bool AppController::Impl::commitSettings(Settings next)
     {
         pendingSettings.reset();
         settingsError      = error;
-        settingsErrorField.clear();
+        settingsErrorField = SettingsPage::None;
         emit q->settingsChanged();
         emit q->settingsApplied(false);
         return false;
@@ -1225,7 +1225,7 @@ bool AppController::Impl::commitSettings(Settings next)
     }
     LogService::instance().setMinimumLevel(settings.loggingLevel);
     settingsError.clear();
-    settingsErrorField.clear();
+    settingsErrorField = SettingsPage::None;
     emit q->settingsChanged();
     emit q->settingsApplied(true);
     return true;
@@ -1400,7 +1400,7 @@ QString AppController::settingsError() const
     return impl_->settingsError;
 }
 
-QString AppController::settingsErrorField() const
+SettingsPage AppController::settingsErrorField() const
 {
     return impl_->settingsErrorField;
 }
@@ -1410,9 +1410,9 @@ bool AppController::settingsApplying() const
     return impl_->pendingSettings.has_value();
 }
 
-QString AppController::pythonEnvironmentPhase() const
+PythonEnvironmentPhase AppController::pythonEnvironmentPhase() const
 {
-    return QString::fromLatin1(pythonEnvironmentPhaseKey(impl_->python->environmentStatus().phase));
+    return impl_->python->environmentStatus().phase;
 }
 
 QString AppController::pythonEnvironmentText() const
@@ -1474,15 +1474,14 @@ QVariantMap AppController::pythonEnvironmentReport() const
 
 QVariantMap AppController::settingsSnapshot() const
 {
-    const auto level = logLevelKey(impl_->settings.loggingLevel);
     return {{QStringLiteral("editBuiltins"), impl_->settings.editBuiltins},
-            {QStringLiteral("loggingLevel"), QString::fromLatin1(level.data(), static_cast<qsizetype>(level.size()))},
+            {QStringLiteral("loggingLevel"), static_cast<int>(impl_->settings.loggingLevel)},
             {QStringLiteral("pythonExecutable"), impl_->settings.pythonExecutable}};
 }
 
 bool AppController::applySettings(const QVariantMap &values)
 {
-    const auto fail = [this](const QString &field, const QString &reason)
+    const auto fail = [this](SettingsPage field, const QString &reason)
     {
         // A refused draft never became a commit: the caller reads settingsError, and settingsApplied
         // stays reserved for commits that were attempted and finished.
@@ -1494,15 +1493,15 @@ bool AppController::applySettings(const QVariantMap &values)
     // One commit at a time: a second apply while the interpreter is being checked would start a
     // second process against the same settings file.
     if (impl_->pendingSettings)
-        return fail(QStringLiteral("runtime"), QStringLiteral("正在检查 Python 环境，请稍候"));
+        return fail(SettingsPage::Runtime, QStringLiteral("正在检查 Python 环境，请稍候"));
 
     Settings next = impl_->settings;
     next.editBuiltins = values.value(QStringLiteral("editBuiltins"), next.editBuiltins).toBool();
 
-    LogLevel level = next.loggingLevel;
-    if (!parseLogLevel(values.value(QStringLiteral("loggingLevel")).toString().toStdString(), level))
-        return fail(QStringLiteral("logging"), QStringLiteral("日志等级无效"));
-    next.loggingLevel = level;
+    const auto level = values.value(QStringLiteral("loggingLevel"), -1).toInt();
+    if (level < 0 || level > static_cast<int>(LogLevel::Off))
+        return fail(SettingsPage::Logging, QStringLiteral("日志等级无效"));
+    next.loggingLevel = static_cast<LogLevel>(level);
 
     // A chosen interpreter is resolved and checked before anything is written: an incompatible
     // environment is reported on the field that produced it, and no other setting is committed
@@ -1511,13 +1510,13 @@ bool AppController::applySettings(const QVariantMap &values)
     QString    error;
     const auto executable = resolvePythonExecutable(values.value(QStringLiteral("pythonExecutable")).toString(), &error);
     if (!error.isEmpty())
-        return fail(QStringLiteral("runtime"), error);
+        return fail(SettingsPage::Runtime, error);
     // Clearing the choice needs no interpreter and no check: "not configured" is a legal setting.
     const bool needsCheck = !executable.isEmpty() && executable != impl_->settings.pythonExecutable;
     next.pythonExecutable = executable;
 
     if (next.editBuiltins != impl_->settings.editBuiltins && !impl_->toolEditor.canSetEditBuiltins(next.editBuiltins))
-        return fail(QStringLiteral("builtins"), QStringLiteral("内置工具还有未保存的修改，请先保存或取消"));
+        return fail(SettingsPage::Tools, QStringLiteral("内置工具还有未保存的修改，请先保存或取消"));
 
     if (needsCheck)
     {
@@ -1525,10 +1524,10 @@ bool AppController::applySettings(const QVariantMap &values)
         // starts, and the draft is written only if that check accepts it. The draft is recorded
         // before the check can answer, and only once the check actually started.
         if (!impl_->beginPythonCheck(executable, Impl::PythonCheck::Draft))
-            return fail(QStringLiteral("runtime"), QStringLiteral("正在检查 Python 环境，请稍候"));
+            return fail(SettingsPage::Runtime, QStringLiteral("正在检查 Python 环境，请稍候"));
         impl_->pendingSettings = next;
         impl_->settingsError.clear();
-        impl_->settingsErrorField.clear();
+        impl_->settingsErrorField = SettingsPage::None;
         emit settingsChanged();
         return true;
     }
@@ -1612,10 +1611,11 @@ bool AppController::stopEnabled() const
         || impl_->state == RuntimeState::RunningNode;
 }
 
-QString AppController::runState() const
+RuntimeState AppController::runState() const
 {
-    return stateName(impl_->state);
+    return impl_->state;
 }
+QString AppController::runStateText() const { return stateName(impl_->state); }
 
 QString AppController::currentFlow() const
 {
@@ -1754,20 +1754,20 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     const bool running = presentation.active(node.id);
     const auto snapshot = displaySnapshot(node);
     const auto disposition = snapshot ? snapshot->disposition : NodeDisposition::Pending;
-    QString stateText = "idle";
+    NodeState stateText = NodeState::Idle;
     if (running)
-        stateText = "running";
+        stateText = NodeState::Running;
     else if (snapshot)
         switch (disposition)
         {
         case NodeDisposition::Canceled:
-            stateText = "cancelled";
+            stateText = NodeState::Canceled;
             break;
         case NodeDisposition::Failed:
-            stateText = "failed";
+            stateText = NodeState::Failed;
             break;
         default:
-            stateText = snapshot->status.code == 0 ? "succeeded" : "failed";
+            stateText = snapshot->status.code == 0 ? NodeState::Succeeded : NodeState::Failed;
             break;
         }
     const auto diagnostic = presentation.status(node);
@@ -1784,7 +1784,7 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     row.x             = node.position.x;
     row.y             = node.position.y;
     row.state         = stateText;
-    row.disposition   = dispositionName(disposition);
+    row.disposition   = disposition;
     row.executed      = disposition == NodeDisposition::Succeeded || disposition == NodeDisposition::Failed
                    || disposition == NodeDisposition::Canceled;
     row.timingText    = timingText.total;
@@ -1793,8 +1793,8 @@ NodeListModel::Row AppController::Impl::nodeRow(const NodeDefinition &node) cons
     row.statusMessage = diagnostic ? workbench::q(diagnostic->status.message) : QString{};
     row.statusDetail  = diagnostic ? workbench::q(diagnostic->status.detail) : QString{};
     if (!running && diagnostic && (presentation.instance(node.id) || diagnostic->phase == NodePhase::Release
-                     || (stateText == "idle" && !diagnostic->status)))
-        row.state = "failed";
+                     || (stateText == NodeState::Idle && !diagnostic->status)))
+        row.state = NodeState::Failed;
     if (const auto *lifecycleDiagnostic = presentation.lifecycle(node.id))
     {
         row.lifecycleMessage = diagnosticMessage(*lifecycleDiagnostic);
@@ -2185,11 +2185,11 @@ bool AppController::isClosing() const
     return impl_->operations.isClosing();
 }
 
-void AppController::resolveUnsaved(const QString &decision, const QString &savePath)
+void AppController::resolveUnsaved(UnsavedDecision decision, const QString &savePath)
 {
     if (!impl_->operations.active() || !impl_->operations.awaitingDecision())
         return;
-    if (decision == "cancel")
+    if (decision == UnsavedDecision::Cancel)
     {
         const bool wasClosing = impl_->operations.isClosing();
         impl_->operations.cancel();
@@ -2197,12 +2197,12 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
             emit closingChanged();
         return;
     }
-    if (decision == "save")
+    if (decision == UnsavedDecision::Save)
     {
         if (!save(savePath))
             return;
     }
-    else if (decision != "discard")
+    else if (decision != UnsavedDecision::Discard)
         return;
     impl_->operations.approve();
     impl_->operations.decisionMade();
@@ -2211,20 +2211,16 @@ void AppController::resolveUnsaved(const QString &decision, const QString &saveP
 
 bool AppController::save(const QString &path)
 {
-    if (impl_->operations.isClosing())
+    if (impl_->state != RuntimeState::Idle || impl_->presentation.draining() || !impl_->operations.acceptsSave())
+    {
+        impl_->report(QStringLiteral("当前任务尚未结束，暂时不能保存工程"));
         return false;
+    }
     const auto previousPath = impl_->editor.project().path;
     auto destination = path.isEmpty() ? previousPath : workbench::localPath(path);
     if (destination.empty())
     {
         emit savePathRequired();
-        return false;
-    }
-    if (!workspaceEnabled())
-    {
-        // A run owns the project; writing it mid-run would serialise a moving project, so the
-        // request is refused instead of being queued for later.
-        impl_->report(QStringLiteral("运行期间不能保存工程，请先停止运行"));
         return false;
     }
     // An installed example stays as the product shipped it. Ctrl+S therefore asks where the user's

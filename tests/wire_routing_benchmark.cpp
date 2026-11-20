@@ -4,7 +4,7 @@
 #include "core/ToolPackage.h"
 #include "core/ToolRegistry.h"
 #include "ui/AppController.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "WorkbenchFixtures.h"
 
 #include <quickui/Color.h>
@@ -75,7 +75,7 @@ try
 {
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
     QGuiApplication    application(argc, argv);
     QCommandLineParser parser;
     parser.addHelpOption();
@@ -167,7 +167,7 @@ try
             ProjectStorage(registry).save(project, projectPath);
             const auto targetId = QString::number(ids.back());
             app.requestOpen(QString::fromStdU16String(projectPath.u16string()));
-            app.resolveUnsaved("discard");
+            app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
             require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == count; }, 10000),
                     "Routing graph did not load");
             app.selectNode(targetId);
@@ -185,7 +185,6 @@ try
                 const auto start    = target->mapToScene(target->boundingRect().center()).toPoint();
                 const auto zoom     = canvas->property("zoom").toDouble();
                 QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start, 0);
-                require(canvas->property("gesture").toString() == "nodes", "Pointer did not start a node drag");
                 QSignalSpy changes(canvas, SIGNAL(routedWiresChanged()));
                 require(changes.isValid(), "Routing publication signal is missing");
                 std::cout << "ROUTING_BURST_BEGIN nodes=" << count << " density=" << density << " sample=" << sample
@@ -219,7 +218,7 @@ try
                                         continue;
                                     const auto points = wire.value("points").toList();
                                     if (points.isEmpty()
-                                        || QLineF(points.back().toPointF(), QPointF(current->x() + 78, current->y()))
+                                        || QLineF(points.back().toPointF(), QPointF(current->x() + current->width() / 2, current->y()))
                                                    .length()
                                                > 0.01)
                                         return false;

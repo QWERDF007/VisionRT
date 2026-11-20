@@ -40,7 +40,7 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
   "name_zh": "Fixture",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "math",
     "file": "tool.py",
     "symbol": "execute"
@@ -50,9 +50,12 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })",
                                                 root / "tools" / folder / "tool.json",
                                                 {
@@ -523,7 +526,7 @@ try
   "name_zh": "Lazy",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "math",
     "file": "tool.py",
     "symbol": "execute"
@@ -533,9 +536,12 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })",
                                                        root / "tools/custom/math/tool.json",
                                                        {

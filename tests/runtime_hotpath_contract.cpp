@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
@@ -111,7 +112,7 @@ class Counter:
     require(repeated && OutputModel::fullText(*repeated) == "2", "hot-path repeated execution failed");
     require(text(package + "python/custom/hotpath/init") == "1", "hot-path execution re-initialized the instance");
     require(text(package + "python/custom/hotpath/exec") == "2", "hot-path execution did not reuse the instance");
-    require(app.nodes().first().toMap().value("state").toString() == "succeeded",
+    require(app.nodes().first().toMap().value("state").toInt() == static_cast<int>(NodeState::Succeeded),
             "hot-path repeated execution did not succeed");
     std::cout << "HOTPATH_CONTRACT_PASS init=1 exec=2 json_removed=1 script_removed=1\n";
     return 0;

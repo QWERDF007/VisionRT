@@ -16,16 +16,7 @@ PortRef reference(const QJsonValue &value, const QString &context)
 {
     const auto block = json::object(value, context);
     json::fields(block, {"stage", "id"}, context);
-    const auto stage = json::text(block.value("stage"), context + ".stage");
-    PortStage  parsed = PortStage::Inputs;
-    if (stage == "init")
-        parsed = PortStage::Init;
-    else if (stage == "inputs")
-        parsed = PortStage::Inputs;
-    else if (stage == "outputs")
-        parsed = PortStage::Outputs;
-    else
-        throw ContractError("未知端口引用阶段：" + stage);
+    const auto parsed = json::enumeration<PortStage>(block.value("stage"), PortStage::Outputs, context + ".stage");
     const auto id = block.value("id");
     if (!id.isDouble() || id.toDouble() < 0.0 || id.toDouble() > 4294967295.0
         || id.toDouble() != std::floor(id.toDouble()))
@@ -98,7 +89,7 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
             }
             else
             {
-                port.type = parseTypeToken(json::text(item.value("type"), context + ".type"));
+                port.type = ValueJson::decodeType(json::object(item.value("type"), context + ".type"));
             }
             if (item.contains("default"))
                 port.defaultValue = decode("default");
@@ -122,15 +113,10 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
                 const auto block = json::object(item.value("ui"), context + ".ui");
                 json::fields(block, {"editor", "tab", "group", "step", "decimals", "options_provider"},
                              context + ".ui");
-                for (const auto &[key, target] :
-                     std::initializer_list<std::pair<const char *, std::string *>>{
-                         {          "editor",          &port.editor},
-                         {             "tab",             &port.tab},
-                         {           "group",           &port.group},
-                         {"options_provider", &port.optionsProvider}
-                })
-                    if (block.contains(key))
-                        *target = json::text(block.value(key), context + ".ui." + key, false);
+                if (block.contains("editor")) port.editor = json::enumeration<EditorKind>(block.value("editor"), EditorKind::Rect, context);
+                if (block.contains("tab")) port.tab = json::enumeration<ParameterTab>(block.value("tab"), ParameterTab::Postprocess, context);
+                if (block.contains("group")) port.group = json::text(block.value("group"), context);
+                if (block.contains("options_provider")) port.optionsProvider = json::enumeration<OptionsProvider>(block.value("options_provider"), OptionsProvider::GpuDevices, context);
                 if (block.contains("step"))
                     port.step = decode("ui", {"step"});
                 if (block.contains("decimals"))
@@ -159,7 +145,7 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
                 const auto block = json::object(item.value("display"), context + ".display");
                 json::fields(block, {"color_order", "visible"}, context + ".display");
                 if (block.contains("color_order"))
-                    port.colorOrder = json::text(block.value("color_order"), context + ".display.color_order");
+                    port.colorOrder = json::enumeration<ColorOrder>(block.value("color_order"), ColorOrder::RGBA, context);
                 if (block.contains("visible"))
                 {
                     if (!block.value("visible").isBool())
@@ -186,23 +172,9 @@ std::vector<PortDefinition> ports(const ValueJson::Document &document, const QJs
     return result;
 }
 
-QString stageText(PortStage stage)
-{
-    switch (stage)
-    {
-    case PortStage::Init:
-        return QStringLiteral("init");
-    case PortStage::Inputs:
-        return QStringLiteral("inputs");
-    case PortStage::Outputs:
-        return QStringLiteral("outputs");
-    }
-    return QStringLiteral("inputs");
-}
-
 QJsonValue referenceJson(const PortRef &reference)
 {
-    return QJsonObject{{"stage", stageText(reference.stage)}, {"id", static_cast<double>(reference.id)}};
+    return QJsonObject{{"stage", static_cast<int>(reference.stage)}, {"id", static_cast<double>(reference.id)}};
 }
 
 QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage)
@@ -222,7 +194,7 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage
                                          {"port", referenceJson(port.typeFrom->portParameter)}
             });
         else
-            item.insert("type", QString::fromStdString(typeToken(port.type)));
+            item.insert("type", ValueJson::encodeType(port.type));
         if (!isMissing(port.defaultValue)
             && (port.typeFrom || !equalValues(port.defaultValue, defaultValue(port.type))))
             item.insert("default", ValueJson::encode(port.defaultValue, port.type));
@@ -240,15 +212,11 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage
         if (!constraints.isEmpty())
             item.insert("constraints", constraints);
         QJsonObject ui;
-        for (const auto &[key, value] : std::initializer_list<std::pair<const char *, std::string>>{
-                 {          "editor",          port.editor},
-                 {           "group",           port.group},
-                 {"options_provider", port.optionsProvider}
-        })
-            if (!value.empty())
-                ui.insert(key, QString::fromStdString(value));
-        if (port.tab != "基本输入" && !port.tab.empty())
-            ui.insert("tab", QString::fromStdString(port.tab));
+        if (port.editor != EditorKind::Default) ui.insert("editor", static_cast<int>(port.editor));
+        if (stage != PortStage::Outputs && port.tab != ParameterTab::BasicInput)
+            ui.insert("tab", static_cast<int>(port.tab));
+        if (!port.group.empty()) ui.insert("group", QString::fromStdString(port.group));
+        if (port.optionsProvider != OptionsProvider::None) ui.insert("options_provider", static_cast<int>(port.optionsProvider));
         if (port.step)
             ui.insert("step", ValueJson::encode(*port.step, port.type));
         if (port.decimals)
@@ -268,8 +236,8 @@ QJsonArray encodePorts(const std::vector<PortDefinition> &ports, PortStage stage
         QJsonObject display;
         if (port.type.type == Type::Image)
             display.insert("visible", port.imageVisible);
-        if (!port.colorOrder.empty())
-            display.insert("color_order", QString::fromStdString(port.colorOrder));
+        if (port.colorOrder != ColorOrder::Automatic)
+            display.insert("color_order", static_cast<int>(port.colorOrder));
         if (!display.isEmpty())
             item.insert("display", display);
         result.append(item);
@@ -287,9 +255,10 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             throw ContractError("工具声明必须是 JSON 对象");
         const auto root = document.json().object();
         json::fields(root,
-                     {"name_en", "name_zh", "version", "implementation", "ui", "init_params", "inputs", "outputs",
+                     {"schema_version", "name_en", "name_zh", "version", "implementation", "ui", "init_params", "inputs", "outputs",
                       "node_model", "interaction", "training"},
                      "工具声明");
+        if (root.value("schema_version").toInt() != 1) throw ContractError("工具声明 schema_version 必须为 1");
         ToolDefinition definition;
         definition.nameEn  = json::text(root.value("name_en"), "name_en");
         definition.nameZh  = json::text(root.value("name_zh"), "name_zh");
@@ -301,19 +270,19 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
         const auto implementation = json::object(root.value("implementation"), "implementation");
         json::fields(implementation, {"kind", "binding", "package", "file", "symbol", "resources"},
                      "implementation");
-        const auto kind = json::text(implementation.value("kind"), "implementation.kind");
-        if (kind == "cpp")
+        const auto kind = json::enumeration<ToolKind>(implementation.value("kind"), ToolKind::Host, "implementation.kind");
+        if (kind == ToolKind::Cpp)
         {
             definition.kind = ToolKind::Cpp;
         }
-        else if (kind == "host")
+        else if (kind == ToolKind::Host)
         {
             definition.kind = ToolKind::Host;
             definition.hostBinding = json::text(implementation.value("binding"), "implementation.binding");
         }
-        else if (kind == "python_function" || kind == "python_class")
+        else if (kind == ToolKind::PythonFunction || kind == ToolKind::PythonClass)
         {
-            definition.kind = kind == "python_function" ? ToolKind::PythonFunction : ToolKind::PythonClass;
+            definition.kind = kind == ToolKind::PythonFunction ? ToolKind::PythonFunction : ToolKind::PythonClass;
             definition.entry.package = json::relativePath(
                 json::text(implementation.value("package"), "implementation.package"), "implementation.package");
             definition.entry.file = json::relativePath(
@@ -321,19 +290,19 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             definition.entry.symbol = json::text(implementation.value("symbol"), "implementation.symbol");
         }
         else
-            throw ContractError("未知 implementation.kind：" + kind);
+            throw ContractError("未知 implementation.kind");
         const auto allowedField = [&](const char *field)
         {
-            if (kind == "host")
+            if (kind == ToolKind::Host)
                 return std::string_view(field) == "binding";
-            if (kind == "python_function" || kind == "python_class")
+            if (kind == ToolKind::PythonFunction || kind == ToolKind::PythonClass)
                 return std::string_view(field) == "package" || std::string_view(field) == "file"
                        || std::string_view(field) == "symbol";
             return false;
         };
         for (const auto *field : {"binding", "package", "file", "symbol"})
             if (implementation.contains(field) && !allowedField(field))
-                throw ContractError("implementation." + std::string(field) + " 不属于 " + kind);
+                throw ContractError("implementation." + std::string(field) + " 不属于所选实现类型");
         if (implementation.contains("resources"))
             for (const auto &value : json::array(implementation.value("resources"), "implementation.resources"))
                 definition.resources.push_back(
@@ -346,41 +315,19 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             json::fields(ui, {"visibility"}, "ui");
             if (ui.contains("visibility"))
             {
-                const auto visibility = json::text(ui.value("visibility"), "ui.visibility");
-                if (visibility == "normal")
-                    definition.visibility = ToolVisibility::Normal;
-                else if (visibility == "assist")
-                    definition.visibility = ToolVisibility::Assist;
-                else
-                    throw ContractError("未知 ui.visibility：" + visibility);
+                definition.visibility = json::enumeration<ToolVisibility>(ui.value("visibility"), ToolVisibility::Assist, "ui.visibility");
             }
         }
         if (root.contains("node_model"))
         {
-            const auto model = json::text(root.value("node_model"), "node_model");
-            if (model == "fixed")
-                definition.nodeModel = NodeModel::Fixed;
-            else if (model == "expression")
-                definition.nodeModel = NodeModel::Expression;
-            else if (model == "condition")
-                definition.nodeModel = NodeModel::Condition;
-            else if (model == "select")
-                definition.nodeModel = NodeModel::Select;
-            else
-                throw ContractError("未知 node_model：" + model);
+            definition.nodeModel = json::enumeration<NodeModel>(root.value("node_model"), NodeModel::Select, "node_model");
         }
         if (root.contains("training"))
         {
             const auto item = json::object(root.value("training"), "training");
             json::fields(item, {"kind", "asset_param", "helper"}, "training");
-            const auto kind = json::text(item.value("kind"), "training.kind");
             TrainingSpec spec;
-            if (kind == "color_samples")
-                spec.kind = TrainingKind::ColorSamples;
-            else if (kind == "straight_edges")
-                spec.kind = TrainingKind::StraightEdges;
-            else
-                throw ContractError("未知 training.kind：" + kind);
+            spec.kind = json::enumeration<TrainingKind>(item.value("kind"), TrainingKind::StraightEdges, "training.kind");
             spec.assetParam = portId(item.value("asset_param"), "training.asset_param");
             if (const auto helper = item.find("helper"); helper != item.end())
                 spec.helper = json::text(*helper, "training.helper");
@@ -416,21 +363,7 @@ ToolDefinition parseToolDefinitionJson(const std::string &content, const std::fi
             {
                 for (const auto &value : json::array(item.value("roi_kinds"), "interaction.roi_kinds"))
                 {
-                    const auto kind = json::text(value, "interaction.roi_kinds");
-                    if (kind == "point")
-                        mapping.roiKinds.push_back(RoiKind::Point);
-                    else if (kind == "segment")
-                        mapping.roiKinds.push_back(RoiKind::Segment);
-                    else if (kind == "rectangle")
-                        mapping.roiKinds.push_back(RoiKind::Rectangle);
-                    else if (kind == "circle")
-                        mapping.roiKinds.push_back(RoiKind::Circle);
-                    else if (kind == "polygon")
-                        mapping.roiKinds.push_back(RoiKind::Polygon);
-                    else if (kind == "point_set")
-                        mapping.roiKinds.push_back(RoiKind::PointSet);
-                    else
-                        throw ContractError("未知 ROI kind：" + kind);
+                    mapping.roiKinds.push_back(json::enumeration<RoiKind>(value, RoiKind::PointSet, "interaction.roi_kinds"));
                 }
             }
             definition.interaction = std::move(mapping);
@@ -481,18 +414,16 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
     auto definition = source;
     normalizeToolDefinition(definition);
     validateToolDefinition(definition);
-    QJsonObject implementation{{"kind", "cpp"}};
+    QJsonObject implementation{{"kind", static_cast<int>(definition.kind)}};
     switch (definition.kind)
     {
     case ToolKind::Cpp:
         break;
     case ToolKind::Host:
-        implementation.insert("kind", "host");
         implementation.insert("binding", QString::fromStdString(definition.hostBinding));
         break;
     case ToolKind::PythonFunction:
     case ToolKind::PythonClass:
-        implementation.insert("kind", definition.kind == ToolKind::PythonFunction ? "python_function" : "python_class");
         implementation.insert("package", json::pathText(definition.entry.package));
         implementation.insert("file", json::pathText(definition.entry.file));
         implementation.insert("symbol", QString::fromStdString(definition.entry.symbol));
@@ -505,50 +436,24 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
         implementation.insert("resources", resources);
     }
     QJsonObject root{
+        {"schema_version", 1},
         {"name_en", QString::fromStdString(definition.nameEn)},
         {"name_zh", QString::fromStdString(definition.nameZh)},
         {"version", QString::fromStdString(definition.version)},
         {"implementation", implementation}
     };
     if (definition.visibility != ToolVisibility::Normal)
-        root.insert("ui", QJsonObject{{"visibility", "assist"}});
+        root.insert("ui", QJsonObject{{"visibility", static_cast<int>(definition.visibility)}});
     if (auto init = encodePorts(definition.initParams, PortStage::Init); !init.isEmpty())
         root.insert("init_params", init);
     if (auto inputs = encodePorts(definition.inputs, PortStage::Inputs); !inputs.isEmpty())
         root.insert("inputs", inputs);
     if (auto outputs = encodePorts(definition.outputs, PortStage::Outputs); !outputs.isEmpty())
         root.insert("outputs", outputs);
-    if (definition.nodeModel != NodeModel::Fixed)
-    {
-        const char *model = "fixed";
-        switch (definition.nodeModel)
-        {
-        case NodeModel::Fixed:
-            break;
-        case NodeModel::Expression:
-            model = "expression";
-            break;
-        case NodeModel::Condition:
-            model = "condition";
-            break;
-        case NodeModel::Select:
-            model = "select";
-            break;
-        }
-        root.insert("node_model", model);
-    }
+    if (definition.nodeModel != NodeModel::Fixed) root.insert("node_model", static_cast<int>(definition.nodeModel));
     if (definition.training)
     {
-        const char *kind = "color_samples";
-        switch (definition.training->kind)
-        {
-        case TrainingKind::ColorSamples:
-            break;
-        case TrainingKind::StraightEdges:
-            kind = "straight_edges";
-            break;
-        }
-        QJsonObject training{{"kind", kind},
+        QJsonObject training{{"kind", static_cast<int>(definition.training->kind)},
                              {"asset_param", static_cast<double>(definition.training->assetParam)}};
         if (!definition.training->helper.empty())
             training.insert("helper", QString::fromStdString(definition.training->helper));
@@ -573,27 +478,7 @@ std::string emitNormalizedToolJson(const ToolDefinition &source)
             QJsonArray kinds;
             for (const auto kind : definition.interaction->roiKinds)
             {
-                switch (kind)
-                {
-                case RoiKind::Point:
-                    kinds.append("point");
-                    break;
-                case RoiKind::Segment:
-                    kinds.append("segment");
-                    break;
-                case RoiKind::Rectangle:
-                    kinds.append("rectangle");
-                    break;
-                case RoiKind::Circle:
-                    kinds.append("circle");
-                    break;
-                case RoiKind::Polygon:
-                    kinds.append("polygon");
-                    break;
-                case RoiKind::PointSet:
-                    kinds.append("point_set");
-                    break;
-                }
+                kinds.append(static_cast<int>(kind));
             }
             interaction.insert("roi_kinds", kinds);
         }

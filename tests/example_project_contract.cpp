@@ -97,7 +97,7 @@ try
     // installation as an ordinary project that saves in place again.
     const auto installedProject = ExampleProject::directory(appDir) / u8"演示.vrt.json";
     write(installedProject,
-          R"({"format_version":7,"project":{"name":"演示","next_node_seq":"1","next_flow_seq":"2"},)"
+          R"({"format_version":8,"project":{"name":"演示","next_node_seq":"1","next_flow_seq":"2"},)"
           R"("flows":[{"flow_id":"flow_1","name":"演示","run_selected":true,"nodes":[]}]})");
     const auto before = read(installedProject);
 
@@ -107,7 +107,7 @@ try
     QObject::connect(&controller, &AppController::projectReplaced, [&] { replaced = true; });
     QObject::connect(&controller, &AppController::savePathRequired, [&] { asked = true; });
     controller.requestOpen(QString::fromStdWString(installedProject.wstring()));
-    controller.resolveUnsaved("discard");
+    controller.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return replaced; }, 15000), "the installed example did not open");
 
     require(!controller.save(), "Ctrl+S wrote an installed example");

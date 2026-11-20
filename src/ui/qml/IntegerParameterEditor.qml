@@ -1,11 +1,11 @@
 import QtQuick
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 QuiStepperField {
     id: root
     buttonWidth: implicitHeight
-    iconSize: 20
+    iconSize: VisionRTSize.IconSize
     contentPadding: 0
     flat: true
 
@@ -21,17 +21,17 @@ QuiStepperField {
 
     property string _lastValue: ""
 
-    implicitHeight: 32
+    implicitHeight: VisionRTSize.ContentSize
     canDecrease: enabled && !readOnly && canDecrement
     canIncrease: enabled && !readOnly && canIncrement
     onTextEdited: invalid = false
 
     function sync() {
         if (inputItem.activeFocus && text !== _lastValue)
-            return
-        _lastValue = valueText
-        text = valueText
-        invalid = false
+            return;
+        _lastValue = valueText;
+        text = valueText;
+        invalid = false;
     }
 
     onValueTextChanged: sync()
@@ -39,29 +39,29 @@ QuiStepperField {
 
     onCommitRequested: {
         if (text === valueText) {
-            invalid = false
-            return
+            invalid = false;
+            return;
         }
         // A rejected draft stays in the field for the user to correct; validation is reported to
         // the owner of the value instead of painting the row red.
         if (commitValue(text)) {
-            _lastValue = text
-            invalid = false
+            _lastValue = text;
+            invalid = false;
         } else {
-            rejected(text)
-            invalid = false
+            rejected(text);
+            invalid = false;
         }
     }
     onCancelRequested: {
-        text = valueText
-        invalid = false
+        text = valueText;
+        invalid = false;
     }
     onDecreaseRequested: {
-        _lastValue = text
-        stepValue(-1, text)
+        _lastValue = text;
+        stepValue(-1, text);
     }
     onIncreaseRequested: {
-        _lastValue = text
-        stepValue(1, text)
+        _lastValue = text;
+        stepValue(1, text);
     }
 }

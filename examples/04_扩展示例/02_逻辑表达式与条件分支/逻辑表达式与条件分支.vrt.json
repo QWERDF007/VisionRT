@@ -1,5 +1,5 @@
 {
-  "format_version": 7,
+  "format_version": 8,
   "project": {
     "name": "逻辑表达式与条件分支",
     "next_node_seq": "5",
@@ -28,37 +28,37 @@
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               }
             ],
@@ -66,45 +66,45 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 1
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               }
             ]
@@ -112,32 +112,32 @@
           "inputs": [
             {
               "port_id": 5,
-              "mode": "literal",
+              "mode": 0,
               "literal": 2
             },
             {
               "port_id": 4,
-              "mode": "literal",
+              "mode": 0,
               "literal": "顺序（下一张）"
             },
             {
               "port_id": 1,
-              "mode": "literal",
+              "mode": 0,
               "literal": "examples/04_扩展示例/02_逻辑表达式与条件分支/images"
             },
             {
               "port_id": 2,
-              "mode": "literal",
+              "mode": 0,
               "literal": false
             },
             {
               "port_id": 6,
-              "mode": "literal",
+              "mode": 0,
               "literal": false
             },
             {
               "port_id": 3,
-              "mode": "literal",
+              "mode": 0,
               "literal": "循环"
             }
           ]
@@ -159,7 +159,7 @@
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               }
             ],
@@ -167,20 +167,20 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Array",
-                  "dtype": "float64",
+                  "type": 5,
+                  "dtype": 4,
                   "rank": 1
                 }
               }
@@ -189,7 +189,7 @@
           "inputs": [
             {
               "port_id": 1,
-              "mode": "upstream",
+              "mode": 1,
               "literal": null,
               "source": {
                 "node_seq": "1",
@@ -214,16 +214,16 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 2
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 2
                 }
               }
@@ -232,8 +232,8 @@
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Array",
-                  "dtype": "float64",
+                  "type": 5,
+                  "dtype": 4,
                   "rank": 1
                 }
               }
@@ -242,25 +242,25 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Float"
+                  "type": 1
                 }
               }
             ]
@@ -268,7 +268,7 @@
           "inputs": [
             {
               "port_id": 2,
-              "mode": "upstream",
+              "mode": 1,
               "literal": null,
               "source": {
                 "node_seq": "2",
@@ -284,8 +284,8 @@
                 "name": "图像均值",
                 "symbol": "mean",
                 "type": {
-                  "type": "Array",
-                  "dtype": "float64",
+                  "type": 5,
+                  "dtype": 4,
                   "rank": 1
                 },
                 "allow_missing": false
@@ -298,7 +298,7 @@
                 "symbol": "is_bright",
                 "expression": "mean[0] > 50.0",
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 },
                 "exposed": true
               },
@@ -308,7 +308,7 @@
                 "symbol": "deviation",
                 "expression": "abs(mean[0] - 50.0)",
                 "type": {
-                  "type": "Float"
+                  "type": 1
                 },
                 "exposed": true
               }
@@ -331,23 +331,23 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 2
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 2
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "String"
+                  "type": 0
                 }
               }
             ],
@@ -355,7 +355,7 @@
               {
                 "port_id": 1,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               }
             ],
@@ -363,37 +363,37 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               }
             ]
@@ -401,7 +401,7 @@
           "inputs": [
             {
               "port_id": 1,
-              "mode": "upstream",
+              "mode": 1,
               "literal": null,
               "source": {
                 "node_seq": "3",

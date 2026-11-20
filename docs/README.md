@@ -83,33 +83,17 @@ Python 侧的形状同样是契约：函数与类的 `execute` 返回 `{'outputs
 
 ## 界面约束
 
-字体来源：[QuickUI 字体](../3rdparty/QuickUI/src/Font.cpp)；参数输入验证：[参数控件契约](../tests/workbench_parameters.cpp)。
-
-图标来源：[QuickUI 图标枚举](../3rdparty/QuickUI/src/include/quickui/IconsFont.h)；参数图标入口：[参数编辑器](../src/ui/qml/ParameterEditor.qml)。
-
-辅助窗口：[公共外壳](../src/ui/qml/WorkbenchWindow.qml)、[平台设置](../src/ui/qml/SettingsWindow.qml)、[自定义工具](../src/ui/qml/CustomToolWindow.qml)、[目录树与操作](../src/ui/qml/ToolCatalogPane.qml)；交互与样式验证：[窗口契约](../tests/tool_editor_dialog_test.cpp)、[进程退出契约](../tests/workbench_exit_contract.cpp)。
-
-样式来源：[工作台](../src/ui/style/WorkbenchStyle.qml)、[参数](../src/ui/style/ParameterStyle.qml)、[工具树](../src/ui/style/ToolTreeStyle.qml)、[图像结果](../src/ui/style/ResultsStyle.qml)、[流程](../src/ui/style/FlowStyle.qml)；[参数页签与分隔线](../src/ui/qml/ParameterPanel.qml)。尺寸与缩放验收见[布局契约](../tests/workbench_layout_contract.cpp)。
-
-应用控件：[操作按钮](../src/ui/qml/WorkbenchActionButton.qml)、[参数操作](../src/ui/qml/ParameterActionButton.qml)、[输入外框](../src/ui/qml/ParameterFieldFrame.qml)、[参数下拉](../src/ui/qml/ParameterComboBox.qml)、[文本输入](../src/ui/qml/WorkbenchTextField.qml)、[分隔线](../src/ui/qml/WorkbenchSeparator.qml)。
-
-面板边界：[工作区分割](../src/ui/qml/Main.qml)、[结果面板](../src/ui/qml/ResultsPanel.qml)、[工具库](../src/ui/qml/ToolLibrary.qml)、[流程画布](../src/ui/qml/FlowCanvas.qml)、[输出表格](../src/ui/qml/OutputPanel.qml)；渲染验收见[布局契约](../tests/workbench_layout_contract.cpp)。
-
-复用按钮：[基础按钮](../3rdparty/QuickUI/src/controls/QuiButtonBase.qml)、[普通按钮](../3rdparty/QuickUI/src/controls/QuiButton.qml)、[主按钮](../3rdparty/QuickUI/src/controls/QuiFilledButton.qml)；窗口尺寸与交互验证：[窗口契约](../tests/tool_editor_dialog_test.cpp)。
-
-日志窗口：[界面](../src/ui/qml/LogDialog.qml)、[窗口交互契约](../tests/workbench_startup.cpp)。
-
-退出生命周期：[关闭状态](../src/ui/ProjectOperations.h)、[控制器](../src/ui/AppController.cpp)、[进程退出契约](../tests/workbench_exit_contract.cpp)。
-
-菜单尺寸实现：[QuickUI 菜单](../3rdparty/QuickUI/src/controls/QuiMenu.qml)、[菜单项](../3rdparty/QuickUI/src/controls/QuiMenuItem.qml)；完整路径与系统缩放验收：[布局契约](../tests/workbench_layout_contract.cpp)。
-
-重构沿用用户确认的三张 VisionRT V3 截图作为外观基准，保持既有布局、配色、间距、边框、图标、控件与节点外观；不另建样式体系，不将结构重构变成视觉改版。
-
-运行态只改变节点卡片的标题底色、标题文字与 2px 边框（`#1a7f37` / 白色），不新增“执行中”、错误诊断或任何卡片文字，也不改变卡片尺寸、图标、版本与耗时区域；选中仍用独立蓝色虚线，运行绿框不被选中覆盖。
+- [整体 UI 样式清单](UI_STYLE_INVENTORY.md)：实际尺寸、字体、颜色、图标码位及完整窗口区域红框。
+- 样式入口：[应用尺寸](../src/ui/Size.h)、[专用颜色](../src/ui/Color.h)、[枚举与样式注册](../src/ui/UiTypes.cpp)、[QuickUI 字体](../3rdparty/QuickUI/src/Font.cpp)、[通用颜色](../3rdparty/QuickUI/src/Color.cpp)、[图标枚举](../3rdparty/QuickUI/src/include/quickui/IconsFont.h)。
+- 工作台组合：[主窗口](../src/ui/qml/Main.qml)、[顶部工具栏](../src/ui/qml/MainToolbar.qml)、[流程工具栏](../src/ui/qml/FlowToolbar.qml)、[流程页签](../src/ui/qml/FlowTabs.qml)、[流程画布](../src/ui/qml/FlowCanvas.qml)、[节点卡片](../src/ui/qml/NodeDelegate.qml)、[工具库](../src/ui/qml/ToolLibrary.qml)。
+- 辅助窗口：[原生窗口外壳](../src/ui/qml/WorkbenchWindow.qml)、[设置草稿与提交](../src/ui/qml/SettingsWindow.qml)、[设置内容](../src/ui/qml/SettingsContent.qml)、[自定义工具组合](../src/ui/qml/CustomToolWindow.qml)、[工具信息](../src/ui/qml/ToolInformationPane.qml)、[端口列](../src/ui/qml/ToolPortsPane.qml)、[端口卡片](../src/ui/qml/ToolPortCard.qml)、[目录树](../src/ui/qml/ToolCatalogPane.qml)。
+- 应用控件：[操作按钮](../src/ui/qml/WorkbenchActionButton.qml)、[参数操作](../src/ui/qml/ParameterActionButton.qml)、[输入外框](../src/ui/qml/ParameterFieldFrame.qml)、[参数下拉](../src/ui/qml/ParameterComboBox.qml)、[文本输入](../src/ui/qml/WorkbenchTextField.qml)、[分隔线](../src/ui/qml/WorkbenchSeparator.qml)。
+- 参数与结果：[参数组合](../src/ui/qml/ParameterPanel.qml)、[字段编辑](../src/ui/qml/ParameterEditor.qml)、[结果组合](../src/ui/qml/ResultsPanel.qml)、[训练记录](../src/ui/qml/ResultsTrainingRecords.qml)、[输出表格](../src/ui/qml/OutputPanel.qml)、[日志窗口](../src/ui/qml/LogDialog.qml)。
+- 功能验收：[参数读写](../tests/workbench_parameters.cpp)、[窗口应用与取消](../tests/tool_editor_dialog_test.cpp)、[运行期交互](../tests/workbench_interaction_contract.cpp)、[训练](../tests/workbench_training_contract.cpp)、[退出](../tests/workbench_exit_contract.cpp)。外观按100%系统缩放、最大化主窗体人工检查；不维护尺寸、颜色或窄窗布局断言。
 
 ## 安装与升级
 
-ABI 9 原生模块须使用当前 SDK 重新编译。旧声明与旧工程不作为兼容目标；升级时核对相对资源路径。Python 工具接收原始字符串，不再接收宿主按工程目录转换的绝对路径。当前接口见 [SDK](../3rdparty/VisionRTContracts/include/visionrt/contracts/Tool.h)、[Python 值桥](../src/python/PythonRuntime.cpp) 与 [工程存储](../src/core/ProjectStorage.cpp)。
+协议源定义：[公共枚举](../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h)、[类型结构](../3rdparty/VisionRTContracts/include/visionrt/contracts/TypeSpec.h)、[工具声明读写](../src/core/DefinitionJson.cpp)、[工程存储](../src/core/ProjectStorage.cpp)、[设置存储](../src/ui/UiPreferences.cpp)、[模块 ABI](../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)。只消费当前数字枚举格式，不提供历史格式兼容。QML 与 Python 的枚举从 C++ 定义[导出](../3rdparty/VisionRTContracts/tools/export_enums.py)。
 
 安装清单只记录**本轮实际写入**的文件：exe、项目 DLL、依赖、windeployqt 产物、工具包与 `qt.conf` 都经 `InstallOwnership` 登记；`custom-tools/**`、`logs/**`、`ui-preferences.json` 永不进入清单。清单在验证通过后才写，失败不会留下宣称完成的记录。清理只删除旧清单内的文件；清单缺失、含用户路径、绝对路径、`..`、重复项或文件/目录冲突时整次拒绝，不删除任何文件。契约见 [test_package_app.py](../tests/test_package_app.py)（三代升级逐文件 hash、保护路径与越界负例）。
 
@@ -140,7 +124,7 @@ ABI 9 原生模块须使用当前 SDK 重新编译。旧声明与旧工程不作
 | 运行时管理、调度与目录失败状态 | [运行时事件](../src/runtime/RuntimeEngine.h)、[节点活动事件与有界邮箱](../src/runtime/NodeActivity.h)、[邮箱契约](../tests/node_activity_mailbox_test.cpp)、[执行窗口契约](../tests/runtime_node_activity_contract.cpp)、[注册状态](../src/core/ToolRegistry.h)、[运行时契约](../tests/runtime_contract.cpp)、[真实释放诊断与队列溢出](../tests/runtime_diagnostics_contract.cpp)、[热路径无 JSON 重读与实例重建](../tests/runtime_hotpath_contract.cpp)、[运行期 Python 延迟创建](../tests/runtime_python_lazy_contract.cpp)、[真实停止与关窗事件](../tests/workbench_cancellation.cpp)、[真实停止/复位/关窗交错](../tests/workbench_lifecycle_contract.cpp)、[注册契约](../tests/tool_registry_contract.cpp) |
 | 应用日志与诊断 | [日志服务](../src/log/LogService.h)、[有界日志模型](../src/log/LogModel.h)、[日志窗口](../src/ui/qml/LogDialog.qml)、[控制器诊断入口](../src/ui/AppControllerDiagnostics.cpp)、[日志文本契约](../tests/log_text_contract.cpp)、[日志聚合契约](../tests/log_aggregation_contract.cpp)、[日志生命周期契约](../tests/log_lifecycle_contract.cpp)、[真实窗口契约](../tests/workbench_startup.cpp) |
 | 节点元数据与画布路由 | [节点读回](../src/ui/AppController.cpp)、[读回与原生值契约](../tests/ui_value_contract.cpp)、[路由器](../src/ui/WireRouter.h)、[画布](../src/ui/qml/FlowCanvas.qml)、[路由契约](../tests/wire_router_contract.cpp)、[真实窗口契约](../tests/flow_canvas_scenarios.cpp)、[同轨迹分阶段基准](../tests/wire_routing_benchmark.cpp) |
-| 工作台结构与样式 | [主窗口](../src/ui/qml/Main.qml)、[流程页签与画布](../src/ui/qml/FlowCanvas.qml)、[节点模型与角色通知](../src/ui/NodeListModel.h)、[工具库](../src/ui/qml/ToolLibrary.qml)、[样式初始化](../src/ui/Theme.cpp)、[ui](../src/ui)、[真实流程新增/切换/关闭](../tests/workbench_flows_contract.cpp)、[真实复制粘贴与内部连线](../tests/workbench_clipboard_contract.cpp)、[节点卡片](../src/ui/qml/NodeDelegate.qml)、[真实运行/成功/失败/取消状态与颜色](../tests/workbench_status_contract.cpp)、[运行期交互收口](../tests/workbench_interaction_contract.cpp)、[真实工具树搜索/折叠/展开](../tests/workbench_tooltree_contract.cpp)、[真实改参与发布原子替换](../tests/workbench_publication_contract.cpp)、[真实窄窗与100/150/200%DPI布局](../tests/workbench_layout_contract.cpp)、[不可用工具添加拒绝](../tests/workbench_unavailable_tool_contract.cpp) |
+| 工作台结构与样式 | [样式与区域定位](UI_STYLE_INVENTORY.md)、[模块组合](../src/ui/qml/Main.qml)、[枚举注册](../src/ui/UiTypes.cpp)、[节点模型](../src/ui/NodeListModel.h)、[真实流程切换](../tests/workbench_flows_contract.cpp)、[复制粘贴与连线](../tests/workbench_clipboard_contract.cpp)、[运行结果状态](../tests/workbench_status_contract.cpp)、[运行期交互](../tests/workbench_interaction_contract.cpp)、[工具树搜索与展开](../tests/workbench_tooltree_contract.cpp)、[工具发布](../tests/workbench_publication_contract.cpp) |
 | 运行期交互 | [唯一可用条件与停止入口](../src/ui/AppController.h)、[停止/保存拒绝/单次/循环/单节点真实契约](../tests/workbench_interaction_contract.cpp) |
 | ROI 编辑与拒绝诊断 | [编辑会话唯一拥有者](../src/ui/RoiEditSession.h)、[编码、语义视图与构造/编辑](../3rdparty/VisionRTContracts/include/visionrt/contracts/ROI.h)、[视图与几何契约](../3rdparty/VisionRTContracts/tests/test_roi_view_contract.cpp)、[构造与读回成本基准](../tests/roi_view_benchmark.cpp)、[编辑入口](../src/ui/AppControllerRoi.cpp)、[图像视口](../src/ui/ImageViewport.h)、[绘制交互契约](../tests/viewport_contract.cpp)、[原生值工作台契约](../tests/ui_value_contract.cpp)、[真实窗口契约](../tests/workbench_roi.cpp) |
 | 展示存储与读取阶段 | [显示转换](../src/ui/DisplayConverter.h)、[非8位批量转换与同条件基准](../tests/display_conversion_benchmark.cpp)、[输出模型](../src/ui/OutputModel.h)、[读取调度](../src/ui/AppControllerReadback.cpp)、[运行时握手](../src/runtime/RuntimeEngine.h)、[异步文本与目录刷新完成顺序](../tests/ui_completion_contract.cpp)、[静默通知与像素读取契约](../tests/ui_notifications_contract.cpp)、[Windows 原生轮询探针](../tools/verify_ui_notifications.cjs)、[视口析构契约](../tests/viewport_lifetime_contract.cpp)、[执行中缓存帧与全文排队](../tests/output_text_readback_test.cpp)、[显示存储契约](../tests/display_storage_contract.cpp)、[工作台节点存储回收](../tests/ui_storage_contract.cpp)、[跨工程、端口类型与迟到显示隔离](../tests/ui_result_isolation_contract.cpp)、[输出值契约](../tests/output_value_contract.cpp)、[读取阶段契约](../tests/result_readback_barrier_test.cpp) |
@@ -165,7 +149,7 @@ ABI 9 原生模块须使用当前 SDK 重新编译。旧声明与旧工程不作
 | `gpu` | 真实设备推理；缺设备或缺 YOLO fixture 时按 SKIP 返回码 77 报 NOT RUN | `tests-gpu` |
 | `perf` | 基准与性能采样 | `tests-perf` |
 
-工作台的每个场景是一个独立 CTest 条目，不再有“聚合入口 + 独立条目”重复执行同一场景；`core` 与 `short-window` 也是独立条目。DPI/外观截图由 `-DVISIONRT_TEST_VISUAL=ON` 显式注册，默认回归只跑功能断言、不落截图。
+工作台每个场景独立注册；当前场景与分组以 [CMakeLists.txt](../CMakeLists.txt) 和 `ctest -N` 为准。样式通过100%系统缩放、最大化主窗口的实际截图检查，功能测试保留用户操作和数据结果。
 
 VisionTools 侧同样按成本拆分：`image_read_cache_test` 用三张小图验证 LRU、reload、失败回滚与第二实例隔离，`image_read_cache_benchmark` 才跑 1600×900 的冷/暖/长循环并写 `read_cache_evidence.json`（`LABELS perf`，尺寸、图数、轮次均可显式传入）；`infer_trace_geometry` 与 `infer_trace_uninitialized` 是常规场景，`infer_trace_initialized` 需要引擎或权重，单独 `SKIP_RETURN_CODE 77` 并归 `gpu`。
 

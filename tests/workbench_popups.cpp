@@ -1,7 +1,8 @@
+#include "core/ValueJson.h"
 #include "ui/AppController.h"
 #include "WorkbenchFixtures.h"
 #include "common/Version.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/OutputModel.h"
 #include "ui/ImageViewport.h"
 #include <quickui/Color.h>
@@ -122,7 +123,7 @@ void popupSessionsContract()
     visionrt::AppController                  app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "popup catalog did not become ready");
     app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
-    app.resolveUnsaved(QStringLiteral("discard"));
+    app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
             "popup contract could not open the real project");
     app.selectNode(QStringLiteral("1"));
@@ -168,8 +169,8 @@ void popupSessionsContract()
     require(QTest::qWaitFor([&] { return menu->property("opened").toBool(); }, 1000),
             "data column did not open its menu");
     auto *copyAction = menu->findChild<QObject *>(QStringLiteral("outputCopyAction"));
-    require(copyAction != nullptr && copyAction->property("enabled").toBool(),
-            "the current node status cannot be copied");
+    require(copyAction != nullptr && !copyAction->property("enabled").toBool(),
+            "unpublished status must not offer a copy action");
     const auto dataActions = menu->property("count").toInt();
     require(dataActions == 1, "the data column still offers actions other than copy");
     QMetaObject::invokeMethod(menu, "close", Qt::DirectConnection);
@@ -270,7 +271,7 @@ void popupSessionsContract()
     const auto openProject = [&]
     {
         app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
-        app.resolveUnsaved(QStringLiteral("discard"));
+        app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
                 "cannot reopen popup project");
         app.selectNode(QStringLiteral("1"));
@@ -549,12 +550,12 @@ void outputCellReuseContract()
     QJsonArray ports;
     for (int number = 0; number < 64; ++number)
         ports.append(QJsonObject{{"id", 2 + number},
-            {"name_zh", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", "int"}});
-    const QJsonObject definition{
+            {"name_zh", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", visionrt::ValueJson::encodeType(visionrt::TypeSpec{visionrt::Type::Int})}});
+    const QJsonObject definition{{"schema_version", 1},
         {       "name_en",                                 "test.outputs"},
         {       "name_zh",                                 "Many outputs"},
         {       "version",                                        "1.0.0"},
-        {"implementation", QJsonObject{{"kind", "python_function"},
+        {"implementation", QJsonObject{{"kind", 1},
                                         {"package", "outputs"},
                                         {"file", "outputs.py"},
                                         {"symbol", "run"}}},
@@ -581,7 +582,7 @@ void outputCellReuseContract()
     QQmlEngine manyEngine;
     manyEngine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     manyEngine.rootContext()->setContextProperty("app", &manyApp);
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
     QQmlComponent manyComponent(&manyEngine, QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/OutputPanel.qml")));
     std::unique_ptr<QObject> manyOwner(manyComponent.create());
     if (!manyOwner) throw std::runtime_error(manyComponent.errorString().toStdString());

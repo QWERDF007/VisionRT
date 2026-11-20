@@ -6,7 +6,7 @@
 #include "core/DefinitionJson.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include <quickui/Color.h>
 
 #include <QDir>
@@ -53,7 +53,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     const auto                     root       = installation.directory();
@@ -130,8 +130,15 @@ def run(inputs):
     // Single run: stop is the only enabled entry, and a save neither writes nor queues.
     removeEntered();
     app.runOnce();
-    require(waitFor([&] { return app.runState() == "RunningOnce"; }, 5000), "single run did not start");
+    require(waitFor([&] { return app.runState() == RuntimeState::RunningOnce; }, 5000), "single run did not start");
     require(waitEntered(), "single run did not reach the tool");
+    const auto runningSelection = app.selectedNode();
+    require(QMetaObject::invokeMethod(window, "toggleLeft"), "workspace collapse action is missing");
+    require(!window->property("leftExpanded").toBool(), "workspace did not collapse");
+    require(QMetaObject::invokeMethod(window, "toggleLeft"), "workspace expand action is missing");
+    require(window->property("leftExpanded").toBool() && app.selectedNode() == runningSelection
+                && app.runState() == RuntimeState::RunningOnce,
+            "collapsing the workspace changed the selected node or interrupted execution");
     require(!app.workspaceEnabled() && app.stopEnabled(), "single run did not lock the workspace");
     require(app.selectedNode() == node, "selection changed during a single run");
     app.selectNode(QString{});
@@ -144,7 +151,7 @@ def run(inputs):
     auto *stopButton = toolbarButton(window, {QStringLiteral("停止运行")});
     require(stopButton && stopButton->isEnabled(), "single run has no enabled stop entry");
     app.stop();
-    require(waitFor([&] { return app.runState() == "Stopping"; }, 2000), "single run did not stop");
+    require(waitFor([&] { return app.runState() == RuntimeState::Stopping; }, 2000), "single run did not stop");
     require(!app.workspaceEnabled() && !app.stopEnabled(), "stopping kept the workspace interactive");
     require(toolbarButton(window, {QStringLiteral("等待本轮结束")}), "stopping state has no visible entry");
     release();
@@ -159,11 +166,11 @@ def run(inputs):
     QFile::remove(permission);
     removeEntered();
     app.runNode();
-    require(waitFor([&] { return app.runState() == "RunningNode"; }, 5000), "node run did not start");
+    require(waitFor([&] { return app.runState() == RuntimeState::RunningNode; }, 5000), "node run did not start");
     require(waitEntered(), "node run did not reach the tool");
     require(!app.workspaceEnabled() && app.stopEnabled(), "node run did not lock the workspace");
     app.stop();
-    require(waitFor([&] { return app.runState() == "Stopping"; }, 2000), "node run did not stop");
+    require(waitFor([&] { return app.runState() == RuntimeState::Stopping; }, 2000), "node run did not stop");
     release();
     require(waitFor([&] { return !app.busy(); }), "stopped node run did not become idle");
 
@@ -171,12 +178,12 @@ def run(inputs):
     QFile::remove(permission);
     removeEntered();
     app.toggleLoop();
-    require(waitFor([&] { return app.runState() == "RunningLoop"; }, 5000), "loop run did not start");
+    require(waitFor([&] { return app.runState() == RuntimeState::RunningLoop; }, 5000), "loop run did not start");
     require(waitEntered(), "loop run did not reach the tool");
     auto *loopStop = toolbarButton(window, {QStringLiteral("停止循环")});
     require(loopStop && loopStop->isEnabled(), "loop run has no enabled stop entry");
     app.toggleLoop();
-    require(waitFor([&] { return app.runState() == "Stopping"; }, 2000), "loop run did not stop");
+    require(waitFor([&] { return app.runState() == RuntimeState::Stopping; }, 2000), "loop run did not stop");
     release();
     require(waitFor([&] { return !app.busy(); }), "stopped loop run did not become idle");
     require(app.workspaceEnabled(), "loop run did not restore the workspace");

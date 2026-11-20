@@ -1,3 +1,4 @@
+#include "core/ValueJson.h"
 #include "ui/ToolPortListModel.h"
 
 #include <QCoreApplication>
@@ -33,13 +34,13 @@ int main(int argc, char **argv)
     assert(!model.updatePort(0, {{"nameZh", "非法改名"}}));
 
     // 2. Add business ports to Inputs
-    assert(model.addPort("阈值", "int", "128"));
+    assert(model.addPort("阈值", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "128"));
     assert(model.rowCount() == 2);
     assert(!model.isFixedRow(1));
     assert(model.data(model.index(1, 0), ToolPortListModel::IdRole).toUInt() == 1);
     assert(model.data(model.index(1, 0), ToolPortListModel::NameZhRole).toString() == "阈值");
 
-    assert(model.addPort("输入图像", "image"));
+    assert(model.addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
     assert(model.rowCount() == 3);
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
 
@@ -49,7 +50,7 @@ int main(int argc, char **argv)
     assert(model.data(model.index(2, 0), ToolPortListModel::ShowImageRole).toBool());
     assert(model.portAt(2).value("showImage").toBool());
     // Retyping away from Image clears the display choice with the rest of the image fields.
-    assert(model.changeType(2, "int"));
+    assert(model.changeType(2, (QVariantMap{{"type", static_cast<int>(Type::Int)}})));
     assert(!def.inputs[1].imageVisible);
 
     // 3. Move row
@@ -66,7 +67,7 @@ int main(int argc, char **argv)
     assert(model.removePort(1));
     assert(model.rowCount() == 2);
 
-    assert(model.addPort("掩模", "image"));
+    assert(model.addPort("掩模", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
     assert(model.rowCount() == 3);
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
 
@@ -81,13 +82,13 @@ int main(int argc, char **argv)
     assert(model.data(model.index(1, 0), ToolPortListModel::IdRole).toUInt() == 1);
 
     // Add business output -> the first number above the status envelope.
-    assert(model.addPort("输出图像", "image"));
+    assert(model.addPort("输出图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
     assert(model.rowCount() == 3);
     assert(model.data(model.index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
 
     // SET-VIS-02: a business output carries its own default the same way an input does, so the card
     // offers the field in both directions. The host-owned status rows stay read-only.
-    assert(model.addPort("通过", "bool", "false"));
+    assert(model.addPort("通过", (QVariantMap{{"type", static_cast<int>(Type::Bool)}}), "false"));
     assert(model.rowCount() == 4);
     assert(def.outputs.back().type == TypeSpec{Type::Bool});
     assert(model.updatePort(3, {{"defaultValue", QStringLiteral("true")}}));
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
     // Init has 0 fixed rows
     assert(model.rowCount() == 0);
     assert(model.fixedRowCount() == 0);
-    assert(model.addPort("初始参数", "int", "0"));
+    assert(model.addPort("初始参数", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "0"));
     assert(model.rowCount() == 1);
     assert(model.data(model.index(0, 0), ToolPortListModel::IdRole).toUInt() == 0);
 
@@ -117,38 +118,38 @@ int main(int argc, char **argv)
 
     ToolPortListModel retypeModel;
     retypeModel.setDraft(&retype, PortStage::Inputs, true);
-    assert(retypeModel.addPort("阈值", "int", "128"));
+    assert(retypeModel.addPort("阈值", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "128"));
     assert(retypeModel.updatePort(1, {{"min", QStringLiteral("0")}, {"max", QStringLiteral("255")}}));
-    assert(retypeModel.addPort("检测区域", "roi"));
-    assert(retypeModel.addPort("输入图像", "image"));
-    assert(retypeModel.addPort("参考区域", "roi"));
+    assert(retypeModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::ROI)}})));
+    assert(retypeModel.addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));
+    assert(retypeModel.addPort("参考区域", (QVariantMap{{"type", static_cast<int>(Type::ROI)}})));
     // Both ROI inputs reference the same image port, so retyping it must clear both references.
     retype.inputs[1].image = PortRef{PortStage::Inputs, 3};
     retype.inputs[3].image = PortRef{PortStage::Inputs, 3};
 
-    const auto thresholdImpact = retypeModel.typeChangeImpact(1, QStringLiteral("string"));
+    const auto thresholdImpact = retypeModel.typeChangeImpact(1, (QVariantMap{{"type", static_cast<int>(Type::String)}}));
     assert(thresholdImpact.contains(QStringLiteral("最小值")));
     assert(thresholdImpact.contains(QStringLiteral("最大值")));
-    assert(retypeModel.changeType(1, QStringLiteral("string")));
+    assert(retypeModel.changeType(1, (QVariantMap{{"type", static_cast<int>(Type::String)}})));
     assert(retype.inputs[0].type == TypeSpec{Type::String});
     assert(!retype.inputs[0].minimum.has_value());
     assert(!retype.inputs[0].maximum.has_value());
     assert(equalValues(retype.inputs[0].defaultValue, PortValue{std::string{}}));
 
-    const auto imageImpact = retypeModel.typeChangeImpact(3, QStringLiteral("string"));
+    const auto imageImpact = retypeModel.typeChangeImpact(3, (QVariantMap{{"type", static_cast<int>(Type::String)}}));
     assert(imageImpact.contains(QStringLiteral("端口 2 的图像关联")));
     assert(imageImpact.contains(QStringLiteral("端口 4 的图像关联")));
-    assert(retypeModel.changeType(3, QStringLiteral("string")));
+    assert(retypeModel.changeType(3, (QVariantMap{{"type", static_cast<int>(Type::String)}})));
     assert(!retype.inputs[1].image.has_value());
     assert(!retype.inputs[3].image.has_value());
 
     // 8. An installed tool is read-only: the list shows it but refuses every mutation, so the
     // editor can never overwrite a definition it does not own.
     retypeModel.setDraft(&retype, PortStage::Inputs, false);
-    assert(!retypeModel.addPort("越权参数", "int", "0"));
+    assert(!retypeModel.addPort("越权参数", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "0"));
     assert(!retypeModel.updatePort(1, {{"nameZh", QStringLiteral("越权改名")}}));
     assert(!retypeModel.removePort(1));
-    assert(!retypeModel.changeType(1, QStringLiteral("int")));
+    assert(!retypeModel.changeType(1, (QVariantMap{{"type", static_cast<int>(Type::Int)}})));
 
     // 9. Relations are edited against real candidates: the editor can only pick a reference the
     // declaration accepts, so a dangling or mistyped relation never reaches the draft.
@@ -159,31 +160,30 @@ int main(int argc, char **argv)
 
     ToolPortListModel relModel;
     relModel.setDraft(&rel, PortStage::Inputs, true);
-    assert(relModel.addPort("输入图像", "image"));                  // id 1
-    assert(relModel.addPort("检测区域", "roi"));                    // id 2
-    assert(relModel.addPort("对位数据", "vec_vec_vec_float"));    // id 3
-    assert(relModel.addPort("根目录", "string"));                   // id 4
-    assert(relModel.addPort("模式", "string"));                     // id 5
+    assert(relModel.addPort("输入图像", (QVariantMap{{"type", static_cast<int>(Type::Image)}})));                  // id 1
+    assert(relModel.addPort("检测区域", (QVariantMap{{"type", static_cast<int>(Type::ROI)}})));                    // id 2
+    assert(relModel.addPort("对位数据", ValueJson::encodeType({Type::Array, DType::Float64, 3}).toVariantMap()));    // id 3
+    assert(relModel.addPort("根目录", (QVariantMap{{"type", static_cast<int>(Type::String)}})));                   // id 4
+    assert(relModel.addPort("模式", (QVariantMap{{"type", static_cast<int>(Type::String)}})));                     // id 5
 
     // The editor list follows the row's type.
-    assert(relModel.updatePort(4, {{"editor", QStringLiteral("path")}}));
-    assert(rel.inputs[3].editor == "path");
-    assert(!relModel.updatePort(5, {{"editor", QStringLiteral("rect")}}));
+    assert(relModel.updatePort(4, {{"editor", static_cast<int>(EditorKind::Path)}}));
+    assert(rel.inputs[3].editor == EditorKind::Path);
 
-    const auto imageCandidates = relModel.relationCandidates(2, QStringLiteral("image"));
+    const auto imageCandidates = relModel.relationCandidates(2, RelationKind::Image);
     assert(imageCandidates.size() == 1);
-    assert(imageCandidates[0].toMap().value("ref").toString() == "inputs.1");
+    assert(imageCandidates[0].toMap().value("ref").toMap() == (QVariantMap{{"stage", static_cast<int>(PortStage::Inputs)}, {"id", 1}}));
 
-    assert(relModel.updatePort(2, {{"image", QStringLiteral("inputs.1")}}));
-    assert(relModel.portAt(2).value("imageRef").toString() == "inputs.1");
+    assert(relModel.updatePort(2, {{"image", (QVariantMap{{"stage", static_cast<int>(PortStage::Inputs)}, {"id", 1}})}}));
+    assert(relModel.portAt(2).value("imageRef").toMap() == (QVariantMap{{"stage", static_cast<int>(PortStage::Inputs)}, {"id", 1}}));
     // A relation that the declaration would reject is refused, and the old target stays.
-    assert(!relModel.updatePort(2, {{"image", QStringLiteral("inputs.2")}}));
-    assert(!relModel.updatePort(2, {{"image", QStringLiteral("inputs.3")}}));
+    assert(!relModel.updatePort(2, {{"image", (QVariantMap{{"stage", static_cast<int>(PortStage::Inputs)}, {"id", 2}})}}));
+    assert(!relModel.updatePort(2, {{"image", (QVariantMap{{"stage", static_cast<int>(PortStage::Inputs)}, {"id", 3}})}}));
     assert(rel.inputs[1].image.has_value());
     assert((*rel.inputs[1].image == PortRef{PortStage::Inputs, 1}));
 
-    assert(relModel.relationCandidates(2, QStringLiteral("alignment")).size() == 1);
-    assert(relModel.updatePort(2, {{"alignment", QStringLiteral("inputs.3")}}));
+    assert(relModel.relationCandidates(2, RelationKind::Alignment).size() == 1);
+    assert(relModel.updatePort(2, {{"alignment", (QVariantMap{{"stage", static_cast<int>(PortStage::Inputs)}, {"id", 3}})}}));
     assert(rel.inputs[1].alignment.has_value());
 
     // A String value is edited as its own text, and candidate values are declared one per line.
@@ -252,7 +252,7 @@ int main(int argc, char **argv)
     // author build a declaration the validator rejects at apply time.
     ToolPortListModel initModel;
     initModel.setDraft(&def, PortStage::Init, true);
-    assert(!initModel.addPort("初始化参数", "int", "0"));
+    assert(!initModel.addPort("初始化参数", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "0"));
     assert(def.initParams.empty());
 
     ToolDefinition classDef;
@@ -261,7 +261,7 @@ int main(int argc, char **argv)
     classDef.kind          = ToolKind::PythonClass;
     ToolPortListModel classInitModel;
     classInitModel.setDraft(&classDef, PortStage::Init, true);
-    assert(classInitModel.addPort("初始化参数", "int", "0"));
+    assert(classInitModel.addPort("初始化参数", (QVariantMap{{"type", static_cast<int>(Type::Int)}}), "0"));
     assert(classDef.initParams.size() == 1);
     assert(classDef.initParams[0].id == 0);
 

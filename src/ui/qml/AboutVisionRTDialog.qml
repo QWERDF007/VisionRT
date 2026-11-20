@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 // The body is one plain-text block inside its own layered surface: the dialog background and the
 // text surface must be visibly different, otherwise the selectable area has no boundary.
@@ -15,8 +15,8 @@ WorkbenchDialog {
     neutralText: "复制全部"
     useNegativeButton: false
     positiveText: "关闭"
-    onNeutralClickListener: function() {
-        app.copyAboutText()
+    onNeutralClickListener: function () {
+        app.copyAboutText();
     }
 
     contentDelegate: Component {
@@ -63,8 +63,8 @@ WorkbenchDialog {
                         MouseArea {
                             anchors.fill: parent
                             acceptedButtons: Qt.RightButton
-                            onClicked: function(mouse) {
-                                aboutMenu.popup()
+                            onClicked: function (mouse) {
+                                aboutMenu.popup();
                             }
                         }
 

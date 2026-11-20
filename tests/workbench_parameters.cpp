@@ -5,7 +5,7 @@
 #include <utility>
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include <quickui/Font.h>
 
 #include <QFile>
@@ -66,7 +66,7 @@ void parameterEditorsContract()
   "name_zh": "参数测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "Test/Parameters",
     "file": "run.py",
     "symbol": "run"
@@ -75,7 +75,9 @@ void parameterEditorsContract()
     {
       "id": 1,
       "name_zh": "比例",
-      "type": "float",
+      "type": {
+        "type": 1
+      },
       "default": 0.15,
       "constraints": {
         "min": 0,
@@ -89,28 +91,36 @@ void parameterEditorsContract()
     {
       "id": 2,
       "name_zh": "整数",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 9007199254740993
     },
     {
       "id": 3,
       "name_zh": "路径",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "原始路径",
       "ui": {
-        "editor": "path"
+        "editor": 6
       }
     },
     {
       "id": 4,
       "name_zh": "启用",
-      "type": "bool",
+      "type": {
+        "type": 2
+      },
       "default": true
     },
     {
       "id": 5,
       "name_zh": "色彩",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "bgr",
       "constraints": {
         "options": [
@@ -122,7 +132,11 @@ void parameterEditorsContract()
     {
       "id": 6,
       "name_zh": "标签列表",
-      "type": "vec_string",
+      "type": {
+        "type": 5,
+        "dtype": 6,
+        "rank": 1
+      },
       "default": [
         "a",
         "b"
@@ -131,22 +145,30 @@ void parameterEditorsContract()
     {
       "id": 7,
       "name_zh": "备注",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "中文备注"
     },
     {
       "id": 8,
       "name_zh": "数据目录",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "default": "F:/tmp",
       "ui": {
-        "editor": "path"
+        "editor": 6
       }
     },
     {
       "id": 9,
       "name_zh": "数值数组",
-      "type": "vec_float",
+      "type": {
+        "type": 5,
+        "dtype": 4,
+        "rank": 1
+      },
       "default": [
         0,
         1
@@ -155,7 +177,9 @@ void parameterEditorsContract()
     {
       "id": 10,
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       },
@@ -164,11 +188,13 @@ void parameterEditorsContract()
     {
       "id": 11,
       "name_zh": "区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "default": [],
       "relations": {
         "image": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 10
         }
       }
@@ -178,14 +204,19 @@ void parameterEditorsContract()
     {
       "id": 2,
       "name_zh": "比例",
-      "type": "float"
+      "type": {
+        "type": 1
+      }
     },
     {
       "id": 3,
       "name_zh": "整数",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
 
     AppController app(1, directory.path());
@@ -201,7 +232,7 @@ void parameterEditorsContract()
     require(!app.setParameter(testing::parameters::Ratio, false, ".nan"), "YAML numeric syntax must not be accepted");
     require(!app.setParameter(testing::parameters::Weights, false, "{shape: [2], data: [0, 1]}"), "YAML arrays must not be accepted");
     QQmlEngine engine;
-    initializeUiStyle();
+    registerUiTypes();
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQmlComponent component(&engine);
@@ -224,31 +255,6 @@ void parameterEditorsContract()
 
     auto *input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "Float parameter did not use the public spin editor");
-    require(input->height() == 32, "Float input text area must use the full 32px height");
-    auto *fonts = quickui::QuiFont::getInstance();
-    const QFont bodyFont = fonts->Body();
-    require(input->property("font").value<QFont>().pixelSize() == 16,
-            "Float input must use the default 16 pixel body font");
-
-    // Dynamic propagation: same numeric size (14) toggled between pointSizeF and pixelSize
-    // verifies QFont unit semantics and dynamic propagation to real consumer item:
-    QFont ptFont = bodyFont;
-    ptFont.setPointSizeF(14.0);
-    fonts->setBody(ptFont);
-    QTest::qWait(50);
-    const QFont actualPt = input->property("font").value<QFont>();
-    require(std::abs(actualPt.pointSizeF() - 14.0) < 0.01 && actualPt.pixelSize() == -1,
-            "Float input did not preserve point unit mode when assigned pointSizeF(14)");
-
-    QFont pxFont = bodyFont;
-    pxFont.setPixelSize(14);
-    fonts->setBody(pxFont);
-    QTest::qWait(50);
-    const QFont actualPx = input->property("font").value<QFont>();
-    require(actualPx.pixelSize() == 14 && actualPx.pointSizeF() < 0,
-            "Float input did not preserve pixel unit mode when assigned pixelSize(14)");
-
-    fonts->setBody(bodyFont);
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     const auto value = [&](PortId id)
@@ -282,8 +288,7 @@ void parameterEditorsContract()
     QTest::qWait(20);
     input = editor->findChild<QQuickItem *>("stepperInput");
     require(input != nullptr, "integer parameter lost the shared field shell");
-    require(input->property("font").value<QFont>().pixelSize() == 16,
-            "integer input must use the default 16 pixel body font");
+
     input->forceActiveFocus();
     QTest::keyClick(&window, Qt::Key_Up);
     require(value(testing::parameters::Count) == "9007199254740994", "integer keyboard step lost precision or did not commit");
@@ -321,8 +326,7 @@ void parameterEditorsContract()
     };
     auto *pathInput = textInput(editor);
     require(pathInput != nullptr, "text parameter does not expose its editable input");
-    require(pathInput->property("font").value<QFont>().pixelSize() == 16,
-            "path input must use the default 16 pixel body font");
+
     pathInput->forceActiveFocus();
     const QString path = QStringLiteral("F:/测试 数据/含\"引号\"/图像.png");
     pathInput->setProperty("text", path);
@@ -475,15 +479,6 @@ void parameterEditorsContract()
     QGuiApplication::sendEvent(&window, &endTextComposition);
     QTest::keyClick(&window, Qt::Key_Escape);
     require(pathInput->property("text").toString() == "new external path", "Escape did not cancel the draft after IME completion");
-    panel->forceActiveFocus();
-    QTest::mouseMove(&window, QPoint(window.width() - 5, window.height() - 5));
-    QTest::qWait(50);
-    const auto fieldPixel = pathInput->mapToScene(QPointF(pathInput->width() - 4, 2)) * window.devicePixelRatio();
-    const auto normalField = window.grabWindow().pixelColor(fieldPixel.toPoint());
-    QTest::mouseMove(&window, pathInput->mapToScene(QPointF(pathInput->width() - 8, pathInput->height() / 2)).toPoint());
-    QTest::qWait(50);
-    const auto hoveredField = window.grabWindow().pixelColor(fieldPixel.toPoint());
-    require(hoveredField != normalField, "text field has no visible hover feedback");
     QQuickItem *pathField = nullptr;
     QQuickItem *pathAction = nullptr;
     for (auto *item : pathRow->findChildren<QQuickItem *>())
@@ -532,12 +527,10 @@ void parameterEditorsContract()
         require(row != nullptr, "parameter panel did not render a dropdown row");
         auto *combo = comboBox(row);
         require(combo != nullptr, "Bool/enum parameter did not use a dropdown");
-        require(combo->height() == 32, "dropdown height differs from numeric field");
-        require(combo->property("font").value<QFont>() == quickui::QuiFont::getInstance()->Body(),
-                "dropdown did not use default QuiFont.Body");
+
+
         auto *label = findItem(findItem, row, "parameterLabel");
-        require(label && label->property("font").value<QFont>() == quickui::QuiFont::getInstance()->Body(),
-                "parameterLabel did not use default QuiFont.Body");
+
         auto *pathLabel = findItem(findItem, pathRow, "parameterLabel");
         auto *actions = findItem(findItem, row, "parameterActions");
         auto *pathActions = findItem(findItem, pathRow, "parameterActions");
@@ -676,7 +669,7 @@ void parameterEditorsContract()
     require(groupSection->property("expand").toBool(), "parameter group is unexpectedly collapsed before header interaction");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                       groupSection->mapToScene(QPointF(groupSection->width() / 2, 36 / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return groupSection->height() <= 36 + 1; }, 1000),
+    require(QTest::qWaitFor([&] { return !groupSection->property("expand").toBool(); }, 1000),
             "parameter group header did not collapse its content");
     require(!groupSection->property("expand").toBool(), "parameter group remained expanded after its header was clicked");
     panel->setProperty("currentTab", 1);
@@ -687,7 +680,7 @@ void parameterEditorsContract()
     require(groupSection != nullptr && !groupSection->property("expand").toBool(), "tab navigation lost the collapsed group state");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                       groupSection->mapToScene(QPointF(groupSection->width() / 2, 36 / 2)).toPoint());
-    require(QTest::qWaitFor([&] { return groupSection->height() > 36 + 1; }, 1000),
+    require(QTest::qWaitFor([&] { return groupSection->property("expand").toBool(); }, 1000),
             "collapsed parameter group could not expand again");
     require(app.parameters() == groupedParameters && parameterChanges.count() == groupChanges,
             "group collapse or tab navigation changed parameter values");

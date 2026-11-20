@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #ifdef NDEBUG
 #    undef NDEBUG
 #endif
@@ -238,9 +239,30 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
   "name_en": "test.plugin.publication",
   "name_zh": "输出发布",
   "version": "1.0.0",
-  "implementation": { "kind": "cpp" },
-  "init_params": [ { "id": 0, "name_en": "code", "name_zh": "状态码", "type": "int" } ],
-  "outputs": [ { "id": 2, "name_en": "value", "name_zh": "值", "type": "int" } ]
+  "implementation": {
+    "kind": 0
+  },
+  "init_params": [
+    {
+      "id": 0,
+      "name_en": "code",
+      "name_zh": "状态码",
+      "type": {
+        "type": 0
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_en": "value",
+      "name_zh": "值",
+      "type": {
+        "type": 0
+      }
+    }
+  ],
+  "schema_version": 1
 })json");
         const auto definition = parseToolDefinitionJson(declaration);
         auto       loader     = std::make_shared<PluginLoader>();
@@ -426,13 +448,15 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "打包计数器",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "init_params": [
     {
       "name_en": "initial",
       "name_zh": "初始值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 10,
       "id": 0
     }
@@ -441,23 +465,28 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     writeText(declarationDir / "function.json", R"json({
   "name_en": "test.plugin.function",
   "name_zh": "打包函数",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 1
     }
   ],
@@ -465,10 +494,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
@@ -476,16 +508,19 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "outputs": [
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     writeText(pkgDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -538,13 +573,15 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "旧目录工具",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 1
     }
   ],
@@ -552,10 +589,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *legacy = registry.find("test.plugin.legacy");
@@ -567,13 +607,15 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "重复计数器",
   "version": "2.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "init_params": [
     {
       "name_en": "initial",
       "name_zh": "初始值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 10,
       "id": 0
     }
@@ -582,10 +624,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *counter = registry.find("test.plugin.counter");
@@ -624,13 +669,15 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "另一包函数",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 1
     }
   ],
@@ -638,10 +685,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     writeText(otherDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -725,13 +775,15 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "name_zh": "实际打包插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "init_params": [
     {
       "name_en": "initial",
       "name_zh": "初始值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 10,
       "id": 0
     }
@@ -740,10 +792,13 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json";
         f.write(jsonContent);
     }
@@ -769,7 +824,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
         assert(!app.busy());
     };
 
-    assert(app.runState() == "Refreshing");
+    assert(app.runState() == RuntimeState::Refreshing);
     waitForIdle();
     for (const auto &item : app.toolDefinitions())
         assert(item.toMap().value("available").toBool());
@@ -783,7 +838,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.nodes().size() == 1);
     const auto nodeAId = app.nodes().first().toMap().value("id").toString();
-    assert(instances() == 1 && app.nodes().first().toMap().value("state") == "idle");
+    assert(instances() == 1 && app.nodes().first().toMap().value("state").toInt() == static_cast<int>(NodeState::Idle));
     app.copyNodes({nodeAId});
     app.pasteNodes(200, 100);
     waitForIdle();
@@ -801,13 +856,13 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.nodes().isEmpty() && instances() == 0);
     app.requestOpen(saved);
-    app.resolveUnsaved("discard");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     waitForIdle();
     assert(app.nodes().size() == 1 && instances() == 1);
-    assert(app.nodes().first().toMap().value("state") == "idle");
+    assert(app.nodes().first().toMap().value("state").toInt() == static_cast<int>(NodeState::Idle));
     app.runOnce();
     waitForIdle();
-    assert(app.nodes().first().toMap().value("state").toString() == "succeeded");
+    assert(app.nodes().first().toMap().value("state").toInt() == static_cast<int>(NodeState::Succeeded));
 
     // 2. Add Tool B (test.plugin.function) into module_index.json & declaration JSON
     const auto funcJsonFile = jsonDir / "test.plugin.function.json";
@@ -819,13 +874,15 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "name_zh": "函数插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 1
     }
   ],
@@ -833,10 +890,13 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json";
         f.write(funcJsonContent);
     }
@@ -884,7 +944,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     for (const auto &n : app.nodes())
     {
-        assert(n.toMap().value("state").toString() == "succeeded");
+        assert(n.toMap().value("state").toInt() == static_cast<int>(NodeState::Succeeded));
     }
 
     assert(std::filesystem::remove(jsonDir / "test.plugin.counter.json"));
@@ -1017,13 +1077,13 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     }
     assert(app.busy());
     const auto runningState = app.runState();
-    assert(runningState == "RunningLoop");
+    assert(runningState == RuntimeState::RunningLoop);
     // Call rescanTools while running; must be rejected and state remains RunningLoop
     app.rescanTools();
-    assert(app.runState() == "RunningLoop");
+    assert(app.runState() == RuntimeState::RunningLoop);
     app.deleteNodes({app.nodes().first().toMap().value("id")});
     waitForIdle();
-    assert(app.runState() == "Idle");
+    assert(app.runState() == RuntimeState::Idle);
     assert(app.nodes().isEmpty() && instances() == 0);
     assert(std::filesystem::remove(funcJsonFile));
     {
@@ -1034,8 +1094,9 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "name_zh": "释放诊断",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
-  }
+    "kind": 0
+  },
+  "schema_version": 1
 })");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -1052,12 +1113,12 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     assert(app.nodes().size() == 1);
     app.runOnce();
     waitForIdle();
-    assert(app.nodes().first().toMap().value("state") == "succeeded");
+    assert(app.nodes().first().toMap().value("state").toInt() == static_cast<int>(NodeState::Succeeded));
     assert(QDir(temp.path()).mkpath("moved"));
     assert(app.save(temp.filePath("moved/lifecycle.vrt.json")));
     waitForIdle();
     const auto released = app.nodes().first().toMap();
-    assert(released.value("state") == "succeeded" && released.value("statusCode").toInt() == 0);
+    assert(released.value("state").toInt() == static_cast<int>(NodeState::Succeeded) && released.value("statusCode").toInt() == 0);
     assert(released.value("statusMessage").toString() == "ok");
     // Saving the project elsewhere is an ordinary save: no plugin instance depends on the project
     // location, so nothing is released and the node keeps the answer it already published.
@@ -1247,16 +1308,19 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
   "name_zh": "插件甲",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "outputs": [
     {
       "name_en": "val",
       "name_zh": "值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     writeText(unicodeDir / "module_index.json", R"json({
   "schema_version": 1,

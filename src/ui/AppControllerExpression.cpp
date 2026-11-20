@@ -1,4 +1,5 @@
 #include "core/NodeContracts.h"
+#include "core/ValueJson.h"
 #include "ui/DisplayTypes.h"
 #include "ui/OutputModel.h"
 #include "ui/AppController_p.h"
@@ -8,77 +9,36 @@
 
 namespace visionrt {
 namespace {
-const char *modelName(NodeModel model)
-{
-    switch (model)
-    {
-    case NodeModel::Expression:
-        return "expression";
-    case NodeModel::Condition:
-        return "condition";
-    case NodeModel::Select:
-        return "select";
-    case NodeModel::Fixed:
-        break;
-    }
-    return "fixed";
-}
-
-Type typeFromName(const QString &name)
-{
-    for (int index = 0; index <= static_cast<int>(Type::ROI); ++index)
-        if (name == QString::fromLatin1(typeName(static_cast<Type>(index))))
-            return static_cast<Type>(index);
-    throw ContractError("未知类型：" + name.toStdString());
-}
-
 TypeSpec typeFromMap(const QVariantMap &row)
 {
-    TypeSpec spec;
-    spec.type = typeFromName(row.value("type").toString());
-    if (spec.type == Type::Array)
-    {
-        const auto dtype = row.value("dtype").toString();
-        if (dtype.isEmpty())
-            throw ContractError("数组类型需要元素类型");
-        for (int index = 0; index <= static_cast<int>(DType::String); ++index)
-            if (dtype == QString::fromLatin1(dtypeName(static_cast<DType>(index))))
-            {
-                spec.dtype = static_cast<DType>(index);
-                break;
-            }
-        if (!spec.dtype)
-            throw ContractError("未知数组元素类型：" + dtype.toStdString());
-        spec.rank = row.value("rank").toInt();
+    QJsonObject type{{"type", row.value("type").toInt()}};
+    if (row.value("type").toInt() == static_cast<int>(Type::Array)) {
+        type.insert("dtype", row.value("dtype").toInt()); type.insert("rank", row.value("rank").toInt());
     }
-    validateTypeSpec(spec);
-    return spec;
+    return ValueJson::decodeType(type);
 }
-
 QVariantMap typeMap(const TypeSpec &type)
 {
-    return {{"type", QString::fromLatin1(typeName(type.type))},
-            {"dtype", type.dtype ? QString::fromLatin1(dtypeName(*type.dtype)) : QString{}},
-            {"rank", type.rank}};
+    return ValueJson::encodeType(type).toVariantMap();
 }
 } // namespace
 
 
 
-QString AppController::nodeModel() const
+NodeModel AppController::nodeModel() const
 {
     const auto *node = impl_->currentNode();
     const auto *tool = impl_->currentTool();
-    return node && tool ? QString::fromLatin1(modelName(tool->nodeModel)) : QStringLiteral("fixed");
+    return node && tool ? tool->nodeModel : NodeModel::Fixed;
 }
 
-QString AppController::conditionMode() const
+BindingMode AppController::conditionMode() const
 {
     const auto *node = impl_->currentNode();
     const auto *tool = impl_->currentTool();
     if (!node || !tool || tool->nodeModel != NodeModel::Condition)
-        return {};
-    return QString::fromStdString(conditionModeText(*node));
+        return BindingMode::Literal;
+    return conditionUsesUpstream(*node) ? BindingMode::Upstream : BindingMode::Literal;
 }
 
 QVariantMap AppController::expressionConfig(const QString &nodeId) const
@@ -112,7 +72,7 @@ QVariantMap AppController::expressionConfig(const QString &nodeId) const
         program.push_back(row);
     }
     return {{"node", nodeId},
-            {"model", QString::fromLatin1(modelName(tool->nodeModel))},
+            {"model", static_cast<int>(tool->nodeModel)},
             {"nextPortId", static_cast<qulonglong>(config.nextPortId)},
             {"variables", variables},
             {"program", program}};
@@ -258,7 +218,7 @@ QVariantMap AppController::selectType(const QString &nodeId) const
     return typeMap(*node->selectType);
 }
 
-bool AppController::applySelectType(const QString &nodeId, const QString &type, const QString &dtype, int rank)
+bool AppController::applySelectType(const QString &nodeId, int type, int dtype, int rank)
 {
     const auto *tool = impl_->currentTool();
     if (!tool || tool->nodeModel != NodeModel::Select || !impl_->idle())
@@ -279,16 +239,12 @@ bool AppController::applySelectType(const QString &nodeId, const QString &type, 
     return ok;
 }
 
-QString AppController::typeDescription(const QString &type, const QString &dtype, int rank) const
+QString AppController::typeDescription(int type, int dtype, int rank) const
 {
-    TypeSpec spec;
-    try
-    {
-        spec = typeFromMap(QVariantMap{{"type", type}, {"dtype", dtype}, {"rank", rank}});
-    }
-    catch (const ContractError &)
-    {
-        return {};
+    TypeSpec spec{static_cast<Type>(type)};
+    if (spec.type == Type::Array) {
+        if (dtype >= 0) spec.dtype = static_cast<DType>(dtype);
+        spec.rank = rank;
     }
     return displayTypeName(spec);
 }

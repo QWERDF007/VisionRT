@@ -1,5 +1,5 @@
 {
-  "format_version": 7,
+  "format_version": 8,
   "project": {
     "name": "图像读取",
     "next_node_seq": "2",
@@ -28,37 +28,37 @@
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               }
             ],
@@ -66,45 +66,45 @@
               {
                 "port_id": 0,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 1,
                 "type": {
-                  "type": "String"
+                  "type": 3
                 }
               },
               {
                 "port_id": 2,
                 "type": {
-                  "type": "Image"
+                  "type": 4
                 }
               },
               {
                 "port_id": 3,
                 "type": {
-                  "type": "Array",
-                  "dtype": "string",
+                  "type": 5,
+                  "dtype": 6,
                   "rank": 1
                 }
               },
               {
                 "port_id": 4,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 5,
                 "type": {
-                  "type": "Int"
+                  "type": 0
                 }
               },
               {
                 "port_id": 6,
                 "type": {
-                  "type": "Bool"
+                  "type": 2
                 }
               }
             ]
@@ -112,32 +112,32 @@
           "inputs": [
             {
               "port_id": 1,
-              "mode": "literal",
+              "mode": 0,
               "literal": "examples/01_基础入门/01_图像读取/images"
             },
             {
               "port_id": 2,
-              "mode": "literal",
+              "mode": 0,
               "literal": false
             },
             {
               "port_id": 3,
-              "mode": "literal",
+              "mode": 0,
               "literal": "循环"
             },
             {
               "port_id": 4,
-              "mode": "literal",
+              "mode": 0,
               "literal": "顺序（下一张）"
             },
             {
               "port_id": 5,
-              "mode": "literal",
+              "mode": 0,
               "literal": 2
             },
             {
               "port_id": 6,
-              "mode": "literal",
+              "mode": 0,
               "literal": false
             }
           ]

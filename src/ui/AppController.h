@@ -1,5 +1,8 @@
 #pragma once
+#include "ui/UiState.h"
 #include "core/ToolDefinition.h"
+#include "runtime/RuntimeEngine.h"
+#include "python/PythonEnvironment.h"
 #include "ui/ToolEditorController.h"
 
 #include <QAbstractItemModel>
@@ -31,7 +34,8 @@ class AppController : public QObject
     Q_PROPERTY(bool workspaceEnabled READ workspaceEnabled NOTIFY runtimeChanged)
     // True exactly while a run that can still be stopped owns the runtime.
     Q_PROPERTY(bool stopEnabled READ stopEnabled NOTIFY runtimeChanged)
-    Q_PROPERTY(QString runState READ runState NOTIFY runtimeChanged)
+    Q_PROPERTY(visionrt::RuntimeState runState READ runState NOTIFY runtimeChanged)
+    Q_PROPERTY(QString runStateText READ runStateText NOTIFY runtimeChanged)
     Q_PROPERTY(QString diagnostic READ diagnostic NOTIFY diagnosticChanged)
     Q_PROPERTY(QStringList diagnostics READ diagnostics NOTIFY diagnosticChanged)
     Q_PROPERTY(QVariantList flows READ flows NOTIFY projectChanged)
@@ -52,7 +56,7 @@ class AppController : public QObject
     Q_PROPERTY(int drawShape READ drawShape NOTIFY resultsChanged)
     Q_PROPERTY(bool trainingAvailable READ trainingAvailable NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingMode READ trainingMode WRITE setTrainingMode NOTIFY trainingChanged)
-    Q_PROPERTY(QString trainingKind READ trainingKind NOTIFY trainingChanged)
+    Q_PROPERTY(visionrt::TrainingKind trainingKind READ trainingKind NOTIFY trainingChanged)
     Q_PROPERTY(QVariantList trainingRecords READ trainingRecords NOTIFY trainingChanged)
     Q_PROPERTY(QString selectedTrainingRecord READ selectedTrainingRecord NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingSavable READ trainingSavable NOTIFY trainingChanged)
@@ -76,7 +80,7 @@ class AppController : public QObject
     Q_PROPERTY(bool closing READ isClosing NOTIFY closingChanged)
     Q_PROPERTY(QString aboutText READ aboutText NOTIFY aboutTextChanged)
     Q_PROPERTY(visionrt::ToolEditorController *toolEditor READ toolEditor CONSTANT)
-    Q_PROPERTY(QString conditionMode READ conditionMode NOTIFY parametersChanged)
+    Q_PROPERTY(visionrt::BindingMode conditionMode READ conditionMode NOTIFY parametersChanged)
     Q_PROPERTY(bool easyTouchEnabled READ easyTouchEnabled WRITE setEasyTouchEnabled NOTIFY assistChanged)
     // The tool editor lists the declarations shipped with the installation only when this is on.
     Q_PROPERTY(bool editBuiltins READ editBuiltins WRITE setEditBuiltins NOTIFY editBuiltinsChanged)
@@ -85,13 +89,13 @@ class AppController : public QObject
     Q_PROPERTY(QString settingsError READ settingsError NOTIFY settingsChanged)
     // Which page owns the refusal: "builtins", "runtime", "logging" or empty for a file-level
     // failure. The window switches to that page instead of leaving the user on an unrelated one.
-    Q_PROPERTY(QString settingsErrorField READ settingsErrorField NOTIFY settingsChanged)
+    Q_PROPERTY(visionrt::SettingsPage settingsErrorField READ settingsErrorField NOTIFY settingsChanged)
     // True while a chosen interpreter is being checked; the window disables its buttons so a second
     // commit cannot start a second check.
     Q_PROPERTY(bool settingsApplying READ settingsApplying NOTIFY settingsChanged)
     // The one host-side answer to "can Python tools run": the phase key and the sentence behind it.
     // Every surface reads this instead of deriving a second verdict of its own.
-    Q_PROPERTY(QString pythonEnvironmentPhase READ pythonEnvironmentPhase NOTIFY pythonEnvironmentChanged)
+    Q_PROPERTY(visionrt::PythonEnvironmentPhase pythonEnvironmentPhase READ pythonEnvironmentPhase NOTIFY pythonEnvironmentChanged)
     Q_PROPERTY(QString pythonEnvironmentText READ pythonEnvironmentText NOTIFY pythonEnvironmentChanged)
     Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
@@ -109,7 +113,8 @@ public:
     bool                stopEnabled() const;
     // State-only view used by editors: drains caused by display conversion must not disable drawing.
     bool                runtimeBusy() const;
-    QString             runState() const;
+    RuntimeState        runState() const;
+    QString             runStateText() const;
     QString             diagnostic() const;
     QStringList         diagnostics() const;
     Q_INVOKABLE QString diagnosticsJson() const;
@@ -125,7 +130,7 @@ public:
     bool                trainingAvailable() const;
     bool                trainingMode() const;
     void                setTrainingMode(bool value);
-    QString             trainingKind() const;
+    TrainingKind        trainingKind() const;
     QVariantList        trainingRecords() const;
     QString             selectedTrainingRecord() const;
     bool                trainingDirty() const;
@@ -232,7 +237,7 @@ public:
     Q_INVOKABLE void         openRecentProject(const QString &path);
     Q_INVOKABLE void         requestClose();
     Q_INVOKABLE bool         isClosing() const;
-    Q_INVOKABLE void         resolveUnsaved(const QString &decision, const QString &savePath = {});
+    Q_INVOKABLE void         resolveUnsaved(visionrt::UnsavedDecision decision, const QString &savePath = {});
     // The log window reports whether it can actually show records; hidden windows stay passive.
     Q_INVOKABLE void         setLogViewActive(bool active);
     // A field that rejects its own draft never reaches setParameter; the window still records it.
@@ -255,17 +260,17 @@ public:
     // Mode switch is one transaction; binding a source is a separate one.
     Q_INVOKABLE bool         setConditionMode(const QString &node, bool upstream);
     Q_INVOKABLE QVariantMap  selectType(const QString &node) const;
-    Q_INVOKABLE bool         applySelectType(const QString &node, const QString &type, const QString &dtype,
+    Q_INVOKABLE bool         applySelectType(const QString &node, int type, int dtype,
                                              int rank);
     // Chinese description of a type row, reusing the parameter panel's display mapping.
-    Q_INVOKABLE QString      typeDescription(const QString &type, const QString &dtype, int rank) const;
+    Q_INVOKABLE QString      typeDescription(int type, int dtype, int rank) const;
     QAbstractListModel      *nodeListModel() const;
     // Single-row lookups by id: canvas helpers use these instead of scanning a list of maps.
     Q_INVOKABLE QVariantMap  nodeRecord(const QString &id) const;
     Q_INVOKABLE QPointF      nodePosition(const QString &id) const;
     Q_INVOKABLE QVariantList nodePositions() const;
-    QString                  nodeModel() const;
-    QString                  conditionMode() const;
+    NodeModel nodeModel() const;
+    BindingMode              conditionMode() const;
     bool                     easyTouchEnabled() const;
     Q_INVOKABLE void         setEasyTouchEnabled(bool enabled);
     bool                     editBuiltins() const;
@@ -277,9 +282,9 @@ public:
     Q_INVOKABLE QVariantMap  settingsSnapshot() const;
     Q_INVOKABLE bool         applySettings(const QVariantMap &values);
     QString                  settingsError() const;
-    QString                  settingsErrorField() const;
+    SettingsPage             settingsErrorField() const;
     bool                     settingsApplying() const;
-    QString                  pythonEnvironmentPhase() const;
+    PythonEnvironmentPhase pythonEnvironmentPhase() const;
     QString                  pythonEnvironmentText() const;
     // One machine-readable answer to "which interpreter runs the tools, which NumPy backs it, and
     // what is actually resident in this process". Release evidence archives it; the window keeps

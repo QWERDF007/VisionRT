@@ -250,7 +250,7 @@ void allValuesSurviveRealProjectFiles()
     QFile file(filename);
     require(file.open(QIODevice::ReadOnly), "saved project unavailable");
     const auto root = QJsonDocument::fromJson(file.readAll()).object();
-    require(root["format_version"].toInt() == 7, "saved project does not use format7");
+    require(root["format_version"].toInt() == 8, "saved project does not use the current project format");
     const auto saved    = root["flows"].toArray()[0].toObject()["nodes"].toArray()[0].toObject();
     // Inputs are an entry list keyed by port number, not an object keyed by a name.
     const auto literals = saved["inputs"].toArray();

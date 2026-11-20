@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/Project.h"
+#include "ui/UiState.h"
+#include "runtime/Snapshot.h"
 
 #include <QAbstractListModel>
 #include <QVariantList>
@@ -55,8 +57,8 @@ public:
         QString      category;
         double       x = 0;
         double       y = 0;
-        QString      state;
-        QString      disposition;
+        NodeState    state = NodeState::Idle;
+        NodeDisposition disposition = NodeDisposition::Pending;
         bool         executed        = false;
         bool         stale           = false;
         QString      timingText;

@@ -67,6 +67,10 @@ Document readDocument()
         return document;
     }
     document.root  = parsed.object();
+    if (document.root.value("schema_version").toInt() != 1) {
+        document.error = QStringLiteral("设置文件版本不受支持");
+        return document;
+    }
     document.state = SettingsState::Loaded;
     return document;
 }
@@ -90,7 +94,9 @@ bool writeRoot(const QJsonObject &root, QString *error)
             *error = QStringLiteral("无法写入设置文件（%1）：%2").arg(path, file.errorString());
         return false;
     }
-    const auto payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    auto document = root;
+    document.insert("schema_version", 1);
+    const auto payload = QJsonDocument(document).toJson(QJsonDocument::Indented);
     if (file.write(payload) != payload.size())
     {
         if (error)
@@ -148,8 +154,8 @@ bool applyStoredSettings(const QJsonObject &root, Settings &settings, QString *e
         return false;
     if (!requireType(editor, QStringLiteral("toolEditor"), QStringLiteral("editBuiltins"), QJsonValue::Bool,
                      QStringLiteral("布尔值"), error)
-        || !requireType(logging, QStringLiteral("logging"), QStringLiteral("level"), QJsonValue::String,
-                        QStringLiteral("字符串"), error)
+        || !requireType(logging, QStringLiteral("logging"), QStringLiteral("level"), QJsonValue::Double,
+                        QStringLiteral("整数"), error)
         || !requireType(python, QStringLiteral("python"), QStringLiteral("executable"), QJsonValue::String,
                         QStringLiteral("字符串"), error))
         return false;
@@ -158,14 +164,12 @@ bool applyStoredSettings(const QJsonObject &root, Settings &settings, QString *e
 
     if (logging.contains(QStringLiteral("level")))
     {
-        const auto key = logging.value(QStringLiteral("level")).toString().toStdString();
-        if (!parseLogLevel(key, settings.loggingLevel))
-        {
-            if (error)
-                *error = QStringLiteral("设置文件中的日志等级无效：%1")
-                             .arg(logging.value(QStringLiteral("level")).toVariant().toString());
+        const auto level = logging.value("level").toInt(-1);
+        if (level < 0 || level > static_cast<int>(LogLevel::Off)) {
+            if (error) *error = QStringLiteral("日志等级无效");
             return false;
         }
+        settings.loggingLevel = static_cast<LogLevel>(level);
     }
 
     settings.pythonExecutable = python.value(QStringLiteral("executable")).toString();
@@ -237,8 +241,7 @@ bool UiPreferences::saveSettings(const Settings &settings, QString *error)
     root.insert(QStringLiteral("toolEditor"), editor);
 
     auto logging = root.value(QStringLiteral("logging")).toObject();
-    const auto levelKey = logLevelKey(settings.loggingLevel);
-    logging.insert(QStringLiteral("level"), QString::fromLatin1(levelKey.data(), static_cast<qsizetype>(levelKey.size())));
+    logging.insert(QStringLiteral("level"), static_cast<int>(settings.loggingLevel));
     root.insert(QStringLiteral("logging"), logging);
 
     auto python = root.value(QStringLiteral("python")).toObject();

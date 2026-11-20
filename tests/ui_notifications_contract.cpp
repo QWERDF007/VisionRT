@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "core/DefinitionJson.h"
@@ -147,7 +148,7 @@ try
         {2, "次数", {Type::Int}},
         {3, "图像", {Type::Image}}
     };
-    definition.outputs.back().colorOrder = "BGR";
+    definition.outputs.back().colorOrder = ColorOrder::BGR;
     // The result view offers only ports the declaration marks visible.
     definition.outputs.back().imageVisible = true;
     write(package + "tools/custom/notifications/source.json",
@@ -254,7 +255,7 @@ def source(inputs):
                     [&]
                     {
                         return QFileInfo::exists(entered) && !app.nodes().isEmpty()
-                            && app.nodes().front().toMap().value("state").toString() == "running";
+                            && app.nodes().front().toMap().value("state").toInt() == static_cast<int>(NodeState::Running);
                     },
                     5000),
                 "notification tool did not enter its controlled active state");

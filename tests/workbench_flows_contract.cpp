@@ -1,6 +1,6 @@
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include <quickui/Color.h>
 
 #include <QGuiApplication>
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());

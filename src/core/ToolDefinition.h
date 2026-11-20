@@ -1,6 +1,7 @@
 #pragma once
 
 #include "visionrt/contracts/Tool.h"
+#include "visionrt/contracts/ProtocolEnums.h"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -13,38 +14,12 @@
 
 namespace visionrt {
 
-enum class ToolKind { Cpp, PythonFunction, PythonClass, Host };
-
-// Which port list a reference points at. The stage is stored, never inferred from a spelling.
-enum class PortStage
-{
-    Init,
-    Inputs,
-    Outputs
-};
-
 // A port reference is a stage plus a number: the same number may exist once per direction.
 struct PortRef
 {
     PortStage stage = PortStage::Inputs;
     PortId    id    = 0;
     bool      operator==(const PortRef &) const = default;
-};
-
-// How the host edits and materialises a node contract. Only fixed nodes use the
-// declaration ports directly; the other models derive ports from node config.
-enum class NodeModel
-{
-    Fixed,
-    Expression,
-    Condition,
-    Select
-};
-
-enum class ToolVisibility
-{
-    Normal,
-    Assist
 };
 
 // Helper port number -> the tool port it feeds (inputs) or proposes into (proposals).
@@ -55,12 +30,6 @@ struct InteractionMapping
     std::map<PortId, PortRef>   proposals;
     std::vector<RoiKind>        roiKinds;
     bool operator==(const InteractionMapping &) const = default;
-};
-
-enum class ToolOrigin
-{
-    Builtin,
-    Custom
 };
 
 struct ToolRoots
@@ -88,12 +57,6 @@ struct PythonEntry
 // What a tool can be trained on. The host owns the training session and the asset file; the
 // declaration only names which session it can run and which initialization parameter carries the
 // asset path. A tool without this block has no training UI at all.
-enum class TrainingKind
-{
-    ColorSamples,
-    // Two reference edges with their search bands; the tool derives a rigid pose from them.
-    StraightEdges
-};
 
 struct TrainingSpec
 {
@@ -124,19 +87,19 @@ struct PortDefinition {
     // normalisation. A host-owned status port and a type_from output keep it Missing.
     PortValue defaultValue = Missing{};
     std::string nameEn;
-    std::string editor;
-    std::string tab = "基本输入";
+    EditorKind editor = EditorKind::Default;
+    ParameterTab tab = ParameterTab::BasicInput;
     std::string group;
     std::optional<PortValue> step;
     std::optional<int>       decimals;
-    std::string              optionsProvider;
+    OptionsProvider          optionsProvider = OptionsProvider::None;
     std::optional<PortValue> minimum;
     std::optional<PortValue> maximum;
     std::vector<PortValue>   options;
     std::optional<PortRef>   image;
     std::optional<PortRef>   alignment;
     std::optional<PortRef>   sameGeometryAs;
-    std::string              colorOrder;
+    ColorOrder               colorOrder = ColorOrder::Automatic;
     // Author's explicit choice to offer this Image port in the workbench image selector. Absent in
     // the declaration means false: an image port never joins the selector without being named.
     bool                     imageVisible = false;
@@ -173,7 +136,6 @@ struct ToolDefinition {
 };
 
 // "inputs.7" — diagnostics only. The number is the identity; the text never becomes one.
-PortRef     parsePortRef(std::string_view text);
 std::string formatPortRef(const PortRef& reference);
 
 // The one Chinese breadcrumb of a tool ("预处理/图像处理"), used by the tool tree and node badges.
@@ -182,7 +144,6 @@ std::string categoryPath(const ToolDefinition& def);
 // A stable ASCII identifier: letter or underscore first, then letters, digits, '_', '.' or '-'.
 // Tool ids name declaration files, so anything that could leave a directory is rejected here.
 void validateIdentifier(const std::string& value, bool isPort);
-
 
 // Canonical host-provided ports. Input 0 carries the upstream status; outputs 0 and 1 carry the
 // status envelope. They are materialised by normalisation and never written by tool declarations.
@@ -226,7 +187,8 @@ PortId nextFreePortId(const ToolDefinition &def, PortStage stage);
 // Editor kinds that can actually present this type. The declaration validator accepts any known
 // editor whose shape fits; this is the subset the editor offers and reconciliation keeps, so a
 // value field is never declared with a control that cannot render it.
-std::vector<std::string_view> editorChoices(const TypeSpec &type);
+const char *editorLabel(EditorKind editor);
+std::vector<EditorKind> editorChoices(const TypeSpec &type);
 
 // Retypes one draft port: every value, constraint, relation and reference the new type can still
 // hold is kept, and the rest is cleared. The returned sentences name each cleared field, so an

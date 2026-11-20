@@ -1,7 +1,7 @@
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include <quickui/Color.h>
 
 #include "core/ValueJson.h"
@@ -96,7 +96,7 @@ void roiParameterContract()
   "name_zh": "ROI图像源",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "roi",
     "file": "source.py",
     "symbol": "run"
@@ -104,30 +104,37 @@ void roiParameterContract()
   "outputs": [
     {
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
-        "color_order": "BGR",
+        "color_order": 2,
         "visible": true
       },
       "id": 2
     },
     {
       "name_zh": "源区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "id": 3
     },
     {
       "name_zh": "源矩形",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "relations": {
         "image": {
-          "stage": "outputs",
+          "stage": 2,
           "id": 2
         }
       },
       "id": 4
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
@@ -145,7 +152,7 @@ void roiParameterContract()
   "name_zh": "ROI编辑",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "roi",
     "file": "editor.py",
     "symbol": "run"
@@ -153,18 +160,22 @@ void roiParameterContract()
   "inputs": [
     {
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "id": 1
     },
     {
       "name_zh": "区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "default": [
         []
       ],
       "relations": {
         "image": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       },
@@ -172,7 +183,9 @@ void roiParameterContract()
     },
     {
       "name_zh": "矩形",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "default": [
         [
           [
@@ -186,11 +199,11 @@ void roiParameterContract()
         ]
       ],
       "ui": {
-        "editor": "rect"
+        "editor": 9
       },
       "relations": {
         "image": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       },
@@ -198,7 +211,9 @@ void roiParameterContract()
     },
     {
       "name_zh": "参考区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "default": [
         [
           [
@@ -212,11 +227,11 @@ void roiParameterContract()
         ]
       ],
       "ui": {
-        "editor": "rect"
+        "editor": 9
       },
       "relations": {
         "image": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       },
@@ -226,30 +241,36 @@ void roiParameterContract()
   "outputs": [
     {
       "name_zh": "区域数量",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     },
     {
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "relations": {
         "same_geometry_as": {
-          "stage": "inputs",
+          "stage": 1,
           "id": 1
         }
       },
       "display": {
-        "color_order": "BGR",
+        "color_order": 2,
         "visible": true
       },
       "id": 3
     },
     {
       "name_zh": "结果区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "relations": {
         "image": {
-          "stage": "outputs",
+          "stage": 2,
           "id": 3
         }
       },
@@ -257,7 +278,9 @@ void roiParameterContract()
     },
     {
       "name_zh": "其他坐标图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       },
@@ -265,7 +288,9 @@ void roiParameterContract()
     },
     {
       "name_zh": "空图像输出",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       },
@@ -273,7 +298,9 @@ void roiParameterContract()
     },
     {
       "name_zh": "裁剪坐标图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       },
@@ -281,10 +308,12 @@ void roiParameterContract()
     },
     {
       "name_zh": "裁剪坐标区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "relations": {
         "image": {
-          "stage": "outputs",
+          "stage": 2,
           "id": 7
         }
       },
@@ -292,21 +321,28 @@ void roiParameterContract()
     },
     {
       "name_zh": "原点坐标",
-      "type": "vec_vec_float",
+      "type": {
+        "type": 5,
+        "dtype": 4,
+        "rank": 2
+      },
       "id": 9
     },
     {
       "name_zh": "其他坐标区域",
-      "type": "roi",
+      "type": {
+        "type": 6
+      },
       "relations": {
         "image": {
-          "stage": "outputs",
+          "stage": 2,
           "id": 5
         }
       },
       "id": 10
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
 
     AppController app(1, directory.path());
@@ -341,7 +377,7 @@ void roiParameterContract()
     };
     QQmlEngine engine;
     quickui::QuiColor::getInstance()->setThemeMode(quickui::QuiColor::Light);
-    initializeUiStyle();
+    registerUiTypes();
     engine.addImportPath(QStringLiteral(VISIONRT_BINARY_DIR "/qml"));
     engine.rootContext()->setContextProperty("app", &app);
     QQmlComponent component(&engine);
@@ -413,6 +449,7 @@ void roiParameterContract()
     viewport.setDrawShape(2);
     const auto project = directory.filePath("roi.vrt.json");
     require(app.save(project) && !app.dirty(), "ROI baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "saved project instances did not synchronize");
     const auto initial = literal();
     QSignalSpy changes(&app, &AppController::parametersChanged);
@@ -455,6 +492,7 @@ void roiParameterContract()
     require(rois.get().size() == 1 && rois.get()[0].size() == 1 && roiKind(rois.get()[0][0]) == RoiKind::Rectangle,
             "ROI parameter lost its typed rectangle representation");
     require(app.save(project) && !app.dirty(), "ROI project could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     changes.clear();
     require(app.editRoi(kRoisInput, false), "Saved ROI could not reopen for read-only testing");
     require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 3000), "Read-only ROI background was not presented");
@@ -493,6 +531,7 @@ void roiParameterContract()
             "copied ROI input could not be edited independently");
     committed = literal();
     require(app.save(project), "copied ROI project could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     app.endRoiPreview();
     app.requestOpen(project);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 3000), "ROI project did not reopen");
@@ -642,6 +681,7 @@ void roiParameterContract()
         return QString{};
     };
     require(app.save(project) && !app.dirty(), "Rect baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "post-save synchronization did not finish");
     const auto originalRectangle = rectLiteral();
     require(app.editRoi(kRectInput, false), "Scalar Rect could not open the image editor");
@@ -666,6 +706,7 @@ void roiParameterContract()
     require(app.setParameter(kRectInput, false, originalRectangle), "Rect fixture reset was rejected");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect fixture reset did not settle");
     require(app.save(project), "Rect fixture could not reset");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect fixture reset did not settle");
     require(app.editRoi(kRectInput, false), "Rect could not reopen after numeric Apply");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
@@ -751,6 +792,7 @@ void roiParameterContract()
     require(app.bindInput(app.portContext(kRectInput), source, kSourceRectOutput), "Scalar Rect could not bind to its upstream output");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Bound Rect baseline did not settle");
     require(app.save(project) && !app.dirty(), "Bound Rect baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Bound Rect baseline did not settle");
     const auto boundRectangle = rectLiteral();
     require(app.editRoi(kRectInput, true), "Scalar Rect upstream copy could not begin");
@@ -766,8 +808,10 @@ void roiParameterContract()
     require(rectLiteral() == boundRectangle && !app.dirty(), "Cancel saved or detached the copied scalar Rect");
     bool rectangleBound = false;
     for (const auto &entry : app.parameters())
-        if (entry.toMap().value("id").toUInt() == kRectInput) rectangleBound = entry.toMap().value("mode") == "upstream";
-    require(rectangleBound, "Cancel removed the scalar Rect upstream binding");
+        if (!entry.toMap().value("init").toBool() && entry.toMap().value("id").toUInt() == kRectInput) rectangleBound = entry.toMap().value("inputMode").toInt() == static_cast<int>(BindingMode::Upstream);
+    if (!rectangleBound)
+        throw std::runtime_error(("Cancel removed the scalar Rect upstream binding: "
+            + QJsonDocument::fromVariant(app.parameters()).toJson(QJsonDocument::Compact)).toStdString());
     const auto previousTarget = rectangleGestures.first().at(0).value<RoiEditTarget>();
     const auto previousGeometry
         = *static_cast<const EncodedRegion *>(rectangleGestures.first().at(1).constData());
@@ -800,6 +844,7 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto withoutImage = app.selectedNode();
     require(app.save(project) && !app.dirty(), "Image-free rectangle baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     const auto imageFreeOriginal = rectLiteral();
     require(app.editRoi(kRectInput, false), "Rect numeric editing must not require a cached image");
     require(app.property("roiEditor").toMap().value("node").toString() == withoutImage
@@ -815,6 +860,7 @@ void roiParameterContract()
     const auto imageFreeValue = std::get<DataRef<ROI>>(ValueJson::parse(rectLiteral(), {Type::ROI})).get()[0][0];
     require(imageFreeValue[2] == 9.25f, "Image-free numeric geometry was lost");
     require(app.save(project), "Image-free Rect could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Image-free Rect save did not settle");
     require(app.editRoi(kRectInput, false), "Image-free Rect could not reopen");
     const auto previousImageFreeSession = app.roiEditor().value("id").toString();
@@ -834,6 +880,7 @@ void roiParameterContract()
     require(app.setParameter(kRectInput, false, "[]"), "Empty ROI rectangle baseline was rejected");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty ROI rectangle baseline did not settle");
     require(app.save(project), "Empty ROI rectangle baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty ROI rectangle save did not settle");
     require(app.editRoi(kRectInput, false), "Empty ROI rectangle could not enter image-free numeric editing");
     QQuickItem *createRectangle  = nullptr;
@@ -899,6 +946,7 @@ void roiParameterContract()
     require(app.roiEditor().isEmpty() && !viewport.editing() && !app.applyRoi() && rectLiteral() == currentRect,
             "Acquiring a background preserved or committed the image-free ROI session");
     require(app.save(project) && !app.dirty(), "Newly bound rectangle baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Newly bound rectangle save did not settle");
     require(app.editRoi(kRectInput, false), "Rectangle editor could not reopen against the newly bound image");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
@@ -949,6 +997,7 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect clear did not settle");
     require(app.save(project) && !app.dirty(),
             "Empty rectangle mode baseline could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     const auto missingRectangle = rectLiteral();
     require(app.editRoi(kRectInput, false), "Empty rectangle could not enter image drawing mode");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
@@ -992,6 +1041,7 @@ void roiParameterContract()
     require(rectLiteral() == missingRectangle && app.dirty() && output(kStatusCodePort) == "0" && !app.busy(),
             "Rectangle preview executed the tool or replaced the last successful publication");
     require(app.save(project) && !app.dirty(), "Save after delete");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     app.endRoiPreview();
     require(!viewport.editing() && viewport.selectedRoi() == -1 && viewport.drawShape() == 0
                 && app.roiEditor().isEmpty() && rectLiteral() == missingRectangle && !app.dirty(),
@@ -1033,6 +1083,7 @@ void roiParameterContract()
                 && app.roiEditor().value("rectangle").toList().size() == 5,
             "A canceled window session's numeric callback modified the reopened rectangle");
     require(app.save(project) && !app.dirty(), "Save window session state");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Window session save did not settle");
     require(app.setRoiRectangle(reopenedWindowSession, {12.0, 14.0, 30.0, 20.0, 0.0}),
             "Transient window test could not stage rectangle geometry");
@@ -1062,10 +1113,12 @@ void roiParameterContract()
                     "Window gesture upstream binding did not settle");
             require(app.save(project) && !app.dirty(),
                     "Window gesture test could not save an upstream rectangle binding");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
         }
         else
         {
             require(app.save(project) && !app.dirty(), "Save literal binding baseline");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
         }
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Window gesture baseline did not settle");
         const auto windowLiteral = rectLiteral();

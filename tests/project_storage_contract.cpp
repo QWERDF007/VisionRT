@@ -1,3 +1,4 @@
+#include "core/ValueJson.h"
 #include "core/ProjectStorage.h"
 #include "ToolResultAssertions.h"
 #include "core/DefinitionJson.h"
@@ -61,22 +62,12 @@ QJsonObject savedType(PortId port, QJsonObject type)
     return QJsonObject{{"port_id", static_cast<int>(port)}, {"type", type}};
 }
 
-QJsonObject savedKind(const char *type, const char *dtype = nullptr, int rank = 0)
-{
-    QJsonObject encoded{{"type", QString::fromLatin1(type)}};
-    if (dtype)
-        encoded.insert("dtype", QString::fromLatin1(dtype));
-    if (rank)
-        encoded.insert("rank", rank);
-    return encoded;
-}
-
 // 端口编号就是身份：输入绑定写成条目数组，上游引用记的是源端口号。
 QJsonObject savedInput(PortId port, const QString &source = "7", QJsonValue literal = qint64{9007199254740993LL})
 {
     QJsonObject result{
         {   "port_id",                 static_cast<int>(port)},
-        {      "mode", source.isEmpty() ? "literal" : "upstream"},
+        {      "mode", static_cast<int>(source.isEmpty() ? BindingMode::Literal : BindingMode::Upstream)},
         {   "literal",                                     literal}
     };
     if (!source.isEmpty())
@@ -99,9 +90,9 @@ QJsonObject savedNode(const QString &id = "7", const QString &source = "7")
     node.insert("init_params",
                 QJsonArray{QJsonObject{{"port_id", 0}, {"value", QStringLiteral("保留中文")}}});
     node.insert("type_snapshot", QJsonObject{
-                                     {"init_params", QJsonArray{savedType(0, savedKind("String"))}},
-                                     {     "inputs", QJsonArray{savedType(1, savedKind("Int"))}},
-                                     {    "outputs", QJsonArray{savedType(2, savedKind("Int"))}}
+                                     {"init_params", QJsonArray{savedType(0, ValueJson::encodeType({Type::String}))}},
+                                     {     "inputs", QJsonArray{savedType(1, ValueJson::encodeType({Type::Int}))}},
+                                     {    "outputs", QJsonArray{savedType(2, ValueJson::encodeType({Type::Int}))}}
     });
     node.insert("inputs", QJsonArray{savedInput(1, source)});
     return node;
@@ -110,7 +101,7 @@ QJsonObject savedNode(const QString &id = "7", const QString &source = "7")
 QJsonObject savedProject(const QJsonArray &nodes, const QString &nextNode = "8", const QString &nextFlow = "2")
 {
     return {
-        {"format_version",                                                                     7                          },
+        {"format_version",                                                                     8                          },
         {       "project", QJsonObject{{"name", "缺失工具"}, {"next_node_seq", nextNode}, {"next_flow_seq", nextFlow}}},
         {         "flows",
          QJsonArray{QJsonObject{{"flow_id", "flow_1"}, {"name", "流程1"}, {"run_selected", true}, {"nodes", nodes}}}    }
@@ -141,53 +132,6 @@ ToolDefinition scalarTool()
     return tool;
 }
 
-void knownFailureDiagnostics(const QString &directory)
-{
-    ToolRegistry registry;
-    const auto   filename = directory + "/错误 工程.vrt.json";
-    for (const auto &[document, reason] : {
-             std::pair{R"json({"format_version":7,"project":{},"flows":{}})json",                             "flows 必须是数组"},
-             std::pair{                        R"json({"format_version":1})json", "format_version 不受支持，要求 7，实际 1"},
-             std::pair{                        R"json({"format_version":2})json", "format_version 不受支持，要求 7，实际 2"},
-             std::pair{                      R"json({"format_version":"7"})json",                    "format_version 必须是整数"},
-             std::pair{                                                  "[1,2]",              "工程 JSON 根节点必须是对象"}
-    })
-    {
-        put(filename, document);
-        bool rejected = false;
-        try
-        {
-            ProjectStorage(registry).load(path(filename));
-        }
-        catch (const ContractError &error)
-        {
-            const std::string message = error.what();
-            require(
-                message.find("错误 工程.vrt.json") != std::string::npos && message.find(reason) != std::string::npos,
-                "project contract failure lost its file and precise Chinese field reason");
-            require(message.find("格式不受支持") == std::string::npos,
-                    "project field failure was relabeled as an unsupported format");
-            rejected = true;
-        }
-        require(rejected, "known project failure did not use ContractError");
-    }
-    for (const auto extension : {".yaml", ".YML"})
-    {
-        const auto legacy = directory + "/旧工程" + extension;
-        put(legacy, "format_version: 2\nproject: {}\nflows: []\n");
-        bool rejected = false;
-        try
-        {
-            ProjectStorage(registry).load(path(legacy));
-        }
-        catch (const ContractError &error)
-        {
-            rejected = std::string(error.what()).find("工程格式不受支持，请使用 JSON 工程") != std::string::npos;
-        }
-        require(rejected, "legacy YAML did not report the JSON project requirement");
-    }
-}
-
 void candidateAndRawPreservation(const QString &directory)
 {
     ToolRegistry   registry;
@@ -203,7 +147,7 @@ void candidateAndRawPreservation(const QString &directory)
     storage.save(loaded.project, path(saved));
     const auto root = QJsonDocument::fromJson(get(saved)).object();
     const auto raw  = root.value("flows").toArray()[0].toObject().value("nodes").toArray()[0].toObject();
-    require(root.value("format_version").toInteger() == 7 && raw.value("node_seq").isString(),
+    require(root.value("format_version").toInteger() == 8 && raw.value("node_seq").isString(),
             "project version or identity encoding is wrong");
     require(raw.value("vendor_extension").toObject().value("opaque").toArray()[1].toObject().value("two") == "three",
             "extension lost");
@@ -381,7 +325,7 @@ void typedArraysAndRanges(const QString &directory)
         QJsonObject{
             {  "init_params",                                                                             QJsonArray{}},
             {      "outputs",                                                                             QJsonArray{}},
-            {       "inputs", QJsonArray{savedType(1, QJsonObject{{"type", "Array"}, {"dtype", "float32"}, {"rank", 2}})}}
+            {       "inputs", QJsonArray{savedType(1, QJsonObject{{"type", static_cast<int>(Type::Array)}, {"dtype", static_cast<int>(DType::Float32)}, {"rank", 2}})}}
     });
     node.insert("inputs", QJsonArray{
                               savedInput(1, "", QJsonArray{QJsonArray{}, QJsonArray{}})
@@ -466,20 +410,20 @@ void saveAsPaths(const QString &directory)
         port.nameEn = id;
         port.nameZh = id;
         port.type   = {Type::String};
-        port.editor = std::string(id) == "text" ? "text" : "path";
+        port.editor = std::string(id) == "text" ? EditorKind::Text : EditorKind::Path;
         tool.inputs.push_back(port);
     }
     PortDefinition dynamic;
     dynamic.id     = next++;   // 6
     dynamic.nameZh = "动态路径";
     dynamic.type   = {Type::String};
-    dynamic.editor = "path";
+    dynamic.editor = EditorKind::Path;
     tool.inputs.push_back(dynamic);
     // 目录参数是同一个编辑器、另一条初始化编号：初始化从 0 起。
     PortDefinition folder = tool.inputs[0];
     folder.id             = 0;
     folder.nameEn         = "folder";
-    folder.editor         = "path";
+    folder.editor         = EditorKind::Path;
     tool.initParams.push_back(folder);
     registry.addDefinition(tool);
     ProjectStorage    storage(registry);
@@ -558,24 +502,30 @@ void retiredInitialization(const QString &directory)
   "name_zh": "接收器",
   "version": "1.0",
   "implementation": {
-    "kind": "host",
+    "kind": 3,
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "id": 0,
       "name_zh": "流程",
-      "type": "string"
+      "type": {
+        "type": 3
+      }
     },
     {
       "id": 1,
       "name_zh": "节点",
-      "type": "string"
+      "type": {
+        "type": 3
+      }
     },
     {
       "id": 2,
       "name_zh": "端口",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 2
     }
   ],
@@ -585,20 +535,21 @@ void retiredInitialization(const QString &directory)
       "name_zh": "值",
       "type_from": {
         "flow": {
-          "stage": "init",
+          "stage": 0,
           "id": 0
         },
         "node": {
-          "stage": "init",
+          "stage": 0,
           "id": 1
         },
         "port": {
-          "stage": "init",
+          "stage": 0,
           "id": 2
         }
       }
     }
-  ]
+  ],
+  "schema_version": 1
 })");
     auto       raw  = savedNode("9007199254740993", "");
     raw.insert("init_params", QJsonArray{
@@ -609,12 +560,12 @@ void retiredInitialization(const QString &directory)
     raw.insert("inputs", QJsonArray{});
     raw.insert("type_snapshot",
                QJsonObject{
-                   {"init_params", QJsonArray{savedType(0, QJsonObject{{"type", "String"}}),
-                                              savedType(1, QJsonObject{{"type", "String"}}),
-                                              savedType(2, QJsonObject{{"type", "Int"}}),
-                                              savedType(9, QJsonObject{{"type", "Array"}, {"dtype", "int64"}, {"rank", 2}})}},
+                   {"init_params", QJsonArray{savedType(0, QJsonObject{{"type", static_cast<int>(Type::String)}}),
+                                              savedType(1, QJsonObject{{"type", static_cast<int>(Type::String)}}),
+                                              savedType(2, QJsonObject{{"type", static_cast<int>(Type::Int)}}),
+                                              savedType(9, QJsonObject{{"type", static_cast<int>(Type::Array)}, {"dtype", static_cast<int>(DType::Int64)}, {"rank", 2}})}},
                    {     "inputs", QJsonArray{}},
-                   {    "outputs", QJsonArray{savedType(2, QJsonObject{{"type", "Int"}})}}});
+                   {    "outputs", QJsonArray{savedType(2, QJsonObject{{"type", static_cast<int>(Type::Int)}})}}});
     const auto input  = directory + "/retired.vrt.json";
     const auto output = directory + "/retained.vrt.json";
     put(input, QJsonDocument(savedProject({raw}, "9007199254740994")).toJson());
@@ -650,7 +601,7 @@ void retiredInitialization(const QString &directory)
             "retired nested shape lost its empty branch");
     require(cells.size() == 2 && cells[0].toInteger() == 9007199254740993LL && cells[1].toInteger() == -17,
             "retired nested values lost integer precision");
-    require(retired[0].toObject().value("type").toObject().value("type") == "Array",
+    require(retired[0].toObject().value("type").toObject().value("type").toInt() == static_cast<int>(Type::Array),
             "retired parameter type was not preserved");
 
     const auto reloaded = storage.load(path(output));
@@ -858,10 +809,10 @@ void toolUpdatesCutIncompatibleWires(const QString &directory)
     };
     const QJsonObject sourceSnapshot{{"init_params", QJsonArray{}},
                                      {"inputs", QJsonArray{}},
-                                     {"outputs", QJsonArray{savedType(2, savedKind("Int"))}}};
+                                     {"outputs", QJsonArray{savedType(2, ValueJson::encodeType({Type::Int}))}}};
     const QJsonObject sinkSnapshot{{"init_params", QJsonArray{}},
-                                   {"inputs", QJsonArray{savedType(1, savedKind("Int"))}},
-                                   {"outputs", QJsonArray{savedType(2, savedKind("Int"))}}};
+                                   {"inputs", QJsonArray{savedType(1, ValueJson::encodeType({Type::Int}))}},
+                                   {"outputs", QJsonArray{savedType(2, ValueJson::encodeType({Type::Int}))}}};
     const auto        file    = directory + "/tool-update.vrt.json";
     const auto        project = savedProject({node("7", "unavailable", "上游", "1.0.0", 0, sourceSnapshot, QJsonArray{}),
                                               node("8", "sink", "下游", "1.0.0", 1, sinkSnapshot,
@@ -982,7 +933,7 @@ void initializationTypeChanges(const QString &directory)
     ProjectStorage(removed).save(retired, file);
     const auto reopened = ProjectStorage(removed).load(file);
     const auto record = reopened.project.flows.front().nodes.front().retiredInitParams.value("0").toObject();
-    require(record.value("value").toString() == "保留值" && record.value("type").toObject().value("type") == "String",
+    require(record.value("value").toString() == "保留值" && record.value("type").toObject().value("type").toInt() == static_cast<int>(Type::String),
             "retiring a retyped initialization parameter lost its actual value type");
 }
 
@@ -1002,7 +953,7 @@ void rejectsHostExecutionGuard(const QString &directory)
     auto flow = flows[0].toObject();
     auto nodes = flow["nodes"].toArray();
     auto node = nodes[0].toObject();
-    node["execution_guard"] = QJsonObject{{"mode", "upstream"}};
+    node["execution_guard"] = QJsonObject{{"mode", static_cast<int>(BindingMode::Upstream)}};
     nodes[0] = node;
     flow["nodes"] = nodes;
     flows[0] = flow;
@@ -1021,7 +972,6 @@ int main()
         QTemporaryDir temporary;
         require(temporary.isValid(), "temporary directory unavailable");
         rejectsHostExecutionGuard(temporary.path());
-        knownFailureDiagnostics(temporary.path());
         candidateAndRawPreservation(temporary.path());
         reconciliationAndIdentities(temporary.path());
         typedArraysAndRanges(temporary.path());

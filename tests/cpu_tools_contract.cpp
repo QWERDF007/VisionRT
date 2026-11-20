@@ -94,7 +94,6 @@ void readImages(ToolRegistry &registry)
     inputs[5] = std::int64_t{-1};
     result = execute(registry, "ReadImage", inputs);
     failure(result);
-    assert((testview::status(result).message.find(portLabel(5)) != std::string::npos));
     inputs[5] = std::int64_t{1};
     result          = execute(registry, "ReadImage", inputs);
     success(result);

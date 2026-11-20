@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 QuiSplitView {
     id: root
@@ -19,7 +19,7 @@ QuiSplitView {
             height: root.height
         }
     }
-    property int currentTab: 0
+    property int currentTab: ParameterTab.BasicInput
     readonly property var tabs: app.parameterTabs
     property var collapsedGroups: ({})
     property var parameterGroups: []
@@ -69,7 +69,7 @@ QuiSplitView {
     function refreshGroups() {
         let result = [], byName = ({});
         for (let p of app.parameters) {
-            if ((p.tab || "基本输入") !== tabs[currentTab])
+            if (p.tab !== currentTab)
                 continue;
             let name = p.init ? "初始化配置" + (p.group ? "：" + p.group : "") : p.group || "输入参数";
             if (byName[name] === undefined) {
@@ -94,8 +94,8 @@ QuiSplitView {
             return;
         roiNodeId = app.selectedNode;
         for (let p of app.parameters) {
-            if (p.type === "ROI" && !p.init) {
-                currentTab = Math.max(0, tabs.indexOf(p.tab || "基本输入"));
+            if (p.type === PortType.ROI && !p.init) {
+                currentTab = p.tab;
                 app.startRoiDraw(p.id, 2);
                 return;
             }
@@ -119,8 +119,8 @@ QuiSplitView {
             spacing: 0
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 36
-                color: WorkbenchStyle.tabBarBg
+                Layout.preferredHeight: VisionRTSize.BarSize
+                color: QuiColor.Primary
                 Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
@@ -144,11 +144,19 @@ QuiSplitView {
                             text: modelData
                             checked: root.currentTab === index
                             showIndicator: true
-                            normalColor: WorkbenchStyle.tabBarBg
+                            normalColor: QuiColor.Primary
                             checkedColor: QuiColor.Button
                             normalTextColor: QuiColor.FontPrimary
-                            checkedTextColor: QuiColor.FontPrimary
+                            checkedTextColor: QuiColor.Highlight
                             hoverTextColor: QuiColor.Highlight
+                            contentItem: QuiText {
+                                text: parameterTab.text
+                                font: parameterTab.font
+                                color: parameterTab.textColor
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                opacity: parameterTab.enabled ? 1.0 : 0.4
+                            }
                             onClicked: root.currentTab = index
                             Rectangle {
                                 parent: parameterTab
@@ -211,7 +219,7 @@ QuiSplitView {
                                 required property var modelData
                                 width: groupColumn.width
                                 headerText: modelData.name
-                                headerHeight: 36
+                                headerHeight: VisionRTSize.BarSize
                                 headerPadding: 5
                                 headerDelegate: Component {
                                     RowLayout {
@@ -221,8 +229,12 @@ QuiSplitView {
                                             iconSource: parameterGroup.expand ? QuiFontIcon.ChevronDown : QuiFontIcon.ChevronRight
                                             onClicked: parameterGroup.toggle()
                                         }
-                                        QuiText { text: parameterGroup.headerText }
-                                        Item { Layout.fillWidth: true }
+                                        QuiText {
+                                            text: parameterGroup.headerText
+                                        }
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                 }
 
@@ -253,7 +265,12 @@ QuiSplitView {
                                             sourceComponent: ParameterEditor {
                                                 nodeId: parameterGroup.modelData.nodeId
                                                 parameter: parameterRow.currentParameter
-                                                panel: root
+                                                onExpressionEditorRequested: function (node, draft, hasDraft) {
+                                                    root.openExpressionEditor(node, draft, hasDraft);
+                                                }
+                                                onSelectTypeEditorRequested: function (node) {
+                                                    root.openSelectTypeEditor(node);
+                                                }
                                             }
                                         }
                                     }

@@ -55,7 +55,7 @@ try
   "name_zh": "Shutdown",
   "version": "1",
   "implementation": {
-    "kind": "python_class",
+    "kind": 2,
     "package": "concurrent_shutdown",
     "file": "tool.py",
     "symbol": "Tool"
@@ -65,9 +65,12 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
@@ -130,7 +133,7 @@ try
   "name_zh": "Shutdown",
   "version": "1",
   "implementation": {
-    "kind": "python_class",
+    "kind": 2,
     "package": "inflight_shutdown",
     "file": "tool.py",
     "symbol": "Tool"
@@ -140,9 +143,12 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
                                                             {root / "tools/custom", root / "python/custom"}});
         auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
@@ -185,7 +191,7 @@ def execute(inputs):
   "name_zh": "Memory",
   "version": "1",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "memory",
     "file": "tool.py",
     "symbol": "execute"
@@ -195,15 +201,20 @@ def execute(inputs):
       "id": 2,
       "name_en": "images",
       "name_zh": "Images",
-      "type": "image"
+      "type": {
+        "type": 4
+      }
     },
     {
       "id": 3,
       "name_en": "namespace",
       "name_zh": "Namespace",
-      "type": "string"
+      "type": {
+        "type": 3
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })",
                                                     root / "tools/custom/memory.json",
                                                     {

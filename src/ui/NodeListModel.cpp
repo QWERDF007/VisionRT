@@ -26,8 +26,8 @@ QVariant NodeListModel::value(const Row &row, int role)
     case CategoryRole: return row.category;
     case PosXRole: return row.x;
     case PosYRole: return row.y;
-    case StateRole: return row.state;
-    case DispositionRole: return row.disposition;
+    case StateRole: return static_cast<int>(row.state);
+    case DispositionRole: return static_cast<int>(row.disposition);
     case ExecutedRole: return row.executed;
     case StaleRole: return row.stale;
     case TimingTextRole: return row.timingText;
@@ -280,8 +280,8 @@ QVariantMap NodeListModel::rowMap(const QString &id) const
         {             "category", item.category},
         {                    "x", item.x},
         {                    "y", item.y},
-        {                "state", item.state},
-        {          "disposition", item.disposition},
+        {                "state", static_cast<int>(item.state)},
+        {          "disposition", static_cast<int>(item.disposition)},
         {             "executed", item.executed},
         {                "stale", item.stale},
         {           "timingText", item.timingText},

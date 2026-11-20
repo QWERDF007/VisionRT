@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 // Merge type for the host select node. The chosen TypeSpec replaces both branch
 // inputs and the output; changing it requires the ports to be unbound first.
@@ -10,6 +10,7 @@ Dialog {
     id: root
     property string nodeId: ""
     property var current: ({})
+    font: QuiFont.Body
     modal: true
     title: "合流类型"
     parent: Overlay.overlay ? Overlay.overlay : undefined
@@ -19,79 +20,132 @@ Dialog {
     height: 320
     standardButtons: Dialog.NoButton
     padding: 12
+    header: QuiText {
+        text: root.title
+        font: QuiFont.BodyStrong
+        color: QuiColor.FontPrimary
+        padding: 12
+    }
 
     background: Rectangle {
-        color: QuiColor.CardBackground
-        border.color: QuiColor.CardBorder
+        color: QuiColor.Primary
+        border.color: QuiColor.Border
         border.width: 1
         radius: 6
     }
 
     readonly property var typeList: [
-        { name: "Int", label: "整数" },
-        { name: "Float", label: "浮点数" },
-        { name: "Bool", label: "布尔" },
-        { name: "String", label: "字符串" },
-        { name: "Array", label: "数组" },
-        { name: "Image", label: "图像" },
-        { name: "ROI", label: "区域 (ROI)" }
+        {
+            name: PortType.Int,
+            label: "整数"
+        },
+        {
+            name: PortType.Float,
+            label: "浮点数"
+        },
+        {
+            name: PortType.Bool,
+            label: "布尔"
+        },
+        {
+            name: PortType.String,
+            label: "字符串"
+        },
+        {
+            name: PortType.Array,
+            label: "数组"
+        },
+        {
+            name: PortType.Image,
+            label: "图像"
+        },
+        {
+            name: PortType.ROI,
+            label: "区域 (ROI)"
+        }
     ]
     readonly property var dtypeList: [
-        { name: "int32", label: "32位整数" },
-        { name: "int64", label: "64位整数" },
-        { name: "float32", label: "32位浮点" },
-        { name: "float64", label: "64位浮点" },
-        { name: "bool", label: "布尔" },
-        { name: "string", label: "字符串" }
+        {
+            name: DType.UInt8,
+            label: "8位无符号整数"
+        },
+        {
+            name: DType.Int32,
+            label: "32位整数"
+        },
+        {
+            name: DType.Int64,
+            label: "64位整数"
+        },
+        {
+            name: DType.Float32,
+            label: "32位浮点"
+        },
+        {
+            name: DType.Float64,
+            label: "64位浮点"
+        },
+        {
+            name: DType.Bool,
+            label: "布尔"
+        },
+        {
+            name: DType.String,
+            label: "字符串"
+        }
     ]
 
     function openFor(id) {
-        nodeId = id
-        current = app.selectType(id)
-        let tIdx = 0
+        nodeId = id;
+        current = app.selectType(id);
+        let tIdx = 0;
         for (let i = 0; i < typeList.length; ++i) {
-            if (typeList[i].name === (current.type || "Int")) {
-                tIdx = i
-                break
+            if (typeList[i].name === (current.type ?? PortType.Int)) {
+                tIdx = i;
+                break;
             }
         }
-        typeBox.currentIndex = tIdx
-
-        let dIdx = 3 // default float64
+        typeBox.currentIndex = tIdx;
+        let dIdx = dtypeList.findIndex(function (item) {
+            return item.name === DType.Float64;
+        });
         for (let j = 0; j < dtypeList.length; ++j) {
-            if (dtypeList[j].name === (current.dtype || "float64")) {
-                dIdx = j
-                break
+            if (dtypeList[j].name === (current.dtype ?? DType.Float64)) {
+                dIdx = j;
+                break;
             }
         }
-        dtypeBox.currentIndex = dIdx
-        rankBox.value = Math.max(1, current.rank || 1)
-        open()
+        dtypeBox.currentIndex = dIdx;
+        rankBox.value = Math.max(1, current.rank || 1);
+        open();
     }
 
     Connections {
         target: app
         function onSelectedNodeChanged() {
             if (root.visible && app.selectedNode !== root.nodeId)
-                root.close()
+                root.close();
         }
         function onRuntimeBusyChanged() {
             if (root.visible && app.runtimeBusy)
-                root.close()
+                root.close();
         }
     }
 
-    readonly property string selectedTypeName: typeList[typeBox.currentIndex] ? typeList[typeBox.currentIndex].name : "Int"
-    readonly property string selectedDtypeName: dtypeList[dtypeBox.currentIndex] ? dtypeList[dtypeBox.currentIndex].name : "float64"
+    readonly property int selectedTypeName: typeList[typeBox.currentIndex] ? typeList[typeBox.currentIndex].name : PortType.Int
+    readonly property int selectedDtypeName: dtypeList[dtypeBox.currentIndex] ? dtypeList[dtypeBox.currentIndex].name : DType.Float64
     readonly property int selectedRank: rankBox.value
-    readonly property string previewDescription: app.typeDescription(selectedTypeName, selectedTypeName === "Array" ? selectedDtypeName : "", selectedTypeName === "Array" ? selectedRank : -1)
+    readonly property string previewDescription: app.typeDescription(selectedTypeName, selectedTypeName === PortType.Array ? selectedDtypeName : -1, selectedTypeName === PortType.Array ? selectedRank : -1)
 
     contentItem: ColumnLayout {
         spacing: 5
         RowLayout {
             spacing: 5
-            QuiText { text: "数据类型"; color: QuiColor.FontDark }
-            ComboBox {
+            QuiText {
+                text: "数据类型"
+                color: QuiColor.FontCaption
+            }
+            ParameterComboBox {
                 id: typeBox
                 Layout.preferredWidth: 180
                 model: root.typeList
@@ -100,43 +154,67 @@ Dialog {
         }
         RowLayout {
             spacing: 5
-            visible: root.selectedTypeName === "Array"
-            QuiText { text: "元素类型"; color: QuiColor.FontDark }
-            ComboBox {
+            visible: root.selectedTypeName === PortType.Array
+            QuiText {
+                text: "元素类型"
+                color: QuiColor.FontCaption
+            }
+            ParameterComboBox {
                 id: dtypeBox
                 Layout.preferredWidth: 140
                 model: root.dtypeList
                 textRole: "label"
             }
-            QuiText { text: "数组维度"; color: QuiColor.FontDark }
-            SpinBox { id: rankBox; from: 1; to: 4 }
+            QuiText {
+                text: "数组维度"
+                color: QuiColor.FontCaption
+            }
+            QuiSpinEditor {
+                id: rankBox
+                minValue: 1
+                maxValue: 4
+                buttonWidth: VisionRTSize.ContentSize
+                iconSize: VisionRTSize.IconSize
+            }
         }
         RowLayout {
             spacing: 5
-            QuiText { text: "类型预览："; font: Qt.font({ bold: true }); color: QuiColor.FontPrimary }
-            QuiText { text: root.previewDescription; color: QuiColor.Highlight; font: Qt.font({ bold: true }) }
+            QuiText {
+                text: "类型预览："
+                font: QuiFont.BodyStrong
+                color: QuiColor.FontPrimary
+            }
+            QuiText {
+                text: root.previewDescription
+                color: QuiColor.Highlight
+                font: QuiFont.BodyStrong
+            }
         }
         QuiText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: QuiColor.FontDark
-            font: Qt.font({ pixelSize: 11 })
-            text: "合流的两条输入与输出使用同一类型；未选中的分支必须是跳过或被阻塞，不能回退到另一侧。"
+            color: QuiColor.FontCaption
+            font: QuiFont.Caption
+            text: "合流的输入与输出使用同一类型。"
         }
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+        }
         RowLayout {
             Layout.fillWidth: true
-            Item { Layout.fillWidth: true }
-            Button { text: "取消"; onClicked: root.close() }
-            Button {
+            Item {
+                Layout.fillWidth: true
+            }
+            QuiButton {
+                text: "取消"
+                onClicked: root.close()
+            }
+            QuiFilledButton {
                 text: "应用"
-                highlighted: true
                 enabled: !app.runtimeBusy
                 onClicked: {
-                    if (app.applySelectType(root.nodeId, root.selectedTypeName,
-                                           root.selectedTypeName === "Array" ? root.selectedDtypeName : "",
-                                           root.selectedTypeName === "Array" ? root.selectedRank : -1))
-                        root.close()
+                    if (app.applySelectType(root.nodeId, root.selectedTypeName, root.selectedTypeName === PortType.Array ? root.selectedDtypeName : -1, root.selectedTypeName === PortType.Array ? root.selectedRank : -1))
+                        root.close();
                 }
             }
         }

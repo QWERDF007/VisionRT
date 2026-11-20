@@ -1,3 +1,4 @@
+#include "ui/UiState.h"
 // Contract for the node list model: stable id roles, row notifications for insert/remove/move and
 // dataChanged limited to the roles that actually changed. Qt's own QAbstractItemModelTester checks
 // the model protocol; this file only asserts the domain behaviour.
@@ -20,13 +21,13 @@ void require(bool condition, const char *message)
         throw std::runtime_error(message);
 }
 
-NodeListModel::Row row(QString id, QString title, double x, QString state = QStringLiteral("idle"))
+NodeListModel::Row row(QString id, QString title, double x, NodeState state = NodeState::Idle)
 {
     NodeListModel::Row value;
     value.id       = std::move(id);
     value.title    = std::move(title);
     value.x        = x;
-    value.state    = std::move(state);
+    value.state    = state;
     value.version  = QStringLiteral("1.0");
     value.category = QStringLiteral("测试");
     return value;
@@ -64,7 +65,7 @@ try
     QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
     require(!model.update(row("3", "检测", 4)), "an identical row reported a change");
     require(changed.isEmpty(), "an identical row emitted dataChanged");
-    require(model.update(row("3", "检测", 4, QStringLiteral("running"))), "state change was ignored");
+    require(model.update(row("3", "检测", 4, NodeState::Running)), "state change was ignored");
     require(changed.count() == 1, "state change did not emit exactly one dataChanged");
     const auto roles = changed.first().at(2).value<QList<int>>();
     require(roles == QList<int>{NodeListModel::StateRole}, "state change reported unrelated roles");
@@ -72,7 +73,7 @@ try
     // The legacy map view stays consistent with the roles for existing consumers.
     const auto record = model.rowMap("3");
     require(record.value("id").toString() == QStringLiteral("3")
-                && record.value("state").toString() == QStringLiteral("running")
+                && record.value("state").toInt() == static_cast<int>(NodeState::Running)
                 && record.value("x").toDouble() == 4,
             "row map disagrees with the model roles");
     require(model.snapshot().size() == 2, "snapshot is incomplete");

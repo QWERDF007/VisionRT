@@ -44,11 +44,11 @@ void write(const QString &path, const QByteArray &bytes)
 
 QByteArray declaration(const QString &id)
 {
-    return QJsonDocument(QJsonObject{
+    return QJsonDocument(QJsonObject{{"schema_version", 1},
                              {        "name_en",                                   id},
                              {        "name_zh",                           "同名工具"},
                              {        "version",                                  "1"},
-                             {"implementation", QJsonObject{{"kind", "python_function"},
+                             {"implementation", QJsonObject{{"kind", 1},
                                                             {"package", "示例 包"},
                                                             {"file", "tool.py"},
                                                             {"symbol", "execute"}}}
@@ -196,11 +196,11 @@ int main(int argc, char **argv)
     assert(resourceExternal.isValid());
     const ToolRoots resourceRoots{std::filesystem::path(resourceExternal.filePath("declarations").toStdWString()),
                                   std::filesystem::path(resourceExternal.filePath("code").toStdWString())};
-    const auto hostResource = QJsonObject{
+    const auto hostResource = QJsonObject{{"schema_version", 1},
         {"name_en", "test.host.resource"},
         {"name_zh", "资源宿主"},
         {"version", "1"},
-        {"implementation", QJsonObject{{"kind", "host"},
+        {"implementation", QJsonObject{{"kind", 3},
                                        {"binding", "visionrt.receiver"},
                                        {"resources", QJsonArray{"data.bin"}}}},
     };

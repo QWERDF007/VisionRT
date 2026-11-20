@@ -34,9 +34,9 @@ int main(int argc, char **argv)
     templateSource.kind   = ToolKind::PythonFunction;
     templateSource.nameZh = "测试函数";
     templateSource.outputs.push_back(PortDefinition{
-        .id = 2, .nameZh = "输出图像", .type = parseTypeToken("image")});
+        .id = 2, .nameZh = "输出图像", .type = TypeSpec{Type::Image}});
     templateSource.outputs.push_back(PortDefinition{
-        .id = 5, .nameZh = "计数", .type = parseTypeToken("int")});
+        .id = 5, .nameZh = "计数", .type = TypeSpec{Type::Int}});
 
     const auto fnTemplate = CustomToolStore::pythonTemplate(templateSource);
     assert(fnTemplate.find("def execute(inputs)") != std::string::npos);
@@ -63,18 +63,18 @@ int main(int argc, char **argv)
     def.inputs.push_back(PortDefinition{
         .id = 1,
         .nameZh = "阈值",
-        .type = parseTypeToken("int"),
+        .type = TypeSpec{Type::Int},
         .defaultValue = std::int64_t(128)
     });
     def.inputs.push_back(PortDefinition{
         .id = 2,
         .nameZh = "图像",
-        .type = parseTypeToken("image")
+        .type = TypeSpec{Type::Image}
     });
     def.outputs.push_back(PortDefinition{
         .id = 2,
         .nameZh = "输出图像",
-        .type = parseTypeToken("image")
+        .type = TypeSpec{Type::Image}
     });
 
     // A declared resource belongs to the tool, so a copy has to carry it.

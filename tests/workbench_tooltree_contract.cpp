@@ -1,7 +1,7 @@
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/ToolTreeModel.h"
 #include <quickui/Color.h>
 
@@ -101,7 +101,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());
@@ -168,24 +168,24 @@ try
             "expanded tool tree category revealed no children");
 
     // Verify mouse stationary expand/collapse: no ghost hover leaks to recycled delegates (e.g. 采集, 预处理)
-    auto dlCategory = delegateWithKey(tree, "深度学习");
-    require(dlCategory != nullptr, "深度学习 category delegate was not found");
+    auto dlCategory = delegateWithKey(tree, "预处理");
+    require(dlCategory != nullptr, "预处理 category delegate was not found");
     const QPoint clickPos = dlCategory->mapToScene(dlCategory->boundingRect().center()).toPoint();
     QTest::mouseMove(&window, clickPos);
     QTest::qWait(50);
     // 1st click: expand
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, clickPos);
     require(QTest::qWaitFor([&] {
-                auto item = delegateWithKey(tree, "深度学习");
+                auto item = delegateWithKey(tree, "预处理");
                 return item && item->property("expanded").toBool() && item->property("isSelected").toBool();
             }, 2000),
-            "clicking 深度学习 did not expand or select it");
+            "clicking 预处理 did not expand or select it");
     // Verify no recycled delegate has ghost hover
     QList<QQuickItem *> delegatesAfterExpand;
     collectDelegates(tree, delegatesAfterExpand);
     for (auto *del : delegatesAfterExpand)
     {
-        if (del->isVisible() && del->property("stableKey").toString() != "深度学习")
+        if (del->isVisible() && del->property("stableKey").toString() != "预处理")
         {
             require(!del->property("isHovered").toBool(),
                     "unfocused delegate unexpectedly has ghost hover after expansion");
@@ -195,15 +195,15 @@ try
     // 2nd click: collapse at exact same position without mouse movement
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, clickPos);
     require(QTest::qWaitFor([&] {
-                auto item = delegateWithKey(tree, "深度学习");
+                auto item = delegateWithKey(tree, "预处理");
                 return item && !item->property("expanded").toBool() && item->property("isSelected").toBool();
             }, 2000),
-            "clicking 深度学习 did not collapse it cleanly");
+            "clicking 预处理 did not collapse it cleanly");
     QList<QQuickItem *> delegatesAfterCollapse;
     collectDelegates(tree, delegatesAfterCollapse);
     for (auto *del : delegatesAfterCollapse)
     {
-        if (del->isVisible() && del->property("stableKey").toString() != "深度学习")
+        if (del->isVisible() && del->property("stableKey").toString() != "预处理")
         {
             require(!del->property("isHovered").toBool(),
                     "unfocused delegate unexpectedly has ghost hover after collapse");

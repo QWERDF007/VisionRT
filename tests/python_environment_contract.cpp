@@ -1,3 +1,4 @@
+#include "SettingsFileGuard.h"
 // R50 Python environment gate: VisionRT owns one answer to "can Python tools run", states the exact
 // reason when it cannot, and never blocks the window while it checks. Every case below goes through
 // the real controller: the same probe, the same settings file and the same tool registry a user's
@@ -47,41 +48,6 @@ QByteArray settingsBytes()
     return file.readAll();
 }
 
-// The preferences file lives in the application directory, so it is shared with every other test
-// binary and with a developer's own installation. This contract owns it while it runs and gives the
-// previous bytes back afterwards.
-class SettingsFileGuard
-{
-public:
-    SettingsFileGuard()
-        : path_(UiPreferences::path())
-    {
-        QFile file(path_);
-        if (file.open(QIODevice::ReadOnly))
-            previous_ = file.readAll();
-        existed_ = file.exists();
-        // The read handle must be closed first: Windows refuses to delete a file that is still open,
-        // and a developer's own preferences would then leak into every case below.
-        file.close();
-        QFile::remove(path_);
-    }
-
-    ~SettingsFileGuard()
-    {
-        QFile::remove(path_);
-        if (!existed_)
-            return;
-        QFile file(path_);
-        if (file.open(QIODevice::WriteOnly))
-            file.write(previous_);
-    }
-
-private:
-    QString    path_;
-    QByteArray previous_;
-    bool       existed_ = false;
-};
-
 // The Python declaration shipped with the test package; a native tool is the control group that
 // must keep working while every Python tool is unavailable.
 const QString kPythonTool = QStringLiteral("RoiGeometry");
@@ -93,7 +59,7 @@ int main(int argc, char **argv)
 try
 {
     QGuiApplication application(argc, argv);
-    SettingsFileGuard settingsFile;
+    testing::SettingsFileGuard settingsFile;
 
     // 0. Identity of an environment path is not its spelling. CPython answers with backslashes for a
     //    venv that was configured with forward ones; treating that as a different environment made
@@ -113,7 +79,7 @@ try
         AppController                  controller(1, installation.directory());
         require(QTest::qWaitFor([&] { return !controller.busy() && !controller.toolDefinitions().isEmpty(); }, 30000),
                 "tool catalog did not become ready");
-        require(controller.pythonEnvironmentPhase() == QStringLiteral("unconfigured"),
+        require(controller.pythonEnvironmentPhase() == PythonEnvironmentPhase::Unconfigured,
                 "an empty selection was not reported as unconfigured");
         require(!controller.settingsApplying(), "an unconfigured environment has nothing to check");
         const auto python = definition(controller.toolDefinitions(), kPythonTool);
@@ -148,7 +114,7 @@ try
         AppController::usePythonForTesting(QStringLiteral("Z:/visionrt/missing/python.exe"));
         testing::WorkbenchInstallation installation;
         AppController                  invalid(1, installation.directory());
-        require(invalid.pythonEnvironmentPhase() == QStringLiteral("invalid"),
+        require(invalid.pythonEnvironmentPhase() == PythonEnvironmentPhase::Invalid,
                 "a missing interpreter was not reported as invalid");
         require(invalid.pythonEnvironmentText().contains(QStringLiteral("路径不存在")),
                 "the environment status lost the missing-path reason");
@@ -179,7 +145,7 @@ try
                     == QDir::cleanPath(QString::fromUtf8(VISIONRT_TEST_PYTHON_EXECUTABLE)),
                 "the accepted interpreter was not committed");
         // The check validates a draft; it never swaps the interpreter the process is running.
-        require(invalid.pythonEnvironmentPhase() == QStringLiteral("invalid"),
+        require(invalid.pythonEnvironmentPhase() == PythonEnvironmentPhase::Invalid,
                 "applying an interpreter replaced the running environment");
 
         // 4. A refused check leaves the file byte for byte as it was.
@@ -190,7 +156,7 @@ try
         require(!applied.at(1).at(0).toBool(), "a non-CPython interpreter was accepted");
         require(invalid.settingsError().contains(QStringLiteral("所选 Python 环境不可用")),
                 "the refusal lost its reason: " + invalid.settingsError());
-        require(invalid.settingsErrorField() == QStringLiteral("runtime"),
+        require(invalid.settingsErrorField() == SettingsPage::Runtime,
                 "the refusal was attached to the wrong settings page");
         require(settingsBytes() == before, "a refused check rewrote the settings file");
         require(invalid.settingsSnapshot().value(QStringLiteral("pythonExecutable")).toString()

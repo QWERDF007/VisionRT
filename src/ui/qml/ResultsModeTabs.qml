@@ -1,15 +1,15 @@
 import QtQuick
 import QtQuick.Controls
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Rectangle {
     id: root
     required property QtObject controller
 
     visible: root.controller.trainingAvailable
-    implicitWidth: 34
-    color: QuiColor.Button
+    implicitWidth: VisionRTSize.BarSize
+    color: QuiColor.Primary
     Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -26,20 +26,18 @@ Rectangle {
             objectName: "trainingProcessTab"
             text: "处理"
             verticalText: true
-            implicitWidth: 30
-            implicitHeight: 56
+            implicitWidth: VisionRTSize.BarSize
+            implicitHeight: 2 * VisionRTSize.ContentSize
             padding: 0
-            font: Qt.font({
-                pixelSize: 12
-            })
+            font: QuiFont.Body
             display: AbstractButton.TextOnly
-            showIndicator: false
+            showIndicator: true
             radius: 3
-            normalColor: "transparent"
-            hoverColor: QuiColor.Hovered
-            checkedColor: QuiColor.Highlight
+            normalColor: QuiColor.Primary
+            hoverColor: QuiColor.ItemHover
+            checkedColor: QuiColor.Primary
             normalTextColor: QuiColor.FontPrimary
-            checkedTextColor: QuiColor.White
+            checkedTextColor: QuiColor.FontPrimary
             hoverTextColor: QuiColor.FontPrimary
             checked: !root.controller.trainingMode
             enabled: root.controller.workspaceEnabled
@@ -50,20 +48,18 @@ Rectangle {
             objectName: "trainingTrainTab"
             text: "训练"
             verticalText: true
-            implicitWidth: 30
-            implicitHeight: 56
+            implicitWidth: VisionRTSize.BarSize
+            implicitHeight: 2 * VisionRTSize.ContentSize
             padding: 0
-            font: Qt.font({
-                pixelSize: 12
-            })
+            font: QuiFont.Body
             display: AbstractButton.TextOnly
-            showIndicator: false
+            showIndicator: true
             radius: 3
-            normalColor: "transparent"
-            hoverColor: QuiColor.Hovered
-            checkedColor: QuiColor.Highlight
+            normalColor: QuiColor.Primary
+            hoverColor: QuiColor.ItemHover
+            checkedColor: QuiColor.Primary
             normalTextColor: QuiColor.FontPrimary
-            checkedTextColor: QuiColor.White
+            checkedTextColor: QuiColor.FontPrimary
             hoverTextColor: QuiColor.FontPrimary
             checked: root.controller.trainingMode
             enabled: root.controller.workspaceEnabled

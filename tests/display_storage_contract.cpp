@@ -19,12 +19,12 @@ void require(bool condition, const char *message)
 
 void ownedDisplayPixels()
 {
-    for (const auto &[channels, order] : std::vector<std::pair<int, QString>>{
-             {1, "Gray"},
-             {3,  "RGB"},
-             {3,  "BGR"},
-             {4, "RGBA"},
-             {4, "BGRA"}
+    for (const auto &[channels, order] : std::vector<std::pair<int, ColorOrder>>{
+             {1, ColorOrder::Gray},
+             {3,  ColorOrder::RGB},
+             {3,  ColorOrder::BGR},
+             {4, ColorOrder::RGBA},
+             {4, ColorOrder::BGRA}
     })
     {
         cv::Mat    pixels(5, 8, CV_MAKETYPE(CV_8U, channels), cv::Scalar(11, 23, 37, 255));
@@ -33,9 +33,9 @@ void ownedDisplayPixels()
         require(frame.error.isEmpty() && !frame.image.isNull(), "display conversion failed");
         require(frame.image.constBits() != view.data, "display frame borrows mutable business pixels");
         const auto before = frame.image.pixelColor(0, 0);
-        require(before.red() == (order.startsWith('B') ? 37 : 11), "display color order changed");
+        require(before.red() == ((order == ColorOrder::BGR || order == ColorOrder::BGRA) ? 37 : 11), "display color order changed");
         if (channels > 1)
-            require(before.green() == 23 && before.blue() == (order.startsWith('B') ? 11 : 37),
+            require(before.green() == 23 && before.blue() == ((order == ColorOrder::BGR || order == ColorOrder::BGRA) ? 11 : 37),
                     "display channels changed");
         pixels.setTo(cv::Scalar(99, 88, 77, 255));
         require(frame.image.pixelColor(0, 0) == before, "later business write changed displayed frame");
@@ -70,7 +70,7 @@ void asynchronousSourcesRetainOwners()
     std::vector<DisplayFrame> displayed;
     QObject::connect(&converter, &DisplayConverter::batchConverted, &converter,
                      [&](const auto &frames) { displayed = frames; });
-    converter.requestBatch(source, "Gray", 1, 1);
+    converter.requestBatch(source, ColorOrder::Gray, 1, 1);
     source = DataRef<Image>(Image{});
     pixels.reset();
     QElapsedTimer timer;
@@ -99,7 +99,7 @@ void drainReleasesSourcesBeforeNextExecution()
                                           delete value;
                                       });
     DataRef<Image>     source(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(19))}, {owner});
-    converter.requestBatch(source, "Gray", 1, 1);
+    converter.requestBatch(source, ColorOrder::Gray, 1, 1);
     source = DataRef<Image>(Image{});
     owner.reset();
     auto entered = releasing.get_future();
@@ -117,7 +117,7 @@ void drainReleasesSourcesBeforeNextExecution()
     std::vector<DisplayFrame> displayed;
     QObject::connect(&converter, &DisplayConverter::batchConverted, &converter,
                      [&](const auto &frames) { displayed = frames; });
-    converter.requestBatch(DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(79))}), "Gray", 2, 1);
+    converter.requestBatch(DataRef<Image>(Image{cv::Mat(2, 3, CV_8UC1, cv::Scalar(79))}), ColorOrder::Gray, 2, 1);
     QElapsedTimer timer;
     timer.start();
     while ((displayed.empty() || converter.isBusy()) && timer.elapsed() < 5000)
@@ -134,7 +134,7 @@ void variableChannelsAndAlpha()
 {
     // A declaration that says BGR must not reject a grey or four-channel image: the layout is
     // inferred from the data, while an explicit RGB/RGBA stays explicit when channels agree.
-    const auto grey = DisplayConverter::convert(cv::Mat(2, 3, CV_8UC1, cv::Scalar(77)), "BGR");
+    const auto grey = DisplayConverter::convert(cv::Mat(2, 3, CV_8UC1, cv::Scalar(77)), ColorOrder::BGR);
     require(grey.error.isEmpty() && !grey.image.isNull(), "declared BGR rejected a grey image");
     require(grey.image.pixelColor(0, 0).red() == 77, "inferred grey image lost its value");
 
@@ -142,7 +142,7 @@ void variableChannelsAndAlpha()
     rgba.at<cv::Vec4b>(0, 0) = {10, 20, 30, 0};
     rgba.at<cv::Vec4b>(0, 1) = {10, 20, 30, 128};
     rgba.at<cv::Vec4b>(0, 2) = {10, 20, 30, 255};
-    const auto four = DisplayConverter::convert(rgba, "BGR");
+    const auto four = DisplayConverter::convert(rgba, ColorOrder::BGR);
     require(four.error.isEmpty(), "declared BGR rejected a BGRA image");
     require(four.image.pixelColor(0, 0).alpha() == 0 && four.image.pixelColor(1, 0).alpha() == 128
                 && four.image.pixelColor(2, 0).alpha() == 255,
@@ -153,7 +153,7 @@ void variableChannelsAndAlpha()
     cv::Mat deep(1, 3, CV_16UC4, cv::Scalar(1000, 2000, 3000, 0));
     deep.at<cv::Vec4w>(0, 1)[3] = 32768;
     deep.at<cv::Vec4w>(0, 2)[3] = 65535;
-    const auto deepFrame = DisplayConverter::convert(deep, "BGRA");
+    const auto deepFrame = DisplayConverter::convert(deep, ColorOrder::BGRA);
     require(deepFrame.error.isEmpty(), "16-bit BGRA image was rejected");
     const auto alpha0 = deepFrame.image.pixelColor(0, 0).alpha();
     const auto alpha1 = deepFrame.image.pixelColor(1, 0).alpha();
@@ -166,7 +166,7 @@ void variableChannelsAndAlpha()
 
     cv::Mat floats(1, 2, CV_32FC4, cv::Scalar(0.25f, 0.5f, 0.75f, 0.5f));
     floats.at<cv::Vec4f>(0, 1)[3] = 1.5f;
-    const auto floatFrame = DisplayConverter::convert(floats, "RGBA");
+    const auto floatFrame = DisplayConverter::convert(floats, ColorOrder::RGBA);
     require(floatFrame.error.isEmpty(), "float RGBA image was rejected");
     require(floatFrame.image.pixelColor(0, 0).alpha() == 128 && floatFrame.image.pixelColor(1, 0).alpha() == 255,
             "float alpha must clamp to its unit range");

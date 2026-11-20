@@ -7,7 +7,7 @@
 #include "core/ToolRegistry.h"
 #include "ui/AppController.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 
 #include <QDir>
 #include <QFile>
@@ -50,7 +50,7 @@ try
 {
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
     QGuiApplication                application(argc, argv);
     testing::WorkbenchInstallation installation;
     const auto                     root  = installation.directory();
@@ -67,7 +67,7 @@ try
   "name_zh": "来源",
   "version": "1.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "identity",
     "file": "source.py",
     "symbol": "run"
@@ -76,16 +76,21 @@ try
     {
       "id": 1,
       "name_zh": "值",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
   ],
   "outputs": [
     {
       "id": 2,
       "name_zh": "值",
-      "type": "int"
+      "type": {
+        "type": 0
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })");
     write("python/custom/identity/source.py",
           "import threading\n"
@@ -274,7 +279,7 @@ try
     parameters.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"value", "旧来源"}});
     auto types     = node["type_snapshot"].toObject();
     auto initTypes = withoutPorts(types["init_params"].toArray(), references);
-    initTypes.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"type", QJsonObject{{"type", "String"}}}});
+    initTypes.append(QJsonObject{{"port_id", static_cast<int>(kRetiredInitPort)}, {"type", QJsonObject{{"type", static_cast<int>(Type::String)}}}});
     types.insert("init_params", initTypes);
     node.insert("init_params", parameters);
     node.insert("type_snapshot", types);

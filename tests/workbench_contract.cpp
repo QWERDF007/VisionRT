@@ -1,9 +1,10 @@
+#include "ui/UiState.h"
 #include "ui/AppController.h"
 #include "TestPythonConfiguration.h"
 #include "ui/DurationText.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include "ui/ToolTreeModel.h"
 #include "ui/LogHighlighter.h"
 #include "runtime/Snapshot.h"
@@ -45,7 +46,6 @@ void startupProjectContract();
 void cancellationWindowContract();
 void popupSessionsContract();
 void outputCellReuseContract();
-void hoverCardContract(visionrt::AppController &app, QQuickWindow *window, double scale);
 
 namespace {
 void require(bool value, const char *message)
@@ -247,36 +247,37 @@ void pendingContract()
     require(app.dirty(), "adding a flow left the project clean");
     app.requestClose();
     require(confirmations == 1 && closes == 0, "dirty close bypasses decision");
-    app.resolveUnsaved("cancel");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Cancel);
     require(closes == 0 && app.dirty(), "cancel changes project or closes");
     app.requestClose();
-    app.resolveUnsaved("save", directory.path() + "/absent/project.vrt.json");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Save, directory.path() + "/absent/project.vrt.json");
     require(closes == 0 && app.dirty(), "failed save permits close");
-    app.resolveUnsaved("discard");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
     require(app.isClosing(), "app must report isClosing() after discard close");
     app.runOnce();
     app.refreshPython();
-    require(app.runState() == "Idle", "runOnce in Ready must not change runState");
+    require(app.runState() == RuntimeState::Idle, "runOnce in Ready must not change runState");
 
     // S-D03: Resolving unsaved decision with valid "save" writes to disk and completes close
     {
         QTemporaryDir saveDir;
         AppController saveApp(1, saveDir.path());
+        require(QTest::qWaitFor([&] { return saveApp.workspaceEnabled(); }, 5000), "save-on-close workspace was not ready");
         int saveCloses = 0;
         QObject::connect(&saveApp, &AppController::closeReady, [&] { ++saveCloses; });
         saveApp.addFlow(QStringLiteral("流程2"));
         saveApp.requestClose();
         require(saveApp.dirty(), "edited project should be dirty");
         const QString validSavePath = saveDir.path() + "/saved_on_close.vrt.json";
-        saveApp.resolveUnsaved("save", validSavePath);
+        saveApp.resolveUnsaved(visionrt::UnsavedDecision::Save, validSavePath);
         require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
         require(QFile::exists(validSavePath), "resolveUnsaved save did not write file");
         require(!saveApp.dirty(), "project should be clean after save on close");
         require(saveApp.isClosing(), "saveApp must report isClosing() after save on close");
         saveApp.runOnce();
         saveApp.refreshPython();
-        require(saveApp.runState() == "Idle", "runOnce in Ready must not change runState");
+        require(saveApp.runState() == RuntimeState::Idle, "runOnce in Ready must not change runState");
     }
 }
 
@@ -437,7 +438,7 @@ void nodeDiagnosticsContract()
   "name_zh": "诊断测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "test_category/test_diag",
     "file": "test_diag.py",
     "symbol": "run"
@@ -445,7 +446,9 @@ void nodeDiagnosticsContract()
   "inputs": [
     {
       "name_zh": "输入",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 1,
       "constraints": {
         "min": 0,
@@ -460,10 +463,13 @@ void nodeDiagnosticsContract()
   "outputs": [
     {
       "name_zh": "输出",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
         jsonFile.close();
     }
@@ -476,7 +482,7 @@ void nodeDiagnosticsContract()
   "name_zh": "诊断失败",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "test_category/test_diag",
     "file": "test_diag_fail.py",
     "symbol": "run"
@@ -484,10 +490,13 @@ void nodeDiagnosticsContract()
   "outputs": [
     {
       "name_zh": "输出",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
         failJsonFile.close();
     }
@@ -500,9 +509,10 @@ void nodeDiagnosticsContract()
   "name_zh": "未提供实现测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": "host",
+    "kind": 3,
     "binding": "nonexistent.binding"
-  }
+  },
+  "schema_version": 1
 })json");
         unfulfilledJson.close();
     }
@@ -535,8 +545,12 @@ void nodeDiagnosticsContract()
     {
         projectFile.write(
             R"json({
-  "format_version": 7,
-  "project": {"name": "诊断工程", "next_node_seq": "4", "next_flow_seq": "2"},
+  "format_version": 8,
+  "project": {
+    "name": "诊断工程",
+    "next_node_seq": "4",
+    "next_flow_seq": "2"
+  },
   "flows": [
     {
       "flow_id": "flow_1",
@@ -548,15 +562,36 @@ void nodeDiagnosticsContract()
           "tool_id": "test.diag.python",
           "tool_name_snapshot": "诊断测试",
           "alias": "",
-          "pos": [100, 100],
+          "pos": [
+            100,
+            100
+          ],
           "init_params": [],
           "type_snapshot": {
             "init_params": [],
-            "inputs": [{"port_id": 1, "type": {"type": "Int"}}],
-            "outputs": [{"port_id": 2, "type": {"type": "Int"}}]
+            "inputs": [
+              {
+                "port_id": 1,
+                "type": {
+                  "type": 0
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "port_id": 2,
+                "type": {
+                  "type": 0
+                }
+              }
+            ]
           },
           "inputs": [
-            {"port_id": 1, "mode": "literal", "literal": 1}
+            {
+              "port_id": 1,
+              "mode": 0,
+              "literal": 1
+            }
           ]
         },
         {
@@ -564,7 +599,10 @@ void nodeDiagnosticsContract()
           "tool_id": "test.diag.unfulfilled",
           "tool_name_snapshot": "未提供实现测试",
           "alias": "",
-          "pos": [200, 200],
+          "pos": [
+            200,
+            200
+          ],
           "init_params": [],
           "type_snapshot": {
             "init_params": [],
@@ -578,12 +616,22 @@ void nodeDiagnosticsContract()
           "tool_id": "test.diag.fail",
           "tool_name_snapshot": "诊断失败",
           "alias": "",
-          "pos": [300, 200],
+          "pos": [
+            300,
+            200
+          ],
           "init_params": [],
           "type_snapshot": {
             "init_params": [],
             "inputs": [],
-            "outputs": [{"port_id": 2, "type": {"type": "Int"}}]
+            "outputs": [
+              {
+                "port_id": 2,
+                "type": {
+                  "type": 0
+                }
+              }
+            ]
           },
           "inputs": []
         }
@@ -594,7 +642,7 @@ void nodeDiagnosticsContract()
         projectFile.close();
     }
     app.requestOpen(directory.path() + "/initial.vrt.json");
-    app.resolveUnsaved("discard");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 3; }, 5000),
             "project with unfulfilled tool did not open");
 
@@ -606,7 +654,7 @@ void nodeDiagnosticsContract()
 
     const auto map0 = nodes.at(0).toMap();
     require(map0.contains("state"), "node missing state");
-    require(map0.value("state").toString() == "idle", "initial node state is not idle");
+    require(map0.value("state").toInt() == static_cast<int>(NodeState::Idle), "initial node state is not idle");
     require(map0.contains("defMissing"), "node missing defMissing");
     require(map0.value("defMissing").toBool() == false, "registered node marked defMissing");
     require(map0.contains("implUnavailable"), "node missing implUnavailable");
@@ -657,7 +705,7 @@ void nodeDiagnosticsContract()
     const auto executedNodes = app.nodes();
     require(!executedNodes.isEmpty(), "executed node empty");
     const auto executedMap = executedNodes.first().toMap();
-    require(executedMap.value("state").toString() == "succeeded", "executed node is not succeeded");
+    require(executedMap.value("state").toInt() == static_cast<int>(NodeState::Succeeded), "executed node is not succeeded");
     require(executedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "executed node total timing is not measured");
     require(phaseValue(executedMap, QStringLiteral("API")).endsWith(QStringLiteral(" ms")),
@@ -670,12 +718,12 @@ void nodeDiagnosticsContract()
             "executed node lost its measured postprocess timing");
 
     const auto unavailableMap = executedNodes.at(1).toMap();
-    require(unavailableMap.value("state").toString() == "failed", "unavailable implementation is not failed");
+    require(unavailableMap.value("state").toInt() == static_cast<int>(NodeState::Failed), "unavailable implementation is not failed");
     require(phaseValue(unavailableMap, QStringLiteral("API")) == "0.000 ms",
             "implementation without a tool call must not report operator time");
 
     const auto failedMap = executedNodes.at(2).toMap();
-    require(failedMap.value("state").toString() == "failed", "failing tool is not failed");
+    require(failedMap.value("state").toInt() == static_cast<int>(NodeState::Failed), "failing tool is not failed");
     require(failedMap.value("statusCode").toLongLong() != 0, "failing tool lost its status code");
     require(!failedMap.value("statusMessage").toString().isEmpty(), "failing tool lost its diagnostic message");
     require(failedMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
@@ -685,7 +733,7 @@ void nodeDiagnosticsContract()
     app.selectNode(pythonId);
     require(app.setParameter(1, false, "2"), "valid integer parameter change was rejected");
     const auto staleMap = app.nodes().first().toMap();
-    require(staleMap.value("state").toString() == "succeeded",
+    require(staleMap.value("state").toInt() == static_cast<int>(NodeState::Succeeded),
             "parameter change discarded the last successful display state");
     require(staleMap.value("timingText").toString().endsWith(QStringLiteral(" ms")),
             "parameter change discarded the previous total timing");
@@ -704,391 +752,6 @@ void nodeDiagnosticsContract()
     std::cout << "[Evidence T-03] Structured node timing, stale revision invalidation and diagnostics verified.\n";
 }
 
-
-void mainQmlContract(double scale)
-{
-    QQuickStyle::setStyle("Basic");
-    QTemporaryDir directory;
-    const auto    dirPath = directory.path();
-
-    // 1. Prepare plugin and JSON definitions
-    QDir(dirPath).mkpath("tools-package/bin");
-    const QString dllSrc = QCoreApplication::applicationDirPath() + "/test_plugin_module.dll";
-    const QString dllDst = dirPath + "/tools-package/bin/test_plugin_module.dll";
-    if (QFile::exists(dllSrc))
-    {
-        QFile::copy(dllSrc, dllDst);
-    }
-
-    QFile indexFile(dirPath + "/tools-package/module_index.json");
-    if (indexFile.open(QIODevice::WriteOnly))
-    {
-        indexFile.write(
-            R"json({
-  "schema_version": 1,
-  "variant": "cpu",
-  "modules": [
-    {"id": "test_module", "library": "bin/test_plugin_module.dll"}
-  ],
-  "tools": [
-    {"tool_id": "test.plugin.counter", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/counter.json"},
-    {"tool_id": "test.plugin.sleep", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/sleep.json"},
-    {"tool_id": "test.plugin.fail_init", "module": "test_module", "definition": "tools/builtin/Plugin/Basic/fail.json"}
-  ],
-  "runtime_files": []
-})json");
-        indexFile.close();
-    }
-
-    QDir(dirPath).mkpath("tools-package/tools/builtin/Plugin/Basic");
-    QFile sleepJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/sleep.json");
-    if (sleepJson.open(QIODevice::WriteOnly))
-    {
-        sleepJson.write(
-            R"json({
-  "name_en": "test.plugin.sleep",
-  "name_zh": "Plugin Sleep",
-  "version": "1.0.0",
-  "implementation": {
-    "kind": "cpp"
-  },
-  "outputs": [
-    {
-      "name_zh": "Y",
-      "type": "int",
-      "id": 2
-    }
-  ]
-})json");
-        sleepJson.close();
-    }
-
-    QFile counterJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/counter.json");
-    if (counterJson.open(QIODevice::WriteOnly))
-    {
-        counterJson.write(
-            R"json({
-  "name_en": "test.plugin.counter",
-  "name_zh": "Plugin Counter",
-  "version": "1.0.0",
-  "implementation": {
-    "kind": "cpp"
-  },
-  "inputs": [
-    {
-      "name_zh": "Step",
-      "type": "int",
-      "default": 1,
-      "id": 1
-    }
-  ],
-  "outputs": [
-    {
-      "name_zh": "Count",
-      "type": "int",
-      "id": 2
-    }
-  ]
-})json");
-        counterJson.close();
-    }
-
-    QFile failJson(dirPath + "/tools-package/tools/builtin/Plugin/Basic/fail.json");
-    if (failJson.open(QIODevice::WriteOnly))
-    {
-        failJson.write(
-            R"json({
-  "name_en": "test.plugin.fail_init",
-  "name_zh": "Fail Init Tool",
-  "version": "1.0.0",
-  "implementation": {
-    "kind": "cpp"
-  }
-})json");
-        failJson.close();
-    }
-
-    AppController app(1, dirPath);
-    for (int i = 0; i < 50 && app.busy(); ++i)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::initializeUiStyle();
-
-    QQmlApplicationEngine engine;
-    const auto            appDir = QCoreApplication::applicationDirPath();
-    engine.addImportPath(appDir + "/qml");
-    engine.addImportPath(appDir + "/../qml");
-#ifdef VISIONRT_SOURCE_DIR
-    const auto sourceDir = QStringLiteral(VISIONRT_SOURCE_DIR);
-    engine.addImportPath(sourceDir + "/src/ui/qml");
-    engine.addImportPath(sourceDir + "/3rdparty/QuickUI/quickui");
-    const auto qmlPath = sourceDir + "/src/ui/qml/Main.qml";
-#else
-    const auto qmlPath = appDir + "/../src/ui/qml/Main.qml";
-#endif
-
-    engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("demoMenu", false);
-    engine.rootContext()->setContextProperty("demoSelect", false);
-
-    if (QFile::exists(qmlPath))
-    {
-        engine.load(QUrl::fromLocalFile(qmlPath));
-    }
-    else
-    {
-        engine.loadFromModule("VisionRT", "Main");
-    }
-
-    const auto roots = engine.rootObjects();
-    require(!roots.isEmpty(), "Main.qml failed to instantiate");
-    auto *window = qobject_cast<QQuickWindow *>(roots.first());
-    require(window != nullptr, "Main.qml root is not QQuickWindow");
-
-    // 1. DPI verification & logical viewport strictly 960x540
-    window->setFlags(Qt::FramelessWindowHint | Qt::Window);
-    window->resize(960, 540);
-    window->show();
-    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
-
-    const double dpr = window->devicePixelRatio();
-    require(std::abs(dpr - scale) < 0.05, "DPR mismatch with target scale");
-    require(window->width() == 960, "window width is not strictly 960");
-    require(window->height() == 540, "window height is not strictly 540");
-
-    // 2. Initial state verification & drawer items
-    require(window->property("leftExpanded").toBool() == true, "drawer initially not expanded");
-    app.save(dirPath + "/test.vrt.json");
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    require(app.dirty() == false, "project initially dirty after save");
-
-    auto *leftHandle     = window->findChild<QQuickItem *>("leftHandle");
-    auto *leftHandleMask = window->findChild<QQuickItem *>("leftHandleMask");
-    auto *leftHost       = window->findChild<QQuickItem *>("leftHost");
-    auto *leftContent    = window->findChild<QQuickItem *>("leftContent");
-    require(leftHandle != nullptr, "missing leftHandle");
-    require(leftHandleMask != nullptr, "missing leftHandleMask");
-    require(leftHost != nullptr, "missing leftHost");
-    require(leftContent != nullptr, "missing leftContent");
-    require(leftContent->isVisible(), "leftContent initially not visible");
-    require(leftHandle->width() == 1, "initial handle width != 1");
-
-    // 3. Drawer Collapse (toggleLeft) & zero hit test on hidden handle/mask
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
-
-    require(window->property("leftExpanded").toBool() == false, "drawer did not collapse");
-    require(leftHost->width() == 28, "collapsed leftHost width != 28");
-    require(leftHandle->implicitWidth() == 0, "collapsed leftHandle implicitWidth != 0");
-    require(leftHandleMask->width() == 0, "collapsed leftHandleMask width != 0");
-    require(!leftHandle->isVisible(), "collapsed leftHandle should be invisible");
-    require(!leftHandle->isEnabled(), "collapsed leftHandle should be disabled");
-    require(!leftHandle->hasActiveFocus(), "collapsed leftHandle must not have active focus");
-    require(!leftContent->isVisible(), "collapsed leftContent should be hidden");
-
-    // Hidden handle mouse click does not expand drawer
-    QMouseEvent handleClick(QEvent::MouseButtonPress, QPointF(0, 0), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    QCoreApplication::sendEvent(leftHandle, &handleClick);
-    require(!window->property("leftExpanded").toBool(), "mouse click on hidden handle expanded drawer");
-
-    auto *drawerToggle = window->findChild<QQuickItem *>("drawerToggle");
-    require(drawerToggle != nullptr && drawerToggle->isVisible(), "drawerToggle missing or invisible");
-    require(window->activeFocusItem() == drawerToggle, "focus did not switch to drawerToggle upon collapse");
-    require(app.dirty() == false, "collapsing drawer dirtied the project");
-
-    // 4. Ctrl+F from collapsed drawer: expands drawer and focuses search field
-    QKeyEvent ctrlFPress(QEvent::KeyPress, Qt::Key_F, Qt::ControlModifier, "f");
-    QKeyEvent ctrlFRelease(QEvent::KeyRelease, Qt::Key_F, Qt::ControlModifier);
-    QCoreApplication::sendEvent(window, &ctrlFPress);
-    QCoreApplication::sendEvent(window, &ctrlFRelease);
-    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
-
-    require(window->property("leftExpanded").toBool() == true, "Ctrl+F event did not expand left drawer");
-    auto *flowSearch = window->findChild<QQuickItem *>("flowSearch");
-    require(flowSearch != nullptr, "missing flowSearch input field");
-    require(flowSearch->hasActiveFocus(), "flowSearch input does not have active focus after Ctrl+F");
-
-    // 5. Tab key: visible focus target
-    QKeyEvent tabPress(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
-    QKeyEvent tabRelease(QEvent::KeyRelease, Qt::Key_Tab, Qt::NoModifier);
-    QCoreApplication::sendEvent(window, &tabPress);
-    QCoreApplication::sendEvent(window, &tabRelease);
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-
-    auto *activeFocus = window->activeFocusItem();
-    require(activeFocus != nullptr, "no active focus item after Tab key");
-    require(activeFocus->isVisible(), "active focus item after Tab is not visible");
-
-    // 6. Running state, loop execution, and drawer toggling
-    app.addNode("test.plugin.sleep", 100, 100);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.addNode("test.plugin.counter", 200, 100);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.save(dirPath + "/test.vrt.json");
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    require(app.dirty() == false, "project dirty after save with nodes");
-
-    const auto nodesBeforeRun = app.nodes();
-    require(!nodesBeforeRun.isEmpty(), "nodes empty after adding nodes. diag: " + app.diagnostic().toStdString());
-    require(nodesBeforeRun.first().toMap().value("state").toString() == "idle", "initial node state is not idle");
-
-    // Start continuous loop
-    app.toggleLoop();
-    for (int i = 0; i < 50 && app.runState() != "RunningLoop"; ++i)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    require(app.runState() == "RunningLoop", "app failed to enter RunningLoop state");
-
-    // Observe active running node state is "running"
-    bool observedRunning = false;
-    for (int i = 0; i < 50; ++i)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        for (const auto &n : app.nodes())
-        {
-            if (n.toMap().value("state").toString() == "running")
-            {
-                observedRunning = true;
-                break;
-            }
-        }
-        if (observedRunning)
-            break;
-    }
-    require(observedRunning, "Running node did not exhibit 'running' state in RunningLoop");
-    std::cout << "[Evidence HS5-03] Node state 'running' observed during RunningLoop execution.\n";
-
-    // Drawer toggle while running: does not dirty project or mutate instance identities
-    const auto *hostIdentityBefore    = leftHost;
-    const auto *contentIdentityBefore = leftContent;
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
-    require(app.dirty() == false, "toggling drawer during active execution dirtied project");
-
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
-    require(app.dirty() == false, "re-expanding drawer during active execution dirtied project");
-    require(window->findChild<QQuickItem *>("leftHost") == hostIdentityBefore,
-            "leftHost identity changed across toggle");
-    require(window->findChild<QQuickItem *>("leftContent") == contentIdentityBefore,
-            "leftContent identity changed across toggle");
-
-    // Stop loop and wait for Idle
-    app.toggleLoop();
-    for (int i = 0; i < 50 && app.busy(); ++i)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    require(app.runState() == "Idle", "app failed to return to Idle after stopping loop");
-
-    // Node state after successful run is green
-    const auto nodesAfterRun = app.nodes();
-    require(!nodesAfterRun.isEmpty(), "nodes empty after running loop");
-    require(nodesAfterRun.first().toMap().value("state").toString() == "succeeded",
-            "node state after execution is not succeeded");
-
-    // Add failing node and verify red error state
-    app.addNode("test.plugin.fail_init", 300, 100);
-    require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    app.runOnce();
-    for (int i = 0; i < 50 && app.busy(); ++i)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    const auto nodesWithFail = app.nodes();
-    require(nodesWithFail.size() == 3, "expected 3 nodes");
-    require(nodesWithFail.at(2).toMap().value("state").toString() == "failed", "failing node state is not failed");
-
-    // 7. Real ROI draft and parameter draft preservation across drawer collapse and expand
-    {
-        visionrt::ImageViewport roiViewport;
-        roiViewport.setWidth(500);
-        roiViewport.setHeight(400);
-        roiViewport.beginRoiEdit({1, 2, 0, -1}, {});
-        roiViewport.setDrawShape(2); // Rectangle
-        QMouseEvent pressEv(QEvent::MouseButtonPress, roiViewport.imageToItem({20, 20}), Qt::LeftButton, Qt::LeftButton,
-                            Qt::NoModifier);
-        QCoreApplication::sendEvent(&roiViewport, &pressEv);
-        QMouseEvent moveEv(QEvent::MouseMove, roiViewport.imageToItem({60, 60}), Qt::NoButton, Qt::LeftButton,
-                           Qt::NoModifier);
-        QCoreApplication::sendEvent(&roiViewport, &moveEv);
-        require(roiViewport.editing(), "ROI viewport not in editing state");
-
-        // Layout / drawer width change preserves draft
-        roiViewport.setWidth(700);
-        require(roiViewport.editing(), "ROI draft lost upon layout expansion");
-        roiViewport.setWidth(300);
-        require(roiViewport.editing(), "ROI draft lost upon layout contraction");
-        roiViewport.cancelDraft();
-        roiViewport.endRoiEdit();
-        std::cout << "[Evidence HS5-03] Real ROI draft preserved across drawer/layout width changes.\n";
-    }
-
-    QString counterNodeId;
-    for (const auto &n : nodesWithFail)
-    {
-        if (n.toMap().value("toolId").toString() == "test.plugin.counter")
-        {
-            counterNodeId = n.toMap().value("id").toString();
-            break;
-        }
-    }
-    require(!counterNodeId.isEmpty(), "missing counter node");
-    app.selectNode(counterNodeId);
-    app.setParameter(1, false, "99");
-    require(app.dirty() == true, "setting parameter did not mark project dirty");
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
-    require(app.dirty() == true, "dirty parameter state lost across drawer toggle");
-    bool paramPreserved = false;
-    for (const auto &paramVar : app.parameters())
-    {
-        const auto pMap = paramVar.toMap();
-        if (pMap.value("id").toUInt() == 1)
-        {
-            paramPreserved = (pMap.value("literal").toString() == "99" || pMap.value("valueText").toString() == "99");
-        }
-    }
-    require(paramPreserved, "modified parameter draft was not preserved across drawer toggle");
-
-    hoverCardContract(app, window, scale);
-
-    // 8. Screenshot capture evidence for this scale
-    QImage frame = window->grabWindow();
-    require(!frame.isNull(), "grabWindow failed");
-    const int expectedPhysicalWidth  = static_cast<int>(std::round(960.0 * dpr));
-    const int expectedPhysicalHeight = static_cast<int>(std::round(540.0 * dpr));
-    require(std::abs(frame.width() - expectedPhysicalWidth) <= 2, "Physical frame width does not match logical * DPR");
-    require(std::abs(frame.height() - expectedPhysicalHeight) <= 2,
-            "Physical frame height does not match logical * DPR");
-
-    const std::filesystem::path evidenceDir = "build/evidence";
-    std::filesystem::create_directories(evidenceDir);
-    char scaleBuf[16];
-    std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
-    const auto screenshotName = "workbench_dpi_" + std::string(scaleBuf) + ".png";
-    const auto screenshotPath = evidenceDir / screenshotName;
-    const bool saved          = frame.save(QString::fromStdString(screenshotPath.string()));
-    require(saved, "Failed to save screenshot evidence to " + screenshotPath.string());
-    require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
-            "Saved screenshot file does not exist or is empty");
-
-    std::cout << "[Evidence HS5-03] Child process scale=" << scaleBuf << ", actual DPR=" << dpr << ", logical size=("
-              << window->width() << ", " << window->height() << ")"
-              << ", physical size=(" << frame.width() << ", " << frame.height() << ")"
-              << ", screenshot=" << screenshotPath.string() << "\n";
-}
 
 void packageDrivenCatalogAndRefreshContract()
 {
@@ -1119,8 +782,9 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "遗留函数",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
-  }
+    "kind": 0
+  },
+  "schema_version": 1
 })json");
             legacyJson.close();
         }
@@ -1140,10 +804,11 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "遗留脚本",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "file": "legacy.py",
     "symbol": "run"
-  }
+  },
+  "schema_version": 1
 })json");
             legacyPyJson.close();
         }
@@ -1179,12 +844,14 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "计数器插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "init_params": [
     {
       "name_zh": "初始值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 10,
       "id": 1
     }
@@ -1192,10 +859,13 @@ void packageDrivenCatalogAndRefreshContract()
   "outputs": [
     {
       "name_zh": "计数值",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
         rootCounterJson.close();
     }
@@ -1211,12 +881,14 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "函数插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
+    "kind": 0
   },
   "inputs": [
     {
       "name_zh": "输入",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 5,
       "id": 1
     }
@@ -1224,10 +896,13 @@ void packageDrivenCatalogAndRefreshContract()
   "outputs": [
     {
       "name_zh": "输出",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
         rootFunctionJson.close();
     }
@@ -1252,7 +927,7 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "用户脚本A",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_function",
+    "kind": 1,
     "package": "user/py",
     "file": "user_node_a.py",
     "symbol": "run"
@@ -1260,18 +935,23 @@ void packageDrivenCatalogAndRefreshContract()
   "outputs": [
     {
       "name_zh": "结果",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     },
     {
       "name_zh": "图像",
-      "type": "image",
+      "type": {
+        "type": 4
+      },
       "display": {
         "visible": true
       },
       "id": 3
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
         root3JsonA.close();
     }
@@ -1287,28 +967,36 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "动态接收器",
   "version": "1.0.0",
   "implementation": {
-    "kind": "host",
+    "kind": 3,
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "name_zh": "源流程",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 0
     },
     {
       "name_zh": "源节点",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 1
     },
     {
       "name_zh": "源端口",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     },
     {
       "name_zh": "超时时间(ms)",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 500,
       "id": 3
     }
@@ -1318,15 +1006,15 @@ void packageDrivenCatalogAndRefreshContract()
       "name_zh": "接收值",
       "type_from": {
         "flow": {
-          "stage": "init",
+          "stage": 0,
           "id": 0
         },
         "node": {
-          "stage": "init",
+          "stage": 0,
           "id": 1
         },
         "port": {
-          "stage": "init",
+          "stage": 0,
           "id": 2
         }
       },
@@ -1334,15 +1022,20 @@ void packageDrivenCatalogAndRefreshContract()
     },
     {
       "name_zh": "源状态码",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 3
     },
     {
       "name_zh": "源状态消息",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 4
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
         recvJson.close();
     }
@@ -1358,8 +1051,9 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
-    "kind": "cpp"
-  }
+    "kind": 0
+  },
+  "schema_version": 1
 })json");
         unindexedJson.close();
     }
@@ -1638,28 +1332,36 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "改名接收器",
   "version": "1.0.0",
   "implementation": {
-    "kind": "host",
+    "kind": 3,
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "name_zh": "源流程",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 0
     },
     {
       "name_zh": "源节点",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 1
     },
     {
       "name_zh": "源端口",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 2
     },
     {
       "name_zh": "超时时间(ms)",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "default": 500,
       "id": 3
     }
@@ -1669,15 +1371,15 @@ void packageDrivenCatalogAndRefreshContract()
       "name_zh": "接收值",
       "type_from": {
         "flow": {
-          "stage": "init",
+          "stage": 0,
           "id": 0
         },
         "node": {
-          "stage": "init",
+          "stage": 0,
           "id": 1
         },
         "port": {
-          "stage": "init",
+          "stage": 0,
           "id": 2
         }
       },
@@ -1685,15 +1387,20 @@ void packageDrivenCatalogAndRefreshContract()
     },
     {
       "name_zh": "源状态码",
-      "type": "int",
+      "type": {
+        "type": 0
+      },
       "id": 3
     },
     {
       "name_zh": "源状态消息",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "id": 4
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
             renamedJson.close();
         }
@@ -1808,99 +1515,8 @@ void packageDrivenCatalogAndRefreshContract()
     std::cout << "[PACKAGE-DRIVEN CATALOG & REFRESH CONTRACT PASSED]\n";
 }
 
-void shortWindowContract()
-{
-    std::cout << "\n[SHORT WINDOW CONTRACT START]\n";
-    QTemporaryDir directory;
-    const auto    dirPath = directory.path();
-    AppController app(1, dirPath);
-    for (int i = 0; i < 50 && app.busy(); ++i)
-    {
-        QCoreApplication::processEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    qmlRegisterType<visionrt::ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
-    visionrt::initializeUiStyle();
-
-    QQmlApplicationEngine engine;
-    const auto            appDir = QCoreApplication::applicationDirPath();
-    engine.addImportPath(appDir + "/qml");
-    engine.addImportPath(appDir + "/../qml");
-#ifdef VISIONRT_SOURCE_DIR
-    const auto sourceDir = QStringLiteral(VISIONRT_SOURCE_DIR);
-    engine.addImportPath(sourceDir + "/src/ui/qml");
-    engine.addImportPath(sourceDir + "/3rdparty/QuickUI/quickui");
-    const auto qmlPath = sourceDir + "/src/ui/qml/Main.qml";
-#else
-    const auto qmlPath = appDir + "/../src/ui/qml/Main.qml";
-#endif
-
-    engine.rootContext()->setContextProperty("app", &app);
-    engine.rootContext()->setContextProperty("demoMenu", false);
-    engine.rootContext()->setContextProperty("demoSelect", false);
-
-    if (QFile::exists(qmlPath))
-    {
-        engine.load(QUrl::fromLocalFile(qmlPath));
-    }
-    else
-    {
-        engine.loadFromModule("VisionRT", "Main");
-    }
-
-    const auto roots = engine.rootObjects();
-    require(!roots.isEmpty(), "Main.qml failed to instantiate in shortWindowContract");
-    auto *window = qobject_cast<QQuickWindow *>(roots.first());
-    require(window != nullptr, "Main.qml root is not QQuickWindow");
-
-    window->setFlags(Qt::FramelessWindowHint | Qt::Window);
-    window->resize(800, 480);
-    window->show();
-    for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
-
-    auto *leftHost    = window->findChild<QQuickItem *>("leftHost");
-    auto *leftContent = window->findChild<QQuickItem *>("leftContent");
-    require(leftHost != nullptr && leftContent != nullptr, "missing drawer items in short window");
-
-    // Drawer toggle in short window
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
-    require(window->property("leftExpanded").toBool() == false, "short window drawer collapse failed");
-
-    QMetaObject::invokeMethod(window, "toggleLeft");
-    for (int i = 0; i < 15; ++i) QCoreApplication::processEvents();
-    require(window->property("leftExpanded").toBool() == true, "short window drawer expand failed");
-
-    QImage frame = window->grabWindow();
-    require(!frame.isNull(), "short window grabWindow failed");
-
-    const std::filesystem::path evidenceDir = "build/evidence";
-    std::filesystem::create_directories(evidenceDir);
-    const auto screenshotPath = evidenceDir / "workbench_short_window.png";
-    const bool saved          = frame.save(QString::fromStdString(screenshotPath.string()));
-    require(saved, "Failed to save short window screenshot");
-    require(std::filesystem::exists(screenshotPath) && std::filesystem::file_size(screenshotPath) > 0,
-            "Saved short window screenshot file does not exist or is empty");
-
-    std::cout << "[Evidence HS5-03] Short window contract verified at (" << window->width() << "x" << window->height()
-              << "), screenshot=" << screenshotPath.string() << "\n";
-    std::cout << "[SHORT WINDOW CONTRACT PASSED]\n";
-}
-
-// Windowless core scenarios shared by the aggregate run; kept in one place so the aggregate main
-// cannot drift from the child-process dispatch table above.
 void coreContracts()
 {
-    QTextDocument logDocument;
-    LogHighlighter highlighter(&logDocument, Qt::yellow, Qt::red);
-    logDocument.setPlainText("[2026/11/15 12:00:00.000] [I] [1] [工具] 正文包含 ] [E]\n"
-                             "[2026/11/15 12:00:00.000] [W] [1] [工具] 正文包含 ] [E]");
-    highlighter.rehighlight();
-    require(logDocument.firstBlock().layout()->formats().isEmpty(), "message text changed an Info log color");
-    const auto warningFormats = logDocument.lastBlock().layout()->formats();
-    require(warningFormats.size() == 1 && warningFormats.front().format.foreground().color() == Qt::yellow,
-            "message text changed a Warning log color");
     treeContract();
     pendingContract();
     durationTextContract();
@@ -1910,7 +1526,7 @@ void coreContracts()
 
 int main(int argc, char **argv)
 {
-    visionrt::initializeUiStyle();
+    visionrt::registerUiTypes();
     // R50: Python runs only on an interpreter someone selected. This runner states the build
     // interpreter once, before any controller exists, so every scenario sees the same catalog the
     // application shows after the user saves that choice.
@@ -1960,36 +1576,6 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    if (argc >= 2 && std::string(argv[1]) == "--short-window-child")
-    {
-        QGuiApplication qt(argc, argv);
-        try
-        {
-            shortWindowContract();
-            return 0;
-        }
-        catch (const std::exception &error)
-        {
-            std::cerr << "[Short Window Error] " << error.what() << '\n';
-            return 1;
-        }
-    }
-    if (argc >= 3 && std::string(argv[1]) == "--dpi-child")
-    {
-        const double scale = std::stod(argv[2]);
-        qputenv("QT_SCALE_FACTOR", QByteArray::number(scale, 'f', 1));
-        QGuiApplication qt(argc, argv);
-        try
-        {
-            mainQmlContract(scale);
-            return 0;
-        }
-        catch (const std::exception &error)
-        {
-            std::cerr << "[DPI Child Error for scale=" << scale << "] " << error.what() << '\n';
-            return 1;
-        }
-    }
 
     QGuiApplication qt(argc, argv);
     try
@@ -2018,45 +1604,6 @@ int main(int argc, char **argv)
             std::cerr << roiProc.readAllStandardError().toStdString();
             require(finished && roiProc.exitStatus() == QProcess::NormalExit && roiProc.exitCode() == 0,
                     "ROI child process failed or timed out");
-        }
-
-        // 1. Run short window contract in child process
-        {
-            QProcess shortProc;
-            shortProc.start(appPath, {"--short-window-child"});
-            const bool shortFinished = shortProc.waitForFinished(45000);
-            require(shortFinished, "Short window child process timed out");
-            std::cout << shortProc.readAllStandardOutput().toStdString();
-            if (shortProc.exitCode() != 0)
-            {
-                std::cerr << shortProc.readAllStandardError().toStdString();
-                throw std::runtime_error("Short window child process failed");
-            }
-            const auto shortScreenshot = std::filesystem::path("build/evidence/workbench_short_window.png");
-            require(std::filesystem::exists(shortScreenshot) && std::filesystem::file_size(shortScreenshot) > 0,
-                    "Short window screenshot missing");
-        }
-
-        // 2. Run 3 DPI scale child processes (1.0, 1.5, 2.0)
-        const double scales[] = {1.0, 1.5, 2.0};
-        for (double scale : scales)
-        {
-            QProcess proc;
-            proc.start(appPath, {"--dpi-child", QString::number(scale, 'f', 1)});
-            const bool finished = proc.waitForFinished(45000);
-            require(finished, "DPI child process timed out for scale " + std::to_string(scale));
-            std::cout << proc.readAllStandardOutput().toStdString();
-            if (proc.exitCode() != 0)
-            {
-                std::cerr << proc.readAllStandardError().toStdString();
-                throw std::runtime_error("DPI child process failed for scale " + std::to_string(scale));
-            }
-            char scaleBuf[16];
-            std::snprintf(scaleBuf, sizeof(scaleBuf), "%.1f", scale);
-            const auto screenshot
-                = std::filesystem::path("build/evidence") / ("workbench_dpi_" + std::string(scaleBuf) + ".png");
-            require(std::filesystem::exists(screenshot) && std::filesystem::file_size(screenshot) > 0,
-                    "Screenshot missing for scale " + std::string(scaleBuf));
         }
 
         std::cout << "workbench contract passed\n";

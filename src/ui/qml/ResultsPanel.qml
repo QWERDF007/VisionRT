@@ -2,12 +2,12 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Rectangle {
     id: root
-    color: QuiColor.Button
-    signal roiRequested()
+    color: QuiColor.Primary
+    signal roiRequested
 
     QuiMenu {
         id: trainingMenu
@@ -21,22 +21,29 @@ Rectangle {
 
     Connections {
         target: app
-        function onSelectionChanged() { trainingMenu.close() }
-        function onTrainingChanged() { trainingMenu.close() }
-        function onRuntimeChanged() { trainingMenu.close() }
+        function onSelectionChanged() {
+            trainingMenu.close();
+        }
+        function onTrainingChanged() {
+            trainingMenu.close();
+        }
+        function onRuntimeChanged() {
+            trainingMenu.close();
+        }
     }
 
     RowLayout {
-        anchors.fill: parent; spacing: 0
+        anchors.fill: parent
+        spacing: 0
         ResultsModeTabs {
             controller: app
             Layout.preferredWidth: implicitWidth
             Layout.fillHeight: true
         }
         Rectangle {
-            Layout.preferredWidth: app.trainingMode ? ResultsStyle.trainingPanelWidth : ResultsStyle.thumbnailPanelWidth
+            Layout.preferredWidth: VisionRTSize.ThumbnailWidth
             Layout.fillHeight: true
-            color: QuiColor.Button
+            color: QuiColor.Primary
             ResultsThumbnails {
                 anchors.fill: parent
                 controller: app
@@ -49,8 +56,11 @@ Rectangle {
                 visible: app.trainingMode
             }
             Rectangle {
-                anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
-                width: 1; color: QuiColor.Border
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
+                width: 1
+                color: QuiColor.Border
             }
         }
         ResultsImageToolbar {
@@ -58,7 +68,9 @@ Rectangle {
             Layout.preferredWidth: implicitWidth
             Layout.fillHeight: true
             onFitRequested: imageView.fitContain()
-            onZoomRequested: function(factor) { imageView.zoomBy(factor) }
+            onZoomRequested: function (factor) {
+                imageView.zoomBy(factor);
+            }
             onOneToOneRequested: imageView.fitOneToOne()
             onRoiRequested: root.roiRequested()
         }

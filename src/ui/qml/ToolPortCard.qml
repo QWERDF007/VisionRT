@@ -2,10 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
-// Modern parameter card matching design specification.
-// Rigorous horizontal label/input alignment with port ID badge and shared style tokens.
+// Edits one port in the controller's current draft.
 Rectangle {
     id: root
 
@@ -15,95 +14,118 @@ Rectangle {
     property var listView: null
     property var types: []
     property bool editable: false
-    property string stage: "inputs"
+    property int stage: PortStage.Inputs
     property int revision: 0
 
-    readonly property bool fixed: model.isFixed === true
-    readonly property bool output: stage === "outputs"
-    readonly property string typeToken: model.typeToken || ""
-    readonly property bool numeric: typeToken === "int" || typeToken === "float"
-    readonly property bool isImage: typeToken === "image"
-    readonly property bool isRoi: typeToken === "roi"
-    readonly property bool hasAdvanced: root.typeToken === "string" ||
-                                       (showsRelation("image") && model.imageRef !== "") ||
-                                       (showsRelation("alignment") && model.alignmentRef !== "") ||
-                                       (showsRelation("same_geometry_as") && model.sameGeometryRef !== "") ||
-                                       (typeToken === "string" && model.editorType !== "") ||
-                                       (model.optionsText && model.optionsText !== "")
+    readonly property bool fixed: root.model.isFixed === true
+    readonly property bool output: stage === PortStage.Outputs
+    readonly property var typeSpec: root.model.typeSpec
+    readonly property int portType: typeSpec.type
+    readonly property bool numeric: portType === PortType.Int || portType === PortType.Float
+    readonly property bool isImage: portType === PortType.Image
+    readonly property bool isRoi: portType === PortType.ROI
+    readonly property bool hasAdvanced: root.portType === PortType.String || (showsRelation(RelationKind.Image) && root.model.imageRef.id !== undefined) || (showsRelation(RelationKind.Alignment) && root.model.alignmentRef.id !== undefined) || (showsRelation(RelationKind.SameGeometry) && root.model.sameGeometryRef.id !== undefined) || (portType === PortType.String && root.model.editorType !== EditorKind.Default) || (root.model.optionsText && root.model.optionsText !== "")
     property bool advancedChecked: false
-    readonly property real lowerBound: model.minValue !== "" && !isNaN(Number(model.minValue)) ? Number(model.minValue) : -2147483648
-    readonly property real upperBound: model.maxValue !== "" && !isNaN(Number(model.maxValue)) ? Number(model.maxValue) : 2147483647
+    readonly property real lowerBound: root.model.minValue !== "" && !isNaN(Number(root.model.minValue)) ? Number(root.model.minValue) : -2147483648
+    readonly property real upperBound: root.model.maxValue !== "" && !isNaN(Number(root.model.maxValue)) ? Number(root.model.maxValue) : 2147483647
 
     implicitHeight: cardLayout.implicitHeight + 2 * cardLayout.anchors.margins
-    color: QuiColor.Button
+    color: QuiColor.Primary
     border.color: QuiColor.Border
     border.width: 1
     radius: 8
 
+    function sameType(a, b) {
+        return a.type === b.type && a.dtype === b.dtype && a.rank === b.rank;
+    }
+
     function typeIndex() {
         for (let i = 0; i < root.types.length; ++i)
-            if (root.types[i].token === root.typeToken)
-                return i
-        return -1
+            if (sameType(root.types[i].token, root.typeSpec))
+                return i;
+        return -1;
     }
 
     function commit(properties) {
         if (!root.portsModel)
-            return false
-        return root.portsModel.updatePort(root.index, properties)
+            return false;
+        return root.portsModel.updatePort(root.index, properties);
     }
 
     function relationOptions(kind) {
-        root.revision
-        let options = [{ ref: "", label: "（无）" }]
+        root.revision;
+        let options = [
+            {
+                ref: ({}),
+                label: "（无）"
+            }
+        ];
         if (root.portsModel) {
-            const candidates = root.portsModel.relationCandidates(root.index, kind)
+            const candidates = root.portsModel.relationCandidates(root.index, kind);
             for (let i = 0; i < candidates.length; ++i)
-                options.push(candidates[i])
+                options.push(candidates[i]);
         }
-        return options
+        return options;
     }
 
     function relationIndex(kind, current) {
-        const options = relationOptions(kind)
+        // A model reset invalidates delegate roles before destroying the delegate.
+        if (current === undefined)
+            return -1;
+        const options = relationOptions(kind);
         for (let i = 0; i < options.length; ++i)
-            if (options[i].ref === (current || ""))
-                return i
-        return 0
+            if (options[i].ref.stage === current.stage && options[i].ref.id === current.id)
+                return i;
+        return 0;
     }
 
     function editorOptions() {
-        root.revision
+        root.revision;
         if (!root.portsModel)
-            return [{ token: "", label: "默认" }]
-        return root.portsModel.editorOptions(root.index)
+            return [
+                {
+                    token: EditorKind.Default,
+                    label: "默认"
+                }
+            ];
+        return root.portsModel.editorOptions(root.index);
     }
 
     function editorIndex() {
-        const options = editorOptions()
+        const options = editorOptions();
         for (let i = 0; i < options.length; ++i)
-            if (options[i].token === (model.editorType || ""))
-                return i
-        return 0
+            if (options[i].token === root.model.editorType)
+                return i;
+        return 0;
     }
 
     function showsRelation(kind) {
-        if (kind === "image")
-            return root.isRoi
-        if (kind === "alignment")
-            return root.isRoi && root.stage === "inputs"
-        if (kind === "same_geometry_as")
-            return root.isImage && root.stage === "outputs"
-        return false
+        if (kind === RelationKind.Image)
+            return root.isRoi;
+        if (kind === RelationKind.Alignment)
+            return root.isRoi && root.stage === PortStage.Inputs;
+        if (kind === RelationKind.SameGeometry)
+            return root.isImage && root.stage === PortStage.Outputs;
+        return false;
     }
 
     Connections {
         target: root.portsModel
-        function onDataChanged() { root.revision++ }
-        function onModelReset() { root.revision++ }
-        function onRowsInserted() { root.revision++ }
-        function onRowsRemoved() { root.revision++ }
-        function onRowsMoved() { root.revision++ }
+        function onDataChanged() {
+            root.revision++;
+        }
+        function onModelReset() {
+            root.revision++;
+        }
+        function onRowsInserted() {
+            root.revision++;
+        }
+        function onRowsRemoved() {
+            root.revision++;
+        }
+        function onRowsMoved() {
+            root.revision++;
+        }
     }
 
     ColumnLayout {
@@ -122,12 +144,12 @@ Rectangle {
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 20
                 radius: 3
-                color: rowDrag.active ? QuiColor.Highlight : ToolTreeStyle.treeItemSelectedBg
+                color: rowDrag.active ? QuiColor.Highlight : QuiColor.Primary
                 border.color: rowDrag.active ? QuiColor.Highlight : "transparent"
 
                 Label {
                     anchors.centerIn: parent
-                    text: String(model.portId)
+                    text: String(root.model.portId)
                     font: QuiFont.Caption
                     color: rowDrag.active ? QuiColor.White : QuiColor.Highlight
                 }
@@ -145,36 +167,37 @@ Rectangle {
 
                     function dropTarget() {
                         if (!rowDrag.active || root.listView === null || !root.portsModel)
-                            return -1
-                        const point = numberChip.mapToItem(root.listView.contentItem,
-                                                           numberChip.width / 2,
-                                                           numberChip.height / 2 + rowDrag.activeTranslation.y)
-                        let row = root.listView.indexAt(point.x, point.y)
+                            return -1;
+                        const point = numberChip.mapToItem(root.listView.contentItem, numberChip.width / 2, numberChip.height / 2 + rowDrag.activeTranslation.y);
+                        let row = root.listView.indexAt(point.x, point.y);
                         if (row < 0)
-                            row = point.y < 0 ? 0 : root.listView.count - 1
-                        return Math.max(row, root.portsModel.fixedRowCount())
+                            row = point.y < 0 ? 0 : root.listView.count - 1;
+                        return Math.max(row, root.portsModel.fixedRowCount());
                     }
 
                     property int targetRow: -1
 
                     onActiveChanged: {
                         if (active) {
-                            root.listView.interactive = false
-                            targetRow = root.index
-                            return
+                            root.listView.interactive = false;
+                            targetRow = root.index;
+                            return;
                         }
-                        root.listView.interactive = true
-                        const target = targetRow
-                        targetRow = -1
+                        root.listView.interactive = true;
+                        const target = targetRow;
+                        targetRow = -1;
                         if (target < 0 || target === root.index)
-                            return
-                        root.portsModel.movePort(root.index, target)
+                            return;
+                        root.portsModel.movePort(root.index, target);
                     }
-                    onActiveTranslationChanged: if (active) targetRow = dropTarget()
+                    onActiveTranslationChanged: if (active)
+                        targetRow = dropTarget()
                 }
             }
 
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
 
             // Delete action button
             WorkbenchActionButton {
@@ -191,23 +214,25 @@ Rectangle {
             spacing: 5
             Label {
                 text: "中文名:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                text: model.nameZh
+                text: root.model.nameZh
                 readOnly: !root.editable || root.fixed
                 onCommitRequested: {
-                    if (text !== model.nameZh)
-                        root.commit({ nameZh: text })
+                    if (text !== root.model.nameZh)
+                        root.commit({
+                            nameZh: text
+                        });
                 }
-                onCancelRequested: text = model.nameZh
+                onCancelRequested: text = root.model.nameZh
             }
         }
 
@@ -217,20 +242,23 @@ Rectangle {
             spacing: 5
             Label {
                 text: "英文名:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                text: model.nameEn
+                text: root.model.nameEn
                 readOnly: !root.editable || root.fixed
-                onCommitRequested: if (text !== model.nameEn) root.commit({ nameEn: text })
-                onCancelRequested: text = model.nameEn
+                onCommitRequested: if (text !== root.model.nameEn)
+                    root.commit({
+                        nameEn: text
+                    })
+                onCancelRequested: text = root.model.nameEn
             }
         }
 
@@ -240,12 +268,12 @@ Rectangle {
             spacing: 5
             Label {
                 text: "类型:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             ParameterComboBox {
                 id: typeCombo
@@ -262,18 +290,18 @@ Rectangle {
                     border.color: typeCombo.activeFocus ? QuiColor.Highlight : QuiColor.Border
                     color: QuiColor.Button
                 }
-                onActivated: function(index) {
-                    const token = root.types[index].token
-                    if (token === root.typeToken)
-                        return
-                    const impact = root.portsModel ? root.portsModel.typeChangeImpact(root.index, token) : []
+                onActivated: function (index) {
+                    const token = root.types[index].token;
+                    if (sameType(token, root.typeSpec))
+                        return;
+                    const impact = root.portsModel ? root.portsModel.typeChangeImpact(root.index, token) : [];
                     if (impact.length > 0) {
-                        typeImpactDialog.impact = impact
-                        typeImpactDialog.pendingToken = token
-                        typeImpactDialog.open()
-                        return
+                        typeImpactDialog.impact = impact;
+                        typeImpactDialog.pendingType = token;
+                        typeImpactDialog.open();
+                        return;
                     }
-                    root.portsModel.changeType(root.index, token)
+                    root.portsModel.changeType(root.index, token);
                 }
             }
         }
@@ -285,29 +313,30 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 5
-            visible: !root.isImage && root.typeToken !== "bool"
+            visible: !root.isImage && root.portType !== PortType.Bool
             Label {
                 text: "默认值:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             ParameterTextField {
                 id: defaultField
                 Layout.fillWidth: true
                 flat: false
-                text: model.defaultValue
+                text: root.model.defaultValue
                 readOnly: !root.editable || root.fixed
-                actionIcon: model.editorType === "path" ? QuiFontIcon.FolderOpen : 0
-                inputItem.validator: root.numeric
-                                     ? (root.typeToken === "int" ? intValidator : realValidator)
-                                     : null
+                actionIcon: root.model.editorType === EditorKind.Path ? QuiFontIcon.FolderOpen : 0
+                inputItem.validator: root.numeric ? (root.portType === PortType.Int ? intValidator : realValidator) : null
                 onActionRequested: defaultPicker.open()
-                onCommitRequested: if (text !== model.defaultValue) root.commit({ defaultValue: text })
-                onCancelRequested: text = model.defaultValue
+                onCommitRequested: if (text !== root.model.defaultValue)
+                    root.commit({
+                        defaultValue: text
+                    })
+                onCancelRequested: text = root.model.defaultValue
             }
         }
 
@@ -326,9 +355,11 @@ Rectangle {
             id: defaultPicker
             title: "选择路径"
             dialogMode: QuiFileFolderDialog.DialogMode.FileOrFolder
-            onAccepted: function(path) {
-                defaultField.text = path
-                root.commit({ defaultValue: path })
+            onAccepted: function (path) {
+                defaultField.text = path;
+                root.commit({
+                    defaultValue: path
+                });
             }
         }
 
@@ -337,71 +368,81 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 5
-            visible: root.typeToken === "bool"
+            visible: root.portType === PortType.Bool
             Label {
                 text: "默认值:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             QuiToggleSwitch {
                 enabled: root.editable && !root.fixed
-                checked: String(model.defaultValue) === "true"
-                clickListener: function() {
+                checked: String(root.model.defaultValue) === "true"
+                clickListener: function () {
                     if (root.editable)
-                        root.commit({ defaultValue: checked ? "false" : "true" })
+                        root.commit({
+                            defaultValue: checked ? "false" : "true"
+                        });
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
         }
 
         // Fields: 下限 & 上限 (Input parameters, numeric types, only for editable custom parameters)
         RowLayout {
             Layout.fillWidth: true
             spacing: 5
-            visible: root.numeric && (!root.fixed || model.minValue !== "" || model.maxValue !== "")
+            visible: root.numeric && (!root.fixed || root.model.minValue !== "" || root.model.maxValue !== "")
             Label {
                 text: "下限:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                text: model.minValue
+                text: root.model.minValue
                 readOnly: !root.editable || root.fixed
-                onCommitRequested: if (text !== model.minValue) root.commit({ min: text })
-                onCancelRequested: text = model.minValue
+                onCommitRequested: if (text !== root.model.minValue)
+                    root.commit({
+                        min: text
+                    })
+                onCancelRequested: text = root.model.minValue
             }
         }
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 5
-            visible: root.numeric && (!root.fixed || model.minValue !== "" || model.maxValue !== "")
+            visible: root.numeric && (!root.fixed || root.model.minValue !== "" || root.model.maxValue !== "")
             Label {
                 text: "上限:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             ParameterTextField {
                 Layout.fillWidth: true
                 flat: false
-                text: model.maxValue
+                text: root.model.maxValue
                 readOnly: !root.editable || root.fixed
-                onCommitRequested: if (text !== model.maxValue) root.commit({ max: text })
-                onCancelRequested: text = model.maxValue
+                onCommitRequested: if (text !== root.model.maxValue)
+                    root.commit({
+                        max: text
+                    })
+                onCancelRequested: text = root.model.maxValue
             }
         }
 
@@ -412,22 +453,26 @@ Rectangle {
             visible: root.isImage
             Label {
                 text: "图像区域显示:"
-                Layout.preferredWidth: ParameterStyle.cardLabelWidth + 24
+                Layout.preferredWidth: VisionRTSize.ParamLabelWidth + 24
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.fillHeight: true
                 font: QuiFont.Body
-                color: QuiColor.FontDark
+                color: QuiColor.FontCaption
             }
             QuiToggleSwitch {
                 enabled: root.editable && !root.fixed
-                checked: model.showImage === true
-                clickListener: function() {
+                checked: root.model.showImage === true
+                clickListener: function () {
                     if (root.editable)
-                        root.commit({ showImage: !checked })
+                        root.commit({
+                            showImage: !checked
+                        });
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
         }
 
         // Advanced expandable settings (only when needed by specialized types)
@@ -438,7 +483,7 @@ Rectangle {
             Text {
                 text: root.advancedChecked ? "收起详情" : "更多设置"
                 font: QuiFont.Body
-                color: advMouse.containsMouse ? QuiColor.Highlight : QuiColor.FontDark
+                color: advMouse.containsMouse ? QuiColor.Highlight : QuiColor.FontCaption
 
                 MouseArea {
                     id: advMouse
@@ -448,7 +493,9 @@ Rectangle {
                     onClicked: root.advancedChecked = !root.advancedChecked
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
         }
 
         ColumnLayout {
@@ -459,8 +506,14 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 5
-                visible: root.typeToken === "string"
-                Label { text: "编辑方式:"; Layout.preferredWidth: ParameterStyle.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: QuiColor.FontDark }
+                visible: root.portType === PortType.String
+                Label {
+                    text: "编辑方式:"
+                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
+                    horizontalAlignment: Text.AlignRight
+                    font: QuiFont.Body
+                    color: QuiColor.FontCaption
+                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
@@ -473,8 +526,10 @@ Rectangle {
                         border.color: QuiColor.Border
                         color: QuiColor.Button
                     }
-                    onActivated: function(index) {
-                        root.commit({ editor: root.editorOptions()[index].token })
+                    onActivated: function (index) {
+                        root.commit({
+                            editor: root.editorOptions()[index].token
+                        });
                     }
                 }
             }
@@ -482,22 +537,30 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 5
-                visible: root.showsRelation("image")
-                Label { text: "关联图像:"; Layout.preferredWidth: ParameterStyle.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: QuiColor.FontDark }
+                visible: root.showsRelation(RelationKind.Image)
+                Label {
+                    text: "关联图像:"
+                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
+                    horizontalAlignment: Text.AlignRight
+                    font: QuiFont.Body
+                    color: QuiColor.FontCaption
+                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
-                    model: root.relationOptions("image")
+                    model: root.relationOptions(RelationKind.Image)
                     textRole: "label"
-                    currentIndex: root.relationIndex("image", model.imageRef)
+                    currentIndex: root.relationIndex(RelationKind.Image, root.model.imageRef)
                     background: Rectangle {
                         radius: 3
                         border.width: 1
                         border.color: QuiColor.Border
                         color: QuiColor.Button
                     }
-                    onActivated: function(index) {
-                        root.commit({ image: root.relationOptions("image")[index].ref })
+                    onActivated: function (index) {
+                        root.commit({
+                            image: root.relationOptions(RelationKind.Image)[index].ref
+                        });
                     }
                 }
             }
@@ -505,22 +568,30 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 5
-                visible: root.showsRelation("alignment")
-                Label { text: "对齐关系:"; Layout.preferredWidth: ParameterStyle.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: QuiColor.FontDark }
+                visible: root.showsRelation(RelationKind.Alignment)
+                Label {
+                    text: "对齐关系:"
+                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
+                    horizontalAlignment: Text.AlignRight
+                    font: QuiFont.Body
+                    color: QuiColor.FontCaption
+                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
-                    model: root.relationOptions("alignment")
+                    model: root.relationOptions(RelationKind.Alignment)
                     textRole: "label"
-                    currentIndex: root.relationIndex("alignment", model.alignmentRef)
+                    currentIndex: root.relationIndex(RelationKind.Alignment, root.model.alignmentRef)
                     background: Rectangle {
                         radius: 3
                         border.width: 1
                         border.color: QuiColor.Border
                         color: QuiColor.Button
                     }
-                    onActivated: function(index) {
-                        root.commit({ alignment: root.relationOptions("alignment")[index].ref })
+                    onActivated: function (index) {
+                        root.commit({
+                            alignment: root.relationOptions(RelationKind.Alignment)[index].ref
+                        });
                     }
                 }
             }
@@ -528,22 +599,30 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 5
-                visible: root.showsRelation("same_geometry_as")
-                Label { text: "同几何:"; Layout.preferredWidth: ParameterStyle.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: QuiColor.FontDark }
+                visible: root.showsRelation(RelationKind.SameGeometry)
+                Label {
+                    text: "同几何:"
+                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
+                    horizontalAlignment: Text.AlignRight
+                    font: QuiFont.Body
+                    color: QuiColor.FontCaption
+                }
                 ParameterComboBox {
                     Layout.fillWidth: true
                     enabled: root.editable
-                    model: root.relationOptions("same_geometry_as")
+                    model: root.relationOptions(RelationKind.SameGeometry)
                     textRole: "label"
-                    currentIndex: root.relationIndex("same_geometry_as", model.sameGeometryRef)
+                    currentIndex: root.relationIndex(RelationKind.SameGeometry, root.model.sameGeometryRef)
                     background: Rectangle {
                         radius: 3
                         border.width: 1
                         border.color: QuiColor.Border
                         color: QuiColor.Button
                     }
-                    onActivated: function(index) {
-                        root.commit({ same_geometry_as: root.relationOptions("same_geometry_as")[index].ref })
+                    onActivated: function (index) {
+                        root.commit({
+                            same_geometry_as: root.relationOptions(RelationKind.SameGeometry)[index].ref
+                        });
                     }
                 }
             }
@@ -551,9 +630,14 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 5
-                visible: !root.output && (root.typeToken === "int" || root.typeToken === "float"
-                                         || root.typeToken === "string" || root.typeToken === "bool")
-                Label { text: "候选值:"; Layout.preferredWidth: ParameterStyle.cardLabelWidth; horizontalAlignment: Text.AlignRight; font: QuiFont.Body; color: QuiColor.FontDark }
+                visible: !root.output && (root.portType === PortType.Int || root.portType === PortType.Float || root.portType === PortType.String || root.portType === PortType.Bool)
+                Label {
+                    text: "候选值:"
+                    Layout.preferredWidth: VisionRTSize.ParamLabelWidth
+                    horizontalAlignment: Text.AlignRight
+                    font: QuiFont.Body
+                    color: QuiColor.FontCaption
+                }
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 50
@@ -566,13 +650,15 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: 5
                         enabled: root.editable
-                        text: model.optionsText
+                        text: root.model.optionsText
                         wrapMode: TextArea.Wrap
                         font: QuiFont.Body
                         color: QuiColor.FontPrimary
                         onActiveFocusChanged: {
-                            if (!activeFocus && text !== model.optionsText)
-                                root.commit({ options: text })
+                            if (!activeFocus && text !== root.model.optionsText)
+                                root.commit({
+                                    options: text
+                                });
                         }
                     }
                 }
@@ -583,12 +669,13 @@ Rectangle {
     WorkbenchDialog {
         id: typeImpactDialog
         property var impact: []
-        property string pendingToken: ""
+        property var pendingType: ({})
         title: "改变类型会清除以下内容"
         positiveText: "确定"
         negativeText: "取消"
         width: 420
         message: typeImpactDialog.impact.join("\n")
-        onPositiveClicked: if (root.portsModel) root.portsModel.changeType(root.index, pendingToken)
+        onPositiveClicked: if (root.portsModel)
+            root.portsModel.changeType(root.index, pendingType)
     }
 }

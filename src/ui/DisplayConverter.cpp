@@ -10,30 +10,30 @@
 namespace visionrt {
 namespace {
 
-QString resolvedOrder(int channels, const QString &requested)
+ColorOrder resolvedOrder(int channels, ColorOrder requested)
 {
     // An explicit order only applies to a layout it can describe. A declared BGR output that really
     // carries a grey or four-channel image therefore falls back to per-image inference instead of
     // being rejected before display.
-    const auto expectedChannels = [](const QString &order)
+    const auto expectedChannels = [](ColorOrder order)
     {
-        if (order == QStringLiteral("Gray"))
+        if (order == ColorOrder::Gray)
             return 1;
-        if (order == QStringLiteral("BGR") || order == QStringLiteral("RGB"))
+        if (order == ColorOrder::BGR || order == ColorOrder::RGB)
             return 3;
-        if (order == QStringLiteral("BGRA") || order == QStringLiteral("RGBA"))
+        if (order == ColorOrder::BGRA || order == ColorOrder::RGBA)
             return 4;
         return 0;
     };
     if (expectedChannels(requested) == channels)
         return requested;
     if (channels == 1)
-        return QStringLiteral("Gray");
+        return ColorOrder::Gray;
     if (channels == 3)
-        return QStringLiteral("BGR");
+        return ColorOrder::BGR;
     if (channels == 4)
-        return QStringLiteral("BGRA");
-    return {};
+        return ColorOrder::BGRA;
+    return ColorOrder::Automatic;
 }
 
 QImage displayImage(const cv::Mat &image, QImage::Format format)
@@ -75,11 +75,11 @@ double alphaUnitScale(int depth)
 // Non-8-bit display: one pass of OpenCV primitives over each plane instead of a per-pixel loop.
 // Colour extremes ignore non-finite components while a pixel with any non-finite channel (alpha
 // included) still renders as opaque black.
-DisplayFrame normalize(const cv::Mat &source, const QString &order)
+DisplayFrame normalize(const cv::Mat &source, ColorOrder order)
 {
     const int  channels  = source.channels();
     const bool hasAlpha  = channels == 4;
-    const bool reverse   = order == "BGR" || order == "BGRA";
+    const bool reverse   = order == ColorOrder::BGR || order == ColorOrder::BGRA;
     const int  depth     = CV_MAT_DEPTH(source.type());
     const bool floats    = depth == CV_32F || depth == CV_64F || depth == CV_16F;
 
@@ -220,17 +220,17 @@ DisplayConverter::~DisplayConverter()
     worker_.join();
 }
 
-DisplayFrame DisplayConverter::convert(const cv::Mat &image, const QString &colorOrder)
+DisplayFrame DisplayConverter::convert(const cv::Mat &image, ColorOrder colorOrder)
 {
     DisplayFrame result;
     if (image.empty())
         return result;
     const auto order = resolvedOrder(image.channels(), colorOrder);
-    if (!((image.channels() == 1 && order == "Gray") || (image.channels() == 3 && (order == "BGR" || order == "RGB"))
-          || (image.channels() == 4 && (order == "BGRA" || order == "RGBA"))))
+    if (!((image.channels() == 1 && order == ColorOrder::Gray) || (image.channels() == 3 && (order == ColorOrder::BGR || order == ColorOrder::RGB))
+          || (image.channels() == 4 && (order == ColorOrder::BGRA || order == ColorOrder::RGBA))))
     {
         result.error
-            = QStringLiteral("不支持显示的通道布局或颜色顺序：%1 通道，%2").arg(image.channels()).arg(colorOrder);
+            = QStringLiteral("不支持显示的通道布局或颜色顺序：%1 通道，%2").arg(image.channels()).arg(static_cast<int>(colorOrder));
         return result;
     }
     switch (CV_MAT_DEPTH(image.type()))
@@ -238,11 +238,11 @@ DisplayFrame DisplayConverter::convert(const cv::Mat &image, const QString &colo
     case CV_8U:
         if (image.channels() == 1)
             result.image = displayImage(image, QImage::Format_Grayscale8);
-        else if (order == "BGR")
+        else if (order == ColorOrder::BGR)
             result.image = displayImage(image, QImage::Format_BGR888);
-        else if (order == "RGB")
+        else if (order == ColorOrder::RGB)
             result.image = displayImage(image, QImage::Format_RGB888);
-        else if (order == "RGBA")
+        else if (order == ColorOrder::RGBA)
             result.image = displayImage(image, QImage::Format_RGBA8888);
         else
         {
@@ -277,7 +277,7 @@ void DisplayConverter::invalidate(quint64 generation)
     pending_.reset();
 }
 
-void DisplayConverter::requestBatch(DataRef<Image> images, QString colorOrder, quint64 requestId, quint64 generation)
+void DisplayConverter::requestBatch(DataRef<Image> images, ColorOrder colorOrder, quint64 requestId, quint64 generation)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     if (generation < generation_)

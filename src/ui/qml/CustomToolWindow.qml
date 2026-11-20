@@ -2,18 +2,15 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 WorkbenchWindow {
     id: root
     objectName: "customToolWindow"
     title: "自定义工具"
     width: 1280
-    height: 760
-    minimumWidth: 1056
-    minimumHeight: 632
+    height: 720
     property var controller: null
-    readonly property string symbolLabel: !controller ? "函数名:" : controller.currentToolKind === "python_class" ? "类名:" : controller.currentToolKind === "cpp" ? "工厂名:" : "函数名:"
     function openDialog() {
         showAndRaise();
     }
@@ -28,9 +25,10 @@ WorkbenchWindow {
                 anchors.topMargin: 0
                 anchors.bottomMargin: 0
                 spacing: 5
+                readonly property real columnUnit: (width - 6 * spacing - 3) / 5
 
                 ToolCatalogPane {
-                    Layout.preferredWidth: 230
+                    Layout.preferredWidth: 2 * parent.columnUnit
                     Layout.fillHeight: true
                     controller: root.controller
                 }
@@ -41,216 +39,10 @@ WorkbenchWindow {
                     color: QuiColor.Border
                 }
 
-                Item {
-                    Layout.preferredWidth: 260
+                ToolInformationPane {
+                    Layout.preferredWidth: parent.columnUnit
                     Layout.fillHeight: true
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.topMargin: 5
-                        anchors.bottomMargin: 5
-                        spacing: 5
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 32
-                            Label {
-                                text: "工具"
-                                font: QuiFont.BodyStrong
-                                color: QuiColor.FontPrimary
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            Item {
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        // Card with primary highlight border when tool is selected
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: 8
-                            color: QuiColor.Button
-                            border.color: (root.controller && root.controller.hasTool) ? QuiColor.Highlight : QuiColor.Border
-                            border.width: 1.5
-
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 5
-                                spacing: 5
-
-                                // 中文名
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    spacing: 5
-                                    Label {
-                                        text: "中文名:"
-                                        Layout.preferredWidth: 64
-                                        horizontalAlignment: Text.AlignRight
-                                        verticalAlignment: Text.AlignVCenter
-                                        Layout.fillHeight: true
-                                        font: QuiFont.Body
-                                        color: QuiColor.FontDark
-                                    }
-                                    ParameterTextField {
-                                        Layout.fillWidth: true
-                                        flat: false
-                                        text: root.controller ? root.controller.currentToolName : ""
-                                        readOnly: !(root.controller && root.controller.isEditable)
-                                        onCommitRequested: if (root.controller)
-                                            root.controller.currentToolName = text
-                                        onCancelRequested: text = root.controller ? root.controller.currentToolName : ""
-                                    }
-                                }
-
-                                // 英文名
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    spacing: 5
-                                    Label {
-                                        text: "英文名:"
-                                        Layout.preferredWidth: 64
-                                        horizontalAlignment: Text.AlignRight
-                                        verticalAlignment: Text.AlignVCenter
-                                        Layout.fillHeight: true
-                                        font: QuiFont.Body
-                                        color: QuiColor.FontDark
-                                    }
-                                    ParameterTextField {
-                                        Layout.fillWidth: true
-                                        flat: false
-                                        text: root.controller ? root.controller.currentToolId : ""
-                                        readOnly: !(root.controller && root.controller.isToolIdEditable)
-                                        onCommitRequested: if (root.controller)
-                                            root.controller.currentToolId = text
-                                        onCancelRequested: text = root.controller ? root.controller.currentToolId : ""
-                                    }
-                                }
-
-                                // 注册接口 (下拉框)
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    spacing: 5
-                                    Label {
-                                        text: "注册接口:"
-                                        Layout.preferredWidth: 64
-                                        horizontalAlignment: Text.AlignRight
-                                        verticalAlignment: Text.AlignVCenter
-                                        Layout.fillHeight: true
-                                        font: QuiFont.Body
-                                        color: QuiColor.FontDark
-                                    }
-                                    ParameterComboBox {
-                                        id: regKindCombo
-                                        Layout.fillWidth: true
-                                        normalColor: QuiColor.Button
-                                        disableColor: QuiColor.Button
-                                        background: Rectangle {
-                                            radius: 3
-                                            border.width: 1
-                                            border.color: regKindCombo.activeFocus ? QuiColor.Highlight : QuiColor.Border
-                                            color: QuiColor.Button
-                                        }
-                                        model: ["Python 函数", "Python 类", "C++ 注册工厂"]
-                                        currentIndex: {
-                                            if (!root.controller)
-                                                return 0;
-                                            if (root.controller.currentToolKind === "python_class")
-                                                return 1;
-                                            if (root.controller.currentToolKind === "cpp")
-                                                return 2;
-                                            return 0;
-                                        }
-                                    }
-                                }
-
-                                // 脚本文件
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    spacing: 5
-                                    Label {
-                                        text: "脚本文件:"
-                                        Layout.preferredWidth: 64
-                                        horizontalAlignment: Text.AlignRight
-                                        verticalAlignment: Text.AlignVCenter
-                                        Layout.fillHeight: true
-                                        font: QuiFont.Body
-                                        color: QuiColor.FontDark
-                                    }
-                                    ParameterTextField {
-                                        Layout.fillWidth: true
-                                        flat: false
-                                        text: root.controller ? root.controller.currentToolFile : ""
-                                        readOnly: !(root.controller && root.controller.isEditable)
-                                        onCommitRequested: if (root.controller)
-                                            root.controller.currentToolFile = text
-                                        onCancelRequested: text = root.controller ? root.controller.currentToolFile : ""
-                                    }
-                                }
-
-                                // 函数名 / 类名 / 工厂名
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    spacing: 5
-                                    Label {
-                                        text: root.symbolLabel
-                                        Layout.preferredWidth: 64
-                                        horizontalAlignment: Text.AlignRight
-                                        verticalAlignment: Text.AlignVCenter
-                                        Layout.fillHeight: true
-                                        font: QuiFont.Body
-                                        color: QuiColor.FontDark
-                                    }
-                                    ParameterTextField {
-                                        Layout.fillWidth: true
-                                        flat: false
-                                        text: root.controller ? root.controller.currentToolSymbol : ""
-                                        readOnly: !(root.controller && root.controller.isEditable)
-                                        onCommitRequested: if (root.controller)
-                                            root.controller.currentToolSymbol = text
-                                        onCancelRequested: text = root.controller ? root.controller.currentToolSymbol : ""
-                                    }
-                                }
-
-                                // 版本
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    spacing: 5
-                                    Label {
-                                        text: "版本:"
-                                        Layout.preferredWidth: 64
-                                        horizontalAlignment: Text.AlignRight
-                                        verticalAlignment: Text.AlignVCenter
-                                        Layout.fillHeight: true
-                                        font: QuiFont.Body
-                                        color: QuiColor.FontDark
-                                    }
-                                    ParameterTextField {
-                                        Layout.fillWidth: true
-                                        flat: false
-                                        text: root.controller ? root.controller.currentToolVersion : ""
-                                        readOnly: !(root.controller && root.controller.isEditable)
-                                        onCommitRequested: if (root.controller)
-                                            root.controller.currentToolVersion = text
-                                        onCancelRequested: text = root.controller ? root.controller.currentToolVersion : ""
-                                    }
-                                }
-
-                                Item {
-                                    Layout.fillHeight: true
-                                }
-                                Item {
-                                    Layout.fillHeight: true
-                                }
-                            }
-                        }
-                    }
+                    controller: root.controller
                 }
 
                 Rectangle {
@@ -259,61 +51,13 @@ WorkbenchWindow {
                     color: QuiColor.Border
                 }
 
-                Item {
-                    Layout.fillWidth: true
+                ToolPortsPane {
+                    Layout.preferredWidth: parent.columnUnit
                     Layout.fillHeight: true
-                    Layout.minimumWidth: 260
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.topMargin: 5
-                        anchors.bottomMargin: 5
-                        spacing: 5
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 32
-                            spacing: 5
-
-                            Label {
-                                text: "输入参数"
-                                font: QuiFont.BodyStrong
-                                color: QuiColor.FontPrimary
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
-                            }
-
-                            QuiButton {
-                                text: "+ 参数"
-                                enabled: root.controller && root.controller.hasTool && root.controller.isEditable
-                                onClicked: {
-                                    root.controller.inputModel.addPort("新参数", "int", "0");
-                                    inputView.positionViewAtEnd();
-                                }
-                            }
-                        }
-
-                        ListView {
-                            id: inputView
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            clip: true
-                            spacing: 5
-                            topMargin: 0
-                            model: (root.controller && root.controller.hasTool) ? root.controller.inputModel : null
-                            delegate: ToolPortCard {
-                                width: inputView.width
-                                portsModel: root.controller ? root.controller.inputModel : null
-                                listView: inputView
-                                types: root.controller ? root.controller.supportedTypes : []
-                                editable: root.controller && root.controller.isEditable
-                                stage: "inputs"
-                            }
-                        }
-                    }
+                    portsModel: root.controller && root.controller.hasTool ? root.controller.inputModel : null
+                    types: root.controller ? root.controller.supportedTypes : []
+                    editable: root.controller && root.controller.hasTool && root.controller.isEditable
+                    stage: PortStage.Inputs
                 }
 
                 Rectangle {
@@ -322,61 +66,13 @@ WorkbenchWindow {
                     color: QuiColor.Border
                 }
 
-                Item {
-                    Layout.fillWidth: true
+                ToolPortsPane {
+                    Layout.preferredWidth: parent.columnUnit
                     Layout.fillHeight: true
-                    Layout.minimumWidth: 260
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.topMargin: 5
-                        anchors.bottomMargin: 5
-                        spacing: 5
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 32
-                            spacing: 5
-
-                            Label {
-                                text: "输出参数"
-                                font: QuiFont.BodyStrong
-                                color: QuiColor.FontPrimary
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
-                            }
-
-                            QuiButton {
-                                text: "+ 参数"
-                                enabled: root.controller && root.controller.hasTool && root.controller.isEditable
-                                onClicked: {
-                                    root.controller.outputModel.addPort("新参数", "int", "");
-                                    outputView.positionViewAtEnd();
-                                }
-                            }
-                        }
-
-                        ListView {
-                            id: outputView
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            clip: true
-                            spacing: 5
-                            topMargin: 0
-                            model: (root.controller && root.controller.hasTool) ? root.controller.outputModel : null
-                            delegate: ToolPortCard {
-                                width: outputView.width
-                                portsModel: root.controller ? root.controller.outputModel : null
-                                listView: outputView
-                                types: root.controller ? root.controller.supportedTypes : []
-                                editable: root.controller && root.controller.isEditable
-                                stage: "outputs"
-                            }
-                        }
-                    }
+                    portsModel: root.controller && root.controller.hasTool ? root.controller.outputModel : null
+                    types: root.controller ? root.controller.supportedTypes : []
+                    editable: root.controller && root.controller.hasTool && root.controller.isEditable
+                    stage: PortStage.Outputs
                 }
             }
         }

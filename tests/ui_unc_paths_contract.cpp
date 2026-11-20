@@ -63,7 +63,7 @@ try
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "UNC project did not save");
     app.requestOpen(projectPath);
     if (!app.busy() && app.nodes().isEmpty())
-        app.resolveUnsaved("discard");
+        app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 1; }, 5000),
             "UNC project did not reopen");
     app.selectNode(app.nodes().front().toMap().value("id").toString());

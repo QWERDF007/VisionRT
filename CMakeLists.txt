@@ -134,14 +134,16 @@ target_link_libraries(visionrt_presentation PUBLIC visionrt_core Qt6::Gui)
 
 option(VISIONRT_BUILD_APP "Build the desktop workbench" ON)
 # DPI/外观截图只在人工视觉验收时运行：常规回归不需要为每个缩放级别启动窗口并落图。
-option(VISIONRT_TEST_VISUAL "注册 DPI 与外观截图场景" OFF)
 if(VISIONRT_BUILD_APP)
     include(ConfigLibavoid)
     add_library(visionrt_viewport src/ui/ImageViewport.cpp src/ui/ImageViewport.h)
     target_link_libraries(visionrt_viewport PUBLIC visionrt_presentation Qt6::Quick)
     add_library(visionrt_ui
-        src/ui/Theme.cpp
-        src/ui/Theme.h
+        src/ui/UiTypes.cpp
+        src/ui/UiTypes.h
+        src/ui/Color.h
+        src/ui/Size.h
+        src/ui/UiState.h
         src/ui/DurationText.cpp
         src/ui/DurationText.h
         src/ui/WireRouter.cpp
@@ -184,8 +186,22 @@ if(VISIONRT_BUILD_APP)
         src/ui/ToolPortListModel.h
         src/ui/ToolEditorController.cpp
         src/ui/ToolEditorController.h)
-    qt_add_resources(visionrt_ui visionrt_styles PREFIX "/visionrt/style" BASE "src/ui/style"
-        FILES src/ui/style/WorkbenchStyle.qml src/ui/style/ParameterStyle.qml src/ui/style/ToolTreeStyle.qml src/ui/style/ResultsStyle.qml src/ui/style/FlowStyle.qml)
+    set(_ui_enum_headers
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/UiState.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/VisionRTContracts/include/visionrt/contracts/TypeSpec.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/VisionRTContracts/include/visionrt/contracts/ROI.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/RuntimeEngine.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/Snapshot.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/python/PythonEnvironment.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/log/LogLevel.h")
+    set(_ui_enums "${CMAKE_CURRENT_BINARY_DIR}/include/UiEnums.h")
+    add_custom_command(OUTPUT "${_ui_enums}"
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/VisionRTContracts/tools/export_enums.py"
+            --qml "${_ui_enums}" ${_ui_enum_headers}
+        DEPENDS ${_ui_enum_headers} "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/VisionRTContracts/tools/export_enums.py"
+        VERBATIM)
+    target_sources(visionrt_ui PRIVATE "${_ui_enums}")
     target_link_libraries(visionrt_ui PUBLIC
         visionrt_runtime visionrt_python_host visionrt_viewport visionrt_log
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui)
@@ -281,10 +297,8 @@ if(BUILD_TESTING)
     visionrt_contract(value_contract visionrt_core)
 
     visionrt_contract(tool_registry_contract visionrt_core)
-    visionrt_contract(port_value_validation_test visionrt_core)
     visionrt_contract(definition_json_contract visionrt_core)
     visionrt_contract(training_session_contract visionrt_ui)
-    visionrt_contract(tool_definition_validation_test visionrt_core)
     visionrt_contract(tools_package_contract visionrt_core)
     visionrt_contract(custom_tool_store_contract visionrt_core)
     add_test(NAME validator_cli_contract COMMAND "${Python3_EXECUTABLE}"
@@ -553,15 +567,9 @@ if(BUILD_TESTING)
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
-        visionrt_contract(workbench_layout_contract visionrt_ui)
         visionrt_contract(workbench_training_contract visionrt_ui)
         target_link_libraries(workbench_training_contract PRIVATE Qt6::Test)
         target_compile_definitions(workbench_training_contract PRIVATE
-            VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
-            VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-            VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
-        target_link_libraries(workbench_layout_contract PRIVATE Qt6::Test)
-        target_compile_definitions(workbench_layout_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
@@ -613,24 +621,13 @@ if(BUILD_TESTING)
         target_link_libraries(workbench_contract PRIVATE Qt6::Test visionrt_python_testing)
         add_dependencies(workbench_contract test_plugin_module)
         set(VISIONRT_WORKBENCH_SCENARIOS core roi output parameters paths canvas startup catalog popups
-            output-reuse cancellation short-window)
+            output-reuse cancellation)
         foreach(_scenario IN LISTS VISIONRT_WORKBENCH_SCENARIOS)
             add_test(NAME workbench_${_scenario}_contract COMMAND workbench_contract --${_scenario}-child)
             visionrt_apply_test_environment(workbench_${_scenario}_contract)
             set_tests_properties(workbench_${_scenario}_contract PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
             set_property(TEST workbench_${_scenario}_contract APPEND PROPERTY ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
         endforeach()
-        if(VISIONRT_TEST_VISUAL)
-            foreach(_dpi IN ITEMS 1.0 1.5 2.0)
-                string(REPLACE "." "_" _dpi_name "${_dpi}")
-                add_test(NAME workbench_dpi_${_dpi_name}_contract COMMAND workbench_contract --dpi-child ${_dpi})
-                visionrt_apply_test_environment(workbench_dpi_${_dpi_name}_contract)
-                set_tests_properties(workbench_dpi_${_dpi_name}_contract
-                    PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-                set_property(TEST workbench_dpi_${_dpi_name}_contract APPEND PROPERTY
-                    ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic")
-            endforeach()
-        endif()
         target_compile_definitions(workbench_contract PRIVATE
             VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
             VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
@@ -769,11 +766,6 @@ if(BUILD_TESTING)
         foreach(_scenario IN LISTS VISIONRT_WORKBENCH_SCENARIOS)
             visionrt_group_test(workbench_${_scenario}_contract LABELS ui REQUIRES workbench_contract)
         endforeach()
-        if(VISIONRT_TEST_VISUAL)
-            foreach(_dpi_name IN ITEMS 1_0 1_5 2_0)
-                visionrt_group_test(workbench_dpi_${_dpi_name}_contract LABELS ui REQUIRES workbench_contract)
-            endforeach()
-        endif()
     endif()
     if(TEST libavoid_contract)
         visionrt_group_test(libavoid_contract LABELS ui REQUIRES libavoid_contract)

@@ -285,7 +285,7 @@ class PathProbe:
   "name_zh": "Path probe",
   "version": "1.0.0",
   "implementation": {
-    "kind": "python_class",
+    "kind": 2,
     "package": "math",
     "file": "entry.py",
     "symbol": "PathProbe"
@@ -295,18 +295,22 @@ class PathProbe:
       "id": 0,
       "name_en": "init_mode",
       "name_zh": "Mode",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "ui": {
-        "editor": "text"
+        "editor": 2
       }
     },
     {
       "id": 1,
       "name_en": "base_dir",
       "name_zh": "Base",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "ui": {
-        "editor": "path"
+        "editor": 6
       }
     }
   ],
@@ -315,18 +319,22 @@ class PathProbe:
       "id": 1,
       "name_en": "input_mode",
       "name_zh": "Mode",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "ui": {
-        "editor": "text"
+        "editor": 2
       }
     },
     {
       "id": 2,
       "name_en": "input_path",
       "name_zh": "Input",
-      "type": "string",
+      "type": {
+        "type": 3
+      },
       "ui": {
-        "editor": "path"
+        "editor": 6
       }
     }
   ],
@@ -335,9 +343,12 @@ class PathProbe:
       "id": 2,
       "name_en": "resolved",
       "name_zh": "Resolved",
-      "type": "string"
+      "type": {
+        "type": 3
+      }
     }
-  ]
+  ],
+  "schema_version": 1
 })json");
     const auto definition = parseToolDefinitionFile(sources.declarations / "paths.json", sources.source());
     const auto loaded     = runtime.refresh(std::span<const ToolDefinition>(&definition, 1));

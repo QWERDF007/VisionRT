@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "kind": "color_samples",
+  "schema_version": 2,
+  "kind": 0,
   "records": [
     {
       "id": "sample-1",

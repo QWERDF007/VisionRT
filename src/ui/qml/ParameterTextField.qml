@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import quickui
-import VisionRT.Style 1.0
+import VisionRT.Ui 1.0
 
 Item {
     id: root
@@ -24,18 +24,18 @@ Item {
     property bool leadingActionActive: false
     property color backgroundColor: QuiColor.Transparent
 
-    signal commitRequested()
-    signal cancelRequested()
-    signal actionRequested()
-    signal secondaryActionRequested()
-    signal leadingActionRequested()
+    signal commitRequested
+    signal cancelRequested
+    signal actionRequested
+    signal secondaryActionRequested
+    signal leadingActionRequested
 
     implicitWidth: 200
     implicitHeight: fieldFrame.implicitHeight
 
     function finishEditing() {
         if (root.enabled && !root.readOnly && !input.inputMethodComposing)
-            root.commitRequested()
+            root.commitRequested();
     }
 
     Timer {
@@ -56,7 +56,7 @@ Item {
         invalid: root.invalid
         border.width: root.flat ? 0 : 1
         radius: root.flat ? 0 : 4
-        color: root.flat ? "transparent" : (root.backgroundColor !== QuiColor.Transparent ? root.backgroundColor : (hover.hovered ? QuiColor.ItemHover : QuiColor.CardBackground))
+        color: root.flat ? "transparent" : (root.backgroundColor !== QuiColor.Transparent ? root.backgroundColor : (hover.hovered ? QuiColor.ItemHover : QuiColor.Primary))
 
         RowLayout {
             anchors.fill: parent
@@ -70,8 +70,8 @@ Item {
                 Layout.fillHeight: true
                 iconSource: root.leadingActionIcon
                 iconColor: root.leadingActionActive ? QuiColor.Highlight : root.leadingActionColor
-                normalColor: root.leadingActionActive ? ParameterStyle.paramActionActiveBg : "transparent"
-                hoverColor: ParameterStyle.paramActionHoverBg
+                normalColor: root.leadingActionActive ? QuiColor.Button : "transparent"
+                hoverColor: QuiColor.ItemHover
                 focusPolicy: Qt.NoFocus
                 text: root.leadingActionText
                 enabled: root.enabled && !root.readOnly
@@ -84,14 +84,13 @@ Item {
                 visible: leadingBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                color: QuiColor.CardBorder
+                color: QuiColor.Border
             }
 
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: root.backgroundColor !== QuiColor.Transparent ? root.backgroundColor
-                     : (hover.hovered ? QuiColor.ItemHover : "transparent")
+                color: root.backgroundColor !== QuiColor.Transparent ? root.backgroundColor : (hover.hovered ? QuiColor.ItemHover : "transparent")
 
                 TextInput {
                     id: input
@@ -102,7 +101,7 @@ Item {
                     font: QuiFont.Body
                     // One text colour for every parameter kind; a rejected draft is reported to the
                     // log and keeps its text instead of painting the field red.
-                    color: root.enabled ? QuiColor.FontPrimary : WorkbenchStyle.iconMuted
+                    color: root.enabled ? QuiColor.FontPrimary : QuiColor.FontCaption
                     selectionColor: QuiColor.Highlight
                     selectedTextColor: QuiColor.White
                     selectByMouse: true
@@ -111,28 +110,30 @@ Item {
                     clip: true
                     autoScroll: true
 
-                    onActiveFocusChanged: if (!activeFocus) cursorPosition = 0
+                    onActiveFocusChanged: if (!activeFocus)
+                        cursorPosition = 0
                     onEditingFinished: {
-                        if (activeFocus) root.finishEditing()
-                        else blurCommit.restart()
+                        if (activeFocus)
+                            root.finishEditing();
+                        else
+                            blurCommit.restart();
                     }
-                    Keys.onEscapePressed: function(event) {
+                    Keys.onEscapePressed: function (event) {
                         if (inputMethodComposing) {
-                            event.accepted = false
-                            return
+                            event.accepted = false;
+                            return;
                         }
-                        root.cancelRequested()
-                        event.accepted = true
+                        root.cancelRequested();
+                        event.accepted = true;
                     }
                 }
-
             }
 
             Rectangle {
                 visible: secondaryBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                color: QuiColor.CardBorder
+                color: QuiColor.Border
             }
 
             ParameterActionButton {
@@ -155,7 +156,7 @@ Item {
                 visible: trailingBtn.visible
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
-                color: QuiColor.CardBorder
+                color: QuiColor.Border
             }
 
             ParameterActionButton {
@@ -177,9 +178,7 @@ Item {
     }
 
     QuiToolTip {
-        visible: hover.hovered && (!leadingBtn.visible || !leadingBtn.hovered)
-                 && (!secondaryBtn.visible || !secondaryBtn.hovered)
-                 && (!trailingBtn.visible || !trailingBtn.hovered) && input.text.length > 0
+        visible: hover.hovered && (!leadingBtn.visible || !leadingBtn.hovered) && (!secondaryBtn.visible || !secondaryBtn.hovered) && (!trailingBtn.visible || !trailingBtn.hovered) && input.text.length > 0
         text: input.text
         delay: 500
     }

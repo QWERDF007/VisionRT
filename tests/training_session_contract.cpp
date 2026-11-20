@@ -73,8 +73,8 @@ int main(int argc, char **argv)
         require(!session.dirty(), "saving clears the dirty mark");
 
         const auto stored = readAsset(asset);
-        require(stored.value("schema_version").toInt() == 1, "asset carries its schema version");
-        require(stored.value("kind").toString() == QStringLiteral("color_samples"), "asset names its kind");
+        require(stored.value("schema_version").toInt() == 2, "asset carries its schema version");
+        require(stored.value("kind").toInt() == static_cast<int>(TrainingKind::ColorSamples), "asset names its kind");
         const auto records = stored.value("records").toArray();
         require(records.size() == 1, "one record is written");
         const auto written = records[0].toObject();
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
         require(edges.save(), edges.error().toStdString().c_str());
 
         const auto edgeDocument = readAsset(edgesAsset);
-        require(edgeDocument.value("kind").toString() == QStringLiteral("straight_edges"),
+        require(edgeDocument.value("kind").toInt() == static_cast<int>(TrainingKind::StraightEdges),
                 "edge asset names its kind");
         require(!edgeDocument.value("reference_image").toString().isEmpty(), "edge asset names its picture");
         const auto segments = edgeDocument.value("segments").toArray();

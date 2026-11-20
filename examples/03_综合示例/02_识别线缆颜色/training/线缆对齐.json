@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "kind": "straight_edges",
+  "schema_version": 2,
+  "kind": 1,
   "reference_image": "examples/03_综合示例/02_识别线缆颜色/training/cable_11.png",
   "segments": [
     {

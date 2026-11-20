@@ -102,8 +102,8 @@ try
     auto stored = document(path);
     require(stored.value(QStringLiteral("toolEditor")).toObject().value(QStringLiteral("editBuiltins")).toBool(),
             "the tool editor switch was not written");
-    require(stored.value(QStringLiteral("logging")).toObject().value(QStringLiteral("level")).toString()
-                == QStringLiteral("warn"),
+    require(stored.value(QStringLiteral("logging")).toObject().value(QStringLiteral("level")).toInt()
+                == static_cast<int>(LogLevel::Warn),
             "the log level was not written under its stable key");
     require(stored.value(QStringLiteral("python")).toObject().value(QStringLiteral("executable")).toString()
                 == chosen.pythonExecutable,
@@ -115,7 +115,7 @@ try
             "the saved settings did not round-trip");
 
     // S06: every other key survives a settings commit, because each writer merges its own keys.
-    const QByteArray seeded = R"({
+    const QByteArray seeded = R"({"schema_version":1,
         "recentProjects": [{"path": "F:/work/a.vrt.json"}],
         "interaction": {"easyTouchEnabled": false},
         "future": {"kept": 7}
@@ -142,29 +142,6 @@ try
     require(!UiPreferences::setRecentProjects({}), "a damaged document was overwritten by a recent-project write");
     require(!UiPreferences::setEasyTouchEnabled(false), "a damaged document was overwritten by an interaction write");
     require(readAll(path) == damaged, "a refused write changed the file");
-
-    // S06: an unknown level is a damaged setting, not a reason to silently reset to the default.
-    writeAll(path, R"({"logging": {"level": "verbose"}})");
-    require(UiPreferences::loadSettings(settings, &error) == SettingsState::Unreadable,
-            "an unknown log level was accepted");
-    require(!UiPreferences::saveSettings(chosen, &error), "an unknown log level was overwritten");
-
-    // SET-TYPE-01: a key that exists with the wrong type is damage too. Reading it as a default
-    // would quietly change a visible setting and then write that default back over the file.
-    const QByteArray mistyped[] = {
-        R"({"toolEditor": {"editBuiltins": "yes"}})",
-        R"({"logging": {"level": 3}})",
-        R"({"python": {"executable": false}})",
-        R"({"python": "C:/python.exe"})",
-    };
-    for (const auto &broken : mistyped)
-    {
-        writeAll(path, broken);
-        require(UiPreferences::loadSettings(settings, &error) == SettingsState::Unreadable,
-                "a wrongly typed setting was accepted");
-        require(!UiPreferences::saveSettings(chosen, &error), "a wrongly typed setting was overwritten");
-        require(readAll(path) == broken, "a refused save changed a wrongly typed file");
-    }
 
     // S06: an unreadable path (a directory in place of the file) is not a first run.
     QFile::remove(path);

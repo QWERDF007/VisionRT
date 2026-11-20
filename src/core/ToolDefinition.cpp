@@ -105,9 +105,9 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
         if (port.typeFrom) {
             if (!output)
                 throw ContractError("type_from requires a business output: " + port.nameZh);
-            if (!isMissing(port.defaultValue) || !port.editor.empty() || port.minimum || port.maximum || port.step
-                || port.decimals || !port.options.empty() || !port.optionsProvider.empty() || port.image
-                || port.alignment || port.sameGeometryAs || !port.colorOrder.empty()
+            if (!isMissing(port.defaultValue) || port.editor != EditorKind::Default || port.minimum || port.maximum || port.step
+                || port.decimals || !port.options.empty() || port.optionsProvider != OptionsProvider::None || port.image
+                || port.alignment || port.sameGeometryAs || port.colorOrder != ColorOrder::Automatic
                 || port.imageVisible)
                 throw ContractError("type_from cannot have concrete value or display attributes: " + port.nameZh);
             continue;
@@ -115,42 +115,18 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
         validateTypeSpec(port.type);
 
         if (output) {
-            if (!port.editor.empty()) throw ContractError("editor is not an output field: " + port.nameZh);
-            if (port.minimum.has_value()) throw ContractError("constraints.min is not an output field: " + port.nameZh);
-            if (port.maximum.has_value()) throw ContractError("constraints.max is not an output field: " + port.nameZh);
-            if (port.step.has_value()) throw ContractError("ui.step is not an output field: " + port.nameZh);
-            if (port.decimals.has_value()) throw ContractError("ui.decimals is not an output field: " + port.nameZh);
-            if (!port.options.empty()) throw ContractError("constraints.options is not an output field: " + port.nameZh);
-            if (!port.optionsProvider.empty()) throw ContractError("ui.options_provider is not an output field: " + port.nameZh);
-            if (port.alignment)
-                throw ContractError("relations.alignment applies to inputs: " + port.nameZh);
-        } else {
-            if (!port.colorOrder.empty())
-                throw ContractError("display.color_order applies only to outputs: " + port.nameZh);
+            if (port.editor != EditorKind::Default || port.minimum || port.maximum || port.step
+                || port.decimals || !port.options.empty() || port.optionsProvider != OptionsProvider::None
+                || port.alignment)
+                throw ContractError("输出端口不能包含输入编辑配置：" + port.nameZh);
+        } else if (port.colorOrder != ColorOrder::Automatic) {
+            throw ContractError("display.color_order 仅属于输出端口：" + port.nameZh);
         }
-
-        if (!port.editor.empty()) {
-            // A path field is one String editor: the value may name a file or a folder, and the
-            // picker offers both. Separate file/directory editors would only duplicate that choice.
-            const std::set<std::string> validEditors
-                = {"number", "text", "bool", "switch", "recursive", "path", "array", "roi", "rect"};
-            if (!validEditors.contains(port.editor)) {
-                throw ContractError("不支持的参数编辑器：" + port.editor + "，参数：" + port.nameZh);
-            }
-        }
-
-        const bool pathEditor = port.editor == "path";
-        if (port.editor == "rect" && port.type.type != Type::ROI)
+        const bool pathEditor = port.editor == EditorKind::Path;
+        if (port.editor == EditorKind::Rect && port.type.type != Type::ROI)
             throw ContractError("矩形编辑器要求 ROI 类型端口：" + port.nameZh);
         if (pathEditor && port.type != TypeSpec{Type::String})
             throw ContractError("路径编辑器要求 String 类型端口：" + port.nameZh);
-
-        if (!port.tab.empty()) {
-            const auto tabs = toolTabs();
-            if (std::find(tabs.begin(), tabs.end(), port.tab) == tabs.end()) {
-                throw ContractError("不支持的参数标签页：" + port.tab + "，参数：" + port.nameZh);
-            }
-        }
 
         const bool numeric = (port.type.type == Type::Int || port.type.type == Type::Float);
         if (!numeric) {
@@ -215,9 +191,6 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
             }
         }
 
-        if (!port.optionsProvider.empty() && port.optionsProvider != "platform.gpu_devices") {
-            throw ContractError("不支持的选项来源：" + port.optionsProvider + "，参数：" + port.nameZh);
-        }
 
         if (port.image && port.type.type != Type::ROI)
             throw ContractError("relations.image requires an ROI port: " + port.nameZh);
@@ -225,16 +198,8 @@ void validatePorts(const std::vector<PortDefinition>& ports, PortStage stage) {
         if (port.alignment && (stage != PortStage::Inputs || port.type.type != Type::ROI))
             throw ContractError("relations.alignment requires an ROI input: " + port.nameZh);
 
-        if (!port.colorOrder.empty()) {
-            if (port.type.type != Type::Image)
-            {
-                throw ContractError("display.color_order requires an Image output: " + port.nameZh);
-            }
-            const std::set<std::string> validColors = {"Gray", "BGR", "BGRA", "RGB", "RGBA"};
-            if (!validColors.contains(port.colorOrder)) {
-                throw ContractError("不支持的图像颜色顺序：" + port.colorOrder + "，参数：" + port.nameZh);
-            }
-        }
+        if (port.colorOrder != ColorOrder::Automatic && port.type.type != Type::Image)
+            throw ContractError("display.color_order requires an Image output: " + port.nameZh);
 
         if (port.imageVisible && port.type.type != Type::Image)
             throw ContractError("display.visible requires an Image port: " + port.nameZh);
@@ -260,41 +225,6 @@ void validateIdentifier(const std::string &value, bool isPort)
         throw ContractError("Port ID uses reserved __ prefix: " + value);
 }
 
-PortRef parsePortRef(std::string_view text)
-{
-    const auto dot = text.find('.');
-    if (dot == std::string_view::npos)
-        throw ContractError("端口引用必须带阶段前缀（init./inputs./outputs.）：" + std::string(text));
-    const auto stage = text.substr(0, dot);
-    const auto port  = text.substr(dot + 1);
-    if (port.empty() || port.find('.') != std::string_view::npos)
-        throw ContractError("端口引用必须形如 inputs.7：" + std::string(text));
-    PortId    id = 0;
-    std::size_t consumed = 0;
-    try
-    {
-        const auto value = std::stoull(std::string(port), &consumed);
-        if (consumed != port.size() || value > std::numeric_limits<PortId>::max())
-            throw ContractError("端口编号超出范围：" + std::string(text));
-        id = static_cast<PortId>(value);
-    }
-    catch (const ContractError &)
-    {
-        throw;
-    }
-    catch (const std::exception &)
-    {
-        throw ContractError("端口引用必须使用数字编号：" + std::string(text));
-    }
-    if (stage == "init")
-        return {PortStage::Init, id};
-    if (stage == "inputs")
-        return {PortStage::Inputs, id};
-    if (stage == "outputs")
-        return {PortStage::Outputs, id};
-    throw ContractError("未知端口引用阶段：" + std::string(stage));
-}
-
 std::string formatPortRef(const PortRef& reference)
 {
     return std::string(stageName(reference.stage)) + "." + std::to_string(reference.id);
@@ -308,21 +238,26 @@ std::string categoryPath(const ToolDefinition& def)
     return path;
 }
 
-std::vector<std::string_view> editorChoices(const TypeSpec &type)
+const char *editorLabel(EditorKind editor) {
+    static constexpr const char *labels[] = {"默认", "数值", "文本", "布尔", "开关", "递归", "路径", "数组", "区域", "矩形", "条件公式", "上层条件", "表达式", "合流类型"};
+    return labels[static_cast<int>(editor)];
+}
+
+std::vector<EditorKind> editorChoices(const TypeSpec &type)
 {
     switch (type.type)
     {
     case Type::Int:
     case Type::Float:
-        return {"number"};
+        return {EditorKind::Number};
     case Type::Bool:
-        return {"bool", "switch"};
+        return {EditorKind::Bool, EditorKind::Switch};
     case Type::String:
-        return {"text", "path"};
+        return {EditorKind::Text, EditorKind::Path};
     case Type::ROI:
-        return {"roi", "rect", "array"};
+        return {EditorKind::Roi, EditorKind::Rect, EditorKind::Array};
     case Type::Array:
-        return {"array", "recursive"};
+        return {EditorKind::Array, EditorKind::Recursive};
     case Type::Image:
         return {};
     }
@@ -356,7 +291,7 @@ PortDefinition hostPort(PortStage stage, PortId id)
         port.nameZh       = "上层工具状态";
         port.type         = TypeSpec{Type::Int};
         port.defaultValue = PortValue{std::int64_t{0}};
-        port.tab          = "基本输入";
+        port.tab          = ParameterTab::BasicInput;
         return port;
     }
     if (stage == PortStage::Outputs && id == kStatusCodePort)
@@ -445,12 +380,12 @@ bool valueFitsType(const PortValue &value, const TypeSpec &type)
 // Editor kinds are type affinities, not permissions: a value editor that cannot show the new type
 // would silently misrepresent every field it renders. The generic list editor is declared for ROI
 // as well as Array, which is how the installed tools already use it.
-bool editorFitsType(const std::string &editor, const TypeSpec &type)
+bool editorFitsType(EditorKind editor, const TypeSpec &type)
 {
-    if (editor.empty())
+    if (editor == EditorKind::Default)
         return true;
     const auto choices = editorChoices(type);
-    return std::find(choices.begin(), choices.end(), std::string_view{editor}) != choices.end();
+    return std::find(choices.begin(), choices.end(), editor) != choices.end();
 }
 
 bool sameReference(const PortRef &reference, PortStage stage, PortId id)
@@ -538,16 +473,16 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
             port.options.clear();
             note("候选值");
         }
-        if (!port.optionsProvider.empty())
+        if (port.optionsProvider != OptionsProvider::None)
         {
-            port.optionsProvider.clear();
+            port.optionsProvider = OptionsProvider::None;
             note("候选来源");
         }
     }
 
     if (!editorFitsType(port.editor, newType))
     {
-        port.editor.clear();
+        port.editor = EditorKind::Default;
         note("编辑器");
     }
 
@@ -567,9 +502,9 @@ std::vector<std::string> retypePort(ToolDefinition &def, PortStage stage, PortId
         port.sameGeometryAs.reset();
         note("同几何关系");
     }
-    if (!port.colorOrder.empty() && newType.type != Type::Image)
+    if (port.colorOrder != ColorOrder::Automatic && newType.type != Type::Image)
     {
-        port.colorOrder.clear();
+        port.colorOrder = ColorOrder::Automatic;
         note("颜色次序");
     }
     if (port.imageVisible && newType.type != Type::Image)
@@ -736,7 +671,7 @@ void normalizeToolDefinition(ToolDefinition &def)
                 throw ContractError("upstream_status 必须是 Int 输入：" + def.nameEn);
             if (port.typeFrom)
                 throw ContractError("upstream_status 不能由 type_from 派生：" + def.nameEn);
-            if (!port.options.empty() || !port.optionsProvider.empty())
+            if (!port.options.empty() || port.optionsProvider != OptionsProvider::None)
                 throw ContractError("upstream_status 不接受 options 约束：" + def.nameEn);
             if (port.minimum || port.maximum || port.step || port.decimals)
                 throw ContractError("upstream_status 不接受数值范围约束：" + def.nameEn);
@@ -878,7 +813,7 @@ void validateToolDefinition(const ToolDefinition& def) {
     {
         const auto *parameter = findPort(def.initParams, id);
         if (!parameter || parameter->type != TypeSpec{Type::Array, DType::String, 2})
-            throw ContractError(std::string("节点模型需要 vec_vec_string 初始化参数：") + label
+            throw ContractError(std::string("节点模型需要二维字符串数组初始化参数：") + label
                                 + "（" + portLabel(id) + "）");
     };
     switch (def.nodeModel)
@@ -888,21 +823,21 @@ void validateToolDefinition(const ToolDefinition& def) {
     case NodeModel::Expression:
     case NodeModel::Condition:
         if (def.kind != ToolKind::PythonClass)
-            throw ContractError("表达式与条件节点必须是 python_class 工具：" + def.nameEn);
+            throw ContractError("表达式与条件节点必须使用 Python 类：" + def.nameEn);
         requireParameter(kVariablesInitPort, "variables");
         requireParameter(kProgramInitPort, "program");
         if (def.nodeModel == NodeModel::Condition)
         {
             const auto *mode = findPort(def.initParams, kConditionModePort);
             const bool  validMode
-                = mode && mode->type == TypeSpec{Type::String} && mode->options.size() == 2
+                = mode && mode->type == TypeSpec{Type::Int} && mode->options.size() == 2
                && std::any_of(mode->options.begin(), mode->options.end(),
-                              [](const auto &value) { return equalValues(value, PortValue{std::string{"formula"}}); })
+                              [](const auto &value) { return equalValues(value, PortValue{std::int64_t{static_cast<int>(BindingMode::Literal)}}); })
                && std::any_of(mode->options.begin(), mode->options.end(),
-                              [](const auto &value) { return equalValues(value, PortValue{std::string{"upstream"}}); })
-               && equalValues(mode->defaultValue, PortValue{std::string{"formula"}});
+                              [](const auto &value) { return equalValues(value, PortValue{std::int64_t{static_cast<int>(BindingMode::Upstream)}}); })
+               && equalValues(mode->defaultValue, PortValue{std::int64_t{static_cast<int>(BindingMode::Literal)}});
             if (!validMode)
-                throw ContractError("条件节点必须声明 condition_mode:string，选项 formula/upstream，默认 formula：" + def.nameEn);
+                throw ContractError("条件节点必须声明整数条件来源，选项 Literal/Upstream，默认 Literal：" + def.nameEn);
             const std::array<PortId, 4> branches{2, 3, 4, 5};
             if (def.outputs.size() != 6
                 || !std::all_of(branches.begin(), branches.end(), [&](PortId id) { return findPort(def.outputs, id); }))

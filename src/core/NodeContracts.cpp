@@ -13,11 +13,6 @@ bool conditionUsesUpstream(const NodeDefinition &node)
     return binding != node.inputs.end() && binding->second.mode == BindingMode::Upstream;
 }
 
-std::string conditionModeText(const NodeDefinition &node)
-{
-    return conditionUsesUpstream(node) ? "upstream" : "formula";
-}
-
 TypeMap resolvedOutputTypes(const ToolDefinition &contract)
 {
     TypeMap result{
@@ -208,12 +203,12 @@ PortDefinition materializedPort(PortId id, std::string nameZh, TypeSpec type)
 
 std::string typeCell(const TypeSpec &type)
 {
-    return typeName(type.type);
+    return std::to_string(static_cast<int>(type.type));
 }
 
 std::string dtypeCell(const TypeSpec &type)
 {
-    return type.dtype ? std::string(dtypeName(*type.dtype)) : std::string{};
+    return type.dtype ? std::to_string(static_cast<int>(*type.dtype)) : std::string{};
 }
 
 std::string rankCell(const TypeSpec &type)
@@ -311,7 +306,7 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
         parameters.emplace(kVariablesInitPort, Array::fromNested(std::move(variables)));
         parameters.emplace(kProgramInitPort, Array::fromNested(std::move(program)));
         if (definition.nodeModel == NodeModel::Condition)
-            parameters.emplace(kConditionModePort, conditionModeText(node));
+            parameters.emplace(kConditionModePort, static_cast<std::int64_t>(conditionUsesUpstream(node) ? BindingMode::Upstream : BindingMode::Literal));
         return parameters;
     }
     for (const auto &port : definition.initParams)

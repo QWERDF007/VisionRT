@@ -1,5 +1,7 @@
 import QtQuick
+import VisionRT.Ui 1.0
+
 WorkbenchActionButton {
- implicitHeight: 32
- focusPolicy: Qt.NoFocus
+    implicitHeight: VisionRTSize.ContentSize
+    focusPolicy: Qt.NoFocus
 }

@@ -406,7 +406,7 @@ void ResultPresentation::updateDisplay()
     const auto           *tool = host_.effectiveTool();
     const DataRef<Image> *batch = nullptr;
     ResultSlot::Snapshot  snapshot;
-    QString               color;
+    ColorOrder color = ColorOrder::Automatic;
     PortId                roiImageInput = 0;
     displayInputs_.clear();
     displayOutputs_.clear();
@@ -438,7 +438,7 @@ void ResultPresentation::updateDisplay()
         index_        = std::clamp(index_, 0, std::max(0, count_ - 1));
         selectedIndex = index_;
         if (selectedPort)
-            color = text(selectedPort->colorOrder);
+            color = selectedPort->colorOrder;
     }
     else if (roi_.active())
     {
@@ -464,7 +464,7 @@ void ResultPresentation::updateDisplay()
                         const auto *value = resolvedInput(*node, port.id);
                         if (!value)
                             continue;
-                        auto values = imageRois(*value, selectedIndex, port.editor == "rect");
+                        auto values = imageRois(*value, selectedIndex, port.editor == EditorKind::Rect);
                         displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
                     }
         }
@@ -485,7 +485,7 @@ void ResultPresentation::updateDisplay()
             const auto value = snapshot->roiInputs.find(port.id);
             if (value != snapshot->roiInputs.end())
             {
-                auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
+                auto values = imageRois(value->second, selectedIndex, port.editor == EditorKind::Rect);
                 displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
             }
         }
@@ -498,7 +498,7 @@ void ResultPresentation::updateDisplay()
                     const auto value = snapshot->roiInputs.find(port.id);
                     if (value != snapshot->roiInputs.end())
                     {
-                        auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
+                        auto values = imageRois(value->second, selectedIndex, port.editor == EditorKind::Rect);
                         displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
                     }
                 }
@@ -525,7 +525,7 @@ void ResultPresentation::updateDisplay()
             const auto value = snapshot->outputs.find(port.id);
             if (value != snapshot->outputs.end())
             {
-                auto values = imageRois(value->second, selectedIndex, port.editor == "rect");
+                auto values = imageRois(value->second, selectedIndex, port.editor == EditorKind::Rect);
                 displayOutputs_.insert(displayOutputs_.end(), values.begin(), values.end());
             }
         }
@@ -668,7 +668,7 @@ QVariantList ResultPresentation::imageOutputs() const
         result.push_back(QVariantMap{
             {  "id",                                         imageKey(choice.ref)},
             {  "name",                                               choice.name},
-            {"stage", choice.ref.stage == PortStage::Inputs ? "inputs" : "outputs"}
+            {"stage", static_cast<int>(choice.ref.stage)}
         });
     return result;
 }

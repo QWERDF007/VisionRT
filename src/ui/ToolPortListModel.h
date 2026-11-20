@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/ToolDefinition.h"
+#include "ui/UiState.h"
 
 #include <QAbstractListModel>
 #include <QString>
@@ -64,7 +65,7 @@ public:
     Q_INVOKABLE int fixedRowCount() const noexcept;
 
     // Adds a new business port at the lowest number this direction still leaves free.
-    Q_INVOKABLE bool addPort(const QString &nameZh, const QString &typeToken = QStringLiteral("int"), const QString &defaultValue = {});
+    Q_INVOKABLE bool addPort(const QString &nameZh, const QVariantMap &type = {{"type", static_cast<int>(Type::Int)}}, const QString &defaultValue = {});
 
     // Removes a business port; rejects fixed rows. Does not recycle port IDs.
     Q_INVOKABLE bool removePort(int row);
@@ -76,16 +77,16 @@ public:
     // changeType() because it has to reconcile the whole draft.
     Q_INVOKABLE bool updatePort(int row, const QVariantMap &properties);
 
-    // What changing this row to `typeToken` would clear, without touching the draft. Empty means the
+    // What changing this row to `type` would clear, without touching the draft. Empty means the
     // change is lossless and can be applied directly.
-    Q_INVOKABLE QStringList typeChangeImpact(int row, const QString &typeToken) const;
+    Q_INVOKABLE QStringList typeChangeImpact(int row, const QVariantMap &type) const;
 
     // Applies the type change and reconciles the draft (values, relations, other ports' references).
-    Q_INVOKABLE bool changeType(int row, const QString &typeToken);
+    Q_INVOKABLE bool changeType(int row, const QVariantMap &type);
 
     // Ports a relation of this row may point at, as {ref, label} maps. The list is filtered by the
     // relation's own rule, so the editor can never create a reference the declaration rejects.
-    Q_INVOKABLE QVariantList relationCandidates(int row, const QString &kind) const;
+    Q_INVOKABLE QVariantList relationCandidates(int row, visionrt::RelationKind kind) const;
 
     // Editor kinds offered for this row's type, as {token, label} maps with a leading default entry.
     Q_INVOKABLE QVariantList editorOptions(int row) const;
@@ -109,7 +110,7 @@ private:
     const std::vector<PortDefinition> *portVector() const noexcept;
     bool                            acceptsEdits() const noexcept;
     const PortDefinition           *findPort(PortStage stage, PortId id) const;
-    void                            requireRelationTarget(const PortDefinition &port, const std::string &kind,
+    void                            requireRelationTarget(const PortDefinition &port, RelationKind kind,
                                                           const PortRef &reference) const;
 
     ToolDefinition *draft_ = nullptr;

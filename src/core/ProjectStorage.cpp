@@ -1,6 +1,7 @@
 #include "core/ProjectStorage.h"
 
 #include "core/InputNormalizer.h"
+#include "core/JsonFields.h"
 #include "core/ProjectEditor.h"
 
 #include "core/NodeContracts.h"
@@ -22,10 +23,7 @@
 
 namespace visionrt {
 namespace {
-constexpr int projectFormatVersion = 7;
-// One readable version: an older file is refused instead of migrated. Nothing produces 7 except this
-// writer, which states every Array value with its own shape or ragged offsets.
-constexpr int minimumProjectFormatVersion = 7;
+constexpr int projectFormatVersion = 8;
 
 QString qtPath(const std::filesystem::path &path)
 {
@@ -398,16 +396,9 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
     if (!root.value("format_version").isDouble())
         invalid("format_version 必须是整数");
     const auto version = std::get<std::int64_t>(document.decode({"format_version"}, {Type::Int}));
-    if (version < minimumProjectFormatVersion || version > projectFormatVersion)
-    {
-        // A single supported version reads better than "7–7", and it is the truth: older formats
-        // are not migrated, they are refused.
-        const auto expected = minimumProjectFormatVersion == projectFormatVersion
-                                  ? std::to_string(projectFormatVersion)
-                                  : std::to_string(minimumProjectFormatVersion) + "–"
-                                        + std::to_string(projectFormatVersion);
-        invalid("format_version 不受支持，要求 " + expected + "，实际 " + std::to_string(version));
-    }
+    if (version != projectFormatVersion)
+        invalid("format_version 不受支持，要求 " + std::to_string(projectFormatVersion)
+                + "，实际 " + std::to_string(version));
 
     const auto metadata = map(root.value("project"), "project");
     if (!root.value("flows").isArray())
@@ -576,11 +567,7 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
                 const auto   id    = portId(entry.value("port_id"), "input binding");
                 const auto   saved = entry;
                 InputBinding binding;
-                const auto   mode = text(saved.value("mode"), "binding mode");
-                if (mode == "upstream")
-                    binding.mode = BindingMode::Upstream;
-                else if (mode != "literal")
-                    invalid("未知的输入绑定模式：" + mode);
+                binding.mode = json::enumeration<BindingMode>(saved.value("mode"), BindingMode::Upstream, "binding.mode");
                 const auto signature = node.signatures.inputs.find(id);
                 if (signature == node.signatures.inputs.end())
                     invalid("保存的输入缺少 type_snapshot：" + portLabel(id));
@@ -861,7 +848,7 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                     invalid("无法保存缺少 type_snapshot 的输入：" + portLabel(id));
                 }
                 QJsonObject saved{{"port_id", static_cast<double>(id)},
-                                  {"mode", binding.mode == BindingMode::Upstream ? "upstream" : "literal"}};
+                                  {"mode", static_cast<int>(binding.mode)}};
                 // The draft value belongs to the binding whatever the mode is: an upstream input
                 // keeps the literal it falls back to, and dropping it would turn a plain reload
                 // into a schema change.

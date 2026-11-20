@@ -1,4 +1,5 @@
 import QtQuick
+import VisionRT.Ui 1.0
 import QtQuick.Controls
 import quickui
 
@@ -7,9 +8,14 @@ QuiContentDialog {
     titleFont: QuiFont.BodyStrong
     closePolicy: Popup.CloseOnEscape
     function prepareButtons(item) {
-        if (!item) return
-        if (item instanceof AbstractButton) item.focusPolicy = Qt.TabFocus
-        for (let child of item.children) prepareButtons(child)
+        if (!item)
+            return;
+        if (item instanceof AbstractButton)
+            item.focusPolicy = Qt.TabFocus;
+        for (let child of item.children)
+            prepareButtons(child);
     }
-    onOpened: Qt.callLater(function() { root.prepareButtons(root.contentItem) })
+    onOpened: Qt.callLater(function () {
+        root.prepareButtons(root.contentItem);
+    })
 }

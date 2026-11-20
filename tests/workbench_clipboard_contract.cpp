@@ -1,7 +1,7 @@
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
 #include "ui/AppController.h"
-#include "ui/Theme.h"
+#include "ui/UiTypes.h"
 #include <quickui/Color.h>
 
 #include <QGuiApplication>
@@ -84,7 +84,7 @@ try
     // R50: the host runs Python only on an interpreter someone selected.
     testsupport::useBuildInterpreter();
     QGuiApplication application(argc, argv);
-    initializeUiStyle();
+    registerUiTypes();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     testing::WorkbenchInstallation installation;
     AppController                  app(1, installation.directory());
@@ -114,7 +114,7 @@ try
     };
     app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
     if (!app.busy() && app.nodes().isEmpty())
-        app.resolveUnsaved("discard");
+        app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
             "clipboard example project did not open");
     auto *surface = findItem(canvas, "flowSurface");
