@@ -199,7 +199,7 @@ void TrainingSession::load()
             error_ = QStringLiteral("训练数据缺少参考图");
             return;
         }
-        TrainingRecord record;
+        TrainingDraftRecord record;
         record.id    = nextRecordId();
         record.label = QStringLiteral("参考图");
         record.image = resolvedPath(image);
@@ -215,11 +215,11 @@ void TrainingSession::load()
         dirty_    = false;
         return;
     }
-    std::vector<TrainingRecord> records;
+    std::vector<TrainingDraftRecord> records;
     for (const auto &value : root.value("records").toArray())
     {
         const auto item = value.toObject();
-        TrainingRecord record;
+        TrainingDraftRecord record;
         record.id    = item.value("id").toString();
         record.label = item.value("label").toString();
         const auto  image = item.value("image").toString();
@@ -272,7 +272,7 @@ std::optional<int> TrainingSession::addImage(const QImage &image)
         error_ = QStringLiteral("无法写入训练图片");
         return std::nullopt;
     }
-    TrainingRecord record;
+    TrainingDraftRecord record;
     record.id    = nextRecordId();
     record.label = QStringLiteral("颜色%1").arg(records_.size() + 1);
     record.image = file;
@@ -362,7 +362,7 @@ bool TrainingSession::savable() const
                                return longSide >= 8.0 && shortSide >= 3.0;
                            });
     }
-    return std::all_of(records_.begin(), records_.end(), [](const TrainingRecord &record)
+    return std::all_of(records_.begin(), records_.end(), [](const TrainingDraftRecord &record)
                        { return !record.label.trimmed().isEmpty() && !record.regions.empty(); });
 }
 

@@ -17,7 +17,7 @@ namespace visionrt {
 
 // One trained colour sample: the picture the rectangles were drawn on, its class name and the
 // rectangles themselves as VisionRT encoded regions in that image's coordinates.
-struct TrainingRecord
+struct TrainingDraftRecord
 {
     QString                    id;
     QString                    label;
@@ -54,7 +54,7 @@ public:
     // Replaces the asset path when the project starts pointing somewhere else.
     void          setAsset(std::filesystem::path asset);
 
-    const std::vector<TrainingRecord> &records() const noexcept { return records_; }
+    const std::vector<TrainingDraftRecord> &records() const noexcept { return records_; }
     int                                selected() const noexcept { return selected_; }
     bool                               select(int index);
 
@@ -82,7 +82,7 @@ private:
     bool                       active_   = false;
     bool                       dirty_    = false;
     QString                    error_;
-    std::vector<TrainingRecord> records_;
+    std::vector<TrainingDraftRecord> records_;
     int                        selected_ = -1;
 };
 

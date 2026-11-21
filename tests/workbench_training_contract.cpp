@@ -181,7 +181,7 @@ try
     require(app.trainingRecords().front().toMap().value("regions").toInt() == regionCount + 1,
             "manual drawing did not add a rectangle to the color record");
     require(app.parameters() == parameters, "a training rectangle changed processing parameters");
-    const auto record = app.selectedTrainingRecord();
+    const auto record = app.selectedTrainingDraftRecord();
     app.setTrainingLabel(record, "edited-purple");
     require(app.trainingDirty(), "editing a label did not mark the draft");
     require(!visibleTextContains(window->contentItem(), QStringLiteral("待应用")), "training still displays a pending-state message");
@@ -190,19 +190,19 @@ try
     app.setTrainingMode(true);
     require(window->findChild<ImageViewport *>("imageViewport") == viewport,
             "switching modes replaced the shared viewport");
-    require(app.trainingDirty() && app.selectedTrainingRecord() == record
+    require(app.trainingDirty() && app.selectedTrainingDraftRecord() == record
                 && app.trainingRecords().front().toMap().value("label").toString() == "edited-purple",
             "switching processing and training discarded the unapplied draft");
     app.selectNode("1");
     require(!app.trainingAvailable() && !app.trainingMode(), "ordinary tool kept training UI");
     app.selectNode("3");
-    require(app.trainingMode() && app.trainingDirty() && app.selectedTrainingRecord() == record,
+    require(app.trainingMode() && app.trainingDirty() && app.selectedTrainingDraftRecord() == record,
             "returning to the node lost its training view and draft");
     const auto rows = app.trainingRecords();
     app.toggleLoop();
     require(QTest::qWaitFor([&] { return app.stopEnabled(); }, 5000), "loop did not start");
     require(!app.property("canAddTrainingImage").toBool() && !app.shapeToolsAvailable(), "run left training actions enabled");
-    app.removeTrainingRecord(record);
+    app.removeTrainingDraftRecord(record);
     app.setTrainingLabel(record, "forbidden-edit");
     require(app.trainingRecords() == rows, "a running pipeline accepted a training edit");
     app.stop();
@@ -227,7 +227,7 @@ try
     require(!app.trainingSavable(), "an unlabelled image without regions must not be applicable");
     app.applyTraining();
     require(app.trainingDirty(), "failed apply discarded the draft");
-    app.removeTrainingRecord(app.selectedTrainingRecord());
+    app.removeTrainingDraftRecord(app.selectedTrainingDraftRecord());
     app.applyTraining();
     settle();
     require(!app.trainingDirty(), "correcting an invalid draft did not allow applying it");
@@ -237,7 +237,7 @@ try
     require(warnings.empty(), warnings.join(" | ").toStdString().c_str());
     const auto rebound = root / sample / "training/rebound.json";
     std::filesystem::copy_file(root / sample / std::filesystem::path(u8"training/线缆颜色.json"), rebound);
-    app.setTrainingLabel(app.selectedTrainingRecord(), "unapplied-rebind");
+    app.setTrainingLabel(app.selectedTrainingDraftRecord(), "unapplied-rebind");
     require(app.trainingDirty(), "asset rebind setup did not create a draft");
     require(app.setParameterPath(0, true, QString::fromStdWString(rebound.wstring())), "training asset rebind failed");
     settle();

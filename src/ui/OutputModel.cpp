@@ -250,6 +250,8 @@ QString preview(const PortValue &value, qsizetype limit)
                 out.append(stringPreview(item, limit, false, out.truncated));
             else if constexpr (std::is_same_v<Element, DataRef<Image>>)
                 out.append(QStringLiteral("非显示型数据"));
+            else if constexpr (std::is_same_v<Element, DataRef<TrainingSet>>)
+                out.append(QStringLiteral("非显示型数据"));
             else if constexpr (std::is_same_v<Element, Array>)
                 appendArray(out, item);
             else if constexpr (std::is_same_v<Element, DataRef<ROI>>)

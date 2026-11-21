@@ -361,7 +361,7 @@ struct AppController::Impl : PresentationHost
     // Ends the training view and restores the ordinary processing presentation.
     void leaveTraining();
     // Presents the selected record, or clears the viewport when the set is empty.
-    void showTrainingRecord();
+    void showTrainingDraftRecord();
     void commitTrainingRoi(const RoiEditTarget &target, const EncodedRegion *value);
     // Re-seats the viewport on the selected record's rectangles without reloading the picture.
     void seatTrainingRegions();

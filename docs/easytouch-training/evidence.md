@@ -4,11 +4,11 @@
 
 ## 基线身份与差距
 
-2026-11-21 的本地状态：VisionRT 指向 Contracts `5db4497`（声明读写已在 SDK），VisionTools 仍为 `c862304b32a0d31a4afb80425589094ea6047b44` 与旧 Contracts gitlink，按票 03 和 14 同步。以下是源码入口，不是已通过候选版验收的声明。工具仓链接固定到核对过的提交。
+2026-11-21 的本地状态：VisionRT 与 VisionTools 都指向 Contracts `f1f6783`（声明读写与训练集值在 SDK，模块 ABI 11）；工具仓自身为 `a493f9e`，并以该 SDK 重建。以下是源码入口，不是已通过候选版验收的声明。工具仓算法链接仍固定到核对过的 `c862304`，其实现内容未随本次 gitlink 变化。
 
 | 交付前须消除的差距 | 直接证据与可复用边界 |
 | --- | --- |
-| 公开合同与宿主声明分散，旧示意字符串不是产品编码 | [SDK 枚举](../../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h)、[PortValue](../../3rdparty/VisionRTContracts/include/visionrt/contracts/Value.h)、[模块 ABI](../../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)、[SDK 声明读写](../../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[宿主声明](../../src/core/include/core/ToolDefinition.h)、[宿主加载适配](../../src/core/DefinitionJson.cpp)。当前 ABI 10，声明根 schema 1，项目格式 8，旧训练资产版本 2；authoring 的版本单独处理。 |
+| 公开合同与宿主声明分散，旧示意字符串不是产品编码 | [SDK 枚举](../../3rdparty/VisionRTContracts/include/visionrt/contracts/ProtocolEnums.h)、[PortValue](../../3rdparty/VisionRTContracts/include/visionrt/contracts/Value.h)、[模块 ABI](../../3rdparty/VisionRTContracts/include/visionrt/contracts/Module.h)、[SDK 声明读写](../../3rdparty/VisionRTContracts/include/visionrt/contracts/DeclarationJson.h)、[宿主声明](../../src/core/include/core/ToolDefinition.h)、[宿主加载适配](../../src/core/DefinitionJson.cpp)。当前 ABI 11，声明根 schema 1，项目格式 8，旧训练资产版本 2；authoring 的版本单独处理。 |
 | 声明校验与真实 DLL 注册是两个不同检查 | [工具包](../../src/core/ToolPackage.cpp)、[宿主 CLI](../../tools/visionrt_validate_tool.cpp)、[工具打包](https://github.com/QWERDF007/VisionTools/blob/c862304b32a0d31a4afb80425589094ea6047b44/tools/package_tools.py)。工具仓目前调用宿主校验器；迁移声明校验到可安装的 SDK，保留真实安装闭包和工厂注册检查。 |
 | 处理页仍找首个 ROI，训练页仍按业务种类工作 | [助手上下文与回写](../../src/ui/AppControllerAssist.cpp)、[有界队列](../../src/ui/AssistPreview.cpp)、[现有批量输入事务](../../src/core/ProjectEditor.cpp)、[工具编辑器](../../src/ui/ToolEditorController.cpp)。扩展已有事务到 init 和普通输入，保留一次提交与过期拒绝。 |
 | 加图会读显示图、可能先改 init，再写 PNG；应用先落盘再重载 | [两个训练入口](../../src/ui/AppControllerTraining.cpp)、[训练记录与写盘](../../src/ui/TrainingSession.cpp)、[结果展示与读回](../../src/ui/ResultPresentation.cpp)、[图像视口](../../src/ui/ImageViewport.cpp)。将原始帧快照与 QImage 展示分开。 |

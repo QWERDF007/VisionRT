@@ -1510,17 +1510,18 @@ int main(int argc, char **argv)
         return 0;
     }
 #endif
-    if (argc == 3 && std::string(argv[1]) == "--abi-child")
+    if (argc == 4 && std::string(argv[1]) == "--abi-child")
     {
         QCoreApplication qt(argc, argv);
         PluginLoader loader;
+        const auto expected = std::string("实际 ") + argv[3];
         for (int attempt = 0; attempt < 2; ++attempt)
         {
             ToolStatus status;
             const auto module = loader.loadModule(std::filesystem::u8path(argv[2]), status);
             assert(!module && !status);
             assert(status.message.find("ABI 主版本不匹配") != std::string::npos);
-            assert(status.message.find("实际 9") != std::string::npos);
+            assert(status.message.find(expected) != std::string::npos);
             assert(loader.loadedModuleCount() == 0);
         }
         return 0;

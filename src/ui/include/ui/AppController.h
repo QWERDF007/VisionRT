@@ -60,7 +60,7 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(bool trainingMode READ trainingMode WRITE setTrainingMode NOTIFY trainingChanged)
     Q_PROPERTY(visionrt::TrainingKind trainingKind READ trainingKind NOTIFY trainingChanged)
     Q_PROPERTY(QVariantList trainingRecords READ trainingRecords NOTIFY trainingChanged)
-    Q_PROPERTY(QString selectedTrainingRecord READ selectedTrainingRecord NOTIFY trainingChanged)
+    Q_PROPERTY(QString selectedTrainingDraftRecord READ selectedTrainingDraftRecord NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingSavable READ trainingSavable NOTIFY trainingChanged)
     Q_PROPERTY(bool canAddTrainingImage READ canAddTrainingImage NOTIFY resultsChanged)
     Q_PROPERTY(int activeRoiParameter READ activeRoiParameter NOTIFY resultsChanged)
@@ -134,15 +134,15 @@ public:
     void                setTrainingMode(bool value);
     TrainingKind        trainingKind() const;
     QVariantList        trainingRecords() const;
-    QString             selectedTrainingRecord() const;
+    QString             selectedTrainingDraftRecord() const;
     bool                trainingDirty() const;
     bool                trainingSavable() const;
     bool                canAddTrainingImage() const;
     // Adds the image currently presented by the main viewport to the selected tool's training set.
     // It writes the picture beside the asset and switches to the training view with the new record.
     Q_INVOKABLE bool    addTrainingImage();
-    Q_INVOKABLE void    selectTrainingRecord(const QString &id);
-    Q_INVOKABLE void    removeTrainingRecord(const QString &id);
+    Q_INVOKABLE void    selectTrainingDraftRecord(const QString &id);
+    Q_INVOKABLE void    removeTrainingDraftRecord(const QString &id);
     Q_INVOKABLE void    setTrainingLabel(const QString &id, const QString &label);
     // Commits the edited records to the tool's asset and reloads the node, so the next run rebuilds
     // the model from exactly what the window shows.

@@ -411,6 +411,11 @@ target_link_libraries(test_plugin_legacy PRIVATE VisionRT::Contracts)
 target_compile_definitions(test_plugin_legacy PRIVATE VISIONRT_CONTRACTS_EXPORTS)
 set_target_properties(test_plugin_legacy PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_legacy)
 
+add_library(test_plugin_previous_abi SHARED ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/previous_abi_plugin.cpp)
+target_link_libraries(test_plugin_previous_abi PRIVATE VisionRT::Contracts)
+target_compile_definitions(test_plugin_previous_abi PRIVATE VISIONRT_CONTRACTS_EXPORTS)
+set_target_properties(test_plugin_previous_abi PROPERTIES PREFIX "" OUTPUT_NAME test_plugin_previous_abi)
+
 foreach(_registration_fixture IN ITEMS valid duplicate short null collision)
     add_library(test_registration_${_registration_fixture} SHARED ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/test_plugin_registration.cpp)
     target_link_libraries(test_registration_${_registration_fixture} PRIVATE VisionRT::Contracts)
@@ -441,7 +446,8 @@ if(VISIONRT_BUILD_APP)
 else()
     target_link_libraries(plugin_contract PRIVATE visionrt_core visionrt_runtime visionrt_python_testing Qt6::Core Qt6::Gui)
 endif()
-add_dependencies(plugin_contract test_plugin_module test_plugin_a test_plugin_b test_dep_a test_dep_b test_plugin_legacy)
+add_dependencies(plugin_contract test_plugin_module test_plugin_a test_plugin_b test_dep_a test_dep_b test_plugin_legacy
+                   test_plugin_previous_abi)
 add_test(NAME plugin_contract COMMAND plugin_contract
     "$<TARGET_FILE:test_plugin_module>"
     "$<TARGET_FILE:test_plugin_a>"
@@ -449,7 +455,9 @@ add_test(NAME plugin_contract COMMAND plugin_contract
     "$<TARGET_FILE:test_plugin_b>"
     "$<TARGET_FILE:test_dep_b>")
 visionrt_apply_test_environment(plugin_contract)
-add_test(NAME plugin_abi_contract COMMAND plugin_contract --abi-child "$<TARGET_FILE:test_plugin_legacy>")
+add_test(NAME plugin_abi_contract COMMAND plugin_contract --abi-child "$<TARGET_FILE:test_plugin_legacy>" 9)
+add_test(NAME plugin_abi_previous_contract COMMAND plugin_contract --abi-child
+    "$<TARGET_FILE:test_plugin_previous_abi>" 10)
 visionrt_apply_test_environment(plugin_abi_contract)
 if(WIN32)
     add_test(NAME plugin_late_runtime_contract COMMAND plugin_contract --late-runtime-child

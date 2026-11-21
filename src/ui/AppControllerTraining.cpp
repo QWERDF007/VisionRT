@@ -103,7 +103,7 @@ bool AppController::Impl::ensureTrainingAsset()
     return true;
 }
 
-void AppController::Impl::showTrainingRecord()
+void AppController::Impl::showTrainingDraftRecord()
 {
     auto *viewport = presentation.viewport();
     if (!viewport)
@@ -275,7 +275,7 @@ void AppController::setTrainingMode(bool value)
     impl_->trainingMode = true;
     impl_->trainingViews.at(impl_->training->node()).visible = true;
     ++impl_->trainingSerial;
-    impl_->showTrainingRecord();
+    impl_->showTrainingDraftRecord();
     impl_->refreshAssist();
     emit trainingChanged();
     emit resultsChanged();
@@ -292,7 +292,7 @@ QVariantList AppController::trainingRecords() const
     return impl_->training ? impl_->training->rows() : QVariantList{};
 }
 
-QString AppController::selectedTrainingRecord() const
+QString AppController::selectedTrainingDraftRecord() const
 {
     if (!impl_->training)
         return {};
@@ -335,7 +335,7 @@ bool AppController::addTrainingImage()
     impl_->trainingMode = true;
     impl_->trainingViews.at(impl_->training->node()).visible = true;
     ++impl_->trainingSerial;
-    impl_->showTrainingRecord();
+    impl_->showTrainingDraftRecord();
     emit trainingChanged();
     emit resultsChanged();
     return true;
@@ -348,7 +348,7 @@ bool AppController::canAddTrainingImage() const
         && viewport && viewport->hasImage();
 }
 
-void AppController::selectTrainingRecord(const QString &id)
+void AppController::selectTrainingDraftRecord(const QString &id)
 {
     if (!impl_->trainingMode || !impl_->idle())
         return;
@@ -358,13 +358,13 @@ void AppController::selectTrainingRecord(const QString &id)
         {
             if (!impl_->training->select(static_cast<int>(index)))
                 return;
-            impl_->showTrainingRecord();
+            impl_->showTrainingDraftRecord();
             emit trainingChanged();
             return;
         }
 }
 
-void AppController::removeTrainingRecord(const QString &id)
+void AppController::removeTrainingDraftRecord(const QString &id)
 {
     if (!impl_->trainingMode || !impl_->idle())
         return;
@@ -374,7 +374,7 @@ void AppController::removeTrainingRecord(const QString &id)
         {
             if (!impl_->training->remove(static_cast<int>(index)))
                 return;
-            impl_->showTrainingRecord();
+            impl_->showTrainingDraftRecord();
             emit trainingChanged();
             return;
         }

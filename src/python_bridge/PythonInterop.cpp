@@ -342,6 +342,8 @@ py::object toPython(const PortValue &value)
                 return encodeList(payload.get());
             else if constexpr (std::is_same_v<Payload, Array>)
                 return arrayToPython(payload);
+            else if constexpr (std::is_same_v<Payload, DataRef<TrainingSet>>)
+                throw ContractError("训练集只传给工具调用，Python 视图尚未提供");
             else
                 return py::cast(payload);
         },
@@ -369,6 +371,8 @@ PortValue fromPython(const TypeSpec &expected, py::handle value, const PythonSto
         if (py::isinstance<py::array>(value))
             return arrayFromNumpy(expected, value, storage, path);
         return arrayFromList(expected, value, path);
+    case Type::TrainingSet:
+        throw ContractError(path + " 不能从 Python 构造训练集");
     case Type::ROI:
     {
         auto result = decodeList<ROI>(value, path);

@@ -424,6 +424,12 @@ QJsonValue ValueJson::encode(const PortValue &value, const TypeSpec &type, Purpo
                 return arrayJson(item, purpose);
             else if constexpr (std::is_same_v<Item, DataRef<ROI>>)
                 return encodeNested(item.get(), purpose, "float64");
+            else if constexpr (std::is_same_v<Item, DataRef<TrainingSet>>)
+            {
+                // A training set belongs to one call and to the assets a successful training
+                // publishes; it is never a project value a document could carry.
+                throw ContractError("训练集不能写入工程或声明");
+            }
             else
             {
                 // Pixels are runtime data and never enter a document: a literal or a stored value
