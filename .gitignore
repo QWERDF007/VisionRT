@@ -83,6 +83,8 @@ visionrt-next/
 logs/
 
 # 本地智能体数据与 docs 方案产物（不入库）
+/docs/**/*方案*
+/docs/easytouch-training/
 .workbuddy/
 docs/*.html
 docs/*.json

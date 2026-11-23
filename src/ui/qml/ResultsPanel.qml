@@ -6,6 +6,7 @@ import VisionRT.Ui 1.0
 
 Rectangle {
     id: root
+    objectName: "resultsPanel"
     color: QuiColor.Primary
     signal roiRequested
 
@@ -41,7 +42,7 @@ Rectangle {
             Layout.fillHeight: true
         }
         Rectangle {
-            Layout.preferredWidth: VisionRTSize.ThumbnailWidth
+            Layout.preferredWidth: VisionRTSize.ThumbnailWidth + (app.trainingAvailable ? 0 : VisionRTSize.BarSize)
             Layout.fillHeight: true
             color: QuiColor.Primary
             ResultsThumbnails {

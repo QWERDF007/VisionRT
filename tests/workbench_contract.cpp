@@ -438,7 +438,7 @@ void nodeDiagnosticsContract()
   "name_zh": "诊断测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "test_category/test_diag",
     "file": "test_diag.py",
     "symbol": "run"
@@ -446,9 +446,7 @@ void nodeDiagnosticsContract()
   "inputs": [
     {
       "name_zh": "输入",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 1,
       "constraints": {
         "min": 0,
@@ -463,13 +461,11 @@ void nodeDiagnosticsContract()
   "outputs": [
     {
       "name_zh": "输出",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         jsonFile.close();
     }
@@ -482,7 +478,7 @@ void nodeDiagnosticsContract()
   "name_zh": "诊断失败",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "test_category/test_diag",
     "file": "test_diag_fail.py",
     "symbol": "run"
@@ -490,13 +486,11 @@ void nodeDiagnosticsContract()
   "outputs": [
     {
       "name_zh": "输出",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         failJsonFile.close();
     }
@@ -509,10 +503,10 @@ void nodeDiagnosticsContract()
   "name_zh": "未提供实现测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": 3,
+    "kind": "host",
     "binding": "nonexistent.binding"
   },
-  "schema_version": 1
+  "schema_version": 2
 })json");
         unfulfilledJson.close();
     }
@@ -782,9 +776,9 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "遗留函数",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
-  "schema_version": 1
+  "schema_version": 2
 })json");
             legacyJson.close();
         }
@@ -804,11 +798,11 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "遗留脚本",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "file": "legacy.py",
     "symbol": "run"
   },
-  "schema_version": 1
+  "schema_version": 2
 })json");
             legacyPyJson.close();
         }
@@ -844,14 +838,12 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "计数器插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "init_params": [
     {
       "name_zh": "初始值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 10,
       "id": 1
     }
@@ -859,13 +851,11 @@ void packageDrivenCatalogAndRefreshContract()
   "outputs": [
     {
       "name_zh": "计数值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         rootCounterJson.close();
     }
@@ -881,14 +871,12 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "函数插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "inputs": [
     {
       "name_zh": "输入",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 5,
       "id": 1
     }
@@ -896,13 +884,11 @@ void packageDrivenCatalogAndRefreshContract()
   "outputs": [
     {
       "name_zh": "输出",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         rootFunctionJson.close();
     }
@@ -927,7 +913,7 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "用户脚本A",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "user/py",
     "file": "user_node_a.py",
     "symbol": "run"
@@ -935,23 +921,19 @@ void packageDrivenCatalogAndRefreshContract()
   "outputs": [
     {
       "name_zh": "结果",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     },
     {
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       },
       "id": 3
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         root3JsonA.close();
     }
@@ -967,36 +949,28 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "动态接收器",
   "version": "1.0.0",
   "implementation": {
-    "kind": 3,
+    "kind": "host",
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "name_zh": "源流程",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 0
     },
     {
       "name_zh": "源节点",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 1
     },
     {
       "name_zh": "源端口",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     },
     {
       "name_zh": "超时时间(ms)",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 500,
       "id": 3
     }
@@ -1006,15 +980,15 @@ void packageDrivenCatalogAndRefreshContract()
       "name_zh": "接收值",
       "type_from": {
         "flow": {
-          "stage": 0,
+          "stage": "init",
           "id": 0
         },
         "node": {
-          "stage": 0,
+          "stage": "init",
           "id": 1
         },
         "port": {
-          "stage": 0,
+          "stage": "init",
           "id": 2
         }
       },
@@ -1022,20 +996,16 @@ void packageDrivenCatalogAndRefreshContract()
     },
     {
       "name_zh": "源状态码",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 3
     },
     {
       "name_zh": "源状态消息",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 4
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         recvJson.close();
     }
@@ -1051,9 +1021,9 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
-  "schema_version": 1
+  "schema_version": 2
 })json");
         unindexedJson.close();
     }
@@ -1332,36 +1302,28 @@ void packageDrivenCatalogAndRefreshContract()
   "name_zh": "改名接收器",
   "version": "1.0.0",
   "implementation": {
-    "kind": 3,
+    "kind": "host",
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "name_zh": "源流程",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 0
     },
     {
       "name_zh": "源节点",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 1
     },
     {
       "name_zh": "源端口",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     },
     {
       "name_zh": "超时时间(ms)",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 500,
       "id": 3
     }
@@ -1371,15 +1333,15 @@ void packageDrivenCatalogAndRefreshContract()
       "name_zh": "接收值",
       "type_from": {
         "flow": {
-          "stage": 0,
+          "stage": "init",
           "id": 0
         },
         "node": {
-          "stage": 0,
+          "stage": "init",
           "id": 1
         },
         "port": {
-          "stage": 0,
+          "stage": "init",
           "id": 2
         }
       },
@@ -1387,20 +1349,16 @@ void packageDrivenCatalogAndRefreshContract()
     },
     {
       "name_zh": "源状态码",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 3
     },
     {
       "name_zh": "源状态消息",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 4
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
             renamedJson.close();
         }

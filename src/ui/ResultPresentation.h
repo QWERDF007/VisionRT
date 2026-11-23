@@ -71,7 +71,7 @@ public:
     void setRuntime(RuntimeEngine *runtime) noexcept { runtime_ = runtime; }
     // The training view owns the viewport while it is open. Result polling keeps filling the output
     // table, but must not replace the reference picture or the rectangles the user is editing.
-    void setSuspended(bool value) noexcept { suspended_ = value; }
+    void setSuspended(bool value);
     void setGeneration(std::uint64_t generation) noexcept { generation_ = generation; }
     // Release completion is part of the drain condition; the controller forwards its helper state.
     void setExternalBusy(std::function<bool()> busy) { externalBusy_ = std::move(busy); }

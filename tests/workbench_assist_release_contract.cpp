@@ -132,6 +132,8 @@ ToolDefinition helperDefinition()
     return definition;
 }
 
+const AssistOutputs kProbeOutputs{2, 3, 4, 5};
+
 void settle(AssistPreview &preview, int milliseconds = 5000)
 {
     require(QTest::qWaitFor([&] { return !preview.busy(); }, milliseconds), "assist preview stayed busy");
@@ -159,7 +161,7 @@ try
     registry->addDefinition(definition);
 
     AssistPreview preview;
-    preview.configure(registry, definition);
+    preview.configure(registry, definition, kProbeOutputs);
     learnOnce(preview);
 
     // A refresh while the worker is still destroying the instance must keep the barrier closed:
@@ -212,7 +214,7 @@ try
         registry->addDefinition(execDef);
 
         AssistPreview execPreview;
-        execPreview.configure(registry, execDef);
+        execPreview.configure(registry, execDef, kProbeOutputs);
         QSignalSpy outcomeSpy(&execPreview, &AssistPreview::outcomeReady);
 
         AssistRequest req;
@@ -235,7 +237,7 @@ try
         registry->addDefinition(setupDef);
 
         AssistPreview setupPreview;
-        setupPreview.configure(registry, setupDef);
+        setupPreview.configure(registry, setupDef, kProbeOutputs);
         QSignalSpy outcomeSpy(&setupPreview, &AssistPreview::outcomeReady);
 
         AssistRequest req;
@@ -258,7 +260,7 @@ try
         registry->addDefinition(throwDef);
 
         AssistPreview throwPreview;
-        throwPreview.configure(registry, throwDef);
+        throwPreview.configure(registry, throwDef, kProbeOutputs);
         QSignalSpy outcomeSpy(&throwPreview, &AssistPreview::outcomeReady);
 
         AssistRequest req;

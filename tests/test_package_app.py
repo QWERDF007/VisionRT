@@ -97,9 +97,9 @@ class ToolsDeploymentContract(unittest.TestCase):
         (self.source / "bin/plugin.dll").write_bytes(b"metadata-only module")
         (self.source / "bin/runtime.dll").write_bytes(b"runtime dependency")
         self.definition = {
-            "schema_version": 1,
+            "schema_version": 2,
             "name_en": "test.plugin", "name_zh": "部署测试",
-            "version": "1.0.0", "implementation": {"kind": 0},
+            "version": "1.0.0", "implementation": {"kind": "cpp"},
         }
         self.index = {
             "schema_version": 1, "variant": "cpu",

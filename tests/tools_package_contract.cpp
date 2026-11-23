@@ -41,9 +41,9 @@ const QByteArray declaration = R"json({
   "name_zh": "包工具",
   "version": "1",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
-  "schema_version": 1
+  "schema_version": 2
 })json";
 
 QJsonObject index()
@@ -132,10 +132,10 @@ try
     putIndex(index());
     auto tool             = QJsonDocument::fromJson(declaration).object();
     tool["implementation"] = QJsonObject{
-        {    "kind", static_cast<int>(ToolKind::PythonFunction)},
-        {"package",           "fixture"},
-        {   "file",         "script.py"},
-        { "symbol",           "execute"}
+        {   "kind", QStringLiteral("python_function")},
+        {"package",                         "fixture"},
+        {   "file",                       "script.py"},
+        { "symbol",                         "execute"}
     };
     write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(tool).toJson());
     rejects([&] { readToolsPackage(root); });
@@ -152,10 +152,10 @@ try
     validateToolsPackage(root);
 
     tool["implementation"] = QJsonObject{
-        {    "kind", static_cast<int>(ToolKind::PythonFunction)},
-        {"package",           "fixture"},
-        {   "file",       "../outside.py"},
-        { "symbol",           "execute"}
+        {   "kind", QStringLiteral("python_function")},
+        {"package",                         "fixture"},
+        {   "file",                   "../outside.py"},
+        { "symbol",                         "execute"}
     };
     write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(tool).toJson());
     rejects([&] { readToolsPackage(root); });
@@ -165,11 +165,11 @@ try
     pythonIndex["tools"]     = QJsonArray{pythonTool};
     putIndex(pythonIndex);
     tool["implementation"] = QJsonObject{
-        {     "kind", static_cast<int>(ToolKind::PythonFunction)},
-        {"package",           "fixture"},
-        {   "file",         "script.py"},
-        { "symbol",           "execute"},
-        {"resources", QJsonArray{"runtime.dll"}}
+        {     "kind", QStringLiteral("python_function")},
+        {  "package",                         "fixture"},
+        {     "file",                       "script.py"},
+        {   "symbol",                         "execute"},
+        {"resources",         QJsonArray{"runtime.dll"}}
     };
     write(directory.path() + "/python/builtin/fixture/runtime.dll", "resource");
     write(directory.path() + "/tools/builtin/nested/tool.json", QJsonDocument(tool).toJson());
@@ -177,8 +177,8 @@ try
     assert(readToolsPackage(root).tools.front().definition.pythonScript() == root / "python/builtin/fixture/script.py");
 
     tool["implementation"] = QJsonObject{
-        {   "kind", static_cast<int>(ToolKind::Host)},
-        {"binding", "visionrt.receiver"}
+        {   "kind", QStringLiteral("host")},
+        {"binding",    "visionrt.receiver"}
     };
     write(directory.path() + "/tools/builtin/nested/tool.json", QJsonDocument(tool).toJson());
     assert(readToolsPackage(root).tools.front().definition.hostBinding == "visionrt.receiver");
@@ -186,14 +186,14 @@ try
     putIndex(index());
     auto resourceTool              = QJsonDocument::fromJson(declaration).object();
     resourceTool["implementation"] = QJsonObject{
-        {     "kind", static_cast<int>(ToolKind::Cpp)},
+        {     "kind",                    QStringLiteral("cpp")},
         {"resources", QJsonArray{"../../outside_resource.bin"}}
     };
     write(directory.path() + "/tools/builtin/tool.json", QJsonDocument(resourceTool).toJson());
     write(directory.path() + "/outside_resource.bin", "outside");
     rejects([&] { readToolsPackage(root); });
     resourceTool["implementation"] = QJsonObject{
-        {     "kind", static_cast<int>(ToolKind::Cpp)},
+        {     "kind",   QStringLiteral("cpp")},
         {"resources", QJsonArray{"local.dll"}}
     };
     write(directory.path() + "/tools/builtin/local.dll", "local");

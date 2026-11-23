@@ -1,20 +1,22 @@
 #include "ui/TrainingSession.h"
 
+#include "core/JsonFields.h"
 #include "core/ToolPaths.h"
+#include "core/ToolValueValidation.h"
+#include "core/ValueJson.h"
+#include "ui/DisplayConverter.h"
+#include "ui/TrainingAssets.h"
+#include "visionrt/contracts/ROI.h"
 
+#include <QBuffer>
 #include <QFile>
-#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSaveFile>
-#include <QUrl>
 #include <QUuid>
-
-#include "visionrt/contracts/ROI.h"
-
 #include <algorithm>
-#include <cmath>
+#include <type_traits>
+#include <vector>
 
 namespace visionrt {
 namespace {
@@ -25,138 +27,279 @@ QString utf8Text(const std::filesystem::path &path)
     return QString::fromUtf8(reinterpret_cast<const char *>(text.data()), static_cast<qsizetype>(text.size()));
 }
 
-std::filesystem::path pathFromText(const QString &text)
-{
-    return std::filesystem::path(text.toStdWString());
-}
-
-// Stored paths stay relative while the asset lives under the installation, so a project copied to
-// another machine keeps its own training data and an author never sees a machine path.
-QString storedPath(const std::filesystem::path &path)
-{
-    std::error_code    error;
-    const auto         root     = softwareDataDir();
-    const auto         relative = std::filesystem::relative(path, root, error);
-    if (!error && !relative.empty() && relative.begin() != relative.end() && *relative.begin() != "..")
-        return utf8Text(relative);
-    return utf8Text(path);
-}
-
-std::filesystem::path resolvedPath(const QString &text)
-{
-    const auto path = pathFromText(text);
-    return path.is_absolute() ? path : softwareDataDir() / path;
-}
-
-bool rectangleOf(const EncodedRegion &region, double (&values)[5])
-{
-    try
-    {
-        const RegionView view(region);
-        if (view.kind() != RoiKind::Rectangle)
-            return false;
-        const auto rectangle = view.rectangle();
-        const auto center    = rectangle.center();
-        values[0] = center.x;
-        values[1] = center.y;
-        values[2] = rectangle.width();
-        values[3] = rectangle.height();
-        values[4] = rectangle.angle();
-        return true;
-    }
-    catch (const ContractError &)
-    {
-        return false;
-    }
-}
-
-QString nextRecordId()
+QString nextRecordKey()
 {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-
-
-bool readRegions(const QJsonArray &values, std::vector<EncodedRegion> &regions)
+bool sameGeometry(const cv::Mat &left, const cv::Mat &right)
 {
-    for (const auto &region : values)
-    {
-        const auto coordinates = region.toArray();
-        if (coordinates.size() != 5)
-            return false;
-        const double centerX = coordinates[0].toDouble();
-        const double centerY = coordinates[1].toDouble();
-        const double width   = coordinates[2].toDouble();
-        const double height  = coordinates[3].toDouble();
-        const double angle   = coordinates[4].toDouble();
-        if (!(width > 0.0) || !(height > 0.0))
-            return false;
-        regions.push_back(makeRectangle(centerX - width / 2.0, centerY - height / 2.0, width, height, angle));
-    }
-    return true;
+    return !left.empty() && !right.empty() && left.rows == right.rows && left.cols == right.cols
+        && left.type() == right.type();
 }
 
-// A reference edge is stored as its endpoints and the band searched across it. The rectangle on
-// screen is the same geometry: its long side is the edge, its short side is the search range.
-bool appendSegmentRegion(const QJsonObject &segment, std::vector<EncodedRegion> &regions)
+TrainingFieldValue emptyFieldValue(const TypeSpec &type)
 {
-    for (const char *endpoint : {"from", "to"})
+    switch (type.type)
     {
-        const auto value = segment.value(endpoint).toArray();
-        if (value.size() != 2)
-            return false;
+    case Type::Int:
+        return std::int64_t{0};
+    case Type::Float:
+        return 0.0;
+    case Type::Bool:
+        return false;
+    case Type::String:
+        return std::string{};
+    case Type::ROI:
+        return DataRef<ROI>(ROI{});
+    case Type::Array:
+        return Array::empty(type.dtype.value_or(DType::Float64), type.rank > 0 ? type.rank : 1);
+    default:
+        return std::string{};
     }
-    const auto search = segment.value("search").toArray();
-    if (search.size() != 5)
-        return false;
-    const double centerX = search[0].toDouble();
-    const double centerY = search[1].toDouble();
-    const double width   = search[2].toDouble();
-    const double height  = search[3].toDouble();
-    if (!(width > 0.0) || !(height > 0.0))
-        return false;
-    regions.push_back(makeRectangle(centerX - width / 2.0, centerY - height / 2.0, width, height,
-                                    search[4].toDouble()));
-    return true;
 }
 
-constexpr double kPi = 3.14159265358979323846;
+// The controller turns a control's text into the declared field type; the session only knows that
+// a value belongs to a field number.
+EditorKind editorOf(const TypeSpec &type)
+{
+    switch (type.type)
+    {
+    case Type::Int:
+    case Type::Float:
+        return EditorKind::Number;
+    case Type::Bool:
+        return EditorKind::Switch;
+    case Type::String:
+        return EditorKind::Text;
+    default:
+        return EditorKind::Default;
+    }
+}
+
+QString thumbnailOf(const cv::Mat &pixels, ColorOrder order)
+{
+    const auto frame = DisplayConverter::convert(pixels, order);
+    if (frame.image.isNull())
+        return {};
+    const auto preview = frame.image.scaled(160, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QByteArray encoded;
+    QBuffer    buffer(&encoded);
+    buffer.open(QIODevice::WriteOnly);
+    if (!preview.save(&buffer, "PNG"))
+        return {};
+    return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(encoded.toBase64());
+}
+
+bool sameFieldValue(const TrainingFieldValue &left, const TrainingFieldValue &right)
+{
+    if (left.index() != right.index())
+        return false;
+    if (const auto *value = std::get_if<std::int64_t>(&left))
+        return *value == std::get<std::int64_t>(right);
+    if (const auto *value = std::get_if<double>(&left))
+        return *value == std::get<double>(right);
+    if (const auto *value = std::get_if<bool>(&left))
+        return *value == std::get<bool>(right);
+    if (const auto *value = std::get_if<std::string>(&left))
+        return *value == std::get<std::string>(right);
+    return false;
+}
+
 } // namespace
+
+QVariant trainingFieldVariant(const TrainingFieldValue &value)
+{
+    return std::visit(
+        [](const auto &stored) -> QVariant
+        {
+            using Stored = std::decay_t<decltype(stored)>;
+            if constexpr (std::is_same_v<Stored, std::int64_t>)
+                return QString::fromStdString(formatInt64(stored));
+            else if constexpr (std::is_same_v<Stored, double>)
+                return stored;
+            else if constexpr (std::is_same_v<Stored, bool>)
+                return stored;
+            else if constexpr (std::is_same_v<Stored, std::string>)
+                return QString::fromStdString(stored);
+            else if constexpr (std::is_same_v<Stored, DataRef<ROI>>)
+                return stored.get().empty() ? 0 : static_cast<int>(stored.get().front().size());
+            else
+                return QVariant{};
+        },
+        value);
+}
+
+TrainingFieldValue trainingFieldValueOf(const PortValue &value)
+{
+    return std::visit(
+        [](const auto &stored) -> TrainingFieldValue
+        {
+            using Stored = std::decay_t<decltype(stored)>;
+            if constexpr (std::is_constructible_v<TrainingFieldValue, const Stored &>)
+                return stored;
+            else
+                throw ContractError("该值不能作为训练字段");
+        },
+        value);
+}
+
+PortValue portValueOf(const TrainingFieldValue &value)
+{
+    return std::visit([](const auto &stored) -> PortValue { return stored; }, value);
+}
 
 void TrainingSession::begin(Begin start)
 {
+    if (active_ && start_.node == start.node && start_.spec == start.spec && start_.asset == start.asset)
+        return;
     end();
     start_  = std::move(start);
     active_ = true;
+    for (const auto &declared : start_.spec.parameters)
+        if (!isMissing(declared.defaultValue))
+            parameters_[declared.id] = trainingFieldValueOf(declared.defaultValue);
     load();
 }
 
 void TrainingSession::end()
 {
-    start_    = {};
-    active_   = false;
-    dirty_    = false;
+    start_  = {};
+    active_ = false;
+    dirty_  = false;
     error_.clear();
+    images_.clear();
     records_.clear();
-    selected_ = -1;
+    parameters_.clear();
+    selected_   = -1;
+    nextImage_  = 1;
+    nextRecord_ = 1;
+}
+
+void TrainingSession::adoptAsset(std::filesystem::path asset)
+{
+    start_.asset = std::move(asset);
+    dirty_       = false;
+    error_.clear();
 }
 
 void TrainingSession::setAsset(std::filesystem::path asset)
 {
     if (asset == start_.asset)
         return;
-    start_.asset = std::move(asset);
+    // A session that never had a file (the first apply of an untrained node) adopts the path and
+    // keeps its draft: the records are still only in memory, and there is no other file to read.
+    // An unapplied draft keeps its records for the same reason: a project moved by "另存为" rewrites
+    // the reference to sit beside the new file, but the edits the user has not committed yet are
+    // still theirs and are not in any file to reload.
+    const bool adopted = start_.asset.empty() || dirty_;
+    start_.asset       = std::move(asset);
+    if (adopted)
+    {
+        error_.clear();
+        return;
+    }
     // The records belong to the old file; a new path starts from what that file contains.
+    images_.clear();
     records_.clear();
+    parameters_.clear();
+    for (const auto &declared : start_.spec.parameters)
+        if (!isMissing(declared.defaultValue))
+            parameters_[declared.id] = trainingFieldValueOf(declared.defaultValue);
     selected_ = -1;
     dirty_    = false;
     error_.clear();
+    nextImage_  = 1;
+    nextRecord_ = 1;
     load();
+}
+
+const TrainingParameterSpec *TrainingSession::parameterSpec(PortId id) const
+{
+    for (const auto &entry : start_.spec.parameters)
+        if (entry.id == id)
+            return &entry;
+    return nullptr;
+}
+
+std::optional<TrainingFieldValue> TrainingSession::parameter(PortId id) const
+{
+    const auto found = parameters_.find(id);
+    return found == parameters_.end() ? std::nullopt : std::optional<TrainingFieldValue>(found->second);
+}
+
+bool TrainingSession::setParameter(PortId id, TrainingFieldValue value)
+{
+    const auto *declared = parameterSpec(id);
+    if (!declared)
+        return false;
+    PortDefinition port;
+    port.id      = declared->id;
+    port.nameZh  = declared->nameZh;
+    port.type    = declared->type;
+    port.minimum = declared->minimum;
+    port.maximum = declared->maximum;
+    port.options = declared->options;
+    try
+    {
+        validateToolValue(port, portValueOf(value));
+    }
+    catch (const ContractError &)
+    {
+        return false;
+    }
+    const auto found = parameters_.find(id);
+    if (found != parameters_.end() && sameFieldValue(found->second, value))
+        return false;
+    parameters_[id] = std::move(value);
+    dirty_          = true;
+    return true;
+}
+
+std::map<PortId, TrainingFieldValue> TrainingSession::parameters() const
+{
+    return parameters_;
+}
+
+QVariantList TrainingSession::parameterRows() const
+{
+    QVariantList result;
+    for (const auto &declared : start_.spec.parameters)
+    {
+        const auto found = parameters_.find(declared.id);
+        result.append(QVariantMap{
+            {    "id",                                                static_cast<uint>(declared.id)},
+            {  "name",                                       QString::fromStdString(declared.nameZh)},
+            {  "type",                                          static_cast<int>(declared.type.type)},
+            {"editor",                                             static_cast<int>(declared.editor)},
+            { "value", found == parameters_.end() ? QVariant{} : trainingFieldVariant(found->second)}
+        });
+    }
+    return result;
+}
+
+const TrainingFieldSpec *TrainingSession::field(PortId id) const
+{
+    for (const auto &entry : start_.spec.records.fields)
+        if (entry.id == id)
+            return &entry;
+    return nullptr;
+}
+
+PortId TrainingSession::roiField() const
+{
+    return start_.spec.records.roiField();
 }
 
 int TrainingSession::regionBudget() const noexcept
 {
-    return start_.kind == TrainingKind::StraightEdges ? 2 : 0;
+    const auto id = start_.spec.records.roiField();
+    if (id == 0)
+        return 0;
+    for (const auto &entry : start_.spec.records.fields)
+        if (entry.id == id)
+            return entry.maxRegions;
+    return 0;
 }
 
 bool TrainingSession::select(int index)
@@ -167,127 +310,239 @@ bool TrainingSession::select(int index)
     return true;
 }
 
+void TrainingSession::assignDefaults(TrainingDraftRecord &record) const
+{
+    for (const auto &entry : start_.spec.records.fields) record.fields.emplace(entry.id, emptyFieldValue(entry.type));
+}
+
+void TrainingSession::materialiseThumbnail(TrainingDraftImage &image) const
+{
+    image.thumbnail = thumbnailOf(image.pixels, image.colorOrder);
+}
+
 void TrainingSession::load()
 {
-    if (start_.asset.empty() || !std::filesystem::is_regular_file(start_.asset))
+    if (start_.asset.empty())
         return;
+    // A configured asset that is gone is a project-level fact the user has to see: silently showing
+    // an empty draft would look like a node that was never trained.
+    if (!std::filesystem::is_regular_file(start_.asset))
+    {
+        error_ = QStringLiteral("训练数据文件不存在：%1").arg(utf8Text(start_.asset));
+        return;
+    }
+    // A malformed asset reports its reason and leaves an empty draft: a half-read file must not
+    // look like a draft the user can edit and then overwrite.
+    const auto fail = [&](const QString &message)
+    {
+        error_ = message;
+        images_.clear();
+        records_.clear();
+        selected_   = -1;
+        nextImage_  = 1;
+        nextRecord_ = 1;
+    };
     QFile file(QString::fromStdWString(start_.asset.wstring()));
     if (!file.open(QIODevice::ReadOnly))
     {
-        error_ = QStringLiteral("无法读取训练数据：%1").arg(file.errorString());
+        fail(QStringLiteral("无法读取训练数据：%1").arg(file.errorString()));
         return;
     }
     QJsonParseError parseError;
     const auto      document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
     {
-        error_ = QStringLiteral("训练数据不是有效的 JSON：%1").arg(parseError.errorString());
+        fail(QStringLiteral("训练数据不是有效的 JSON：%1").arg(parseError.errorString()));
         return;
     }
-    const auto root = document.object();
-    if (root.value("schema_version").toInt(0) != kTrainingAssetVersion
-        || root.value("kind").toInt(-1) != static_cast<int>(start_.kind))
+    const auto root    = document.object();
+    const auto version = root.value("schema_version").toInt(0);
+    if (version != kTrainingManifestVersion)
     {
-        error_ = QStringLiteral("训练数据格式不正确");
+        fail(QStringLiteral("训练数据格式不正确"));
         return;
     }
-    if (start_.kind == TrainingKind::StraightEdges)
+
+    const auto assetBase = start_.asset.parent_path();
+
+    const auto storeImage = [&](const QString &text, TrainingImageId id) -> std::optional<TrainingImageId>
     {
-        const auto image = root.value("reference_image").toString();
-        if (image.isEmpty())
+        if (id == 0 || std::ranges::any_of(images_, [&](const auto &image) { return image.id == id; }))
         {
-            error_ = QStringLiteral("训练数据缺少参考图");
-            return;
+            fail(QStringLiteral("训练原图编号缺失或重复"));
+            return std::nullopt;
         }
-        TrainingDraftRecord record;
-        record.id    = nextRecordId();
-        record.label = QStringLiteral("参考图");
-        record.image = resolvedPath(image);
-        for (const auto &value : root.value("segments").toArray())
-            if (!appendSegmentRegion(value.toObject(), record.regions))
+        cv::Mat    pixels;
+        ColorOrder order = ColorOrder::Automatic;
+        try
+        {
+            const auto path = resolveToolPath(assetBase, json::relativePath(text.toStdString(), "训练原图.file"));
+            training::readFrame(QString::fromStdWString(path.wstring()), pixels, order);
+        }
+        catch (const ContractError &error)
+        {
+            fail(QString::fromUtf8(error.what()));
+            return std::nullopt;
+        }
+        TrainingDraftImage image;
+        image.id         = id;
+        nextImage_       = std::max(nextImage_, id + 1);
+        image.source     = text;
+        image.pixels     = std::move(pixels);
+        image.colorOrder = order;
+        materialiseThumbnail(image);
+        images_.push_back(std::move(image));
+        return images_.back().id;
+    };
+
+    {
+        for (const auto &value : root.value("images").toArray())
+        {
+            const auto item = value.toObject();
+            const auto text = item.value("file").toString();
+            try
             {
-                error_ = QStringLiteral("参考边数据不正确，需要端点与搜索框");
+                json::fields(item, {"id", "file"}, "训练原图");
+            }
+            catch (const ContractError &error)
+            {
+                fail(QString::fromUtf8(error.what()));
                 return;
             }
-        records_.clear();
-        records_.push_back(std::move(record));
-        selected_ = 0;
+            const auto id = item.value("id").toInteger();
+            if (text.isEmpty() || id <= 0)
+            {
+                fail(QStringLiteral("训练原图缺少文件或编号"));
+                return;
+            }
+            if (!storeImage(text, static_cast<TrainingImageId>(id)))
+                return;
+        }
+        for (const auto &value : root.value("records").toArray())
+        {
+            const auto item   = value.toObject();
+            const auto image  = static_cast<TrainingImageId>(item.value("image").toInteger());
+            const auto stored = std::find_if(images_.begin(), images_.end(),
+                                             [&](const TrainingDraftImage &entry) { return entry.id == image; });
+            if (stored == images_.end())
+            {
+                fail(QStringLiteral("训练记录引用了不存在的训练图"));
+                return;
+            }
+            TrainingDraftRecord record;
+            const auto          storedId = item.value("id").toString();
+            if (storedId.isEmpty())
+            {
+                fail(QStringLiteral("训练记录缺少编号"));
+                return;
+            }
+            record.id     = storedId;
+            record.number = nextRecord_++;
+            record.image  = image;
+            assignDefaults(record);
+            const auto fields = item.value("fields").toObject();
+            for (const auto &declared : start_.spec.records.fields)
+            {
+                const auto encoded = fields.value(QString::number(declared.id));
+                if (encoded.isUndefined())
+                {
+                    fail(QStringLiteral("训练记录缺少字段：%1").arg(QString::fromStdString(declared.nameZh)));
+                    return;
+                }
+                try
+                {
+                    record.fields[declared.id] = trainingFieldValueOf(ValueJson::decode(encoded, declared.type));
+                }
+                catch (const ContractError &error)
+                {
+                    fail(QStringLiteral("训练字段 %1：%2")
+                             .arg(QString::fromStdString(declared.nameZh), QString::fromUtf8(error.what())));
+                    return;
+                }
+            }
+            records_.push_back(std::move(record));
+        }
+        const auto parameters = root.value("parameters").toObject();
+        for (const auto &declared : start_.spec.parameters)
+        {
+            const auto encoded = parameters.value(QString::number(declared.id));
+            if (encoded.isUndefined())
+                continue;
+            try
+            {
+                parameters_[declared.id] = trainingFieldValueOf(ValueJson::decode(encoded, declared.type));
+            }
+            catch (const ContractError &error)
+            {
+                fail(QStringLiteral("训练参数 %1：%2")
+                         .arg(QString::fromStdString(declared.nameZh), QString::fromUtf8(error.what())));
+                return;
+            }
+        }
+        selected_ = records_.empty() ? -1 : 0;
         dirty_    = false;
         return;
     }
-    std::vector<TrainingDraftRecord> records;
-    for (const auto &value : root.value("records").toArray())
-    {
-        const auto item = value.toObject();
-        TrainingDraftRecord record;
-        record.id    = item.value("id").toString();
-        record.label = item.value("label").toString();
-        const auto  image = item.value("image").toString();
-        const auto &regions = item.value("regions").toArray();
-        if (record.id.isEmpty() || image.isEmpty())
-        {
-            error_ = QStringLiteral("训练记录缺少编号或图片");
-            return;
-        }
-        record.image = resolvedPath(image);
-        if (!readRegions(regions, record.regions))
-        {
-            error_ = QStringLiteral("训练区域需要五个坐标，且宽高必须为正数");
-            return;
-        }
-        records.push_back(std::move(record));
-    }
-    records_  = std::move(records);
-    selected_ = records_.empty() ? -1 : 0;
-    dirty_    = false;
 }
 
-std::optional<int> TrainingSession::addImage(const QImage &image)
+std::optional<int> TrainingSession::addImage(const cv::Mat &pixels, ColorOrder colorOrder, const QString &source)
 {
     if (!active_)
         return std::nullopt;
-    if (image.isNull())
+    if (pixels.empty())
     {
         error_ = QStringLiteral("当前没有可加入训练的图像");
         return std::nullopt;
     }
-    if (start_.asset.empty())
+    const int maxCount = start_.spec.records.maxCount;
+    if (maxCount > 1 && static_cast<int>(records_.size()) >= maxCount)
     {
-        error_ = QStringLiteral("训练数据路径未配置");
+        error_ = QStringLiteral("训练记录已达到声明的上限");
         return std::nullopt;
     }
-    const auto imageDirectory
-        = start_.asset.parent_path() / (start_.asset.stem().wstring() + L"-images");
-    std::error_code error;
-    std::filesystem::create_directories(imageDirectory, error);
-    if (error)
+
+    // A one-record tool replaces its reference picture. Edges drawn on a frame of the same geometry
+    // still describe the part; a different size invalidates them and the user draws again.
+    std::vector<EncodedRegion> carried;
+    if (maxCount == 1 && !records_.empty())
     {
-        error_ = QStringLiteral("无法创建训练图片目录：%1").arg(QString::fromStdString(error.message()));
-        return std::nullopt;
+        const auto current = std::find_if(images_.begin(), images_.end(), [&](const TrainingDraftImage &image)
+                                          { return image.id == records_.front().image; });
+        if (current != images_.end() && sameGeometry(current->pixels, pixels))
+            carried = regions(0);
     }
-    const auto name = QStringLiteral("record-%1.png").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
-    const auto file = imageDirectory / name.toStdWString();
-    if (!image.save(QString::fromStdWString(file.wstring()), "PNG"))
+
+    TrainingImageId imageId = 0;
+    if (!source.isEmpty())
     {
-        error_ = QStringLiteral("无法写入训练图片");
-        return std::nullopt;
+        const auto existing = std::find_if(images_.begin(), images_.end(),
+                                           [&](const TrainingDraftImage &image) { return image.source == source; });
+        if (existing != images_.end())
+            imageId = existing->id;
     }
-    TrainingDraftRecord record;
-    record.id    = nextRecordId();
-    record.label = QStringLiteral("颜色%1").arg(records_.size() + 1);
-    record.image = file;
-    if (start_.kind == TrainingKind::StraightEdges)
+    if (imageId == 0)
     {
-        // A straight-edge model names one reference picture. Replacing it keeps the trained edges
-        // only while the new picture has the same geometry; otherwise the rectangles would no
-        // longer describe the part and the user has to draw them again.
-        record.label = QStringLiteral("参考图");
-        if (records_.size() == 1
-            && QImageReader(QString::fromStdWString(records_.front().image.wstring())).size() == image.size())
-            record.regions = records_.front().regions;
+        TrainingDraftImage image;
+        image.id         = nextImage_++;
+        image.source     = source;
+        image.pixels     = pixels.clone();
+        image.colorOrder = colorOrder;
+        materialiseThumbnail(image);
+        images_.push_back(std::move(image));
+        imageId = images_.back().id;
+    }
+
+    if (maxCount == 1)
         records_.clear();
-    }
+    TrainingDraftRecord record;
+    record.id     = nextRecordKey();
+    record.number = nextRecord_++;
+    record.image  = imageId;
+    assignDefaults(record);
+    if (const auto roi = roiField(); roi != 0)
+        record.fields[roi] = DataRef<ROI>(ROI{carried});
     records_.push_back(std::move(record));
+    pruneImages();
     selected_ = static_cast<int>(records_.size()) - 1;
     dirty_    = true;
     error_.clear();
@@ -299,160 +554,276 @@ bool TrainingSession::remove(int index)
     if (index < 0 || index >= static_cast<int>(records_.size()))
         return false;
     records_.erase(records_.begin() + index);
+    pruneImages();
     selected_ = records_.empty() ? -1 : std::min(index, static_cast<int>(records_.size()) - 1);
     dirty_    = true;
     return true;
 }
 
-bool TrainingSession::setLabel(int index, const QString &label)
+void TrainingSession::pruneImages()
+{
+    std::erase_if(images_,
+                  [&](const TrainingDraftImage &image)
+                  {
+                      return std::none_of(records_.begin(), records_.end(),
+                                          [&](const TrainingDraftRecord &record) { return record.image == image.id; });
+                  });
+}
+
+bool TrainingSession::setField(int index, PortId fieldId, TrainingFieldValue value)
 {
     if (index < 0 || index >= static_cast<int>(records_.size()))
         return false;
-    if (records_[index].label == label)
+    const auto *declared = field(fieldId);
+    if (!declared)
         return false;
-    records_[index].label = label;
-    dirty_                = true;
+    if (declared->roi)
+        return false; // the canvas field is replaced as a group, never one value at a time
+    const auto current = records_[index].fields.find(fieldId);
+    if (current != records_[index].fields.end() && sameFieldValue(current->second, value))
+        return false;
+    records_[index].fields[fieldId] = std::move(value);
+    dirty_                          = true;
     return true;
+}
+
+std::optional<TrainingFieldValue> TrainingSession::value(int index, PortId fieldId) const
+{
+    if (index < 0 || index >= static_cast<int>(records_.size()))
+        return std::nullopt;
+    const auto found = records_[index].fields.find(fieldId);
+    return found == records_[index].fields.end() ? std::nullopt : std::optional<TrainingFieldValue>(found->second);
+}
+
+std::vector<EncodedRegion> TrainingSession::regions(int index) const
+{
+    const auto roi = roiField();
+    if (roi == 0 || index < 0 || index >= static_cast<int>(records_.size()))
+        return {};
+    const auto found = records_[index].fields.find(roi);
+    if (found == records_[index].fields.end())
+        return {};
+    const auto *value = std::get_if<DataRef<ROI>>(&found->second);
+    if (!value || value->get().empty())
+        return {};
+    return value->get().front();
 }
 
 bool TrainingSession::setRegions(int index, std::vector<EncodedRegion> regions)
 {
-    if (index < 0 || index >= static_cast<int>(records_.size()))
+    const auto roi = roiField();
+    if (roi == 0 || index < 0 || index >= static_cast<int>(records_.size()))
         return false;
-    records_[index].regions = std::move(regions);
-    dirty_                  = true;
+    records_[index].fields[roi] = DataRef<ROI>(ROI{std::move(regions)});
+    dirty_                      = true;
     return true;
+}
+
+QVariantList TrainingSession::fields(int index) const
+{
+    QVariantList result;
+    if (index < 0 || index >= static_cast<int>(records_.size()))
+        return result;
+    const auto &record = records_[index];
+    for (const auto &declared : start_.spec.records.fields)
+    {
+        const auto found = record.fields.find(declared.id);
+        result.append(QVariantMap{
+            {    "id",                                                  static_cast<uint>(declared.id)},
+            {  "name",                                         QString::fromStdString(declared.nameZh)},
+            {  "type",                                            static_cast<int>(declared.type.type)},
+            {"editor",                                       static_cast<int>(editorOf(declared.type))},
+            {   "roi",                                                                    declared.roi},
+            { "value", found == record.fields.end() ? QVariant{} : trainingFieldVariant(found->second)}
+        });
+    }
+    return result;
 }
 
 QVariantList TrainingSession::rows() const
 {
+    const auto   roi = roiField();
     QVariantList result;
     for (std::size_t index = 0; index < records_.size(); ++index)
     {
-        const auto &record = records_[index];
-        const auto  path   = QString::fromStdWString(record.image.wstring());
-        result.append(QVariantMap{{"id", record.id},
-                                  {"label", record.label},
-                                  {"image", path},
-                                  {"imageUrl", QUrl::fromLocalFile(path).toString()},
-                                  {"regions", static_cast<int>(record.regions.size())},
-                                  {"selected", static_cast<int>(index) == selected_}});
+        const auto &record  = records_[index];
+        const auto  image   = std::find_if(images_.begin(), images_.end(),
+                                           [&](const TrainingDraftImage &entry) { return entry.id == record.image; });
+        int         regions = 0;
+        if (roi != 0)
+            if (const auto found = record.fields.find(roi); found != record.fields.end())
+                if (const auto *value = std::get_if<DataRef<ROI>>(&found->second))
+                    regions = value->get().empty() ? 0 : static_cast<int>(value->get().front().size());
+        result.append(QVariantMap{
+            {      "id",                                             record.id},
+            { "imageId",                       static_cast<uint>(record.image)},
+            {"imageUrl", image == images_.end() ? QString{} : image->thumbnail},
+            { "regions",                                               regions},
+            {"selected",                  static_cast<int>(index) == selected_},
+            {  "fields",                       fields(static_cast<int>(index))}
+        });
     }
     return result;
+}
+
+DataRef<TrainingSet> TrainingSession::trainingSet() const
+{
+    TrainingSet set;
+    for (const auto &image : images_)
+        set.images.emplace(image.id, trainingFrame(image.id, image.pixels, image.colorOrder));
+    for (const auto &record : records_)
+    {
+        TrainingRecord stored;
+        stored.id      = record.number;
+        stored.imageId = record.image;
+        stored.fields  = record.fields;
+        set.records.emplace(stored.id, std::move(stored));
+    }
+    validateTrainingSet(set);
+    return DataRef<TrainingSet>(std::move(set));
+}
+
+QJsonObject TrainingSession::manifest(const std::map<TrainingImageId, QString> &imageFiles,
+                                      const std::map<std::string, QString>     &artifactFiles) const
+{
+    QJsonObject root{
+        {"schema_version", kTrainingManifestVersion}
+    };
+    QJsonArray images;
+    for (const auto &image : images_)
+    {
+        const auto file = imageFiles.find(image.id);
+        if (file == imageFiles.end())
+            continue;
+        images.append(QJsonObject{
+            {  "id", static_cast<qint64>(image.id)},
+            {"file",                  file->second}
+        });
+    }
+    root.insert("images", images);
+
+    QJsonArray records;
+    for (const auto &record : records_)
+    {
+        QJsonObject fields;
+        for (const auto &declared : start_.spec.records.fields)
+        {
+            const auto found = record.fields.find(declared.id);
+            if (found == record.fields.end())
+                continue;
+            fields.insert(QString::number(declared.id),
+                          ValueJson::encode(portValueOf(found->second), declared.type, ValueJson::Purpose::Stored));
+        }
+        records.append(QJsonObject{
+            {    "id",                         record.id},
+            { "image", static_cast<qint64>(record.image)},
+            {"fields",                            fields}
+        });
+    }
+    root.insert("records", records);
+
+    QJsonObject parameters;
+    for (const auto &declared : start_.spec.parameters)
+    {
+        const auto found = parameters_.find(declared.id);
+        if (found == parameters_.end())
+            continue;
+        parameters.insert(QString::number(declared.id),
+                          ValueJson::encode(portValueOf(found->second), declared.type, ValueJson::Purpose::Stored));
+    }
+    root.insert("parameters", parameters);
+
+    QJsonArray artifacts;
+    for (const auto &declared : start_.spec.artifacts)
+    {
+        const auto file = artifactFiles.find(declared.id);
+        if (file == artifactFiles.end())
+            continue;
+        artifacts.append(QJsonObject{
+            {     "id",     QString::fromStdString(declared.id)},
+            { "format", QString::fromStdString(declared.format)},
+            {"version",                        declared.version},
+            {   "file",                            file->second}
+        });
+    }
+    root.insert("artifacts", artifacts);
+    return root;
 }
 
 bool TrainingSession::savable() const
 {
     if (records_.empty())
         return false;
-    if (start_.kind == TrainingKind::StraightEdges)
+    if (start_.spec.records.maxCount > 0 && static_cast<int>(records_.size()) > start_.spec.records.maxCount)
+        return false;
+    for (const auto &declared : start_.spec.parameters)
     {
-        // The tool needs exactly two non-parallel edges; a band thinner than a pixel carries no
-        // gradient and a short edge carries too few samples to fit a line.
-        if (records_.size() != 1 || records_.front().regions.size() != 2)
+        const auto found = parameters_.find(declared.id);
+        if (found == parameters_.end())
             return false;
-        return std::all_of(records_.front().regions.begin(), records_.front().regions.end(),
-                           [](const EncodedRegion &region)
-                           {
-                               double values[5]{};
-                               if (!rectangleOf(region, values))
-                                   return false;
-                               const double longSide  = std::max(values[2], values[3]);
-                               const double shortSide = std::min(values[2], values[3]);
-                               return longSide >= 8.0 && shortSide >= 3.0;
-                           });
+        PortDefinition port;
+        port.id      = declared.id;
+        port.nameZh  = declared.nameZh;
+        port.type    = declared.type;
+        port.minimum = declared.minimum;
+        port.maximum = declared.maximum;
+        port.options = declared.options;
+        try
+        {
+            validateToolValue(port, portValueOf(found->second));
+        }
+        catch (const ContractError &)
+        {
+            return false;
+        }
     }
-    return std::all_of(records_.begin(), records_.end(), [](const TrainingDraftRecord &record)
-                       { return !record.label.trimmed().isEmpty() && !record.regions.empty(); });
+    const auto roi = roiField();
+    for (const auto &record : records_)
+        for (const auto &declared : start_.spec.records.fields)
+        {
+            const auto found = record.fields.find(declared.id);
+            if (found == record.fields.end())
+                return false;
+            if (declared.type.type == Type::String)
+            {
+                const auto *text = std::get_if<std::string>(&found->second);
+                if (!text || QString::fromStdString(*text).trimmed().isEmpty())
+                    return false;
+            }
+            if (declared.roi)
+            {
+                const auto *value = std::get_if<DataRef<ROI>>(&found->second);
+                if (!value)
+                    return false;
+                const auto count = value->get().empty() ? 0 : static_cast<int>(value->get().front().size());
+                if (count < declared.minRegions)
+                    return false;
+                if (declared.maxRegions != 0 && count > declared.maxRegions)
+                    return false;
+            }
+        }
+    return roi == 0
+        || std::any_of(records_.begin(), records_.end(),
+                       [&](const TrainingDraftRecord &record)
+                       {
+                           const auto found = record.fields.find(roi);
+                           if (found == record.fields.end())
+                               return false;
+                           const auto *value = std::get_if<DataRef<ROI>>(&found->second);
+                           return value && !value->get().empty() && !value->get().front().empty();
+                       });
 }
 
-bool TrainingSession::save()
+bool TrainingSession::validate()
 {
-    if (!active_)
-        return false;
-    if (start_.asset.empty())
-    {
-        error_ = QStringLiteral("训练数据路径未配置");
-        return false;
-    }
     if (!savable())
     {
         if (records_.empty())
             error_ = QStringLiteral("训练集为空");
-        else if (start_.kind == TrainingKind::StraightEdges)
-            error_ = QStringLiteral("直边训练需要参考图上的两个矩形：长边是参考边，短边是搜索范围");
         else
-            error_ = QStringLiteral("每条训练记录都需要颜色名称和至少一个矩形");
+            error_ = QStringLiteral("训练记录和参数不满足声明约束");
         return false;
     }
-
-    QJsonObject root{{"schema_version", kTrainingAssetVersion}, {"kind", static_cast<int>(start_.kind)}};
-    if (start_.kind == TrainingKind::StraightEdges)
-    {
-        QJsonArray segments;
-        for (const auto &region : records_.front().regions)
-        {
-            double values[5]{};
-            if (!rectangleOf(region, values))
-            {
-                error_ = QStringLiteral("训练区域必须是矩形");
-                return false;
-            }
-            const bool   alongWidth = values[2] >= values[3];
-            const double length     = alongWidth ? values[2] : values[3];
-            const double band       = alongWidth ? values[3] : values[2];
-            const double angle      = std::remainder(alongWidth ? values[4] : values[4] + 90.0, 360.0);
-            const double radians    = angle * kPi / 180.0;
-            const double halfX      = std::cos(radians) * length / 2.0;
-            const double halfY      = std::sin(radians) * length / 2.0;
-            segments.append(QJsonObject{
-                {"name", QStringLiteral("参考边%1").arg(segments.size() + 1)},
-                {"from", QJsonArray{values[0] - halfX, values[1] - halfY}},
-                {"to", QJsonArray{values[0] + halfX, values[1] + halfY}},
-                {"search", QJsonArray{values[0], values[1], length, band, angle}}});
-        }
-        root.insert("reference_image", storedPath(records_.front().image));
-        root.insert("segments", segments);
-    }
-    else
-    {
-        QJsonArray records;
-        for (const auto &record : records_)
-        {
-            QJsonArray regions;
-            for (const auto &region : record.regions)
-            {
-                double values[5]{};
-                if (!rectangleOf(region, values))
-                {
-                    error_ = QStringLiteral("训练区域必须是矩形");
-                    return false;
-                }
-                regions.append(QJsonArray{values[0], values[1], values[2], values[3], values[4]});
-            }
-            records.append(QJsonObject{{"id", record.id},
-                                       {"label", record.label},
-                                       {"image", storedPath(record.image)},
-                                       {"regions", regions}});
-        }
-        root.insert("records", records);
-    }
-
-    std::error_code error;
-    std::filesystem::create_directories(start_.asset.parent_path(), error);
-    QSaveFile file(QString::fromStdWString(start_.asset.wstring()));
-    if (!file.open(QIODevice::WriteOnly))
-    {
-        error_ = QStringLiteral("无法写入训练数据：%1").arg(file.errorString());
-        return false;
-    }
-    const auto content = QJsonDocument(root).toJson(QJsonDocument::Indented);
-    if (file.write(content) != content.size() || !file.commit())
-    {
-        error_ = QStringLiteral("无法提交训练数据：%1").arg(file.errorString());
-        return false;
-    }
-    dirty_ = false;
     error_.clear();
     return true;
 }

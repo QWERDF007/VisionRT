@@ -93,12 +93,12 @@ if(VISIONRT_BUILD_APP)
 
     # 开发运行目录与安装态同构：示例工程就在可执行文件旁边，菜单在 build/bin 下同样可用。
     # 先清空再复制，改名或删除的示例不会残留在运行目录里冒充产品文件。
-    add_custom_target(examples_runtime ALL
-        COMMAND "${CMAKE_COMMAND}" -E rm -rf "$<TARGET_FILE_DIR:VisionRT>/examples"
+    add_custom_target(visionrt_examples
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/examples"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory
-            "${CMAKE_SOURCE_DIR}/examples" "$<TARGET_FILE_DIR:VisionRT>/examples"
+            "${CMAKE_SOURCE_DIR}/examples" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/examples"
         COMMENT "同步示例工程到运行目录")
-    add_dependencies(examples_runtime VisionRT)
+    add_dependencies(VisionRT visionrt_examples)
 endif()
 
 visionrt_write_module_catalog()

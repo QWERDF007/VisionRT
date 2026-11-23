@@ -324,6 +324,54 @@ Array arrayFromNumpy(const TypeSpec &expected, const py::handle &value, const Py
     return Array::borrowedDense(*expected.dtype, std::move(shape), array.mutable_data(), count,
                                 storage.retain(value));
 }
+
+py::object fieldView(const TrainingFieldValue &field)
+{
+    return std::visit(
+        [](const auto &payload) -> py::object
+        {
+            using Payload = std::decay_t<decltype(payload)>;
+            if constexpr (std::is_same_v<Payload, Array>)
+                return arrayToPython(payload);
+            else if constexpr (std::is_same_v<Payload, DataRef<ROI>>)
+                return encodeList(payload.get());
+            else
+                return py::cast(payload);
+        },
+        field);
+}
+
+// A trainer reads the set by identity: images and records are dictionaries keyed by the numbers the
+// declaration published, never by list position. Each frame is one ndarray wrapped with the set's
+// owner, so a slice a trainer keeps alive survives the call that produced it.
+py::dict trainingView(const DataRef<TrainingSet> &set)
+{
+    const auto &value = set.get();
+    py::dict    images;
+    for (const auto &[id, image] : value.images)
+    {
+        DataRef<Image> wrapped(Image{image.pixels}, {set.owner()});
+        py::list       views = python::imageViews(wrapped);
+        py::dict       entry;
+        entry["pixels"]      = views[0];
+        entry["color_order"] = static_cast<int>(image.colorOrder);
+        images[py::int_(id)] = std::move(entry);
+    }
+    py::dict records;
+    for (const auto &[id, record] : value.records)
+    {
+        py::dict fields;
+        for (const auto &[fieldId, field] : record.fields) fields[py::int_(fieldId)] = fieldView(field);
+        py::dict entry;
+        entry["image_id"]     = record.imageId;
+        entry["fields"]       = std::move(fields);
+        records[py::int_(id)] = std::move(entry);
+    }
+    py::dict result;
+    result["images"]  = std::move(images);
+    result["records"] = std::move(records);
+    return result;
+}
 }
 
 py::object toPython(const PortValue &value)
@@ -343,7 +391,7 @@ py::object toPython(const PortValue &value)
             else if constexpr (std::is_same_v<Payload, Array>)
                 return arrayToPython(payload);
             else if constexpr (std::is_same_v<Payload, DataRef<TrainingSet>>)
-                throw ContractError("训练集只传给工具调用，Python 视图尚未提供");
+                return trainingView(payload);
             else
                 return py::cast(payload);
         },

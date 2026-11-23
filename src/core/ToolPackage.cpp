@@ -1,5 +1,6 @@
 #include "core/ToolPackage.h"
 
+#include "core/CustomToolStore.h"
 #include "core/JsonFields.h"
 #include "core/ToolPaths.h"
 
@@ -21,7 +22,7 @@ std::filesystem::path resourcePath(const ToolDefinition &definition, const std::
     const auto &root = definition.source.roots.declarations;
     return resolveToolPath(root, (definition.definitionPath.parent_path() / resource).lexically_relative(root));
 }
-}
+} // namespace
 
 ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::optional<ToolRoots> customRoots)
 {
@@ -52,14 +53,18 @@ ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::opt
             continue;
         if (!std::filesystem::is_directory(source.roots.declarations))
             throw ContractError("声明根不是目录：" + json::pathText(source.roots.declarations).toStdString());
+        const auto registrations = source.origin == ToolOrigin::Custom && customRoots
+                                     ? CustomToolStore(source.roots.declarations.parent_path()).integrations()
+                                     : std::map<std::string, ToolIntegrations>{};
         for (const auto &file : std::filesystem::recursive_directory_iterator(source.roots.declarations))
         {
             if (!file.is_regular_file() || file.path().extension() != ".json")
                 continue;
             (void)resolveToolPath(source.roots.declarations, file.path().lexically_relative(source.roots.declarations));
             PackageTool tool;
-            tool.definition                 = parseToolDefinitionFile(file.path(), source);
-            const auto [previous, inserted] = identities.emplace(tool.definition.nameEn, tool.definition.definitionPath);
+            tool.definition = parseToolDefinitionFile(file.path(), source);
+            const auto [previous, inserted]
+                = identities.emplace(tool.definition.nameEn, tool.definition.definitionPath);
             if (!inserted)
                 throw ContractError("name_en 重复：" + tool.definition.nameEn + "："
                                     + json::pathText(previous->second).toStdString() + " / "
@@ -67,6 +72,12 @@ ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::opt
             const auto indexed = package.index.tools.find(tool.definition.nameEn);
             if (source.origin == ToolOrigin::Builtin && indexed == package.index.tools.end())
                 throw ContractError("内建声明缺少发行索引：" + tool.definition.nameEn);
+            if (indexed != package.index.tools.end() && (source.origin == ToolOrigin::Builtin || !customRoots))
+            {
+                tool.definition.integrations = indexed->second.integrations;
+            }
+            if (const auto owned = registrations.find(tool.definition.nameEn); owned != registrations.end())
+                tool.definition.integrations = owned->second;
             if (tool.definition.kind == ToolKind::Cpp)
             {
                 if (indexed == package.index.tools.end() || indexed->second.module.empty())
@@ -79,8 +90,7 @@ ToolsPackage readToolsPackage(const std::filesystem::path &packageRoot, std::opt
                 throw ContractError("Python/host 工具不能引用 module：" + tool.definition.nameEn);
             if (tool.definition.kind == ToolKind::PythonFunction || tool.definition.kind == ToolKind::PythonClass)
                 (void)tool.definition.pythonScript();
-            for (const auto &resource : tool.definition.resources)
-                (void)resourcePath(tool.definition, resource);
+            for (const auto &resource : tool.definition.resources) (void)resourcePath(tool.definition, resource);
             package.tools.push_back(std::move(tool));
         }
     }
@@ -124,4 +134,4 @@ void validateToolsPackage(const std::filesystem::path &root)
         }
     }
 }
-}
+} // namespace visionrt

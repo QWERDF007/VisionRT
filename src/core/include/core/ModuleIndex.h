@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Export.h"
+#include "core/ToolIntegrations.h"
 
 #include <filesystem>
 #include <map>
@@ -15,8 +16,9 @@ struct ModuleEntry
 
 struct ToolIndexEntry
 {
-    std::string module;
-    std::string definition;
+    std::string      module;
+    std::string      definition;
+    ToolIntegrations integrations;
 };
 
 struct ModuleIndex
@@ -30,4 +32,4 @@ struct ModuleIndex
 
 VISIONRT_CORE_API ModuleIndex parseModuleIndexJson(const std::string &content);
 VISIONRT_CORE_API ModuleIndex parseModuleIndexFile(const std::filesystem::path &path);
-}
+} // namespace visionrt

@@ -96,6 +96,9 @@ struct NodeDefinition
     std::optional<ExpressionConfig>                  expression;
     std::optional<TypeSpec>                          selectType;
     std::uint64_t                                    executionRevision = 0;
+    // The published training revision this node runs from, resolved against the project directory
+    // while the project is in memory. Empty means the node never published any training result.
+    std::filesystem::path                            trainingAsset;
     QJsonObject                                      unresolved;
     QJsonObject                                      retiredInitParams;
     VISIONRT_CORE_API std::string                                      title() const;

@@ -6,6 +6,7 @@ import VisionRT.Ui 1.0
 
 QuiSplitView {
     id: root
+    objectName: "parameterPanel"
     orientation: Qt.Horizontal
     backgroundColor: QuiColor.Border
     handleColor: QuiColor.Border
@@ -133,22 +134,15 @@ QuiSplitView {
                     spacing: 0
                     Repeater {
                         model: root.tabs
-                        QuiTabButton {
+                        WorkbenchTabButton {
                             id: parameterTab
                             clip: true
-                            font: QuiFont.Body
                             required property string modelData
                             required property int index
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             text: modelData
                             checked: root.currentTab === index
-                            showIndicator: true
-                            normalColor: QuiColor.Primary
-                            checkedColor: QuiColor.Button
-                            normalTextColor: QuiColor.FontPrimary
-                            checkedTextColor: QuiColor.Highlight
-                            hoverTextColor: QuiColor.Highlight
                             contentItem: QuiText {
                                 text: parameterTab.text
                                 font: parameterTab.font
@@ -158,25 +152,6 @@ QuiSplitView {
                                 opacity: parameterTab.enabled ? 1.0 : 0.4
                             }
                             onClicked: root.currentTab = index
-                            Rectangle {
-                                parent: parameterTab
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.right: parent.right
-                                width: 2
-                                color: QuiColor.Border
-                                z: 1
-                            }
-                            Rectangle {
-                                parent: parameterTab
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: 2
-                                visible: !parameterTab.checked
-                                color: QuiColor.Border
-                                z: 1
-                            }
                         }
                     }
                     WorkbenchActionButton {
@@ -206,12 +181,44 @@ QuiSplitView {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     boundsMovement: Flickable.StopAtBounds
-                    ScrollBar.vertical: QuiScrollBar {
+                    ScrollBar.vertical: WorkbenchScrollBar {
+                        id: parameterScrollBar
                     }
                     Column {
                         id: groupColumn
-                        width: scroller.width
+                        width: scroller.width - parameterScrollBar.width
                         spacing: 5
+                        QuiExpander {
+                            width: groupColumn.width
+                            visible: app.trainingMode && app.trainingParameters.length > 0 && root.currentTab === ParameterTab.BasicInput
+                            headerText: "训练参数"
+                            headerHeight: VisionRTSize.BarSize
+                            expand: true
+                            contentHeight: trainingValues.implicitHeight + VisionRTSize.Spacing * 2
+                            ColumnLayout {
+                                id: trainingValues
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: VisionRTSize.Spacing
+                                spacing: VisionRTSize.Spacing
+                                Repeater {
+                                    model: app.trainingParameters
+                                    delegate: ToolFormRow {
+                                        required property var modelData
+                                        labelWidth: VisionRTSize.ParamLabelWidth
+                                        label: modelData.name
+                                        TrainingValueEditor {
+                                            Layout.fillWidth: true
+                                            field: modelData
+                                            onCommitRequested: function(value) {
+                                                app.setTrainingParameter(field.id, value);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Repeater {
                             model: root.parameterGroups
                             QuiExpander {

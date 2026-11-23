@@ -13,17 +13,13 @@ void ToolTreeModel::setRegistry(const ToolRegistry &registry)
     definitions_.clear();
     for (const auto &tool : registry.definitions())
     {
-        // Assist helpers are driven by the interaction mapping and never appear
-        // in the ordinary tool menu.
-        if (tool.visibility == ToolVisibility::Assist)
+        // Internal algorithms are invoked through integrations, outside the ordinary tool menu.
+        if (tool.visibility == ToolVisibility::Internal)
             continue;
-        const auto availability = registry.availability(tool.nameEn);
+        const auto  availability = registry.availability(tool.nameEn);
         QStringList categories;
-        for (const auto &name : tool.categories)
-            categories.append(QString::fromStdString(name));
-        definitions_.push_back({categories,
-                                QString::fromStdString(tool.nameZh),
-                                QString::fromStdString(tool.nameEn),
+        for (const auto &name : tool.categories) categories.append(QString::fromStdString(name));
+        definitions_.push_back({categories, QString::fromStdString(tool.nameZh), QString::fromStdString(tool.nameEn),
                                 QString::fromStdString(tool.version),
                                 QString::fromStdString(availability.status.message),
                                 availability.state == ToolAvailability::Available});
@@ -66,13 +62,13 @@ ToolTreeModel::Entry *ToolTreeModel::findById(Entry &entry, const QString &id)
 
 bool ToolTreeModel::updateToolStatus(const QString &toolId, bool available, const QString &status)
 {
-    const auto definition = std::find_if(definitions_.begin(), definitions_.end(),
-                                         [&](const auto &value) { return value.id == toolId; });
+    const auto definition
+        = std::find_if(definitions_.begin(), definitions_.end(), [&](const auto &value) { return value.id == toolId; });
     if (definition == definitions_.end() || (definition->available == available && definition->status == status))
         return false;
     definition->available = available;
-    definition->status = status;
-    auto *tool = findById(root_, toolId);
+    definition->status    = status;
+    auto *tool            = findById(root_, toolId);
     if (!tool)
         return true;
     tool->available = available;
@@ -105,8 +101,7 @@ void ToolTreeModel::rebuild()
         Entry *parent = &root_;
         if (definition.categories.isEmpty())
             parent = &groupEntry(root_, QStringLiteral("未分类"));
-        for (const auto &category : definition.categories)
-            parent = &groupEntry(*parent, category);
+        for (const auto &category : definition.categories) parent = &groupEntry(*parent, category);
         auto child       = std::make_unique<Entry>();
         child->name      = definition.name;
         child->id        = definition.id;
@@ -181,8 +176,7 @@ QVariant ToolTreeModel::data(const QModelIndex &index, int role) const
         {
             // The full folder path, so two roots that use the same leaf name stay distinct.
             QStringList path;
-            for (const Entry *node = &entry; node && node != &root_; node = node->parent)
-                path.prepend(node->name);
+            for (const Entry *node = &entry; node && node != &root_; node = node->parent) path.prepend(node->name);
             return path.join(QLatin1Char('/'));
         }
     default:

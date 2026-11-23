@@ -40,13 +40,69 @@ int main(int argc, char **argv)
   "name_zh": "外部根工具",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "external",
     "file": "tool.py",
     "symbol": "execute"
   },
-  "schema_version": 1
+  "schema_version": 2
 })";
+                }
+                {
+                    // A trainer is an ordinary Python tool whose input is a TrainingSet. The view is
+                    // keyed by the declared ids and a slice it keeps must outlive the call.
+                    std::ofstream declaration(externalDeclarations / "training.json");
+                    declaration << R"({
+  "name_en": "test.training.view",
+  "name_zh": "训练集视图夹具",
+  "version": "1",
+  "implementation": {
+    "kind": "python_function",
+    "package": "trainingprobe",
+    "file": "tool.py",
+    "symbol": "execute"
+  },
+  "inputs": [
+    {
+      "id": 1,
+      "name_zh": "训练集",
+      "type": "training_set"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name_zh": "摘要",
+      "type": "string"
+    }
+  ],
+  "schema_version": 2
+})";
+                    const auto code = std::filesystem::path(external.path().toStdWString()) / "code";
+                    std::filesystem::create_directories(code / "trainingprobe");
+                    std::ofstream script(code / "trainingprobe" / "tool.py");
+                    script << R"(
+kept = None
+
+
+STATUS_CODE, STATUS_MESSAGE = 0, 1
+
+
+def execute(inputs):
+    global kept
+    training = inputs[1]
+    if kept is None:
+        image = training["images"][7]["pixels"]
+        kept = image[1:, 1:]
+        return {
+            "outputs": {STATUS_CODE: 0, STATUS_MESSAGE: "运行成功", 2: "shape=%d,%d,%d" % image.shape},
+            "detail": "",
+        }
+    return {
+        "outputs": {STATUS_CODE: 0, STATUS_MESSAGE: "运行成功", 2: "kept=%d" % int(kept.sum())},
+        "detail": "",
+    }
+)";
                 }
                 const auto overridden = readToolsPackage(
                     root, ToolRoots{externalDeclarations,
@@ -58,6 +114,11 @@ int main(int argc, char **argv)
                     if (tool.definition.kind == ToolKind::PythonFunction
                         || tool.definition.kind == ToolKind::PythonClass)
                         registry.addDefinition(tool.definition);
+                const auto trainerDefinition
+                    = std::find_if(overridden.tools.begin(), overridden.tools.end(),
+                                   [](const auto &tool) { return tool.definition.nameEn == "test.training.view"; });
+                assert(trainerDefinition != overridden.tools.end());
+                registry.addDefinition(trainerDefinition->definition);
                 for (const auto &loaded : runtime.refresh(registry.definitions()))
                 {
                     assert(loaded.status);
@@ -75,7 +136,7 @@ int main(int argc, char **argv)
                     std::cout << "Pure Python ZIP result: 42\n";
                     return;
                 }
-                assert(registry.definitions().size() == 7);
+                assert(registry.definitions().size() == 8);
                 assert(registry.find("ImageMean") && registry.find("CallCounter")
                        && registry.find("RoiGeometry") && registry.find("AddOneToImage")
                        && registry.find("ImageSizes")
@@ -227,6 +288,39 @@ int main(int argc, char **argv)
                     assert(std::get<std::int64_t>(first->execute({}).outputs.at(2)) == 2);
                     assert(std::get<std::int64_t>(second->execute({}).outputs.at(2)) == 1);
                     assert(first->release().code == 0 && second->release().code == 0);
+                }
+                {
+                    // The trainer reads identity-keyed images and records, then keeps a slice. The
+                    // parent set is released before the second call, so only the bridge's owner
+                    // chain can keep those pixels readable.
+                    const auto makeSet = [](std::uint8_t value)
+                    {
+                        TrainingSet set;
+                        cv::Mat     frame(4, 5, CV_8UC3, cv::Scalar(value, value + 1, value + 2));
+                        set.images.emplace(7, trainingFrame(7, frame, ColorOrder::BGR));
+                        TrainingRecord record;
+                        record.id      = 3;
+                        record.imageId = 7;
+                        record.fields.emplace(1, std::string("外圈"));
+                        set.records.emplace(3, record);
+                        return DataRef<TrainingSet>(std::move(set));
+                    };
+                    auto trainer = registry.create("test.training.view");
+                    assert(trainer->initialize({}).code == 0);
+                    auto       source = std::make_unique<DataRef<TrainingSet>>(makeSet(10));
+                    const auto first  = trainer->execute({
+                        {1, *source}
+                    });
+                    assert(testview::status(first).code == 0);
+                    assert(std::get<std::string>(first.outputs.at(2)) == "shape=4,5,3");
+                    source.reset();
+                    const auto second = trainer->execute({
+                        {1, makeSet(1)}
+                    });
+                    assert(testview::status(second).code == 0);
+                    // 3 rows x 4 columns x (10 + 11 + 12) from the released set, not the new one.
+                    assert(std::get<std::string>(second.outputs.at(2)) == "kept=396");
+                    assert(trainer->release().code == 0);
                 }
             });
         worker.get();

@@ -1,12 +1,67 @@
 #include "core/NodeContracts.h"
-#include "core/Sequence.h"
 
+#include "core/Sequence.h"
+#include "core/ToolPaths.h"
+#include "visionrt/contracts/ProtocolEnums.h"
+
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QString>
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <map>
 #include <set>
 
 namespace visionrt {
+namespace {
+std::string pathText(const std::filesystem::path &path)
+{
+    const auto utf8 = path.generic_u8string();
+    return {reinterpret_cast<const char *>(utf8.data()), utf8.size()};
+}
+
+// A published revision is the node's single training source: artifact target ports receive the
+// files the revision's manifest names, never a value copied into the project. A missing or
+// unreadable revision fails this node instead of falling back to a path the project no longer owns.
+void materialiseTrainingAssets(const NodeDefinition &node, const ToolDefinition &definition, Values &parameters)
+{
+    if (!definition.training || node.trainingAsset.empty())
+        return;
+    const auto manifestPath = node.trainingAsset / "manifest.json";
+    QFile      file(QString::fromStdWString(manifestPath.wstring()));
+    if (!file.open(QIODevice::ReadOnly))
+        throw ContractError("训练资产缺失：" + pathText(manifestPath));
+    QJsonParseError error;
+    const auto      document = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+        throw ContractError("训练资产清单损坏：" + pathText(manifestPath));
+    const auto root = document.object();
+    if (root.value("schema_version").toInt() != kTrainingManifestVersion)
+        throw ContractError("训练资产格式不兼容：" + pathText(manifestPath));
+    std::map<std::string, QString> files;
+    for (const auto &value : root.value("artifacts").toArray())
+    {
+        const auto item = value.toObject();
+        const auto id   = item.value("id").toString();
+        const auto path = item.value("file").toString();
+        if (id.isEmpty() || path.isEmpty())
+            throw ContractError("训练资产清单缺少产物索引：" + pathText(manifestPath));
+        files.insert_or_assign(id.toStdString(), path);
+    }
+    for (const auto &artifact : definition.training->artifacts)
+    {
+        const auto found = files.find(artifact.id);
+        if (found == files.end())
+            throw ContractError("训练资产缺少模型：" + artifact.id + "：" + pathText(manifestPath));
+        parameters.insert_or_assign(
+            artifact.target.id,
+            pathText(resolveToolPath(node.trainingAsset, pathFromUtf8(found->second.toStdString()))));
+    }
+}
+} // namespace
 bool conditionUsesUpstream(const NodeDefinition &node)
 {
     const auto binding = node.inputs.find(kConditionInputPort);
@@ -315,6 +370,7 @@ Values nodeParameters(const NodeDefinition &node, const ToolDefinition &definiti
         parameters.emplace(port.id,
                            copyProjectLiteral(found == node.initParams.end() ? port.defaultValue : found->second));
     }
+    materialiseTrainingAssets(node, definition, parameters);
     return parameters;
 }
 }

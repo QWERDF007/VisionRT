@@ -60,6 +60,11 @@ struct ProjectLoadResult
     std::vector<ToolUpdate> toolUpdates;
 };
 
+// The absolute file a destination names, with the product's default suffix and its one extension
+// rule. Save and the asset copier both start from this value so they cannot disagree about where
+// the project and its assets go.
+VISIONRT_CORE_API std::filesystem::path projectDestination(std::filesystem::path destination);
+
 // All parsing/reconciliation happens in a candidate. Exceptions never replace the
 // caller's project; save installs its candidate only after QSaveFile::commit.
 class VISIONRT_CORE_API ProjectStorage

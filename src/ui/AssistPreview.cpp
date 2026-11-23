@@ -14,12 +14,6 @@
 namespace visionrt {
 namespace {
 constexpr int kHoverDelayMs = 40;
-// The helper protocol is fixed by number, like every other tool contract: the probe answers on
-// outputs 2..5 and the host never looks a port up by its spelling.
-constexpr PortId kPreview  = 2;
-constexpr PortId kProposal = 3;
-constexpr PortId kValid    = 4;
-constexpr PortId kQuality  = 5;
 
 QString helperMessage(const std::string &message)
 {
@@ -41,7 +35,8 @@ AssistPreview::~AssistPreview()
     shutdown();
 }
 
-void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper)
+void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper,
+                              AssistOutputs outputs)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     normalizeToolDefinition(helper);
@@ -49,7 +44,7 @@ void AssistPreview::configure(std::shared_ptr<const ToolRegistry> registry, Tool
     hoverRequest_.reset();
     pending_.reset();
     ++epoch_;
-    session_ = std::make_shared<Session>(Session{std::move(registry), std::move(helper)});
+    session_ = std::make_shared<Session>(Session{std::move(registry), std::move(helper), outputs});
     notifyBusy();
 }
 
@@ -61,6 +56,14 @@ bool AssistPreview::configured() const
 std::string AssistPreview::helperId() const
 {
     return session_ ? session_->helper.nameEn : std::string{};
+}
+
+bool AssistPreview::request(AssistRequest value, std::shared_ptr<const ToolRegistry> registry, ToolDefinition tool)
+{
+    if (inFlightLearn_ || (pending_ && pending_->learn))
+        return false;
+    configure(std::move(registry), std::move(tool), {});
+    return request(std::move(value));
 }
 
 bool AssistPreview::request(AssistRequest value)
@@ -299,27 +302,34 @@ AssistOutcome AssistPreview::execute(const std::shared_ptr<const Session> &sessi
             return outcome;
         }
         outcome.outputs = result.outputs;
-        const auto valid = result.outputs.find(kValid);
-        const auto *flag = valid == result.outputs.end() ? nullptr : std::get_if<bool>(&valid->second);
-        outcome.valid    = flag && *flag;
-        if (const auto quality = result.outputs.find(kQuality); quality != result.outputs.end())
-            if (const auto *text = std::get_if<std::string>(&quality->second))
-                outcome.quality = helperMessage(*text);
+        if (const auto message = session.outputs.message; message != 0)
+        {
+            const auto found = result.outputs.find(message);
+            if (found != result.outputs.end())
+                if (const auto *text = std::get_if<std::string>(&found->second))
+                    outcome.quality = helperMessage(*text);
+        }
+        if (const auto valid = result.outputs.find(session.outputs.valid); valid != result.outputs.end())
+            if (const auto *flag = std::get_if<bool>(&valid->second))
+                outcome.valid = *flag;
         if (outcome.valid)
         {
-            const auto proposal = result.outputs.find(kProposal);
-            const auto preview  = result.outputs.find(kPreview);
-            const auto *regions = proposal == result.outputs.end()
-                                    ? nullptr
-                                    : std::get_if<DataRef<ROI>>(&proposal->second);
-            const auto *shown = preview == result.outputs.end() ? nullptr : std::get_if<DataRef<ROI>>(&preview->second);
-            if (!regions || !shown || regions->get().empty())
-                outcome.valid = false;
-            else
+            // Output identities belong to the host integration; trainers need no preview roles.
+            const auto readRois = [&](PortId port, ROI &target)
             {
-                outcome.proposal = regions->get();
-                outcome.preview  = shown->get();
-            }
+                if (port == 0)
+                    return true;
+                const auto  found = result.outputs.find(port);
+                const auto *groups
+                    = found == result.outputs.end() ? nullptr : std::get_if<DataRef<ROI>>(&found->second);
+                if (!groups || groups->get().empty())
+                    return false;
+                target = groups->get();
+                return true;
+            };
+            if (!readRois(session.outputs.preview, outcome.preview)
+                || !readRois(session.outputs.proposal, outcome.proposal))
+                outcome.valid = false;
         }
     }
     catch (const RegistryError &error)

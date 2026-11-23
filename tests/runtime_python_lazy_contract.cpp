@@ -63,12 +63,12 @@ try
                   "                        0: 0, 1: '运行成功'},\n"
                   "            'detail': ''}\n";
     }
-    const auto definition = parseToolDefinitionJson(R"({
+    const auto   definition = parseToolDefinitionJson(R"({
   "name_en": "python.lazy.runtime",
   "name_zh": "Lazy runtime",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "lazy",
     "file": "tool.py",
     "symbol": "execute"
@@ -78,25 +78,21 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 3,
       "name_en": "rois",
       "name_zh": "ROIs",
-      "type": {
-        "type": 6
-      }
+      "type": "roi"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })",
                                                       root / "tools/custom/lazy/tool.json",
                                                       {
-                                                          ToolOrigin::Custom,
-                                                          {root / "tools/custom", root / "python/custom"}
+                                                        ToolOrigin::Custom,
+                                                        {root / "tools/custom", root / "python/custom"}
     });
     ToolRegistry registry;
     registry.addDefinition(definition);

@@ -169,6 +169,9 @@ if(VISIONRT_BUILD_APP)
     # What the result view may expose is decided without a window, so the visibility rule is
     # checked here instead of through a rendered frame.
     visionrt_contract(presentation_visibility_contract visionrt_ui LABELS backend)
+    target_include_directories(presentation_visibility_contract PRIVATE "${CMAKE_SOURCE_DIR}/src/ui")
+    target_sources(presentation_visibility_contract PRIVATE "${CMAKE_SOURCE_DIR}/src/ui/ResultPresentation.cpp")
+    target_link_libraries(presentation_visibility_contract PRIVATE Qt6::Test)
     # The environment verdict is host-owned: one status, one reason per failure, and a check
     # that never blocks the caller. The controller is the only entry point, so this walks the
     # real settings path without opening a window.
@@ -266,6 +269,12 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
     target_link_libraries(workbench_assist_contract PRIVATE Qt6::Test)
     target_compile_definitions(workbench_assist_contract PRIVATE
         VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}")
+    visionrt_contract(workbench_authoring_contract visionrt_ui)
+    target_link_libraries(workbench_authoring_contract PRIVATE visionrt_python_testing Qt6::Test)
+    target_compile_definitions(workbench_authoring_contract PRIVATE
+        VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+        VISIONRT_TEST_AUTHORING_PROBE="$<TARGET_FILE:test_authoring_probe>")
+    add_dependencies(workbench_authoring_contract test_authoring_probe)
     visionrt_contract(workbench_tooltree_contract visionrt_ui)
     # these scenarios execute Python, so the test states the build interpreter.
     target_link_libraries(workbench_tooltree_contract PRIVATE visionrt_python_testing)
@@ -293,11 +302,27 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
     visionrt_contract(workbench_training_contract visionrt_ui)
-    target_link_libraries(workbench_training_contract PRIVATE Qt6::Test)
+    target_link_libraries(workbench_training_contract PRIVATE visionrt_plugins Qt6::Test)
     target_compile_definitions(workbench_training_contract PRIVATE
         VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-        VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
+        VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}"
+        VISIONRT_TEST_AUTHORING_PROBE="$<TARGET_FILE:test_authoring_probe>")
+    add_dependencies(workbench_training_contract test_authoring_probe)
+    visionrt_contract(workbench_training_publish_contract visionrt_ui)
+    target_link_libraries(workbench_training_publish_contract PRIVATE visionrt_plugins Qt6::Test)
+    target_compile_definitions(workbench_training_publish_contract PRIVATE
+        VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+        VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}"
+        VISIONRT_TEST_AUTHORING_PROBE="$<TARGET_FILE:test_authoring_probe>")
+    add_dependencies(workbench_training_publish_contract test_authoring_probe)
+    # The real recognition module, not a probe: the draft the host builds has to reach the shipped
+    # trainer and come back as the model the shipped node decodes.
+    visionrt_contract(color_training_contract visionrt_ui)
+    target_link_libraries(color_training_contract PRIVATE visionrt_plugins)
+    target_compile_definitions(color_training_contract PRIVATE
+        VISIONRT_DEV_TOOLS_PACKAGE="${CMAKE_BINARY_DIR}/bin/tools-package")
     visionrt_contract(workbench_lifecycle_contract visionrt_ui)
     visionrt_contract(workbench_exit_contract visionrt_ui)
     target_link_libraries(workbench_exit_contract PRIVATE visionrt_python_testing Qt6::Test)
@@ -389,6 +414,16 @@ set_target_properties(test_dep_b PROPERTIES PREFIX "" OUTPUT_NAME test_dep_b
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
 
+# A business tool and its helper whose declared ports deliberately differ from every production
+# numbering, so a passing authoring contract proves the binding is declaration-driven.
+add_library(test_authoring_probe SHARED ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/authoring_probe.cpp)
+target_link_libraries(test_authoring_probe PRIVATE VisionRT::Contracts)
+target_compile_definitions(test_authoring_probe PRIVATE VISIONRT_CONTRACTS_EXPORTS)
+set_target_properties(test_authoring_probe PROPERTIES PREFIX "" OUTPUT_NAME test_authoring_probe
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fixtures"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/fixtures"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/fixtures")
+
 add_library(test_plugin_a SHARED ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/test_plugin_a.cpp)
 target_link_libraries(test_plugin_a PRIVATE VisionRT::Contracts test_dep_a)
 target_compile_definitions(test_plugin_a PRIVATE VISIONRT_CONTRACTS_EXPORTS)
@@ -470,7 +505,7 @@ endif()
 
 add_executable(example_pipelines_contract ${CMAKE_CURRENT_SOURCE_DIR}/example_pipelines.cpp)
 target_link_libraries(example_pipelines_contract PRIVATE visionrt_core visionrt_runtime visionrt_python_testing Qt6::Core)
-add_dependencies(example_pipelines_contract test_plugin_module test_plugin_a test_dep_a)
+add_dependencies(example_pipelines_contract test_plugin_module test_plugin_a test_dep_a visionrt_examples)
 target_compile_definitions(example_pipelines_contract PRIVATE VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME example_pipelines_contract COMMAND example_pipelines_contract --tools-package "${VISIONRT_TEST_TOOLS_PACKAGE}" "${CMAKE_SOURCE_DIR}")
 visionrt_apply_test_environment(example_pipelines_contract)

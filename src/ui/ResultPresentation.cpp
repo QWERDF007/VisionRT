@@ -104,6 +104,24 @@ ResultPresentation::ResultPresentation(PresentationHost &host, OutputModel &outp
 
 ResultPresentation::~ResultPresentation() = default;
 
+void ResultPresentation::setSuspended(bool value)
+{
+    if (suspended_ == value)
+        return;
+    suspended_ = value;
+    if (suspended_)
+    {
+        ++displayRequest_;
+        converter_.invalidate(generation_);
+        displayTargets_.clear();
+        if (viewport_)
+        {
+            viewport_->setOverlays({}, {});
+            viewport_->endRoiEdit();
+        }
+    }
+}
+
 const ResultSlot::Snapshot *ResultPresentation::snapshot(NodeId node) const
 {
     const auto found = snapshots_.find(node);

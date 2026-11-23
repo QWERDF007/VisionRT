@@ -1,7 +1,9 @@
+#include "ExecutionEvidence.h"
+#include "ToolResultAssertions.h"
 #include "core/ProjectStorage.h"
 #include "plugins/PluginLoader.h"
-#include "ToolResultAssertions.h"
 #include "runtime/RuntimeEngine.h"
+
 #include <core/ToolPackage.h>
 
 #include <QByteArray>
@@ -206,6 +208,8 @@ int main(int argc, char **argv)
                 {
                     if (!runtime.acknowledgeCompletion(*update.completion))
                         throw std::runtime_error("GPU completion acknowledgement failed");
+                    testsupport::printExecutionEvidence(std::filesystem::path(arguments.at(2).toStdU16String()),
+                                                        loaded.project, update);
                     completed = true;
                     break;
                 }

@@ -66,7 +66,7 @@ void parameterEditorsContract()
   "name_zh": "参数测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "Test/Parameters",
     "file": "run.py",
     "symbol": "run"
@@ -75,9 +75,7 @@ void parameterEditorsContract()
     {
       "id": 1,
       "name_zh": "比例",
-      "type": {
-        "type": 1
-      },
+      "type": "float",
       "default": 0.15,
       "constraints": {
         "min": 0,
@@ -91,36 +89,28 @@ void parameterEditorsContract()
     {
       "id": 2,
       "name_zh": "整数",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 9007199254740993
     },
     {
       "id": 3,
       "name_zh": "路径",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "原始路径",
       "ui": {
-        "editor": 6
+        "editor": "path"
       }
     },
     {
       "id": 4,
       "name_zh": "启用",
-      "type": {
-        "type": 2
-      },
+      "type": "bool",
       "default": true
     },
     {
       "id": 5,
       "name_zh": "色彩",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "bgr",
       "constraints": {
         "options": [
@@ -133,8 +123,8 @@ void parameterEditorsContract()
       "id": 6,
       "name_zh": "标签列表",
       "type": {
-        "type": 5,
-        "dtype": 6,
+        "type": "array",
+        "dtype": "string",
         "rank": 1
       },
       "default": [
@@ -145,28 +135,24 @@ void parameterEditorsContract()
     {
       "id": 7,
       "name_zh": "备注",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "中文备注"
     },
     {
       "id": 8,
       "name_zh": "数据目录",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "F:/tmp",
       "ui": {
-        "editor": 6
+        "editor": "path"
       }
     },
     {
       "id": 9,
       "name_zh": "数值数组",
       "type": {
-        "type": 5,
-        "dtype": 4,
+        "type": "array",
+        "dtype": "float64",
         "rank": 1
       },
       "default": [
@@ -177,9 +163,7 @@ void parameterEditorsContract()
     {
       "id": 10,
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       },
@@ -188,13 +172,11 @@ void parameterEditorsContract()
     {
       "id": 11,
       "name_zh": "区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "default": [],
       "relations": {
         "image": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 10
         }
       }
@@ -204,19 +186,15 @@ void parameterEditorsContract()
     {
       "id": 2,
       "name_zh": "比例",
-      "type": {
-        "type": 1
-      }
+      "type": "float"
     },
     {
       "id": 3,
       "name_zh": "整数",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
 
     AppController app(1, directory.path());

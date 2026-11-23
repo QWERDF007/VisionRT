@@ -17,6 +17,12 @@ void AppController::Impl::beginDrain(std::function<void()> continuation)
     // A preview must stop touching the data the caller is about to mutate. Only an invalidation
     // belongs here: the persistent helper is released by the management operations that really end
     // its session (reset, catalog reload, close), otherwise every drain would tear it down again.
+    if (pendingTraining)
+    {
+        pendingTraining.reset();
+        editor.setBusy(state != RuntimeState::Idle);
+        emit q->runtimeChanged();
+    }
     if (assist && !presentation.draining())
         assist->invalidate();
     presentation.beginDrain(std::move(continuation));

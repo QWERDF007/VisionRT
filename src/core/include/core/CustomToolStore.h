@@ -44,6 +44,8 @@ public:
     // `problems` instead of disappearing; passing nullptr makes the first such file an error.
     std::vector<PackageTool> discoverCustomTools(std::vector<std::string> *problems = nullptr) const;
 
+    std::map<std::string, ToolIntegrations> integrations() const;
+
     // One tool of this store by its tool id; nullopt when the declaration does not exist or cannot
     // be parsed. Used to pick a free clone id without rescanning the whole root at the call site.
     std::optional<PackageTool> findCustomTool(std::string_view toolId) const;

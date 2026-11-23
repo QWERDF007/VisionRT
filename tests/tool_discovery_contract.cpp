@@ -1,8 +1,8 @@
 #include "core/ToolPackage.h"
 #include "core/ToolRegistry.h"
 
-#include <QDir>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -44,18 +44,19 @@ void write(const QString &path, const QByteArray &bytes)
 
 QByteArray declaration(const QString &id)
 {
-    return QJsonDocument(QJsonObject{{"schema_version", 1},
-                             {        "name_en",                                   id},
-                             {        "name_zh",                           "同名工具"},
-                             {        "version",                                  "1"},
-                             {"implementation", QJsonObject{{"kind", 1},
-                                                            {"package", "示例 包"},
-                                                            {"file", "tool.py"},
-                                                            {"symbol", "execute"}}}
+    return QJsonDocument(QJsonObject{
+                             {"schema_version",                                                                                 2},
+                             {       "name_en",                                                                                id},
+                             {       "name_zh",                                                                    "同名工具"},
+                             {       "version",                                                                               "1"},
+                             {"implementation", QJsonObject{{"kind", "python_function"},
+ {"package", "示例 包"},
+ {"file", "tool.py"},
+ {"symbol", "execute"}}                                                           }
     })
         .toJson();
 }
-}
+} // namespace
 
 int main(int argc, char **argv)
 {
@@ -196,21 +197,21 @@ int main(int argc, char **argv)
     assert(resourceExternal.isValid());
     const ToolRoots resourceRoots{std::filesystem::path(resourceExternal.filePath("declarations").toStdWString()),
                                   std::filesystem::path(resourceExternal.filePath("code").toStdWString())};
-    const auto hostResource = QJsonObject{{"schema_version", 1},
-        {"name_en", "test.host.resource"},
-        {"name_zh", "资源宿主"},
-        {"version", "1"},
-        {"implementation", QJsonObject{{"kind", 3},
-                                       {"binding", "visionrt.receiver"},
-                                       {"resources", QJsonArray{"data.bin"}}}},
+    const auto      hostResource = QJsonObject{
+             {"schema_version",                                                     2                               },
+             {       "name_en",                                                                 "test.host.resource"},
+             {       "name_zh",                                                                       "资源宿主"},
+             {       "version",                                                                                  "1"},
+             {"implementation",
+              QJsonObject{{"kind", "host"}, {"binding", "visionrt.receiver"}, {"resources", QJsonArray{"data.bin"}}}},
     };
     write(resourceExternal.filePath("declarations/host.json"), QJsonDocument(hostResource).toJson());
     write(resourceExternal.filePath("declarations/data.bin"), "data");
     const auto withResource = readToolsPackage(root, resourceRoots);
     assert(withResource.tools.size() == 2);
-    assert(std::any_of(withResource.tools.begin(), withResource.tools.end(), [](const auto &tool)
-                       { return tool.definition.nameEn == "test.host.resource"; }));
-    auto escapedHost       = hostResource;
+    assert(std::any_of(withResource.tools.begin(), withResource.tools.end(),
+                       [](const auto &tool) { return tool.definition.nameEn == "test.host.resource"; }));
+    auto escapedHost         = hostResource;
     escapedHost["resources"] = QJsonArray{"../outside.bin"};
     write(resourceExternal.filePath("declarations/host.json"), QJsonDocument(escapedHost).toJson());
     bool escapedHostResource = false;
@@ -234,8 +235,8 @@ int main(int argc, char **argv)
     const ToolRoots overrideRoots{std::filesystem::path(overrideExternal.filePath("declarations").toStdWString()),
                                   std::filesystem::path(overrideExternal.filePath("code").toStdWString())};
     write(overrideExternal.filePath("declarations/external.json"), declaration("test.external"));
-    const auto overriddenIndex = readToolsPackage(std::filesystem::path(overridePackage.path().toStdWString()),
-                                                  overrideRoots);
+    const auto overriddenIndex
+        = readToolsPackage(std::filesystem::path(overridePackage.path().toStdWString()), overrideRoots);
     assert(overriddenIndex.tools.size() == 1 && overriddenIndex.tools.front().definition.nameEn == "test.external");
     QTemporaryDir linked;
     assert(linked.isValid());

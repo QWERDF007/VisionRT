@@ -29,6 +29,7 @@ function capture(name, debuggerCommands, arguments_ = []) {
         }
         environment[assignment[1]] = assignment[2];
     }
+    if (name === 'ui_notifications_contract') environment.VISIONRT_EXTENDED_TESTS = '1';
     const label = name + (arguments_.length ? '-pixel-probe' : '');
     const commands = path.join(output, label + '.cdb');
     fs.writeFileSync(commands, [
@@ -57,7 +58,7 @@ const lifetime = capture('viewport_lifetime_contract', []);
 assert.match(lifetime, /^VIEWPORT_LIFETIME_PASS destroyed=32 reparented=16 parent_owned=16\s*$/m);
 assert.match(lifetime, /Exit process [^\r\n]+, code 0\r?\n/);
 const notifications = capture('ui_notifications_contract', [
-    'bu ui_notifications_contract!visionrt::RuntimeEngine::pollLatest ".echo D02_POLL; gc"'
+    'bu visionrt_runtime!visionrt::RuntimeEngine::pollLatest ".echo D02_POLL; gc"'
 ]);
 assert.match(notifications, /^NOTIFICATION_CONTRACT_PASS source_pages=12288 phases=2 final_pixel=37\s*$/m);
 assert.match(notifications, /Exit process [^\r\n]+, code 0\r?\n/);
@@ -79,7 +80,19 @@ assert.match(pixel, /^PIXEL_GUARD_CAUGHT\s*$/m);
 assert.match(pixel, /ExceptionCode: c0000005/);
 assert.match(pixel, /Attempt to read from address/);
 assert.doesNotMatch(pixel, /^UNEXPECTED_PIXEL_READ /m);
-const summary = { phases, pixelReadNegativeControl: 'caught',
+const trainingLog = capture('workbench_training_publish_contract', [
+    'bm visionrt_ui!visionrt::training::Revision::Revision* ".echo TRAINING_WRITE_ENTRY; gc"'
+]);
+const trainingWrites = ['draft', 'publish', 'refused', 'upstream'].map(phase => {
+    const begin = trainingLog.indexOf('TRAINING_PHASE_BEGIN ' + phase);
+    const end = trainingLog.indexOf('TRAINING_PHASE_END ' + phase, begin);
+    assert.ok(begin >= 0 && end > begin, 'Missing training observation phase: ' + phase);
+    const writes = (trainingLog.slice(begin, end).match(/^TRAINING_WRITE_ENTRY\s*$/gm) || []).length;
+    assert.equal(writes, phase === 'publish' ? 1 : 0, 'Unexpected training writer entry count: ' + phase);
+    return { phase, writes };
+});
+assert.match(trainingLog, /Exit process [^\r\n]+, code 0\r?\n/);
+const summary = { phases, trainingWrites, pixelReadNegativeControl: 'caught',
     viewportDestructions: 32, nativeExit: 0, captures };
 fs.writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
 console.log(JSON.stringify(summary));

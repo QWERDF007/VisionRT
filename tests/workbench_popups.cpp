@@ -538,17 +538,19 @@ void outputCellReuseContract()
           "    return {'outputs': values, 'detail': ''}\n");
     QJsonArray ports;
     for (int number = 0; number < 64; ++number)
-        ports.append(QJsonObject{{"id", 2 + number},
-            {"name_zh", "Value " + QString::number(number).rightJustified(2, '0')}, {"type", visionrt::ValueJson::encodeType(visionrt::TypeSpec{visionrt::Type::Int})}});
-    const QJsonObject definition{{"schema_version", 1},
-        {       "name_en",                                 "test.outputs"},
-        {       "name_zh",                                 "Many outputs"},
-        {       "version",                                        "1.0.0"},
-        {"implementation", QJsonObject{{"kind", 1},
-                                        {"package", "outputs"},
-                                        {"file", "outputs.py"},
-                                        {"symbol", "run"}}},
-        {       "outputs",                                             ports}
+        ports.append(QJsonObject{
+            {"id", 2 + number},
+            {"name_zh", "Value " + QString::number(number).rightJustified(2, '0')},
+            {"type", "int"}
+        });
+    const QJsonObject definition{
+        {"schema_version",                                                               2                          },
+        {       "name_en",                                                                            "test.outputs"},
+        {       "name_zh",                                                                            "Many outputs"},
+        {       "version",                                                                                   "1.0.0"},
+        {"implementation",
+         QJsonObject{{"kind", "python_function"}, {"package", "outputs"}, {"file", "outputs.py"}, {"symbol", "run"}}},
+        {       "outputs",                                                                                     ports}
     };
     write("tools/custom/outputs.json", QJsonDocument(definition).toJson());
     visionrt::AppController manyApp(1, manyDirectory.path());

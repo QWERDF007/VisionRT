@@ -4,6 +4,7 @@
 #include "core/ValueJson.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace visionrt {
 namespace {
@@ -14,7 +15,8 @@ std::string packagePath(const QJsonValue &value, const QString &context)
         throw ContractError((context + " 超出包根目录").toStdString());
     return json::pathText(path).toStdString();
 }
-}
+
+} // namespace
 
 ModuleIndex parseModuleIndexJson(const std::string &content)
 {
@@ -38,10 +40,11 @@ ModuleIndex parseModuleIndexJson(const std::string &content)
     for (const auto &value : json::array(root.value("tools"), "tools"))
     {
         const auto item = json::object(value, "tools");
-        json::fields(item, {"tool_id", "definition", "module"}, "tools");
+        json::fields(item, {"tool_id", "definition", "module", "processing_locator", "training_locator"}, "tools");
         const auto     id = json::text(item.value("tool_id"), "tools.tool_id");
         ToolIndexEntry entry;
-        entry.definition = packagePath(item.value("definition"), "tools.definition");
+        entry.definition   = packagePath(item.value("definition"), "tools.definition");
+        entry.integrations = readToolIntegrations(item);
         if (item.contains("module"))
         {
             entry.module = json::text(item.value("module"), "tools.module");
@@ -72,4 +75,4 @@ ModuleIndex parseModuleIndexFile(const std::filesystem::path &path)
         throw ContractError(json::pathText(path).toStdString() + ": " + error.what());
     }
 }
-}
+} // namespace visionrt

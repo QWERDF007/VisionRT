@@ -820,34 +820,59 @@ bool ProjectEditor::setLiteral(std::string_view flowId, NodeId id, PortId input,
     return setBinding(flowId, id, input, std::move(binding));
 }
 
-bool ProjectEditor::setLiteralBindings(std::string_view flowId, NodeId id,
-                                       std::span<const std::pair<PortId, PortValue>> values)
+bool ProjectEditor::setLiteralWrites(std::string_view flowId, NodeId id, std::span<const LiteralWrite> writes,
+                                     std::function<std::filesystem::path()> prepareTrainingAsset)
 {
     requireIdle();
-    if (values.empty())
+    if (writes.empty() && !prepareTrainingAsset)
         return false;
     ProjectEditor edit(project_);
     auto         &node = findNode(edit.flow(flowId), id);
     requireEditable(node);
     bool changed = false;
-    for (const auto &[input, value] : values)
+    for (const auto &write : writes)
     {
-        const auto &binding = inputBinding(node, input);
-        if (binding.mode == BindingMode::Upstream || effectiveSource(binding))
-            throw ContractError("该参数由上游提供：" + portLabel(input));
-        const auto &type = signature(node.signatures.inputs, input);
-        if (type.type == Type::Image)
-            throw ContractError("图像输入不能写入字面量：" + portLabel(input));
-        validateLiteral(type, value);
-        if (equalValues(binding.literal, value))
+        if (write.stage == PortStage::Init)
+        {
+            const auto found = node.initParams.find(write.port);
+            if (found == node.initParams.end())
+                throw ContractError("初始化参数不存在：" + portLabel(write.port));
+            validateLiteral(signature(node.signatures.initParams, write.port), write.value);
+            if (equalValues(found->second, write.value))
+                continue;
+            found->second = copyProjectLiteral(write.value);
+            changed       = true;
             continue;
-        auto &mutableBinding  = node.inputs.find(input)->second;
-        mutableBinding.literal = copyProjectLiteral(value);
+        }
+        if (write.stage != PortStage::Inputs)
+            throw ContractError("字面量只能写入初始化参数或输入：" + std::string(stageName(write.stage)));
+        const auto &binding = inputBinding(node, write.port);
+        if (binding.mode == BindingMode::Upstream || effectiveSource(binding))
+            throw ContractError("该参数由上游提供：" + portLabel(write.port));
+        const auto &type = signature(node.signatures.inputs, write.port);
+        if (type.type == Type::Image)
+            throw ContractError("图像输入不能写入字面量：" + portLabel(write.port));
+        validateLiteral(type, write.value);
+        if (equalValues(binding.literal, write.value))
+            continue;
+        auto &mutableBinding   = node.inputs.find(write.port)->second;
+        mutableBinding.literal = copyProjectLiteral(write.value);
         changed                = true;
+    }
+    if (!changed && !prepareTrainingAsset)
+        return false;
+    requireIncrement(node.executionRevision);
+    if (prepareTrainingAsset)
+    {
+        auto asset = prepareTrainingAsset();
+        if (node.trainingAsset != asset)
+        {
+            node.trainingAsset = std::move(asset);
+            changed            = true;
+        }
     }
     if (!changed)
         return false;
-    requireIncrement(node.executionRevision);
     ++node.executionRevision;
     commit(std::move(edit.project_));
     return true;

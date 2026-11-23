@@ -1,20 +1,20 @@
+#include "AppController_p.h"
 #include "common/Version.h"
-#include "tools/ReceiveTool.h"
-#include "log/LogService.h"
 #include "core/DefinitionJson.h"
 #include "core/ExampleProject.h"
 #include "core/NodeContracts.h"
 #include "core/Sequence.h"
 #include "core/ToolPaths.h"
-#include "runtime/Receiver.h"
-#include "tools/SelectTool.h"
-#include "AppController_p.h"
-#include "ui/AboutReport.h"
-#include "ui/DurationText.h"
-#include "ui/Diagnostics.h"
-#include "ui/UiPreferences.h"
-
+#include "log/LogService.h"
 #include "python/PythonProbe.h"
+#include "runtime/Receiver.h"
+#include "tools/ReceiveTool.h"
+#include "tools/SelectTool.h"
+#include "ui/AboutReport.h"
+#include "ui/Diagnostics.h"
+#include "ui/DurationText.h"
+#include "ui/TrainingAssets.h"
+#include "ui/UiPreferences.h"
 
 #include <core/ToolPackage.h>
 
@@ -31,8 +31,9 @@
 #include <QUrl>
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
 
 namespace visionrt {
 namespace workbench {
@@ -211,6 +212,11 @@ AppController::Impl::Impl(AppController *owner, std::size_t workers, const QStri
     QObject::connect(assist.get(), &AssistPreview::outcomeReady, owner,
                      [this](const AssistOutcome &outcome)
                      {
+                         if (pendingTraining)
+                         {
+                             completeTraining(outcome);
+                             return;
+                         }
                          if (outcome.learn)
                          {
                              applyAssistOutcome(outcome);
@@ -405,7 +411,7 @@ const PortDefinition *AppController::Impl::parameter(PortId id, bool initializat
 
 bool AppController::Impl::editingAllowed() const
 {
-    return state == RuntimeState::Idle && !presentation.draining() && !operations.active()
+    return state == RuntimeState::Idle && !pendingTraining && !presentation.draining() && !operations.active()
         && !operations.isClosing();
 }
 
@@ -496,6 +502,8 @@ void AppController::Impl::changed(bool structure)
         selected.clear();
         emit q->selectionChanged();
     }
+    if (trainingMode)
+        trainingEdited();
     refreshNodeModel();
     publishWiresChanged();
     emit q->projectChanged();
@@ -2235,17 +2243,22 @@ bool AppController::save(const QString &path)
     }
     try
     {
-        auto candidate = impl_->editor.project();
-        ProjectStorage(impl_->registry).save(candidate, destination);
+        const auto           target    = projectDestination(destination);
+        auto                 candidate = impl_->editor.project();
+        // Assets first, project JSON last: a copy that cannot carry a published revision leaves the
+        // existing project and its own files exactly as they were.
+        training::SaveAssets assets(candidate, target);
+        ProjectStorage(impl_->registry).save(candidate, target);
+        assets.accept();
         impl_->editor.replaceProject(std::move(candidate));
         impl_->synchronizeNodes();
         emit projectChanged();
         // A first save or a save-as puts the new file in the recent list; a plain Ctrl+S writes the
         // same file again and must leave the order alone.
-        if (destination != previousPath)
-            impl_->recordRecent(workbench::pathText(destination));
+        if (target != previousPath)
+            impl_->recordRecent(workbench::pathText(target));
         LogService::write(LogLevel::Info, LogSource::System,
-                          QStringLiteral("保存工程 %1").arg(workbench::pathText(destination)));
+                          QStringLiteral("保存工程 %1").arg(workbench::pathText(target)));
         return true;
     }
     catch (const std::exception &error)

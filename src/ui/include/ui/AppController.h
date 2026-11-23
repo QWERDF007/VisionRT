@@ -1,11 +1,11 @@
 #pragma once
 
-#include "ui/Export.h"
-#include "ui/UiState.h"
 #include "core/ToolDefinition.h"
-#include "runtime/RuntimeEngine.h"
 #include "python/PythonEnvironment.h"
+#include "runtime/RuntimeEngine.h"
+#include "ui/Export.h"
 #include "ui/ToolEditorController.h"
+#include "ui/UiState.h"
 
 #include <QAbstractItemModel>
 #include <QColor>
@@ -16,6 +16,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <memory>
+#include <optional>
 
 class QQuickTextDocument;
 
@@ -58,8 +59,8 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(int drawShape READ drawShape NOTIFY resultsChanged)
     Q_PROPERTY(bool trainingAvailable READ trainingAvailable NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingMode READ trainingMode WRITE setTrainingMode NOTIFY trainingChanged)
-    Q_PROPERTY(visionrt::TrainingKind trainingKind READ trainingKind NOTIFY trainingChanged)
     Q_PROPERTY(QVariantList trainingRecords READ trainingRecords NOTIFY trainingChanged)
+    Q_PROPERTY(QVariantList trainingParameters READ trainingParameters NOTIFY trainingChanged)
     Q_PROPERTY(QString selectedTrainingDraftRecord READ selectedTrainingDraftRecord NOTIFY trainingChanged)
     Q_PROPERTY(bool trainingSavable READ trainingSavable NOTIFY trainingChanged)
     Q_PROPERTY(bool canAddTrainingImage READ canAddTrainingImage NOTIFY resultsChanged)
@@ -132,20 +133,25 @@ public:
     bool                trainingAvailable() const;
     bool                trainingMode() const;
     void                setTrainingMode(bool value);
-    TrainingKind        trainingKind() const;
     QVariantList        trainingRecords() const;
     QString             selectedTrainingDraftRecord() const;
     bool                trainingDirty() const;
     bool                trainingSavable() const;
     bool                canAddTrainingImage() const;
-    // Adds the image currently presented by the main viewport to the selected tool's training set.
-    // It writes the picture beside the asset and switches to the training view with the new record.
+    // Copies the declared original frame into the in-memory draft and opens its training record.
     Q_INVOKABLE bool    addTrainingImage();
     Q_INVOKABLE void    selectTrainingDraftRecord(const QString &id);
     Q_INVOKABLE void    removeTrainingDraftRecord(const QString &id);
-    Q_INVOKABLE void    setTrainingLabel(const QString &id, const QString &label);
-    // Commits the edited records to the tool's asset and reloads the node, so the next run rebuilds
-    // the model from exactly what the window shows.
+    // The typed value of one declared field. QML binds a control to the field number the
+    // declaration publishes, so a renamed field keeps the same value.
+    Q_INVOKABLE bool         setTrainingField(const QString &id, int field, const QVariant &value);
+    // Typed values the declaration offers beside the records. They belong to the draft and are
+    // published only through the trainer's declared writes.
+    QVariantList             trainingParameters() const;
+    Q_INVOKABLE bool         setTrainingParameter(int id, const QVariant &value);
+    // Runs the declared trainer over the draft. A successful result is published as one asset
+    // revision plus one transaction of node parameters and model references; a failure keeps the
+    // draft and every previous result untouched.
     Q_INVOKABLE void    applyTraining();
     int                 activeRoiParameter() const;
     bool                shapeToolsAvailable() const;

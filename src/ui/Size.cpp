@@ -24,14 +24,20 @@ VisionRTSize::VisionRTSize(QObject *parent)
     ButtonSize(32);
     IconButtonSize(28);
     IconSize(20);
+    SmallIconButtonSize(16);
+    SmallIconSize(12);
     SeparatorSize(32);
     ContentSize(32);
+    SmallContentSize(20);
     NodeWidth(160);
     NodeHeight(60);
     NodeTooltipWidth(240);
     ThumbnailWidth(140);
     ThumbnailHeight(60);
+    ThumbnailHorizontalMargin(10);
+    ScrollBarWidth(8);
     ParamLabelWidth(120);
+    Spacing(5);
     NavbarWidth(160);
 }
 

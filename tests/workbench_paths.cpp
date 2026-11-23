@@ -78,7 +78,7 @@ void pathEditorsContract()
   "name_zh": "路径测试",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "Test",
     "file": "run.py",
     "symbol": "run"
@@ -86,31 +86,25 @@ void pathEditorsContract()
   "inputs": [
     {
       "name_zh": "文件",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "original file",
       "ui": {
-        "editor": 6
+        "editor": "path"
       },
       "id": 1
     },
     {
       "name_zh": "目录",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "original folder",
       "ui": {
-        "editor": 6
+        "editor": "path"
       },
       "id": 2
     },
     {
       "name_zh": "模式",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "file",
       "constraints": {
         "options": [
@@ -122,12 +116,10 @@ void pathEditorsContract()
     },
     {
       "name_zh": "动态路径",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "default": "original path",
       "ui": {
-        "editor": 6
+        "editor": "path"
       },
       "id": 4
     }
@@ -135,13 +127,11 @@ void pathEditorsContract()
   "outputs": [
     {
       "name_zh": "模式输出",
-      "type": {
-        "type": 3
-      },
+      "type": "string",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     const QString nested = QStringLiteral("测试 空格/") + QString(40, 'a') + "/" + QString(40, 'b');
     const QString folderName = QStringLiteral("选择的目录 # %");

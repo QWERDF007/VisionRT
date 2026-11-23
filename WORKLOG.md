@@ -30,6 +30,455 @@
 - ...
 -->
 
+### 2026-11-23 — 整理全部修改并清理方案跟踪
+
+**目标**
+- 提交并推送全部现有修改，仓库不再跟踪 docs 下的方案包。
+
+**当前状态**
+- 已整理工作台样式、尺寸、缩略图、参数和训练交互相关修改，验证入口沿用下面的日志。
+- 删除已跟踪的 EasyTouch 实施方案和 easytouch-training 方案包，加入忽略规则；docs/README.md 保留源码与测试索引并清除失效链接。
+- origin/dev 与本地比较为落后 2 个未推送提交；将这些未推送内容和当前改动统一提交，避免方案经未推送历史发布。
+
+**验证证据**
+- `git fetch origin` 成功，远端不存在需要合并的新提交；子模块工作树均无修改。
+- 代码编译、定向回归和实际截图证据见本条之后的相关日志；本轮仅调整文档与提交范围。
+- 提交前检查索引、忽略规则、认知索引与工作树状态，推送后以 HEAD 和 origin/dev 的身份核对交付。
+
+**下一步**
+- 以 `git log -1`、`git status --short` 和 `git ls-remote origin refs/heads/dev` 核对最新交付；业务实现和验证入口从 docs/README.md 进入。
+
+### 2026-11-23 — 图片卡片水平留白与工作台滚动条统一
+
+**目标**
+- 处理和训练卡片相对整个列表居中，左右边距 10，上下边距保持不变；工作台滚动条统一宽度并贴边。
+
+**当前状态**
+- 新增 ThumbnailHorizontalMargin 属性；卡片相对整个列表左右各留白并居中，顶部、底部和记录间距继续使用 Spacing。
+- WorkbenchScrollBar 复用 QuiScrollBar，厚度绑定 ScrollBarWidth，默认 8；竖向贴右侧、横向贴底部。图片列表的滚动条位于右侧 10 的留白内。
+- 参数区、流程列表、图像工具栏、日志、关于窗口、表达式编辑器、工具树和输出表共用该样式；日志和弹窗滚动容器也统一接入，内容为滚动条预留空间。
+- 列表项内部安排卡片留白，避免 ListView 重新定位委托覆盖横向位置；处理缩略图显式传递索引。
+
+**验证证据**
+- 编译 VisionRT 及训练、参数、输出、弹窗、表达式、工具树相关工作台目标成功。
+- 七项定向回归最终均通过，见 build/evidence/scrollbar-style-tests.xml 和 scrollbar-training-retry.xml；训练操作首次遇到临时目录 rename 拒绝，单项复验通过，未添加运行时回退逻辑。此前委托索引问题已修正并通过两项训练回归，见 thumbnail-margins-tests.xml。
+- build/evidence/thumbnail-margins-1.png、thumbnail-margins-3.png 已确认普通工具、训练记录的实际边距和滚动条位置。
+- `git diff --check` 通过。
+
+**下一步**
+- 本轮开发与验证完成，运行入口为 build/bin/VisionRT.exe。
+
+### 2026-11-23 — 图像侧栏总宽统一
+
+**目标**
+- 图像侧栏整组保持同宽，普通工具将页签栏空出的宽度用于图片列表。
+
+**当前状态**
+- ResultsPanel 从 ThumbnailWidth 和 BarSize 派生图片列表宽度；有训练能力时保留页签栏，普通工具扩宽图片列表，整组宽度相同。
+- 保留当前 Size 属性设置；既有文档索引继续指向 ResultsPanel 和 Size 源码。
+
+**验证证据**
+- 编译 VisionRT、workbench_training_contract 成功；workbench_training_contract 通过，见 build/evidence/image-panel-width-tests.xml。
+- 实际应用分别选择普通读图节点和可训练直边节点运行并截图，build/evidence/image-panel-width-1.png、image-panel-width-2.png 确认两种整组宽度均为 212，右侧工具栏与大图起点一致。
+- 用户原始两张截图的蓝色边框均测得 113；此前差异来自额外的页签栏，而非图片列表自身宽度。
+- `git diff --check` 通过。
+
+**下一步**
+- 本轮开发与验证完成，运行入口为 build/bin/VisionRT.exe。
+
+### 2026-11-23 — 训练记录序号与滚动条布局
+
+**目标**
+- 将训练记录序号放在编辑框下方，避免滚动条遮挡内容，并调整 Close 按钮状态颜色。
+
+**当前状态**
+- 共享缩略图卡片支持可选记录详情，序号位于详情下方；没有记录字段时仍位于图片下方。
+- 处理和训练列表均按实际滚动条宽度及 Spacing 预留独立占位，图片和编辑框不进入滚动条区域。
+- Close 按钮正常、悬浮和按下时背景均透明，悬浮时图标使用 Highlight；尺寸仍绑定 SmallIconSize 和 SmallIconButtonSize，保留当前源码设置。
+- 训练记录编辑框高度绑定新增 SmallContentSize，默认 24；字体使用 QuiFont.Caption，文字颜色不变。TrainingValueEditor 公开字体属性，下方训练参数保持原有 ContentSize 和 Body；主题与字体源码已加入文档索引。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --target VisionRT workbench_training_contract workbench_training_publish_contract -j 8` 成功，用户关闭占用 DLL 的应用后链接正常。
+- 两项工作台训练契约通过，见 build/evidence/thumbnail-record-layout-tests.xml。
+- build/bin/VisionRT.exe 加载随包识色工程运行并截图，build/evidence/thumbnail-record-layout.png 已确认序号在编辑框下方、滚动条有独立占位、Close 背景透明。悬浮着色已核对属性绑定，未取得真实悬浮截图。
+- `git diff --check` 通过。
+
+**下一步**
+- 本轮开发及上述验证完成，运行入口为 build/bin/VisionRT.exe。
+
+### 2026-11-23 — 缩略图与训练操作样式统一
+
+**目标**
+- 统一处理和训练缩略图的内边距、选中边框与序号位置，并将工具图标和训练按钮尺寸绑定到 C++ 属性。
+
+**当前状态**
+- 两页复用 ResultsThumbnailCard，图像容器内边距使用 Spacing，序号位于图像边框下方；训练记录字段在卡片下方保留编辑。
+- WorkbenchActionButton 的图标绑定 IconSize；训练 Close 按钮使用 SmallIconButtonSize 和 SmallIconSize，默认分别为 20 和 16。
+- 应用训练数据高度绑定 ButtonSize，底栏高度和左右留白与加入训练共用 BarSize、Spacing。
+- 文档索引指向共享卡片源码；没有新增样式常量测试、兼容分支或业务参数副本。
+
+**验证证据**
+- `tools/build.cmd cmake --build build --target VisionRT workbench_training_contract workbench_training_publish_contract -j 8` 成功。
+- `ctest --test-dir build -R '^(workbench_training_contract|workbench_training_publish_contract)$' --output-on-failure --output-junit build/evidence/thumbnail-layout-tests.xml` 两项通过，包含真实工作台交互、训练、发布与重开。
+- build/bin/VisionRT.exe 加载随包线缆工程运行并截图：build/evidence/thumbnail-processing.png、thumbnail-training.png、thumbnail-training-fields.png，已目视确认两页布局和带标签的多条训练记录。
+- 桌面控制接口连接原生管道失败；截图使用应用既有命令行入口生成，交互验证由上述 Qt 工作台契约完成。
+- `git diff --check` 通过。
+
+**下一步**
+- 本轮开发与验证已完成，运行入口为 build/bin/VisionRT.exe；后续缩略图样式从共享卡片和 Size 属性修改。
+
+### 2026-11-23 — 图像区职责与训练参数统一
+
+**目标**
+- 修正竖排页签选中线，清除图像区的重复参数，并核对大图显示所有权。
+
+**当前状态**
+- 横排和竖排页签共用 WorkbenchTabButton，选中线分别在下方和右侧，分隔线保持灰色。
+- 直边训练直接引用既有业务 inputs；删除四份同名训练参数定义。定位建议一次写入已有参数，最低完整度保持用户设置，没有旧字段兼容分支。
+- 算法参数集中到下方参数区；训练列表仅显示缩略图、记录字段、序号、删除及应用。真正仅供训练的参数也位于下方参数区。
+- ResultPresentation 在让出视口时使排队转换失效并清除处理叠加；返回处理后恢复当前结果，参数编辑同时使旧训练拟合失效。
+- VisionTools 已提交 9ad87f8；宿主交付目录仍为 build/evidence/easytouch-candidate，最终身份与环境证据使用 build/evidence/image-area-release.json。
+
+**验证证据**
+- workbench_training_contract 先捕获旧 ROI 污染训练图，presentation_visibility_contract 先捕获排队转换覆盖训练原图；修正后均通过。
+- 8 项相关契约通过，见 build/evidence/image-area-tests.xml；集中展示所有权后 3 项再次通过，见 image-area-owner-tests.xml；页签最终布局的真实工作台 2 项通过，见 image-area-ui-final.xml。
+- 真实直边训练中，下方对比度 900 导致训练拒绝，恢复点选建议后成功；手工与点选共用输入，最低完整度 0.6 未被覆盖。
+- 已安装应用的处理、训练窗口以及未配置和明确配置 Python 均通过；截图为 build/evidence/candidate-processing.png 与 candidate-training.png。训练专用字段在下方编辑、图像区无参数控件由发布契约验证。
+- 27 工具包以已提交 VisionTools 身份通过真实宿主校验器，见 build/image-area-tools-package-final.log。
+
+**下一步**
+- 从 docs/easytouch-training/spec.md 的 S3 和源码索引扩展图像区，业务参数始终复用已有端口；运行证据保留在上述机器文件。
+
+### 2026-11-22 — 三仓声明、参数定位与训练发布收口
+
+**目标**
+- 统一工具声明，隔离宿主交互与算法输入，交付内存草稿、显式发布和安装验收。
+
+**当前状态**
+- 已替换总方案、产品规格及 10 张依赖票；旧票据删除，历史实验保留来源。
+- Contracts v2 使用语义枚举和精确数值；27 份工具声明已迁移。定位算法只接收原图、搜索区域、标称几何和对齐，宿主负责替换、追加和完整参数事务。
+- 包级与自定义交互登记共用 ToolIntegrations 编解码；自定义工具克隆、保存和重载保留登记，业务 JSON 不含点选字段。
+- 草稿驻内存；训练在有界后台通道运行，验证输出后由 RAII Revision 准备完整资产，再提交一次工程引用。已修正鼠标离开误取消训练、共享 ROI 批次展开和训练参数类型绑定。
+- 已删除旧示例训练 JSON、重复原图、种子生成器及只供测试调用的控制器接口。
+- 隐藏工具统一为 internal、定位算法统一为 Locate，未保留旧接口别名或旧版本读写。圆建议同时提交搜索半宽和实际使用的平滑标准差，已用正式测量验证。
+- 训练无默认参数保持未设置，清单中的 null 明确拒绝；先红后绿回归覆盖未设置与明确 0、空串的区别。动态合流图像通过有效节点契约取得输出声明。
+- Contracts 8eb2603 的两副本相同，VisionTools 已提交 2fd1610。功能与安装验收完成；父仓身份及实际加载文件见 build/evidence/installed-acceptance-final.json，认知对齐状态以 AOCI 终态收据为准。
+- 训练参数在窄栏中改为标签与输入纵向排列，保留现有画布和应用入口；真实窗口回归与安装截图确认所有输入均可读写。
+- 未发布训练节点可通过原有业务参数选择已有模型；发布后路径由修订派生。示例移除被修订覆盖的冗余路径。
+
+**验证证据**
+- 新增回归先复现共享 ROI 丢失、自定义登记丢失及训练取消丢失完成三个问题；修正后 custom_tool_store、tool_discovery、tool_editor_controller、workbench_assist、workbench_training_publish 定向通过。
+- 完整宿主 121 项已执行，含 RTX 4060 的 3 项 GPU 契约；初次 7 项失败已修正并全部复验通过，见 build/final-host-tests.log 与 build/evidence/easytouch-corrections.xml。SDK 隔离安装需经 tools/build.cmd 继承编译环境。
+- training_session_contract 通过无默认参数及 null 拒绝回归；example_pipelines_contract 通过真实示例和数值输出取证。VisionTools 全部 21 项获得通过证据，含单独补跑的真实引擎追踪；圆调整后 6 项相关测试通过。
+- node tools/verify_ui_notifications.cjs build 通过；build/ui-notification-probe/summary.json 记录草稿、成功发布、非法结果及上游绑定拒绝的实际 Revision 构造调用次数 0/1/0/0；文件事件同样证明草稿与拒绝零写入。空闲 106 次、运行 107 次轮询均零重复通知，像素负对照被捕获，32 次视口析构正常。
+- color_training_contract 已验证真实模型消费和重开；27 工具包已按已提交的 VisionTools 与 Contracts 重建，并通过宿主包验证。
+- 最终相关 12 项复验全过，见 build/evidence/easytouch-related-final.xml。训练栏裁切经安装截图复核；临时尺寸探针已移除，保留真实操作验收。
+- 独立候选安装的 11 示例逐项签收：10 个正常、1 个预期诊断；真实 DLL 路径、SHA-256、ABI 11 和逐节点输出记录在 build/evidence/installed-acceptance-final.json。线缆姿态、两条边、五色、分数和比例均保留；诊断例确实报告缺少模型，而非缺 DLL。
+- RTX 4060 上候选工具包从 WTS 建引擎耗时 184 秒，并再次加载引擎；5 个检测匹配独立参考，下游保留 4 个，原始证据 build/evidence/installed-gpu-build.log。已安装应用的处理/训练视图及未配置、明确配置 Python 两种启动均通过，截图与环境报告位于 build/evidence/candidate-*。
+- workbench_training_publish_contract 先复现未发布节点模型参数隐藏，修正后普通模型初始化、发布和重开通过；示例去冗余路径后同样通过，见 build/evidence/model-parameter-final.xml。
+
+**下一步**
+- 后续扩展从 docs/easytouch-training/spec.md 和相关票据进入；实际测试入口见 evidence.md，避免恢复旧方案或创建业务专用宿主分支。
+- 交付目录为 build/evidence/easytouch-candidate；提交后的构建身份与安装签收写回同一机器证据文件，不在方案与票据复制运行状态。
+
+### 2026-11-22 — 票09 工作台接线、示例迁移与贯通契约
+
+**目标**
+- 收尾票 09：把训练声明接进识色工具包，让工作台草稿真的走到 `TrainColorModel`，并把随包线缆示例迁到发布资产。
+
+**当前状态**
+- 已完成（Contracts）：训练声明提交为 `e34eaf8` 并同步进 VisionTools 子模块，`识别颜色.json` 由此接线 `training.call`（TrainColorModel，上下文 TrainingSet + 字段 1/2）与 `artifacts`（`color-model` → 初始化参数 1）。
+- 已完成：新增 `color_training_contract`，从工具包读真实声明校验训练器端口/字段编号，再用 `TrainingSession` 组草稿交给真实训练器，确认返回识色节点可解码的模型字节，空草稿被明确拒绝。
+- 已完成：随包线缆示例生成 `识别线缆颜色.assets/training/3/1`（5 条记录、1 张原图、305 字节模型），工程改用 `training_asset` 与 init 0/1；生成器 `tests/seed_example_training.cpp` 不是契约，无 CTest 条目。
+- 已完成：修复另存为后草稿被丢弃的缺陷——`ensureTrainingSession` 在资产路径随工程移动时保留未应用草稿（`TrainingSession::setAsset` 对脏草稿只换路径）。
+- 已完成：`build/bin/tools-package` 用 `package_tools.py --profile rtx40-build` 重打为 26 个工具（含 `TrainColorModel`），旧包移到 `F:\tmp\tools-package-25`。
+
+**验证证据**
+- `ctest -R '^(definition_json_contract|project_storage_contract|training_session_contract|workbench_training_contract|workbench_training_publish_contract|color_training_contract|example_metadata_contract|example_project_contract|example_pipelines_contract|tool_discovery_contract|installed_pipeline_contract|cpu_tools_contract)$'` 全部通过。
+- `workbench_training_contract` 现在跑在已发布示例上：加载 5 条记录、手绘新增矩形、应用失败保留草稿、修正后发布成功。
+- `example_pipelines_contract` 按安装形态执行线缆示例，无 LOAD DIAGNOSTIC。
+- 校验器 `visionrt_validate_tool` 对两份声明均返回 Valid；`--emit-normalized-json` 回写训练块与源一致。
+
+**下一步**
+- 票 10：直边训练器与 `通过直边确定对齐.json` 的 `training.call/artifacts`，复用本票的模型产物与发布路径；11 待 10；14 复验安装形态。
+
+### 2026-11-22 — 票09 工具侧：颜色训练器与模型加载
+
+**目标**
+- 推进票 09 的 VisionTools 部分：真实训练器从工作台训练集建模，识色节点只加载版本化模型，为工作台声明接线做准备。
+
+**当前状态**
+- 已完成（VisionTools）：`ColorModel` 支持从像素样本训练与版本化字节往返；新增隐藏 `TrainColorModel`，矩形/圆/多边形统一掩膜、同名跨图聚合、8 位限制有诊断；`RecognizeColor` 新增初始化参数 1 为模型路径，只解码，缺失/损坏分别报错。
+- 已完成（VisionTools）：新工具注册进 recognition 模块与 `package_catalog`，`识别颜色.json` 的初始化端口改名为“颜色模型路径”。
+- 未完成：`识别颜色.json` 的 `training.call/artifacts`、VisionRT 工作台发布与 A6 验收、随包示例模型。VisionRT 的 Contracts 训练声明改动未提交，VisionTools 子模块仍指向 f1f6783，无法解析新字段；本仓未同步新 DLL 到 `build/bin/tools-package`，避免旧示例提前失效。
+
+**验证证据**
+- VisionTools `test_recognition_contract` 通过：四类样本、矩形/多边形/圆、第二张图同名标签、模型类别数 4、字节往返一致、五工位标签与 unknown/批量顺序不变、损坏与截断模型被拒、空训练集与 16 位图诊断。
+- VisionTools `test_package` 3/3、`test_module_contract`、`test_geometry_contract` 通过。
+- 未验证：工作台端到端训练与发布（阻塞于 Contracts 同步）。
+
+**下一步**
+- 提交并同步 Contracts 的 `training.call/artifacts` 后，给 `识别颜色.json` 接线；票 10/11 复用同一模型产物与训练器模式。
+
+### 2026-11-22 — 票12 工程旁资产与另存重开
+
+**目标**
+- 按 `docs/easytouch-training/issues/12-portable-assets.md` 让已命名工程的训练结果放在工程旁，节点只保存一个相对引用；另存复制已发布的 revision，源工程移走后副本仍能运行并继续训练。
+
+**当前状态**
+- 已完成：`NodeDefinition` 新增 `trainingAsset`；`ProjectStorage` 写盘时相对工程目录、读盘时解析为绝对目录，格式仍是 8，未发布节点没有该字段。
+- 已完成：`ProjectEditor::setLiteralWrites` 可同时提交训练参数与 revision 引用，仍是一次执行修订；`nodeParameters` 从引用读 manifest，把产物目标端口物化为 revision 内的模型路径，缺失/损坏/版本不符时报告“训练资产缺失/损坏”，不回退旧路径。
+- 已完成：发布目录由 `TrainingAssets` 统一定义（已命名工程 `<工程名>.assets/training/<节点>/<revision>`，未命名与安装示例仍用工作区）；清单内图片与模型改为 revision 内相对路径。
+- 已完成：保存先经 `TrainingAssets::prepareForSave` 复制被引用的完整 revision 并改写引用，再由 `QSaveFile` 提交工程；目标已有同号 revision 时取下一个空号，复制失败不写工程。保存不发布未应用草稿。
+- 已完成：参数面板不再列出由引用派生的 `asset_param` 与产物目标端口，避免编辑一个会被物化值覆盖的路径。
+- 未完成：颜色/直边真实训练器与产线声明（票 09/10）；旧布局工程（未声明 `call`）仍按 init 路径读取，14 收口。
+
+**验证证据**
+- `ctest -R '^project_storage_contract$'` 通过：新增 `trainingAssets` 覆盖相对引用往返、加载解析、init 7 得到 revision 内模型路径、清单缺失报“训练资产缺失”。
+- `ctest -R '^workbench_training_publish_contract$'` 通过：命名工程发布到 `<工程名>.assets`，工程 JSON 只含相对 `training_asset`，模型字节未被改写；训练器失败保留草稿与旧 revision；重试发布 revision 2；另存后移走源工程与源资产树，开副本仍恢复参数/记录并以副本模型初始化；目标 `.assets` 被文件占用时保存被拒且不写工程文件。
+- 回归 `training_session_contract`、`workbench_training_contract`、`workbench_assist_contract`、`workbench_authoring_contract`、`definition_json_contract`、`project_editor_contract`、`example_project_contract` 全部通过；`VisionRT` 应用链接通过。
+- 未验证：安装示例（只读目录）发布到工作区后的另存行为，留票 14 的安装验收。
+
+**下一步**
+- 票 09/10：为识色与直边补真实训练器、模型读写和产线 `training.call/artifacts` 声明；随包示例的 init 端口与模型在 14 一并更新。
+
+### 2026-11-22 — 票08 训练器调用与一次发布
+
+**目标**
+- 按 `docs/easytouch-training/issues/08-apply-publication.md` 让“应用训练数据”调用声明的训练器，成功时先写完整资产 revision，再用一次事务提交训练参数、产物引用与资产引用；失败保留草稿与旧结果。
+
+**当前状态**
+- 已完成：Contracts `TrainingSpec` 新增 `call` / `parameters` / `writes` / `artifacts`，`AuthoringInput` 支持 `literal`（带类型）、`field_id`、`parameter`；宿主校验参数与端口、字段/参数引用、产物目标必须是 init String。
+- 已完成：`TrainingSession` 持有类型化训练参数（默认值、上下限、控件），清单升级为 schema 3（类型化记录、参数、原图、产物索引），原图按行/列/类型/色彩顺序与 Base64 保存；schema 2 仍可读，缺失文件给出诊断。
+- 已完成：应用路径按普通工具生命周期创建/初始化/执行验证训练器；成功后写 `training/<工程>-<节点>-<工具>/<revision>/`（manifest、images、models），暂存目录整体提升，再用 `setLiteralWrites` 一次写入声明的目标、产物路径与 `asset_param`，不再 `reloadNode`；训练器失败或提交被拒时删除本次 revision。
+- 已完成：QML 在记录列表上方渲染训练参数；未声明 `call` 的工具保留旧数据格式写入（09/10 补训练器，14 删除 `TrainingKind`）。
+- 未完成：颜色/直边训练器与真实产线声明（票 09/10）；工程旁资产树与另存复制（票 12）。
+
+**验证证据**
+- 新增 `workbench_training_publish_contract` 通过：真实工具包 + 探针模块里 `ProbeTrainable` 声明非零 init 7 为模型目标、`ProbeFit` 返回 `PROBEMODEL`；应用后 init 9 写入 46、input 24 写入拟合说明、init 0/7 指向存在的清单与模型，模型字节未被改写，清单 schema 3 且参数 41，revision 恰为 1，`projectChanged` 恰一次；训练器按样本返回失败时草稿保留、参数与 revision 不变、旧模型仍在；改回标签再点同一按钮发布 revision 2；重开工程后训练参数仍为 41。
+- `ctest -R '^(training_session_contract|workbench_training_contract|workbench_assist_contract|workbench_authoring_contract|definition_json_contract|project_editor_contract|workbench_training_publish_contract)$'` 7/7 通过。
+- 编译期发现并修正：`TrainingSpec` 的值成员没有相等语义，改为按参数形状比较；构建在沙箱内多次被安全策略拦截，改用 `ninja -C build -j 2` 逐目标编译。
+
+**下一步**
+- 票 09：在 VisionTools 增加 `TrainColorModel`，识色声明补 `training.call/parameters/artifacts`，删除初始化重训。
+- 待查：训练页打开时应用，工作台仍会再发一次 `projectChanged`（发布契约在没有 QML 窗口时断言一次事务）；需要在 09 的界面验收里确认它是否伴随真实写入。
+- 旧数据格式写入与 `TrainingKind` 在 14 统一删除。
+
+### 2026-11-22 — 票07 训练从声明取帧并留在内存草稿
+
+**目标**
+- 按 `docs/easytouch-training/issues/07-memory-training.md` 让“加入训练”从 `training.image` 的发布值按批次索引取原始像素，训练页只在内存编辑，应用前不写盘、不改工程。
+
+**当前状态**
+- 已完成：`TrainingSpec` 增加 `image` 与 `records`（max、字段编号/名称/类型、唯一画布 ROI 字段、矩形上下限）；Contracts 读写与宿主 `validateToolDefinition` 用同一规则校验。两个产线训练工具补全声明。
+- 已完成：`TrainingSession` 改为内存草稿：图像表保存 `cv::Mat` 深拷贝、`ColorOrder` 与缩略图；记录按字段编号存 `TrainingFieldValue`；同帧多次加入共享一个图像条目；`trainingSet()` 生成按编号索引的 `DataRef<TrainingSet>`。加入/编辑/删除不触盘。
+- 已完成：宿主从 `training.image` 的 `resolvedInput` 按 `imageIndex` 取帧，来源身份是发布批次 owner + 索引；加入训练不再调用 `ensureTrainingAsset`，应用成功后才回写 `asset_param`。
+- 已完成：QML 按 `fields[].editor` 渲染文本/数字/开关，画布字段由 `roi` 标记；不再引用 `TrainingKind`、颜色标签名或直边工具身份。
+- 已完成：记录切换后迟到的点选预览按 `context.trainingRecord` 丢弃；删除节点释放草稿。
+- 未完成：应用仍写旧 JSON + PNG（票 08 改为训练器调用与版本化资产）；`training.call`/`parameters`/`artifacts` 未进声明。
+
+**验证证据**
+- `training_session_contract` 通过：16UC3 原图经 `addImage` 后类型、颜色顺序与像素值保持，修改源矩阵不影响草稿；同帧两次加入为 1 图 2 记录；字段改名/改号后写入仍到对应编号；加入与编辑期间临时目录始终为空；`trainingSet` 携带原图与类型化字段；旧资产保存/重开后记录与图组一致；直边 `max=1`、矩形上下限 2/2、同尺寸换图保留参考边、异尺寸清空。
+- `workbench_training_contract` 通过：真实工具包下切页/换节点保留未应用草稿；第一条边可编辑但不满足应用资格；手动框选、加入训练、保存/另存前后工程目录逐文件一致，宿主 `training/` 工作区未被创建，`parameters`/`dirty` 不变；运行中训练只读；删除节点后训练视图与草稿释放；`ProbeTrainer` 通过模块边界实际收到 `TrainingSet` 的原图尺寸与 `f<id>=edited-purple`、`roi` 字段。
+- `ctest -R '^(definition_json_contract|tools_package_contract|validator_cli_contract|tool_discovery_contract|project_editor_contract|training_session_contract|workbench_assist_release_contract|workbench_assist_contract|workbench_authoring_contract|workbench_training_contract)$'` 10/10 通过。
+
+**下一步**
+- 票 08：把草稿交给 `training.call` 声明的训练器，成功后才创建资产目录并更新节点引用；失败留在训练页。
+- 票 12：无损原图与可移植资产目录；本票的 PNG 重编码只是旧格式过渡。
+
+### 2026-11-21 — 票04 Python 训练器持有训练集子视图
+
+**目标**
+- 按 `docs/easytouch-training/issues/04-python-training-set.md` 让 Python 训练器在选定解释器里读到按 id 索引的原图与字段，返回后保留的 NumPy 切片仍可读。
+
+**当前状态**
+- 已完成：`PythonInterop.cpp` 新增 `trainingView`，把 `DataRef<TrainingSet>` 转成 `images` / `records` 两个按声明编号索引的字典；每帧用 `python::imageViews` 包成 ndarray，capsule 持有训练集 owner；`color_order` 作为像素旁的整数元数据；字段复用 `arrayToPython` 与 ROI 编码。
+- 已完成：训练器端口可以在声明里命名训练集。`DeclarationValue.cpp` 与宿主 `ValueJson.cpp` 的类型编码上限从 `Type::ROI` 放开到 `Type::TrainingSet`；工程值仍不序列化训练集。
+- 已完成：`fromPython` 继续拒绝从 Python 构造训练集，训练集只由工作台单向提供。
+- 未完成：训练页还未产出训练集（票 07 的内存草稿），当前由测试直接构造 `DataRef<TrainingSet>` 驱动。
+
+**验证证据**
+- `python_value_contract` 通过，含新增 `trainingViews`：id 7/3/4 作为字典键；3 通道 uint8 ndarray 形状 4x5x3；`color_order` 为 BGR；字段字符串、12.5 与 ROI 编码正确；改写 ndarray 落到训练集矩阵；清空字典并释放父 `DataRef` 后同一指针仍读到 99/20。
+- `python_tools_execution_test` 通过，含新增 `test.training.view` 训练器：真实解释器执行，第一次调用读到 `shape=4,5,3` 并保留 `image[1:, 1:]`；释放父训练集后第二次调用仍返回 `kept=396`（来自旧帧的 10/11/12 三通道），证明 owner 链而非列表位置在保活。
+- `ctest -R '^(python_value_contract|python_tools_execution_test|python_adapter_contract|python_loading_contract|python_shutdown_contract|python_probe_contract|definition_json_contract|project_editor_contract|project_storage_contract|tools_package_contract|tool_discovery_contract|workbench_assist_contract|workbench_authoring_contract)$'` 13/13 通过；`project_storage_contract` 首轮 SegFault 是陈旧二进制，重编即消。
+
+**下一步**
+- 票 07（内存训练草稿）把训练页的原始帧与记录按 `authoring.training` 声明组装成 `TrainingSet`，交给本票的视图。
+- Python 训练集视图的关闭等待没有单独用例，若 07/08 引入长驻训练器会话再补。
+
+### 2026-11-21 — 票06 行间距声明点选与追加语义收口
+
+**目标**
+- 按 `docs/easytouch-training/issues/06-row-spacing-pick.md` 把 `MeasureRowSpacing` 迁到 `authoring.easy_touch`，让 `PickRowSpacing` 支持追加并返回完整矩形组，验证一次点击写 ROI、极性、宽度下限与上限四个目标。
+
+**当前状态**
+- 已完成：`行间距智能点选.json` 新增 inputs.7 追加意图；`行间距测量.json` 删除 `interaction`，改为 `authoring.version=1`，writes 按 outputs.3/6/7/8 写 inputs.2/6/7/8。
+- 已完成：`assistRowSpacing` 在 append 时保留矩形种子并追加新带，新增 `toCurrentRectangle` 做参考坐标到当前帧的预览变换；非矩形种子跳过而不是让整次点击失败。
+- 已完成：收口追加语义。`applyAuthoringOutcome` 在 append 时只写 ROI 目标，跳过极性/宽度等共享参数；被跳过的建议与当前值不同时写"追加点击保留当前共享参数"日志。票 05 时追加会覆盖共享参数，只是测试里的建议值恰好相同才通过，这次改成真正不写。
+- 未完成：训练作用域（07/08）与直边点选（10/11）仍走旧声明。
+
+**验证证据**
+- VisionTools `test_geometry_contract` 通过，新增 `assistRowAppend`：2 倍相似变换下种子矩形保持在参考坐标（宽 8）、预览为当前坐标（宽 16），点击带追加为第二个矩形；去掉 append 后同一次点击只返回 1 个。
+- `workbench_assist_contract` 通过（真实条带图 + 真实 PickRowSpacing + 新声明）：先把极性设为 `dark`、宽度范围设为 50–60，单击后三个参数都被建议值覆盖且 ROI 落为矩形；Ctrl 追加第二组后三参数逐一保持不变，保存后所选图像上有两个矩形；同一条测试前段的圆测量定向回归通过。
+- `ctest -R '^(workbench_assist_contract|workbench_authoring_contract|workbench_training_contract|workbench_assist_release_contract|definition_json_contract|project_editor_contract|tools_package_contract|tool_discovery_contract|cpu_tools_contract|validator_cli_contract)$'` 10/10 通过。
+- VisionTools `test_package`、`test_package_payload`、`test_package_profile` 保持通过；`vst_metrology.dll` 与两份行间距声明已同步到 `build/bin/tools-package` 与 `build/tools-package`。
+
+**下一步**
+- 票 07（把声明指定的原始帧加入内存草稿）或票 04（Python 训练集视图），两者互不阻塞。
+- 追加后按完整组重估共享参数需要助手拿到整组测量结果，留到 11 的直边训练集一并设计。
+
+### 2026-11-21 — 票05 圆测量一次点击提交完整配置
+
+**目标**
+- 按 `docs/easytouch-training/issues/05-circle-pick.md` 把产线 `MeasureCircle` 的旧 `interaction` 迁到 `authoring.easy_touch`，并让 `PickCircle` 按追加意图返回完整圆组，验证 A1/A2。
+
+**当前状态**
+- 已完成：`圆智能点选.json` 新增 `inputs.7` 追加意图（bool，默认 false）；`圆测量.json` 删除 `interaction`，改为 `authoring.version=1`，image 取 inputs.1，call 映射 inputs.1/2/3 与 cursor/phase/append 上下文，writes 按 outputs.3/7/6 写 inputs.2/5/9。
+- 已完成：`AssistRequest` 增加 `append`；`assistCircle` 在 append 时保留全部圆种子并把新圆追加在后，preview 输出当前坐标、proposal 输出参考坐标；append 时不再把第一个种子当作新目标的标称几何（否则追加会精测到已有圆）。
+- 已完成：修复迁移后暴露的两个真实缺陷。其一，声明路径把整个 ROI 参数（含其他图像组）交给单图助手，切图后助手拿另一帧的圆当标称几何，现按 `context.imageIndex` 取当前图组（共享组只在第 0 图作为待替换种子），并按 `nearCursor` 只保留光标邻域记录；对齐矩阵按图切片。其二，提交时只把新组放到当前图、丢掉其余组，现从参数现有组复制后再放置，切图不再清空前一帧的圆。
+- 已完成：写目标接上游时不再让整个点选不可用。悬停保持可用（不写入），点击在请求阶段同步拒绝并指出端口，`applyAuthoringOutcome` 仍兜底整组拒绝；这与旧 `interaction` 路径的“可预览、不可提交”一致。
+- 已完成：修正 VisionTools 打包测试对校验器措辞的硬绑定（`重复成员` → `重复(成员|字段)`），此失败由早前 Contracts 声明下沉提交的措辞变更引起，与票 05 无关。
+- 未完成：行间距（票 06）与训练作用域（07/08）仍走旧声明，双读期按 14 收口。
+
+**验证证据**
+- 注意取数口径：`VISIONRT_TEST_TOOLS_PACKAGE` 实际指向 `build/bin/tools-package`（不是 `build/tools-package`）。首轮把 DLL 与声明只同步到后者，测试仍在旧 `interaction` 声明上通过，属于假绿；两处现已同步。
+- `ctest -R '^test_geometry_contract$'` 通过，含新增 `assistAppend`：2 个参考坐标种子经 scale=2 相似变换后，proposal 为 3 个参考圆、preview 为 3 个当前坐标圆，去掉 append 后同一次点击只返回 1 个。
+- `ctest -R '^workbench_assist_contract$'` 通过（真实工具包 + 真实 PickCircle + 新声明）：悬停零写入、单击提交 ROI 与建议参数、Ctrl+单击追加到 2 个圆、切图后第三张图的组正确写入且前一帧两组保留、非单位对齐按图切片、上游 ROI 点击拒绝、关闭前悬停仍可用、过期预览丢弃。
+- `ctest -R '^(workbench_assist_contract|workbench_authoring_contract|workbench_training_contract|workbench_assist_release_contract|definition_json_contract|project_editor_contract|tools_package_contract|tool_discovery_contract|cpu_tools_contract|validator_cli_contract)$'` 10/10 通过（`cpu_tools_contract` 首轮 0xc0000409 仍是陈旧测试可执行文件，重编即消）。
+- VisionTools：`test_geometry_contract` 与 `test_package`、`test_package_payload`、`test_package_profile` 全部通过；`visiontools_metrology` 重编后与两份声明同步到 `build/bin/tools-package` 与 `build/tools-package`。
+
+**下一步**
+- 票 06（行间距迁移，复用同一 append 端口）或票 04（Python 训练集视图），两者互不阻塞。
+- 重新生成 `dist/visiontools-deploy.zip` 并做安装态验收时，连同票 06/09 的声明一起验证 25 个工具加载。
+
+### 2026-11-21 — 票02 声明驱动的点选绑定
+
+**目标**
+- 按 `docs/easytouch-training/issues/02-runtime-port-binding.md` 让 VisionRT 按 `authoring.easy_touch` 解析助手、端口与写目标，验证 A1/A8；产线声明暂留旧 `interaction`，随 05/06/07/08 迁移。
+
+**当前状态**
+- 已完成：Contracts 新增 `AuthoringSpec` / `EasyTouchSpec` / `AuthoringCall` / `AuthoringWrite` / `ContextRole`，JSON 读写支持 `authoring.version=1` 与 `easy_touch`，只做单文件结构校验；负例覆盖版本、空 writes、重复目标、context 与 source 并存、重复助手端口。
+- 已完成：宿主 `ToolDefinition` 校验 image 必须是图像输入、写目标可写且非图像、辅助工具不得声明 authoring、同一工具不得同时声明 interaction 与 authoring；`erasePort` / `retypePort` 同步清理 authoring 引用。
+- 已完成：`AppControllerAssist` 新增声明路径（`authoringContext` / `authoringRequest` / `applyAuthoringOutcome`），上下文提供 cursor/phase/append，节点端口按声明取值（init 与 inputs），助手输出按 preview/valid/message 角色读取；缺端口、类型不符、目标接上游都整组拒绝并指出工具与端口。
+- 已完成：`AssistPreview` 的输出角色由调用方传入（旧路径固定 2/3/4/5，新路径取声明），`ProjectEditor::setLiteralWrites` 一次事务写 init 与 inputs，替换只写 inputs 的 `setLiteralBindings`。
+- 已完成：新增测试算子 `ProbeMeasure` / `ProbePick`（业务端口 21/34/47/12、init 0，助手输出 30 到 36）与 `workbench_authoring_contract`，覆盖换端口仍写入、悬停零写入、一次事务、缺端口诊断、修正声明后再次成功、目标接上游拒绝。
+- 未完成：产线四份声明迁移与旧字段删除归 05/06/07/08/14；`authoring.training` 归 07；AOCI 条目未更新（本轮无 MCP 工具，CLI maintain 未执行）。
+
+**验证证据**
+- 独立 SDK 树 `F:/tmp/contracts-verify`：`ctest` 9/9 通过，含 `test_declaration_contract` 的 authoring 往返与 6 个负例、`test_isolated_installation` 安装态消费者。
+- `cmake --build build --config Release --target visionrt_ui` 退出 0。
+- `ctest -R '^(workbench_authoring_contract|workbench_assist_contract|project_editor_contract|definition_json_contract)$'` 4/4 通过（旧点选合同无回归）。
+- `ctest -R '^(workbench_training_contract|workbench_assist_release_contract)$'` 2/2 通过；释放合同此前其实链接不上（`AssistPreview` 没有导出宏，ctest 跑的是旧二进制），本轮补 `VISIONRT_UI_API` 后真正完成链接。
+- `ctest -R '^(tools_package_contract|validator_cli_contract|tool_discovery_contract)$'` 3/3 通过；首轮 3 项 fail-fast，重编测试可执行文件后全通过，仍是测试目标陈旧导致的假失败。
+- 注意：`tools/build.cmd` 的 vcvars 会调用被安全策略拦截的 `reg.exe`，本轮改用显式 MSVC 14.29.30133 + SDK 10.0.19041 的 INCLUDE/LIB/PATH 直接跑 `cmake --build`；PATH 条目要用 `/c/...` 形式，否则 msys 会把带空格的 `C:/Program Files (x86)` 拼成无效路径，子进程找不到 `rc.exe`。测试进程还需 app-local UCRT 与 OpenCV DLL（`F:/tmp/contracts-verify/tests` 已放置）。
+
+**下一步**
+- 开票 04（Python 训练集视图）或票 05（圆测量点选，把 MeasureCircle 声明迁到 `authoring.easy_touch` 并给 PickCircle 增加追加输入）。
+- 新会话先按 `docs/easytouch-training/README.md` 的依赖取票；改 `ToolDefinition` 布局后必须重编相关测试目标。
+
+### 2026-11-21 — 票03 训练集值类型与模块 ABI 11
+
+**目标**
+- 按 `docs/easytouch-training/issues/03-native-training-set.md` 让原生训练工具通过普通调用收到带原图与字段的训练集，并把模块 ABI 升到 11、同步两父仓。
+
+**当前状态**
+- 已完成：SDK 新增 `TrainingSet`（图像表 imageId/独立 Mat/颜色顺序，记录表 recordId/imageId/按 fieldId 的标量与 Array/ROI），`TrainingFieldValue` 按构造排除图像与训练集；`PortValue` 增加 `DataRef<TrainingSet>`，`validateValue`/`typeOf`/`retainValue`/`defaultValue` 同步，`MODULE_ABI_MAJOR` 升 11。
+- 已完成：宿主分派明确处理新类型——工程/声明 JSON 与 Python 桥显式拒绝并给出原因，输出预览标为非显示数据；`Type::TrainingSet` 追加为 7，既有类型数值不变。
+- 已完成：宿主旧草稿结构改名 `TrainingDraftRecord`，与 SDK 合同名分离。新增 ABI 10 夹具与 `plugin_abi_previous_contract`，证明上一主版本在创建实例前被拒。
+- 已完成：Contracts `f1f6783`、VisionRT `a6bc9e0`、VisionTools `a493f9e` 三仓提交并推送；工具仓以 ABI 11 重建，`build/bin/tools-package` 已用新 SDK 重新打包并加载验证（25 个工具）。
+- 未完成：Python 训练器视图是票 04，当前明确报错；正式安装包与发布证据归票 14；AOCI 条目仍描述旧值集合，待 MCP 可用时 maintain。
+
+**验证证据**
+- 独立 SDK 树 `F:/tmp/contracts-verify` 9 项契约全通过，含 `test_training_set_contract` 与安装态消费者（typeOf/validate/retain、ABI 11、精确 int64 字段）。
+- 宿主 `ctest` 通过：`value_contract`、`value_json_contract`、`project_value_contract`、`runtime_value_contract`、`python_value_contract`、`python_array_lifetime_contract`、`plugin_contract`、`plugin_abi_contract`、`plugin_abi_previous_contract`、`test_training_set_contract`、`workbench_training_contract`、`cpu_tools_contract`、`tools_package_contract`、`example_metadata_contract`。
+- `visionrt_validate_tool --package build/bin/tools-package --load` 退出 0，`PickCircle`/`PickStraightEdge`/`RecognizeColor` 等原生工厂全部可用；旧包已备份为 `build/bin/tools-package-abi10-backup`。
+- VisionTools 重建后 `test_module_contract`、`test_installation_consumer`、`test_recognition_contract` 通过（此前失败均因测试可执行文件陈旧）。
+
+**下一步**
+- 开票 02（声明目录校验）或 04（Python 训练集视图）。
+- 注意：测试目标 `EXCLUDE_FROM_ALL`，ABI 变更后必须显式重编相关测试可执行文件，否则 ctest 跑的是旧二进制并误报 ABI 不匹配。
+
+### 2026-11-21 — 票01 工具声明读写下沉到 SDK
+
+**目标**
+- 按 `docs/easytouch-training/issues/01-sdk-declaration.md` 把普通工具的声明模型、读写和宿主公共端口规则移入 Contracts，宿主只保留路径来源、目录分类与运行时派生。
+
+**当前状态**
+- 已完成：SDK 新增 `Declaration.h`（PortRef、PortDefinition、InteractionMapping、TrainingSpec、ToolDeclaration 及宿主保留端口规则）与 `DeclarationJson.h`（UTF-8 读写）；内部 JSON 用固定提交的 RapidJSON `297637b` 以原始数字文本建树，int64 不经过 double。
+- 已完成：宿主 `ToolDefinition` 继承 `ToolDeclaration`，`DefinitionJson.cpp` 改为 SDK 读取 + 路径/分类/来源 + normalize/validate，删除宿主重复解析与重复的保留端口实现。
+- 已完成：Contracts 提交 `5db4497`、VisionRT 提交 `78f2e43`，两仓均已推送；VisionTools 仍指旧 gitlink，按要求留给票 03/14。
+- 未完成：AOCI 索引条目仍描述旧解析入口，MCP 工具本轮不可用，需后续用 maintain 更新；`examples/03_综合示例/02_识别线缆颜色/README.md` 的既有改动仍未提交。
+
+**验证证据**
+- `cmake --build build`（Ninja Release，MSVC 2019）退出 0；`visionrt_core.dll`、`visionrt_ui.dll` 均重新链接。
+- `ctest -R '^(test_declaration_contract|definition_json_contract|tool_discovery_contract|tool_registry_contract|tools_package_contract|custom_tool_store_contract|project_storage_contract|example_metadata_contract|validator_cli_contract)$'` 全部通过。
+- 独立 SDK 树 `F:/tmp/contracts-verify` 的 8 项契约全通过，含 `test_isolated_installation`（安装 SDK 后由无 Qt 消费者读取、重写声明并保持 9007199254740993）。
+- 宿主 `test_isolated_installation` 通过；`value_json_contract`、`project_editor_contract`、`project_value_contract`、`runtime_contract`、`tool_port_list_model_test` 通过。
+- 注意：`build` 全量 `--clean-first` 后，QML 缓存生成偶发无子进程挂起；带 Qt `bin` 到 PATH 重跑可完成，本轮未改构建脚本。
+
+**下一步**
+- 开票 03：TrainingSet 值类型与 ABI 11，随后同步 VisionTools gitlink（票 14 收口）。
+- 新会话先用 AOCI maintain 对齐 `DefinitionJson`、`ToolDefinition`、`Contracts` 三个受影响对象。
+
+### 2026-11-20 — 建立 AOCI 项目索引
+
+**目标**
+- 确认 E 盘安装的 AOCI MCP 接入，为当前项目建立认知索引并提供面板。
+
+**当前状态**
+- 已完成：实际 MCP 调用确认服务版本 0.2.0-rc3、仓库根 F:/Projects/VisionRT；按实时 Guide 的完整批次阅读证据并创作 269 条中文 Entry，补齐 Root 项目概览与全局约束。
+- 已完成：保持原 Managed Scope；284 个 Code 来源中 269 个有 Entry，另 15 个按二进制或超限规则跳过。6 个子模块保持独立仓库边界，未对其内部建立索引。
+- 已完成：审查并修正模块日志条目的关系引用；AOCI 面板已后台启动，PID 39476，地址 http://127.0.0.1:54794/。带访问令牌的完整链接可用下方 ui 命令重新取得。
+- 未修改业务实现，未运行业务构建或全量测试；索引已按用户指令提交并推送，提交 `86be713`，`origin/dev` 已同步。
+
+**验证证据**
+- `aoci_rules` 与 `aoci_maintain` 的实际 MCP 响应确认版本及仓库身份；7 个创作批次分别正式应用 32、43、47、46、48、48、5 条。
+- 最终条目应用及 Root 应用均返回 `aligned=true`、`remaining=0`；terminal_proof 的 `structure_valid`、`check_passed`、`guide_complete` 均为 true。
+- `E:/Tools/AOCI/aoci.exe --repo F:/Projects/VisionRT index agent guide --agent codex --json` 返回 `stage=aligned`、`complete=true`、`next_action=none`。
+- `E:/Tools/AOCI/aoci.exe --repo F:/Projects/VisionRT ui --detach` 成功；面板根页面 HTTP 200，内容包含 AOCI。正式索引的本轮账本及文档变更在交付前通过 MCP 同步并重新 verify/check。
+- `git commit` → `86be713`（9 个文件，+4585）；`git push origin dev` → `82cf756..86be713`，`git rev-parse HEAD` 与 `origin/dev` 同为 `86be71355d`。
+
+**下一步**
+- 使用面板查看索引；后续任务遵守 AGENTS 中的 Rules、Overview 与增量维护流程。面板停机后用相同 E 盘绝对路径执行 `ui --detach` 重启，不重复 init 或 scan。
+
+### 2026-11-20 — AOCI 迁移到 E 盘
+
+**目标**
+- 按用户要求将 AOCI 安装与本轮下载文件迁至 E 盘，更新当前项目 MCP 路径。
+
+**当前状态**
+- 已完成：安装目录迁至 `E:/Tools/AOCI`，`.codex/config.toml` 的 command 已更新为 `E:/Tools/AOCI/aoci.exe`；此前安装条目中的 C 盘路径已失效。
+- 已完成：36 个安装文件逐个校验一致后删除 C 盘旧 AOCI 安装目录；本任务在用户临时目录的发布元数据亦迁入 E 盘安装目录的 `releases/0.2.0-rc3/`。
+- 未重复 init 或 scan，未建立索引；仍待用户重启 Agent 后加载新 MCP 配置。
+
+**验证证据**
+- `E:/Tools/AOCI/aoci.exe --version` 退出 0，报告 0.2.0-rc3 及此前已校验的同一提交；二进制 SHA-256 与上一条安装记录一致。
+- 迁移前后 `.aoci/baseline.json` 和 `aoci.code.txt` 的 SHA-256 分别一致；C 盘旧安装目录已不存在。
+- `git check-ignore -v --no-index -- aoci.txt aoci.meta.txt aoci.code.txt AGENTS.md .codex/config.toml` 仍仅命中宿主配置。
+
+**下一步**
+- 重启 Agent，确认加载项目 MCP 配置中的 E 盘程序；收到继续指令后再建立索引。
+
+### 2026-11-20 — 安装 AOCI 并初始化扫描
+
+**目标**
+- 安装当前系统适用的最新发布包，完成 Codex MCP 接入及 scan；本轮不建立索引。
+
+**当前状态**
+- 已完成：Windows x64 最新预发布版 v0.2.0-rc3 安装在 `C:/Users/wt/AppData/Local/Programs/AOCI/aoci.exe`；实时官方 Release API 确认发布时间为 2026-11-20T12:15:01Z。
+- 已完成：`init --locale zh-CN --agent codex` 创建认知骨架、治理配置并追加 AGENTS 区块，项目 `.codex/config.toml` 使用上述绝对路径及本仓根目录；保留 init 生成的宿主配置忽略项，四个认知资产未被忽略。原 AGENTS 备份保存在安装目录的 `releases/0.2.0-rc3/mailtools-AGENTS-before-init.md`。
+- 已完成：scan 建立 614 个文件的基线；269 个文件待编写条目，15 个文件因二进制或超限无需 Entry，6 个子模块作为独立仓库不扫描其内容。未建立索引，未调用 Maintain 或条目写入。
+- 未验证：重启后宿主实际加载 MCP server；当前会话未暴露 AOCI MCP 工具。
+
+**验证证据**
+- 按同版本官方 `docs/install.md` 的基础安装校验，合并官方 CDN 分段下载的 ZIP，其 SHA-256 为 `0a3427213623948befbfd47da1ad150f320eb00dc462e6cd69f3a0520f7f340c`，与官方 SHA256SUMS 一致；未执行 Cosign 签名或完整供应链校验。
+- 绝对路径运行 `--version` 返回 `0.2.0-rc3`、提交 `0a00a2b952ca6f6c40556b0fc37d4230baac98ae`；可执行文件 SHA-256 为 `d5e74716568be5644e5a72dfbdc0f1753d69372e6fa47f9b403881ad4ffaa21a`。下载包、校验清单和官方安装说明保存在安装目录的 `releases/0.2.0-rc3/`。
+- 绝对路径运行 `--repo F:/Projects/VisionRT init --locale zh-CN --agent codex` 与 `--repo F:/Projects/VisionRT scan` 均退出 0；scan 报告基线 614 个文件。`aoci.code.txt` 仅含 Volume Header，无 Entry。
+- `git check-ignore -v --no-index -- aoci.txt aoci.meta.txt aoci.code.txt AGENTS.md .codex/config.toml` 仅命中 `.codex/config.toml`。
+
+**下一步**
+- 用户重启 Agent，使项目 MCP 配置生效；收到用户继续指令后，再通过 AOCI MCP 的 Rules 和实时 Guide 建立索引。不要重复 init、scan，不要在本轮提前生成条目。
+
 ### 2026-11-20 — 提交并推送0.2.0
 
 **目标**

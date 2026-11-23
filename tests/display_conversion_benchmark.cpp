@@ -25,7 +25,7 @@ struct Scenario
 {
     const char *name;
     cv::Mat     image;
-    const char *order;
+    ColorOrder  order;
 };
 
 double milliseconds(Clock::time_point begin, Clock::time_point end)
@@ -103,12 +103,12 @@ int main(int argc, char **argv)
     const int count = std::max(3, parser.value(iterations).toInt());
 
     const std::vector<Scenario> scenarios{
-        {"1080p 16UC1", filled(1080, 1920, CV_16UC1, 0.0, 30.0), "Gray"},
-        {"1080p 32FC1", filled(1080, 1920, CV_32FC1, -5.0, 0.25), "Gray"},
-        {"1080p 8UC3", filled(1080, 1920, CV_8UC3, 0.0, 2.0), "BGR"},
-        {"1080p 32FC4", filled(1080, 1920, CV_32FC4, 0.0, 0.01), "BGRA"},
-        {"4K 16UC3", filled(2160, 3840, CV_16UC3, 0.0, 30.0), "BGR"},
-        {"4K 32FC1", filled(2160, 3840, CV_32FC1, -5.0, 0.25), "Gray"},
+        {"1080p 16UC1", filled(1080, 1920, CV_16UC1,  0.0, 30.0), ColorOrder::Gray},
+        {"1080p 32FC1", filled(1080, 1920, CV_32FC1, -5.0, 0.25), ColorOrder::Gray},
+        { "1080p 8UC3", filled(1080, 1920,  CV_8UC3,  0.0,  2.0),  ColorOrder::BGR},
+        {"1080p 32FC4", filled(1080, 1920, CV_32FC4,  0.0, 0.01), ColorOrder::BGRA},
+        {   "4K 16UC3", filled(2160, 3840, CV_16UC3,  0.0, 30.0),  ColorOrder::BGR},
+        {   "4K 32FC1", filled(2160, 3840, CV_32FC1, -5.0, 0.25), ColorOrder::Gray},
     };
 
     std::ofstream csv;

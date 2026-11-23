@@ -18,6 +18,7 @@ visionrt_add_module(ui SOURCES
     ResultPresentation.cpp
     RoiEditSession.cpp
     TrainingSession.cpp
+    TrainingAssets.cpp
     AppControllerTraining.cpp
     ProjectOperations.cpp
     AppControllerMetadata.cpp

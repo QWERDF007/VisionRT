@@ -496,7 +496,7 @@ void receiverOutputFollowsItsSource()
   "name_zh": "跨流程接收",
   "version": "1.0.0",
   "implementation": {
-    "kind": 3,
+    "kind": "host",
     "binding": "visionrt.receiver"
   },
   "init_params": [
@@ -504,25 +504,19 @@ void receiverOutputFollowsItsSource()
       "id": 0,
       "name_en": "source_flow_id",
       "name_zh": "源流程",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     },
     {
       "id": 1,
       "name_en": "source_node_seq",
       "name_zh": "源节点",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     },
     {
       "id": 2,
       "name_en": "source_port_id",
       "name_zh": "源端口",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
   "outputs": [
@@ -532,21 +526,21 @@ void receiverOutputFollowsItsSource()
       "name_zh": "数据",
       "type_from": {
         "flow": {
-          "stage": 0,
+          "stage": "init",
           "id": 0
         },
         "node": {
-          "stage": 0,
+          "stage": "init",
           "id": 1
         },
         "port": {
-          "stage": 0,
+          "stage": "init",
           "id": 2
         }
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json",
                                                      {}, {ToolOrigin::Builtin, {}});
     ProjectEditor editor;

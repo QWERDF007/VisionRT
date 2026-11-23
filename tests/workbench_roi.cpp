@@ -96,7 +96,7 @@ void roiParameterContract()
   "name_zh": "ROI图像源",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "roi",
     "file": "source.py",
     "symbol": "run"
@@ -104,37 +104,31 @@ void roiParameterContract()
   "outputs": [
     {
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
-        "color_order": 2,
+        "color_order": "bgr",
         "visible": true
       },
       "id": 2
     },
     {
       "name_zh": "源区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "id": 3
     },
     {
       "name_zh": "源矩形",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "relations": {
         "image": {
-          "stage": 2,
+          "stage": "outputs",
           "id": 2
         }
       },
       "id": 4
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     write("python/custom/roi/editor.py",
           "import numpy as np\ndef run(inputs):\n"
@@ -152,7 +146,7 @@ void roiParameterContract()
   "name_zh": "ROI编辑",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "roi",
     "file": "editor.py",
     "symbol": "run"
@@ -160,22 +154,18 @@ void roiParameterContract()
   "inputs": [
     {
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "id": 1
     },
     {
       "name_zh": "区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "default": [
         []
       ],
       "relations": {
         "image": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       },
@@ -183,9 +173,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "矩形",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "default": [
         [
           [
@@ -199,11 +187,11 @@ void roiParameterContract()
         ]
       ],
       "ui": {
-        "editor": 9
+        "editor": "rect"
       },
       "relations": {
         "image": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       },
@@ -211,9 +199,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "参考区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "default": [
         [
           [
@@ -227,11 +213,11 @@ void roiParameterContract()
         ]
       ],
       "ui": {
-        "editor": 9
+        "editor": "rect"
       },
       "relations": {
         "image": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       },
@@ -241,36 +227,30 @@ void roiParameterContract()
   "outputs": [
     {
       "name_zh": "区域数量",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     },
     {
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "relations": {
         "same_geometry_as": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       },
       "display": {
-        "color_order": 2,
+        "color_order": "bgr",
         "visible": true
       },
       "id": 3
     },
     {
       "name_zh": "结果区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "relations": {
         "image": {
-          "stage": 2,
+          "stage": "outputs",
           "id": 3
         }
       },
@@ -278,9 +258,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "其他坐标图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       },
@@ -288,9 +266,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "空图像输出",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       },
@@ -298,9 +274,7 @@ void roiParameterContract()
     },
     {
       "name_zh": "裁剪坐标图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       },
@@ -308,12 +282,10 @@ void roiParameterContract()
     },
     {
       "name_zh": "裁剪坐标区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "relations": {
         "image": {
-          "stage": 2,
+          "stage": "outputs",
           "id": 7
         }
       },
@@ -322,27 +294,25 @@ void roiParameterContract()
     {
       "name_zh": "原点坐标",
       "type": {
-        "type": 5,
-        "dtype": 4,
+        "type": "array",
+        "dtype": "float64",
         "rank": 2
       },
       "id": 9
     },
     {
       "name_zh": "其他坐标区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "relations": {
         "image": {
-          "stage": 2,
+          "stage": "outputs",
           "id": 5
         }
       },
       "id": 10
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
 
     AppController app(1, directory.path());

@@ -176,12 +176,35 @@ int main(int argc, char **argv)
     assert(inputs->data(inputs->index(2, 0), ToolPortListModel::IdRole).toUInt() == 2);
 
     // 11. Cloning carries the script as a draft; the copy is only written by Save.
+    assert(!std::filesystem::exists(root / "integrations.json"));
+    auto             integrated = store.findCustomTool("custom.test.threshold")->definition;
+    ParameterLocator locator;
+    locator.algorithm                  = "LocateEditorRegion";
+    locator.imageSource                = 2;
+    locator.regionTarget               = 3;
+    locator.frameInput                 = 11;
+    locator.searchInput                = 12;
+    locator.searchRadius               = 64;
+    locator.candidateOutput            = 15;
+    locator.previewOutput              = 16;
+    locator.validOutput                = 17;
+    integrated.integrations.processing = locator;
+    store.saveCustomTool(integrated);
+    controller.cancelAll();
+    controller.selectKey("custom.test.threshold");
+    const auto registrationBefore = readFile(root / "integrations.json");
+    assert(controller.cloneTool("custom.test.threshold"));
+    controller.cancelAll();
+    assert(readFile(root / "integrations.json") == registrationBefore);
+    assert(!store.findCustomTool("custom.test.threshold_copy1"));
+    controller.selectKey("custom.test.threshold");
     assert(controller.cloneTool("custom.test.threshold"));
     assert(controller.currentToolId() == "custom.test.threshold_copy1");
     assert(controller.isDirty());
     assert(!std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold_copy1.json"));
     assert(controller.saveAll());
     assert(std::filesystem::exists(root / "tools" / u8"自定义" / u8"图像" / "custom.test.threshold_copy1.json"));
+    assert(store.findCustomTool("custom.test.threshold_copy1")->definition.integrations == integrated.integrations);
 
     // 12. Folder edits are drafts too: renaming moves the tools, deleting a non-empty folder is
     // refused, and an empty folder can be added and removed without touching the disk.

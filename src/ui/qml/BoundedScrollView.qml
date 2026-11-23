@@ -8,6 +8,17 @@ import QtQuick.Controls
 // repeating the same two properties at each call site.
 ScrollView {
     id: root
+    rightPadding: VisionRTSize.ScrollBarWidth
+    ScrollBar.vertical: WorkbenchScrollBar {
+        parent: root
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+    }
+    ScrollBar.horizontal: WorkbenchScrollBar {
+        parent: root
+        anchors.left: parent.left
+        anchors.right: parent.right
+    }
 
     function pinContent() {
         if (!contentItem)

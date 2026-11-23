@@ -1,89 +1,186 @@
 #pragma once
 
-#include "ui/Export.h"
-
 #include "core/Project.h"
 #include "core/ToolDefinition.h"
+#include "ui/Export.h"
 
-#include <QImage>
+#include <QJsonObject>
 #include <QString>
 #include <QVariantList>
-
+#include <QVariantMap>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <vector>
 
 namespace visionrt {
 
-// One trained colour sample: the picture the rectangles were drawn on, its class name and the
-// rectangles themselves as VisionRT encoded regions in that image's coordinates.
-struct TrainingDraftRecord
+// Presentation of one stored field for a control or a test. A region field reports its count; the
+// canvas reads the regions themselves through TrainingSession::regions.
+VISIONRT_UI_API QVariant trainingFieldVariant(const TrainingFieldValue &value);
+
+// The training draft and the project speak different value types for the same data: a record field
+// may hold what a port value holds, and a parameter is published into a port. One conversion pair
+// keeps the two from drifting apart.
+VISIONRT_UI_API TrainingFieldValue trainingFieldValueOf(const PortValue &value);
+VISIONRT_UI_API PortValue          portValueOf(const TrainingFieldValue &value);
+
+// One frame the draft owns. The pixels are an independent copy of the published value: a display
+// conversion is only a derivative for the list, never the source a trainer reads. Records that
+// grew from the same published frame point at one entry, so two labels painted on one picture
+// travel as one image with two records.
+struct TrainingDraftImage
 {
-    QString                    id;
-    QString                    label;
-    std::filesystem::path      image;
-    std::vector<EncodedRegion> regions;
+    TrainingImageId id = 0;
+    // Identity of the published frame this copy came from; a repeated add reuses the entry.
+    QString         source;
+    cv::Mat         pixels;
+    ColorOrder      colorOrder = ColorOrder::Automatic;
+    // Display-only PNG data URL for the record list.
+    QString         thumbnail;
 };
 
-// The host half of a tool's training. Records are edited in the window and the asset file is the
-// only persisted state; applying writes that file and reloads the node, so no second model copy can
-// drift from what was trained.
+// One editable record. Fields are keyed by the declaration's field number, so renaming a field
+// changes only its label in the panel and a trainer reads the same key it always did.
+struct TrainingDraftRecord
+{
+    QString                              id;
+    TrainingRecordId                     number = 0;
+    TrainingImageId                      image  = 0;
+    std::map<PortId, TrainingFieldValue> fields;
+};
+
+// The host half of a tool's training. "加入训练" and every edit live in memory; the only moment a
+// draft may reach the disk is a successful apply, which is why the session never creates a file
+// while the user is still editing.
 class VISIONRT_UI_API TrainingSession
 {
 public:
     struct Begin
     {
-        NodeId                     node = 0;
-        TrainingKind               kind = TrainingKind::ColorSamples;
-        std::filesystem::path      asset;
+        NodeId                node = 0;
+        TrainingSpec          spec;
+        std::filesystem::path asset;
     };
 
-    // Starts a session and reads the asset when it already exists. A malformed asset leaves an
-    // empty session and reports the reason instead of silently discarding the user's file.
+    // Starts a session over the tool's declaration. An existing draft for the same node, spec and
+    // asset is kept, so switching pages or selecting another node and coming back continues the
+    // work instead of rereading a file that was never written.
     void begin(Begin start);
     void end();
 
-    bool          active() const noexcept { return active_; }
-    NodeId        node() const noexcept { return start_.node; }
-    TrainingKind  kind() const noexcept { return start_.kind; }
-    // Colour samples label every rectangle; straight edges label the two reference edges instead.
-    bool          colorSamples() const noexcept { return start_.kind == TrainingKind::ColorSamples; }
-    // Rectangles one record may hold; 0 means the kind sets no fixed budget.
-    int           regionBudget() const noexcept;
-    const std::filesystem::path &asset() const noexcept { return start_.asset; }
-    // Replaces the asset path when the project starts pointing somewhere else.
-    void          setAsset(std::filesystem::path asset);
+    bool active() const noexcept
+    {
+        return active_;
+    }
 
-    const std::vector<TrainingDraftRecord> &records() const noexcept { return records_; }
-    int                                selected() const noexcept { return selected_; }
-    bool                               select(int index);
+    NodeId node() const noexcept
+    {
+        return start_.node;
+    }
 
-    // Writes the picture beside the asset and appends a record. The image is the one the user is
-    // looking at, saved at full resolution; a thumbnail would train on pixels the tool never sees.
-    std::optional<int> addImage(const QImage &image);
-    bool               remove(int index);
-    bool               setLabel(int index, const QString &label);
-    bool               setRegions(int index, std::vector<EncodedRegion> regions);
+    const TrainingSpec &spec() const noexcept
+    {
+        return start_.spec;
+    }
 
-    bool    dirty() const noexcept { return dirty_; }
-    QString error() const noexcept { return error_; }
-    // Records as QML rows: id, label, image path and a file URL for the thumbnail.
+    const std::filesystem::path &asset() const noexcept
+    {
+        return start_.asset;
+    }
+
+    // Follows a changed published reference. Unapplied edits survive save-as; a clean draft reloads.
+    void setAsset(std::filesystem::path asset);
+
+    const std::vector<TrainingDraftImage> &images() const noexcept
+    {
+        return images_;
+    }
+
+    const std::vector<TrainingDraftRecord> &records() const noexcept
+    {
+        return records_;
+    }
+
+    int selected() const noexcept
+    {
+        return selected_;
+    }
+
+    bool select(int index);
+
+    // Copies the frame into the draft and appends (or, for a one-record tool, replaces) its record.
+    // `source` identifies the published frame; two adds from one frame share one image entry.
+    std::optional<int>                addImage(const cv::Mat &pixels, ColorOrder colorOrder, const QString &source);
+    bool                              remove(int index);
+    bool                              setField(int index, PortId field, TrainingFieldValue value);
+    // One stored field value, for readers that do not go through the QML row projection.
+    std::optional<TrainingFieldValue> value(int index, PortId field) const;
+    // The canvas field's rectangles, read and replaced as a group.
+    std::vector<EncodedRegion>        regions(int index) const;
+    bool                              setRegions(int index, std::vector<EncodedRegion> regions);
+    // Rectangles the canvas field accepts; 0 means the declaration sets no fixed budget.
+    int                               regionBudget() const noexcept;
+
+    // Typed values the training page offers beside the records. They start from the declaration's
+    // defaults, live only in this draft, and reach the node only through a published trainer result.
+    std::optional<TrainingFieldValue>    parameter(PortId id) const;
+    bool                                 setParameter(PortId id, TrainingFieldValue value);
+    std::map<PortId, TrainingFieldValue> parameters() const;
+    // One row per declared parameter, shaped like a record field row so QML reuses its controls.
+    QVariantList                         parameterRows() const;
+
+    bool dirty() const noexcept
+    {
+        return dirty_;
+    }
+
+    QString error() const noexcept
+    {
+        return error_;
+    }
+
+    // The asset path a published draft now lives at. The records already equal that file, so the
+    // session keeps them instead of rereading its own output.
+    void adoptAsset(std::filesystem::path asset);
+
+    // Records as QML rows: stable id, thumbnail data URL, region count of the canvas field and the
+    // typed fields of the record. QML renders the fields it is given and knows no tool by name.
     QVariantList rows() const;
+    QVariantList fields(int index) const;
 
-    // Refuses an asset the tool would reject: every record needs a class name and at least one
-    // rectangle, and there must be at least one record.
-    bool savable() const;
-    bool save();
+    // The draft as one call value. Images are independent copies and fields keep their declared
+    // types; a record names its image by number, never by list position.
+    DataRef<TrainingSet> trainingSet() const;
+
+    // The published manifest: typed records, parameters, image files and model files, all relative
+    // to the manifest. The caller writes the files; this only states what the asset contains.
+    QJsonObject manifest(const std::map<TrainingImageId, QString> &imageFiles,
+                         const std::map<std::string, QString>     &artifactFiles) const;
+    // Refuses a draft the trainer could not use: every declared field present, at least one record,
+    // and the canvas field inside its declared region budget. `validate` reports the reason once.
+    bool        savable() const;
+    bool        validate();
 
 private:
-    void load();
+    void                         load();
+    void                         materialiseThumbnail(TrainingDraftImage &image) const;
+    const TrainingFieldSpec     *field(PortId id) const;
+    const TrainingParameterSpec *parameterSpec(PortId id) const;
+    PortId                       roiField() const;
+    void                         assignDefaults(TrainingDraftRecord &record) const;
+    void                         pruneImages();
 
-    Begin                      start_;
-    bool                       active_   = false;
-    bool                       dirty_    = false;
-    QString                    error_;
-    std::vector<TrainingDraftRecord> records_;
-    int                        selected_ = -1;
+    Begin                                start_;
+    bool                                 active_ = false;
+    bool                                 dirty_  = false;
+    QString                              error_;
+    std::vector<TrainingDraftImage>      images_;
+    std::vector<TrainingDraftRecord>     records_;
+    std::map<PortId, TrainingFieldValue> parameters_;
+    int                                  selected_   = -1;
+    TrainingImageId                      nextImage_  = 1;
+    TrainingRecordId                     nextRecord_ = 1;
 };
 
 } // namespace visionrt

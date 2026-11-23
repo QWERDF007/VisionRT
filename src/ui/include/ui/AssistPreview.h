@@ -2,11 +2,11 @@
 
 #include "core/ToolDefinition.h"
 #include "runtime/Snapshot.h"
+#include "ui/Export.h"
 
 #include <QObject>
 #include <QString>
 #include <QTimer>
-
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
@@ -31,8 +31,7 @@ struct AssistContext
     std::uint64_t        executionRevision = 0;
     int                  imageIndex        = 0;
     ResultSlot::Snapshot source;
-    // Training view: the proposal belongs to one record of this session instead of a node input, so
-    // the node identity above stays empty and the session serial is what must still match.
+    // Training proposals also bind the draft session and selected record.
     std::uint64_t trainingSerial = 0;
     int           trainingRecord = -1;
     bool operator==(const AssistContext &) const = default;
@@ -41,8 +40,7 @@ struct AssistContext
 struct AssistRequest
 {
     AssistContext context;
-    // Helper inputs already resolved to this image; cursor, phase and the search budget are added
-    // by the coordinator because they are protocol fields, not declaration mappings.
+    // Algorithm inputs resolved by the coordinator into ordinary business values.
     Values inputs;
     bool   learn  = false;
     bool   append = false;
@@ -61,9 +59,19 @@ struct AssistOutcome
     Values        outputs;  // helper outputs, used for the mapped suggestions
 };
 
+// Algorithm output ports read through host integration registration. Zero denotes an unused role.
+struct AssistOutputs
+{
+    PortId preview                                 = 0;
+    PortId proposal                                = 0;
+    PortId valid                                   = 0;
+    PortId message                                 = 0;
+    bool   operator==(const AssistOutputs &) const = default;
+};
+
 // Bounded assist channel. One request may run at a time; a newer hover replaces the single pending
 // slot, so a mouse storm can never grow a queue, spawn threads or create extra tool instances.
-class AssistPreview final : public QObject
+class VISIONRT_UI_API AssistPreview final : public QObject
 {
     Q_OBJECT
 public:
@@ -71,13 +79,15 @@ public:
     ~AssistPreview() override;
 
     // GUI thread. Replaces the helper session and drops whatever was queued.
-    void        configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper);
+    void        configure(std::shared_ptr<const ToolRegistry> registry, ToolDefinition helper, AssistOutputs outputs);
     bool        configured() const;
     std::string helperId() const;
 
     // Hover requests are coalesced for 40 ms; learn requests jump the queue.
     // Returns false when a learn request arrived while another learn is running.
     bool request(AssistRequest value);
+    // Admit a different tool call before replacing the current session.
+    bool request(AssistRequest value, std::shared_ptr<const ToolRegistry> registry, ToolDefinition tool);
     // Drops the preview and every queued request. An in-flight algorithm is allowed to finish and
     // its result is discarded.
     void cancel();
@@ -106,6 +116,7 @@ private:
     {
         std::shared_ptr<const ToolRegistry> registry;
         ToolDefinition                      helper;
+        AssistOutputs                       outputs;
     };
 
     struct Job

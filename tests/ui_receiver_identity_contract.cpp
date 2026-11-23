@@ -67,7 +67,7 @@ try
   "name_zh": "来源",
   "version": "1.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "identity",
     "file": "source.py",
     "symbol": "run"
@@ -76,21 +76,17 @@ try
     {
       "id": 1,
       "name_zh": "值",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
   "outputs": [
     {
       "id": 2,
       "name_zh": "值",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })");
     write("python/custom/identity/source.py",
           "import threading\n"

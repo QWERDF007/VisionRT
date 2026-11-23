@@ -12,7 +12,7 @@ using namespace visionrt;
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
-    QTemporaryDir tempDir;
+    QTemporaryDir    tempDir;
     assert(tempDir.isValid());
     const std::filesystem::path root(tempDir.path().toStdWString());
 
@@ -33,17 +33,15 @@ int main(int argc, char **argv)
     ToolDefinition templateSource;
     templateSource.kind   = ToolKind::PythonFunction;
     templateSource.nameZh = "测试函数";
-    templateSource.outputs.push_back(PortDefinition{
-        .id = 2, .nameZh = "输出图像", .type = TypeSpec{Type::Image}});
-    templateSource.outputs.push_back(PortDefinition{
-        .id = 5, .nameZh = "计数", .type = TypeSpec{Type::Int}});
+    templateSource.outputs.push_back(PortDefinition{.id = 2, .nameZh = "输出图像", .type = TypeSpec{Type::Image}});
+    templateSource.outputs.push_back(PortDefinition{.id = 5, .nameZh = "计数", .type = TypeSpec{Type::Int}});
 
     const auto fnTemplate = CustomToolStore::pythonTemplate(templateSource);
     assert(fnTemplate.find("def execute(inputs)") != std::string::npos);
     assert(fnTemplate.find("inputs.get(0, 0)") != std::string::npos);
     assert(fnTemplate.find("\"outputs\": {0: 1, 1: \"工具尚未实现\", 2: None, 5: None}") != std::string::npos);
 
-    templateSource.kind = ToolKind::PythonClass;
+    templateSource.kind    = ToolKind::PythonClass;
     const auto clsTemplate = CustomToolStore::pythonTemplate(templateSource);
     assert(clsTemplate.find("class Tool:") != std::string::npos);
     assert(clsTemplate.find("def initialize") != std::string::npos);
@@ -60,22 +58,30 @@ int main(int argc, char **argv)
     def.entry.package = "custom/test/demo";
     def.entry.file    = "tool.py";
     def.entry.symbol  = "execute";
-    def.inputs.push_back(PortDefinition{
-        .id = 1,
-        .nameZh = "阈值",
-        .type = TypeSpec{Type::Int},
-        .defaultValue = std::int64_t(128)
+    def.inputs.push_back(
+        PortDefinition{.id = 1, .nameZh = "阈值", .type = TypeSpec{Type::Int}, .defaultValue = std::int64_t(128)});
+    def.inputs.push_back(PortDefinition{.id = 2, .nameZh = "图像", .type = TypeSpec{Type::Image}});
+    def.outputs.push_back(PortDefinition{.id = 2, .nameZh = "输出图像", .type = TypeSpec{Type::Image}});
+
+    ParameterLocator locator;
+    locator.algorithm       = "LocateTestRegion";
+    locator.imageSource     = 2;
+    locator.regionTarget    = 3;
+    locator.frameInput      = 11;
+    locator.searchInput     = 12;
+    locator.searchRadius    = 72;
+    locator.candidateOutput = 15;
+    locator.previewOutput   = 16;
+    locator.validOutput     = 17;
+    locator.messageOutput   = 18;
+    locator.seedInput       = 19;
+    locator.alignmentInput  = 20;
+    locator.parameters.push_back({
+        21,
+        {PortStage::Inputs, 1},
+        SuggestedLimit::Minimum
     });
-    def.inputs.push_back(PortDefinition{
-        .id = 2,
-        .nameZh = "图像",
-        .type = TypeSpec{Type::Image}
-    });
-    def.outputs.push_back(PortDefinition{
-        .id = 2,
-        .nameZh = "输出图像",
-        .type = TypeSpec{Type::Image}
-    });
+    def.integrations.processing = locator;
 
     // A declared resource belongs to the tool, so a copy has to carry it.
     const auto resourceDir = root / "python" / "custom/test/demo";
@@ -99,6 +105,10 @@ int main(int argc, char **argv)
     auto tools = store.discoverCustomTools();
     assert(tools.size() == 1);
     assert(tools[0].definition.nameEn == "custom.test.demo");
+    assert(tools[0].definition.integrations.processing.has_value());
+    assert(tools[0].definition.integrations.processing->algorithm == locator.algorithm);
+    assert(tools[0].definition.integrations.processing->searchInput == locator.searchInput);
+    assert(tools[0].definition.integrations == def.integrations);
     assert(tools[0].definition.nameZh == "演示自定义工具");
     assert(tools[0].definition.inputs.size() == 3);
     assert(tools[0].definition.inputs[0].id == 0);
@@ -124,6 +134,17 @@ int main(int argc, char **argv)
     tools = store.discoverCustomTools();
     assert(tools.size() == 2);
     assert(store.findCustomTool("custom.test.demo_copy1").has_value());
+    assert(store.findCustomTool("custom.test.demo_copy1")->definition.integrations.processing.has_value());
+    assert(store.findCustomTool("custom.test.demo_copy1")->definition.integrations.processing->searchRadius
+           == locator.searchRadius);
+    const auto packageRoot = root / "package";
+    std::filesystem::create_directories(packageRoot);
+    std::ofstream(packageRoot / "module_index.json")
+        << R"({"schema_version":1,"variant":"cpu","modules":[],"tools":[],"runtime_files":[]})";
+    const auto reloaded = readToolsPackage(packageRoot, ToolRoots{store.declarationsDir(), store.pythonDir()});
+    assert(reloaded.tools.size() == 2);
+    for (const auto &tool : reloaded.tools) assert(tool.definition.integrations == def.integrations);
+    assert(emitNormalizedToolJson(def).find("processing_locator") == std::string::npos);
     assert(!store.findCustomTool("custom.test.missing").has_value());
 
     // 5. A clone never overwrites a published tool: the caller picks the next free id.
@@ -145,8 +166,8 @@ int main(int argc, char **argv)
     bool shellRefused = false;
     try
     {
-        store.cloneCustomTool(store.findCustomTool("custom.test.demo_copy1")->definition,
-                              "custom.test.shell", "空壳副本");
+        store.cloneCustomTool(store.findCustomTool("custom.test.demo_copy1")->definition, "custom.test.shell",
+                              "空壳副本");
     }
     catch (const std::exception &)
     {
@@ -158,10 +179,10 @@ int main(int argc, char **argv)
     // 5c. A native tool is a registered factory, not a declaration, so copying its JSON would
     // create a tool nothing can instantiate.
     ToolDefinition native;
-    native.nameEn        = "builtin.native.demo";
-    native.nameZh        = "原生工具";
-    native.kind          = ToolKind::Cpp;
-    bool nativeRefused   = false;
+    native.nameEn      = "builtin.native.demo";
+    native.nameZh      = "原生工具";
+    native.kind        = ToolKind::Cpp;
+    bool nativeRefused = false;
     try
     {
         store.cloneCustomTool(native, "custom.native.copy", "原生副本");
@@ -174,8 +195,8 @@ int main(int argc, char **argv)
 
     // 5d. An installed Python example can be copied into the user root: the script and resources are
     // read from the package root the definition was discovered under, not from the editor's store.
-    const std::filesystem::path installedRoot = root / "installed";
-    const auto installedPackage = installedRoot / "python" / "builtin" / "examples" / "installed";
+    const std::filesystem::path installedRoot    = root / "installed";
+    const auto                  installedPackage = installedRoot / "python" / "builtin" / "examples" / "installed";
     std::filesystem::create_directories(installedPackage);
     {
         std::ofstream script(installedPackage / "tool.py", std::ios::binary);
@@ -192,7 +213,7 @@ int main(int argc, char **argv)
     installed.entry.file    = "tool.py";
     installed.entry.symbol  = "execute";
     installed.resources.push_back("weights.txt");
-    installed.source.origin            = ToolOrigin::Builtin;
+    installed.source.origin             = ToolOrigin::Builtin;
     installed.source.roots.declarations = installedRoot / "tools";
     installed.source.roots.python       = installedRoot / "python" / "builtin";
     normalizeToolDefinition(installed);
@@ -229,13 +250,13 @@ int main(int argc, char **argv)
 
     const auto authoredPath = root / "tools" / u8"任意声明名.json";
     std::filesystem::rename(jsonPath, authoredPath);
-    auto authored = store.findCustomTool(def.nameEn)->definition;
-    authored.nameZh = "已编辑";
+    auto authored     = store.findCustomTool(def.nameEn)->definition;
+    authored.nameZh   = "已编辑";
     const auto edited = store.saveCustomTool(authored);
     assert(edited.definitionPath == authoredPath);
     assert(store.discoverCustomTools().size() == 1);
     authored.categories = {"分类", "子分类"};
-    const auto moved = store.saveCustomTool(authored);
+    const auto moved    = store.saveCustomTool(authored);
     assert(moved.definitionPath.filename() == authoredPath.filename());
     assert(!std::filesystem::exists(authoredPath));
     assert(store.discoverCustomTools().size() == 1);

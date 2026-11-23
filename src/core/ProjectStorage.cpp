@@ -37,6 +37,33 @@ std::string utf8Path(const std::filesystem::path &path)
     return {reinterpret_cast<const char *>(utf8.data()), utf8.size()};
 }
 
+// A training reference is stored relative to the project file, so a copied project keeps its own
+// assets. A revision outside the project tree (an unnamed project's workspace result) stays
+// absolute: there is no directory to be relative to yet.
+std::string storedTrainingAsset(const ProjectDefinition &project, const NodeDefinition &node)
+{
+    if (project.path.empty() || node.trainingAsset.is_relative())
+        return utf8Path(node.trainingAsset);
+    std::error_code error;
+    const auto      relative = std::filesystem::relative(node.trainingAsset, project.path.parent_path(), error);
+    if (!error && !relative.empty() && relative.begin() != relative.end() && *relative.begin() != "..")
+        return utf8Path(relative);
+    return utf8Path(node.trainingAsset);
+}
+
+// The in-memory form is the resolved directory: runtime parameters, the training session and the
+// save-time copier all read one absolute location instead of joining a relative path three times.
+void resolveTrainingAssets(ProjectDefinition &project)
+{
+    if (project.path.empty())
+        return;
+    const auto base = project.path.parent_path();
+    for (auto &flow : project.flows)
+        for (auto &node : flow.nodes)
+            if (!node.trainingAsset.empty() && node.trainingAsset.is_relative())
+                node.trainingAsset = (base / node.trainingAsset).lexically_normal();
+}
+
 [[noreturn]] void invalid(const std::string &message)
 {
     throw ContractError(message);
@@ -506,6 +533,9 @@ ProjectLoadResult decodeProject(const ValueJson::Document &document, const ToolR
             if (raw.contains("tool_version_snapshot"))
                 node.toolVersionSnapshot = text(raw.value("tool_version_snapshot"), "tool_version_snapshot");
             node.alias = text(raw.value("alias"), "alias");
+            if (raw.contains("training_asset"))
+                node.trainingAsset = std::filesystem::path(
+                    QString::fromStdString(text(raw.value("training_asset"), "training_asset")).toStdWString());
             if (!raw.value("pos").isArray() || raw.value("pos").toArray().size() != 2)
                 invalid("node.pos 必须包含两个整数坐标");
             const auto x = std::get<std::int64_t>(literal({"pos", "0"}, {Type::Int}));
@@ -774,6 +804,9 @@ QJsonObject encodeProject(const ProjectDefinition &project)
                 raw.insert("tool_version_snapshot", QString::fromStdString(node.toolVersionSnapshot));
             raw.insert("alias", QString::fromStdString(node.alias));
             raw.insert("pos", QJsonArray{node.position.x, node.position.y});
+            raw.remove("training_asset");
+            if (!node.trainingAsset.empty())
+                raw.insert("training_asset", QString::fromStdString(storedTrainingAsset(project, node)));
             if (!unresolved)
             {
                 QJsonArray parameters;
@@ -903,6 +936,7 @@ ProjectLoadResult ProjectStorage::load(const std::filesystem::path &path) const
         const ValueJson::Document document(bytes);
         auto                      result = decodeProject(document, registry_);
         result.project.path              = absolute;
+        resolveTrainingAssets(result.project);
         return result;
     }
     catch (const ContractError &error)
@@ -917,6 +951,7 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
     auto                      result = decodeProject(document, registry_);
     result.project.path              = project.path;
     result.project.dirty             = result.project.dirty || project.dirty;
+    resolveTrainingAssets(result.project);
     for (std::size_t f = 0; f < project.flows.size(); ++f)
     {
         auto &updatedFlow             = result.project.flows[f];
@@ -963,17 +998,22 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
     return result;
 }
 
+std::filesystem::path projectDestination(std::filesystem::path destination)
+{
+    if (!destination.has_extension())
+        destination += ".vrt.json";
+    // Load accepts any casing of the suffix, so save has to accept the same spellings.
+    if (qtPath(destination.extension()).toLower() != ".json")
+        invalid("工程保存路径必须使用 .json 扩展名：" + utf8Path(destination));
+    return std::filesystem::absolute(destination).lexically_normal();
+}
+
 void ProjectStorage::save(ProjectDefinition &project, const std::filesystem::path &destination) const
 {
     auto target = destination.empty() ? project.path : destination;
     if (target.empty())
         invalid("未命名工程必须指定保存位置");
-    if (!target.has_extension())
-        target += ".vrt.json";
-    // Load accepts any casing of the suffix, so save has to accept the same spellings.
-    if (qtPath(target.extension()).toLower() != ".json")
-        invalid("工程保存路径必须使用 .json 扩展名：" + utf8Path(target));
-    target                = std::filesystem::absolute(target).lexically_normal();
+    target                      = projectDestination(target);
     ProjectDefinition candidate = project;
     candidate.path        = target;
     candidate.dirty       = false;

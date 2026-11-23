@@ -335,7 +335,10 @@ TypeSpec ValueJson::decodeType(const QJsonObject &json)
             throw ContractError("TypeSpec 包含未知字段：" + field.key().toStdString());
     TypeSpec type;
     const auto code = integer(json.value("type"));
-    if (code < 0 || code > static_cast<int>(Type::ROI)) throw ContractError("未知类型编码");
+    // Type::TrainingSet is declaration-only: a trainer port names it, while project values never
+    // carry one. Decoding stays the single place that converts the published number.
+    if (code < 0 || code > static_cast<int>(Type::TrainingSet))
+        throw ContractError("未知类型编码");
     type.type = static_cast<Type>(code);
     if (json.contains("dtype")) {
         const auto dtype = integer(json.value("dtype"));

@@ -133,6 +133,8 @@ Rectangle {
         }
         QuiTableView {
             id: table
+            view.ScrollBar.vertical: WorkbenchScrollBar {}
+            view.ScrollBar.horizontal: WorkbenchScrollBar {}
             objectName: "outputTable"
             Layout.fillWidth: true
             Layout.fillHeight: true

@@ -117,6 +117,8 @@ Rectangle {
         }
         QuiTreeView {
             id: tree
+            view.ScrollBar.vertical: WorkbenchScrollBar {}
+            view.ScrollBar.horizontal: WorkbenchScrollBar {}
             objectName: "toolTree"
             visible: root.expanded
             Layout.fillWidth: true

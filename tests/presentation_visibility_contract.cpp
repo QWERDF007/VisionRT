@@ -3,13 +3,13 @@
 // never reported as the image the user picked for results or export. The presentation owns that
 // decision, which is why this runs without a window: QML only renders the list it is given.
 
+#include "ResultPresentation.h"
 #include "core/ProjectEditor.h"
 #include "ui/OutputModel.h"
-#include "ResultPresentation.h"
 #include "ui/RoiEditSession.h"
 
-#include <QCoreApplication>
-
+#include <QGuiApplication>
+#include <QTest>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -90,7 +90,7 @@ struct FakeHost final : PresentationHost
 int main(int argc, char **argv)
 try
 {
-    QCoreApplication application(argc, argv);
+    QGuiApplication application(argc, argv);
 
     // Two hidden inputs and one visible output, exactly the shape the specification names.
     ToolDefinition tool;
@@ -148,6 +148,32 @@ try
     for (const auto &choice : choices)
         listed = listed || choice.toMap().value(QStringLiteral("id")).toString() == selected;
     require(listed, "the reported image is absent from the selector it came from");
+
+    session.end();
+    ImageViewport viewport;
+    presentation.adoptViewport(&viewport);
+    auto result         = std::make_shared<NodeSnapshot>();
+    result->node        = node.id;
+    result->toolId      = tool.nameEn;
+    result->generation  = 1;
+    result->publication = 1;
+    result->outputs.emplace(2, DataRef<Image>(Image{cv::Mat(40, 60, CV_8UC1, cv::Scalar(32))}));
+    presentation.setGeneration(1);
+    presentation.applyNode(node.id, false, {}, {}, result, 1);
+    presentation.updateResults();
+    presentation.setImageOutput("outputs:2");
+    presentation.updateDisplay();
+    require(!presentation.drainReady(), "the processing conversion control was not queued");
+    presentation.setSuspended(true);
+    QImage reference(13, 9, QImage::Format_RGB32);
+    reference.fill(Qt::green);
+    viewport.setHostImage(reference);
+    require(QTest::qWaitFor([&] { return presentation.drainReady(); }, 3000), "processing conversion did not finish");
+    require(viewport.displayedImage() == reference, "a queued processing frame replaced the training reference");
+    presentation.setSuspended(false);
+    presentation.updateDisplay();
+    require(QTest::qWaitFor([&] { return presentation.drainReady(); }, 3000), "processing view did not resume");
+    require(viewport.displayedImage().size() == QSize(60, 40), "returning to processing did not restore its image");
 
     std::cout << "Hidden ROI backgrounds stay internal; published ones join the selector\n";
     return 0;

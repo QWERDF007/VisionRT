@@ -57,7 +57,7 @@ try
   "name_zh": "大图存储",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "storage",
     "file": "tool.py",
     "symbol": "source"
@@ -66,39 +66,33 @@ try
     {
       "id": 1,
       "name_zh": "执行闸门",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     }
   ],
   "outputs": [
     {
       "id": 2,
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
-        "color_order": 2,
+        "color_order": "bgr",
         "visible": true
       }
     },
     {
       "id": 3,
       "name_zh": "对象编号",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })");
     write("tools/custom/storage/probe.json", R"({
   "name_en": "test.storage.probe",
   "name_zh": "存储计数",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "storage",
     "file": "tool.py",
     "symbol": "probe"
@@ -107,28 +101,24 @@ try
     {
       "id": 2,
       "name_zh": "分配",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 3,
       "name_zh": "释放",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 4,
       "name_zh": "存活",
       "type": {
-        "type": 5,
-        "dtype": 2,
+        "type": "array",
+        "dtype": "int64",
         "rank": 1
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })");
     write("python/custom/storage/tool.py", R"py(import numpy as np
 import weakref

@@ -39,7 +39,6 @@ WorkbenchDialog {
                 BoundedScrollView {
                     id: scrollView
                     anchors.fill: parent
-                    anchors.margins: 5
                     ScrollBar.horizontal.policy: ScrollBar.AsNeeded
                     ScrollBar.vertical.policy: ScrollBar.AsNeeded
 

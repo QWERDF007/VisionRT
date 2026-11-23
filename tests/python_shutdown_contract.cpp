@@ -55,7 +55,7 @@ try
   "name_zh": "Shutdown",
   "version": "1",
   "implementation": {
-    "kind": 2,
+    "kind": "python_class",
     "package": "concurrent_shutdown",
     "file": "tool.py",
     "symbol": "Tool"
@@ -65,14 +65,16 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
-})", root / "tools/custom/concurrent_shutdown.json", {ToolOrigin::Custom,
-                                                            {root / "tools/custom", root / "python/custom"}});
+  "schema_version": 2
+})",
+                                                        root / "tools/custom/concurrent_shutdown.json",
+                                                        {
+                                                            ToolOrigin::Custom,
+                                                            {root / "tools/custom", root / "python/custom"}
+        });
         auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
         runtime->refresh(std::span(&definition, 1));
         std::vector<std::unique_ptr<IToolInstance>> instances;
@@ -133,7 +135,7 @@ try
   "name_zh": "Shutdown",
   "version": "1",
   "implementation": {
-    "kind": 2,
+    "kind": "python_class",
     "package": "inflight_shutdown",
     "file": "tool.py",
     "symbol": "Tool"
@@ -143,14 +145,16 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
-})", root / "tools/custom/inflight_shutdown.json", {ToolOrigin::Custom,
-                                                            {root / "tools/custom", root / "python/custom"}});
+  "schema_version": 2
+})",
+                                                        root / "tools/custom/inflight_shutdown.json",
+                                                        {
+                                                            ToolOrigin::Custom,
+                                                            {root / "tools/custom", root / "python/custom"}
+        });
         auto runtime = std::make_unique<PythonRuntime>(testsupport::pythonEnvironment());
         runtime->refresh(std::span(&definition, 1));
         auto instance = runtime->factory(definition)();
@@ -191,7 +195,7 @@ def execute(inputs):
   "name_zh": "Memory",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "memory",
     "file": "tool.py",
     "symbol": "execute"
@@ -201,20 +205,16 @@ def execute(inputs):
       "id": 2,
       "name_en": "images",
       "name_zh": "Images",
-      "type": {
-        "type": 4
-      }
+      "type": "image"
     },
     {
       "id": 3,
       "name_en": "namespace",
       "name_zh": "Namespace",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })",
                                                     root / "tools/custom/memory.json",
                                                     {

@@ -19,52 +19,24 @@ Rectangle {
     }
     Column {
         anchors.top: parent.top
-        anchors.topMargin: 5
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 5
-        QuiTabButton {
-            objectName: "trainingProcessTab"
-            text: "处理"
-            verticalText: true
-            implicitWidth: VisionRTSize.BarSize
-            implicitHeight: 2 * VisionRTSize.ContentSize
-            padding: 0
-            font: QuiFont.Body
-            display: AbstractButton.TextOnly
-            showIndicator: true
-            radius: 3
-            normalColor: QuiColor.Primary
-            hoverColor: QuiColor.ItemHover
-            checkedColor: QuiColor.Primary
-            normalTextColor: QuiColor.FontPrimary
-            checkedTextColor: QuiColor.FontPrimary
-            hoverTextColor: QuiColor.FontPrimary
-            checked: !root.controller.trainingMode
-            enabled: root.controller.workspaceEnabled
-            onClicked: root.controller.trainingMode = false
-            Accessible.name: "处理"
-        }
-        QuiTabButton {
-            objectName: "trainingTrainTab"
-            text: "训练"
-            verticalText: true
-            implicitWidth: VisionRTSize.BarSize
-            implicitHeight: 2 * VisionRTSize.ContentSize
-            padding: 0
-            font: QuiFont.Body
-            display: AbstractButton.TextOnly
-            showIndicator: true
-            radius: 3
-            normalColor: QuiColor.Primary
-            hoverColor: QuiColor.ItemHover
-            checkedColor: QuiColor.Primary
-            normalTextColor: QuiColor.FontPrimary
-            checkedTextColor: QuiColor.FontPrimary
-            hoverTextColor: QuiColor.FontPrimary
-            checked: root.controller.trainingMode
-            enabled: root.controller.workspaceEnabled
-            onClicked: root.controller.trainingMode = true
-            Accessible.name: "训练"
+        width: parent.width
+        Repeater {
+            model: ["处理", "训练"]
+            WorkbenchTabButton {
+                required property string modelData
+                required property int index
+                objectName: index === 0 ? "trainingProcessTab" : "trainingTrainTab"
+                text: modelData
+                orientation: Qt.Vertical
+                width: root.width
+                implicitHeight: 2 * VisionRTSize.ContentSize
+                padding: 0
+                display: AbstractButton.TextOnly
+                checked: root.controller.trainingMode === (index === 1)
+                enabled: root.controller.workspaceEnabled
+                onClicked: root.controller.trainingMode = index === 1
+                Accessible.name: text
+            }
         }
     }
 }

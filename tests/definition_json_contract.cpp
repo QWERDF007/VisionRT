@@ -31,7 +31,19 @@ try
     output.imageVisible = true;
     authored.outputs.push_back(output);
     authored.initParams.push_back(PortDefinition{0, "训练数据", {Type::String}});
-    authored.training = TrainingSpec{TrainingKind::StraightEdges, 0};
+    authored.training                 = TrainingSpec{};
+    authored.training->image          = PortRef{PortStage::Inputs, 2};
+    authored.training->records.fields = {
+        {1, "参考边", TypeSpec{Type::ROI}, true, 2, 2}
+    };
+    authored.training->call.tool = "FitModel";
+    TrainingArtifactSpec artifact;
+    artifact.id         = "model";
+    artifact.sourcePort = 2;
+    artifact.format     = "sample.model";
+    artifact.version    = 1;
+    artifact.target     = {PortStage::Init, 0};
+    authored.training->artifacts.push_back(std::move(artifact));
     writeToolDefinitionFile(file, authored);
 
     auto restored = parseToolDefinitionFile(file);
@@ -41,13 +53,14 @@ try
     assert(std::ranges::find(restored.inputs, PortId{2}, &PortDefinition::id)->imageVisible);
     const auto result = std::ranges::find(restored.outputs, PortId{2}, &PortDefinition::id);
     assert(result != restored.outputs.end() && result->sameGeometryAs == output.sameGeometryAs && result->colorOrder == ColorOrder::BGR);
-    assert(restored.training && restored.training->kind == TrainingKind::StraightEdges);
+    const PortRef framePort{PortStage::Inputs, 2};
+    assert(restored.training->image == framePort);
+    assert(restored.training->records.fields.size() == 1 && restored.training->records.roiField() == 1
+           && restored.training->records.fields.front().maxRegions == 2);
 
     restored.nameZh = "编辑后的声明";
-    restored.training->kind = TrainingKind::ColorSamples;
     writeToolDefinitionFile(file, restored);
     const auto edited = parseToolDefinitionFile(file);
-    assert(edited.nameZh == "编辑后的声明" && edited.training->kind == TrainingKind::ColorSamples);
     assert(std::get<std::int64_t>(std::ranges::find(edited.inputs, PortId{1}, &PortDefinition::id)->defaultValue) == 9007199254740993LL);
     std::cout << "declaration save/reopen preserves typed metadata and exact integers\n";
     return 0;

@@ -246,16 +246,14 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
   "name_zh": "输出发布",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "init_params": [
     {
       "id": 0,
       "name_en": "code",
       "name_zh": "状态码",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
   "outputs": [
@@ -263,12 +261,10 @@ void nativeOutputDefaults(const std::filesystem::path &modulePath)
       "id": 2,
       "name_en": "value",
       "name_zh": "值",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
         const auto definition = parseToolDefinitionJson(declaration);
         auto       loader     = std::make_shared<PluginLoader>();
@@ -454,15 +450,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "打包计数器",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "init_params": [
     {
       "name_en": "initial",
       "name_zh": "初始值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 10,
       "id": 0
     }
@@ -471,28 +465,24 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     writeText(declarationDir / "function.json", R"json({
   "name_en": "test.plugin.function",
   "name_zh": "打包函数",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 1
     }
   ],
@@ -500,13 +490,11 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     // An unindexed builtin declaration invalidates the package.
     writeText(declarationDir / "ghost.json", R"json({
@@ -514,19 +502,17 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "未索引工具",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "outputs": [
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     writeText(pkgDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -579,15 +565,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "旧目录工具",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 1
     }
   ],
@@ -595,13 +579,11 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *legacy = registry.find("test.plugin.legacy");
@@ -613,15 +595,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "重复计数器",
   "version": "2.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "init_params": [
     {
       "name_en": "initial",
       "name_zh": "初始值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 10,
       "id": 0
     }
@@ -630,13 +610,11 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     registry.registerPackage(readToolsPackage(pkgDir));
     const auto *counter = registry.find("test.plugin.counter");
@@ -675,15 +653,13 @@ void packageRegistration(const std::filesystem::path &modulePath)
   "name_zh": "另一包函数",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 1
     }
   ],
@@ -691,13 +667,11 @@ void packageRegistration(const std::filesystem::path &modulePath)
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     writeText(otherDir / "module_index.json", R"json({
   "schema_version": 1,
@@ -781,15 +755,13 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "name_zh": "实际打包插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "init_params": [
     {
       "name_en": "initial",
       "name_zh": "初始值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 10,
       "id": 0
     }
@@ -798,13 +770,11 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
       "name_en": "count",
       "name_zh": "计数值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
         f.write(jsonContent);
     }
@@ -880,15 +850,13 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "name_zh": "函数插件",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "inputs": [
     {
       "name_en": "x",
       "name_zh": "输入X",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 1
     }
   ],
@@ -896,13 +864,11 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     {
       "name_en": "y",
       "name_zh": "输出Y",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
         f.write(funcJsonContent);
     }
@@ -1100,9 +1066,9 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
   "name_zh": "释放诊断",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
-  "schema_version": 1
+  "schema_version": 2
 })");
         QFile index(toQString(indexFile));
         assert(index.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -1314,19 +1280,17 @@ void unicodeAndChinesePathLoading(const std::filesystem::path &pluginAPath, cons
   "name_zh": "插件甲",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "outputs": [
     {
       "name_en": "val",
       "name_zh": "值",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "id": 2
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json");
     writeText(unicodeDir / "module_index.json", R"json({
   "schema_version": 1,

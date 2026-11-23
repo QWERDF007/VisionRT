@@ -27,8 +27,8 @@ ColumnLayout {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: 5
-            anchors.rightMargin: 5
+            anchors.leftMargin: VisionRTSize.Spacing
+            anchors.rightMargin: VisionRTSize.Spacing
             height: VisionRTSize.ContentSize
             model: root.controller.imageOutputs
             textRole: "name"
@@ -52,35 +52,37 @@ ColumnLayout {
             id: thumbnails
             visible: root.controller.imageCount > 0
             anchors.fill: parent
-            anchors.margins: 5
+            anchors.topMargin: VisionRTSize.Spacing
+            anchors.bottomMargin: VisionRTSize.Spacing
             clip: true
-            spacing: 5
+            spacing: VisionRTSize.Spacing
             boundsBehavior: Flickable.StopAtBounds
             boundsMovement: Flickable.StopAtBounds
             model: root.controller.imageCount
             currentIndex: root.controller.imageIndex
-            ScrollBar.vertical: QuiScrollBar {
+            ScrollBar.vertical: WorkbenchScrollBar {
+                id: thumbnailScrollBar
+                parent: thumbnails.parent
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
             }
             delegate: Item {
+                id: thumbnailRow
                 required property int index
-                width: thumbnails.width - 8
-                height: imageCard.height + indexLabel.implicitHeight
-                anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                Rectangle {
-                    id: imageCard
-                    width: parent.width
-                    height: thumbnail.height + 2 * thumbnail.anchors.margins
-                    color: QuiColor.Background
-                    border.color: QuiColor.Highlight
-                    border.width: index === root.controller.imageIndex ? 2 : 0
+                width: thumbnails.width
+                height: thumbnailCard.implicitHeight
+                ResultsThumbnailCard {
+                    id: thumbnailCard
+                    index: thumbnailRow.index
+                    x: VisionRTSize.ThumbnailHorizontalMargin
+                    width: thumbnails.width - 2 * VisionRTSize.ThumbnailHorizontalMargin
+                    height: implicitHeight
+                    selected: index === root.controller.imageIndex
                     ImageViewport {
                         id: thumbnail
-                        property int thumbnailIndex: index
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: 5
-                        height: VisionRTSize.ThumbnailHeight
+                        property int thumbnailIndex: thumbnailCard.index
+                        anchors.fill: parent
                         readOnly: true
                         enabled: false
                         inputRoiColor: VisionRTColor.InputROI
@@ -91,26 +93,20 @@ ColumnLayout {
                         Component.onCompleted: root.controller.attachViewport(thumbnail)
                         onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
                     }
-                }
-                QuiText {
-                    id: indexLabel
-                    anchors.top: imageCard.bottom
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: index
-                    font: QuiFont.Caption
-                    color: QuiColor.FontPrimary
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: root.controller.workspaceEnabled
-                    onClicked: root.controller.setImageIndex(index)
-                }
-                TapHandler {
-                    acceptedButtons: Qt.RightButton
-                    onTapped: {
-                        root.controller.setImageIndex(index);
-                        if (root.controller.canAddTrainingImage)
-                            root.trainingMenuRequested();
+                    MouseArea {
+                        parent: thumbnailCard
+                        anchors.fill: parent
+                        enabled: root.controller.workspaceEnabled
+                        onClicked: root.controller.setImageIndex(thumbnailCard.index)
+                    }
+                    TapHandler {
+                        parent: thumbnailCard
+                        acceptedButtons: Qt.RightButton
+                        onTapped: {
+                            root.controller.setImageIndex(thumbnailCard.index);
+                            if (root.controller.canAddTrainingImage)
+                                root.trainingMenuRequested();
+                        }
                     }
                 }
             }
@@ -125,8 +121,8 @@ ColumnLayout {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: 5
-            anchors.rightMargin: 5
+            anchors.leftMargin: VisionRTSize.Spacing
+            anchors.rightMargin: VisionRTSize.Spacing
             height: VisionRTSize.ButtonSize
             text: "加入训练"
             font: QuiFont.Body

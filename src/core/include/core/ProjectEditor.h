@@ -1,9 +1,9 @@
 #pragma once
 
 #include "core/Export.h"
-
 #include "core/Project.h"
 
+#include <functional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -83,6 +83,15 @@ struct CopiedSelection
     std::vector<NodeDefinition> nodes;
 };
 
+// One value a proposal writes. The stage says which side of the node is edited: an initialization
+// parameter or a literal input, never an output or an upstream connection.
+struct LiteralWrite
+{
+    PortStage stage = PortStage::Inputs;
+    PortId    port  = 0;
+    PortValue value;
+};
+
 // GUI-thread owned. Rejected commands throw ContractError without changing configuration.
 // Successful bool commands return whether persistent configuration actually changed.
 class VISIONRT_CORE_API ProjectEditor
@@ -134,12 +143,13 @@ public:
     bool setSource(std::string_view flowId, NodeId node, PortId input, std::optional<SourcePort> source);
     bool unbind(std::string_view flowId, NodeId node, PortId input);
     bool setLiteral(std::string_view flowId, NodeId node, PortId input, PortValue value);
-    // One transaction for a proposal that touches several literal inputs (ROI plus recommended
-    // parameters). Every port is validated before anything is written, inputs currently fed from
-    // upstream are refused instead of being silently disconnected, and the whole proposal raises
-    // exactly one node execution revision.
-    bool setLiteralBindings(std::string_view flowId, NodeId node,
-                            std::span<const std::pair<PortId, PortValue>> values);
+    // One transaction for a proposal that touches several values (ROI plus recommended parameters,
+    // or an initialization parameter and the input it initializes). Every target is validated before
+    // anything is written, inputs currently fed from upstream are refused instead of being silently
+    // disconnected, and the whole proposal raises exactly one node execution revision. A training
+    // publication also names the revision the node will read from that point on.
+    bool setLiteralWrites(std::string_view flowId, NodeId node, std::span<const LiteralWrite> writes,
+                          std::function<std::filesystem::path()> prepareTrainingAsset = {});
     bool setInitParam(std::string_view flowId, NodeId node, PortId parameter, PortValue value);
     // Raises the node's execution revision without touching its configuration. Used when an
     // external asset the node reads (trained data) changed and the tool must initialize again.

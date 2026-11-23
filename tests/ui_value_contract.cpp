@@ -56,7 +56,7 @@ try
   "name_zh": "图像源",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "fixture",
     "file": "tool.py",
     "symbol": "source"
@@ -65,11 +65,9 @@ try
     {
       "id": 2,
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
-        "color_order": 2,
+        "color_order": "bgr",
         "visible": true
       }
     },
@@ -77,40 +75,36 @@ try
       "id": 3,
       "name_zh": "列表",
       "type": {
-        "type": 5,
-        "dtype": 2,
+        "type": "array",
+        "dtype": "int64",
         "rank": 2
       }
     },
     {
       "id": 4,
       "name_zh": "轮次",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 5,
       "name_zh": "区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "relations": {
         "image": {
-          "stage": 2,
+          "stage": "outputs",
           "id": 2
         }
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })");
     write("tools/custom/fixture/editor.json", R"({
   "name_en": "test.ui.editor",
   "name_zh": "图像编辑",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "fixture",
     "file": "tool.py",
     "symbol": "edit"
@@ -119,9 +113,7 @@ try
     {
       "id": 1,
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       }
@@ -129,16 +121,14 @@ try
     {
       "id": 2,
       "name_zh": "裁剪区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "default": [],
       "ui": {
-        "editor": 9
+        "editor": "rect"
       },
       "relations": {
         "image": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       }
@@ -146,16 +136,14 @@ try
     {
       "id": 3,
       "name_zh": "区域",
-      "type": {
-        "type": 6
-      },
+      "type": "roi",
       "default": [],
       "ui": {
-        "editor": 8
+        "editor": "roi"
       },
       "relations": {
         "image": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       }
@@ -165,21 +153,19 @@ try
     {
       "id": 2,
       "name_zh": "图像",
-      "type": {
-        "type": 4
-      },
+      "type": "image",
       "display": {
         "visible": true
       },
       "relations": {
         "same_geometry_as": {
-          "stage": 1,
+          "stage": "inputs",
           "id": 1
         }
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })");
     write("python/custom/fixture/tool.py",
           "import numpy as np, time\nepoch = 0\npixels = np.full((80, 120, 3), 29, dtype=np.uint8)\n"

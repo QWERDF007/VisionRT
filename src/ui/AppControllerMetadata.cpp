@@ -5,7 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-
+#include <algorithm>
 #include <limits>
 
 namespace visionrt {
@@ -94,14 +94,7 @@ QVariantMap metadata(const ToolDefinition &definition)
         for (const auto &port : values) rows.push_back(portMetadata(port, stage));
         return rows;
     };
-    if (definition.interaction)
-    {
-        QVariantList kinds;
-        for (const auto kind : definition.interaction->roiKinds)
-            kinds.push_back(static_cast<int>(kind));
-        result["interaction"] = QVariantMap{{"helper", q(definition.interaction->helperNameEn)},
-                                            {"roiKinds", kinds}};
-    }
+
     result["inputs"]     = ports(definition.inputs, PortStage::Inputs);
     result["initParams"] = ports(definition.initParams, PortStage::Init);
     result["outputs"]    = ports(definition.outputs, PortStage::Outputs);
@@ -412,12 +405,25 @@ QVariantList AppController::parameters() const
 
     if (contract)
     {
+        // Published models are derived from the revision. Before publication the same business
+        // parameters remain available for choosing an existing model.
+        const auto derivedTrainingPath = [&](PortId id)
+        {
+            if (!tool->training || node->trainingAsset.empty())
+                return false;
+
+            return std::any_of(tool->training->artifacts.begin(), tool->training->artifacts.end(),
+                               [&](const TrainingArtifactSpec &artifact)
+                               { return artifact.target.stage == PortStage::Init && artifact.target.id == id; });
+        };
         for (const auto &port : contract->initParams)
         {
             // Derived initialisation entries are internal presentation sources: the parameter
             // editors own them, so they never appear as editable rows while still being handed to
             // the tool through nodeParameters().
             if (tool->derivesPorts() && isDerivedInitParam(tool->nodeModel, port.id))
+                continue;
+            if (derivedTrainingPath(port.id))
                 continue;
             add(port.id, port.type, true, &port);
         }

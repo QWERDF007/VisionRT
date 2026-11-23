@@ -154,14 +154,15 @@
           ],
           "init_params": [
             {
-              "port_id": 0,
-              "value": "examples/03_综合示例/02_识别线缆颜色/training/线缆对齐.json"
+              "port_id": 1,
+              "value": null
             }
           ],
+          "training_asset": "识别线缆颜色.assets/training/2/1",
           "type_snapshot": {
             "init_params": [
               {
-                "port_id": 0,
+                "port_id": 1,
                 "type": {
                   "type": 3
                 }
@@ -278,14 +279,15 @@
           ],
           "init_params": [
             {
-              "port_id": 0,
-              "value": "examples/03_综合示例/02_识别线缆颜色/training/线缆颜色.json"
+              "port_id": 1,
+              "value": null
             }
           ],
+          "training_asset": "识别线缆颜色.assets/training/3/1",
           "type_snapshot": {
             "init_params": [
               {
-                "port_id": 0,
+                "port_id": 1,
                 "type": {
                   "type": 3
                 }

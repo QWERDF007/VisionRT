@@ -205,6 +205,56 @@ void workerRelease(const PythonStorage &storage)
     assert(retained().is_none());
 }
 
+void trainingViews()
+{
+    cv::Mat frame(4, 5, CV_8UC3);
+    frame.setTo(cv::Scalar(10, 20, 30));
+    TrainingSet set;
+    set.images.emplace(7, trainingFrame(7, frame, ColorOrder::BGR));
+    TrainingRecord outer;
+    outer.id      = 3;
+    outer.imageId = 7;
+    outer.fields.emplace(1, std::string("外圈"));
+    outer.fields.emplace(2, DataRef<ROI>(ROI{{{3, 2.0, 2.0, 1.5}}}));
+    outer.fields.emplace(5, 12.5);
+    set.records.emplace(3, outer);
+    TrainingRecord inner;
+    inner.id      = 4;
+    inner.imageId = 7;
+    inner.fields.emplace(1, std::string("内圈"));
+    set.records.emplace(4, inner);
+
+    auto      source = std::make_unique<DataRef<TrainingSet>>(std::move(set));
+    auto      view   = toPython(*source).cast<py::dict>();
+    // Identity is the declared number, not the list position: ids 7/3/4 come back as dictionary keys.
+    py::array pixels = view["images"][py::int_(7)]["pixels"].cast<py::array>();
+    assert(pixels.ndim() == 3 && pixels.shape(0) == 4 && pixels.shape(1) == 5 && pixels.shape(2) == 3);
+    assert(pixels.dtype().is(py::dtype::of<std::uint8_t>()));
+    assert(view["images"][py::int_(7)]["color_order"].cast<int>() == static_cast<int>(ColorOrder::BGR));
+    assert(view["records"][py::int_(3)]["image_id"].cast<int>() == 7);
+    assert(view["records"][py::int_(4)]["fields"][py::int_(1)].cast<std::string>() == "内圈");
+    assert(view["records"][py::int_(3)]["fields"][py::int_(5)].cast<double>() == 12.5);
+
+    // A field region uses the same encoded list the ROI port answers.
+    py::list groups = view["records"][py::int_(3)]["fields"][py::int_(2)].cast<py::list>();
+    assert(groups.size() == 1);
+    py::list records = groups[0].cast<py::list>();
+    py::list encoded = records[0].cast<py::list>();
+    assert(encoded.size() == 4 && encoded[0].cast<double>() == 3.0 && encoded[3].cast<double>() == 1.5);
+
+    // The pixels are the stored frame, not a display conversion: channel 0 keeps the value the set
+    // wrote, and the colour order travels beside them as metadata.
+    auto *data = static_cast<std::uint8_t *>(pixels.mutable_data());
+    assert(data[0] == 10 && data[1] == 20 && data[2] == 30);
+    data[0] = 99;
+    assert(source->get().images.at(7).pixels.at<cv::Vec3b>(0, 0)[0] == 99);
+
+    // Releasing the call must not invalidate a view the trainer kept: the ndarray owns the set
+    // through the capsule, so the same pixels stay readable afterwards.
+    view = py::dict();
+    source.reset();
+    assert(data[0] == 99 && data[1] == 20);
+}
 }
 
 int main()
@@ -255,6 +305,7 @@ cropped = [images[0][1:, 1:3]]
         assert(released == 1 && retained.expired());
         nativeLists(storage);
         imageLayouts(storage);
+        trainingViews();
         workerRelease(storage);
         std::cout << "Writable NumPy views retain storage and preserve padded crops across 500 round trips\n";
         return 0;

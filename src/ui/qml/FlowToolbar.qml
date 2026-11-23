@@ -172,6 +172,7 @@ Rectangle {
                 width: Math.max(flowDropdown.width, 130)
                 implicitHeight: Math.min(flowListView.contentHeight + topPadding + bottomPadding, 220)
                 padding: 4
+                rightPadding: 0
                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent | Popup.CloseOnPressOutside
                 background: Rectangle {
                     radius: 4
@@ -189,12 +190,13 @@ Rectangle {
                     clip: true
                     implicitHeight: contentHeight
                     spacing: 5
-                    ScrollBar.vertical: QuiScrollBar {
+                    ScrollBar.vertical: WorkbenchScrollBar {
+                        id: flowScrollBar
                     }
                     delegate: Rectangle {
                         id: flowRow
                         objectName: "flowToggle_" + modelData.id
-                        width: flowListView.width
+                        width: flowListView.width - flowScrollBar.width
                         height: VisionRTSize.ContentSize
                         radius: 4
                         color: rowMouse.containsMouse ? QuiColor.Border : "transparent"

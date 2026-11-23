@@ -133,12 +133,15 @@ Window {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 5
+        anchors.leftMargin: VisionRTSize.Spacing
+        anchors.topMargin: VisionRTSize.Spacing
+        anchors.bottomMargin: VisionRTSize.Spacing
         spacing: 5
 
         RowLayout {
             id: toolbar
             Layout.fillWidth: true
+            Layout.rightMargin: VisionRTSize.Spacing
             spacing: 5
             Item {
                 Layout.fillWidth: true
@@ -159,13 +162,11 @@ Window {
             }
         }
 
-        ScrollView {
+        BoundedScrollView {
             id: scroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            ScrollBar.vertical: QuiScrollBar {
-            }
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
             TextArea {

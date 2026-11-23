@@ -553,7 +553,7 @@ void test10x4KZeroCopyAndPythonPassthrough()
         // Saturated burst submission to observe queue high-water marks
         for (quint64 reqId = 1; reqId <= 5; ++reqId)
         {
-            converter.requestBatch(batch, "BGR", reqId, 1);
+            converter.requestBatch(batch, ColorOrder::BGR, reqId, 1);
             maxInFlight = std::max(maxInFlight, converter.isBusy() ? std::size_t{1} : std::size_t{0});
             maxPending  = std::max(maxPending, converter.hasPending() ? std::size_t{1} : std::size_t{0});
         }
@@ -734,7 +734,7 @@ void testRepeatedOnceMemoryAndQueueStability(const std::filesystem::path &eviden
             // Trigger real display conversion within tool execution pipeline
             if (!inBatch.get().empty())
             {
-                auto frame = DisplayConverter::convert(inBatch.get().front(), "BGR");
+                auto frame = DisplayConverter::convert(inBatch.get().front(), ColorOrder::BGR);
                 require(!frame.image.isNull(), "Display conversion in loop returned null image");
             }
             return toolResult({{2, v * 2}, {3, inBatch}}, {});

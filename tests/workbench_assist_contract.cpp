@@ -4,10 +4,12 @@
 // transaction, Ctrl+click appends, the selected image index is honoured, non-identity alignment is
 // forwarded and inverse-transformed, an upstream ROI refuses the click, and editing a parameter
 // makes the pending preview stale.
+#include "SettingsFileGuard.h"
 #include "TestPythonConfiguration.h"
 #include "WorkbenchFixtures.h"
-#include "ui/AppController.h"
 #include "log/LogModel.h"
+#include "ui/AppController.h"
+#include "ui/OutputModel.h"
 
 #include <QDir>
 #include <QFile>
@@ -34,19 +36,21 @@ void require(bool condition, const std::string &message)
 // ReadImage: 图像路径 1, 图像数量 5, 图像 2.
 // MeasureCircle: 图像 1, 测量区域 2, 参考变换 3, 卡尺数量 4, 径向半搜索宽度 5,
 // 边缘极性 9; 测得圆 7.
-// MeasureRowSpacing: 合格宽度上限 8.
+// MeasureRowSpacing: 物体极性 6, 合格宽度下限 7, 合格宽度上限 8.
 constexpr PortId kPathInput            = 1;
 constexpr PortId kImagesInput          = 1;
 constexpr PortId kRoisInput            = 2;
+constexpr PortId kRowPolarityInput     = 6;
+constexpr PortId kRowWidthMinInput     = 7;
+constexpr PortId kRowWidthMaxInput     = 8;
 constexpr PortId kAlignmentInput       = 3;
 constexpr PortId kNumCalipersInput     = 4;
 constexpr PortId kSearchHalfWidthInput = 5;
-constexpr PortId kWidthMaxInput        = 8;
+constexpr PortId kSigmaInput           = 7;
 constexpr PortId kPolarityInput        = 9;
 constexpr PortId kImagesOutput         = 2;
 constexpr PortId kCountInput           = 5;
 constexpr PortId kCirclesOutput        = 7;
-
 
 QVariantMap rowOf(const QVariantList &rows, PortId id)
 {
@@ -112,34 +116,48 @@ int main(int argc, char **argv)
 try
 {
     // R50: the host runs Python only on an interpreter someone selected.
+    QGuiApplication            application(argc, argv);
+    testing::SettingsFileGuard settings;
     testsupport::useBuildInterpreter();
-    QGuiApplication application(argc, argv);
     testing::WorkbenchInstallation installation;
     const auto                     root = installation.directory();
 
     // Image 0 carries the replace and append circles, image 1 proves the selected index is honoured.
     const auto images = root + "/assist-images";
     require(QDir().mkpath(images), "assist image directory could not be created");
-    require(dots({{160.0, 120.0}, {60.0, 60.0}}, {40.0, 30.0}).save(images + "/0.png"),
+    require(dots(
+                {
+                    {160.0, 120.0},
+                    { 60.0,  60.0}
+    },
+                {40.0, 30.0})
+                .save(images + "/0.png"),
             "assist first image could not be written");
-    require(dots({{200.0, 80.0}}, {32.0}).save(images + "/1.png"), "assist second image could not be written");
+    require(dots(
+                {
+                    {200.0, 80.0}
+    },
+                {32.0})
+                .save(images + "/1.png"),
+            "assist second image could not be written");
     QImage stripes(320, 240, QImage::Format_Grayscale8);
     stripes.fill(20);
     {
         QPainter painter(&stripes);
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(220, 220, 220));
-        for (int x = 40; x < 280; x += 24)
-            painter.drawRect(x, 20, 10, 200);
+        for (int x = 40; x < 280; x += 24) painter.drawRect(x, 20, 10, 200);
     }
     require(stripes.save(images + "/2.png"), "assist stripe image could not be written");
 
     require(LogService::instance().start({}, root + "/logs/assist.log"), "assist log did not start");
     AppController app(2, root);
     app.setLogViewActive(true);
-    auto *history = qobject_cast<LogModel *>(app.logModel());
-    const auto    settle = [&]
-    { require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "assist operation did not settle"); };
+    auto      *history = qobject_cast<LogModel *>(app.logModel());
+    const auto settle  = [&]
+    {
+        require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "assist operation did not settle");
+    };
     // A management synchronize starts on the runtime thread shortly after a project edit. Let it
     // finish before the next pointer interaction, exactly as a user's next mouse move would.
     const auto stable = [&]
@@ -161,11 +179,22 @@ try
     require(app.setParameterPath(kPathInput, false, QUrl::fromLocalFile(images)), "assist image path was rejected");
     settle();
 
+    app.addNode("ReadImage", 1, 0);
+    settle();
+    const auto singleReader = app.selectedNode();
+    require(!singleReader.isEmpty(), "the single-frame measurement source is missing");
+    require(app.setParameter(kCountInput, false, "1"), "the single-frame count was rejected");
+    require(app.setParameterPath(kPathInput, false, QUrl::fromLocalFile(images + "/0.png")),
+            "the single-frame source was rejected");
+    settle();
+
     app.addNode("MeasureCircle", 0, 4);
     settle();
     const auto circle = app.selectedNode();
     require(!circle.isEmpty(), "assist circle node is missing");
-    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "circle image input could not be bound");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput),
+            "circle image input could not be bound");
+    require(app.setParameter(kSigmaInput, false, "3"), "the smoothing preset was rejected");
     settle();
     if (!app.save(root + "/assist.json"))
         throw std::runtime_error("assist project could not be saved: " + app.diagnostic().toStdString());
@@ -184,11 +213,13 @@ try
     require(QTest::qWaitFor([&] { return app.assistActive(); }, 5000),
             "smart point selection did not become available after the image was cached: "
                 + app.assistDisabledReason().toStdString());
-    require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("单击")); }, 2000), "assist guidance did not reach the log");
+    require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("单击")); }, 2000),
+            "assist guidance did not reach the log");
 
     // Hover only previews: candidate visible, project untouched.
     const auto parametersBefore = app.parameters();
-    require(app.assistHover(160.0, 120.0), "hover over the circle was rejected: " + app.assistDisabledReason().toStdString());
+    require(app.assistHover(160.0, 120.0),
+            "hover over the circle was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate: " + app.assistDisabledReason().toStdString());
     require(!app.dirty(), "a hover preview must not dirty the project");
@@ -211,8 +242,7 @@ try
     require(rois.value("hasRois").toBool() && rois.value("roiCount").toInt() == 1,
             "the committed ROI was not written back");
     const auto polarity = rowOf(rows, kPolarityInput).value("valueText").toString();
-    require(polarity == "dark_to_light" || polarity == "light_to_dark",
-            "the recommended polarity was not applied");
+    require(polarity == "dark_to_light" || polarity == "light_to_dark", "the recommended polarity was not applied");
     const double halfWidth = numericValue(rowOf(rows, kSearchHalfWidthInput).value("literal").toString());
     require(std::abs(halfWidth - 8.0) > 1e-9, "the recommended search half width was not applied");
     require(rowOf(rows, kNumCalipersInput).value("literal").toString()
@@ -229,13 +259,54 @@ try
                 5000),
             "a committed proposal must mark the previous formal result as stale");
 
+    auto *circleOutputs = qobject_cast<OutputModel *>(app.outputModel());
+    require(circleOutputs != nullptr, "the formal circle result model is missing");
+    const auto measuredCircle = [&]() -> PortValue
+    {
+        for (int row = 0; row < circleOutputs->rowCount(); ++row)
+        {
+            const auto captured = circleOutputs->capture(row);
+            if (captured && captured->port == kCirclesOutput)
+                return captured->value;
+        }
+        throw std::runtime_error("the formal circle output is missing");
+    };
+    require(app.bindInput(app.portContext(kImagesInput), singleReader, kImagesOutput),
+            "the formal measurement source could not be selected");
+    stable();
+    app.runNode();
+    stable();
+    const auto  pickedMeasurement = measuredCircle();
+    const auto *measured          = std::get_if<DataRef<ROI>>(&pickedMeasurement);
+    require(
+        measured && !measured->get().empty() && !measured->get().front().empty(),
+        "point selection must produce a real formal measurement before comparison: " + app.diagnostic().toStdString()
+            + " " + app.diagnostics().join(" | ").toStdString() + " " + history->allText().toStdString());
+    require(std::abs(RegionView(measured->get().front().front()).circle().radius() - 40.0) <= 1.5,
+            "the formal circle measurement does not match the source image");
+    const auto pickedGeometry = rowOf(app.parameters(), kRoisInput).value("literal").toString();
+    require(app.clearRoi(kRoisInput), "the manual ROI entry could not be started");
+    require(app.setParameter(kRoisInput, false, pickedGeometry, true),
+            "the same geometry could not be entered manually");
+    stable();
+    app.runNode();
+    stable();
+    require(equalValues(pickedMeasurement, measuredCircle()),
+            "manual and point-selected parameters must produce the same formal circle result");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput),
+            "the original batch source could not be restored");
+    stable();
+    app.setImageOutput(QStringLiteral("inputs:%1").arg(kImagesInput));
+    stable();
+
     // Ctrl+click at another circle appends instead of replacing, and keeps the global parameters.
     const auto beforeAppend = app.parameters();
     stable();
     require(app.assistHover(60.0, 60.0), "hover over the second circle was rejected");
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate for the second circle: " + app.assistDisabledReason().toStdString());
-    require(app.assistClick(60.0, 60.0, true), "append click was rejected: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(60.0, 60.0, true),
+            "append click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 2; }, 10000),
             "Ctrl+click did not append the second candidate");
     stable();
@@ -246,18 +317,23 @@ try
     // The selected image index owns the proposal: image 1 keeps image 0's group untouched.
     app.setImageIndex(1);
     stable();
+    require(app.assistClick(200.0, 80.0, true), "appending to a shared group was rejected");
+    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 7; }, 10000),
+            "editing a shared ROI must preserve it on every other batch image");
+    stable();
     require(app.assistHover(200.0, 80.0), "hover over the second image was rejected");
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover produced no candidate on the second image: " + app.assistDisabledReason().toStdString());
-    require(app.assistClick(200.0, 80.0, false), "second image click was rejected: " + app.assistDisabledReason().toStdString());
-    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 3; }, 10000),
+    require(app.assistClick(200.0, 80.0, false),
+            "second image click was rejected: " + app.assistDisabledReason().toStdString());
+    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 5; }, 10000),
             "the second image proposal was not committed");
     stable();
     require(app.save(root + "/assist.json"), "assist project could not be saved after the batch commit");
     settle();
     const auto batchGroups = roiGroups(root + "/assist.json", circle);
-    require(batchGroups.size() == 2 && batchGroups.at(0).toArray().size() == 2
-                && batchGroups.at(1).toArray().size() == 1,
+    require(batchGroups.size() == 3 && batchGroups.at(0).toArray().size() == 2
+                && batchGroups.at(1).toArray().size() == 1 && batchGroups.at(2) == batchGroups.at(0),
             "the proposal was not written to the selected image group");
     require(std::abs(recordCenter(batchGroups.at(1).toArray().at(0).toArray()).x() - 200.0) <= 1.5
                 && std::abs(recordCenter(batchGroups.at(1).toArray().at(0).toArray()).y() - 80.0) <= 1.5,
@@ -270,14 +346,16 @@ try
     require(app.setParameter(kAlignmentInput, false, "[[[1,0,10],[0,1,5],[0,0,1]]]", true),
             "assist alignment literal was rejected");
     stable();
-    require(app.assistHover(160.0, 120.0), "hover with alignment was rejected: " + app.assistDisabledReason().toStdString());
+    require(app.assistHover(160.0, 120.0),
+            "hover with alignment was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
             "hover with alignment produced no candidate: " + app.assistDisabledReason().toStdString());
     const auto alignedPreview = app.assistPreview().front().toList();
     require(std::abs(alignedPreview.at(1).toDouble() - 160.0) <= 1.5
                 && std::abs(alignedPreview.at(2).toDouble() - 120.0) <= 1.5,
             "the preview must stay in current-image coordinates");
-    require(app.assistClick(160.0, 120.0, false), "aligned click was rejected: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(160.0, 120.0, false),
+            "aligned click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return app.dirty(); }, 10000), "the aligned click was not committed");
     stable();
     require(app.save(root + "/assist.json"), "aligned assist project could not be saved");
@@ -287,6 +365,14 @@ try
     const auto aligned = recordCenter(alignedGroups.at(0).toArray().at(0).toArray());
     require(std::abs(aligned.x() - 150.0) <= 1.5 && std::abs(aligned.y() - 115.0) <= 1.5,
             "the proposal was not inverse-transformed into reference coordinates");
+    const auto alignmentBefore = rowOf(app.parameters(), kAlignmentInput).value("literal").toString();
+    require(app.setParameter(kAlignmentInput, false, "null", true), "the missing alignment could not be entered");
+    stable();
+    const auto missingAlignment = app.parameters();
+    require(!app.assistClick(160, 120, false), "a missing alignment must not be replaced by an identity matrix");
+    require(app.parameters() == missingAlignment, "a missing alignment must preserve every parameter");
+    require(app.setParameter(kAlignmentInput, false, alignmentBefore, true), "the alignment could not be restored");
+    stable();
 
     // Editing a parameter invalidates the preview that was learned from the old configuration.
     require(app.assistHover(160.0, 120.0),
@@ -312,7 +398,8 @@ try
     settle();
     const auto rowsNode = app.selectedNode();
     require(!rowsNode.isEmpty(), "row spacing node is missing");
-    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "row spacing image input could not be bound");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput),
+            "row spacing image input could not be bound");
     settle();
     app.runNode();
     settle();
@@ -322,23 +409,81 @@ try
             "the row spacing image could not be selected");
     app.setImageIndex(2);
     stable();
+    // Preset values the helper cannot agree with: the click has to overwrite all four declared
+    // targets (geometry, polarity and both width bounds) in one commit, or the declaration is not
+    // doing what it says.
+    require(app.setParameter(kRowPolarityInput, false, "dark"), "row polarity preset was rejected");
+    require(app.setParameter(kRowWidthMinInput, false, "50"), "row width lower preset was rejected");
+    require(app.setParameter(kRowWidthMaxInput, false, "60"), "row width upper preset was rejected");
+    stable();
     require(QTest::qWaitFor([&] { return app.assistActive(); }, 5000),
             "row spacing assist did not become available: " + app.assistDisabledReason().toStdString());
-    require(app.assistHover(160.0, 120.0), "row spacing hover was rejected: " + app.assistDisabledReason().toStdString());
+    require(app.assistHover(160.0, 120.0),
+            "row spacing hover was rejected: " + app.assistDisabledReason().toStdString());
     const bool rowPreview = QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000);
     require(rowPreview, "row spacing hover produced no candidate: " + app.assistDisabledReason().toStdString());
-    require(app.assistClick(160.0, 120.0, false), "row spacing click was rejected: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(160.0, 120.0, false),
+            "row spacing click was rejected: " + app.assistDisabledReason().toStdString());
     require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 1; }, 10000),
             "row spacing proposal was not committed: " + app.assistDisabledReason().toStdString());
     stable();
-    const auto rowWidths = app.parameters();
-    require(numericValue(rowOf(rowWidths, kWidthMaxInput).value("literal").toString()) < 1000000.0,
-            "row spacing width range was not applied");
+    const auto rowApplied = app.parameters();
+    require(rowOf(rowApplied, kRowPolarityInput).value("literal").toString() != QStringLiteral("dark"),
+            "the row spacing click did not apply the recommended polarity");
+    require(numericValue(rowOf(rowApplied, kRowWidthMinInput).value("literal").toString()) < 50.0,
+            "the row spacing click did not apply the recommended lower width bound");
+    require(numericValue(rowOf(rowApplied, kRowWidthMaxInput).value("literal").toString()) < 60.0,
+            "the row spacing click did not apply the recommended upper width bound");
+
+    // Ctrl+click adds a second band and leaves the shared parameters alone: the helper measured one
+    // band, and rewriting the group-wide bounds would silently reclassify the band already placed.
+    const auto beforeRowAppend = app.parameters();
+    require(app.setParameter(kRowWidthMinInput, false, "null", true), "the manual missing value was rejected");
+    stable();
+    const auto missingParameters = app.parameters();
+    const auto missingConflicts  = history->allText().count(QStringLiteral("冲突"));
+    QSignalSpy missingChanges(&app, &AppController::projectChanged);
+    require(app.assistClick(208, 120, true), "the missing shared parameter could not be evaluated");
+    require(QTest::qWaitFor([&] { return history->allText().count(QStringLiteral("冲突")) > missingConflicts; }, 5000),
+            "a missing shared limit must be diagnosed");
+    require(missingChanges.count() == 0 && app.parameters() == missingParameters,
+            "an append must preserve a missing shared parameter and the ROI");
+    require(app.setParameter(kRowWidthMinInput, false,
+                             rowOf(beforeRowAppend, kRowWidthMinInput).value("literal").toString(), true),
+            "the shared limit could not be restored");
+    stable();
+    const auto beforeConflict = history->allText().count(QStringLiteral("冲突"));
+    QSignalSpy rejectedAppend(&app, &AppController::projectChanged);
+    require(app.assistClick(200, 120, true), "the opposite-polarity candidate can be evaluated");
+    require(QTest::qWaitFor([&] { return history->allText().count(QStringLiteral("冲突")) > beforeConflict; }, 5000),
+            "incompatible global polarity is diagnosed: " + history->allText().toStdString());
+    require(rejectedAppend.count() == 0 && rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 1,
+            "an incompatible append leaves the complete configuration unchanged");
+    stable();
+    require(app.assistHover(208.0, 120.0),
+            "row spacing append hover was rejected: " + app.assistDisabledReason().toStdString());
+    require(QTest::qWaitFor([&] { return !app.assistPreview().isEmpty(); }, 5000),
+            "row spacing append hover produced no candidate: " + app.assistDisabledReason().toStdString());
+    require(app.assistClick(208.0, 120.0, true),
+            "row spacing append click was rejected: " + app.assistDisabledReason().toStdString());
+    require(QTest::qWaitFor([&] { return rowOf(app.parameters(), kRoisInput).value("roiCount").toInt() == 2; }, 10000),
+            "Ctrl+click did not append the second compatible band: " + history->allText().toStdString());
+    stable();
+    const auto afterRowAppend = app.parameters();
+    require(rowOf(afterRowAppend, kRowPolarityInput).value("literal")
+                == rowOf(beforeRowAppend, kRowPolarityInput).value("literal"),
+            "the append must keep the current polarity");
+    require(numericValue(rowOf(afterRowAppend, kRowWidthMinInput).value("literal").toString())
+                == numericValue(rowOf(beforeRowAppend, kRowWidthMinInput).value("literal").toString()),
+            "the append must keep the current lower width bound");
+    require(numericValue(rowOf(afterRowAppend, kRowWidthMaxInput).value("literal").toString())
+                == numericValue(rowOf(beforeRowAppend, kRowWidthMaxInput).value("literal").toString()),
+            "the append must keep the current upper width bound");
     require(app.save(root + "/assist.json"), "row spacing project could not be saved");
     const auto rowGroups = roiGroups(root + "/assist.json", rowsNode);
-    require(rowGroups.size() == 3 && rowGroups.at(2).toArray().size() == 1
+    require(rowGroups.size() == 3 && rowGroups.at(2).toArray().size() == 2
                 && static_cast<int>(rowGroups.at(2).toArray().at(0).toArray().at(0).toDouble()) == 2,
-            "row spacing proposal did not land as a rectangle on the selected image");
+            "row spacing proposals did not land as rectangles on the selected image");
     app.setImageIndex(0);
     stable();
 
@@ -348,16 +493,19 @@ try
     settle();
     const auto downstream = app.selectedNode();
     require(!downstream.isEmpty(), "downstream circle node is missing");
-    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput), "downstream image input could not be bound");
+    require(app.bindInput(app.portContext(kImagesInput), reader, kImagesOutput),
+            "downstream image input could not be bound");
     settle();
-    require(app.bindInput(app.portContext(kRoisInput), circle, kCirclesOutput), "downstream upstream ROI could not be bound");
+    require(app.bindInput(app.portContext(kRoisInput), circle, kCirclesOutput),
+            "downstream upstream ROI could not be bound");
     settle();
     app.setImageOutput(QStringLiteral("inputs:%1").arg(kImagesInput));
     require(app.selectedImageOutput() == QStringLiteral("inputs:%1").arg(kImagesInput),
             "the downstream image could not be selected");
     settle();
     require(!app.assistClick(160.0, 120.0, false), "an upstream ROI click must be refused");
-    require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("上游")); }, 2000), "the upstream refusal must reach the log");
+    require(QTest::qWaitFor([&] { return history->allText().contains(QStringLiteral("上游")); }, 2000),
+            "the upstream refusal must reach the log");
 
     app.assistCancel();
     require(app.assistPreview().isEmpty(), "cancel left a candidate visible");
@@ -369,8 +517,7 @@ try
     QSignalSpy closeReady(&app, &AppController::closeReady);
     require(app.assistHover(160.0, 120.0), "hover before close was rejected");
     app.requestClose();
-    require(QTest::qWaitFor([&] { return closeReady.count() == 1; }, 20000),
-            "close did not drain the assist channel");
+    require(QTest::qWaitFor([&] { return closeReady.count() == 1; }, 20000), "close did not drain the assist channel");
 
     std::cout << "WORKBENCH_ASSIST_PASS preview=1 dirty=0 click=roi+params append=2 batch=3 rows=rectangle "
                  "alignment=inverse upstream=refused stale=1\n";

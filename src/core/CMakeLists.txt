@@ -4,6 +4,7 @@ visionrt_add_module(core SOURCES
     InputNormalizer.cpp
     DefinitionJson.cpp
     ModuleIndex.cpp
+    ToolIntegrations.cpp
     ToolPackage.cpp
     ValueJson.cpp
     ValueJsonDocument.cpp

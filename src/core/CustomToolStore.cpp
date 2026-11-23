@@ -1,10 +1,12 @@
 #include "core/CustomToolStore.h"
 
 #include "core/DefinitionJson.h"
+#include "core/JsonFields.h"
 #include "core/ToolPaths.h"
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
 #include <QSaveFile>
 #include <algorithm>
 #include <fstream>
@@ -43,6 +45,26 @@ void writeAtomically(const std::filesystem::path &path, std::string_view content
         throw ContractError("提交" + std::string(what) + "失败：" + path.string());
 }
 
+void writeIntegrations(const std::filesystem::path &path, const std::map<std::string, ToolIntegrations> &registrations)
+{
+    if (registrations.empty())
+    {
+        std::filesystem::remove(path);
+        return;
+    }
+    QJsonObject entries;
+    for (const auto &[id, value] : registrations)
+        entries.insert(QString::fromStdString(id), writeToolIntegrations(value));
+    writeAtomically(path,
+                    QJsonDocument(QJsonObject{
+                                      {"schema_version",       1},
+                                      {         "tools", entries}
+    })
+                        .toJson()
+                        .toStdString(),
+                    "交互登记");
+}
+
 // The folder a declaration lives in is its category, so a tool's place in the tree is a directory
 // name the store can always reach: no empty part, no separator and no parent reference.
 std::filesystem::path declarationFolder(const std::filesystem::path        &root,
@@ -61,6 +83,31 @@ std::filesystem::path declarationFolder(const std::filesystem::path        &root
 }
 
 } // namespace
+
+std::map<std::string, ToolIntegrations> CustomToolStore::integrations() const
+{
+    const auto path = rootDir_ / "integrations.json";
+    if (!std::filesystem::exists(path))
+        return {};
+    const auto document = QJsonDocument::fromJson(json::read(path));
+    if (!document.isObject())
+        throw ContractError("自定义交互登记必须是 JSON 对象");
+    const auto root = document.object();
+    json::fields(root, {"schema_version", "tools"}, "自定义交互登记");
+    if (root.value("schema_version").toInteger() != 1)
+        throw ContractError("自定义交互登记版本必须为 1");
+    std::map<std::string, ToolIntegrations> result;
+    const auto                              entries = json::object(root.value("tools"), "自定义交互登记.tools");
+    for (auto it = entries.begin(); it != entries.end(); ++it)
+    {
+        const auto id = it.key().toStdString();
+        validateIdentifier(id, false);
+        const auto entry = json::object(it.value(), it.key());
+        json::fields(entry, {"processing_locator", "training_locator"}, it.key());
+        result.emplace(id, readToolIntegrations(entry));
+    }
+    return result;
+}
 
 std::string CustomToolStore::pythonTemplate(const ToolDefinition &definition)
 {
@@ -113,6 +160,7 @@ std::vector<PackageTool> CustomToolStore::discoverCustomTools(std::vector<std::s
     std::vector<PackageTool> result;
     const auto declDir = declarationsDir();
     const auto pyDir   = pythonDir();
+    const auto               registrations = integrations();
 
     if (!std::filesystem::exists(declDir) || !std::filesystem::is_directory(declDir))
         return result;
@@ -133,6 +181,8 @@ std::vector<PackageTool> CustomToolStore::discoverCustomTools(std::vector<std::s
         {
             PackageTool tool;
             tool.definition = parseToolDefinitionFile(entry.path(), source);
+            if (const auto found = registrations.find(tool.definition.nameEn); found != registrations.end())
+                tool.definition.integrations = found->second;
             result.push_back(std::move(tool));
         }
         catch (const std::exception &error)
@@ -231,7 +281,27 @@ ToolDefinition CustomToolStore::saveCustomTool(const ToolDefinition &authored, c
     // A tool moved to another folder keeps one declaration: the former file would otherwise be
     // discovered as a second copy of the same id.
     std::filesystem::create_directories(jsonDir);
-    writeAtomically(jsonPath, emitNormalizedToolJson(definition), "工具声明");
+    const auto registrationPath      = rootDir_ / "integrations.json";
+    const bool hadRegistrations      = std::filesystem::exists(registrationPath);
+    const auto previousRegistrations = hadRegistrations ? json::read(registrationPath) : QByteArray{};
+    auto       registrations         = integrations();
+    if (definition.integrations.processing || definition.integrations.training)
+        registrations[definition.nameEn] = definition.integrations;
+    else
+        registrations.erase(definition.nameEn);
+    writeIntegrations(registrationPath, registrations);
+    try
+    {
+        writeAtomically(jsonPath, emitNormalizedToolJson(definition), "工具声明");
+    }
+    catch (...)
+    {
+        if (hadRegistrations)
+            writeAtomically(registrationPath, previousRegistrations.toStdString(), "交互登记");
+        else
+            std::filesystem::remove(registrationPath);
+        throw;
+    }
     if (!previous.empty() && previous != jsonPath)
     {
         std::error_code error;
@@ -263,6 +333,12 @@ bool CustomToolStore::deleteCustomTool(const std::string &toolId)
     std::filesystem::remove(jsonPath, error);
     if (error)
         throw ContractError("无法删除工具声明：" + jsonPath.string() + "：" + error.message());
+
+    auto registrations = integrations();
+    if (registrations.erase(toolId))
+    {
+        writeIntegrations(rootDir_ / "integrations.json", registrations);
+    }
 
     if (package.empty())
         return true;

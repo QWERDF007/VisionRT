@@ -35,12 +35,12 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
                              ToolOrigin origin = ToolOrigin::Custom, std::string package = "math")
 {
     const auto folder = origin == ToolOrigin::Builtin ? "builtin" : "custom";
-    auto       result = parseToolDefinitionJson(R"({
+    auto       result        = parseToolDefinitionJson(R"({
   "name_en": "python.fixture",
   "name_zh": "Fixture",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "math",
     "file": "tool.py",
     "symbol": "execute"
@@ -50,15 +50,13 @@ ToolDefinition definitionFor(const std::filesystem::path &root, std::string id, 
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })",
-                                                root / "tools" / folder / "tool.json",
-                                                {
+                                                       root / "tools" / folder / "tool.json",
+                                                       {
                                               origin,
                                               {root / "tools" / folder, root / "python" / folder}
     });
@@ -526,7 +524,7 @@ try
   "name_zh": "Lazy",
   "version": "1",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "math",
     "file": "tool.py",
     "symbol": "execute"
@@ -536,12 +534,10 @@ try
       "id": 2,
       "name_en": "value",
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })",
                                                        root / "tools/custom/math/tool.json",
                                                        {

@@ -154,7 +154,7 @@ public:
                     require(roundtrip[batch].data == images->get()[batch].data
                                 && roundtrip[batch].step[0] == images->get()[batch].step[0],
                             "Image bridge copied storage or changed stride");
-                    frames.push_back(DisplayConverter::convert(roundtrip[batch], "BGR"));
+                    frames.push_back(DisplayConverter::convert(roundtrip[batch], ColorOrder::BGR));
                     require(frames.back().error.isEmpty() && !frames.back().image.isNull()
                                 && frames.back().image.constBits() != roundtrip[batch].data,
                             "Display did not create independent Qt storage");

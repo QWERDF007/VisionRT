@@ -1,15 +1,16 @@
-#include "core/ProjectStorage.h"
+#include "ExecutionEvidence.h"
 #include "RuntimeTestSupport.h"
+#include "TestPythonEnvironment.h"
 #include "ToolResultAssertions.h"
+#include "core/ProjectStorage.h"
 #include "core/ToolRegistry.h"
 #include "plugins/PluginLoader.h"
 #include "python_bridge/PythonRuntime.h"
-#include "TestPythonEnvironment.h"
 #include "runtime/Receiver.h"
 #include "runtime/RuntimeEngine.h"
 
-#include <opencv2/core.hpp>
 #include <core/ToolPackage.h>
+#include <opencv2/core.hpp>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -47,8 +48,8 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     const auto tempProjectFile = tmpPath / u8"Python图像统计.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"Python图像统计.vrt.json", tempProjectFile);
 
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -69,6 +70,8 @@ void testRealToolsCpuPythonPipeline(const std::filesystem::path &toolsPkg, const
     RuntimeEngine engine(4);
     assert((engine.start(loaded.project, registry, RunMode::Once).code == 0));
     auto update = finish(engine);
+
+    printExecutionEvidence(repoRoot / "examples" / projectPath / u8"Python图像统计.vrt.json", loaded.project, update);
 
     auto s1 = snapshot(update, 1);
     assert((s1 && s1->status.code == 0));
@@ -150,12 +153,12 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     // The shipped examples are the product: every project under the installed examples must load
     // without a diagnostic and produce real results from its own images. They are read exactly as
     // installed, because a resource path is relative to the product directory, not to the project.
-    const auto root = std::filesystem::u8path(QCoreApplication::applicationDirPath().toUtf8().toStdString())
-                    / "examples";
+    const auto root
+        = std::filesystem::u8path(QCoreApplication::applicationDirPath().toUtf8().toStdString()) / "examples";
     assert((std::filesystem::is_directory(root)));
 
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -166,8 +169,8 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     {
         auto loaded = storage.load(project);
         for (const auto &diagnostic : loaded.diagnostics)
-            std::cerr << "LOAD DIAGNOSTIC " << project.filename().string() << ": node="
-                      << (diagnostic.node ? *diagnostic.node : 0) << " field=" << diagnostic.field
+            std::cerr << "LOAD DIAGNOSTIC " << project.filename().string()
+                      << ": node=" << (diagnostic.node ? *diagnostic.node : 0) << " field=" << diagnostic.field
                       << " msg=" << diagnostic.message << std::endl;
         assert((loaded.diagnostics.empty()));
         assert((loaded.project.flows.size() == 1));
@@ -181,12 +184,12 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
             auto result = snapshot(update, node.id);
             if (!result || result->status.code != 0)
                 std::cerr << "NODE FAILURE " << project.filename().string() << " node=" << node.id
-                          << " tool=" << node.toolId
-                          << " code=" << (result ? result->status.code : -1)
+                          << " tool=" << node.toolId << " code=" << (result ? result->status.code : -1)
                           << " message=" << (result ? result->status.message : std::string{"missing"})
                           << " detail=" << (result ? result->status.detail : std::string{}) << std::endl;
             assert((result && result->status.code == 0));
         }
+        printExecutionEvidence(project, loaded.project, update);
         return update;
     };
 
@@ -202,7 +205,7 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     assert((binarised.size() == 1 && binarised[0].rows == 300 && binarised[0].cols == 400));
 
     const auto located = run(root / u8"02_工具示例" / u8"01_ROI定位与裁剪" / u8"ROI定位与裁剪.vrt.json", 3);
-    const auto &rois   = std::get<DataRef<ROI>>(snapshot(located, 2)->outputs.at(3)).get();
+    const auto &rois    = std::get<DataRef<ROI>>(snapshot(located, 2)->outputs.at(3)).get();
     assert((rois.size() == 1 && rois[0].size() == 1));
     const auto &cropped = std::get<DataRef<Image>>(snapshot(located, 3)->outputs.at(2)).get();
     assert((cropped.size() == 1 && cropped[0].rows == 300 && cropped[0].cols == 60));
@@ -210,24 +213,22 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     const auto circle       = run(root / u8"02_工具示例" / u8"03_圆测量" / u8"圆测量.vrt.json", 2);
     const auto circleResult = snapshot(circle, 2);
     const auto radius       = nestedOf<std::vector<std::vector<double>>>(std::get<Array>(circleResult->outputs.at(9)));
-    const auto centers = nestedOf<std::vector<std::vector<std::vector<double>>>>(
-        std::get<Array>(circleResult->outputs.at(8)));
+    const auto centers
+        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(circleResult->outputs.at(8)));
     assert((radius.size() == 1 && radius[0].size() == 1));
     assert((std::abs(radius[0][0] - 60.0) < 0.5));
     assert((std::abs(centers[0][0][0] - 160.0) < 0.5 && std::abs(centers[0][0][1] - 120.0) < 0.5));
 
     const auto spacing = run(root / u8"02_工具示例" / u8"04_行间距测量" / u8"行间距测量.vrt.json", 2);
     const auto spacingResult = snapshot(spacing, 2);
-    const auto widths = nestedOf<std::vector<std::vector<std::vector<double>>>>(
-        std::get<Array>(spacingResult->outputs.at(9)));
-    const auto gaps = nestedOf<std::vector<std::vector<std::vector<double>>>>(
-        std::get<Array>(spacingResult->outputs.at(10)));
+    const auto widths
+        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(spacingResult->outputs.at(9)));
+    const auto gaps
+        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(spacingResult->outputs.at(10)));
     assert((widths.size() == 1 && widths[0].size() == 1 && widths[0][0].size() == 5));
     assert((gaps[0][0].size() == 4));
-    for (const auto &width : widths[0][0])
-        assert((std::abs(width - 20.0) < 0.5));
-    for (const auto &gap : gaps[0][0])
-        assert((std::abs(gap - 20.0) < 0.5));
+    for (const auto &width : widths[0][0]) assert((std::abs(width - 20.0) < 0.5));
+    for (const auto &gap : gaps[0][0]) assert((std::abs(gap - 20.0) < 0.5));
 
     const auto branch = run(root / u8"03_综合示例" / u8"01_多分支视觉检测" / u8"多分支视觉检测.vrt.json", 5);
     const auto &branchRois = std::get<DataRef<ROI>>(snapshot(branch, 2)->outputs.at(3)).get();
@@ -243,33 +244,36 @@ void testShippedExamples(const std::filesystem::path &toolsPkg)
     // Colour recognition: the reference picture is its own reference, so the pose must come back as
     // the identity, and the five trained wire tips as their classes in wire order.
     const auto cable = run(root / u8"03_综合示例" / u8"02_识别线缆颜色" / u8"识别线缆颜色.vrt.json", 3);
-    const auto pose  = nestedOf<std::vector<std::vector<std::vector<double>>>>(
-        std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
+    const auto pose
+        = nestedOf<std::vector<std::vector<std::vector<double>>>>(std::get<Array>(snapshot(cable, 2)->outputs.at(2)));
     assert((pose.size() == 1 && pose[0].size() == 3 && pose[0][0].size() == 3));
     assert((std::abs(pose[0][0][0] - 1.0) < 1e-3 && std::abs(pose[0][1][1] - 1.0) < 1e-3));
     assert((std::abs(pose[0][0][1]) < 1e-3 && std::abs(pose[0][1][0]) < 1e-3));
-    assert((std::abs(pose[0][0][2]) < 2.0 && std::abs(pose[0][1][2]) < 2.0));
+    assert((std::hypot(pose[0][0][2], pose[0][1][2]) <= 0.75));
+    assert((std::abs(std::atan2(pose[0][1][0], pose[0][0][0]) * 180.0 / 3.14159265358979323846) <= 0.05));
     // The reference edges are reported back on the picture they were trained on.
     const auto foundEdges = std::get<DataRef<ROI>>(snapshot(cable, 2)->outputs.at(3)).get();
     assert((foundEdges.size() == 1 && foundEdges[0].size() == 2));
-    for (const auto &edge : foundEdges[0])
-        assert((RegionView(edge).kind() == RoiKind::Segment));
+    for (const auto &edge : foundEdges[0]) assert((RegionView(edge).kind() == RoiKind::Segment));
 
     const auto colorResult = snapshot(cable, 3);
-    const auto colors = nestedOf<std::vector<std::vector<std::string>>>(std::get<Array>(colorResult->outputs.at(4)));
-    const auto scores = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(5)));
-    const auto ratios = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(6)));
-    const auto centerXs
-        = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(7)));
-    const auto centerYs
-        = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(8)));
+    const auto colors   = nestedOf<std::vector<std::vector<std::string>>>(std::get<Array>(colorResult->outputs.at(4)));
+    const auto scores   = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(5)));
+    const auto ratios   = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(6)));
+    const auto centerXs = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(7)));
+    const auto centerYs = nestedOf<std::vector<std::vector<float>>>(std::get<Array>(colorResult->outputs.at(8)));
     assert((colors.size() == 1 && colors[0].size() == 5));
     const std::vector<std::string> expected{"purple", "red", "blue", "yellow", "purple"};
     assert((colors[0] == expected));
     // Five wire tips at their trained positions: the same index keeps the same wire across every
     // output, which is what a downstream rule indexes.
-    const std::vector<std::pair<float, float>> tips{{950.0F, 652.0F}, {950.0F, 819.0F}, {950.0F, 1019.0F},
-                                                    {950.0F, 1185.0F}, {950.0F, 1395.0F}};
+    const std::vector<std::pair<float, float>> tips{
+        {950.0F,  652.0F},
+        {950.0F,  819.0F},
+        {950.0F, 1019.0F},
+        {950.0F, 1185.0F},
+        {950.0F, 1395.0F}
+    };
     for (std::size_t index = 0; index < expected.size(); ++index)
     {
         assert((scores[0][index] > 0.3F && ratios[0][index] > 0.8F));
@@ -292,8 +296,8 @@ void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std
     const auto projectFile = tmpPath / u8"逻辑表达式与条件分支.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"逻辑表达式与条件分支.vrt.json", projectFile);
 
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -311,6 +315,9 @@ void testLogicExpressionExample(const std::filesystem::path &toolsPkg, const std
     RuntimeEngine engine(4);
     assert((engine.start(loaded.project, registry, RunMode::Once).code == 0));
     const auto update = finish(engine);
+
+    printExecutionEvidence(repoRoot / "examples" / projectPath / u8"逻辑表达式与条件分支.vrt.json", loaded.project,
+                           update);
 
     // The first image averages 51.0, so the expression result is true and one unit away from 50.
     const auto expression = snapshot(update, 3);
@@ -345,13 +352,13 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
     auto       loader  = std::make_shared<PluginLoader>();
     loader->registerPackage(package);
 
-    auto                 inst = loader->createAdapter("FilterDetections");
+    auto inst = loader->createAdapter("FilterDetections");
     assert((inst != nullptr));
     assert((inst->initialize({}).code == 0));
 
     // 1. Scenario: 0 targets (empty rois/scores/classes)
     {
-        cv::Mat      mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        cv::Mat        mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
         DataRef<Image> imgBatch(Image{(mat)});
         DataRef<ROI>   emptyRois(ROI{{}});
         Array          emptyScores  = Array::fromNested(NestedVector<float, 2>{{}});
@@ -396,9 +403,9 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
     // Target 1: (30, 30, 40, 40, 15), score=0.70, class=20, name="crack"   -> passes
     // Target 2: (50, 50, 60, 60, 30), score=0.95, class=30, name="dent"    -> passes
     {
-        cv::Mat          mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
-        DataRef<Image>   imgBatch(Image{(mat)});
-        RegionGroup  rois3;
+        cv::Mat        mat(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        DataRef<Image> imgBatch(Image{(mat)});
+        RegionGroup    rois3;
         rois3.push_back(std::vector<double>{2, 10.0f, 10.0f, 20.0f, 20.0f, 5.0f});
         rois3.push_back(std::vector<double>{2, 30.0f, 30.0f, 40.0f, 40.0f, 15.0f});
         rois3.push_back(std::vector<double>{2, 50.0f, 50.0f, 60.0f, 60.0f, 30.0f});
@@ -486,8 +493,8 @@ void testRaggedDetectionFilter(const std::filesystem::path &toolsPkg)
 
 void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
 {
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -499,7 +506,7 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     assert((def->kind == ToolKind::Cpp));
     assert((registry.availability("AdaptiveThreshold").state == ToolAvailability::Available));
 
-    auto                 inst = registry.create("AdaptiveThreshold");
+    auto inst = registry.create("AdaptiveThreshold");
     assert((inst != nullptr));
     assert((inst->initialize({}).code == 0));
 
@@ -509,7 +516,7 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
     mat(cv::Rect(5, 0, 5, 10)).setTo(200);
 
     DataRef<Image> imgBatch(Image{(mat)});
-    Values     inputs;
+    Values         inputs;
     inputs.emplace(1, std::move(imgBatch));
     inputs.emplace(2, std::int64_t{3});
     inputs.emplace(3, 5.0);
@@ -526,8 +533,8 @@ void testAdaptiveBinary(const std::filesystem::path &toolsPkg)
 
 void testRoiProjection(const std::filesystem::path &toolsPkg)
 {
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -537,7 +544,7 @@ void testRoiProjection(const std::filesystem::path &toolsPkg)
     assert((def != nullptr));
     assert((registry.availability("ProjectRoi").state == ToolAvailability::Available));
 
-    auto                 inst = registry.create("ProjectRoi");
+    auto inst = registry.create("ProjectRoi");
     assert((inst != nullptr));
     assert((inst->initialize({}).code == 0));
 
@@ -644,8 +651,8 @@ void testMissingDependencyHandling(const std::filesystem::path &repoRoot, const 
 void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg, const std::filesystem::path &repoRoot,
                                           PythonRuntime &python)
 {
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -664,8 +671,8 @@ void testRealToolsConcurrencyAndLifecycle(const std::filesystem::path &toolsPkg,
     assert((loaded.diagnostics.empty()));
 
     // Prepare 2 projects with different inputs (Engine 1: 2 images; Engine 2: 1 image via count=1)
-    ProjectDefinition project1                 = loaded.project;
-    ProjectDefinition project2                 = loaded.project;
+    ProjectDefinition project1           = loaded.project;
+    ProjectDefinition project2           = loaded.project;
     project2.flows[0].nodes[0].inputs[5] = {BindingMode::Literal, std::int64_t{1}, {}};
 
     // Concurrent execution of 2 independent engines sharing registry & plugin loader
@@ -735,8 +742,8 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     const auto tempProjectFile = tmpPath / u8"错误诊断.vrt.json";
     std::filesystem::copy_file(repoRoot / "examples" / projectPath / u8"错误诊断.vrt.json", tempProjectFile);
 
-    const auto package = visionrt::readToolsPackage(toolsPkg);
-    auto       loader  = std::make_shared<PluginLoader>();
+    const auto   package = visionrt::readToolsPackage(toolsPkg);
+    auto         loader  = std::make_shared<PluginLoader>();
     ToolRegistry registry;
     registry.setNativeProvider(loader);
     registry.registerPackage(package);
@@ -758,16 +765,17 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     assert((foundMissingDef));
 
     RuntimeEngine engine(2);
-    const bool inferenceIncluded = registry.find("DetectObjectsYolo") != nullptr;
+    const bool    inferenceIncluded = registry.find("DetectObjectsYolo") != nullptr;
     if (!inferenceIncluded)
     {
-        assert(std::any_of(loaded.diagnostics.begin(), loaded.diagnostics.end(), [](const auto &diagnostic)
-                          { return diagnostic.node == 3 && diagnostic.code == ProjectStorageCode::DefinitionMissing; }));
+        assert(
+            std::any_of(loaded.diagnostics.begin(), loaded.diagnostics.end(), [](const auto &diagnostic)
+                        { return diagnostic.node == 3 && diagnostic.code == ProjectStorageCode::DefinitionMissing; }));
         assert((!engine.start(loaded.project, registry, RunMode::Once)));
         std::erase_if(loaded.project.flows[0].nodes, [](const auto &node) { return node.id == 3; });
         std::cout << "[NOT_RUN] Model-file negative execution: DetectObjectsYolo is not included in this package.\n";
     }
-    const auto    startRes = engine.start(loaded.project, registry, RunMode::Once);
+    const auto startRes = engine.start(loaded.project, registry, RunMode::Once);
     if (startRes.code != 0)
     {
         std::cerr << "Diagnostic pipeline engine.start failed: code=" << startRes.code << " msg=" << startRes.message
@@ -777,6 +785,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     auto update = finish(engine);
 
     // Node 1: read succeeds
+    printExecutionEvidence(repoRoot / "examples" / projectPath / u8"错误诊断.vrt.json", loaded.project, update);
     auto s1 = snapshot(update, 1);
     assert((s1 && s1->status.code == 0));
 
@@ -804,6 +813,7 @@ void testDiagnosticPipeline(const std::filesystem::path &toolsPkg, const std::fi
     assert((missingStartStatus.code == -2));
     assert((missingStartStatus.message == "执行节点的工具定义缺失：unavailable.custom.plugin"));
     assert((missingStartStatus.detail.empty()));
+    std::cout << "EXPECTED_MISSING_DEFINITION " << missingStartStatus.code << " " << missingStartStatus.message << '\n';
 }
 
 void testRealPluginModulePipeline(PythonRuntime &python)
@@ -827,10 +837,10 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     // Register plugin counter tool
     ToolDefinition counterDef;
-    counterDef.nameEn           = "test.plugin.counter";
-    counterDef.nameZh           = "Plugin Counter";
-    counterDef.version          = "1.0.0";
-    counterDef.kind             = ToolKind::Cpp;
+    counterDef.nameEn  = "test.plugin.counter";
+    counterDef.nameZh  = "Plugin Counter";
+    counterDef.version = "1.0.0";
+    counterDef.kind    = ToolKind::Cpp;
 
     PortDefinition initParam;
     initParam.id           = 0;
@@ -850,10 +860,10 @@ void testRealPluginModulePipeline(PythonRuntime &python)
 
     // Register plugin function tool
     ToolDefinition funcDef;
-    funcDef.nameEn           = "test.plugin.function";
-    funcDef.nameZh           = "Plugin Function";
-    funcDef.version          = "1.0.0";
-    funcDef.kind             = ToolKind::Cpp;
+    funcDef.nameEn  = "test.plugin.function";
+    funcDef.nameZh  = "Plugin Function";
+    funcDef.version = "1.0.0";
+    funcDef.kind    = ToolKind::Cpp;
 
     PortDefinition inX;
     inX.id           = 1;
@@ -937,8 +947,7 @@ void testRealPluginModulePipeline(PythonRuntime &python)
     auto       rs1            = snapshot(reloadedUpdate, 1);
     assert((rs1 && std::get<std::int64_t>(rs1->outputs.at(2)) == std::get<std::int64_t>(s1->outputs.at(2))));
     auto rs2 = snapshot(reloadedUpdate, 2);
-    assert(
-        (rs2 && std::get<std::int64_t>(rs2->outputs.at(2)) == std::get<std::int64_t>(s2->outputs.at(2))));
+    assert((rs2 && std::get<std::int64_t>(rs2->outputs.at(2)) == std::get<std::int64_t>(s2->outputs.at(2))));
 }
 
 } // namespace
@@ -966,11 +975,16 @@ int main(int argc, char **argv)
     QCoreApplication      app(argc, argv);
     std::filesystem::path installRoot;
     std::filesystem::path repoRoot;
+    bool                  installedExamplesOnly = false;
 
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
-        if (arg == "--tools-package" && i + 1 < argc)
+        if (arg == "--installed-examples-only")
+        {
+            installedExamplesOnly = true;
+        }
+        else if (arg == "--tools-package" && i + 1 < argc)
         {
             installRoot = std::filesystem::path(argv[++i]);
         }
@@ -1008,19 +1022,28 @@ int main(int argc, char **argv)
         = std::filesystem::u8path(unicodeTemp.path().toUtf8().toStdString()) / "测试 工具 目录 with space";
     // Only the unicode-path contract is under test, so the heavyweight GPU inference runtime is
     // skipped: it is never loaded by these CPU/Python examples and would cost gigabytes per run.
-    copyWithoutGpuRuntime(toolsPkg, unicodePkg);
+    if (!installedExamplesOnly)
+        copyWithoutGpuRuntime(toolsPkg, unicodePkg);
+    const auto &exampleTools = installedExamplesOnly ? toolsPkg : unicodePkg;
 
     std::cout << "[TEST] Running real Tools package CPU + Python pipeline in unicode path (RT-S03)..." << std::endl;
-    testRealToolsCpuPythonPipeline(unicodePkg, repoRoot, python);
+    testRealToolsCpuPythonPipeline(exampleTools, repoRoot, python);
     std::cout << "[PASS] Real Tools package CPU + Python pipeline passed." << std::endl;
 
     std::cout << "[TEST] Running the shipped example projects..." << std::endl;
-    testShippedExamples(unicodePkg);
+    testShippedExamples(exampleTools);
     std::cout << "[PASS] Shipped example projects passed." << std::endl;
 
     std::cout << "[TEST] Running the expression and branch example..." << std::endl;
-    testLogicExpressionExample(unicodePkg, repoRoot, python);
+    testLogicExpressionExample(exampleTools, repoRoot, python);
     std::cout << "[PASS] Expression and branch example passed." << std::endl;
+
+    if (installedExamplesOnly)
+    {
+        testDiagnosticPipeline(exampleTools, repoRoot, python);
+        std::cout << "[PASS] Installed CPU, Python and diagnostic examples passed." << std::endl;
+        return 0;
+    }
 
     std::cout << "[TEST] Running ragged detection filter 0/3 targets test (RT-S03)..." << std::endl;
     testRaggedDetectionFilter(unicodePkg);

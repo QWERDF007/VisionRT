@@ -29,7 +29,7 @@ Rectangle {
         contentHeight: toolbarColumn.implicitHeight + 2 * 5
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: QuiScrollBar {
+        ScrollBar.vertical: WorkbenchScrollBar {
         }
         ColumnLayout {
             id: toolbarColumn

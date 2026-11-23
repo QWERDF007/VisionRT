@@ -37,11 +37,11 @@ def main():
             return result
 
         tool = {
-            "schema_version": 1,
+            "schema_version": 2,
             "name_en": "test.cli", "name_zh": "校验工具",
-            "version": "1", "implementation": {"kind": 0},
-            "inputs": [{"id": 1, "name_zh": "数量", "type": {"type": 0}, "default": 9007199254740993}],
-            "outputs": [{"id": 2, "name_zh": "值", "type": {"type": 0}}],
+            "version": "1", "implementation": {"kind": "cpp"},
+            "inputs": [{"id": 1, "name_zh": "数量", "type": "int", "default": 9007199254740993}],
+            "outputs": [{"id": 2, "name_zh": "值", "type": "int"}],
         }
         path = write("tools/builtin/工具.json", tool)
         run(path)

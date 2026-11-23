@@ -62,15 +62,13 @@ void runPackageReplacement(PythonRuntime &python)
   "name_zh": "Plugin Function",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "inputs": [
     {
       "id": 1,
       "name_zh": "X",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 10
     }
   ],
@@ -78,12 +76,10 @@ void runPackageReplacement(PythonRuntime &python)
     {
       "id": 2,
       "name_zh": "Y",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
     }
 
@@ -100,7 +96,7 @@ void runPackageReplacement(PythonRuntime &python)
   "name_zh": "Python Calc",
   "version": "1.0.0",
   "implementation": {
-    "kind": 1,
+    "kind": "python_function",
     "package": "calc",
     "file": "calc.py",
     "symbol": "execute"
@@ -109,21 +105,17 @@ void runPackageReplacement(PythonRuntime &python)
     {
       "id": 1,
       "name_zh": "Val",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
   "outputs": [
     {
       "id": 2,
       "name_zh": "Res",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
     }
 
@@ -135,37 +127,29 @@ void runPackageReplacement(PythonRuntime &python)
   "name_zh": "Test Receiver",
   "version": "1.0.0",
   "implementation": {
-    "kind": 3,
+    "kind": "host",
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "id": 0,
       "name_zh": "Source Flow",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     },
     {
       "id": 1,
       "name_zh": "Source Node",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     },
     {
       "id": 2,
       "name_zh": "Source Port",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 3,
       "name_zh": "Timeout",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 1000
     }
   ],
@@ -173,26 +157,20 @@ void runPackageReplacement(PythonRuntime &python)
     {
       "id": 2,
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 3,
       "name_zh": "Source Status Code",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 4,
       "name_zh": "Source Status Message",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
     }
 
@@ -423,27 +401,23 @@ void runPackageReplacement(PythonRuntime &python)
   "name_zh": "Plugin Counter",
   "version": "1.0.0",
   "implementation": {
-    "kind": 0
+    "kind": "cpp"
   },
   "init_params": [
     {
       "id": 0,
       "name_zh": "Initial",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
   "outputs": [
     {
       "id": 2,
       "name_zh": "Count",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
     }
     // Write platform receiver declaration
@@ -454,37 +428,29 @@ void runPackageReplacement(PythonRuntime &python)
   "name_zh": "Test Receiver",
   "version": "1.0.0",
   "implementation": {
-    "kind": 3,
+    "kind": "host",
     "binding": "visionrt.receiver"
   },
   "init_params": [
     {
       "id": 0,
       "name_zh": "Source Flow",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     },
     {
       "id": 1,
       "name_zh": "Source Node",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     },
     {
       "id": 2,
       "name_zh": "Source Port",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 3,
       "name_zh": "Timeout",
-      "type": {
-        "type": 0
-      },
+      "type": "int",
       "default": 1000
     }
   ],
@@ -492,26 +458,20 @@ void runPackageReplacement(PythonRuntime &python)
     {
       "id": 2,
       "name_zh": "Value",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 3,
       "name_zh": "Source Status Code",
-      "type": {
-        "type": 0
-      }
+      "type": "int"
     },
     {
       "id": 4,
       "name_zh": "Source Status Message",
-      "type": {
-        "type": 3
-      }
+      "type": "string"
     }
   ],
-  "schema_version": 1
+  "schema_version": 2
 })json";
     }
     // Write module_index.json for Package 2
