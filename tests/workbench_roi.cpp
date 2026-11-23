@@ -339,6 +339,7 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto target = app.selectedNode();
     require(target != source && app.bindInput(app.portContext(kImagesInput), source, kSourceImagesOutput), "ROI image input could not bind to the source");
+    require(app.setParameter(kRoisInput, false, "[[[0,1,2,3,4]]]"), "point parameter could not be set");
     const auto literal = [&]
     {
         for (const auto &entry : app.parameters())
@@ -385,6 +386,25 @@ void roiParameterContract()
         return image.pixelColor(qFloor(point.x()), qFloor(point.y()));
     };
     require(QTest::qWaitFor([&] { return editor->height() > 0; }, 1000), "ROI row has no layout");
+    QObject *geometryField = nullptr;
+    for (auto *item : owner->findChildren<QQuickItem *>())
+        if (item->metaObject()->indexOfProperty("inputItem") >= 0
+            && item->property("text").toString() == literal())
+            geometryField = item;
+    require(geometryField != nullptr, "ROI field replaced the coordinates with a summary");
+    auto *geometryInput = geometryField->property("inputItem").value<QObject *>();
+    require(geometryInput && geometryInput->property("cursorPosition").toInt() == 0,
+            "unfocused ROI field starts at the end of its coordinates");
+    {
+        QSignalSpy noOpChanges(&app, &AppController::parametersChanged);
+        QMetaObject::invokeMethod(geometryField, "commitRequested");
+        require(noOpChanges.isEmpty(), "untouched ROI text rewrote the parameter");
+    }
+    geometryField->setProperty("text", "[[[0,1,2,3,8]]]");
+    QMetaObject::invokeMethod(geometryField, "commitRequested");
+    require(QJsonDocument::fromJson(literal().toUtf8()).array()[0].toArray()[0].toArray()[4].toInt() == 8,
+            "ROI text editing did not commit the coordinate");
+    require(app.setParameter(kRoisInput, false, "[[]]"), "ROI editing fixture could not be cleared");
     const auto findAction = [&]
     {
         QQuickItem *found   = nullptr;

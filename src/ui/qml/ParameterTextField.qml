@@ -110,6 +110,8 @@ Item {
                     clip: true
                     autoScroll: true
 
+                    onTextChanged: if (!activeFocus)
+                        cursorPosition = 0
                     onActiveFocusChanged: if (!activeFocus)
                         cursorPosition = 0
                     onEditingFinished: {

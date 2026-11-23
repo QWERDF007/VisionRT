@@ -205,6 +205,7 @@ ColumnLayout {
         id: upstreamEditor
         QuiGroupComboBox {
             id: groupCombo
+            indicatorIconSize: VisionRTSize.IconSize
             flat: true
             property var bindingContext: ({})
             objectName: "parameterUpstream"
@@ -506,7 +507,7 @@ ColumnLayout {
             id: field
             backgroundColor: QuiColor.Hovered
             readonly property bool hasRect: root.parameter.hasRect === true
-            readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape === 2
+            readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape === RoiDrawShape.DrawRectangle
 
             leadingActionIcon: QuiFontIcon.RectangularClipping
             leadingActionText: isDrawing ? "正在绘制..." : "画矩形"
@@ -519,7 +520,7 @@ ColumnLayout {
                 if (isDrawing) {
                     app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, 2);
+                    app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawRectangle);
                 }
             }
             onActionRequested: app.clearRoi(root.parameter.id)
@@ -564,6 +565,7 @@ ColumnLayout {
         id: regionsEditor
         ParameterTextField {
             id: field
+            property string committedText: ""
             backgroundColor: QuiColor.Hovered
             readonly property int count: root.parameter.roiCount !== undefined ? root.parameter.roiCount : 0
             readonly property bool hasRois: count > 0
@@ -580,7 +582,7 @@ ColumnLayout {
                 if (isDrawing) {
                     app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, 2);
+                    app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawRectangle);
                 }
             }
             onActionRequested: app.clearRoi(root.parameter.id)
@@ -595,30 +597,31 @@ ColumnLayout {
                 id: shapeMenu
                 MenuItem {
                     text: "画矩形"
-                    onTriggered: app.startRoiDraw(root.parameter.id, 2)
+                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawRectangle)
                 }
                 MenuItem {
                     text: "画圆"
-                    onTriggered: app.startRoiDraw(root.parameter.id, 3)
+                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawCircle)
                 }
                 MenuItem {
                     text: "画线"
-                    onTriggered: app.startRoiDraw(root.parameter.id, 1)
+                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawLine)
                 }
                 MenuItem {
                     text: "画多边形"
-                    onTriggered: app.startRoiDraw(root.parameter.id, 4)
+                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawPolygon)
                 }
                 MenuItem {
-                    text: "画点集"
-                    onTriggered: app.startRoiDraw(root.parameter.id, 5)
+                    text: "画点"
+                    onTriggered: app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawPoint)
                 }
             }
 
             function sync(force) {
-                const currentText = hasRois ? ("[" + count + " 个区域]") : "[]";
+                const currentText = root.valueText;
                 if (force || !inputItem.activeFocus) {
                     text = currentText;
+                    committedText = currentText;
                     invalid = false;
                 }
             }
@@ -626,12 +629,16 @@ ColumnLayout {
             Component.onCompleted: sync(true)
 
             onCommitRequested: {
+                if (text === committedText)
+                    return;
                 if (text === "[]" || text.trim() === "" || text === "null" || text === "~") {
                     app.clearRoi(root.parameter.id);
                     invalid = false;
                     return;
                 }
                 invalid = !root.commit(text);
+                if (!invalid)
+                    committedText = text;
             }
 
             onCancelRequested: sync(true)

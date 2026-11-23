@@ -28,7 +28,7 @@ Vector nestedSample()
 }
 
 template<class Element, int Rank>
-void arrayPreviews()
+void arrayDisplay()
 {
     PortValue      value = Array::fromNested(nestedSample<NestedVector<Element, Rank>>());
     const auto     type  = *typeOf(value);
@@ -42,13 +42,13 @@ void arrayPreviews()
     model.setResult(&definition, snapshot, {});
     const auto full = OutputModel::fullText(*model.capture(2));
     const auto text = model.get(2)["preview"].toString();
-    require(!text.isEmpty() && text.size() <= 256, "Array dtype/rank preview is empty or unbounded");
+    require(text == full, "Array display is not the complete encoded value");
     require(QJsonDocument::fromJson(text.toUtf8()).array() == QJsonDocument::fromJson(full.toUtf8()).array(),
             "Array preview flattened nested values or did not escape native strings");
     require(OutputModel::estimatedTextBytes(*model.capture(2)) >= static_cast<std::size_t>(full.toUtf8().size()),
             "Array full text estimate is below the encoded bytes");
     if constexpr (Rank < 4)
-        arrayPreviews<Element, Rank + 1>();
+        arrayDisplay<Element, Rank + 1>();
 }
 }
 
@@ -56,13 +56,13 @@ int main(int argc, char **argv)
 try
 {
     QCoreApplication application(argc, argv);
-    arrayPreviews<std::uint8_t, 1>();
-    arrayPreviews<std::int32_t, 1>();
-    arrayPreviews<std::int64_t, 1>();
-    arrayPreviews<float, 1>();
-    arrayPreviews<double, 1>();
-    arrayPreviews<bool, 1>();
-    arrayPreviews<std::string, 1>();
+    arrayDisplay<std::uint8_t, 1>();
+    arrayDisplay<std::int32_t, 1>();
+    arrayDisplay<std::int64_t, 1>();
+    arrayDisplay<float, 1>();
+    arrayDisplay<double, 1>();
+    arrayDisplay<bool, 1>();
+    arrayDisplay<std::string, 1>();
     ToolDefinition definition;
     // Outputs are numbered 2..5: 0 and 1 belong to the host-owned status envelope.
     definition.outputs = {
@@ -106,13 +106,23 @@ try
     // Growing the structure replaces the value: published storage is never resized in place.
     snapshot->outputs[2] = Array::fromNested(NestedVector<std::int64_t, 2>(10000, {1, 2, 3}));
     model.setResult(&definition, snapshot, {});
-    require(model.get(2)["preview"].toString().size() <= 256 && model.get(2)["tooltip"].toString().size() <= 4096,
-            "output preview expanded the complete Array");
+    require(model.get(2)["preview"].toString() == OutputModel::fullText(*model.capture(2))
+                && model.get(2)["tooltip"].toString() == model.get(2)["preview"].toString(),
+            "output display replaced array values with a truncated preview");
     require(OutputModel::fullText(*model.capture(2)).size() > 4096, "full output was replaced with a preview");
     const auto regions = QJsonDocument::fromJson(OutputModel::fullText(*model.capture(3)).toUtf8()).array();
     require(regions.size() == 2 && regions[0].toArray()[0].toArray().size() == 4,
             "ROI lost native three-level list encoding");
-    std::cout << "Native output values preserve JSON, bounded previews and independent cached text\n";
+    snapshot->outputs[3] = DataRef<ROI>(ROI{{makePoint(1, 2), makeSegment({0, 0}, {1, 1}),
+        makeRectangle(1, 2, 3, 4), makeCircle({5, 6}, 2),
+        makePolygon(std::vector<cv::Point2d>{{0, 0}, {4, 0}, {4, 3}})}});
+    snapshot->outputs[5] = QString(10000, QChar(0x4e2d)).toUtf8().toStdString();
+    model.setResult(&definition, snapshot, {});
+    require(model.get(3)["typeDisplay"].toString() == QStringLiteral("点、线、矩形、圆、多边形"),
+            "output type hid its concrete geometry kinds");
+    require(model.get(5)["preview"].toString() == QString(10000, QChar(0x4e2d)),
+            "long Unicode string display was truncated");
+    std::cout << "Native output values preserve complete data, concrete geometry and independent cached text\n";
 }
 catch (const std::exception &error)
 {

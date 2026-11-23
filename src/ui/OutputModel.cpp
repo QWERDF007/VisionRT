@@ -16,211 +16,6 @@ QString q(const std::string &value)
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
-struct Preview
-{
-    QString   text;
-    qsizetype limit;
-    bool      truncated = false;
-
-    bool append(QStringView value)
-    {
-        const auto room = limit - text.size();
-        if (value.size() > room)
-        {
-            text += value.left(std::max<qsizetype>(0, room));
-            truncated = true;
-            return false;
-        }
-        text += value;
-        return true;
-    }
-
-    bool append(const QString &value)
-    {
-        return append(QStringView(value));
-    }
-
-    bool full() const
-    {
-        return text.size() >= limit;
-    }
-
-    QString finish()
-    {
-        if (truncated || full())
-        {
-            text.truncate(std::max<qsizetype>(0, limit - 3));
-            text += QStringLiteral("...");
-        }
-        return text;
-    }
-};
-
-QString stringPreview(const std::string &value, qsizetype limit, bool quoted, bool &truncated)
-{
-    const auto bytes = std::min(value.size(), static_cast<std::size_t>(limit) * 4 + 4);
-    truncated |= bytes < value.size();
-    const auto prefix = QString::fromUtf8(value.data(), static_cast<qsizetype>(bytes));
-    if (!quoted)
-        return prefix;
-    return ValueJson::text(prefix.toUtf8().toStdString(), {Type::String});
-}
-
-template<class Vector>
-void appendNested(Preview &out, const Vector &values)
-{
-    using Element = typename Vector::value_type;
-    out.append(QStringLiteral("["));
-    for (std::size_t index = 0; index < values.size(); ++index)
-    {
-        if (out.full())
-        {
-            out.truncated = true;
-            return;
-        }
-        if (index)
-            out.append(QStringLiteral(", "));
-        if constexpr (std::is_same_v<Element, std::string>)
-            out.append(stringPreview(values[index], out.limit - out.text.size(), true, out.truncated));
-        else if constexpr (std::is_same_v<Element, bool>)
-            out.append(values[index] ? QStringLiteral("true") : QStringLiteral("false"));
-        else if constexpr (std::is_integral_v<Element>)
-            out.append(QString::number(static_cast<qlonglong>(values[index])));
-        else if constexpr (std::is_floating_point_v<Element>)
-            out.append(QString::number(values[index], 'g', std::numeric_limits<Element>::max_digits10));
-        else
-            appendNested(out, values[index]);
-    }
-    out.append(QStringLiteral("]"));
-}
-
-
-template<class T>
-void appendArrayLeaf(Preview &out, const Array &array, std::size_t index)
-{
-    if constexpr (std::is_same_v<T, bool>)
-        out.append(array.boolBytes()[index] != 0 ? QStringLiteral("true") : QStringLiteral("false"));
-    else if constexpr (std::is_same_v<T, std::string>)
-        out.append(stringPreview(array.elements<std::string>()[index], out.limit - out.text.size(), true,
-                                 out.truncated));
-    else if constexpr (std::is_integral_v<T>)
-        out.append(QString::number(static_cast<qlonglong>(array.elements<T>()[index])));
-    else
-        out.append(QString::number(array.elements<T>()[index], 'g', std::numeric_limits<T>::max_digits10));
-}
-
-template<class T>
-void appendArrayDense(Preview &out, const Array &array, int dimension, std::size_t &index)
-{
-    out.append(QStringLiteral("["));
-    const auto &shape = array.shape();
-    for (std::int64_t i = 0; i < shape[static_cast<std::size_t>(dimension)]; ++i)
-    {
-        if (out.full())
-        {
-            out.truncated = true;
-            return;
-        }
-        if (i)
-            out.append(QStringLiteral(", "));
-        if (dimension + 1 == static_cast<int>(shape.size()))
-            appendArrayLeaf<T>(out, array, index++);
-        else
-            appendArrayDense<T>(out, array, dimension + 1, index);
-    }
-    out.append(QStringLiteral("]"));
-}
-
-template<class T>
-void appendArrayRagged(Preview &out, const Array &array, int level, std::size_t group, std::size_t &index)
-{
-    out.append(QStringLiteral("["));
-    const auto &bounds = array.offsets()[static_cast<std::size_t>(level)];
-    if (level + 1 == static_cast<int>(array.offsets().size()))
-    {
-        for (auto leaf = bounds[group]; leaf < bounds[group + 1]; ++leaf)
-        {
-            if (out.full())
-            {
-                out.truncated = true;
-                return;
-            }
-            if (leaf != bounds[group])
-                out.append(QStringLiteral(", "));
-            appendArrayLeaf<T>(out, array, index++);
-        }
-    }
-    else
-    {
-        for (auto child = bounds[group]; child < bounds[group + 1]; ++child)
-        {
-            if (out.full())
-            {
-                out.truncated = true;
-                return;
-            }
-            if (child != bounds[group])
-                out.append(QStringLiteral(", "));
-            appendArrayRagged<T>(out, array, level + 1, static_cast<std::size_t>(child), index);
-        }
-    }
-    out.append(QStringLiteral("]"));
-}
-
-template<class T>
-void appendArrayTyped(Preview &out, const Array &array)
-{
-    if (array.layout() == ArrayLayout::Dense)
-    {
-        std::size_t index = 0;
-        appendArrayDense<T>(out, array, 0, index);
-        return;
-    }
-    out.append(QStringLiteral("["));
-    std::size_t index  = 0;
-    const auto  groups = array.offsets().empty() ? 0 : array.offsets()[0].size() - 1;
-    for (std::size_t group = 0; group < groups; ++group)
-    {
-        if (out.full())
-        {
-            out.truncated = true;
-            return;
-        }
-        if (group)
-            out.append(QStringLiteral(", "));
-        appendArrayRagged<T>(out, array, 0, group, index);
-    }
-    out.append(QStringLiteral("]"));
-}
-
-void appendArray(Preview &out, const Array &array)
-{
-    switch (array.dtype())
-    {
-    case DType::UInt8:
-        appendArrayTyped<std::uint8_t>(out, array);
-        break;
-    case DType::Int32:
-        appendArrayTyped<std::int32_t>(out, array);
-        break;
-    case DType::Int64:
-        appendArrayTyped<std::int64_t>(out, array);
-        break;
-    case DType::Float32:
-        appendArrayTyped<float>(out, array);
-        break;
-    case DType::Float64:
-        appendArrayTyped<double>(out, array);
-        break;
-    case DType::Bool:
-        appendArrayTyped<bool>(out, array);
-        break;
-    case DType::String:
-        appendArrayTyped<std::string>(out, array);
-        break;
-    }
-}
-
 std::size_t estimatedArrayBytes(const Array &array)
 {
     const auto maximum = std::numeric_limits<std::size_t>::max();
@@ -237,34 +32,15 @@ std::size_t estimatedArrayBytes(const Array &array)
     return size;
 }
 
-QString preview(const PortValue &value, qsizetype limit)
+QString displayValue(const PortValue &value, const TypeSpec &type)
 {
-    Preview out{{}, limit};
-    std::visit(
-        [&](const auto &item)
-        {
-            using Element = std::decay_t<decltype(item)>;
-            if constexpr (std::is_same_v<Element, Missing>)
-                return;
-            else if constexpr (std::is_same_v<Element, std::string>)
-                out.append(stringPreview(item, limit, false, out.truncated));
-            else if constexpr (std::is_same_v<Element, DataRef<Image>>)
-                out.append(QStringLiteral("非显示型数据"));
-            else if constexpr (std::is_same_v<Element, DataRef<TrainingSet>>)
-                out.append(QStringLiteral("非显示型数据"));
-            else if constexpr (std::is_same_v<Element, Array>)
-                appendArray(out, item);
-            else if constexpr (std::is_same_v<Element, DataRef<ROI>>)
-                appendNested(out, item.get());
-            else if constexpr (std::is_same_v<Element, bool>)
-                out.append(item ? QStringLiteral("true") : QStringLiteral("false"));
-            else if constexpr (std::is_same_v<Element, std::int64_t>)
-                out.append(QString::number(static_cast<qlonglong>(item)));
-            else
-                out.append(QString::number(item, 'g', std::numeric_limits<Element>::max_digits10));
-        },
-        value);
-    return out.finish();
+    if (isMissing(value))
+        return {};
+    if (std::holds_alternative<DataRef<Image>>(value) || std::holds_alternative<DataRef<TrainingSet>>(value))
+        return QStringLiteral("非显示型数据");
+    if (const auto *text = std::get_if<std::string>(&value))
+        return q(*text);
+    return ValueJson::text(value, type, ValueJson::Purpose::Display);
 }
 
 std::size_t estimatedStringBytes(const std::string &value)
@@ -376,8 +152,8 @@ void OutputModel::setResult(const ToolDefinition *definition, ResultSlot::Snapsh
                        system,
                        canConnect,
                        std::move(captured)};
-        row.preview = preview(row.captured.value, 256);
-        row.tooltip = preview(row.captured.value, 4096);
+        row.preview = displayValue(row.captured.value, row.captured.type);
+        row.tooltip = row.preview;
         if (id == kStatusMessagePort && row.captured.diagnostic)
         {
             const auto &diagnostic = *row.captured.diagnostic;
@@ -431,8 +207,8 @@ void OutputModel::setStatus(std::optional<NodeDiagnostic> status)
             continue;
         row.captured.value = value;
         row.captured.diagnostic = status;
-        row.preview = preview(value, 256);
-        row.tooltip = preview(value, 4096);
+        row.preview = displayValue(value, row.captured.type);
+        row.tooltip = row.preview;
         emit dataChanged(this->index(index, 0), this->index(index, columnCount() - 1));
     }
 }
@@ -492,7 +268,7 @@ QVariantMap OutputModel::get(int row) const
         {   "port_id",                                                                item.id},
         {      "name",                                                              item.name},
         {      "type",                                                              item.type},
-        {"typeDisplay", !item.resolved ? QStringLiteral("未绑定") : displayTypeName(item.captured.type)},
+        {"typeDisplay", !item.resolved ? QStringLiteral("未绑定") : displayTypeName(item.captured.type, item.captured.value)},
         {   "preview",                                                           item.preview},
         {   "tooltip",                                                           item.tooltip},
         {     "count",                                    static_cast<qulonglong>(item.count)},
@@ -544,7 +320,7 @@ QVariant OutputModel::data(const QModelIndex &index, int role) const
     case TypeRole:
         return row.type;
     case TypeDisplayRole:
-        return displayTypeName(row.captured.type);
+        return displayTypeName(row.captured.type, row.captured.value);
     case PreviewRole:
         return row.preview;
     case CountRole:

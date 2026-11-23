@@ -132,18 +132,18 @@ int main(int argc, char **argv)
     points.reserve(pointsPerSet);
     for (std::size_t index = 0; index < pointsPerSet; ++index)
         points.push_back({static_cast<double>(index), static_cast<double>(index) * 0.5});
-    std::vector<double> pointSetReads;
+    std::vector<double> pointReads;
     const std::size_t   sets = std::max<std::size_t>(1, records / pointsPerSet);
-    RegionGroup         pointSets;
-    pointSets.reserve(sets);
-    for (std::size_t index = 0; index < sets; ++index) pointSets.push_back(makePointSet(points));
+    RegionGroup         pointGroups;
+    pointGroups.reserve(sets);
+    for (std::size_t index = 0; index < sets; ++index) pointGroups.push_back(makePoint(points));
     for (int iteration = 0; iteration < iterations; ++iteration)
     {
         const auto begin = Clock::now();
         double     total = 0;
-        for (const auto &record : pointSets)
+        for (const auto &record : pointGroups)
         {
-            const auto view = RegionView::trusted(record, RoiKind::PointSet).pointSet();
+            const auto view = RegionView::trusted(record, RoiKind::Point).point();
             for (std::size_t index = 0; index < view.size(); ++index)
             {
                 const auto point = view.point(index);
@@ -152,9 +152,9 @@ int main(int argc, char **argv)
         }
         const auto end = Clock::now();
         sink += total;
-        pointSetReads.push_back(milliseconds(begin, end));
+        pointReads.push_back(milliseconds(begin, end));
     }
-    report(std::cout, csv, "read_pointset_trusted", sets * pointsPerSet, pointSetReads);
+    report(std::cout, csv, "read_points_trusted", sets * pointsPerSet, pointReads);
 
     if (!(sink > 0))
         return 1;

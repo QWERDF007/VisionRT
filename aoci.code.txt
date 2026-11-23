@@ -39,7 +39,7 @@ WriteBuildInfo.cmake[OV7S]: F:在构建完成阶段写入组件版本、Git身�
 check_git_workspace.py[XV6S]: F:用NUL分隔Git状态判定组件提交、分支及生产输入是否干净 | R:code:cmake/WriteBuildInfo.cmake | A:check_git_workspace,is_whitelisted | S:同时检查重命名前后路径与未跟踪文件；只豁免指定账本和文档路径，查询失败保留unknown
 
 ===/<repository>/docs/===
-README.md[SG7T]: F:索引契约源码、核心模块、工作台、构建发行、验证和仓库认知入口 | R:code:WORKLOG.md,code:CMakeLists.txt,code:tests/workbench_training_contract.cpp,code:tests/workbench_training_publish_contract.cpp,code:src/ui/qml/WorkbenchScrollBar.qml | A:- | S:只维护入口，运行结果归任务账本；枚举、声明与实现事实指向各自源码
+README.md[SG7T]: F:索引契约、核心模块、工作台数据展示、构建发行和验证入口 | R:code:WORKLOG.md,code:src/ui/OutputModel.cpp,code:tests/workbench_roi.cpp | A:- | S:只维护入口，运行证据归任务账本；实现事实指向源码，避免第二套定义
 
 ===/<repository>/examples/01_基础入门/01_图像读取/===
 README.md[SA3T]: F:说明双图批次读取示例的操作及预期索引与总数 | R:- | A:- | S:-
@@ -222,7 +222,7 @@ AppControllerBindings.cpp[IU6M]: F:为端口菜单生成绑定候选并以捕获
 AppControllerDiagnostics.cpp[IO6S]: F:统一发布应用诊断、工具更新提示和日志窗口操作 | R:code:src/ui/Diagnostics.cpp,code:src/log/LogService.cpp | A:diagnosticsJson,copyAllLogs,publishToolUpdates | S:诊断同时写日志且内存历史限制100条；RegistryError保留其原始状态
 AppControllerDisplay.cpp[IU6S]: F:接入主视口和只读缩略图并把ROI交互路由到对应会话 | R:code:src/ui/ResultPresentation.cpp,code:src/ui/ImageViewport.cpp | A:attachViewport,updateDisplay,updateResults | S:训练画布的ROI事件不能误开启工程输入编辑；缩略图固定只读
 AppControllerExpression.cpp[IU6M]: F:在QML和节点动态契约之间转换表达式、条件及合流类型配置 | R:code:src/core/ProjectEditor.cpp,code:src/core/NodeContracts.cpp | A:expressionConfig,applySelectType,conditionMode,typeDescription | S:动态端口变更通过ProjectEditor统一提交
-AppControllerMetadata.cpp[IU6L]: F:把工具端口、有效节点契约和绑定状态投影为QML参数行及工具元数据 | R:code:src/core/NodeContracts.cpp,code:src/ui/DisplayTypes.cpp | A:parameters,toolMetadata,toolDefinitions | S:仅已发布修订的模型路径隐藏，未训练节点仍可填写普通模型参数；动态初始化行及条件专用行避免重复展示
+AppControllerMetadata.cpp[IU6L]: F:将有效节点契约和绑定状态投影为参数行，提供完整几何坐标及具体类型名 | R:code:src/core/NodeContracts.cpp,code:src/ui/DisplayTypes.cpp,code:src/core/ValueJson.cpp | A:parameters,toolMetadata,toolDefinitions | S:运行读回受限时复用对应节点的参数行；仅已发布修订的模型路径隐藏，未训练节点仍可填写；矩形字段编码保持双精度
 AppControllerParameters.cpp[IU6S]: F:解析手动参数和本地路径并以精确整数步进提交工程编辑 | R:code:src/core/InputNormalizer.cpp,code:src/core/ValueJson.cpp | A:setParameter,setParameterPath,stepIntegerParameter | S:非法选项拒绝而不替换默认值；整数步进不经JS浮点，上游输入及越int64边界拒绝
 AppControllerReadback.cpp[IU6T]: F:委托展示所有者处理读回、异步输出文本和工程管理排空 | R:code:src/ui/ResultPresentation.cpp,code:src/ui/AssistPreview.cpp | A:beginDrain,requestOutputText,updateReadback | S:管理排空清除待训练提交并使预览失效；普通排空不反复销毁持久算法实例
 AppControllerRoi.cpp[IU7M]: F:协调ROI编辑的启动、草稿应用、形状工具和显式清空 | R:code:src/ui/RoiEditSession.cpp,code:src/ui/ImageViewport.cpp | A:editRoi,applyRoi,startRoiDraw,clearRoi | S:上游ROI须显式复制才可编辑；草稿保存捕获背景与结果身份，不能悄悄写回上游
@@ -232,14 +232,14 @@ AppController_p.h[AU7L]: F:集中控制器服务、展示和交互会话的所�
 AssistPreview.cpp[RU7L]: F:以单工作线程和有界待办执行预览、确认及训练调用并释放实例 | R:code:src/ui/include/ui/AssistPreview.h,code:src/ui/AppControllerAssist.cpp | A:AssistPreview::request,AssistPreview::configure,AssistPreview::releaseSession,AssistPreview::shutdown | S:悬停延迟合并，确认进行中拒绝新确认；新训练先获准再替换会话；epoch和serial筛旧结果，释放须匹配GUI确认才解除Busy
 CMakeLists.txt[FV6T]: F:构建UI与训练发布模块，生成C++枚举的QML适配并嵌入界面资源 | R:code:cmake/ConfigLibavoid.cmake,code:src/ui/UiTypes.cpp | A:visionrt_ui | S:QML使用NO_PLUGIN嵌入同一DLL，枚举由实际头文件生成，不维护另一套数值
 Color.cpp[CU4T]: F:集中初始化工作台颜色并提供QML单例实例 | R:code:src/ui/include/ui/Color.h | A:VisionRTColor::getInstance,VisionRTColor::create | S:单例由C++拥有，QML不得回收
-Diagnostics.cpp[IO6M]: F:将工具、节点、运行与存储诊断统一转换为中文摘要及JSON | R:code:src/ui/include/ui/Diagnostics.h | A:statusDisplay,diagnosticMessage,diagnosticObject,diagnosticJson | S:直接使用message与detail，不从消息文本反推错误分类；大身份数字用字符串编码
+Diagnostics.cpp[IO6M]: F:将工具、节点、运行与存储诊断转换为完整中文消息及结构化JSON | R:code:src/ui/include/ui/Diagnostics.h | A:statusDisplay,diagnosticMessage,diagnosticObject,diagnosticJson | S:message与detail分别保留，不从消息文本反推错误分类；大身份数字用字符串编码
 DisplayConverter.cpp[IU7L]: F:在后台把图像批次转换为可显示QImage并过滤过期结果 | R:code:src/ui/include/ui/DisplayConverter.h | A:DisplayConverter::requestBatch,DisplayConverter::convert,DisplayConverter::waitForReads | S:只保留当前请求与最新待处理请求；非有限像素显示黑色；读者排空后才能变更共享源数据
-DisplayTypes.cpp[CU4T]: F:把端口类型、数组维度及dtype转换为中文显示名 | R:code:src/ui/include/ui/DisplayTypes.h | A:displayTypeName | S:-
+DisplayTypes.cpp[CU4T]: F:将端口类型、数组维度和dtype转换为中文名称，并从ROI值派生具体几何种类 | R:code:src/ui/include/ui/DisplayTypes.h | A:displayTypeName | S:无几何值时显示通用类型，不猜测具体形状
 DurationText.cpp[IO6S]: F:格式化节点总耗时、工具调用及预处理后处理阶段文本 | R:code:src/core/include/core/ExecutionMetrics.h,code:src/runtime/include/runtime/Snapshot.h | A:nodeTimingText,timingPhasesOf,durationText,formatElapsed | S:仅显示measured阶段，零耗时有效；运行中不复用旧轮次；Python调用取内部函数时间，桥接计入前后处理
-ImageViewport.cpp[IU8L]: F:渲染图像与ROI叠加，处理缩放平移、形状绘制、编辑和智能点选手势 | R:code:src/ui/include/ui/ImageViewport.h,code:src/ui/RoiEditSession.cpp | A:ImageViewport::setDisplayFrame,ImageViewport::beginRoiEdit,ImageViewport::updatePaintNode | S:按generation与requestId拒绝旧图；ROI提交携带节点、输入、图像和会话身份；仅发出编辑事件，不直接修改工程
+ImageViewport.cpp[IU8L]: F:渲染图像及五种几何叠加，处理视图变换、绘制编辑和智能点选手势 | R:code:src/ui/include/ui/ImageViewport.h,code:src/ui/RoiEditSession.cpp | A:ImageViewport::setDisplayFrame,ImageViewport::beginRoiEdit,ImageViewport::updatePaintNode | S:按generation与requestId拒绝旧图；ROI提交携带节点、输入、图像和会话身份；只发出编辑事件，不直接修改工程；点的任意坐标均参与渲染与命中
 LogHighlighter.cpp[IU4T]: F:按日志等级标记为警告与错误行着色 | R:code:src/log/LogService.cpp | A:LogHighlighter::highlightBlock | S:只识别格式器等级栏，不搜索正文关键词
 NodeListModel.cpp[IU6M]: F:按节点身份增量同步卡片行、顺序与变化角色 | R:code:src/ui/include/ui/NodeListModel.h | A:NodeListModel::sync,NodeListModel::update,NodeListModel::rowMap | S:增删移行后重建ID索引，只发布实际变化角色以保留QML委托状态
-OutputModel.cpp[IU7L]: F:把端口输出及诊断转换为有限预览、表格与可异步读取的完整文本 | R:code:src/ui/include/ui/OutputModel.h,code:src/ui/Diagnostics.cpp | A:OutputModel::setResult,OutputModel::capture,OutputModel::fullText | S:捕获值持有publication及Owner；Missing与空文本分开，训练集不展开成图像或字段表
+OutputModel.cpp[IU7M]: F:将端口输出及诊断投影为完整数据表格，并提供捕获值、文本复制及大小估计 | R:code:src/ui/include/ui/OutputModel.h,code:src/ui/Diagnostics.cpp,code:src/core/ValueJson.cpp | A:OutputModel::setResult,OutputModel::capture,OutputModel::fullText | S:捕获值保留publication及Owner；显示文本独立缓存且不截断，Missing与空文本分开；图像及训练集不在表格展开
 ProjectOperations.cpp[AU6T]: F:维护新建、打开、重置、删除与关闭操作的单一待办状态机 | R:code:src/ui/include/ui/ProjectOperations.h | A:ProjectOperations::begin,ProjectOperations::complete,ProjectOperations::markReady | S:一次只接受一个操作；关闭分重置、等待Owner和就绪阶段，就绪只通知一次
 RecentProjects.cpp[PU5S]: F:归一最近工程路径、去重、生成可区分标签并保存最新优先列表 | R:code:src/ui/UiPreferences.cpp | A:RecentProjects::record,RecentProjects::identity,RecentProjects::normalise | S:最多10条；缺失文件仍保留恢复入口；大小写身份遵循平台规则
 ResultPresentation.cpp[AU8L]: F:统一持有结果快照、图像选择、输出表、文本读取及视口交接和读回排空 | R:code:src/ui/ResultPresentation.h,code:src/ui/DisplayConverter.cpp,code:src/ui/OutputModel.cpp | A:ResultPresentation::updateResults,ResultPresentation::updateReadback,ResultPresentation::beginDrain,ResultPresentation::setSuspended | S:文本读请求先于读回确认处理，转换和文本读者空闲才确认；训练接管时失效排队转换并清除处理叠加，旧运行帧不能覆盖参考图
@@ -252,7 +252,7 @@ ToolTreeModel.cpp[IU5M]: F:按注册表生成分类工具树、搜索过滤与�
 TrainingAssets.cpp[PU8M]: F:保真读写训练帧，准备完整发布修订并在保存时复制被引用资产 | R:code:src/ui/include/ui/TrainingAssets.h,code:src/ui/TrainingSession.cpp | A:writeFrame,readFrame,Revision,SaveAssets,assetName,projectBase | S:只读取当前JSON原帧；像素保留Mat类型及色序；修订先暂存后改名，不覆盖已有编号；工程接受前由RAII清除本次产物，保存失败同时撤销此前节点复制
 TrainingSession.cpp[DU7L]: F:管理类型化内存训练图片、记录、参数和选择，并投影界面及当前发布清单 | R:code:src/ui/include/ui/TrainingSession.h,code:src/ui/TrainingAssets.cpp | A:TrainingSession::begin,TrainingSession::addImage,TrainingSession::trainingSet,TrainingSession::manifest,trainingFieldValueOf | S:编辑不写盘，同帧多记录共享原始像素；只读版本4清单，缺省参数保持未设置且null拒绝；脏草稿另存不丢，单记录同尺寸换图保留搜索几何
 UiPreferences.cpp[PC7M]: F:在安装目录原子读写平台设置、EasyTouch偏好和最近工程列表 | R:code:src/ui/include/ui/UiPreferences.h,code:src/core/include/core/ToolPaths.h | A:UiPreferences::loadSettings,UiPreferences::saveSettings,UiPreferences::setRecentProjects | S:各写者只合并自己的键；损坏、不可读或未知schema的文件不能以默认文档覆写；仅首次缺失允许新建
-UiTypes.cpp[IU6T]: F:向QML注册样式单例和从C++定义生成的协议、运行及界面枚举 | R:code:src/ui/CMakeLists.txt,code:src/ui/Color.cpp,code:src/ui/Size.cpp | A:registerUiTypes | S:注册幂等，QuickUI主题统一Light，训练与点选使用已有语义枚举
+UiTypes.cpp[IU6T]: F:注册工作台样式单例、协议及运行枚举和视口绘图枚举供QML使用 | R:code:src/ui/CMakeLists.txt,code:src/ui/include/ui/ImageViewport.h,code:src/ui/Size.cpp | A:registerUiTypes | S:注册幂等，QuickUI主题统一Light；绘图模式取视口元对象，不要求参数控件加载图像视口模块
 WireRouter.cpp[KU6S]: F:按节点几何与逻辑边生成缓存的正交避障连线路径 | R:code:src/ui/include/ui/WireRouter.h,code:cmake/ConfigLibavoid.cmake | A:WireRouter::route | S:同端点多端口合成一根线；路由失败保留错误而不以直线假装成功
 
 ===/<repository>/src/ui/include/ui/===
@@ -263,9 +263,9 @@ Color.h[CU4T]: F:声明节点、连线与ROI颜色的QML自动属性单例 | R:c
 Def.h[CU5T]: F:提供样式属性的Qt读写、变更信号与去重赋值宏 | R:code:src/ui/include/ui/Color.h,code:src/ui/include/ui/Size.h | A:VISIONRT_Q_PROPERTY_AUTO | S:值未变化时不发通知
 Diagnostics.h[LO6T]: F:声明应用诊断联合类型及摘要、结构化序列化接口 | R:code:src/ui/Diagnostics.cpp | A:ApplicationDiagnostic,StatusDisplay,diagnosticObject,diagnosticMessage | S:-
 DisplayConverter.h[LU6T]: F:公开后台图像批次转换、身份失效与读者排空协议 | R:code:src/ui/DisplayConverter.cpp | A:DisplayConverter,DisplayFrame | S:DisplayFrame绑定generation、requestId和批次位置
-DisplayTypes.h[LU4T]: F:声明类型契约的中文显示名转换 | R:code:src/ui/DisplayTypes.cpp | A:displayTypeName | S:-
+DisplayTypes.h[LU4T]: F:公开按类型契约或实际几何值生成中文类型名的重载接口 | R:code:src/ui/DisplayTypes.cpp | A:displayTypeName | S:-
 DurationText.h[LO5T]: F:定义节点计时文本投影和耗时格式化接口 | R:code:src/ui/DurationText.cpp | A:NodeTimingText,NodeTimingPhase,nodeTimingText | S:未测量阶段用空文本，与有效零值不同
-ImageViewport.h[LU7M]: F:定义图像视口、ROI编辑身份、视图变换及交互信号 | R:code:src/ui/ImageViewport.cpp | A:ImageViewport,RoiEditTarget,RoiTargetKind | S:训练与输入ROI用独立目标种类；渲染资源及草稿保持在视口边界内
+ImageViewport.h[LU7M]: F:定义图像视口、绘图模式枚举、ROI编辑身份、视图变换和交互信号 | R:code:src/ui/ImageViewport.cpp | A:ImageViewport,RoiEditTarget,RoiTargetKind | S:训练与输入ROI具有独立目标种类；绘图模式与业务几何类型编码各自定义，不能混用；渲染资源及草稿保持在视口边界内
 LogHighlighter.h[LU4T]: F:声明日志文本等级着色器 | R:code:src/ui/LogHighlighter.cpp | A:LogHighlighter | S:-
 NodeListModel.h[LU6S]: F:定义节点卡片角色、稳定身份与增量列表同步接口 | R:code:src/ui/NodeListModel.cpp | A:NodeListModel,NodeListModel::Row | S:运行、业务状态、生命周期诊断和耗时为独立角色
 OutputModel.h[LU6T]: F:公开端口结果表与持有Owner的捕获值及文本读取接口 | R:code:src/ui/OutputModel.cpp | A:OutputModel,OutputModel::Captured | S:捕获结果保留publication与诊断，不依赖当前可变模型行
@@ -298,12 +298,12 @@ MainToolbar.qml[IU4S]: F:显示文件、设置、工具、帮助菜单及重置�
 NodeDelegate.qml[IU5M]: F:渲染节点卡片状态、图标、选择框与指针交互 | R:code:src/ui/NodeListModel.cpp,code:src/ui/qml/FlowCanvas.qml | A:executeRequested,pointerPressed,pointerMoved,pointerReleased | S:运行边框独立于选择层，不能被选中样式遮蔽
 OutputPanel.qml[IU6L]: F:展示输出端口表并提供结果复制和连接关系菜单 | R:code:src/ui/OutputModel.cpp,code:src/ui/AppControllerBindings.cpp,code:src/ui/qml/WorkbenchScrollBar.qml | A:showNameMenu,showDataMenu | S:复制等菜单关闭后才提交读取；上下文过期或Missing时不能复制伪数据
 ParameterActionButton.qml[CU3T]: F:统一参数行操作按钮尺寸与焦点策略 | R:code:src/ui/qml/WorkbenchActionButton.qml | A:ParameterActionButton | S:-
-ParameterComboBox.qml[CU3T]: F:统一参数下拉框高度与箭头呈现 | R:- | A:ParameterComboBox | S:-
+ParameterComboBox.qml[CU3T]: F:将参数下拉框高度及通用箭头尺寸属性绑定到工作台尺寸，统一内容留白 | R:code:src/ui/include/ui/Size.h | A:ParameterComboBox | S:-
 ParameterDialogField.qml[CU4S]: F:提供文本字段与对话编辑入口的参数行外壳 | R:code:src/ui/qml/ParameterActionButton.qml | A:commitRequested,cancelRequested,actionRequested | S:-
-ParameterEditor.qml[IU6L]: F:按端口声明选择编辑控件，处理字面量、上游、路径和专用编辑器 | R:code:src/ui/AppControllerParameters.cpp,code:src/ui/AppControllerBindings.cpp | A:commit,buildBindingGroups | S:绑定菜单捕获并校验上下文；参数身份变化时关闭路径选择，防止向新节点提交旧结果
+ParameterEditor.qml[IU6L]: F:按声明选择参数编辑控件，处理绑定、路径及完整几何和数组文本 | R:code:src/ui/AppControllerParameters.cpp,code:src/ui/AppControllerBindings.cpp,code:src/ui/qml/ParameterComboBox.qml | A:commit,buildBindingGroups | S:绑定菜单捕获并校验上下文，参数身份变化即关闭路径选择；未修改的几何文本不写回；绘图操作使用C++导出的命名模式
 ParameterFieldFrame.qml[CU3T]: F:统一参数字段正常、聚焦与非法状态边框 | R:- | A:ParameterFieldFrame | S:-
 ParameterPanel.qml[IU5M]: F:集中呈现业务及训练专用参数和输出，懒加载表达式与合流类型编辑器 | R:code:src/ui/qml/ParameterEditor.qml,code:src/ui/qml/OutputPanel.qml,code:src/ui/qml/WorkbenchScrollBar.qml | A:openExpressionEditor,openSelectTypeEditor | S:训练专用参数仅在训练模式的基本输入页显示；公式编辑取当前行草稿，明确清空不回载旧公式
-ParameterTextField.qml[CU4S]: F:组合可编辑文本与前后操作按钮，提供统一提交和取消信号 | R:code:src/ui/qml/ParameterFieldFrame.qml | A:commitRequested,actionRequested,secondaryActionRequested | S:输入法组合期间不提交文本
+ParameterTextField.qml[CU4S]: F:组合可编辑文本及前后操作按钮，统一提交取消、完整悬浮文本和未聚焦时的起始位置 | R:code:src/ui/qml/ParameterFieldFrame.qml | A:commitRequested,actionRequested,secondaryActionRequested | S:输入法组合期间不提交；聚焦编辑时保留光标位置
 ResultsImageToolbar.qml[IU4S]: F:提供图像适应、缩放、ROI编辑与EasyTouch开关 | R:code:src/ui/AppControllerAssist.cpp,code:src/ui/qml/WorkbenchScrollBar.qml | A:fitRequested,zoomRequested,roiRequested | S:EasyTouch开关读写控制器偏好，能力不可用不改变用户选择
 ResultsImageView.qml[IU5T]: F:接入ImageViewport并把缩放、智能点选及训练菜单请求交控制器 | R:code:src/ui/ImageViewport.cpp | A:fitContain,zoomBy,fitOneToOne | S:显示视口真实错误与缩放状态
 ResultsModeTabs.qml[IU4T]: F:按工具训练能力呈现竖排处理与训练模式切换 | R:code:src/ui/qml/WorkbenchTabButton.qml | A:- | S:选中线位于文字右侧；模式与可编辑性均由控制器决定

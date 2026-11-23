@@ -149,8 +149,8 @@ void outputContract()
     require(diagnostic.value("message") == "输出合同错误"
                 && diagnostic.value("detail") == "third-party \"detail\"\n完整详情",
             "diagnostic JSON loses raw summary/detail");
-    require(model.get(2).value("preview").toString().size() <= 256, "preview is unbounded");
-    require(model.get(2).value("tooltip").toString().size() <= 4096, "tooltip is unbounded");
+    require(model.get(2).value("preview").toString() == QString(10000, 'x'), "display truncated string data");
+    require(model.get(2).value("tooltip").toString() == QString(10000, 'x'), "tooltip truncated string data");
     require(model.get(2).value("count").toInt() == 2, "relationship count is not input binding count");
     const auto frozen = model.capture(2);
     model.clear();

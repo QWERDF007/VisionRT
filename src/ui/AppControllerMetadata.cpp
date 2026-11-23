@@ -1,5 +1,6 @@
 #include "AppController_p.h"
 #include "core/NodeContracts.h"
+#include "core/ValueJson.h"
 #include "ui/DisplayTypes.h"
 
 #include <QJsonArray>
@@ -261,9 +262,7 @@ QVariantList AppController::parameters() const
                     {"height", rectangle.height()},
                     { "angle", rectangle.angle()}
                 };
-                rectDisplayText = QString::asprintf("[2, %.6g, %.6g, %.6g, %.6g, %.6g]", rectangle.left(),
-                                                    rectangle.top(), rectangle.width(), rectangle.height(),
-                                                    rectangle.angle());
+                rectDisplayText = ValueJson::text(Array::fromNested(record), {Type::Array, DType::Float64, 1});
             }
             catch (const ContractError &)
             {
@@ -282,7 +281,7 @@ QVariantList AppController::parameters() const
         if (rectangleEditor)
             displayText = hasRect ? rectDisplayText : QStringLiteral("[]");
         else if (type.type == Type::ROI)
-            displayText = hasRois ? QStringLiteral("[%1 个区域]").arg(roiCount) : QStringLiteral("[]");
+            displayText = text;
         else if (type.type == Type::Array)
             displayText = arrayText;
         else if (string)
@@ -295,7 +294,7 @@ QVariantList AppController::parameters() const
             {           "name",       declaration ? q(declaration->nameZh) : q(portLabel(id))},
             {           "type",                                 static_cast<int>(type.type)},
             {     "typeDetail",                                                           typeText(type)},
-            {    "typeDisplay",                                                    displayTypeName(type)},
+            {    "typeDisplay", rectangleEditor ? QStringLiteral("矩形") : displayTypeName(type, literal)},
             {           "init",                                                           initialization},
             {        "literal",                         type.type == Type::Array ? arrayText : text},
             {      "valueText",               rectangleEditor && hasRect ? rectDisplayText

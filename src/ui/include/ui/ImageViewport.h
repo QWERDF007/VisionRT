@@ -55,6 +55,16 @@ class VISIONRT_UI_API ImageViewport : public QQuickItem
     Q_PROPERTY(qreal roiStrokeWidth READ roiStrokeWidth WRITE setRoiStrokeWidth NOTIFY styleChanged)
     Q_PROPERTY(qreal roiHandleSize READ roiHandleSize WRITE setRoiHandleSize NOTIFY styleChanged)
 public:
+    enum DrawShape
+    {
+        DrawNone = 0,
+        DrawLine = 1,
+        DrawRectangle = 2,
+        DrawCircle = 3,
+        DrawPolygon = 4,
+        DrawPoint = 5
+    };
+    Q_ENUM(DrawShape)
     enum ViewMode
     {
         Contain,
@@ -262,7 +272,7 @@ private:
     QColor                            assistRoiColor_{0, 190, 190};
     qreal                             roiStrokeWidth_ = 1.8;
     qreal                             roiHandleSize_  = 3.5;
-    int                               drawShape_ = 0;
+    int                               drawShape_ = DrawNone;
     int                               selected_  = -1;
     Gesture                           gesture_   = Gesture::None;
     Qt::MouseButton                   panButton_ = Qt::NoButton;

@@ -30,6 +30,46 @@
 - ...
 -->
 
+### 2026-11-23 — 完整数据展示与点几何统一
+
+**目标**
+- 参数和输出展示实际非图像数据，显示具体几何类型，统一一个或多个点的契约。
+
+**当前状态**
+- ROI 参数展示完整坐标；输出数组、几何和字符串复用 ValueJson 完整编码，删除重复的限长预览实现。图像输出及缩放展示保持现状。
+- 类型按实际值显示点、线、矩形、圆、多边形；矩形字段保留浮点精度。未聚焦字段从开头显示，未改动 ROI 文本不触发写入。
+- Contracts 点类型统一为代码 0 的坐标列表，移除 PointSet API 及代码 5，模块 ABI 为 12；VisionTools 适配已同步，当前运行树安装新工具包。
+- 代码及实际示例验收通过；Contracts 两份检出统一为 52cd2b7，QuickUI 为 74ecdc4，VisionTools 为 df1185d；主仓提交同步固定这些子模块引用，本轮不推送。
+
+**验证证据**
+- TDD：新增多点编码与完整输出断言最初失败，实现后 SDK、输出、参数、视口、训练及弹窗等 11 项通过，见 build/evidence/geometry-data-tests.xml。
+- 真实 QML 参数编辑、无修改提交、坐标起始位置及随包示例等 4 项通过，见 build/evidence/geometry-data-integration-tests.xml；最终编译见 build/geometry-data-final-build.log。
+- VisionTools 几何、识别、共享可写图像 3 项通过；27 工具包经实际宿主校验器及安装消费者验证，见 F:/Projects/VisionTools/build/geometry-data-package.log。
+- VisionRT.exe 运行线缆工程退出 0；build/evidence/geometry-data.png 已核对完整坐标字段和实际输出。主仓、Contracts 与 VisionTools 的 git diff --check 通过。
+
+**下一步**
+- 如需远端交付，先推送 Contracts 与 QuickUI，再推送两父仓；当前提交身份以 git log -1 为准，实现与验证入口见 docs/README.md。
+
+### 2026-11-23 — 下拉箭头尺寸属性统一
+
+**目标**
+- QuickUI 暴露下拉箭头尺寸属性，VisionRT 用现有 IconSize 统一绑定。
+
+**当前状态**
+- QuiComboBox 新增 indicatorIconSize，QuiGroupComboBox 继承该属性。参数选项、上游来源和图片列表三处绑定 VisionRTSize.IconSize。
+- ParameterComboBox 移除重复的 indicator 实现，复用 QuickUI 指示器；属性与实现入口已加入文档索引。
+- QuickUI 源码改动位于子模块工作树；后续提交需要先处理子模块再提交主仓引用。
+
+**验证证据**
+- 编译 VisionRT、workbench_contract、workbench_training_contract 成功，见 build/combobox-indicator-build.log。
+- 参数、弹窗和训练工作台 3 项回归通过，见 build/evidence/combobox-indicator-tests.xml。
+- qmltestrunner 执行 QuickUI 既有 QuiComboBoxTest.qml，9 项通过，见 build/evidence/quickui-combobox-tests.txt。
+- build/evidence/combobox-indicator-1.png、combobox-indicator-3.png 已核对普通选项、图像及对齐来源和图片列表箭头大小一致。
+- 主仓和 QuickUI 的 `git diff --check` 均通过。
+
+**下一步**
+- 本轮开发与验证完成；运行入口为 build/bin/VisionRT.exe，QuickUI 属性入口见 docs/README.md。
+
 ### 2026-11-23 — 整理全部修改并清理方案跟踪
 
 **目标**

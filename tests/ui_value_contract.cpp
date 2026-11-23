@@ -306,12 +306,25 @@ try
     require(rectangle["type"].toInt() == static_cast<int>(Type::ROI) && rectangle["editor"].toInt() == static_cast<int>(EditorKind::Rect) && rectangle["hasRect"].toBool(),
             "rectangle editor reintroduced a separate value type");
     const auto encoded = QJsonDocument::fromJson(rectangle["literal"].toString().toUtf8()).array();
+    require(QJsonDocument::fromJson(rectangle["displayText"].toString().toUtf8()).array()[1].toDouble()
+                == 100000000.125,
+            "rectangle display rounded the editable coordinate");
     require(encoded.size() == 1 && encoded[0].toArray().size() == 1
                 && encoded[0].toArray()[0].toArray()[1].toDouble() == 100000000.125,
             "rectangle is not one group containing one native ROI record");
     require(app.clearRoi(kRectInput), "rectangle clearing failed");
     const auto cleared = QJsonDocument::fromJson(parameter(kRectInput)["literal"].toString().toUtf8());
     require(cleared.isArray() && cleared.array().isEmpty(), "rectangle clearing did not produce empty ROI");
+    require(app.setParameter(kRegionsInput, false,
+                "[[[0,1,2,3,4],[1,0,0,10,10],[2,1,2,3,4,0],[3,5,6,2],[4,0,0,4,0,4,3]]]"),
+            "mixed geometry parameter was rejected");
+    const auto geometryParameter = parameter(kRegionsInput);
+    require(geometryParameter["typeDisplay"].toString() == QStringLiteral("点、线、矩形、圆、多边形"),
+            "geometry parameter lost concrete kinds");
+    require(geometryParameter["displayText"] == geometryParameter["valueText"]
+                && geometryParameter["displayText"].toString().contains("10"),
+            "geometry parameter replaced coordinates with a count");
+    require(app.clearRoi(kRegionsInput), "geometry fixture could not be cleared");
     require(app.bindInput(app.portContext(kImagesInput), source, kImagesOutput), "cannot bind writable source images");
     idle();
     // The editor shows the image the user opened; the test opens that port explicitly.

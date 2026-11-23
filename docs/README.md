@@ -26,6 +26,8 @@
 - [工具编辑器](../src/ui/ToolEditorController.cpp)、[用户工具存储](../src/core/CustomToolStore.cpp)。
 - [设置](../src/ui/UiPreferences.cpp)、[关于信息](../src/ui/AboutReport.cpp)、[页签](../src/ui/qml/WorkbenchTabButton.qml)、[尺寸属性](../src/ui/include/ui/Size.h)、[颜色属性](../src/ui/include/ui/Color.h)。
 - [通用主题颜色](../3rdparty/QuickUI/src/Color.cpp)、[字体属性](../3rdparty/QuickUI/src/Font.cpp)、[工作台滚动条](../src/ui/qml/WorkbenchScrollBar.qml)、[滚动容器](../src/ui/qml/BoundedScrollView.qml)、[训练字段编辑器](../src/ui/qml/TrainingValueEditor.qml)。
+- [下拉框属性](../3rdparty/QuickUI/src/controls/QuiComboBox.qml)、[分组下拉框](../3rdparty/QuickUI/src/controls/QuiGroupComboBox.qml)、[参数下拉框](../src/ui/qml/ParameterComboBox.qml)。
+- [值的中文类型](../src/ui/DisplayTypes.cpp)、[参数投影](../src/ui/AppControllerMetadata.cpp)、[完整输出数据](../src/ui/OutputModel.cpp)、[值编解码](../src/core/ValueJson.cpp)、[几何编辑验证](../tests/workbench_roi.cpp)、[输出数据验证](../tests/output_value_contract.cpp)。
 
 ## 构建与发行
 

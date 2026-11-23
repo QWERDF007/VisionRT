@@ -66,9 +66,6 @@ std::vector<QPointF> contourOf(const RegionView &region)
         }
         break;
     }
-    case RoiKind::Point:
-        points.push_back(fromCv(region.point()));
-        break;
     case RoiKind::Segment:
     {
         const auto segment = region.segment();
@@ -83,9 +80,9 @@ std::vector<QPointF> contourOf(const RegionView &region)
         for (std::size_t index = 0; index < polygon.size(); ++index) points.push_back(fromCv(polygon.point(index)));
         break;
     }
-    case RoiKind::PointSet:
+    case RoiKind::Point:
     {
-        const auto set = region.pointSet();
+        const auto set = region.point();
         points.reserve(set.size());
         for (std::size_t index = 0; index < set.size(); ++index) points.push_back(fromCv(set.point(index)));
         break;
@@ -198,7 +195,7 @@ struct Lines
         const auto region = RegionView(roi);
         const auto points = contourOf(region);
         const auto kind   = region.kind();
-        if (kind == RoiKind::Point || kind == RoiKind::PointSet)
+        if (kind == RoiKind::Point)
         {
             for (const auto &point : points)
             {
@@ -550,7 +547,7 @@ void ImageViewport::endRoiEdit()
         return;
     target_.reset();
     editable_.clear();
-    setDrawShape(0);
+    setDrawShape(DrawNone);
     selectRoi(-1);
     overlaysUpdated();
     emit editingChanged();
@@ -571,7 +568,8 @@ void ImageViewport::setReadOnly(bool value)
 
 void ImageViewport::setDrawShape(int shape)
 {
-    if (shape < 0 || shape > 5 || drawShape_ == shape || (editing() && singleRectangle() && shape != 0 && shape != 2))
+    if (shape < DrawNone || shape > DrawPoint || drawShape_ == shape
+        || (editing() && singleRectangle() && shape != DrawNone && shape != DrawRectangle))
         return;
     clearGesture();
     drawShape_ = shape;
@@ -650,7 +648,7 @@ void ImageViewport::cancelDraft()
     clearGesture();
     if (restoreSelection)
     {
-        setDrawShape(0);
+        setDrawShape(DrawNone);
         selectRoi(0);
     }
     updateCursor();
@@ -711,7 +709,7 @@ int hitRoiInList(const RegionGroup &rois, QPointF point, double scale)
             continue;
         }
         const auto points = contourOf(region);
-        if (region.kind() == RoiKind::Point || region.kind() == RoiKind::PointSet)
+        if (region.kind() == RoiKind::Point)
         {
             for (const auto &candidate : points)
                 if (length(point - candidate) <= tolerance)
@@ -762,7 +760,7 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
     // While regions are editable, a press on one of them keeps selecting, moving or resizing it;
     // only empty space belongs to the assistant. That is what lets a training view hold its picked
     // bands and still accept the next point-and-click.
-    if (event->button() == Qt::LeftButton && drawShape_ == 0 && assistActive_ && hasImage() && gesture_ == Gesture::None
+    if (event->button() == Qt::LeftButton && drawShape_ == DrawNone && assistActive_ && hasImage() && gesture_ == Gesture::None
         && (!canEdit() || hitRoi(itemToImage(event->position())) < 0))
     {
         // A click is only a selection if the pointer does not travel; beyond the drag threshold the
@@ -802,7 +800,7 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
     }
     anchor_ = point;
     handle_ = -1;
-    const bool isDrawingNew = drawShape_ >= 1 && drawShape_ <= 5;
+    const bool isDrawingNew = drawShape_ >= DrawLine && drawShape_ <= DrawPoint;
     if (!isDrawingNew && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
     {
         const auto controls = handles(editable_[selected_]);
@@ -828,9 +826,9 @@ void ImageViewport::mousePressEvent(QMouseEvent *event)
         gesture_      = handle_ >= 0 ? Gesture::Handle : Gesture::Move;
         draftChanged_ = false;
     }
-    else if (drawShape_ >= 1 && drawShape_ <= 5)
+    else if (drawShape_ >= DrawLine && drawShape_ <= DrawPoint)
     {
-        gesture_      = drawShape_ >= 4 ? Gesture::Vertices : Gesture::Create;
+        gesture_      = drawShape_ >= DrawPolygon ? Gesture::Vertices : Gesture::Create;
         draftChanged_ = false;
         if (gesture_ == Gesture::Vertices)
         {
@@ -850,12 +848,12 @@ void ImageViewport::changeDraft(QPointF point)
         {
             const auto delta = point - anchor_;
             draft_.reset();
-            if (drawShape_ == 1 && length(delta) > epsilon)
+            if (drawShape_ == DrawLine && length(delta) > epsilon)
                 draft_ = makeSegment({anchor_.x(), anchor_.y()}, {point.x(), point.y()});
-            else if (drawShape_ == 2 && std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
+            else if (drawShape_ == DrawRectangle && std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
                 draft_ = makeRectangle(std::min(anchor_.x(), point.x()), std::min(anchor_.y(), point.y()),
                                        std::abs(delta.x()), std::abs(delta.y()));
-            else if (drawShape_ == 3 && length(delta) > epsilon)
+            else if (drawShape_ == DrawCircle && length(delta) > epsilon)
                 draft_ = makeCircle({anchor_.x(), anchor_.y()}, length(delta));
         }
         else if (original_ && gesture_ == Gesture::Move)
@@ -1001,7 +999,7 @@ void ImageViewport::mouseDoubleClickEvent(QMouseEvent *event)
 
 void ImageViewport::mouseUngrabEvent()
 {
-    // Multi-click polygon/point-set drafts intentionally survive each click's ungrab.
+    // Multi-click polygon/point drafts intentionally survive each click's ungrab.
     if (gesture_ == Gesture::Assist)
         clearGesture();
     else if (gesture_ != Gesture::Vertices)
@@ -1013,7 +1011,7 @@ std::optional<EncodedRegion> ImageViewport::completedDraft() const
     if (gesture_ != Gesture::Vertices)
         return draft_;
     auto count = vertices_.size();
-    if (drawShape_ == 4 && count > 1 && length(vertices_.front() - vertices_.back()) * scale_ <= 4)
+    if (drawShape_ == DrawPolygon && count > 1 && length(vertices_.front() - vertices_.back()) * scale_ <= 4)
         --count;
     std::vector<cv::Point2d> points;
     points.reserve(count);
@@ -1021,10 +1019,10 @@ std::optional<EncodedRegion> ImageViewport::completedDraft() const
         points.push_back({vertices_[index].x(), vertices_[index].y()});
     try
     {
-        if (drawShape_ == 4)
+        if (drawShape_ == DrawPolygon)
             return makePolygon(points);
-        if (drawShape_ == 5)
-            return makePointSet(points);
+        if (drawShape_ == DrawPoint)
+            return makePoint(points);
     }
     catch (const ContractError &)
     {
@@ -1057,7 +1055,7 @@ void ImageViewport::commitDraft()
     else
         editable_[key.roiIndex] = *value;
     clearGesture();
-    setDrawShape(0);
+    setDrawShape(DrawNone);
     updateCursor();
     emit roiCommitted(key, *value);
 }
@@ -1120,7 +1118,7 @@ void ImageViewport::keyPressEvent(QKeyEvent *event)
 
 void ImageViewport::updateCursor()
 {
-    if ((drawShape_ > 0 && canEdit()) || (assistActive_ && hasImage()))
+    if ((drawShape_ != DrawNone && canEdit()) || (assistActive_ && hasImage()))
         setCursor(QCursor(Qt::CrossCursor));
     else
         unsetCursor();
@@ -1129,7 +1127,7 @@ void ImageViewport::updateCursor()
 void ImageViewport::hoverEnterEvent(QHoverEvent *event)
 {
     updateCursor();
-    if (assistActive_ && hasImage() && drawShape_ == 0)
+    if (assistActive_ && hasImage() && drawShape_ == DrawNone)
         emit assistHover(itemToImage(event->position()));
     QQuickItem::hoverEnterEvent(event);
 }
@@ -1137,7 +1135,7 @@ void ImageViewport::hoverEnterEvent(QHoverEvent *event)
 void ImageViewport::hoverMoveEvent(QHoverEvent *event)
 {
     updateCursor();
-    if (assistActive_ && hasImage() && drawShape_ == 0)
+    if (assistActive_ && hasImage() && drawShape_ == DrawNone)
         emit assistHover(itemToImage(event->position()));
     QQuickItem::hoverMoveEvent(event);
 }
@@ -1201,7 +1199,7 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             edit.roi(*draft_);
         if (gesture_ == Gesture::Vertices)
         {
-            if (drawShape_ == 4)
+            if (drawShape_ == DrawPolygon)
                 edit.path(vertices_, false);
             for (const auto &point : vertices_) edit.square(point, roiHandleSize_ * 0.7 / scale_);
         }

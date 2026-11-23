@@ -24,6 +24,7 @@ ColumnLayout {
         }
         QuiComboBox {
             id: outputChoice
+            indicatorIconSize: VisionRTSize.IconSize
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter

@@ -1,4 +1,7 @@
 #include "ui/DisplayTypes.h"
+#include <visionrt/contracts/ROI.h>
+#include <QStringList>
+#include <set>
 
 namespace visionrt {
 
@@ -17,7 +20,7 @@ QString displayTypeName(const TypeSpec &type)
     case Type::Image:
         return QStringLiteral("图像");
     case Type::ROI:
-        return QStringLiteral("区域");
+        return QStringLiteral("几何");
     case Type::Array:
     {
         QString rankStr;
@@ -48,6 +51,28 @@ QString displayTypeName(const TypeSpec &type)
     }
     }
     return QString::fromLatin1(typeName(type.type));
+}
+
+QString displayTypeName(const TypeSpec &type, const PortValue &value)
+{
+    if (type.type != Type::ROI)
+        return displayTypeName(type);
+    std::set<RoiKind> kinds;
+    if (const auto *geometry = std::get_if<DataRef<ROI>>(&value))
+        for (const auto &group : geometry->get())
+            for (const auto &record : group)
+                kinds.insert(static_cast<RoiKind>(record.front()));
+    QStringList names;
+    for (const auto kind : kinds)
+        switch (kind)
+        {
+        case RoiKind::Point: names.append(QStringLiteral("点")); break;
+        case RoiKind::Segment: names.append(QStringLiteral("线")); break;
+        case RoiKind::Rectangle: names.append(QStringLiteral("矩形")); break;
+        case RoiKind::Circle: names.append(QStringLiteral("圆")); break;
+        case RoiKind::Polygon: names.append(QStringLiteral("多边形")); break;
+        }
+    return names.empty() ? displayTypeName(type) : names.join(QStringLiteral("、"));
 }
 
 } // namespace visionrt

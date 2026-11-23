@@ -190,7 +190,7 @@ int main(int argc, char **argv)
     mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({20, 30}), Qt::LeftButton, Qt::NoButton);
     QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
     QCoreApplication::sendEvent(&viewport, &enter);
-    assert(commits == 5 && roiKind(*committed) == RoiKind::PointSet && (*committed).size() == 3);
+    assert(commits == 5 && roiKind(*committed) == RoiKind::Point && (*committed).size() == 3);
 
     viewport.beginRoiEdit(
         {

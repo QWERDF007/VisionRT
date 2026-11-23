@@ -199,8 +199,7 @@ QString diagnosticMessage(const NodeDiagnostic &diagnostic)
 
 QString diagnosticMessage(const ApplicationDiagnostic &diagnostic)
 {
-    const auto message = std::visit([](const auto &entry) { return summary(entry); }, diagnostic);
-    return message.size() > 16384 ? message.left(16360) + QStringLiteral("…[诊断已截断]") : message;
+    return std::visit([](const auto &entry) { return summary(entry); }, diagnostic);
 }
 
 QJsonObject diagnosticObject(const ApplicationDiagnostic &diagnostic)
