@@ -1,259 +1,22 @@
 #include "ui/ImageViewport.h"
 
-#include <QCursor>
-#include <QGuiApplication>
-#include <QHoverEvent>
-#include <QKeyEvent>
-#include <QMatrix4x4>
-#include <QMouseEvent>
-#include <QPainter>
-#include <QPolygonF>
+#include "RoiOverlay.h"
+
+#include <QEvent>
 #include <QQuickWindow>
-#include <QSGFlatColorMaterial>
-#include <QSGGeometryNode>
-#include <QSGRenderNode>
-#include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
-#include <QSGTransformNode>
-#include <QStyleHints>
 #include <QThread>
-#include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <numbers>
 
 namespace visionrt {
-namespace {
-constexpr double pi      = std::numbers::pi;
-constexpr double epsilon = 0.0001;
-
-double length(QPointF point)
-{
-    return std::hypot(point.x(), point.y());
-}
-
-QPointF rotated(QPointF point, double degrees)
-{
-    const double angle = degrees * pi / 180;
-    const double c = std::cos(angle), s = std::sin(angle);
-    return {point.x() * c - point.y() * s, point.x() * s + point.y() * c};
-}
-
-QPointF fromCv(cv::Point2d point)
-{
-    return {point.x, point.y};
-}
-
-std::vector<QPointF> contourOf(const RegionView &region)
-{
-    std::vector<QPointF> points;
-    switch (region.kind())
-    {
-    case RoiKind::Rectangle:
-        for (const auto &corner : region.rectangle().corners()) points.push_back(fromCv(corner));
-        break;
-    case RoiKind::Circle:
-    {
-        const auto   circle = region.circle();
-        const QPointF center = fromCv(circle.center());
-        points.reserve(96);
-        for (int i = 0; i < 96; ++i)
-        {
-            const double angle = 2 * pi * i / 96;
-            points.push_back(center + QPointF(circle.radius() * std::cos(angle), circle.radius() * std::sin(angle)));
-        }
-        break;
-    }
-    case RoiKind::Segment:
-    {
-        const auto segment = region.segment();
-        points.push_back(fromCv(segment.start()));
-        points.push_back(fromCv(segment.end()));
-        break;
-    }
-    case RoiKind::Polygon:
-    {
-        const auto polygon = region.polygon();
-        points.reserve(polygon.size());
-        for (std::size_t index = 0; index < polygon.size(); ++index) points.push_back(fromCv(polygon.point(index)));
-        break;
-    }
-    case RoiKind::Point:
-    {
-        const auto set = region.point();
-        points.reserve(set.size());
-        for (std::size_t index = 0; index < set.size(); ++index) points.push_back(fromCv(set.point(index)));
-        break;
-    }
-    }
-    return points;
-}
-
-double segmentDistance(QPointF point, QPointF a, QPointF b)
-{
-    const auto   delta   = b - a;
-    const double squared = QPointF::dotProduct(delta, delta);
-    if (squared == 0)
-        return length(point - a);
-    const double fraction = std::clamp(QPointF::dotProduct(point - a, delta) / squared, 0.0, 1.0);
-    return length(point - a - delta * fraction);
-}
-
-// The raster scene graph does not execute generic material/geometry nodes.
-// Only ROI geometry uses its painter; the image remains a QSG texture node.
-class SoftwareRoiNode final : public QSGRenderNode
-{
-public:
-    SoftwareRoiNode(QQuickWindow *window, std::vector<QPointF> triangles, QColor color)
-        : window_(window)
-        , triangles_(std::move(triangles))
-        , color_(color)
-    {
-        double left = triangles_[0].x(), right = left, top = triangles_[0].y(), bottom = top;
-        for (const auto &point : triangles_)
-        {
-            left   = std::min(left, point.x());
-            right  = std::max(right, point.x());
-            top    = std::min(top, point.y());
-            bottom = std::max(bottom, point.y());
-        }
-        bounds_ = QRectF(QPointF(left, top), QPointF(right, bottom));
-    }
-
-    RenderingFlags flags() const override
-    {
-        return BoundedRectRendering;
-    }
-
-    QRectF rect() const override
-    {
-        return bounds_;
-    }
-
-    void render(const RenderState *state) override
-    {
-        auto *painter = static_cast<QPainter *>(
-            window_->rendererInterface()->getResource(window_, QSGRendererInterface::PainterResource));
-        if (!painter)
-            return;
-        painter->setWorldTransform(QTransform());
-        if (state->clipRegion())
-            painter->setClipRegion(*state->clipRegion(), Qt::IntersectClip);
-        painter->setWorldTransform(matrix()->toTransform());
-        painter->setOpacity(inheritedOpacity());
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(color_);
-        for (std::size_t i = 0; i < triangles_.size(); i += 3) painter->drawConvexPolygon(triangles_.data() + i, 3);
-    }
-
-private:
-    QQuickWindow        *window_;
-    std::vector<QPointF> triangles_;
-    QColor               color_;
-    QRectF               bounds_;
-};
-
-struct Lines
-{
-    std::vector<QPointF> triangles;
-    double               halfWidth;
-
-    Lines(double scale, double strokeWidth)
-        : halfWidth(strokeWidth * 0.5 / scale)
-    {
-    }
-
-    void segment(QPointF a, QPointF b)
-    {
-        const auto   delta = b - a;
-        const double size  = length(delta);
-        if (size <= epsilon)
-            return;
-        const QPointF perpendicular(-delta.y() / size * halfWidth, delta.x() / size * halfWidth);
-        triangles.insert(triangles.end(), {a + perpendicular, a - perpendicular, b + perpendicular, b + perpendicular,
-                                           a - perpendicular, b - perpendicular});
-    }
-
-    void square(QPointF center, double radius)
-    {
-        const QPointF a = center + QPointF(-radius, -radius), b = center + QPointF(radius, -radius);
-        const QPointF c = center + QPointF(radius, radius), d = center + QPointF(-radius, radius);
-        triangles.insert(triangles.end(), {a, b, c, a, c, d});
-    }
-
-    void path(const std::vector<QPointF> &points, bool closed)
-    {
-        for (std::size_t i = 1; i < points.size(); ++i) segment(points[i - 1], points[i]);
-        if (closed && points.size() > 2)
-            segment(points.back(), points.front());
-    }
-
-    void roi(const EncodedRegion &roi)
-    {
-        const auto region = RegionView(roi);
-        const auto points = contourOf(region);
-        const auto kind   = region.kind();
-        if (kind == RoiKind::Point)
-        {
-            for (const auto &point : points)
-            {
-                segment(point - QPointF(halfWidth * 4, 0), point + QPointF(halfWidth * 4, 0));
-                segment(point - QPointF(0, halfWidth * 4), point + QPointF(0, halfWidth * 4));
-            }
-        }
-        else
-            path(points, kind != RoiKind::Segment);
-    }
-
-    QSGNode *node(QQuickWindow *window, QColor color)
-    {
-        if (triangles.empty())
-            return nullptr;
-        if (window->rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
-            return new SoftwareRoiNode(window, std::move(triangles), color);
-        auto *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), static_cast<int>(triangles.size()));
-        geometry->setDrawingMode(QSGGeometry::DrawTriangles);
-        auto *vertices = geometry->vertexDataAsPoint2D();
-        for (std::size_t i = 0; i < triangles.size(); ++i)
-            vertices[i].set(static_cast<float>(triangles[i].x()), static_cast<float>(triangles[i].y()));
-        auto *material = new QSGFlatColorMaterial;
-        material->setColor(color);
-        auto *result = new QSGGeometryNode;
-        result->setGeometry(geometry);
-        result->setFlag(QSGNode::OwnsGeometry);
-        result->setMaterial(material);
-        result->setFlag(QSGNode::OwnsMaterial);
-        return result;
-    }
-};
-
-class ViewportNode final : public QSGTransformNode
-{
-public:
-    ViewportNode()
-    {
-        image = new QSGSimpleTextureNode;
-        image->setOwnsTexture(true);
-        image->setFiltering(QSGTexture::Nearest);
-        appendChildNode(image);
-        overlays = new QSGNode;
-        appendChildNode(overlays);
-    }
-
-    QSGSimpleTextureNode *image;
-    QSGNode              *overlays;
-    quint64               textureRevision = std::numeric_limits<quint64>::max();
-    quint64               overlayRevision = std::numeric_limits<quint64>::max();
-};
-
-} // namespace
-
 ImageViewport::ImageViewport(QQuickItem *parent)
     : QQuickItem(parent)
 {
     setFlag(ItemHasContents, true);
+    overlay_ = new RoiOverlay(*this);
     setClip(true);
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
     setAcceptHoverEvents(true);
@@ -264,14 +27,13 @@ ImageViewport::ImageViewport(QQuickItem *parent)
         QObject::disconnect(windowActiveConnection_);
         if (editing())
             emit roiEditCanceled();
-        windowActiveConnection_ = window
-            ? connect(window, &QWindow::activeChanged, this,
-                      [this, window]
-                      {
-                          if (!window->isActive() && editing())
-                              emit roiEditCanceled();
-                      })
-            : QMetaObject::Connection{};
+        windowActiveConnection_ = window ? connect(window, &QWindow::activeChanged, this,
+                                                   [this, window]
+                                                   {
+                                                       if (!window->isActive() && editing())
+                                                           emit roiEditCanceled();
+                                                   })
+                                         : QMetaObject::Connection{};
         if (mode_ == OneToOne)
         {
             recalculateFit();
@@ -309,6 +71,8 @@ void ImageViewport::setGeneration(quint64 generation)
     outputs_.clear();
     assistPreview_.clear();
     display_    = {};
+    sourceType_ = -1;
+    updatePixelProbe();
     imageSize_  = {};
     firstImage_ = true;
     ++textureRevision_;
@@ -340,17 +104,11 @@ void ImageViewport::setDisplayFrame(const DisplayFrame &frame)
     applyFrame(frame);
 }
 
-void ImageViewport::setHostImage(const QImage &image)
+void ImageViewport::setHostFrame(const DisplayFrame &source)
 {
-    DisplayFrame frame;
+    auto frame       = source;
     frame.generation = generation_;
     frame.requestId  = requestId_;
-    frame.image      = image;
-    if (image.isNull())
-    {
-        clearImage(requestId_);
-        return;
-    }
     applyFrame(frame);
     setStatus({});
     update();
@@ -360,8 +118,11 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
 {
     if (frame.generation != generation_ || frame.requestId != requestId_)
         return;
+    sourceType_ = frame.sourceType;
     if (display_.cacheKey() != frame.image.cacheKey())
     {
+        inspectedInput_.reset();
+        static_cast<RoiOverlay *>(overlay_)->clear();
         display_   = frame.image;
         imageSize_ = display_.size();
         ++textureRevision_;
@@ -377,14 +138,16 @@ void ImageViewport::applyFrame(const DisplayFrame &frame)
         updateCursor();
     }
     setStatus(!frame.error.isEmpty() ? frame.error : frame.warning);
+    updatePixelProbe();
     update();
     emit imagePresented(frame.requestId);
 }
 
-void ImageViewport::setOverlays(RegionGroup inputs, RegionGroup outputs)
+void ImageViewport::setOverlays(RegionGroup inputs, RegionGroup outputs, std::vector<RoiEditTarget> targets)
 {
-    inputs_  = std::move(inputs);
-    outputs_ = std::move(outputs);
+    inputs_       = std::move(inputs);
+    outputs_      = std::move(outputs);
+    inputTargets_ = std::move(targets);
     overlaysUpdated();
 }
 
@@ -443,6 +206,7 @@ void ImageViewport::transformUpdated()
     if (gesture_ != Gesture::None && gesture_ != Gesture::Pan)
         cancelDraft();
     overlaysUpdated();
+    updatePixelProbe();
     emit transformChanged();
 }
 
@@ -499,6 +263,8 @@ void ImageViewport::zoomBy(double factor)
 void ImageViewport::geometryChange(const QRectF &current, const QRectF &previous)
 {
     QQuickItem::geometryChange(current, previous);
+    if (overlay_)
+        overlay_->setSize(current.size());
     if (current.size() == previous.size())
         return;
     recalculateFit();
@@ -519,633 +285,30 @@ bool ImageViewport::event(QEvent *event)
     return QQuickItem::event(event);
 }
 
-void ImageViewport::beginRoiEdit(RoiEditTarget target, RegionGroup targetRois, bool readOnly, bool singleRectangle)
+QString ImageViewport::pixelTextAt(QPointF itemPoint) const
 {
-    if (target_ && *target_ == target && editable_ == targetRois && singleRectangle_ == singleRectangle)
+    if (!hasImage() || itemPoint.x() < 0 || itemPoint.y() < 0 || itemPoint.x() >= width() || itemPoint.y() >= height())
+        return {};
+    const auto point = itemToImage(itemPoint);
+    if (point.x() < 0 || point.y() < 0 || point.x() >= imageSize_.width() || point.y() >= imageSize_.height())
+        return {};
+    const int x    = static_cast<int>(std::floor(point.x()));
+    const int y    = static_cast<int>(std::floor(point.y()));
+    auto      text = QStringLiteral("X: %1  Y: %2").arg(x).arg(y);
+    if (sourceType_ == CV_8UC1)
+        text += QStringLiteral("\nGray: %1").arg(display_.constScanLine(y)[x]);
+    else if (sourceType_ == CV_8UC3)
     {
-        setReadOnly(readOnly);
-        return;
+        const auto color = display_.pixelColor(x, y);
+        text += QStringLiteral("\nR: %1  G: %2  B: %3").arg(color.red()).arg(color.green()).arg(color.blue());
     }
-    cancelDraft();
-    singleRectangle_ = singleRectangle;
-    target_   = std::move(target);
-    editable_ = std::move(targetRois);
-    int initialSelection = target_->roiIndex >= 0 && target_->roiIndex < static_cast<int>(editable_.size())
-        ? target_->roiIndex
-        : (singleRectangle_ && !editable_.empty() ? 0 : -1);
-    selectRoi(initialSelection);
-    setReadOnly(readOnly);
-    overlaysUpdated();
-    emit editingChanged();
-    updateCursor();
+    return text;
 }
 
-void ImageViewport::endRoiEdit()
+void ImageViewport::updatePixelProbe()
 {
-    cancelDraft();
-    if (!target_)
-        return;
-    target_.reset();
-    editable_.clear();
-    setDrawShape(DrawNone);
-    selectRoi(-1);
-    overlaysUpdated();
-    emit editingChanged();
-    updateCursor();
-}
-
-void ImageViewport::setReadOnly(bool value)
-{
-    if (readOnly_ == value)
-        return;
-    if (value)
-        cancelDraft();
-    readOnly_ = value;
-    overlaysUpdated();
-    emit readOnlyChanged();
-    updateCursor();
-}
-
-void ImageViewport::setDrawShape(int shape)
-{
-    if (shape < DrawNone || shape > DrawPoint || drawShape_ == shape
-        || (editing() && singleRectangle() && shape != DrawNone && shape != DrawRectangle))
-        return;
-    clearGesture();
-    drawShape_ = shape;
-    updateCursor();
-    emit drawShapeChanged();
-}
-
-void ImageViewport::selectRoi(int index)
-{
-    if (selected_ == index)
-        return;
-    selected_ = index;
-    emit selectedRoiChanged();
-    overlaysUpdated();
-}
-
-bool ImageViewport::canEdit() const
-{
-    return editing() && !readOnly_ && hasImage() && isEnabled();
-}
-
-void ImageViewport::setInputRoiColor(const QColor &color)
-{
-    if (inputRoiColor_ == color)
-        return;
-    inputRoiColor_ = color;
-    emit styleChanged();
-    overlaysUpdated();
-}
-
-void ImageViewport::setOutputRoiColor(const QColor &color)
-{
-    if (outputRoiColor_ == color)
-        return;
-    outputRoiColor_ = color;
-    emit styleChanged();
-    overlaysUpdated();
-}
-
-void ImageViewport::setAssistRoiColor(const QColor &color)
-{
-    if (assistRoiColor_ == color)
-        return;
-    assistRoiColor_ = color;
-    emit styleChanged();
-    overlaysUpdated();
-}
-
-void ImageViewport::setRoiStrokeWidth(qreal width)
-{
-    if (width <= 0.0 || qFuzzyCompare(roiStrokeWidth_, width))
-        return;
-    roiStrokeWidth_ = width;
-    emit styleChanged();
-    overlaysUpdated();
-}
-
-void ImageViewport::setRoiHandleSize(qreal size)
-{
-    if (size <= 0.0 || qFuzzyCompare(roiHandleSize_, size))
-        return;
-    roiHandleSize_ = size;
-    emit styleChanged();
-    overlaysUpdated();
-}
-
-void ImageViewport::overlaysUpdated()
-{
-    ++overlayRevision_;
-    update();
-}
-
-void ImageViewport::cancelDraft()
-{
-    const bool restoreSelection = gesture_ == Gesture::Create && singleRectangle() && !editable_.empty();
-    clearGesture();
-    if (restoreSelection)
-    {
-        setDrawShape(DrawNone);
-        selectRoi(0);
-    }
-    updateCursor();
-}
-
-void ImageViewport::clearGesture()
-{
-    gesture_   = Gesture::None;
-    panButton_ = Qt::NoButton;
-    original_.reset();
-    draft_.reset();
-    vertices_.clear();
-    handle_       = -1;
-    draftChanged_ = false;
-    overlaysUpdated();
-}
-
-namespace {
-std::vector<QPointF> controlPoints(const RegionView &region, double scale)
-{
-    if (region.kind() == RoiKind::Circle)
-    {
-        const auto    circle = region.circle();
-        const QPointF center = fromCv(circle.center());
-        const double  radius = circle.radius();
-        return {center + QPointF(radius, 0), center + QPointF(0, radius), center - QPointF(radius, 0),
-                center - QPointF(0, radius)};
-    }
-    auto points = contourOf(region);
-    if (region.kind() == RoiKind::Rectangle)
-    {
-        const auto rectangle = region.rectangle();
-        points.push_back(fromCv(rectangle.center())
-                         + rotated({0, -rectangle.height() / 2.0 - 24 / scale}, rectangle.angle()));
-    }
-    return points;
-}
-} // namespace
-
-std::vector<QPointF> ImageViewport::handles(const EncodedRegion &roi) const
-{
-    return controlPoints(RegionView(roi), scale_);
-}
-
-namespace {
-int hitRoiInList(const RegionGroup &rois, QPointF point, double scale)
-{
-    const double tolerance = 8 / scale;
-    for (int i = static_cast<int>(rois.size()) - 1; i >= 0; --i)
-    {
-        const auto region = RegionView(rois[i]);
-        if (region.kind() == RoiKind::Circle)
-        {
-            const auto    circle = region.circle();
-            const QPointF center = fromCv(circle.center());
-            if (length(point - center) <= circle.radius() + tolerance)
-                return i;
-            continue;
-        }
-        const auto points = contourOf(region);
-        if (region.kind() == RoiKind::Point)
-        {
-            for (const auto &candidate : points)
-                if (length(point - candidate) <= tolerance)
-                    return i;
-        }
-        else
-        {
-            for (std::size_t j = 1; j < points.size(); ++j)
-                if (segmentDistance(point, points[j - 1], points[j]) <= tolerance)
-                    return i;
-            if (region.kind() != RoiKind::Segment)
-            {
-                if (segmentDistance(point, points.back(), points.front()) <= tolerance)
-                    return i;
-                QPolygonF polygon;
-                for (const auto &vertex : points) polygon.append(vertex);
-                if (polygon.containsPoint(point, Qt::OddEvenFill))
-                    return i;
-            }
-        }
-    }
-    return -1;
-}
-} // namespace
-
-int ImageViewport::hitRoi(QPointF point) const
-{
-    return hitRoiInList(editable_, point, scale_);
-}
-
-void ImageViewport::mousePressEvent(QMouseEvent *event)
-{
-    forceActiveFocus(Qt::MouseFocusReason);
-    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton)
-    {
-        if (gesture_ != Gesture::None)
-        {
-            event->accept();
-            return;
-        }
-        gesture_     = Gesture::Pan;
-        panButton_   = event->button();
-        anchor_      = event->position();
-        lastPointer_ = event->position();
-        event->accept();
-        return;
-    }
-    // While regions are editable, a press on one of them keeps selecting, moving or resizing it;
-    // only empty space belongs to the assistant. That is what lets a training view hold its picked
-    // bands and still accept the next point-and-click.
-    if (event->button() == Qt::LeftButton && drawShape_ == DrawNone && assistActive_ && hasImage() && gesture_ == Gesture::None
-        && (!canEdit() || hitRoi(itemToImage(event->position())) < 0))
-    {
-        // A click is only a selection if the pointer does not travel; beyond the drag threshold the
-        // same press turns into a pan, so inspecting the image never commits a candidate.
-        gesture_     = Gesture::Assist;
-        anchor_      = itemToImage(event->position());
-        lastPointer_ = event->position();
-        event->accept();
-        return;
-    }
-    if (!canEdit() && event->button() == Qt::LeftButton && hasImage() && gesture_ == Gesture::None)
-    {
-        const auto point = itemToImage(event->position());
-        const int hit = hitRoiInList(inputs_, point, scale_);
-        if (hit >= 0)
-        {
-            emit roiSelected(hit, point);
-            event->accept();
-            return;
-        }
-    }
-    if (event->button() != Qt::LeftButton || !canEdit()
-        || (gesture_ != Gesture::None && gesture_ != Gesture::Vertices))
-    {
-        event->ignore();
-        return;
-    }
-    const auto point = itemToImage(event->position());
-    if (gesture_ == Gesture::Vertices)
-    {
-        if (vertices_.empty() || length(point - vertices_.back()) * scale_ > 4)
-            vertices_.push_back(point);
-        draftChanged_ = true;
-        overlaysUpdated();
-        event->accept();
-        return;
-    }
-    anchor_ = point;
-    handle_ = -1;
-    const bool isDrawingNew = drawShape_ >= DrawLine && drawShape_ <= DrawPoint;
-    if (!isDrawingNew && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
-    {
-        const auto controls = handles(editable_[selected_]);
-        double nearest = std::numeric_limits<double>::infinity();
-        for (std::size_t i = 0; i < controls.size(); ++i)
-        {
-            const double distance = length(point - controls[i]) * scale_;
-            if (distance <= 8 && distance < nearest)
-            {
-                handle_ = static_cast<int>(i);
-                nearest = distance;
-            }
-        }
-    }
-    if (isDrawingNew)
-        selectRoi(-1);
-    else if (handle_ < 0)
-        selectRoi(hitRoi(point));
-    if (selected_ >= 0)
-    {
-        original_     = editable_[selected_];
-        draft_        = original_;
-        gesture_      = handle_ >= 0 ? Gesture::Handle : Gesture::Move;
-        draftChanged_ = false;
-    }
-    else if (drawShape_ >= DrawLine && drawShape_ <= DrawPoint)
-    {
-        gesture_      = drawShape_ >= DrawPolygon ? Gesture::Vertices : Gesture::Create;
-        draftChanged_ = false;
-        if (gesture_ == Gesture::Vertices)
-        {
-            vertices_     = {point};
-            draftChanged_ = true;
-        }
-    }
-    overlaysUpdated();
-    event->accept();
-}
-
-void ImageViewport::changeDraft(QPointF point)
-{
-    try
-    {
-        if (gesture_ == Gesture::Create)
-        {
-            const auto delta = point - anchor_;
-            draft_.reset();
-            if (drawShape_ == DrawLine && length(delta) > epsilon)
-                draft_ = makeSegment({anchor_.x(), anchor_.y()}, {point.x(), point.y()});
-            else if (drawShape_ == DrawRectangle && std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
-                draft_ = makeRectangle(std::min(anchor_.x(), point.x()), std::min(anchor_.y(), point.y()),
-                                       std::abs(delta.x()), std::abs(delta.y()));
-            else if (drawShape_ == DrawCircle && length(delta) > epsilon)
-                draft_ = makeCircle({anchor_.x(), anchor_.y()}, length(delta));
-        }
-        else if (original_ && gesture_ == Gesture::Move)
-        {
-            auto draft = *original_;
-            RegionEditor(draft).translate({point.x() - anchor_.x(), point.y() - anchor_.y()});
-            draft_ = std::move(draft);
-        }
-        else if (original_ && gesture_ == Gesture::Handle)
-        {
-            draft_.reset();
-            const auto region = RegionView(*original_);
-            if (region.kind() == RoiKind::Rectangle)
-            {
-                const auto rectangle = region.rectangle();
-                const auto center    = fromCv(rectangle.center());
-                if (handle_ == 4)
-                {
-                    const auto delta = point - center;
-                    if (length(delta) > epsilon)
-                        draft_ = makeRectangle(rectangle.left(), rectangle.top(), rectangle.width(),
-                                               rectangle.height(),
-                                               std::atan2(delta.y(), delta.x()) * 180 / pi + 90);
-                }
-                else
-                {
-                    const auto corners  = contourOf(region);
-                    const auto opposite = corners[(handle_ + 2) % 4];
-                    const auto delta    = rotated(point - opposite, -rectangle.angle());
-                    const auto newCenter = (point + opposite) / 2;
-                    if (std::abs(delta.x()) > epsilon && std::abs(delta.y()) > epsilon)
-                        draft_ = makeRectangle(newCenter.x() - std::abs(delta.x()) / 2,
-                                               newCenter.y() - std::abs(delta.y()) / 2, std::abs(delta.x()),
-                                               std::abs(delta.y()), rectangle.angle());
-                }
-            }
-            else if (region.kind() == RoiKind::Circle)
-            {
-                const auto   circle = region.circle();
-                const double radius = length(point - fromCv(circle.center()));
-                if (radius > epsilon)
-                    draft_ = makeCircle(circle.center(), radius);
-            }
-            else
-            {
-                auto draft = *original_;
-                RegionEditor(draft).setVertex(static_cast<std::size_t>(handle_), {point.x(), point.y()});
-                draft_ = std::move(draft);
-            }
-        }
-        draftChanged_ = draft_.has_value() && (!original_ || *original_ != *draft_);
-    }
-    catch (const ContractError &)
-    {
-        draft_.reset();
-        draftChanged_ = false;
-    }
-    overlaysUpdated();
-}
-
-void ImageViewport::mouseMoveEvent(QMouseEvent *event)
-{
-    if (gesture_ == Gesture::Assist)
-    {
-        const auto delta = event->position() - lastPointer_;
-        if (delta.manhattanLength() > QGuiApplication::styleHints()->startDragDistance())
-        {
-            gesture_     = Gesture::Pan;
-            panButton_   = Qt::LeftButton;
-            lastPointer_ = event->position();
-        }
-        event->accept();
-        return;
-    }
-    if (gesture_ == Gesture::Pan)
-    {
-        const auto delta = event->position() - lastPointer_;
-        lastPointer_     = event->position();
-        if (!delta.isNull())
-        {
-            mode_ = Manual;
-            center_ -= delta / scale_;
-            transformUpdated();
-        }
-        event->accept();
-        return;
-    }
-    if (canEdit() && (gesture_ == Gesture::Create || gesture_ == Gesture::Move || gesture_ == Gesture::Handle))
-    {
-        changeDraft(itemToImage(event->position()));
-        event->accept();
-        return;
-    }
-    event->ignore();
-}
-
-void ImageViewport::mouseReleaseEvent(QMouseEvent *event)
-{
-    if (gesture_ == Gesture::Assist && event->button() == Qt::LeftButton)
-    {
-        const auto point = itemToImage(event->position());
-        const bool append = event->modifiers().testFlag(Qt::ControlModifier);
-        clearGesture();
-        event->accept();
-        emit assistClicked(point, append);
-        return;
-    }
-    if (gesture_ == Gesture::Pan && event->button() == panButton_)
-    {
-        const bool contextMenu = panButton_ == Qt::RightButton
-            && (event->position() - anchor_).manhattanLength() <= QGuiApplication::styleHints()->startDragDistance();
-        gesture_   = Gesture::None;
-        panButton_ = Qt::NoButton;
-        event->accept();
-        if (contextMenu)
-            emit contextMenuRequested(event->position());
-        return;
-    }
-    if (event->button() == Qt::LeftButton && canEdit()
-        && (gesture_ == Gesture::Create || gesture_ == Gesture::Move || gesture_ == Gesture::Handle))
-    {
-        changeDraft(itemToImage(event->position()));
-        commitDraft();
-        event->accept();
-        return;
-    }
-    event->setAccepted(gesture_ == Gesture::Vertices);
-}
-
-void ImageViewport::mouseDoubleClickEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton && canEdit() && gesture_ == Gesture::Vertices)
-    {
-        const auto point = itemToImage(event->position());
-        if (vertices_.empty() || length(point - vertices_.back()) * scale_ > 4)
-            vertices_.push_back(point);
-        finishDraft();
-        event->accept();
-        return;
-    }
-    event->ignore();
-}
-
-void ImageViewport::mouseUngrabEvent()
-{
-    // Multi-click polygon/point drafts intentionally survive each click's ungrab.
-    if (gesture_ == Gesture::Assist)
-        clearGesture();
-    else if (gesture_ != Gesture::Vertices)
-        cancelDraft();
-}
-
-std::optional<EncodedRegion> ImageViewport::completedDraft() const
-{
-    if (gesture_ != Gesture::Vertices)
-        return draft_;
-    auto count = vertices_.size();
-    if (drawShape_ == DrawPolygon && count > 1 && length(vertices_.front() - vertices_.back()) * scale_ <= 4)
-        --count;
-    std::vector<cv::Point2d> points;
-    points.reserve(count);
-    for (std::size_t index = 0; index < count; ++index)
-        points.push_back({vertices_[index].x(), vertices_[index].y()});
-    try
-    {
-        if (drawShape_ == DrawPolygon)
-            return makePolygon(points);
-        if (drawShape_ == DrawPoint)
-            return makePoint(points);
-    }
-    catch (const ContractError &)
-    {
-    }
-    return {};
-}
-
-void ImageViewport::commitDraft()
-{
-    if (!canEdit() || !draftChanged_)
-    {
-        clearGesture();
-        return;
-    }
-    const auto value = completedDraft();
-    if (!value)
-    {
-        clearGesture();
-        return;
-    }
-    auto key     = *target_;
-    key.roiIndex = (gesture_ == Gesture::Create || gesture_ == Gesture::Vertices) ? -1 : selected_;
-    if (singleRectangle() && !editable_.empty())
-        key.roiIndex = 0;
-    if (key.roiIndex < 0)
-    {
-        editable_.push_back(*value);
-        selectRoi(static_cast<int>(editable_.size()) - 1);
-    }
-    else
-        editable_[key.roiIndex] = *value;
-    clearGesture();
-    setDrawShape(DrawNone);
-    updateCursor();
-    emit roiCommitted(key, *value);
-}
-
-void ImageViewport::finishDraft()
-{
-    if (gesture_ == Gesture::Vertices)
-        commitDraft();
-}
-
-void ImageViewport::deleteSelectedRoi()
-{
-    if (!canEdit() || selected_ < 0 || selected_ >= static_cast<int>(editable_.size()))
-        return;
-    auto key     = *target_;
-    key.roiIndex = selected_;
-    cancelDraft();
-    editable_.erase(editable_.begin() + selected_);
-    selectRoi(-1);
-    overlaysUpdated();
-    emit roiDeleted(key);
-}
-
-void ImageViewport::wheelEvent(QWheelEvent *event)
-{
-    const double delta
-        = !event->angleDelta().isNull() ? event->angleDelta().y() / 120.0 : event->pixelDelta().y() / 60.0;
-    zoomAt(std::pow(1.2, delta), event->position());
-    event->accept();
-}
-
-void ImageViewport::keyPressEvent(QKeyEvent *event)
-{
-    if (event->key() == Qt::Key_Escape && assistActive_ && !editing())
-    {
-        emit assistCanceled();
-        event->accept();
-    }
-    else if (event->key() == Qt::Key_Escape && editing())
-    {
-        if (gesture_ == Gesture::None)
-            emit roiEditCanceled();
-        else
-            cancelDraft();
-        event->accept();
-    }
-    else if ((event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return) && editing())
-    {
-        finishDraft();
-        event->accept();
-    }
-    else if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) && editing())
-    {
-        deleteSelectedRoi();
-        event->accept();
-    }
-    else
-        QQuickItem::keyPressEvent(event);
-}
-
-void ImageViewport::updateCursor()
-{
-    if ((drawShape_ != DrawNone && canEdit()) || (assistActive_ && hasImage()))
-        setCursor(QCursor(Qt::CrossCursor));
-    else
-        unsetCursor();
-}
-
-void ImageViewport::hoverEnterEvent(QHoverEvent *event)
-{
-    updateCursor();
-    if (assistActive_ && hasImage() && drawShape_ == DrawNone)
-        emit assistHover(itemToImage(event->position()));
-    QQuickItem::hoverEnterEvent(event);
-}
-
-void ImageViewport::hoverMoveEvent(QHoverEvent *event)
-{
-    updateCursor();
-    if (assistActive_ && hasImage() && drawShape_ == DrawNone)
-        emit assistHover(itemToImage(event->position()));
-    QQuickItem::hoverMoveEvent(event);
-}
-
-void ImageViewport::hoverLeaveEvent(QHoverEvent *event)
-{
-    unsetCursor();
-    if (assistActive_)
-        emit assistLeave();
-    QQuickItem::hoverLeaveEvent(event);
+    pixelText_ = pointerInside_ ? pixelTextAt(pointerPosition_) : QString{};
+    emit pixelProbeChanged();
 }
 
 QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
@@ -1155,10 +318,16 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         delete oldNode;
         return nullptr;
     }
-    auto *node = static_cast<ViewportNode *>(oldNode);
+    auto *node = static_cast<QSGSimpleTextureNode *>(oldNode);
     if (!node)
-        node = new ViewportNode;
-    if (node->textureRevision != textureRevision_)
+    {
+        node = new QSGSimpleTextureNode;
+        node->setOwnsTexture(true);
+        node->setFiltering(QSGTexture::Nearest);
+    }
+    if (!node->texture() || node->texture()->comparisonKey() != uploadedTextureKey_)
+        uploadedRevision_ = std::numeric_limits<quint64>::max();
+    if (uploadedRevision_ != textureRevision_)
     {
         auto *texture = window()->createTextureFromImage(display_);
         if (!texture)
@@ -1166,64 +335,11 @@ QSGNode *ImageViewport::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             delete node;
             return nullptr;
         }
-        node->image->setTexture(texture);
-        node->image->setRect(0, 0, imageSize_.width(), imageSize_.height());
-        node->textureRevision = textureRevision_;
+        node->setTexture(texture);
+        uploadedTextureKey_ = texture->comparisonKey();
+        uploadedRevision_   = textureRevision_;
     }
-    QMatrix4x4 matrix;
-    matrix.translate(float(width() / 2 - center_.x() * scale_), float(height() / 2 - center_.y() * scale_));
-    matrix.scale(float(scale_), float(scale_));
-    node->setMatrix(matrix);
-    if (node->overlayRevision != overlayRevision_)
-    {
-        while (auto *child = node->overlays->firstChild())
-        {
-            node->overlays->removeChildNode(child);
-            delete child;
-        }
-        Lines input(scale_, roiStrokeWidth_), output(scale_, roiStrokeWidth_), edit(scale_, roiStrokeWidth_),
-            assist(scale_, roiStrokeWidth_);
-        for (const auto &roi : inputs_) input.roi(roi);
-        for (const auto &roi : outputs_) output.roi(roi);
-        for (const auto &group : assistPreview_)
-            for (const auto &roi : group)
-                assist.roi(roi);
-        for (std::size_t i = 0; editing() && i < editable_.size(); ++i)
-        {
-            if (static_cast<int>(i) == selected_ && draft_)
-                edit.roi(*draft_);
-            else
-                edit.roi(editable_[i]);
-        }
-        if (gesture_ == Gesture::Create && draft_)
-            edit.roi(*draft_);
-        if (gesture_ == Gesture::Vertices)
-        {
-            if (drawShape_ == DrawPolygon)
-                edit.path(vertices_, false);
-            for (const auto &point : vertices_) edit.square(point, roiHandleSize_ * 0.7 / scale_);
-        }
-        if (editing() && !readOnly_ && selected_ >= 0 && selected_ < static_cast<int>(editable_.size()))
-        {
-            const auto &roi      = draft_ ? *draft_ : editable_[selected_];
-            const auto  region   = RegionView(roi);
-            const auto  controls = controlPoints(region, scale_);
-            for (const auto &point : controls) edit.square(point, roiHandleSize_ / scale_);
-            if (region.kind() == RoiKind::Rectangle)
-                edit.segment((controls[0] + controls[1]) / 2, controls[4]);
-        }
-        if (auto *geometry = input.node(window(), inputRoiColor_))
-            node->overlays->appendChildNode(geometry);
-        if (auto *geometry = output.node(window(), outputRoiColor_))
-            node->overlays->appendChildNode(geometry);
-        if (auto *geometry = assist.node(window(), assistRoiColor_))
-            node->overlays->appendChildNode(geometry);
-        if (auto *geometry = edit.node(window(), inputRoiColor_))
-            node->overlays->appendChildNode(geometry);
-        node->overlayRevision = overlayRevision_;
-        node->markDirty(QSGNode::DirtyMatrix);
-    }
+    node->setRect(QRectF(imageToItem({0, 0}), imageToItem({double(imageSize_.width()), double(imageSize_.height())})));
     return node;
 }
-
 } // namespace visionrt

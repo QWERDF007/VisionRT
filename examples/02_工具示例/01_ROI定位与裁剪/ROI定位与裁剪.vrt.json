@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "ProjectRoi",
           "tool_name_snapshot": "投影ROI",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "投影定位亮条",
           "pos": [
             0,
@@ -216,12 +216,6 @@
                 "port_id": 1,
                 "type": {
                   "type": 3
-                }
-              },
-              {
-                "port_id": 2,
-                "type": {
-                  "type": 4
                 }
               },
               {
@@ -341,7 +335,7 @@
               "mode": 1,
               "literal": null,
               "source": {
-                "node_seq": "2",
+                "node_seq": "1",
                 "port_id": 2
               }
             },

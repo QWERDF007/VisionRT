@@ -2,8 +2,8 @@
 
 #include "ui/Export.h"
 
-#include <visionrt/contracts/Value.h>
 #include <visionrt/contracts/ProtocolEnums.h>
+#include <visionrt/contracts/Value.h>
 
 #include <QImage>
 #include <QObject>
@@ -18,6 +18,7 @@ namespace visionrt {
 struct DisplayFrame
 {
     QImage  image;
+    int     sourceType = -1;
     QString warning;
     QString error;
     int     batchIndex = 0; // Position in the submitted display batch, not a DAG batch index.
@@ -56,11 +57,11 @@ signals:
 private:
     struct Request
     {
-        DataRef<Image>          images;
-        ColorOrder colorOrder = ColorOrder::Automatic;
-        quint64                 requestId;
-        quint64                 generation;
-        quint64                 serial;
+        DataRef<Image> images;
+        ColorOrder     colorOrder = ColorOrder::Automatic;
+        quint64        requestId;
+        quint64        generation;
+        quint64        serial;
     };
 
     void dispatch(Request request);

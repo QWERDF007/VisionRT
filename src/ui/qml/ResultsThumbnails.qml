@@ -86,11 +86,6 @@ ColumnLayout {
                         anchors.fill: parent
                         readOnly: true
                         enabled: false
-                        inputRoiColor: VisionRTColor.InputROI
-                        outputRoiColor: VisionRTColor.OutputROI
-                        assistRoiColor: VisionRTColor.InputROI
-                        roiStrokeWidth: 2
-                        roiHandleSize: 4
                         Component.onCompleted: root.controller.attachViewport(thumbnail)
                         onThumbnailIndexChanged: root.controller.attachViewport(thumbnail)
                     }

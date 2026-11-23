@@ -141,6 +141,8 @@ if(VISIONRT_BUILD_APP)
         VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
     visionrt_contract(viewport_contract visionrt_ui)
+    visionrt_contract(viewport_pixel_contract visionrt_ui)
+    visionrt_contract(roi_interaction_contract visionrt_ui)
     visionrt_contract(viewport_lifetime_contract visionrt_ui)
     target_link_libraries(viewport_lifetime_contract PRIVATE Qt6::Test)
     visionrt_contract(ui_value_contract visionrt_ui)
@@ -309,6 +311,12 @@ target_link_libraries(ui_completion_contract PRIVATE visionrt_python_testing)
         VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}"
         VISIONRT_TEST_AUTHORING_PROBE="$<TARGET_FILE:test_authoring_probe>")
     add_dependencies(workbench_training_contract test_authoring_probe)
+    visionrt_contract(workbench_roi_persistence_contract visionrt_ui)
+    target_link_libraries(workbench_roi_persistence_contract PRIVATE Qt6::Test)
+    target_compile_definitions(workbench_roi_persistence_contract PRIVATE
+        VISIONRT_TEST_TOOLS_PACKAGE="${VISIONRT_TEST_TOOLS_PACKAGE}"
+        VISIONRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        VISIONRT_BINARY_DIR="${CMAKE_BINARY_DIR}")
     visionrt_contract(workbench_training_publish_contract visionrt_ui)
     target_link_libraries(workbench_training_publish_contract PRIVATE visionrt_plugins Qt6::Test)
     target_compile_definitions(workbench_training_publish_contract PRIVATE

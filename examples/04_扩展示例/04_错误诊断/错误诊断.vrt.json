@@ -219,7 +219,7 @@
           "node_seq": "3",
           "tool_id": "DetectObjectsYolo",
           "tool_name_snapshot": "YOLO目标检测",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "YOLO(缺模型文件负例)",
           "pos": [
             2,
@@ -357,12 +357,6 @@
               }
             ],
             "outputs": [
-              {
-                "port_id": 2,
-                "type": {
-                  "type": 4
-                }
-              },
               {
                 "port_id": 3,
                 "type": {

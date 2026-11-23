@@ -10,7 +10,7 @@ void AppController::Impl::finishRoi()
 {
     if (!roiSession.active())
         return;
-    const auto view = roiSession.view();
+    const auto view   = roiSession.view();
     const int  result = roiSession.resultIndex();
     roiSession.end();
     presentation.restoreImageIndex(result);
@@ -38,6 +38,13 @@ void AppController::Impl::commitRoi(const RoiEditTarget &target, const EncodedRe
             viewport->setDrawShape(value ? 0 : 2);
         if (outcome.changedBinding)
         {
+            if (trainingMode)
+            {
+                ++trainingSerial;
+                clearTrainingFit();
+                assist->invalidate();
+                emit q->trainingChanged();
+            }
             emit q->projectChanged();
             emit q->parametersChanged();
         }
@@ -57,18 +64,14 @@ bool AppController::editRoi(int parameter, bool copyUpstream)
     try
     {
         const auto *node        = impl_->currentNode();
-        const auto port        = static_cast<PortId>(parameter);
+        const auto  port        = static_cast<PortId>(parameter);
         const auto *declaration = impl_->parameter(port, false);
         if (!node || !declaration || declaration->type.type != Type::ROI)
             throw ContractError("参数不是可编辑的 ROI 输入：" + portLabel(port));
         if (!declaration->image)
             throw ContractError("ROI 输入未声明关联图像：" + portLabel(port));
-        const auto  imageValue = impl_->resolvedInput(*node, declaration->image->id);
-        const auto *images     = std::get_if<DataRef<Image>>(&imageValue);
-        if (declaration->editor != EditorKind::Rect && (!images || images->get().empty()))
-            throw ContractError("ROI 输入 " + portLabel(port) + " 的关联图像 " + portLabel(declaration->image->id)
-                                + " 没有缓存，请先运行图像源或上游");
-        auto roiValue = impl_->resolvedInput(*node, port);
+        const auto imageValue = impl_->resolvedInput(*node, declaration->image->id);
+        auto       roiValue   = impl_->resolvedInput(*node, port);
         if (isMissing(roiValue))
             roiValue = DataRef<ROI>(ROI{});
         validateValue(declaration->type, roiValue);
@@ -106,7 +109,67 @@ bool AppController::editRoi(int parameter, bool copyUpstream)
 
 QVariantMap AppController::roiEditor() const
 {
-    return impl_->roiSession.editor();
+    auto *viewport = impl_->presentation.viewport();
+    auto  editor   = impl_->roiSession.editor(viewport ? viewport->selectedRoi() : -1);
+    if (!editor.isEmpty())
+        editor["readOnly"] = !viewport || viewport->readOnly();
+    return editor;
+}
+
+bool AppController::setRoiCoordinate(const QString &session, int coordinate, const QString &text, bool commit)
+{
+    if (!impl_->idle() || !impl_->roiSession.active() || session != QString::number(impl_->roiSession.id()))
+        return false;
+    auto *viewport = impl_->presentation.viewport();
+    if (!viewport || viewport->readOnly())
+        return false;
+    const int   index  = viewport ? viewport->selectedRoi() : -1;
+    const auto &groups = std::get<DataRef<ROI>>(impl_->roiSession.draft()).get();
+    const int   group  = impl_->roiSession.singleRectangle() ? 0 : impl_->roiSession.displayIndex();
+    if (group >= static_cast<int>(groups.size()) || index < 0 || index >= static_cast<int>(groups[group].size()))
+        return false;
+    auto value = groups[group][index];
+    if (coordinate < 0 || coordinate + 1 >= static_cast<int>(value.size()))
+        return false;
+    bool       valid  = false;
+    const auto number = text.toDouble(&valid);
+    if (!valid || !std::isfinite(number))
+        return false;
+    value[coordinate + 1] = number;
+    const auto key        = impl_->roiSession.target(index);
+    try
+    {
+        validateRoi(value);
+        if (commit && key.kind == RoiTargetKind::Training)
+            impl_->commitTrainingRoi(key, &value);
+        else if (commit)
+            impl_->commitRoi(key, &value);
+        else
+            impl_->roiSession.previewGeometry(key, value);
+        const auto &updated = std::get<DataRef<ROI>>(impl_->roiSession.draft()).get();
+        viewport->previewGeometry(updated[group]);
+        emit parametersChanged();
+        emit resultsChanged();
+        return true;
+    }
+    catch (const ContractError &)
+    {
+        return false;
+    }
+}
+
+void AppController::cancelRoiCoordinates()
+{
+    impl_->roiSession.cancelPreview();
+    if (auto *viewport = impl_->presentation.viewport(); viewport && impl_->roiSession.active())
+    {
+        const auto &groups = std::get<DataRef<ROI>>(impl_->roiSession.draft()).get();
+        const int   group  = impl_->roiSession.singleRectangle() ? 0 : impl_->roiSession.displayIndex();
+        if (group < static_cast<int>(groups.size()))
+            viewport->previewGeometry(groups[group]);
+    }
+    emit parametersChanged();
+    emit resultsChanged();
 }
 
 bool AppController::setRoiRectangle(const QString &session, const QVariantList &coordinates)
@@ -117,16 +180,17 @@ bool AppController::setRoiRectangle(const QString &session, const QVariantList &
     try
     {
         if (coordinates.size() != 5)
-            throw ContractError("矩形参数 " + portLabel(impl_->roiSession.input()) + " 需要 x、y、width、height、angle 五个坐标，实际 "
+            throw ContractError("矩形参数 " + portLabel(impl_->roiSession.input())
+                                + " 需要 x、y、width、height、angle 五个坐标，实际 "
                                 + std::to_string(coordinates.size()) + " 项");
         std::array<double, 5> values;
         for (std::size_t index = 0; index < values.size(); ++index)
         {
-            bool valid = false;
+            bool valid    = false;
             values[index] = coordinates[qsizetype(index)].toDouble(&valid);
             if (!valid || !std::isfinite(values[index]))
-                throw ContractError("矩形参数 " + portLabel(impl_->roiSession.input()) + " 的坐标[" + std::to_string(index)
-                                    + "] 必须为有限数值");
+                throw ContractError("矩形参数 " + portLabel(impl_->roiSession.input()) + " 的坐标["
+                                    + std::to_string(index) + "] 必须为有限数值");
         }
         const auto outcome = impl_->roiSession.commitRectangle(values);
         if (!outcome.accepted)
@@ -181,8 +245,7 @@ bool AppController::applyRoi()
             throw ContractError("ROI 背景图像已在编辑期间改变：" + portLabel(input));
         validateValue(impl_->roiSession.type(), impl_->roiSession.draft());
         InputBinding committed{BindingMode::Literal, impl_->roiSession.draft(), std::nullopt};
-        const bool   changed
-            = impl_->editor.setBinding(flow.toStdString(), nodeValue, input, std::move(committed));
+        const bool   changed = impl_->editor.setBinding(flow.toStdString(), nodeValue, input, std::move(committed));
         impl_->finishRoi();
         if (changed)
             impl_->changed();
@@ -247,13 +310,12 @@ bool AppController::startRoiDraw(int parameter, int shape)
 {
     if (!impl_->idle())
         return false;
-    const auto *node = impl_->currentNode();
-    const auto port        = static_cast<PortId>(parameter);
+    const auto *node        = impl_->currentNode();
+    const auto  port        = static_cast<PortId>(parameter);
     const auto *declaration = impl_->parameter(port, false);
     if (!node || !declaration)
         return false;
-    if (!impl_->roiSession.active() || impl_->roiSession.node() != node->id
-        || impl_->roiSession.input() != port)
+    if (!impl_->roiSession.active() || impl_->roiSession.node() != node->id || impl_->roiSession.input() != port)
     {
         if (!editRoi(parameter, true))
             return false;
@@ -268,8 +330,8 @@ bool AppController::clearRoi(int parameter)
 {
     if (!impl_->idle())
         return false;
-    const auto *node = impl_->currentNode();
-    const auto port        = static_cast<PortId>(parameter);
+    const auto *node        = impl_->currentNode();
+    const auto  port        = static_cast<PortId>(parameter);
     const auto *declaration = impl_->parameter(port, false);
     if (!node || !declaration)
         return false;
@@ -277,9 +339,8 @@ bool AppController::clearRoi(int parameter)
         return false;
     PortValue    emptyVal = DataRef<ROI>(ROI{});
     InputBinding committed{BindingMode::Literal, std::move(emptyVal), {}};
-    const bool changed = impl_->editor.setBinding(impl_->flow.toStdString(), node->id, port, std::move(committed));
-    if (impl_->roiSession.active() && impl_->roiSession.input() == port
-        && impl_->roiSession.node() == node->id)
+    const bool   changed = impl_->editor.setBinding(impl_->flow.toStdString(), node->id, port, std::move(committed));
+    if (impl_->roiSession.active() && impl_->roiSession.input() == port && impl_->roiSession.node() == node->id)
     {
         impl_->finishRoi();
     }

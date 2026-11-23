@@ -2,7 +2,6 @@
 
 #include <QClipboard>
 #include <QGuiApplication>
-
 #include <algorithm>
 #include <type_traits>
 
@@ -57,7 +56,7 @@ std::optional<PortRef> parseImageKey(const QString &key)
     const auto parts = key.split(QLatin1Char(':'));
     if (parts.size() != 2)
         return std::nullopt;
-    bool      ok = false;
+    bool       ok = false;
     const auto id = parts[1].toUInt(&ok);
     if (!ok || id == 0)
         return std::nullopt;
@@ -281,6 +280,7 @@ void ResultPresentation::clearDisplay()
         viewport_->setOverlays({}, {});
         viewport_->endRoiEdit();
     }
+    displayInputTargets_.clear();
     displayInputs_.clear();
     displayOutputs_.clear();
     displayRoiTarget_.reset();
@@ -288,8 +288,8 @@ void ResultPresentation::clearDisplay()
     outputs_.clear();
     imageSelection_.reset();
     selectionNode_.reset();
-    index_     = 0;
-    count_     = 0;
+    index_ = 0;
+    count_ = 0;
     displayed_.reset();
 }
 
@@ -343,7 +343,7 @@ void ResultPresentation::updateResults()
     }
     else
     {
-        const auto snapshot = displaySnapshot(*node);
+        const auto                    snapshot = displaySnapshot(*node);
         std::map<PortId, std::size_t> references;
         if (const auto *current = host_.currentFlow())
             for (const auto &relation : portRelations(*current).active)
@@ -373,9 +373,10 @@ void ResultPresentation::applyOverlays()
 {
     if (!viewport_ || suspended_)
         return;
-    viewport_->setOverlays(displayInputs_, displayOutputs_);
+    viewport_->setOverlays(displayInputs_, displayOutputs_, displayInputTargets_);
     if (displayRoiTarget_)
-        viewport_->beginRoiEdit(*displayRoiTarget_, imageRois(roi_.draft(), roi_.displayIndex(), roi_.singleRectangle()),
+        viewport_->beginRoiEdit(*displayRoiTarget_,
+                                imageRois(roi_.draft(), roi_.displayIndex(), roi_.singleRectangle()),
                                 !host_.runtimeIdle(), roi_.singleRectangle());
     else
         viewport_->endRoiEdit();
@@ -403,16 +404,15 @@ void ResultPresentation::updateDisplay()
         return;
     if (roi_.active())
     {
-        const auto *node        = host_.selectedNode();
-        const auto *declaration = host_.parameter(roi_.input(), false);
+        const auto     *node        = host_.selectedNode();
+        const auto     *declaration = host_.parameter(roi_.input(), false);
         // An image-free editor freezes a Missing background; a missing port must compare equal to it
         // instead of ending the session that just started.
-        const PortValue  missing{Missing{}};
-        const auto      *background
+        const PortValue missing{Missing{}};
+        const auto     *background
             = node && declaration && declaration->image ? resolvedInput(*node, declaration->image->id) : nullptr;
-        const PortValue &current    = background ? *background : missing;
-        if (!node || node->id != roi_.node() || !declaration
-            || !equalValues(roi_.background(), current))
+        const PortValue &current = background ? *background : missing;
+        if (!node || node->id != roi_.node() || !declaration || !equalValues(roi_.background(), current))
         {
             host_.endRoiEdit();
             if (!readsAllowed())
@@ -420,12 +420,13 @@ void ResultPresentation::updateDisplay()
         }
     }
 
-    const auto           *node = host_.selectedNode();
-    const auto           *tool = host_.effectiveTool();
+    const auto           *node  = host_.selectedNode();
+    const auto           *tool  = host_.effectiveTool();
     const DataRef<Image> *batch = nullptr;
     ResultSlot::Snapshot  snapshot;
-    ColorOrder color = ColorOrder::Automatic;
+    ColorOrder            color         = ColorOrder::Automatic;
     PortId                roiImageInput = 0;
+    displayInputTargets_.clear();
     displayInputs_.clear();
     displayOutputs_.clear();
     displayRoiTarget_.reset();
@@ -460,16 +461,11 @@ void ResultPresentation::updateDisplay()
     }
     else if (roi_.active())
     {
-        batch         = std::get_if<DataRef<Image>>(&roi_.background());
-        selectedIndex = roi_.displayIndex();
-        displayRoiTarget_ = RoiEditTarget{roi_.node(),
-                                          roi_.input(),
-                                          selectedIndex,
-                                          roi_.singleRectangle()
-                                                  && !std::get<DataRef<ROI>>(roi_.draft()).get().empty()
-                                              ? 0
-                                              : -1,
-                                          roi_.id()};
+        batch             = std::get_if<DataRef<Image>>(&roi_.background());
+        selectedIndex     = roi_.displayIndex();
+        displayRoiTarget_ = RoiEditTarget{
+            roi_.node(), roi_.input(), selectedIndex,
+            roi_.singleRectangle() && !std::get<DataRef<ROI>>(roi_.draft()).get().empty() ? 0 : -1, roi_.id()};
         const auto *declaration = host_.parameter(roi_.input(), false);
         if (declaration && node)
         {
@@ -483,6 +479,8 @@ void ResultPresentation::updateDisplay()
                         if (!value)
                             continue;
                         auto values = imageRois(*value, selectedIndex, port.editor == EditorKind::Rect);
+                        for (std::size_t i = 0; i < values.size(); ++i)
+                            displayInputTargets_.push_back({node->id, port.id, selectedIndex, static_cast<int>(i)});
                         displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
                     }
         }
@@ -493,23 +491,25 @@ void ResultPresentation::updateDisplay()
         index_ = 0;
     }
 
-    if (!roi_.active() && node && tool && snapshot && imageSelection_)
+    if (!roi_.active() && node && tool && imageSelection_)
     {
         // Geometry declared on the displayed image itself.
         for (const auto &port : tool->inputs)
         {
             if (port.type.type != Type::ROI || !port.image || *port.image != *imageSelection_)
                 continue;
-            const auto value = snapshot->roiInputs.find(port.id);
-            if (value != snapshot->roiInputs.end())
+            const auto *value = resolvedInput(*node, port.id);
+            if (value)
             {
-                auto values = imageRois(value->second, selectedIndex, port.editor == EditorKind::Rect);
+                auto values = imageRois(*value, selectedIndex, port.editor == EditorKind::Rect);
+                for (std::size_t i = 0; i < values.size(); ++i)
+                    displayInputTargets_.push_back({node->id, port.id, selectedIndex, static_cast<int>(i)});
                 displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
             }
         }
         // An output image declares which input image shares its coordinates. Only that declared
         // input contributes overlays; equal pixels or a first-non-empty input never do.
-        if (imageSelection_->stage == PortStage::Outputs && selectedPort && selectedPort->sameGeometryAs)
+        if (snapshot && imageSelection_->stage == PortStage::Outputs && selectedPort && selectedPort->sameGeometryAs)
             for (const auto &port : tool->inputs)
                 if (port.type.type == Type::ROI && port.image && *port.image == *selectedPort->sameGeometryAs)
                 {
@@ -517,6 +517,8 @@ void ResultPresentation::updateDisplay()
                     if (value != snapshot->roiInputs.end())
                     {
                         auto values = imageRois(value->second, selectedIndex, port.editor == EditorKind::Rect);
+                        for (std::size_t i = 0; i < values.size(); ++i)
+                            displayInputTargets_.push_back({node->id, port.id, selectedIndex, static_cast<int>(i)});
                         displayInputs_.insert(displayInputs_.end(), values.begin(), values.end());
                     }
                 }
@@ -528,16 +530,16 @@ void ResultPresentation::updateDisplay()
             if (port.type.type != Type::ROI || !port.image)
                 continue;
             const auto *imagePort = port.image->stage == PortStage::Inputs ? findPort(tool->inputs, port.image->id)
-                                                                          : findPort(tool->outputs, port.image->id);
+                                                                           : findPort(tool->outputs, port.image->id);
             if (!imagePort)
                 continue;
             const bool matches
                 = roi_.active()
-                      ? (port.image->stage == PortStage::Inputs
-                             ? port.image->id == roiImageInput
-                             : (imagePort->sameGeometryAs && imagePort->sameGeometryAs->stage == PortStage::Inputs
-                                && imagePort->sameGeometryAs->id == roiImageInput))
-                      : (imageSelection_ && *port.image == *imageSelection_);
+                    ? (port.image->stage == PortStage::Inputs
+                           ? port.image->id == roiImageInput
+                           : (imagePort->sameGeometryAs && imagePort->sameGeometryAs->stage == PortStage::Inputs
+                              && imagePort->sameGeometryAs->id == roiImageInput))
+                    : (imageSelection_ && *port.image == *imageSelection_);
             if (!matches)
                 continue;
             const auto value = snapshot->outputs.find(port.id);
@@ -618,8 +620,8 @@ std::vector<ResultPresentation::ImageChoice> ResultPresentation::imageChoices() 
     if (!tool || !node)
         return choices;
 
-    const auto add = [&](const std::vector<PortDefinition> &ports, PortStage stage, const TypeMap &signatures,
-                         bool visibleOnly)
+    const auto add
+        = [&](const std::vector<PortDefinition> &ports, PortStage stage, const TypeMap &signatures, bool visibleOnly)
     {
         for (const auto &port : ports)
         {
@@ -659,8 +661,9 @@ void ResultPresentation::ensureImageSelection(const NodeDefinition &node, const 
     const auto choices = imageChoices();
     if (choices.empty())
         return;
-    if (imageSelection_ && std::any_of(choices.begin(), choices.end(),
-                                       [&](const ImageChoice &choice) { return choice.ref == *imageSelection_; }))
+    if (imageSelection_
+        && std::any_of(choices.begin(), choices.end(),
+                       [&](const ImageChoice &choice) { return choice.ref == *imageSelection_; }))
         return;
     // Prefer a port that already carries images: a declared but still empty output would show a
     // name with a blank canvas, which is the state this default exists to avoid.
@@ -684,8 +687,8 @@ QVariantList ResultPresentation::imageOutputs() const
     QVariantList result;
     for (const auto &choice : imageChoices())
         result.push_back(QVariantMap{
-            {  "id",                                         imageKey(choice.ref)},
-            {  "name",                                               choice.name},
+            {   "id",               imageKey(choice.ref)},
+            { "name",                        choice.name},
             {"stage", static_cast<int>(choice.ref.stage)}
         });
     return result;
@@ -756,8 +759,7 @@ bool ResultPresentation::setImageOutput(const QString &output)
     if (!parsed || imageSelection_ == parsed)
         return false;
     const auto choices = imageChoices();
-    if (std::none_of(choices.begin(), choices.end(),
-                     [&](const ImageChoice &choice) { return choice.ref == *parsed; }))
+    if (std::none_of(choices.begin(), choices.end(), [&](const ImageChoice &choice) { return choice.ref == *parsed; }))
         return false;
     imageSelection_ = parsed;
     updateDisplay();
@@ -815,8 +817,7 @@ void ResultPresentation::updateReadback()
             requestText(current);
     }
     const bool textQueued = !readRequests_.empty();
-    if (readback_ && runtime_ && !textTask_.valid() && !textQueued && !converter_.isBusy()
-        && !converter_.hasPending())
+    if (readback_ && runtime_ && !textTask_.valid() && !textQueued && !converter_.isBusy() && !converter_.hasPending())
     {
         if (runtime_->acknowledgeReadback(*readback_))
             readback_.reset();
@@ -833,8 +834,7 @@ void ResultPresentation::requestText(const QVariantMap &context)
     {
         const auto target = textTarget(context);
         const bool alreadyQueued
-            = std::any_of(readRequests_.begin(), readRequests_.end(),
-                          [&](const auto &item) { return item == target; });
+            = std::any_of(readRequests_.begin(), readRequests_.end(), [&](const auto &item) { return item == target; });
         if (!alreadyQueued)
             readRequests_.push_back(target);
         return;
@@ -854,31 +854,30 @@ void ResultPresentation::requestText(const QVariantMap &context)
     mailbox->generation   = generation;
     textMailbox_          = mailbox;
     ++textPending_;
-    textTask_ = std::async(
-        std::launch::async,
-        [captured = std::move(*captured), generation, context, mailbox, this]
-        {
-            try
-            {
-                auto text = OutputModel::fullText(captured);
-                {
-                    std::lock_guard lock(mailbox->mutex);
-                    mailbox->value = TextResult{std::move(text), generation, context};
-                    mailbox->done  = true;
-                }
-            }
-            catch (...)
-            {
-                std::lock_guard lock(mailbox->mutex);
-                mailbox->error = std::current_exception();
-                mailbox->done  = true;
-            }
-            --textPending_;
-            // The future is released on the GUI thread; posting through the converter keeps this
-            // module free of a QObject identity of its own.
-            QMetaObject::invokeMethod(&converter_, [this, mailbox] { consumeTextMailbox(mailbox); },
-                                      Qt::QueuedConnection);
-        });
+    textTask_ = std::async(std::launch::async,
+                           [captured = std::move(*captured), generation, context, mailbox, this]
+                           {
+                               try
+                               {
+                                   auto text = OutputModel::fullText(captured);
+                                   {
+                                       std::lock_guard lock(mailbox->mutex);
+                                       mailbox->value = TextResult{std::move(text), generation, context};
+                                       mailbox->done  = true;
+                                   }
+                               }
+                               catch (...)
+                               {
+                                   std::lock_guard lock(mailbox->mutex);
+                                   mailbox->error = std::current_exception();
+                                   mailbox->done  = true;
+                               }
+                               --textPending_;
+                               // The future is released on the GUI thread; posting through the converter keeps this
+                               // module free of a QObject identity of its own.
+                               QMetaObject::invokeMethod(
+                                   &converter_, [this, mailbox] { consumeTextMailbox(mailbox); }, Qt::QueuedConnection);
+                           });
 }
 
 void ResultPresentation::consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox)
@@ -971,8 +970,8 @@ void ResultPresentation::finishDrain()
 {
     if (!draining_ || !drainReady())
         return;
-    draining_ = false;
-    auto continuation = std::move(drainContinuation_);
+    draining_          = false;
+    auto continuation  = std::move(drainContinuation_);
     drainContinuation_ = {};
     if (continuation)
         continuation();
@@ -987,8 +986,18 @@ void ResultPresentation::drainReaders()
     {
         bool &flag;
         bool  previous;
-        DrainGuard(bool &f) : flag(f), previous(f) { flag = true; }
-        ~DrainGuard() { flag = previous; }
+
+        DrainGuard(bool &f)
+            : flag(f)
+            , previous(f)
+        {
+            flag = true;
+        }
+
+        ~DrainGuard()
+        {
+            flag = previous;
+        }
     } guard(draining_);
 
     converter_.waitForReads();

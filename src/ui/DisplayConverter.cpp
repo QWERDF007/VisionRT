@@ -77,15 +77,15 @@ double alphaUnitScale(int depth)
 // included) still renders as opaque black.
 DisplayFrame normalize(const cv::Mat &source, ColorOrder order)
 {
-    const int  channels  = source.channels();
-    const bool hasAlpha  = channels == 4;
-    const bool reverse   = order == ColorOrder::BGR || order == ColorOrder::BGRA;
-    const int  depth     = CV_MAT_DEPTH(source.type());
-    const bool floats    = depth == CV_32F || depth == CV_64F || depth == CV_16F;
+    const int  channels = source.channels();
+    const bool hasAlpha = channels == 4;
+    const bool reverse  = order == ColorOrder::BGR || order == ColorOrder::BGRA;
+    const int  depth    = CV_MAT_DEPTH(source.type());
+    const bool floats   = depth == CV_32F || depth == CV_64F || depth == CV_16F;
 
     // OpenCV has no float16 range or comparison primitives; widening once keeps every later plane a
     // supported depth without changing any value.
-    cv::Mat        widened;
+    cv::Mat widened;
     if (depth == CV_16F)
         source.convertTo(widened, CV_MAKETYPE(CV_32F, channels));
     const cv::Mat &matrix = widened.empty() ? source : widened;
@@ -99,13 +99,12 @@ DisplayFrame normalize(const cv::Mat &source, ColorOrder order)
     else
     {
         colour.resize(3);
-        for (int index = 0; index < 3; ++index)
-            cv::extractChannel(matrix, colour[reverse ? 2 - index : index], index);
+        for (int index = 0; index < 3; ++index) cv::extractChannel(matrix, colour[reverse ? 2 - index : index], index);
         if (hasAlpha)
             cv::extractChannel(matrix, alpha, 3);
     }
 
-    std::vector<cv::Mat> planes = channels == 1 ? std::vector<cv::Mat>{matrix} : colour;
+    std::vector<cv::Mat> planes  = channels == 1 ? std::vector<cv::Mat>{matrix} : colour;
     double               minimum = std::numeric_limits<double>::infinity();
     double               maximum = -minimum;
     cv::Mat              pixelFinite;
@@ -164,8 +163,7 @@ DisplayFrame normalize(const cv::Mat &source, ColorOrder order)
     }
     else
     {
-        for (const auto &plane : colour)
-            display.push_back(quantize(plane));
+        for (const auto &plane : colour) display.push_back(quantize(plane));
     }
     if (hasAlpha)
     {
@@ -184,7 +182,8 @@ DisplayFrame normalize(const cv::Mat &source, ColorOrder order)
     }
 
     DisplayFrame result;
-    result.image = QImage(source.cols, source.rows, QImage::Format_RGBA8888);
+    result.image      = QImage(source.cols, source.rows, QImage::Format_RGBA8888);
+    result.sourceType = source.type();
     if (result.image.isNull())
         throw std::bad_alloc();
     // Merge straight into the QImage storage: RGBA8888 is interleaved R,G,B,A with four bytes per
@@ -225,12 +224,15 @@ DisplayFrame DisplayConverter::convert(const cv::Mat &image, ColorOrder colorOrd
     DisplayFrame result;
     if (image.empty())
         return result;
-    const auto order = resolvedOrder(image.channels(), colorOrder);
-    if (!((image.channels() == 1 && order == ColorOrder::Gray) || (image.channels() == 3 && (order == ColorOrder::BGR || order == ColorOrder::RGB))
+    result.sourceType = image.type();
+    const auto order  = resolvedOrder(image.channels(), colorOrder);
+    if (!((image.channels() == 1 && order == ColorOrder::Gray)
+          || (image.channels() == 3 && (order == ColorOrder::BGR || order == ColorOrder::RGB))
           || (image.channels() == 4 && (order == ColorOrder::BGRA || order == ColorOrder::RGBA))))
     {
-        result.error
-            = QStringLiteral("不支持显示的通道布局或颜色顺序：%1 通道，%2").arg(image.channels()).arg(static_cast<int>(colorOrder));
+        result.error = QStringLiteral("不支持显示的通道布局或颜色顺序：%1 通道，%2")
+                           .arg(image.channels())
+                           .arg(static_cast<int>(colorOrder));
         return result;
     }
     switch (CV_MAT_DEPTH(image.type()))
@@ -297,7 +299,7 @@ void DisplayConverter::requestBatch(DataRef<Image> images, ColorOrder colorOrder
 
 void DisplayConverter::dispatch(Request request)
 {
-    busy_ = true;
+    busy_         = true;
     activeSerial_ = request.serial;
     {
         std::lock_guard lock(mutex_);

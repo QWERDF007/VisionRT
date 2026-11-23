@@ -219,6 +219,7 @@ QuiSplitView {
                                 }
                             }
                         }
+                        RoiGeometryEditor { width: groupColumn.width }
                         Repeater {
                             model: root.parameterGroups
                             QuiExpander {

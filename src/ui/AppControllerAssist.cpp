@@ -170,7 +170,7 @@ std::optional<AssistContext> AppController::Impl::assistContext(QString *reason)
     if (trainingMode)
     {
         const auto *spec = trainingSpec();
-        if (!spec || spec->records.roiField() != locator->regionTarget)
+        if (!spec || (spec->regionInput != 0 ? spec->regionInput : spec->records.roiField()) != locator->regionTarget)
             return reject(QStringLiteral("训练画布字段不存在"));
         if (!training || !training->active() || training->selected() < 0 || trainingAssistImage.empty())
             return reject(QStringLiteral("请先加入训练参考图"));
@@ -223,6 +223,12 @@ std::optional<AssistRequest> AppController::Impl::assistRequest(bool learn, bool
         request.inputs.emplace(locator.frameInput, DataRef<Image>(Image{trainingAssistImage}));
         if (append)
             seeds = training->regions(training->selected());
+        if (append && training->spec().regionInput != 0)
+        {
+            const auto value = resolvedInput(node, training->spec().regionInput);
+            if (const auto *roi = std::get_if<DataRef<ROI>>(&value); roi && !roi->get().empty())
+                seeds = roi->get().front();
+        }
     }
     else
     {
@@ -399,7 +405,7 @@ void AppController::Impl::clearAssistPreview()
 
 bool AppController::Impl::assistRequestsAllowed() const
 {
-    return easyTouchEnabled && editingAllowed() && !roiSession.active() && readsAllowed();
+    return easyTouchEnabled && editingAllowed() && (!roiSession.active() || trainingMode) && readsAllowed();
 }
 
 void AppController::Impl::publishAssistState(bool enabled, const QString &reason)

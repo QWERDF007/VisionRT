@@ -1,25 +1,25 @@
+#include "core/ValueJson.h"
 #include "ui/AppController.h"
 #include "ui/ImageViewport.h"
 #include "ui/OutputModel.h"
 #include "ui/UiTypes.h"
+
 #include <quickui/Color.h>
 
-#include "core/ValueJson.h"
-
 #include <QDir>
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QJSValue>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
-#include <QPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -53,14 +53,13 @@ QString imageKey(PortId output)
     return QStringLiteral("outputs:%1").arg(output);
 }
 
-
-
 void roiParameterContract()
 {
     using namespace visionrt;
     const auto require = [](bool condition, const char *message)
     {
-        if (!condition) throw std::runtime_error(message);
+        if (!condition)
+            throw std::runtime_error(message);
     };
     QTemporaryDir directory;
     require(directory.isValid(), "ROI fixture directory is unavailable");
@@ -333,17 +332,20 @@ void roiParameterContract()
         return QString{};
     };
     if (output(kStatusCodePort) != "0")
-        throw std::runtime_error((QStringLiteral("ROI numpy image source failed: ") + output(kStatusMessagePort)
-                                 + " " + app.diagnostic()).toStdString());
+        throw std::runtime_error(
+            (QStringLiteral("ROI numpy image source failed: ") + output(kStatusMessagePort) + " " + app.diagnostic())
+                .toStdString());
     app.addNode("test.roi.editor", 0, 1);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
     const auto target = app.selectedNode();
-    require(target != source && app.bindInput(app.portContext(kImagesInput), source, kSourceImagesOutput), "ROI image input could not bind to the source");
+    require(target != source && app.bindInput(app.portContext(kImagesInput), source, kSourceImagesOutput),
+            "ROI image input could not bind to the source");
     require(app.setParameter(kRoisInput, false, "[[[0,1,2,3,4]]]"), "point parameter could not be set");
     const auto literal = [&]
     {
         for (const auto &entry : app.parameters())
-            if (entry.toMap().value("id").toUInt() == kRoisInput) return entry.toMap().value("literal").toString();
+            if (entry.toMap().value("id").toUInt() == kRoisInput)
+                return entry.toMap().value("literal").toString();
         return QString{};
     };
     QQmlEngine engine;
@@ -359,7 +361,8 @@ void roiParameterContract()
         "sourceComponent: ParameterEditor { parameter: root.currentParameter } } }",
         QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/RoiContract.qml")));
     std::unique_ptr<QObject> owner(component.create());
-    if (!owner) throw std::runtime_error(component.errorString().toStdString());
+    if (!owner)
+        throw std::runtime_error(component.errorString().toStdString());
     auto *editor = qobject_cast<QQuickItem *>(owner.get());
     require(editor != nullptr, "ROI parameter editor is unavailable");
     QQuickWindow window;
@@ -388,8 +391,7 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return editor->height() > 0; }, 1000), "ROI row has no layout");
     QObject *geometryField = nullptr;
     for (auto *item : owner->findChildren<QQuickItem *>())
-        if (item->metaObject()->indexOfProperty("inputItem") >= 0
-            && item->property("text").toString() == literal())
+        if (item->metaObject()->indexOfProperty("inputItem") >= 0 && item->property("text").toString() == literal())
             geometryField = item;
     require(geometryField != nullptr, "ROI field replaced the coordinates with a summary");
     auto *geometryInput = geometryField->property("inputItem").value<QObject *>();
@@ -407,7 +409,7 @@ void roiParameterContract()
     require(app.setParameter(kRoisInput, false, "[[]]"), "ROI editing fixture could not be cleared");
     const auto findAction = [&]
     {
-        QQuickItem *found   = nullptr;
+        QQuickItem         *found = nullptr;
         QList<QQuickItem *> pending{editor};
         while (!pending.isEmpty())
         {
@@ -429,25 +431,30 @@ void roiParameterContract()
             "parameter ROI action did not open the real input image editor");
     viewport.setDrawShape(0);
     const auto layeredImage = renderedFrame();
-    const auto guidePoint = viewport.mapToScene(viewport.imageToItem({90, 50})) * window.effectiveDevicePixelRatio();
-    const auto guideColor = layeredImage.pixelColor(qFloor(guidePoint.x()), qFloor(guidePoint.y()));
-    require(guideColor.red() - guideColor.blue() > 100 && guideColor.green() - guideColor.blue() > 80,
+    const auto guidePoint   = viewport.mapToScene(viewport.imageToItem({90, 50})) * window.effectiveDevicePixelRatio();
+    const auto guideColor   = layeredImage.pixelColor(qFloor(guidePoint.x()), qFloor(guidePoint.y()));
+    require(guideColor.blue() > 180 && guideColor.red() < 100 && guideColor.green() > 60,
             "editing one ROI parameter hid another input's read-only geometry");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                       viewport.mapToScene(viewport.imageToItem({90, 60})).toPoint());
-    require(viewport.selectedRoi() == -1, "read-only input geometry entered the editable selection");
+    require(QTest::qWaitFor([&] { return app.activeRoiParameter() == 4 && viewport.selectedRoi() == 0; }, 3000),
+            "clicking a literal ROI must select its actual input");
+    require(app.editRoi(kRoisInput, true), "the original ROI input must remain editable");
+    require(QTest::qWaitFor([&] { return viewport.editTarget() && viewport.editTarget()->inputPortId == kRoisInput; },
+                            3000),
+            "the selected input frame did not arrive");
     viewport.setDrawShape(2);
     const auto project = directory.filePath("roi.vrt.json");
     require(app.save(project) && !app.dirty(), "ROI baseline could not be saved");
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "saved project instances did not synchronize");
     const auto initial = literal();
-    QSignalSpy changes(&app, &AppController::parametersChanged);
+    QSignalSpy changes(&app, &AppController::projectChanged);
     const auto draw = [&](bool cancel, QPointF from = {10, 10}, QPointF to = {30, 30}, bool holdForPolling = false)
     {
         viewport.forceActiveFocus();
         const auto start = viewport.mapToScene(viewport.imageToItem(from)).toPoint();
-        const auto end = viewport.mapToScene(viewport.imageToItem(to)).toPoint();
+        const auto end   = viewport.mapToScene(viewport.imageToItem(to)).toPoint();
         QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
         QTest::mouseMove(&window, end, 20);
         if (holdForPolling)
@@ -459,7 +466,8 @@ void roiParameterContract()
             require(heldEdit.isEmpty() && heldOutput.isEmpty() && heldCommit.isEmpty() && viewport.editing(),
                     "Idle polling interrupted an in-progress ROI gesture or reset its output model");
         }
-        if (cancel) QTest::keyClick(&window, Qt::Key_Escape);
+        if (cancel)
+            QTest::keyClick(&window, Qt::Key_Escape);
         QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, end);
         QTest::qWait(30);
     };
@@ -477,7 +485,7 @@ void roiParameterContract()
                  .arg(changes.count())
                  .arg(initial, literal(), app.diagnostic()))
                 .toStdString());
-    auto committed = literal();
+    auto       committed = literal();
     const auto rois      = std::get<DataRef<ROI>>(ValueJson::parse(committed, {Type::ROI}));
     require(rois.get().size() == 1 && rois.get()[0].size() == 1 && roiKind(rois.get()[0][0]) == RoiKind::Rectangle,
             "ROI parameter lost its typed rectangle representation");
@@ -485,7 +493,14 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     changes.clear();
     require(app.editRoi(kRoisInput, false), "Saved ROI could not reopen for read-only testing");
-    require(QTest::qWaitFor([&] { return viewport.hasImage(); }, 3000), "Read-only ROI background was not presented");
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    return viewport.hasImage() && viewport.editTarget()
+                        && viewport.editTarget()->session == app.roiEditor().value("id").toString().toULongLong();
+                },
+                3000),
+            "Read-only ROI background was not presented");
     viewport.setReadOnly(true);
     viewport.setDrawShape(2);
     draw(false);
@@ -493,7 +508,8 @@ void roiParameterContract()
     require(literal() == committed && !app.dirty() && changes.isEmpty(), "read-only ROI editor changed the project");
     viewport.setReadOnly(false);
     app.endRoiPreview();
-    require(app.bindInput(app.portContext(kRoisInput), source, kSourceRoisOutput), "ROI input could not bind to the upstream ROI output");
+    require(app.bindInput(app.portContext(kRoisInput), source, kSourceRoisOutput),
+            "ROI input could not bind to the upstream ROI output");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "upstream ROI binding did not settle");
     require(app.editRoi(kRoisInput, true), "Copied upstream session could reopen");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
@@ -505,12 +521,13 @@ void roiParameterContract()
                       viewport.mapToScene(viewport.imageToItem({20, 20})).toPoint());
     require(viewport.selectedRoi() == 1, "Copied ROI collection could not select its newly drawn rectangle");
     QTest::keyClick(&window, Qt::Key_Delete);
+    QTest::qWait(150);
     const auto copiedAfterDelete = renderedFrame();
-    const auto deletedBoundary = colorAt(copiedAfterDelete, {10, 20});
-    const auto retainedBoundary = colorAt(copiedAfterDelete, {40, 45});
+    const auto deletedBoundary   = colorAt(copiedAfterDelete, {10, 20});
+    const auto retainedBoundary  = colorAt(copiedAfterDelete, {40, 45});
     require(viewport.selectedRoi() == -1 && deletedBoundary.red() < 10 && deletedBoundary.green() < 10
-                && deletedBoundary.blue() < 10 && retainedBoundary.red() - retainedBoundary.blue() > 100
-                && retainedBoundary.green() - retainedBoundary.blue() > 80,
+                && deletedBoundary.blue() < 10 && retainedBoundary.blue() > 180 && retainedBoundary.red() < 100
+                && retainedBoundary.green() > 60,
             "Deleting a copied ROI did not remove only the selected draft region and its handles");
     require(app.wires().first().toMap().value("count").toInt() == 1,
             "Deleting a copied ROI detached its upstream binding");
@@ -530,28 +547,30 @@ void roiParameterContract()
     app.setImageOutput(imageKey(kUnavailableImagesOutput));
     app.runOnce();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "ROI workflow did not finish");
-    require(output(kStatusCodePort) == "0" && output(kCountOutput) == "2", "Python did not receive the saved typed ROI");
+    require(output(kStatusCodePort) == "0" && output(kCountOutput) == "2",
+            "Python did not receive the saved typed ROI");
     QSignalSpy matchingPresented(&viewport, &ImageViewport::imagePresented);
     app.setImageOutput(imageKey(kImagesOutput));
     app.setImageIndex(0);
-    require(QTest::qWaitFor([&] { return !matchingPresented.isEmpty() && viewport.hasImage() && !viewport.editing(); }, 3000),
+    require(QTest::qWaitFor([&] { return !matchingPresented.isEmpty() && viewport.hasImage() && !viewport.editing(); },
+                            3000),
             "Normal result view did not present its requested image before overlay inspection");
     const auto matchingOutput = renderedFrame();
     require(app.selectedImageOutput() == imageKey(kImagesOutput) && viewport.hasImage() && !viewport.editing(),
             "normal result view did not select the declared image output");
     const auto matchingRegion = colorAt(matchingOutput, {65, 75});
-    require(matchingRegion.blue() - matchingRegion.red() > 100 && matchingRegion.green() - matchingRegion.red() > 50,
+    require(matchingRegion.blue() > 160 && matchingRegion.red() > 100 && matchingRegion.green() < 100,
             "normal result view hid regions associated with its image output");
     const auto matchingInput = colorAt(matchingOutput, {90, 50});
-    require(matchingInput.red() - matchingInput.blue() > 100 && matchingInput.green() - matchingInput.blue() > 80,
+    require(matchingInput.blue() > 180 && matchingInput.red() < 100 && matchingInput.green() > 60,
             "normal result view hid input geometry declared in matching coordinates");
     const auto unrelatedOnMatching = colorAt(matchingOutput, {35, 75});
     require(unrelatedOnMatching.red() < 10 && unrelatedOnMatching.green() < 10 && unrelatedOnMatching.blue() < 10,
             "normal result view mixed regions from a different image output");
-    const auto savedRegions = output(kRegionsOutput);
+    const auto savedRegions          = output(kRegionsOutput);
     const auto savedUnrelatedRegions = output(kUnrelatedRegionsOutput);
-    require(!savedRegions.isEmpty() && savedRegions != "Missing"
-                && !savedUnrelatedRegions.isEmpty() && savedUnrelatedRegions != "Missing",
+    require(!savedRegions.isEmpty() && savedRegions != "Missing" && !savedUnrelatedRegions.isEmpty()
+                && savedUnrelatedRegions != "Missing",
             "normal result view has no region values to inspect");
     QSignalSpy secondOutputPresented(&viewport, &ImageViewport::imagePresented);
     app.setImageIndex(1);
@@ -570,16 +589,17 @@ void roiParameterContract()
     require(app.selectedImageOutput() == imageKey(kUnrelatedImagesOutput) && viewport.hasImage() && !viewport.editing(),
             "normal result view could not switch to another image output");
     const auto unrelatedRegion = colorAt(unrelatedOutput, {35, 75});
-    require(unrelatedRegion.blue() - unrelatedRegion.red() > 100 && unrelatedRegion.green() - unrelatedRegion.red() > 50,
+    require(unrelatedRegion.blue() > 160 && unrelatedRegion.red() > 100 && unrelatedRegion.green() < 100,
             "switching image outputs did not display their associated regions");
     const auto mismatchingRegion = colorAt(unrelatedOutput, {65, 75});
-    const auto mismatchingInput = colorAt(unrelatedOutput, {90, 50});
+    const auto mismatchingInput  = colorAt(unrelatedOutput, {90, 50});
     require(mismatchingRegion.red() < 10 && mismatchingRegion.green() < 10 && mismatchingRegion.blue() < 10
                 && mismatchingInput.red() < 10 && mismatchingInput.green() < 10 && mismatchingInput.blue() < 10,
             "equal image pixels incorrectly implied matching ROI coordinates");
     require(output(kRegionsOutput) == savedRegions && output(kUnrelatedRegionsOutput) == savedUnrelatedRegions,
             "switching image outputs discarded undisplayed region values");
-    std::cout << "[ROI image ownership] Normal output switching respects metadata, not equal pixels; undisplayed region values remain available.\n";
+    std::cout << "[ROI image ownership] Normal output switching respects metadata, not equal pixels; undisplayed "
+                 "region values remain available.\n";
     app.setImageOutput(imageKey(kUnavailableImagesOutput));
     renderedFrame();
     require(app.imageCount() == 0 && app.imageIndex() == 0 && !viewport.hasImage()
@@ -591,20 +611,22 @@ void roiParameterContract()
                 && app.imageCount() == 2 && app.imageIndex() == 0,
             "Cropped image output did not present its own image batch");
     const auto croppedView = renderedFrame();
-    const auto cropRegion = colorAt(croppedView, {30, 20});
-    require(cropRegion.blue() - cropRegion.red() > 100 && cropRegion.green() - cropRegion.red() > 50,
+    const auto cropRegion  = colorAt(croppedView, {30, 20});
+    require(cropRegion.blue() > 160 && cropRegion.red() > 100 && cropRegion.green() < 100,
             "Cropped image output did not show regions declared in its own coordinates");
-    const auto inputOnCrop = colorAt(croppedView, {90, 50});
+    const auto inputOnCrop             = colorAt(croppedView, {90, 50});
     const auto unprojectedResultOnCrop = colorAt(croppedView, {65, 75});
     const auto guessedProjectionOnCrop = colorAt(croppedView, {80, 45});
     require(inputOnCrop.red() < 10 && inputOnCrop.green() < 10 && inputOnCrop.blue() < 10
-                && unprojectedResultOnCrop.red() < 10 && unprojectedResultOnCrop.green() < 10 && unprojectedResultOnCrop.blue() < 10
-                && guessedProjectionOnCrop.red() < 10 && guessedProjectionOnCrop.green() < 10 && guessedProjectionOnCrop.blue() < 10,
+                && unprojectedResultOnCrop.red() < 10 && unprojectedResultOnCrop.green() < 10
+                && unprojectedResultOnCrop.blue() < 10 && guessedProjectionOnCrop.red() < 10
+                && guessedProjectionOnCrop.green() < 10 && guessedProjectionOnCrop.blue() < 10,
             "Crop origins implicitly overlaid or translated regions from the original image coordinates");
     require(output(kOriginsOutput) != "Missing" && !output(kOriginsOutput).isEmpty()
                 && output(kRegionsOutput) == savedRegions && output(kUnrelatedRegionsOutput) == savedUnrelatedRegions,
             "Cropped output preview discarded the original region values or origin coordinates");
-    std::cout << "[ROI crop coordinates] Cropped outputs display their declared regions without inferring projection from origins.\n";
+    std::cout << "[ROI crop coordinates] Cropped outputs display their declared regions without inferring projection "
+                 "from origins.\n";
     app.setImageOutput(imageKey(kImagesOutput));
     require(app.imageCount() == 2 && app.imageIndex() == 0,
             "switching back to an image output did not restore its own batch count");
@@ -612,11 +634,12 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Executed ROI background was not presented");
     const auto resultLayers = renderedFrame();
-    const auto resultPoint = viewport.mapToScene(viewport.imageToItem({65, 75})) * window.effectiveDevicePixelRatio();
-    const auto resultColor = resultLayers.pixelColor(qFloor(resultPoint.x()), qFloor(resultPoint.y()));
-    require(resultColor.blue() - resultColor.red() > 100 && resultColor.green() - resultColor.red() > 50,
+    const auto resultPoint  = viewport.mapToScene(viewport.imageToItem({65, 75})) * window.effectiveDevicePixelRatio();
+    const auto resultColor  = resultLayers.pixelColor(qFloor(resultPoint.x()), qFloor(resultPoint.y()));
+    require(resultColor.blue() > 160 && resultColor.red() > 100 && resultColor.green() < 100,
             "ROI editing hid output regions with declared matching input geometry");
-    const auto unrelatedPoint = viewport.mapToScene(viewport.imageToItem({35, 75})) * window.effectiveDevicePixelRatio();
+    const auto unrelatedPoint
+        = viewport.mapToScene(viewport.imageToItem({35, 75})) * window.effectiveDevicePixelRatio();
     const auto unrelatedColor = resultLayers.pixelColor(qFloor(unrelatedPoint.x()), qFloor(unrelatedPoint.y()));
     require(unrelatedColor.red() < 10 && unrelatedColor.green() < 10 && unrelatedColor.blue() < 10,
             "output ROI without declared matching coordinates leaked into the input editor");
@@ -634,18 +657,21 @@ void roiParameterContract()
     app.endRoiPreview();
     app.addNode("test.roi.editor", 1, 1);
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "node instance synchronization did not finish");
-    require(app.bindInput(app.portContext(kImagesInput), source, kSourceImagesOutput) && app.bindInput(app.portContext(kRoisInput), source, kSourceRoisOutput),
+    require(app.bindInput(app.portContext(kImagesInput), source, kSourceImagesOutput)
+                && app.bindInput(app.portContext(kRoisInput), source, kSourceRoisOutput),
             "upstream ROI verification inputs could not bind");
     app.runNode();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "upstream ROI verification did not finish");
-    require(output(kStatusCodePort) == "0" && output(kCountOutput) == "1", "editing copied ROIs modified their source cache");
+    require(output(kStatusCodePort) == "0" && output(kCountOutput) == "1",
+            "editing copied ROIs modified their source cache");
     const auto verificationTarget = app.selectedNode();
     editor->setVisible(false);
     QQmlComponent panelComponent(&engine);
     panelComponent.setData("import QtQuick\nimport \".\"\nParameterPanel { width: 720; height: 520 }",
                            QUrl::fromLocalFile(QStringLiteral(VISIONRT_SOURCE_DIR "/src/ui/qml/RoiPanelContract.qml")));
     std::unique_ptr<QObject> panelOwner(panelComponent.create());
-    if (!panelOwner) throw std::runtime_error(panelComponent.errorString().toStdString());
+    if (!panelOwner)
+        throw std::runtime_error(panelComponent.errorString().toStdString());
     auto *panel = qobject_cast<QQuickItem *>(panelOwner.get());
     require(panel != nullptr, "ROI parameter panel is unavailable");
     panel->setParentItem(window.contentItem());
@@ -655,7 +681,7 @@ void roiParameterContract()
     {
         require(item && item->isVisible(), "ROI panel action is not visible");
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                         item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
         QTest::qWait(30);
     };
     require(QMetaObject::invokeMethod(panel, "focusRoi"), "ROI toolbar command is unavailable");
@@ -663,11 +689,13 @@ void roiParameterContract()
     app.endRoiPreview();
     app.runNode();
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "ROI toolbar copied input did not execute");
-    require(output(kStatusCodePort) == "0" && output(kCountOutput) == "1", "ROI toolbar copy lost its upstream geometry");
+    require(output(kStatusCodePort) == "0" && output(kCountOutput) == "1",
+            "ROI toolbar copy lost its upstream geometry");
     const auto rectLiteral = [&]
     {
         for (const auto &entry : app.parameters())
-            if (entry.toMap().value("id").toUInt() == kRectInput) return entry.toMap().value("literal").toString();
+            if (entry.toMap().value("id").toUInt() == kRectInput)
+                return entry.toMap().value("literal").toString();
         return QString{};
     };
     require(app.save(project) && !app.dirty(), "Rect baseline could not be saved");
@@ -682,13 +710,33 @@ void roiParameterContract()
     {
         for (auto *child : parent->childItems())
         {
-            if (child->objectName() == name) return child;
-            if (auto *found = self(self, child, name)) return found;
+            if (child->objectName() == name)
+                return child;
+            if (auto *found = self(self, child, name))
+                return found;
         }
         return nullptr;
     };
-    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") == nullptr,
-            "Rect editing must not render the deleted coordinate spinbox form");
+    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") != nullptr,
+            "Rect editing must expose fields in the shared parameter area");
+    auto *coordinateField = findCoordinate(findCoordinate, panel, "roiCoordinate1");
+    auto *coordinateInput = qobject_cast<QQuickItem *>(coordinateField->property("inputItem").value<QObject *>());
+    require(coordinateInput, "the numeric geometry field has no real text input");
+    QTest::mouseClick(&window, Qt::LeftButton, {},
+                      coordinateInput->mapToScene(coordinateInput->boundingRect().center()).toPoint());
+    coordinateInput->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
+    for (const auto key : {Qt::Key_7, Qt::Key_Period, Qt::Key_2, Qt::Key_5}) QTest::keyClick(&window, key);
+    require(
+        coordinateInput->hasActiveFocus() && app.roiEditor().value("coordinates").toList()[1].toDouble() == 7.25
+            && !app.dirty(),
+        ("a numeric draft did not redraw without committing: text=" + coordinateInput->property("text").toString()
+         + " focus=" + QString::number(coordinateInput->hasActiveFocus()) + " y="
+         + app.roiEditor().value("coordinates").toList().at(1).toString() + " dirty=" + QString::number(app.dirty()))
+            .toUtf8()
+            .constData());
+    QTest::keyClick(&window, Qt::Key_Escape);
+    require(rectLiteral() == originalRectangle && !app.dirty(), "canceling numeric fields committed the preview");
     require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {6.125, 6.125, 30.0, 20.0, 0.0}),
             "Numeric commit did not update the same ROI session as the image editor");
     require(rectLiteral() != originalRectangle && app.dirty(), "Numeric ROI edit wrote the project directly");
@@ -712,35 +760,43 @@ void roiParameterContract()
     viewport.setDrawShape(2);
     draw(false, {10, 10}, {30, 30}, true);
     require(rectLiteral() != originalRectangle && app.dirty(), "Rect gesture saved directly");
-    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") == nullptr,
-            "Rectangle coordinate form must be deleted");
+    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") != nullptr,
+            "rectangle dragging lost its numeric field projection");
     if (rectangleGestures.count() != 1)
     {
         window.grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/roi-rect-failure.png"));
         throw std::runtime_error(QStringLiteral("Rect gesture count=%1, readOnly=%2, shape=%3, image=%4, enabled=%5")
-                                     .arg(rectangleGestures.count()).arg(viewport.readOnly()).arg(viewport.drawShape())
-                                     .arg(viewport.hasImage()).arg(viewport.isEnabled()).toStdString());
+                                     .arg(rectangleGestures.count())
+                                     .arg(viewport.readOnly())
+                                     .arg(viewport.drawShape())
+                                     .arg(viewport.hasImage())
+                                     .arg(viewport.isEnabled())
+                                     .toStdString());
     }
     const auto beforeCanceledRedraw = app.roiEditor().value("rectangle").toList();
     viewport.setDrawShape(2);
     draw(true, {40, 40}, {60, 60});
     if (!(viewport.editing() && viewport.drawShape() == 0 && rectangleGestures.count() == 1
           && app.roiEditor().value("rectangle").toList() == beforeCanceledRedraw))
-        throw std::runtime_error(QStringLiteral("Canceling a redraw did not restore selection mode and the previous "
-                                                "rectangle: editing=%1 shape=%2 gestures=%3 before=%4 after=%5")
-                                     .arg(viewport.editing())
-                                     .arg(viewport.drawShape())
-                                     .arg(rectangleGestures.count())
-                                     .arg(QString::fromUtf8(QJsonDocument(QJsonArray::fromVariantList(beforeCanceledRedraw)).toJson(QJsonDocument::Compact)))
-                                     .arg(QString::fromUtf8(QJsonDocument(QJsonArray::fromVariantList(app.roiEditor().value("rectangle").toList())).toJson(QJsonDocument::Compact)))
-                                     .toStdString());
+        throw std::runtime_error(
+            QStringLiteral("Canceling a redraw did not restore selection mode and the previous "
+                           "rectangle: editing=%1 shape=%2 gestures=%3 before=%4 after=%5")
+                .arg(viewport.editing())
+                .arg(viewport.drawShape())
+                .arg(rectangleGestures.count())
+                .arg(QString::fromUtf8(
+                    QJsonDocument(QJsonArray::fromVariantList(beforeCanceledRedraw)).toJson(QJsonDocument::Compact)))
+                .arg(QString::fromUtf8(
+                    QJsonDocument(QJsonArray::fromVariantList(app.roiEditor().value("rectangle").toList()))
+                        .toJson(QJsonDocument::Compact)))
+                .toStdString());
     viewport.setDrawShape(2);
     draw(false, {40, 40}, {40, 60});
     require(viewport.drawShape() == 2 && rectangleGestures.count() == 1
                 && app.roiEditor().value("rectangle").toList() == beforeCanceledRedraw,
             "A zero-width redraw replaced the rectangle or stopped accepting a new redraw");
     const auto ungrabStart = viewport.mapToScene(viewport.imageToItem({40, 40})).toPoint();
-    const auto ungrabEnd = viewport.mapToScene(viewport.imageToItem({60, 60})).toPoint();
+    const auto ungrabEnd   = viewport.mapToScene(viewport.imageToItem({60, 60})).toPoint();
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, ungrabStart);
     QTest::mouseMove(&window, ungrabEnd);
     viewport.ungrabMouse();
@@ -764,22 +820,23 @@ void roiParameterContract()
     app.setImageIndex(1);
     require(QTest::qWaitFor([&] { return !switchedImage.isEmpty() && viewport.hasImage(); }, 3000),
             "Second batch image was not presented");
-    require(app.roiEditor().value("imageWidth").toInt() == 32
-                && app.roiEditor().value("imageHeight").toInt() == 24
+    require(app.roiEditor().value("imageWidth").toInt() == 32 && app.roiEditor().value("imageHeight").toInt() == 24
                 && app.roiEditor().value("rectangle").toList() == beforeImageSwitch,
             "Switching to a smaller batch image scaled or clipped the shared rectangle");
     changes.clear();
     const bool applied = app.applyRoi();
     if (!applied)
-        throw std::runtime_error((QStringLiteral("Rect Apply=%1: ").arg(applied)
-                                 + app.diagnostic()).toStdString());
+        throw std::runtime_error((QStringLiteral("Rect Apply=%1: ").arg(applied) + app.diagnostic()).toStdString());
     const auto scalar   = ValueJson::parse(rectLiteral(), {Type::ROI});
     const auto geometry = std::get<DataRef<ROI>>(scalar).get()[0][0];
     if (!(geometry.size() == 6 && std::abs(geometry[1] - 60) < 1 && std::abs(geometry[2] - 60) < 1
           && std::abs(geometry[3] - 30) < 1 && std::abs(geometry[4] - 20) < 1))
         throw std::runtime_error((QStringLiteral("Rect redraw/batch switch geometry=%1, gestures=%2")
-                                     .arg(rectLiteral()).arg(rectangleGestures.count())).toStdString());
-    require(app.bindInput(app.portContext(kRectInput), source, kSourceRectOutput), "Scalar Rect could not bind to its upstream output");
+                                      .arg(rectLiteral())
+                                      .arg(rectangleGestures.count()))
+                                     .toStdString());
+    require(app.bindInput(app.portContext(kRectInput), source, kSourceRectOutput),
+            "Scalar Rect could not bind to its upstream output");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Bound Rect baseline did not settle");
     require(app.save(project) && !app.dirty(), "Bound Rect baseline could not be saved");
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
@@ -790,7 +847,7 @@ void roiParameterContract()
             "Copied scalar Rect background was not presented");
     viewport.setDrawShape(2);
     const auto previousSession = app.roiEditor().value("id").toString();
-    const auto previousPress = viewport.mapToScene(viewport.imageToItem({15, 15})).toPoint();
+    const auto previousPress   = viewport.mapToScene(viewport.imageToItem({15, 15})).toPoint();
     const auto previousRelease = viewport.mapToScene(viewport.imageToItem({25, 25})).toPoint();
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, previousPress);
     QTest::mouseMove(&window, previousRelease);
@@ -798,13 +855,14 @@ void roiParameterContract()
     require(rectLiteral() == boundRectangle && !app.dirty(), "Cancel saved or detached the copied scalar Rect");
     bool rectangleBound = false;
     for (const auto &entry : app.parameters())
-        if (!entry.toMap().value("init").toBool() && entry.toMap().value("id").toUInt() == kRectInput) rectangleBound = entry.toMap().value("inputMode").toInt() == static_cast<int>(BindingMode::Upstream);
+        if (!entry.toMap().value("init").toBool() && entry.toMap().value("id").toUInt() == kRectInput)
+            rectangleBound = entry.toMap().value("inputMode").toInt() == static_cast<int>(BindingMode::Upstream);
     if (!rectangleBound)
         throw std::runtime_error(("Cancel removed the scalar Rect upstream binding: "
-            + QJsonDocument::fromVariant(app.parameters()).toJson(QJsonDocument::Compact)).toStdString());
-    const auto previousTarget = rectangleGestures.first().at(0).value<RoiEditTarget>();
-    const auto previousGeometry
-        = *static_cast<const EncodedRegion *>(rectangleGestures.first().at(1).constData());
+                                  + QJsonDocument::fromVariant(app.parameters()).toJson(QJsonDocument::Compact))
+                                     .toStdString());
+    const auto previousTarget   = rectangleGestures.first().at(0).value<RoiEditTarget>();
+    const auto previousGeometry = *static_cast<const EncodedRegion *>(rectangleGestures.first().at(1).constData());
     require(app.editRoi(kRectInput, true), "Scalar Rect could not reopen the same upstream-copy input");
     require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
             "Reopened scalar Rect background was not presented");
@@ -817,11 +875,15 @@ void roiParameterContract()
                 && app.roiEditor().value("rectangle").toList() == reopenedRectangle,
             "A canceled session's mouse release completed geometry in the reopened session");
     bool deliveredPrevious = false;
-    QMetaObject::invokeMethod(&viewport, [&] {
-        emit viewport.roiCommitted(previousTarget, previousGeometry);
-        emit viewport.roiDeleted(previousTarget);
-        deliveredPrevious = true;
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        &viewport,
+        [&]
+        {
+            emit viewport.roiCommitted(previousTarget, previousGeometry);
+            emit viewport.roiDeleted(previousTarget);
+            deliveredPrevious = true;
+        },
+        Qt::QueuedConnection);
     require(QTest::qWaitFor([&] { return deliveredPrevious; }, 1000), "Previous ROI callback was not delivered");
     require(app.roiEditor().value("rectangle").toList() == reopenedRectangle,
             "A previous ROI session's queued gesture changed the reopened input draft");
@@ -838,12 +900,13 @@ void roiParameterContract()
     const auto imageFreeOriginal = rectLiteral();
     require(app.editRoi(kRectInput, false), "Rect numeric editing must not require a cached image");
     require(app.property("roiEditor").toMap().value("node").toString() == withoutImage
-                && app.property("roiEditor").toMap().value("imageWidth").toInt() == 0
-                && app.imageCount() == 0 && !viewport.hasImage(),
+                && app.property("roiEditor").toMap().value("imageWidth").toInt() == 0 && app.imageCount() == 0
+                && !viewport.hasImage(),
             "Image-free Rect editing invented a background or selected another parameter");
-    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") == nullptr,
-            "Image-free rectangle must not expose numeric coordinates");
-    require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {0.0, 9.25, 30.0, 20.0, 0.0}), "Set ROI rectangle");
+    require(findCoordinate(findCoordinate, panel, "roiCoordinate1") != nullptr,
+            "image-free geometry must remain numerically editable");
+    require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {0.0, 9.25, 30.0, 20.0, 0.0}),
+            "Set ROI rectangle");
     require(rectLiteral() != imageFreeOriginal && app.dirty(), "Image-free fields saved directly");
     changes.clear();
     require(app.applyRoi(), "Image-free numeric Apply succeeded");
@@ -856,9 +919,8 @@ void roiParameterContract()
     const auto previousImageFreeSession = app.roiEditor().value("id").toString();
     app.endRoiPreview();
     require(app.editRoi(kRectInput, false), "Image-free Rect could not start a new session for the same parameter");
-    const auto staleValidation = QObject::connect(&app, &AppController::roiApplyRequested, &app, [&] {
-        app.setRoiFieldsValid(previousImageFreeSession, false);
-    });
+    const auto staleValidation = QObject::connect(&app, &AppController::roiApplyRequested, &app,
+                                                  [&] { app.setRoiFieldsValid(previousImageFreeSession, false); });
     const bool unaffectedApply = app.applyRoi();
     QObject::disconnect(staleValidation);
     require(unaffectedApply && !app.dirty(), "A previous ROI field validation blocked applying the current session");
@@ -873,7 +935,7 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Empty ROI rectangle save did not settle");
     require(app.editRoi(kRectInput, false), "Empty ROI rectangle could not enter image-free numeric editing");
-    QQuickItem *createRectangle  = nullptr;
+    QQuickItem         *createRectangle = nullptr;
     QList<QQuickItem *> pendingItems{panel};
     while (!pendingItems.isEmpty())
     {
@@ -884,9 +946,10 @@ void roiParameterContract()
     }
     require(createRectangle == nullptr, "Empty ROI rectangle must not offer 新建矩形 button");
     require(app.setRoiRectangle(app.roiEditor().value("id").toString(), {0, 0, 8, 6, 30}), "Set ROI rectangle");
-    const auto rectList = app.property("roiEditor").toMap().value("rectangle").toList();
+    const auto rectList   = app.property("roiEditor").toMap().value("rectangle").toList();
     const bool hasApplied = app.applyRoi();
-    require(rectList.size() == 5 && app.dirty() && hasApplied, "Image-free Rect creation did not produce a valid draft");
+    require(rectList.size() == 5 && app.dirty() && hasApplied,
+            "Image-free Rect creation did not produce a valid draft");
     if (!app.save(project))
         throw std::runtime_error("Image-free rectangle could not save: " + app.diagnostic().toStdString());
 
@@ -922,14 +985,15 @@ void roiParameterContract()
     const auto beforeImageFreeDraw = rectangleGestures.count();
     viewport.setDrawShape(2);
     const auto emptyStart = viewport.mapToScene(QPointF(100, 100)).toPoint();
-    const auto emptyEnd = viewport.mapToScene(QPointF(180, 180)).toPoint();
+    const auto emptyEnd   = viewport.mapToScene(QPointF(180, 180)).toPoint();
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, emptyStart);
     QTest::mouseMove(&window, emptyEnd);
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, emptyEnd);
     require(rectangleGestures.count() == beforeImageFreeDraw && !viewport.hasImage()
                 && app.roiEditor().value("rectangle").toList() == imageFreeDraft && app.dirty(),
             "Pointer drawing without a background invented image geometry or changed the numeric draft");
-    const RoiEditTarget oldBackgroundTarget{withoutImage.toULongLong(), kRectInput, 0, 0, imageFreeSession.toULongLong()};
+    const RoiEditTarget oldBackgroundTarget{withoutImage.toULongLong(), kRectInput, 0, 0,
+                                            imageFreeSession.toULongLong()};
     require(app.bindInput(app.portContext(kImagesInput), source, kSourceImagesOutput),
             "Image-free rectangle input could not acquire a real upstream image");
     const auto currentRect = rectLiteral();
@@ -939,11 +1003,11 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Newly bound rectangle save did not settle");
     require(app.editRoi(kRectInput, false), "Rectangle editor could not reopen against the newly bound image");
-    require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000)
-                && app.imageCount() == 2 && app.roiEditor().value("imageWidth").toInt() == 128
+    require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000) && app.imageCount() == 2
+                && app.roiEditor().value("imageWidth").toInt() == 128
                 && app.roiEditor().value("imageHeight").toInt() == 96,
             "New ROI session did not present the actual newly bound background");
-    const auto acquiredSession = app.roiEditor().value("id").toString();
+    const auto acquiredSession   = app.roiEditor().value("id").toString();
     const auto acquiredRectangle = app.roiEditor().value("rectangle").toList();
     require(acquiredSession != imageFreeSession && !app.setRoiRectangle(imageFreeSession, {50, 50, 5, 5, 0}),
             "New background accepted the old image-free numeric session");
@@ -958,8 +1022,8 @@ void roiParameterContract()
         },
         Qt::QueuedConnection);
     require(QTest::qWaitFor([&] { return oldBackgroundDelivered; }, 1000)
-                && app.roiEditor().value("rectangle").toList() == acquiredRectangle
-                && rectLiteral() == currentRect && !app.dirty(),
+                && app.roiEditor().value("rectangle").toList() == acquiredRectangle && rectLiteral() == currentRect
+                && !app.dirty(),
             "Late image-free events modified the replacement background's session");
     app.endRoiPreview();
     require(!app.dirty() && rectLiteral() == currentRect,
@@ -971,7 +1035,7 @@ void roiParameterContract()
     require(app.setRoiRectangle(beforeExecutionSession, {10, 10, 20, 20, 0}),
             "Execution cancellation could not stage an ROI draft");
     const auto executeStart = viewport.mapToScene(viewport.imageToItem({20, 20})).toPoint();
-    const auto executeEnd = viewport.mapToScene(viewport.imageToItem({25, 25})).toPoint();
+    const auto executeEnd   = viewport.mapToScene(viewport.imageToItem({25, 25})).toPoint();
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, executeStart);
     QTest::mouseMove(&window, executeEnd);
     app.runNode();
@@ -980,13 +1044,12 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000) && output(kStatusCodePort) == "0",
             "Execution after ROI cancellation did not publish a successful result");
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, executeEnd);
-    require(!app.setRoiRectangle(beforeExecutionSession, {99, 99, 1, 1, 0})
-                && app.dirty() && rectLiteral() != currentRect,
-            "A pre-execution gesture or numeric callback changed the saved rectangle after new results");
+    require(
+        !app.setRoiRectangle(beforeExecutionSession, {99, 99, 1, 1, 0}) && app.dirty() && rectLiteral() != currentRect,
+        "A pre-execution gesture or numeric callback changed the saved rectangle after new results");
     require(app.setParameter(kRectInput, false, "[]"), "Rect clear was rejected");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Rect clear did not settle");
-    require(app.save(project) && !app.dirty(),
-            "Empty rectangle mode baseline could not be saved");
+    require(app.save(project) && !app.dirty(), "Empty rectangle mode baseline could not be saved");
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     const auto missingRectangle = rectLiteral();
     require(app.editRoi(kRectInput, false), "Empty rectangle could not enter image drawing mode");
@@ -996,8 +1059,8 @@ void roiParameterContract()
     const auto beforeModeGestures = rectangleGestures.count();
     draw(true, {10, 10}, {30, 30});
     draw(false, {10, 10}, {10, 30});
-    require(rectangleGestures.count() == beforeModeGestures && viewport.drawShape() == 2
-                && viewport.selectedRoi() == -1 && app.roiEditor().value("rectangle").toList().isEmpty(),
+    require(rectangleGestures.count() == beforeModeGestures && viewport.drawShape() == 2 && viewport.selectedRoi() == -1
+                && app.roiEditor().value("rectangle").toList().isEmpty(),
             "Canceled or zero-width initial drawing created a rectangle or stopped accepting drawing");
     draw(false, {10, 10}, {30, 30});
     require(rectangleGestures.count() == beforeModeGestures + 1 && viewport.drawShape() == 0
@@ -1005,12 +1068,11 @@ void roiParameterContract()
             "Initial rectangle drawing did not switch to selecting exactly one rectangle");
     draw(false, {20, 20}, {30, 25});
     const auto movedRectangle = app.roiEditor().value("rectangle").toList();
-    require(rectangleGestures.count() == beforeModeGestures + 2 && viewport.drawShape() == 0
-                && movedRectangle.size() == 5 && std::abs(movedRectangle[0].toDouble() - 20) < 0.5
-                && std::abs(movedRectangle[1].toDouble() - 15) < 0.5
-                && std::abs(movedRectangle[2].toDouble() - 20) < 0.5
-                && std::abs(movedRectangle[3].toDouble() - 20) < 0.5,
-            "Dragging a newly created rectangle replaced its dimensions instead of moving it");
+    require(
+        rectangleGestures.count() == beforeModeGestures + 2 && viewport.drawShape() == 0 && movedRectangle.size() == 5
+            && std::abs(movedRectangle[0].toDouble() - 20) < 0.5 && std::abs(movedRectangle[1].toDouble() - 15) < 0.5
+            && std::abs(movedRectangle[2].toDouble() - 20) < 0.5 && std::abs(movedRectangle[3].toDouble() - 20) < 0.5,
+        "Dragging a newly created rectangle replaced its dimensions instead of moving it");
     QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                       viewport.mapToScene(viewport.imageToItem({60, 40})).toPoint());
     require(viewport.selectedRoi() == -1 && viewport.drawShape() == 0,
@@ -1054,22 +1116,19 @@ void roiParameterContract()
     otherWindow.resize(180, 100);
     otherWindow.show();
     otherWindow.requestActivate();
-    require(QTest::qWaitForWindowActive(&otherWindow, 1000)
-                && qGuiApp->applicationState() == Qt::ApplicationActive && !window.isActive(),
+    require(QTest::qWaitForWindowActive(&otherWindow, 1000) && qGuiApp->applicationState() == Qt::ApplicationActive
+                && !window.isActive(),
             "Window deactivation did not activate another independent window in the active application");
     require(QTest::qWaitFor([&] { return app.roiEditor().isEmpty() && !viewport.editing(); }, 1000)
-                && viewport.drawShape() == 0 && viewport.selectedRoi() == -1
-                && app.dirty(),
+                && viewport.drawShape() == 0 && viewport.selectedRoi() == -1 && app.dirty(),
             "Deactivating the ROI window retained the draft while another application window was active");
     otherWindow.close();
     window.requestActivate();
-    require(QTest::qWaitForWindowActive(&window, 1000)
-                && app.roiEditor().isEmpty() && !viewport.editing(),
+    require(QTest::qWaitForWindowActive(&window, 1000) && app.roiEditor().isEmpty() && !viewport.editing(),
             "Returning to the ROI window restored a canceled session");
     require(app.editRoi(kRectInput, false), "Rectangle could not reopen after window deactivation");
     const auto reopenedWindowSession = app.roiEditor().value("id").toString();
-    require(reopenedWindowSession != windowSession
-                && !app.setRoiRectangle(windowSession, {1.0, 2.0, 3.0, 4.0, 0.0})
+    require(reopenedWindowSession != windowSession && !app.setRoiRectangle(windowSession, {1.0, 2.0, 3.0, 4.0, 0.0})
                 && app.roiEditor().value("rectangle").toList().size() == 5,
             "A canceled window session's numeric callback modified the reopened rectangle");
     require(app.save(project) && !app.dirty(), "Save window session state");
@@ -1077,15 +1136,15 @@ void roiParameterContract()
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Window session save did not settle");
     require(app.setRoiRectangle(reopenedWindowSession, {12.0, 14.0, 30.0, 20.0, 0.0}),
             "Transient window test could not stage rectangle geometry");
-    const auto transientRectangle = app.roiEditor().value("rectangle").toList();
+    const auto   transientRectangle = app.roiEditor().value("rectangle").toList();
     QQuickWindow transientWindow;
     transientWindow.setTransientParent(&window);
     transientWindow.resize(180, 100);
     transientWindow.show();
     transientWindow.requestActivate();
     require(QTest::qWaitFor([&] { return QGuiApplication::focusWindow() == &transientWindow; }, 1000)
-                && window.isActive()
-                && viewport.editing() && app.roiEditor().value("id").toString() == reopenedWindowSession
+                && window.isActive() && viewport.editing()
+                && app.roiEditor().value("id").toString() == reopenedWindowSession
                 && app.roiEditor().value("rectangle").toList() == transientRectangle,
             "Activating a transient child window canceled its owner's ROI session");
     transientWindow.close();
@@ -1103,36 +1162,36 @@ void roiParameterContract()
                     "Window gesture upstream binding did not settle");
             require(app.save(project) && !app.dirty(),
                     "Window gesture test could not save an upstream rectangle binding");
-    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
+            require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000),
+                    "saved ROI workspace did not settle");
         }
         else
         {
             require(app.save(project) && !app.dirty(), "Save literal binding baseline");
-    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
+            require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000),
+                    "saved ROI workspace did not settle");
         }
         require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "Window gesture baseline did not settle");
         const auto windowLiteral = rectLiteral();
-        const auto windowWires = app.wires();
+        const auto windowWires   = app.wires();
         require(app.editRoi(kRectInput, copyUpstream), "Window gesture rectangle could not open");
         require(QTest::qWaitFor([&] { return viewport.editing() && viewport.hasImage(); }, 3000),
                 "Window gesture rectangle did not present its background");
         const auto gestureSession = app.roiEditor().value("id").toString();
         renderedFrame();
         const auto gestureStart = viewport.mapToScene(viewport.imageToItem({25, 25})).toPoint();
-        const auto gestureEnd = viewport.mapToScene(viewport.imageToItem({35, 30})).toPoint();
+        const auto gestureEnd   = viewport.mapToScene(viewport.imageToItem({35, 30})).toPoint();
         viewport.forceActiveFocus();
         QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, gestureStart);
         QTest::mouseMove(&window, gestureEnd, 20);
         const auto gestureCount = rectangleGestures.count();
         otherWindow.show();
         otherWindow.requestActivate();
-        require(QTest::qWaitForWindowActive(&otherWindow, 1000)
-                    && qGuiApp->applicationState() == Qt::ApplicationActive,
+        require(QTest::qWaitForWindowActive(&otherWindow, 1000) && qGuiApp->applicationState() == Qt::ApplicationActive,
                 "Window gesture test did not activate the independent window");
         require(QTest::qWaitFor([&] { return !viewport.editing() && app.roiEditor().isEmpty(); }, 1000)
-                    && viewport.drawShape() == 0 && viewport.selectedRoi() == -1
-                    && rectLiteral() == windowLiteral && app.wires() == windowWires && !app.dirty()
-                    && rectangleGestures.count() == gestureCount,
+                    && viewport.drawShape() == 0 && viewport.selectedRoi() == -1 && rectLiteral() == windowLiteral
+                    && app.wires() == windowWires && !app.dirty() && rectangleGestures.count() == gestureCount,
                 "Window deactivation committed an active gesture or detached the copied upstream rectangle");
         otherWindow.close();
         window.requestActivate();
@@ -1149,10 +1208,56 @@ void roiParameterContract()
                 "A canceled window gesture's late release or numeric callback modified the reopened session");
         app.endRoiPreview();
     }
-    std::cout << "[ROI owning window] Independent-window activation cancels numeric and active pointer drafts, preserves local/upstream inputs and rejects late callbacks; transient children preserve the session.\n";
-    std::cout << "[ROI single rectangle] Creation enters move mode; deletion clears fields and handles; Apply and Cancel end drawing without executing.\n";
-    std::cout << "[ROI execution] Starting execution cancels an in-progress draft; late release and numeric edits cannot modify the new result.\n";
-    std::cout << "[ROI background] Acquiring an upstream image cancels image-free drafts; reopened sessions reject late geometry and numeric callbacks.\n";
-    std::cout << "[Evidence T-05] ROI toolbar copy honors panel enablement and node identity, then executes the copied input.\n";
-    std::cout << "[Evidence T-05] ROI action, pointer edits, Escape, read-only, upstream copy isolation, save/reopen and Python execution verified.\n";
+    app.selectNode(target);
+    app.setParameterMode(kRoisInput, false);
+    require(app.setParameter(kRoisInput, false, "[[[3,30,30,10]]]"), "circle draft fixture was rejected");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "circle fixture did not settle");
+    require(app.save(project), "circle fixture could not be saved");
+    require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "circle save did not settle");
+    require(app.editRoi(kRoisInput, false), "circle input could not enter editing");
+    require(QTest::qWaitFor(
+                [&]
+                {
+                    return viewport.editTarget()
+                        && viewport.editTarget()->session == app.roiEditor().value("id").toString().toULongLong();
+                },
+                3000),
+            "circle frame did not arrive");
+    viewport.selectRegion(0);
+    QSignalSpy circleCommits(&app, &AppController::projectChanged);
+    const auto circleStart = viewport.mapToScene(viewport.imageToItem({40, 30})).toPoint();
+    const auto circleEnd   = viewport.mapToScene(viewport.imageToItem({50, 30})).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, {}, circleStart);
+    QElapsedTimer latency;
+    latency.start();
+    QTest::mouseMove(&window, circleEnd, 1);
+    require(std::abs(app.roiEditor().value("coordinates").toList()[2].toDouble() - 20) < 0.5 && !app.dirty()
+                && circleCommits.isEmpty(),
+            "dragging a circle did not refresh its draft radius without a project commit");
+    std::cout << "[ROI synchronization] radius draft refreshed in " << latency.elapsed() << " ms\n";
+    QTest::mouseRelease(&window, Qt::LeftButton, {}, circleEnd);
+    require(circleCommits.size() == 1 && app.dirty(), "one circle gesture must produce one project commit");
+    const auto circleSession = app.roiEditor().value("id").toString();
+    require(app.setRoiCoordinate(circleSession, 2, "25", false), "numeric circle preview was rejected");
+    const auto circlePreview = colorAt(renderedFrame(), {30, 55});
+    require(circlePreview.blue() > 120 && circlePreview.green() > circlePreview.red(),
+            "numeric radius did not redraw the actual circle");
+    app.cancelRoiCoordinates();
+    require(
+        std::abs(app.roiEditor().value("coordinates").toList()[2].toDouble() - 20) < 0.5 && circleCommits.size() == 1,
+        "canceling numeric circle fields committed their preview");
+    app.endRoiPreview();
+    std::cout
+        << "[ROI owning window] Independent-window activation cancels numeric and active pointer drafts, preserves "
+           "local/upstream inputs and rejects late callbacks; transient children preserve the session.\n";
+    std::cout << "[ROI single rectangle] Creation enters move mode; deletion clears fields and handles; Apply and "
+                 "Cancel end drawing without executing.\n";
+    std::cout << "[ROI execution] Starting execution cancels an in-progress draft; late release and numeric edits "
+                 "cannot modify the new result.\n";
+    std::cout << "[ROI background] Acquiring an upstream image cancels image-free drafts; reopened sessions reject "
+                 "late geometry and numeric callbacks.\n";
+    std::cout << "[Evidence T-05] ROI toolbar copy honors panel enablement and node identity, then executes the copied "
+                 "input.\n";
+    std::cout << "[Evidence T-05] ROI action, pointer edits, Escape, read-only, upstream copy isolation, save/reopen "
+                 "and Python execution verified.\n";
 }

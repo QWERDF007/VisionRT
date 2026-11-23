@@ -1,13 +1,11 @@
 #pragma once
 
-#include "ui/Export.h"
-
 #include "core/ProjectEditor.h"
+#include "ui/Export.h"
 #include "ui/ImageViewport.h"
 
 #include <QString>
 #include <QVariantMap>
-
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -24,16 +22,17 @@ class VISIONRT_UI_API RoiEditSession
 public:
     struct Start
     {
-        NodeId        node            = 0;
-        PortId        input           = 0;
-        QString       flow;
-        TypeSpec      type;
-        bool          singleRectangle = false;
-        InputBinding  original;
-        PortValue     background;
-        PortValue     draft;
-        int           displayIndex    = 0;
-        int           resultIndex     = 0;
+        NodeId                   node  = 0;
+        RoiTargetKind            kind  = RoiTargetKind::Input;
+        PortId                   input = 0;
+        QString                  flow;
+        TypeSpec                 type;
+        bool                     singleRectangle = false;
+        InputBinding             original;
+        PortValue                background;
+        PortValue                draft;
+        int                      displayIndex = 0;
+        int                      resultIndex  = 0;
         ImageViewport::ViewState view{ImageViewport::Contain, 1.0, {}};
     };
 
@@ -50,36 +49,72 @@ public:
     // Ends the session; the id is invalidated even when no new session starts.
     void          end();
 
-    bool               active() const noexcept { return draft_.has_value(); }
-    std::uint64_t      id() const noexcept { return draft_ ? draft_->id : 0; }
-    NodeId             node() const noexcept { return draft_ ? draft_->node : 0; }
-    PortId             input() const noexcept;
-    const QString     &flow() const noexcept;
-    const TypeSpec    &type() const noexcept;
-    bool               singleRectangle() const noexcept { return draft_ && draft_->singleRectangle; }
+    bool active() const noexcept
+    {
+        return draft_.has_value();
+    }
+
+    std::uint64_t id() const noexcept
+    {
+        return draft_ ? draft_->id : 0;
+    }
+
+    NodeId node() const noexcept
+    {
+        return draft_ ? draft_->node : 0;
+    }
+
+    PortId          input() const noexcept;
+    const QString  &flow() const noexcept;
+    const TypeSpec &type() const noexcept;
+
+    bool singleRectangle() const noexcept
+    {
+        return draft_ && draft_->singleRectangle;
+    }
+
+    RoiEditTarget       target(int index = -1) const;
     const InputBinding &original() const noexcept;
     const PortValue    &background() const noexcept;
     const PortValue    &draft() const noexcept;
-    int                 displayIndex() const noexcept { return draft_ ? draft_->displayIndex : 0; }
-    void                setDisplayIndex(int value);
-    int                 resultIndex() const noexcept { return draft_ ? draft_->resultIndex : 0; }
+
+    int displayIndex() const noexcept
+    {
+        return draft_ ? draft_->displayIndex : 0;
+    }
+
+    void setDisplayIndex(int value);
+
+    int resultIndex() const noexcept
+    {
+        return draft_ ? draft_->resultIndex : 0;
+    }
+
     const ImageViewport::ViewState &view() const noexcept;
-    bool                fieldsValid() const noexcept { return draft_ && draft_->fieldsValid; }
-    void                setFieldsValid(bool value);
+
+    bool fieldsValid() const noexcept
+    {
+        return draft_ && draft_->fieldsValid;
+    }
+
+    void setFieldsValid(bool value);
 
     // Applies one geometry edit (create, move, resize or delete) or a numeric rectangle and writes
     // the literal binding. Throws ContractError when the session or the value is no longer valid.
     Commit commitGeometry(const RoiEditTarget &target, const EncodedRegion *value);
+    bool   previewGeometry(const RoiEditTarget &target, const EncodedRegion &value);
+    void   cancelPreview();
     Commit commitRectangle(const std::array<double, 5> &values);
 
-    // QML rectangle editor payload; empty unless the session edits a single rectangle.
-    QVariantMap editor() const;
+    // Projects the selected geometry and field names for the QML coordinate editor.
+    QVariantMap editor(int selected = -1) const;
 
 private:
     struct Draft
     {
         std::uint64_t            id;
         NodeId                   node;
+        RoiTargetKind            kind;
         PortId                   input = 0;
         QString                  flow;
         TypeSpec                 type;
@@ -93,11 +128,13 @@ private:
         bool                     fieldsValid = true;
     };
 
-    Commit writeLiteral(InputBinding committed);
+    Commit                   writeLiteral(InputBinding committed);
+    bool                     stageGeometry(const RoiEditTarget &target, const EncodedRegion *value);
+    std::optional<PortValue> previewBase_;
 
     std::optional<Draft> draft_;
     std::uint64_t        serial_ = 0;
-    ProjectEditor        &editor_;
+    ProjectEditor       &editor_;
 };
 
 } // namespace visionrt

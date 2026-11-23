@@ -98,7 +98,8 @@ class VISIONRT_UI_API AppController : public QObject
     Q_PROPERTY(bool settingsApplying READ settingsApplying NOTIFY settingsChanged)
     // The one host-side answer to "can Python tools run": the phase key and the sentence behind it.
     // Every surface reads this instead of deriving a second verdict of its own.
-    Q_PROPERTY(visionrt::PythonEnvironmentPhase pythonEnvironmentPhase READ pythonEnvironmentPhase NOTIFY pythonEnvironmentChanged)
+    Q_PROPERTY(visionrt::PythonEnvironmentPhase pythonEnvironmentPhase READ pythonEnvironmentPhase NOTIFY
+                   pythonEnvironmentChanged)
     Q_PROPERTY(QString pythonEnvironmentText READ pythonEnvironmentText NOTIFY pythonEnvironmentChanged)
     Q_PROPERTY(bool assistAvailable READ assistAvailable NOTIFY assistChanged)
     Q_PROPERTY(bool assistActive READ assistActive NOTIFY assistChanged)
@@ -144,11 +145,11 @@ public:
     Q_INVOKABLE void    removeTrainingDraftRecord(const QString &id);
     // The typed value of one declared field. QML binds a control to the field number the
     // declaration publishes, so a renamed field keeps the same value.
-    Q_INVOKABLE bool         setTrainingField(const QString &id, int field, const QVariant &value);
+    Q_INVOKABLE bool    setTrainingField(const QString &id, int field, const QVariant &value);
     // Typed values the declaration offers beside the records. They belong to the draft and are
     // published only through the trainer's declared writes.
-    QVariantList             trainingParameters() const;
-    Q_INVOKABLE bool         setTrainingParameter(int id, const QVariant &value);
+    QVariantList        trainingParameters() const;
+    Q_INVOKABLE bool    setTrainingParameter(int id, const QVariant &value);
     // Runs the declared trainer over the draft. A successful result is published as one asset
     // revision plus one transaction of node parameters and model references; a failure keeps the
     // draft and every previous result untouched.
@@ -169,9 +170,9 @@ public:
     // The window has shown the notice; a later refresh starts from an empty summary again.
     Q_INVOKABLE void    dismissToolUpdate();
     // Copies the whole window history as plain text; the selection and the scroll position stay.
-    Q_INVOKABLE void copyAllLogs();
+    Q_INVOKABLE void    copyAllLogs();
     // Installs the window's level colouring on the text document the log view owns.
-    Q_INVOKABLE void attachLogHighlighter(QQuickTextDocument *document, const QColor &warning, const QColor &error);
+    Q_INVOKABLE void    attachLogHighlighter(QQuickTextDocument *document, const QColor &warning, const QColor &error);
     QVariantList        searchResults() const;
     QString             timingText() const;
     bool                dirty() const;
@@ -184,10 +185,10 @@ public:
     // would. The application never calls this: a shipped build reads the user's choice and nothing
     // else, and an unset value leaves the backend unavailable.
     static void         usePythonForTesting(const QString &executable);
-    ToolEditorController *toolEditor() const noexcept;
+    ToolEditorController              *toolEditor() const noexcept;
     // The open project is the only source an impact preview reads; the tool editor never keeps a
     // second copy of it.
-    const ProjectDefinition &project() const noexcept;
+    const ProjectDefinition           &project() const noexcept;
     // Every definition the runtime catalog holds, in one place: the editor lists installed tools
     // from here instead of scanning package roots a second time. Distinct from the QML-facing
     // toolDefinitions() list, which is a presentation of the same catalog.
@@ -214,8 +215,7 @@ public:
     Q_INVOKABLE bool         setParameter(int port, bool initialization, const QString &text, bool jsonInput = false);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QString &path);
     Q_INVOKABLE bool         setParameterPath(int port, bool initialization, const QUrl &url);
-    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction,
-                                                  const QString &literal);
+    Q_INVOKABLE bool         stepIntegerParameter(int port, bool initialization, int direction, const QString &literal);
     Q_INVOKABLE bool         setParameterMode(int port, bool upstream);
     Q_INVOKABLE QVariantMap  portDeclarationContext(PortId port, bool output = false) const;
     Q_INVOKABLE QVariantMap  portResultContext(PortId port) const;
@@ -258,6 +258,8 @@ public:
     Q_INVOKABLE bool         clearRoi(int parameter);
     Q_INVOKABLE bool         applyRoi();
     Q_INVOKABLE bool         setRoiRectangle(const QString &session, const QVariantList &coordinates);
+    Q_INVOKABLE bool         setRoiCoordinate(const QString &session, int coordinate, const QString &text, bool commit);
+    Q_INVOKABLE void         cancelRoiCoordinates();
     Q_INVOKABLE void         setRoiFieldsValid(const QString &session, bool valid);
     Q_INVOKABLE void         endRoiPreview();
     Q_INVOKABLE void         requestOutputText(const QVariantMap &context);
@@ -268,8 +270,7 @@ public:
     // Mode switch is one transaction; binding a source is a separate one.
     Q_INVOKABLE bool         setConditionMode(const QString &node, bool upstream);
     Q_INVOKABLE QVariantMap  selectType(const QString &node) const;
-    Q_INVOKABLE bool         applySelectType(const QString &node, int type, int dtype,
-                                             int rank);
+    Q_INVOKABLE bool         applySelectType(const QString &node, int type, int dtype, int rank);
     // Chinese description of a type row, reusing the parameter panel's display mapping.
     Q_INVOKABLE QString      typeDescription(int type, int dtype, int rank) const;
     QAbstractListModel      *nodeListModel() const;
@@ -277,7 +278,7 @@ public:
     Q_INVOKABLE QVariantMap  nodeRecord(const QString &id) const;
     Q_INVOKABLE QPointF      nodePosition(const QString &id) const;
     Q_INVOKABLE QVariantList nodePositions() const;
-    NodeModel nodeModel() const;
+    NodeModel                nodeModel() const;
     BindingMode              conditionMode() const;
     bool                     easyTouchEnabled() const;
     Q_INVOKABLE void         setEasyTouchEnabled(bool enabled);
@@ -292,7 +293,7 @@ public:
     QString                  settingsError() const;
     SettingsPage             settingsErrorField() const;
     bool                     settingsApplying() const;
-    PythonEnvironmentPhase pythonEnvironmentPhase() const;
+    PythonEnvironmentPhase   pythonEnvironmentPhase() const;
     QString                  pythonEnvironmentText() const;
     // One machine-readable answer to "which interpreter runs the tools, which NumPy backs it, and
     // what is actually resident in this process". Release evidence archives it; the window keeps

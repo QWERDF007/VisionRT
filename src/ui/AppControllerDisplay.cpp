@@ -49,28 +49,50 @@ void AppController::attachViewport(QObject *object)
                              else
                                  impl_->commitRoi(key, nullptr);
                          });
+        QObject::connect(target, &ImageViewport::roiDraftChanged, this,
+                         [this](const RoiEditTarget &key, const EncodedRegion &roi)
+                         {
+                             if (impl_->roiSession.previewGeometry(key, roi))
+                             {
+                                 emit parametersChanged();
+                                 emit resultsChanged();
+                             }
+                         });
+        QObject::connect(target, &ImageViewport::roiDraftCanceled, this,
+                         [this]
+                         {
+                             impl_->roiSession.cancelPreview();
+                             emit parametersChanged();
+                         });
         QObject::connect(target, &ImageViewport::roiSelected, this,
-                         [this](int /*index*/, QPointF /*point*/)
+                         [this](const RoiEditTarget &key)
                          {
                              // A training rectangle belongs to the training session; clicking it
                              // must not start a project input edit on the reference picture.
                              if (!impl_->idle() || impl_->trainingMode)
                                  return;
                              const auto *node = impl_->currentNode();
-                             const auto *tool = impl_->effectiveTool();
-                             if (!node || !tool)
+                             if (!node || node->id != key.nodeSeq)
                                  return;
-                             for (const auto &port : tool->inputs)
+                             const auto binding = node->inputs.find(key.inputPortId);
+                             if (binding != node->inputs.end() && binding->second.mode == BindingMode::Upstream)
                              {
-                                 if (port.type.type == Type::ROI)
+                                 const auto value = impl_->resolvedInput(*node, key.inputPortId);
+                                 if (const auto *roi = std::get_if<DataRef<ROI>>(&value); roi && !roi->get().empty())
                                  {
-                                     const auto found = node->inputs.find(port.id);
-                                     if (found != node->inputs.end() && found->second.mode == BindingMode::Literal)
-                                     {
-                                         editRoi(static_cast<int>(port.id), true);
-                                         break;
-                                     }
+                                     const auto &group = roi->get().at(roi->get().size() == 1 ? 0 : key.imageIndex);
+                                     if (key.roiIndex >= 0 && key.roiIndex < static_cast<int>(group.size()))
+                                         impl_->presentation.viewport()->inspectInputRegion(group[key.roiIndex]);
                                  }
+                                 return;
+                             }
+                             if (binding != node->inputs.end() && binding->second.mode == BindingMode::Literal
+                                 && editRoi(static_cast<int>(key.inputPortId), false))
+                             {
+                                 impl_->roiSession.setDisplayIndex(key.imageIndex);
+                                 impl_->updateDisplay();
+                                 if (auto *viewport = impl_->presentation.viewport())
+                                     viewport->selectRegion(key.roiIndex);
                              }
                          });
         QObject::connect(target, &ImageViewport::roiEditCanceled, this,
@@ -83,6 +105,9 @@ void AppController::attachViewport(QObject *object)
                              endRoiPreview();
                          });
         QObject::connect(target, &ImageViewport::drawShapeChanged, this, [this] { emit resultsChanged(); });
+        QObject::connect(target, &ImageViewport::selectedRoiChanged, this, [this] { emit resultsChanged(); });
+        QObject::connect(target, &ImageViewport::readOnlyChanged, this, [this] { emit resultsChanged(); });
+        QObject::connect(target, &ImageViewport::editingChanged, this, [this] { emit resultsChanged(); });
     }
     impl_->updateDisplay();
 }

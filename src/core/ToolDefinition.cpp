@@ -717,11 +717,18 @@ void validateToolDefinition(const ToolDefinition &def)
         const auto *frame = findPort(def.inputs, def.training->image.id);
         if (def.training->image.stage != PortStage::Inputs || !frame || frame->type.type != Type::Image)
             throw ContractError("training.image must reference an Image input: " + def.nameEn);
-        if (def.training->records.fields.empty())
+        if (def.training->records.fields.empty() && def.training->regionInput == 0)
             throw ContractError("training.records.fields cannot be empty: " + def.nameEn);
         if (def.training->records.maxCount < 0)
             throw ContractError("training.records.max cannot be negative: " + def.nameEn);
         int roiFields = 0;
+        if (def.training->regionInput != 0)
+        {
+            const auto *regions = findPort(def.inputs, def.training->regionInput);
+            if (!regions || regions->type.type != Type::ROI || regions->image != def.training->image)
+                throw ContractError("training.region_input must reference a ROI on the training image: " + def.nameEn);
+            ++roiFields;
+        }
         for (const auto &field : def.training->records.fields)
         {
             if (field.id == 0)

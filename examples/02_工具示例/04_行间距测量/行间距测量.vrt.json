@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "MeasureRowSpacing",
           "tool_name_snapshot": "测量行间距",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "测量宽度与节距",
           "pos": [
             0,
@@ -230,12 +230,6 @@
                 "port_id": 1,
                 "type": {
                   "type": 3
-                }
-              },
-              {
-                "port_id": 2,
-                "type": {
-                  "type": 4
                 }
               },
               {

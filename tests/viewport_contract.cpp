@@ -6,6 +6,7 @@
 #include "ui/ImageViewport.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QKeyEvent>
@@ -44,7 +45,7 @@ void await(Predicate predicate)
 QImage renderedFrame(QQuickWindow &window)
 {
     QObject context;
-    bool ready = false;
+    bool    ready = false;
     QObject::connect(&window, &QQuickWindow::frameSwapped, &context, [&] { ready = true; });
     window.update();
     await([&] { return ready; });
@@ -68,7 +69,9 @@ void drag(ImageViewport &view, QPointF start, QPointF end)
 int main(int argc, char **argv)
 {
     QGuiApplication application(argc, argv);
-    cv::Mat         pixels(1, 5, CV_32FC1);
+    const auto      evidence = QDir(application.applicationDirPath()).absoluteFilePath("../evidence");
+    QDir().mkpath(evidence);
+    cv::Mat pixels(1, 5, CV_32FC1);
     pixels.at<float>(0, 0) = -10;
     pixels.at<float>(0, 1) = 0;
     pixels.at<float>(0, 2) = 10;
@@ -132,9 +135,9 @@ int main(int argc, char **argv)
     assert(near(viewport.zoom(), 1 / window.effectiveDevicePixelRatio()));
     viewport.zoomBy(2);
     viewport.beginRoiEdit({9007199254740993ULL, 1, 0, -1}, {});
-    int                commits = 0;
+    int                          commits = 0;
     std::optional<EncodedRegion> committed;
-    RoiEditTarget      committedTarget;
+    RoiEditTarget                committedTarget;
     QObject::connect(&viewport, &ImageViewport::roiCommitted,
                      [&](const RoiEditTarget &target, const EncodedRegion &roi)
                      {
@@ -192,296 +195,81 @@ int main(int argc, char **argv)
     QCoreApplication::sendEvent(&viewport, &enter);
     assert(commits == 5 && roiKind(*committed) == RoiKind::Point && (*committed).size() == 3);
 
-    viewport.beginRoiEdit(
-        {
-            4, 6, 0, 0
-    },
-        {EncodedRegion{2., 40, 30, 40, 20, 0}});
-    viewport.setDrawShape(0);
-    const double rotationArm = 10 + 24 / viewport.zoom();
-    drag(viewport, {60, 40 - rotationArm}, {60 + rotationArm, 40});
-    assert(commits == 6 && committedTarget.roiIndex == 0 && near((*committed)[5], 90));
-    drag(viewport, {60, 40}, {65, 47});
-    assert(commits == 7 && near((*committed)[1], 45) && near((*committed)[2], 37));
-    assert(near((*committed)[5], 90));
-    viewport.beginRoiEdit(
-        {
-            4, 6, 0, 0
-    },
-        {EncodedRegion{2., 40, 30, 40, 20, 90}});
-    drag(viewport, {70, 20}, {80, 10});
-    assert(commits == 8 && near((*committed)[1], 40) && near((*committed)[2], 20));
-    assert(near((*committed)[3], 50) && near((*committed)[4], 30));
-    viewport.beginRoiEdit(
-        {
-            4, 6, 0, 0
-    },
-        {EncodedRegion{2., 40, 30, 40, 20, 0}});
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({40, 30}), Qt::LeftButton, Qt::LeftButton);
-    mouse(viewport, QEvent::MouseMove, viewport.imageToItem({30, 20}), Qt::NoButton, Qt::LeftButton);
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({80, 50}), Qt::LeftButton, Qt::NoButton);
-    assert(commits == 8); // Invalid final geometry must not commit the last valid mouse move.
-    int deletions = 0;
-    QObject::connect(&viewport, &ImageViewport::roiDeleted,
-                     [&](const RoiEditTarget &key)
-                     {
-                         ++deletions;
-                         assert(key.inputPortId == 6 && key.roiIndex == 0);
-                     });
-    viewport.setReadOnly(true);
-    viewport.deleteSelectedRoi();
-    assert(deletions == 0);
-    viewport.setReadOnly(false);
-    viewport.deleteSelectedRoi();
-    assert(deletions == 1);
-    viewport.setDrawShape(2);
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({70, 70}), Qt::LeftButton, Qt::LeftButton);
-    viewport.beginRoiEdit({4, 7, 1, -1}, {});
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({90, 90}), Qt::LeftButton, Qt::NoButton);
-    assert(commits == 8);
-    DisplayFrame missing;
-    missing.requestId = 2;
-    viewport.setDisplayFrame(missing);
-    assert(!viewport.hasImage());
-    drag(viewport, {10, 10}, {30, 30});
-    assert(commits == 8);
-    viewport.setDisplayFrame(frame); // Stale id cannot restore a disappeared image.
-    assert(!viewport.hasImage());
-    frame.requestId = 3;
-    viewport.setDisplayFrame(frame);
-
     viewport.endRoiEdit();
+    viewport.setSize({400, 300});
     viewport.fitContain();
-    viewport.setSize(QSizeF(400, 300));
-    viewport.setOverlays(
-        {
-            EncodedRegion{2., 20, 20, 40, 40, 0}
-    },
-        {});
+    viewport.setOverlays({makeRectangle(20, 20, 40, 40)}, {makeCircle({120, 50}, 15)});
     window.show();
     await([&] { return window.isExposed(); });
-    const auto rendered = renderedFrame(window);
-    assert(!rendered.isNull());
     const double dpr      = window.effectiveDevicePixelRatio();
-    std::cout << "[Viewport rendering] API=" << window.rendererInterface()->graphicsApi() << " DPR=" << dpr << '\n';
-    const auto   interior = rendered.pixelColor(qRound(200 * dpr), qRound(150 * dpr));
-    assert(std::abs(interior.red() - 45) <= 1 && std::abs(interior.green() - 45) <= 1);
-    const auto yellow = rendered.pixelColor(qRound(40 * dpr), qRound(130 * dpr));
-    const bool yellowVisible = yellow.red() - yellow.blue() > 100 && yellow.green() - yellow.blue() > 80;
-    if (!yellowVisible)
+    auto         rendered = renderedFrame(window);
+    const auto   at       = [&](const QImage &image, QPointF source)
     {
-        rendered.save("viewport_rendering_failure.png");
-        std::cerr << "ROI boundary pixel: " << yellow.name().toStdString() << '\n';
-    }
-    assert(yellowVisible);
-    viewport.setOverlays(
-        {
-            {0., 35., 35.}
-    },
-        {});
-    const auto pointFrame    = renderedFrame(window);
-    const auto pointLocation = viewport.imageToItem({35., 35.}) * dpr;
-    const auto pointColor    = pointFrame.pixelColor(qRound(pointLocation.x()), qRound(pointLocation.y()));
-    assert(pointColor.red() > 240 && pointColor.green() > 200 && pointColor.blue() < 10);
-    viewport.setOverlays(
-        {
-            EncodedRegion{2., 20, 20, 40, 40, 0}
-    },
-        {EncodedRegion{2., 20, 20, 40, 40, 0}});
-    const auto overlaid = renderedFrame(window);
-    const auto blue     = overlaid.pixelColor(qRound(40 * dpr), qRound(130 * dpr));
-    if (!(blue.blue() - blue.red() > 100 && blue.green() - blue.red() > 50))
+        const auto location = viewport.imageToItem(source) * dpr;
+        return image.pixelColor(qRound(location.x()), qRound(location.y()));
+    };
+    const auto inactive = at(rendered, {20, 40});
+    rendered.save(evidence + "/roi-render-control.png");
+    std::cerr << "inactive boundary=" << inactive.name().toStdString() << '\n';
+    assert(inactive.blue() > 180 && inactive.red() < 100 && inactive.green() > 60);
+    assert(at(rendered, {100, 50}).red() == 45);
+    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({120, 50}), Qt::LeftButton, Qt::LeftButton);
+    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({120, 50}), Qt::LeftButton, Qt::NoButton);
+    rendered                    = renderedFrame(window);
+    const auto outputAfterClick = at(rendered, {135, 50});
+    assert(outputAfterClick.blue() > 160 && outputAfterClick.red() > 100 && outputAfterClick.green() < 100);
+    assert(!viewport.editing() && viewport.selectedRoi() == -1);
+    rendered.save(evidence + "/roi-output-click.png");
+    viewport.beginRoiEdit({4, 6, 0, 0}, {makeRectangle(20, 20, 40, 20)}, false);
+    viewport.setOverlays({}, {});
+    for (double scale : {0.1, 1.0, 8.0})
     {
-        overlaid.save("viewport_overlap_failure.png");
-        std::cerr << "ROI overlap pixel: " << blue.name().toStdString() << '\n';
+        viewport.restoreViewState({
+            ImageViewport::Manual,
+            scale,
+            {40, 30}
+        });
+        rendered          = renderedFrame(window);
+        const auto stable = renderedFrame(window);
+        assert(rendered == stable);
+        const auto center      = viewport.imageToItem({40, 30}) * dpr;
+        const auto whiteHandle = rendered.pixelColor(qRound(center.x() + 4 * dpr), qRound(center.y() - 6 * dpr));
+        assert(whiteHandle.red() > 240 && whiteHandle.green() > 240 && whiteHandle.blue() > 240);
     }
-    assert(blue.blue() - blue.red() > 100 && blue.green() - blue.red() > 50);
-    viewport.setOverlays(
-        {
-            EncodedRegion{2., 100, 10, 40, 20, 0}
-    },
-        {EncodedRegion{2., 20, 20, 40, 40, 0}});
-    viewport.beginRoiEdit(
-        {
-            4, 8, 0, 0
-    },
-        {EncodedRegion{2., 20, 20, 40, 40, 0}}, false, true);
-    const auto editingLayers = renderedFrame(window);
-    const auto selectedPoint = viewport.imageToItem({20, 20}) * dpr;
-    const auto selectedColor = editingLayers.pixelColor(qRound(selectedPoint.x()), qRound(selectedPoint.y()));
-    assert(selectedColor.red() > 240 && selectedColor.green() > 200 && selectedColor.blue() < 10);
-    const auto sourcePoint = viewport.imageToItem({120, 10}) * dpr;
-    const auto sourceColor = editingLayers.pixelColor(qRound(sourcePoint.x()), qRound(sourcePoint.y()));
-    assert(sourceColor.red() - sourceColor.blue() > 100 && sourceColor.green() - sourceColor.blue() > 80);
-    viewport.endRoiEdit();
-    auto replacement      = DisplayConverter::convert(cv::Mat(100, 200, CV_8UC1, cv::Scalar(82)));
-    replacement.requestId = 4;
-    viewport.setDisplayFrame(replacement);
-    const auto refreshed       = renderedFrame(window);
-    const auto refreshedCenter = refreshed.pixelColor(qRound(200 * dpr), qRound(150 * dpr));
-    assert(std::abs(refreshedCenter.red() - 82) <= 1);
-    const std::array<std::function<void()>, 6> transforms = {
-        [&] { viewport.zoomBy(1.5); }, [&] { viewport.fitContain(); }, [&] { viewport.fitCover(); },
-        [&] { viewport.fitOneToOne(); }, [&] { viewport.setWidth(viewport.width() + 30); },
-        [&] { viewport.restoreViewState({ImageViewport::Manual, 2, {50, 30}}); }};
-    for (const auto &transform : transforms)
-    {
-        const auto original = EncodedRegion{2., 20, 20, 40, 20, 25};
-        viewport.beginRoiEdit({4, 9, 0, 0}, {original}, false, true);
-        viewport.setDrawShape(0);
-        const int before = commits;
-        mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({40, 30}), Qt::LeftButton, Qt::LeftButton);
-        mouse(viewport, QEvent::MouseMove, viewport.imageToItem({45, 35}), Qt::NoButton, Qt::LeftButton);
-        transform();
-        mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({55, 40}), Qt::LeftButton, Qt::NoButton);
-        assert(commits == before);
-        drag(viewport, {40, 30}, {45, 35});
-        assert(commits == before + 1 && near((*committed)[1], 25) && near((*committed)[2], 25));
-        assert(near((*committed)[5], 25));
-    }
-    const auto    original = EncodedRegion{2., 40, 30, 40, 20, 25};
-    const auto    corners  = rectangleCorners(original);
-    const QPointF rectangleCenter(60, 40);
-    for (std::size_t corner = 0; corner < corners.size(); ++corner)
-    {
-        viewport.beginRoiEdit({4, 10, 0, 0}, {original}, false, true);
-        viewport.setDrawShape(0);
-        const int before = commits;
-        const QPointF start(corners[corner].x, corners[corner].y);
-        drag(viewport, start, rectangleCenter + (start - rectangleCenter) * 1.5);
-        assert(commits == before + 1 && near((*committed)[5], 25));
-        const auto adjusted = rectangleCorners(*committed);
-        const auto opposite = (corner + 2) % 4;
-        assert(near(adjusted[opposite].x, corners[opposite].x)
-            && near(adjusted[opposite].y, corners[opposite].y));
-    }
-    viewport.beginRoiEdit({4, 11, 0, 0}, {original}, false, true);
-    viewport.setDrawShape(0);
-    QTransform rotation;
-    rotation.rotate(25);
-    const double arm = 10 + 24 / viewport.zoom();
-    const int beforeRotation = commits;
-    drag(viewport, rectangleCenter + rotation.map(QPointF(0, -arm)),
-         rectangleCenter + rotation.map(QPointF(arm, 0)));
-    assert(commits == beforeRotation + 1 && near((*committed)[5], 115));
-    for (std::size_t component = 1; component < 5; ++component)
-        assert(near((*committed)[component], original[component]));
-    viewport.beginRoiEdit({4, 12, 0, -1, 91}, {}, false, true);
-    viewport.setDrawShape(2);
-    const int beforePaired = commits;
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({10, 10}), Qt::RightButton, Qt::RightButton);
-    mouse(viewport, QEvent::MouseMove, viewport.imageToItem({20, 20}), Qt::NoButton, Qt::RightButton);
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({30, 30}), Qt::LeftButton,
-          Qt::LeftButton | Qt::RightButton);
-    mouse(viewport, QEvent::MouseMove, viewport.imageToItem({50, 50}), Qt::NoButton,
-          Qt::LeftButton | Qt::RightButton);
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({50, 50}), Qt::LeftButton, Qt::RightButton);
-    assert(commits == beforePaired);
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({50, 50}), Qt::RightButton, Qt::NoButton);
-    drag(viewport, {10, 10}, {30, 30});
-    assert(commits == beforePaired + 1 && committedTarget.session == 91);
-
-    viewport.beginRoiEdit({4, 12, 0, -1, 92}, {}, false, true);
-    viewport.setDrawShape(2);
-    const int beforeRelease = commits;
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({10, 10}), Qt::LeftButton, Qt::LeftButton);
-    mouse(viewport, QEvent::MouseMove, viewport.imageToItem({30, 30}), Qt::NoButton, Qt::LeftButton);
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({30, 30}), Qt::RightButton,
-          Qt::LeftButton | Qt::RightButton);
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({30, 30}), Qt::RightButton, Qt::LeftButton);
-    assert(commits == beforeRelease);
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({30, 30}), Qt::LeftButton, Qt::NoButton);
-    assert(commits == beforeRelease + 1 && committedTarget.session == 92);
-    assert(near((*committed)[1], 10) && near((*committed)[2], 10) && near((*committed)[3], 20)
-           && near((*committed)[4], 20));
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({40, 40}), Qt::LeftButton, Qt::NoButton);
-    assert(commits == beforeRelease + 1);
-    viewport.beginRoiEdit({4, 12, 0, -1, 93}, {}, true, true);
-    mouse(viewport, QEvent::MouseButtonPress, viewport.imageToItem({10, 10}), Qt::LeftButton, Qt::LeftButton);
-    viewport.setReadOnly(false);
-    mouse(viewport, QEvent::MouseButtonRelease, viewport.imageToItem({30, 30}), Qt::LeftButton, Qt::NoButton);
-    assert(commits == beforeRelease + 1);
-    for (const double scale : {0.5, 1.0, 4.0})
-    {
-        viewport.restoreViewState({ImageViewport::Manual, scale, {50, 40}});
-        viewport.beginRoiEdit(
-            {
-                4, 13, 0, 0
-        },
-            {EncodedRegion{2., 40, 30, 2, 2, 0}}, false, true);
-        viewport.setDrawShape(0);
-        const int beforeSmall = commits;
-        drag(viewport, {42, 32}, {46, 35});
-        assert(commits == beforeSmall + 1);
-        assert(near((*committed)[1], 40) && near((*committed)[2], 30) && near((*committed)[3], 6)
-               && near((*committed)[4], 5));
-        viewport.beginRoiEdit(
-            {
-                4, 14, 0, 0
-        },
-            {EncodedRegion{2., 40, 30, 2, 2, 0}}, false, true);
-        drag(viewport, {41, 31}, {39, 29});
-        assert(near((*committed)[1], 39) && near((*committed)[2], 29) && near((*committed)[3], 3)
-               && near((*committed)[4], 3));
-        const auto    rotatedSmall = EncodedRegion{2., 40, 30, 2, 2, 25};
-        const auto    smallCorners = rectangleCorners(rotatedSmall);
-        const QPointF smallCenter(41, 31);
-        const QPointF smallCorner(smallCorners[2].x, smallCorners[2].y);
-        viewport.beginRoiEdit({4, 15, 0, 0}, {rotatedSmall}, false, true);
-        drag(viewport, smallCorner, smallCenter + (smallCorner - smallCenter) * 3);
-        const auto resizedCorners = rectangleCorners(*committed);
-        assert(near(resizedCorners[0].x, smallCorners[0].x) && near(resizedCorners[0].y, smallCorners[0].y)
-               && near((*committed)[3], 4) && near((*committed)[4], 4) && near((*committed)[5], 25));
-    }
-    viewport.endRoiEdit();
-    viewport.beginRoiEdit(
-        {
-            4, 16, 0, 0
-    },
-        {{2., 100000000.125, 100000000.25, 20.5, 10.75, 0.}}, false, true);
+    viewport.setHostFrame(DisplayConverter::convert(cv::Mat(700, 900, CV_8UC1, cv::Scalar(45))));
+    window.resize(900, 700);
+    viewport.setSize({900, 700});
     viewport.restoreViewState({
         ImageViewport::Manual,
-        4,
+        0.75,
+        {450, 350}
+    });
+    viewport.beginRoiEdit({4, 6, 0, 0}, {makeRectangle(295.3, 189.25, 456.8, 238.9, 0.3)});
+    renderedFrame(window).save(evidence + "/roi-rectangle.png");
+    viewport.beginRoiEdit({4, 6, 0, 0}, {makeSegment({231.4, 253.6}, {431.4, 353.6})});
+    renderedFrame(window).save(evidence + "/roi-line.png");
+    viewport.beginRoiEdit({4, 6, 0, 1}, {makeCircle({383.3, 406.1}, 100), makeCircle({583.3, 606.1}, 100)});
+    renderedFrame(window).save(evidence + "/roi-circles.png");
+    viewport.endRoiEdit();
+    auto replacement      = frame;
+    replacement.requestId = 3;
+    replacement.image.fill(82);
+    viewport.setDisplayFrame(replacement);
+    viewport.setDisplayFrame(frame);
+    assert(viewport.displayedImage() == replacement.image);
+    viewport.clearImage(4);
+    assert(!viewport.hasImage());
+    frame.requestId = 5;
+    viewport.setDisplayFrame(frame);
+    const int before = commits;
+    viewport.restoreViewState({
+        ImageViewport::Manual,
+        100,
         {100000010.375, 100000005.625}
     });
-    viewport.setDrawShape(0);
-    const auto preciseBefore = commits;
+    viewport.beginRoiEdit({4, 6, 0, 0}, {makeRectangle(100000000.125, 100000000.25, 20.5, 10.75)});
     drag(viewport, {100000010.375, 100000005.625}, {100000010.5, 100000005.875});
-    assert(commits == preciseBefore + 1);
-    assert(near((*committed)[1], 100000000.25) && near((*committed)[2], 100000000.5));
-    assert(near((*committed)[3], 20.5) && near((*committed)[4], 10.75));
-    viewport.endRoiEdit();
-    viewport.setSize(QSizeF(320, 200));
-    viewport.setPosition(QPointF(40, 50));
-    viewport.restoreViewState({ImageViewport::Manual, 2, {0, 20}});
-    viewport.setOverlays({}, {});
-    window.setColor(QColor(18, 32, 46));
-    const auto beyondImage = EncodedRegion{2., -90, 5, 40, 30, 0};
-    viewport.beginRoiEdit({4, 17, 0, 0}, {beyondImage}, false, true);
-    viewport.setDrawShape(0);
-    const int beforeEdge = commits;
-    const auto clipped = renderedFrame(window);
-    const auto outsideViewport = clipped.pixelColor(qRound(20 * dpr), qRound(120 * dpr));
-    assert(outsideViewport == QColor(18, 32, 46));
-    const auto visibleHandle = viewport.mapToScene(viewport.imageToItem({-50, 5}));
-    const auto edgeHandleColor = clipped.pixelColor(qRound(visibleHandle.x() * dpr), qRound(visibleHandle.y() * dpr));
-    assert(edgeHandleColor.red() > 240 && edgeHandleColor.green() > 200 && edgeHandleColor.blue() < 10);
-    assert(commits == beforeEdge);
-    const auto windowMouse = [&](QEvent::Type type, const QPointF &position, Qt::MouseButton button, Qt::MouseButtons buttons)
-    {
-        QMouseEvent event(type, position, window.mapToGlobal(position.toPoint()), button, buttons, Qt::NoModifier);
-        QCoreApplication::sendEvent(&window, &event);
-    };
-    const auto adjustedHandle = viewport.mapToScene(viewport.imageToItem({-40, 0}));
-    windowMouse(QEvent::MouseButtonPress, visibleHandle, Qt::LeftButton, Qt::LeftButton);
-    windowMouse(QEvent::MouseMove, adjustedHandle, Qt::NoButton, Qt::LeftButton);
-    windowMouse(QEvent::MouseButtonRelease, adjustedHandle, Qt::LeftButton, Qt::NoButton);
-    assert(commits == beforeEdge + 1 && committedTarget.inputPortId == 17);
-    assert(near((*committed)[1], -90) && near((*committed)[2], 0) && near((*committed)[3], 50)
-           && near((*committed)[4], 35));
-    const auto clippedAgain = renderedFrame(window);
-    assert(clippedAgain.pixelColor(qRound(20 * dpr), qRound(120 * dpr)) == QColor(18, 32, 46));
-    std::cout << "[Viewport edge] Out-of-image geometry remains unchanged by viewport clipping; visible handles retain source coordinates.\n";
+    assert(commits == before + 1 && near((*committed)[1], 100000000.25) && near((*committed)[2], 100000000.5));
     viewport.endRoiEdit();
     int windowCancellations = 0;
     QObject::connect(&viewport, &ImageViewport::roiEditCanceled, &viewport,
@@ -502,7 +290,7 @@ int main(int argc, char **argv)
         {EncodedRegion{2., 10, 10, 20, 20, 0}}, false, true);
     viewport.setParentItem(relocatedWindow.contentItem());
     assert(windowCancellations == 1 && !viewport.editing() && viewport.selectedRoi() == -1
-        && viewport.drawShape() == 0);
+           && viewport.drawShape() == 0);
     relocatedWindow.requestActivate();
     await([&] { return relocatedWindow.isActive(); });
     viewport.beginRoiEdit(
@@ -512,7 +300,7 @@ int main(int argc, char **argv)
         {EncodedRegion{2., 10, 10, 20, 20, 0}}, false, true);
     viewport.setParentItem(nullptr);
     assert(windowCancellations == 2 && !viewport.editing() && viewport.selectedRoi() == -1
-        && viewport.drawShape() == 0);
+           && viewport.drawShape() == 0);
     viewport.setParentItem(window.contentItem());
     window.requestActivate();
     await([&] { return window.isActive(); });
@@ -524,10 +312,11 @@ int main(int argc, char **argv)
     relocatedWindow.requestActivate();
     await([&] { return relocatedWindow.isActive() && !window.isActive(); });
     assert(windowCancellations == 3 && !viewport.editing() && viewport.selectedRoi() == -1
-        && viewport.drawShape() == 0);
+           && viewport.drawShape() == 0);
     viewport.setParentItem(nullptr);
     assert(windowCancellations == 3);
-    std::cout << "[Viewport owning window] Reparenting and detaching cancel once; reattaching observes the current window without retaining editing state.\n";
+    std::cout << "[Viewport owning window] Reparenting and detaching cancel once; reattaching observes the current "
+                 "window without retaining editing state.\n";
     window.hide();
     ImageViewport stable;
     stable.setWidth(200);

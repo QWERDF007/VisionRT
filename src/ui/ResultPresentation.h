@@ -9,7 +9,6 @@
 
 #include <QPointer>
 #include <QVariantMap>
-
 #include <deque>
 #include <functional>
 #include <future>
@@ -30,30 +29,31 @@ public:
     virtual ~PresentationHost() = default;
 
     // Current selection. All three come from the same node, never from separate mirrors.
-    virtual const NodeDefinition *selectedNode() const                            = 0;
-    virtual const FlowDefinition *currentFlow() const                             = 0;
-    virtual const ToolDefinition *effectiveTool() const                           = 0;
-    virtual const PortDefinition *parameter(PortId id, bool init) const = 0;
+    virtual const NodeDefinition         *selectedNode() const                  = 0;
+    virtual const FlowDefinition         *currentFlow() const                   = 0;
+    virtual const ToolDefinition         *effectiveTool() const                 = 0;
+    virtual const PortDefinition         *parameter(PortId id, bool init) const = 0;
     // Same candidate/validate rule the binding menu uses, cached by the controller. The returned map
     // is the cache itself, not a copy.
     virtual const std::map<PortId, bool> *refreshConnectable(const FlowDefinition &flow,
-                                                                               const NodeDefinition &node) const = 0;
+                                                             const NodeDefinition &node) const
+        = 0;
 
     // Runtime facts the presentation must not duplicate.
     virtual Availability toolAvailability(std::string_view toolId) const = 0;
-    virtual bool runtimeIdle() const = 0;
-    virtual bool closing() const     = 0;
+    virtual bool         runtimeIdle() const                             = 0;
+    virtual bool         closing() const                                 = 0;
 
     // Effects that belong to the controller: QML notifications and the user-visible ROI session.
-    virtual bool contextCurrent(const QVariantMap &context) const = 0;
+    virtual bool        contextCurrent(const QVariantMap &context) const = 0;
     // Rebuilds the live context for a port; a queued read is only served when it still matches.
-    virtual QVariantMap portContext(PortId port) const = 0;
-    virtual void deliverText(const QString &text)                 = 0;
-    virtual void resultsChanged()                                 = 0;
-    virtual void runtimeChanged()                                 = 0;
-    virtual void endRoiEdit()                                     = 0;
-    virtual void reportDiagnostic(const ApplicationDiagnostic &diagnostic) = 0;
-    virtual void reportFailure(const std::exception &error, const QString &summary) = 0;
+    virtual QVariantMap portContext(PortId port) const                                     = 0;
+    virtual void        deliverText(const QString &text)                                   = 0;
+    virtual void        resultsChanged()                                                   = 0;
+    virtual void        runtimeChanged()                                                   = 0;
+    virtual void        endRoiEdit()                                                       = 0;
+    virtual void        reportDiagnostic(const ApplicationDiagnostic &diagnostic)          = 0;
+    virtual void        reportFailure(const std::exception &error, const QString &summary) = 0;
 };
 
 // Owns everything the workbench presents for the runtime: node snapshots and role diagnostics, the
@@ -68,28 +68,45 @@ public:
     ResultPresentation(const ResultPresentation &)            = delete;
     ResultPresentation &operator=(const ResultPresentation &) = delete;
 
-    void setRuntime(RuntimeEngine *runtime) noexcept { runtime_ = runtime; }
+    void setRuntime(RuntimeEngine *runtime) noexcept
+    {
+        runtime_ = runtime;
+    }
+
     // The training view owns the viewport while it is open. Result polling keeps filling the output
     // table, but must not replace the reference picture or the rectangles the user is editing.
     void setSuspended(bool value);
-    void setGeneration(std::uint64_t generation) noexcept { generation_ = generation; }
+
+    void setGeneration(std::uint64_t generation) noexcept
+    {
+        generation_ = generation;
+    }
+
     // Release completion is part of the drain condition; the controller forwards its helper state.
-    void setExternalBusy(std::function<bool()> busy) { externalBusy_ = std::move(busy); }
+    void setExternalBusy(std::function<bool()> busy)
+    {
+        externalBusy_ = std::move(busy);
+    }
 
     // --- snapshots and node roles -------------------------------------------------------------
-    const ResultSlot::Snapshot *snapshot(NodeId node) const;
+    const ResultSlot::Snapshot   *snapshot(NodeId node) const;
     // Shared owner for consumers that keep the snapshot (assist contexts), never a deep copy.
-    ResultSlot::Snapshot        sharedSnapshot(NodeId node) const;
-    bool                        active(NodeId node) const;
+    ResultSlot::Snapshot          sharedSnapshot(NodeId node) const;
+    bool                          active(NodeId node) const;
     std::optional<NodeDiagnostic> status(const NodeDefinition &node) const;
-    std::size_t                 snapshotCount() const noexcept { return snapshots_.size(); }
-    const NodeDiagnostic       *lifecycle(NodeId node) const;
+
+    std::size_t snapshotCount() const noexcept
+    {
+        return snapshots_.size();
+    }
+
+    const NodeDiagnostic                 *lifecycle(NodeId node) const;
     // Shared owner for consumers that pass the diagnostic into the output model.
     std::shared_ptr<const NodeDiagnostic> lifecycleShared(NodeId node) const;
-    const NodeDiagnostic       *instance(NodeId node) const;
-    ResultSlot::Snapshot        displaySnapshot(const NodeDefinition &node) const;
+    const NodeDiagnostic                 *instance(NodeId node) const;
+    ResultSlot::Snapshot                  displaySnapshot(const NodeDefinition &node) const;
     // The bound value of an input, read through this module's snapshots. One lookup, no second copy.
-    const PortValue *resolvedInput(const NodeDefinition &node, PortId input) const;
+    const PortValue                      *resolvedInput(const NodeDefinition &node, PortId input) const;
 
     // One polled node. Returns true when its visible role or result changed.
     bool applyNode(NodeId node, bool active, const std::shared_ptr<const NodeDiagnostic> &lifecycle,
@@ -102,7 +119,12 @@ public:
     // Keeps only nodes that still exist in the committed project.
     void retain(const std::set<NodeId> &existing);
     void clear();
-    void clearActive() noexcept { active_.clear(); }
+
+    void clearActive() noexcept
+    {
+        active_.clear();
+    }
+
     // Drops every presented image/row; the next update repopulates them.
     void clearDisplay();
 
@@ -122,7 +144,7 @@ public:
     bool         setImageIndex(int index);
     bool         setImageOutput(const QString &output);
     // Restores the pre-edit index without the user-command guards; the ROI session owns that rule.
-    void restoreImageIndex(int index);
+    void         restoreImageIndex(int index);
 
     // --- text and readback --------------------------------------------------------------------
     bool readsAllowed() const;
@@ -136,7 +158,11 @@ public:
     void finishDrain();
     void drainReaders();
     bool drainReady() const;
-    bool draining() const noexcept { return draining_; }
+
+    bool draining() const noexcept
+    {
+        return draining_;
+    }
 
 private:
     struct TextResult
@@ -155,7 +181,7 @@ private:
         std::exception_ptr        error;
     };
 
-    void             consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
+    void consumeTextMailbox(std::shared_ptr<TextMailbox> mailbox);
 
     // One entry per real Image port the workbench may present. Visible ports come first; an ROI
     // session also names its own background input so the session stays selectable when that port is
@@ -165,49 +191,51 @@ private:
         PortRef ref;
         QString name;
     };
+
     std::vector<ImageChoice> imageChoices() const;
     // Keeps the panel on a real image: a node without a usable selection adopts the first offered
     // port that already carries images, so switching nodes never lands on an empty canvas.
-    void ensureImageSelection(const NodeDefinition &node, const ResultSlot::Snapshot &snapshot);
+    void                     ensureImageSelection(const NodeDefinition &node, const ResultSlot::Snapshot &snapshot);
 
     PresentationHost &host_;
     OutputModel      &outputs_;
     RoiEditSession   &roi_;
-    DisplayConverter converter_;
-    RuntimeEngine   *runtime_ = nullptr;
+    DisplayConverter  converter_;
+    RuntimeEngine    *runtime_ = nullptr;
 
     std::map<NodeId, ResultSlot::Snapshot>                  snapshots_;
     std::set<NodeId>                                        active_;
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> lifecycle_;
     std::map<NodeId, std::shared_ptr<const NodeDiagnostic>> instances_;
 
-    std::optional<PortRef> imageSelection_;
+    std::optional<PortRef>               imageSelection_;
     // The node the current selection was made for. A node that has never been shown picks its first
     // offered image; a port that disappeared is replaced by the first one still carrying images
     // instead of leaving the viewport empty. Both are optional: node 0 is a real node, so 0 cannot
     // mean "none".
-    std::optional<NodeId> selectionNode_;
-    int      index_    = 0;
-    int      count_    = 0;
-    std::optional<NodeId> displayed_;
-    quint64  displayRequest_ = 0;
-    RegionGroup                  displayInputs_;
-    RegionGroup                  displayOutputs_;
-    std::optional<RoiEditTarget> displayRoiTarget_;
-    bool                         suspended_ = false;
+    std::optional<NodeId>                selectionNode_;
+    int                                  index_ = 0;
+    int                                  count_ = 0;
+    std::optional<NodeId>                displayed_;
+    quint64                              displayRequest_ = 0;
+    RegionGroup                          displayInputs_;
+    std::vector<RoiEditTarget>           displayInputTargets_;
+    RegionGroup                          displayOutputs_;
+    std::optional<RoiEditTarget>         displayRoiTarget_;
+    bool                                 suspended_ = false;
     QPointer<ImageViewport>              viewport_;
     std::vector<QPointer<ImageViewport>> thumbnails_;
     std::vector<QPointer<ImageViewport>> displayTargets_;
 
-    std::deque<QVariantMap>            readRequests_;
-    std::optional<RuntimeReadback>     readback_;
-    std::future<void>                  textTask_;
-    std::shared_ptr<TextMailbox>       textMailbox_;
-    std::atomic<int>                   textPending_{0};
-    bool                               draining_ = false;
-    std::function<void()>              drainContinuation_;
-    std::function<bool()>              externalBusy_;
-    std::uint64_t                      generation_ = 1;
+    std::deque<QVariantMap>        readRequests_;
+    std::optional<RuntimeReadback> readback_;
+    std::future<void>              textTask_;
+    std::shared_ptr<TextMailbox>   textMailbox_;
+    std::atomic<int>               textPending_{0};
+    bool                           draining_ = false;
+    std::function<void()>          drainContinuation_;
+    std::function<bool()>          externalBusy_;
+    std::uint64_t                  generation_ = 1;
 };
 
 } // namespace visionrt

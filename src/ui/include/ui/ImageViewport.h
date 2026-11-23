@@ -1,16 +1,16 @@
 #pragma once
 
-#include "ui/Export.h"
-
+#include "core/ToolDefinition.h"
 #include "ui/DisplayConverter.h"
+#include "ui/Export.h"
 
 #include <QPointF>
 #include <QQuickItem>
+#include <QQuickPaintedItem>
 #include <QSize>
 #include <QTransform>
+#include <limits>
 #include <optional>
-#include "core/ToolDefinition.h"
-
 #include <string>
 #include <vector>
 
@@ -26,12 +26,12 @@ enum class RoiTargetKind
 
 struct RoiEditTarget
 {
-    std::uint64_t nodeSeq = 0;
+    std::uint64_t nodeSeq     = 0;
     PortId        inputPortId = 0;
-    int           imageIndex = 0;
-    int           roiIndex   = -1; // -1 appends a new ROI; existing edits/deletion use an index.
-    std::uint64_t session = 0;
-    RoiTargetKind kind    = RoiTargetKind::Input;
+    int           imageIndex  = 0;
+    int           roiIndex    = -1; // -1 appends a new ROI; existing edits/deletion use an index.
+    std::uint64_t session     = 0;
+    RoiTargetKind kind        = RoiTargetKind::Input;
     bool          operator==(const RoiEditTarget &) const = default;
 };
 
@@ -47,24 +47,20 @@ class VISIONRT_UI_API ImageViewport : public QQuickItem
     Q_PROPERTY(int drawShape READ drawShape WRITE setDrawShape NOTIFY drawShapeChanged)
     Q_PROPERTY(int selectedRoi READ selectedRoi NOTIFY selectedRoiChanged)
     Q_PROPERTY(bool assistActive READ assistActive WRITE setAssistActive NOTIFY assistActiveChanged)
-    // Display-only style snapshot pushed from the theme. It never changes ROI geometry, business
-    // coordinates or the rendered image data.
-    Q_PROPERTY(QColor inputRoiColor READ inputRoiColor WRITE setInputRoiColor NOTIFY styleChanged)
-    Q_PROPERTY(QColor outputRoiColor READ outputRoiColor WRITE setOutputRoiColor NOTIFY styleChanged)
-    Q_PROPERTY(QColor assistRoiColor READ assistRoiColor WRITE setAssistRoiColor NOTIFY styleChanged)
-    Q_PROPERTY(qreal roiStrokeWidth READ roiStrokeWidth WRITE setRoiStrokeWidth NOTIFY styleChanged)
-    Q_PROPERTY(qreal roiHandleSize READ roiHandleSize WRITE setRoiHandleSize NOTIFY styleChanged)
+    Q_PROPERTY(QString pixelText READ pixelText NOTIFY pixelProbeChanged)
+    Q_PROPERTY(QPointF pointerPosition READ pointerPosition NOTIFY pixelProbeChanged)
 public:
     enum DrawShape
     {
-        DrawNone = 0,
-        DrawLine = 1,
+        DrawNone      = 0,
+        DrawLine      = 1,
         DrawRectangle = 2,
-        DrawCircle = 3,
-        DrawPolygon = 4,
-        DrawPoint = 5
+        DrawCircle    = 3,
+        DrawPolygon   = 4,
+        DrawPoint     = 5
     };
     Q_ENUM(DrawShape)
+
     enum ViewMode
     {
         Contain,
@@ -78,15 +74,34 @@ public:
 
     // All methods belong to the GUI thread. Request ids increase within a generation.
     // For a shared converter serving the main view and all visible thumbnails.
-    void setDisplayFrame(const DisplayFrame &frame);
-    void clearImage(quint64 requestId);
+    void    setDisplayFrame(const DisplayFrame &frame);
+    void    clearImage(quint64 requestId);
     // Shows a host-owned picture (the selected training record) without consuming the result
     // pipeline's request identity; the next result frame replaces it in the ordinary way.
-    void setHostImage(const QImage &image);
+    void    setHostFrame(const DisplayFrame &frame);
+    QString pixelTextAt(QPointF itemPoint) const;
+
+    QString pixelText() const
+    {
+        return pixelText_;
+    }
+
+    QPointF pointerPosition() const
+    {
+        return pointerPosition_;
+    }
+
     // The full-resolution picture on screen. Training saves exactly these pixels, never a thumbnail.
-    QImage displayedImage() const { return display_; }
+    QImage displayedImage() const
+    {
+        return display_;
+    }
+
     void setGeneration(quint64 generation);
-    void setOverlays(RegionGroup inputs, RegionGroup outputs);
+    void setOverlays(RegionGroup inputs, RegionGroup outputs, std::vector<RoiEditTarget> targets = {});
+    void selectRegion(int index);
+    void previewGeometry(const RegionGroup &regions);
+    void inspectInputRegion(const EncodedRegion &region);
     // Caller freezes the matching background and performs the project edit command.
     void beginRoiEdit(RoiEditTarget target, RegionGroup targetRois, bool readOnly = false,
                       bool singleRectangle = false);
@@ -116,6 +131,11 @@ public:
         return target_.has_value();
     }
 
+    const std::optional<RoiEditTarget> &editTarget() const noexcept
+    {
+        return target_;
+    }
+
     bool singleRectangle() const noexcept
     {
         return singleRectangle_;
@@ -127,17 +147,6 @@ public:
     }
 
     void setReadOnly(bool value);
-
-    QColor inputRoiColor() const { return inputRoiColor_; }
-    QColor outputRoiColor() const { return outputRoiColor_; }
-    QColor assistRoiColor() const { return assistRoiColor_; }
-    qreal  roiStrokeWidth() const { return roiStrokeWidth_; }
-    qreal  roiHandleSize() const { return roiHandleSize_; }
-    void   setInputRoiColor(const QColor &color);
-    void   setOutputRoiColor(const QColor &color);
-    void   setAssistRoiColor(const QColor &color);
-    void   setRoiStrokeWidth(qreal width);
-    void   setRoiHandleSize(qreal size);
 
     int drawShape() const noexcept
     {
@@ -183,7 +192,7 @@ public:
     Q_INVOKABLE void deleteSelectedRoi();
 
 signals:
-    void styleChanged();
+    void pixelProbeChanged();
     void imageChanged();
     void statusTextChanged();
     void transformChanged();
@@ -200,9 +209,11 @@ signals:
     void assistCanceled();
     void contextMenuRequested(const QPointF &position);
     void roiCommitted(const visionrt::RoiEditTarget &target, const visionrt::EncodedRegion &roi);
+    void roiDraftChanged(const visionrt::RoiEditTarget &target, const visionrt::EncodedRegion &roi);
+    void roiDraftCanceled();
     void roiDeleted(const visionrt::RoiEditTarget &target);
     void roiEditCanceled();
-    void roiSelected(int index, QPointF point);
+    void roiSelected(const visionrt::RoiEditTarget &target);
 
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
@@ -220,6 +231,7 @@ protected:
     bool     event(QEvent *event) override;
 
 private:
+    friend class RoiOverlay;
     enum class Gesture
     {
         None,
@@ -230,59 +242,64 @@ private:
         Vertices,
         Assist
     };
-    void                 applyFrame(const DisplayFrame &frame);
-    void                 recalculateFit();
-    void                 transformUpdated();
-    void                 zoomAt(double factor, QPointF itemPoint);
-    void                 selectRoi(int index);
-    bool                 canEdit() const;
-    void                 changeDraft(QPointF imagePoint);
+    void                         applyFrame(const DisplayFrame &frame);
+    void                         recalculateFit();
+    void                         transformUpdated();
+    void                         zoomAt(double factor, QPointF itemPoint);
+    void                         selectRoi(int index);
+    bool                         canEdit() const;
+    void                         changeDraft(QPointF imagePoint);
     std::optional<EncodedRegion> completedDraft() const;
-    std::vector<QPointF>                       handles(const EncodedRegion &roi) const;
-    int                  hitRoi(QPointF imagePoint) const;
-    void                 commitDraft();
-    void                 clearGesture();
-    void                 setStatus(QString text);
-    void                 updateCursor();
-    void                 overlaysUpdated();
+    std::vector<QPointF>         handles(const EncodedRegion &roi) const;
+    int                          hitRoi(QPointF imagePoint) const;
+    void                         commitDraft();
+    void                         clearGesture();
+    void                         setStatus(QString text);
+    void                         updateCursor();
+    void                         overlaysUpdated();
+    void                         updatePixelProbe();
+    QQuickPaintedItem           *overlay_ = nullptr;
+    std::vector<RoiEditTarget>   inputTargets_;
+    quint64                      uploadedRevision_   = std::numeric_limits<quint64>::max();
+    qint64                       uploadedTextureKey_ = 0;
 
-    QMetaObject::Connection           windowActiveConnection_;
-    QImage                            display_;
-    QSize                             imageSize_;
-    QString                           statusText_;
-    quint64                           generation_      = 0;
-    quint64                           requestId_       = 0;
-    quint64                           textureRevision_ = 0;
-    quint64                           overlayRevision_ = 0;
-    bool                              requested_       = false;
-    bool                              firstImage_      = true;
-    ViewMode                          mode_            = Contain;
-    double                            scale_           = 1;
-    QPointF                           center_;
-    RegionGroup                            inputs_;
-    RegionGroup                            outputs_;
-    RegionGroup                            editable_;
-    ROI                                        assistPreview_;
-    bool                                       assistActive_    = false;
-    std::optional<RoiEditTarget>      target_;
-    bool                                       singleRectangle_ = false;
-    bool                              readOnly_  = true;
-    QColor                            inputRoiColor_{255, 220, 0};
-    QColor                            outputRoiColor_{0, 120, 255};
-    QColor                            assistRoiColor_{0, 190, 190};
-    qreal                             roiStrokeWidth_ = 1.8;
-    qreal                             roiHandleSize_  = 3.5;
-    int                               drawShape_ = DrawNone;
-    int                               selected_  = -1;
-    Gesture                           gesture_   = Gesture::None;
-    Qt::MouseButton                   panButton_ = Qt::NoButton;
-    QPointF                           anchor_;
-    QPointF                           lastPointer_;
-    int                               handle_ = -1;
+    QMetaObject::Connection      windowActiveConnection_;
+    QImage                       display_;
+    int                          sourceType_    = -1;
+    bool                         pointerInside_ = false;
+    QPointF                      pointerPosition_;
+    QString                      pixelText_;
+    QSize                        imageSize_;
+    QString                      statusText_;
+    quint64                      generation_      = 0;
+    quint64                      requestId_       = 0;
+    quint64                      textureRevision_ = 0;
+    bool                         requested_       = false;
+    bool                         firstImage_      = true;
+    ViewMode                     mode_            = Contain;
+    double                       scale_           = 1;
+    QPointF                      center_;
+    RegionGroup                  inputs_;
+    RegionGroup                  outputs_;
+    RegionGroup                  editable_;
+    ROI                          assistPreview_;
+    bool                         assistActive_ = false;
+    std::optional<RoiEditTarget> target_;
+    bool                         singleRectangle_ = false;
+    bool                         readOnly_        = true;
+    int                          drawShape_       = DrawNone;
+    int                          selected_        = -1;
+    Gesture                      gesture_         = Gesture::None;
+    Qt::MouseButton              panButton_       = Qt::NoButton;
+    QPointF                      anchor_;
+    QTransform                   gestureInverse_;
+    QPointF                      lastPointer_;
+    int                          handle_ = -1;
     std::optional<EncodedRegion> original_;
     std::optional<EncodedRegion> draft_;
-    std::vector<QPointF>              vertices_;
-    bool                              draftChanged_ = false;
+    std::optional<EncodedRegion> inspectedInput_;
+    std::vector<QPointF>         vertices_;
+    bool                         draftChanged_ = false;
 };
 
 } // namespace visionrt

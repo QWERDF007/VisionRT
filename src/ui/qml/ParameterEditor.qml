@@ -572,7 +572,7 @@ ColumnLayout {
             readonly property bool isDrawing: app.activeRoiParameter === root.parameter.id && app.activeRoiShape > 0
 
             leadingActionIcon: QuiFontIcon.RectangularClipping
-            leadingActionText: isDrawing ? "正在绘制..." : "画矩形"
+            leadingActionText: isDrawing ? "正在绘制..." : ({1:"画线",2:"画矩形",3:"画圆",4:"画多边形",5:"画点"})[root.parameter.roiDrawShape || RoiDrawShape.DrawRectangle]
             leadingActionActive: isDrawing
 
             actionIcon: hasRois ? QuiFontIcon.Clear : 0
@@ -582,7 +582,7 @@ ColumnLayout {
                 if (isDrawing) {
                     app.endRoiPreview();
                 } else {
-                    app.startRoiDraw(root.parameter.id, RoiDrawShape.DrawRectangle);
+                    app.startRoiDraw(root.parameter.id, root.parameter.roiDrawShape || RoiDrawShape.DrawRectangle);
                 }
             }
             onActionRequested: app.clearRoi(root.parameter.id)

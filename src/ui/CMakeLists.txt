@@ -36,6 +36,8 @@ visionrt_add_module(ui SOURCES
     OutputModel.cpp
     Diagnostics.cpp
     ImageViewport.cpp
+    ImageViewportRoi.cpp
+    RoiOverlay.cpp
     PUBLIC_LIBRARIES visionrt_runtime visionrt_python visionrt_plugins visionrt_tools visionrt_log
         Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 quickui::quickui
     PRIVATE_LIBRARIES visionrt_avoid)

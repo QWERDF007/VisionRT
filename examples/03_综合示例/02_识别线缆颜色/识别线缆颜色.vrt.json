@@ -146,7 +146,7 @@
           "node_seq": "2",
           "tool_id": "AlignStraightBorders",
           "tool_name_snapshot": "通过直边确定对齐",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "直边对齐",
           "pos": [
             0,
@@ -198,6 +198,12 @@
                 "type": {
                   "type": 1
                 }
+              },
+              {
+                "port_id": 6,
+                "type": {
+                  "type": 6
+                }
               }
             ],
             "outputs": [
@@ -223,12 +229,6 @@
               },
               {
                 "port_id": 3,
-                "type": {
-                  "type": 6
-                }
-              },
-              {
-                "port_id": 4,
                 "type": {
                   "type": 6
                 }
@@ -264,6 +264,30 @@
               "port_id": 5,
               "mode": 0,
               "literal": 0.4
+            },
+            {
+              "literal": [
+                [
+                  [
+                    2,
+                    1118.802,
+                    1592.07,
+                    462.396,
+                    44,
+                    5.8351
+                  ],
+                  [
+                    2,
+                    1593.603,
+                    1128,
+                    905.068,
+                    44,
+                    96.0662
+                  ]
+                ]
+              ],
+              "mode": 0,
+              "port_id": 6
             }
           ]
         },
@@ -271,7 +295,7 @@
           "node_seq": "3",
           "tool_id": "RecognizeColor",
           "tool_name_snapshot": "识别颜色",
-          "tool_version_snapshot": "1.0.0",
+          "tool_version_snapshot": "2.0.0",
           "alias": "识别五芯颜色",
           "pos": [
             0,
@@ -338,12 +362,6 @@
                 "port_id": 1,
                 "type": {
                   "type": 3
-                }
-              },
-              {
-                "port_id": 2,
-                "type": {
-                  "type": 4
                 }
               },
               {

@@ -401,7 +401,7 @@ void AppController::Impl::showTrainingDraftRecord()
     if (index < 0 || index >= static_cast<int>(records.size()))
     {
         viewport->endRoiEdit();
-        viewport->setHostImage(QImage{});
+        viewport->setHostFrame({});
         trainingAssistImage = {};
         return;
     }
@@ -417,14 +417,14 @@ void AppController::Impl::showTrainingDraftRecord()
                           QStringLiteral("无法显示训练图：%1")
                               .arg(frame.error.isEmpty() ? QStringLiteral("草稿中没有这张原图") : frame.error));
         viewport->endRoiEdit();
-        viewport->setHostImage(QImage{});
+        viewport->setHostFrame({});
         trainingAssistImage = {};
         return;
     }
     // The assistant reads the same picture the user is pointing at; the stored frame stays the
     // trainer's source and this conversion only feeds the canvas.
     trainingAssistImage = stored->pixels;
-    viewport->setHostImage(frame.image);
+    viewport->setHostFrame(frame);
     viewport->fitContain();
     viewport->setDrawShape(0);
     // The record's rectangles are edited through the same ROI mechanism the processing view uses;
@@ -439,9 +439,43 @@ void AppController::Impl::seatTrainingRegions()
     const int index    = training->selected();
     if (!viewport || index < 0 || index >= static_cast<int>(training->records().size()))
         return;
-    viewport->beginRoiEdit(RoiEditTarget{training->node(), training->spec().records.roiField(), index, -1,
-                                         trainingSerial, RoiTargetKind::Training},
-                           training->regions(index), false, false);
+    if (const auto input = training->spec().regionInput; input != 0)
+    {
+        const auto *node        = currentNode();
+        const auto *declaration = parameter(input, false);
+        if (!node || !declaration)
+            return;
+        auto value = resolvedInput(*node, input);
+        if (isMissing(value))
+            value = DataRef<ROI>(ROI{});
+        RoiEditSession::Start start;
+        start.node       = node->id;
+        start.input      = input;
+        start.flow       = flow;
+        start.type       = declaration->type;
+        start.original   = node->inputs.at(input);
+        start.background = DataRef<Image>(Image{trainingAssistImage});
+        start.draft      = value;
+        start.view       = viewport->viewState();
+        roiSession.begin(std::move(start));
+        const auto &regions = std::get<DataRef<ROI>>(roiSession.draft()).get();
+        viewport->beginRoiEdit({node->id, input, 0, -1, roiSession.id()},
+                               regions.empty() ? RegionGroup{} : regions.front(),
+                               node->inputs.at(input).mode == BindingMode::Upstream);
+        return;
+    }
+    RoiEditSession::Start start;
+    start.node       = training->node();
+    start.kind       = RoiTargetKind::Training;
+    start.input      = training->spec().records.roiField();
+    start.flow       = flow;
+    start.type       = TypeSpec{Type::ROI};
+    start.background = DataRef<Image>(Image{trainingAssistImage});
+    start.draft      = DataRef<ROI>(ROI{training->regions(index)});
+    start.original   = {BindingMode::Literal, start.draft, {}};
+    start.view       = viewport->viewState();
+    roiSession.begin(std::move(start));
+    viewport->beginRoiEdit(roiSession.target(), training->regions(index), false, false);
 }
 
 void AppController::Impl::applyTrainingAssist(const AssistOutcome &outcome)
@@ -471,7 +505,19 @@ void AppController::Impl::applyTrainingAssist(const AssistOutcome &outcome)
                               + (outcome.quality.isEmpty() ? QStringLiteral("未找到有效目标") : outcome.quality));
         return;
     }
-    auto regions = training->regions(index);
+    const auto sharedInput = training->spec().regionInput;
+    auto       regions     = training->regions(index);
+    if (sharedInput != 0)
+    {
+        const auto value = resolvedInput(*currentNode(), sharedInput);
+        if (const auto *roi = std::get_if<DataRef<ROI>>(&value); roi && !roi->get().empty())
+            regions = roi->get().front();
+        if (currentNode()->inputs.at(sharedInput).mode == BindingMode::Upstream)
+        {
+            report(QStringLiteral("搜索区域由上游提供，请编辑上游工具"));
+            return;
+        }
+    }
     if (outcome.append)
     {
         // A declaration may cap the canvas field, so a click that would exceed the budget is
@@ -489,11 +535,14 @@ void AppController::Impl::applyTrainingAssist(const AssistOutcome &outcome)
     else
         regions = outcome.proposal.front();
     auto draft = *training;
-    draft.setRegions(index, std::move(regions));
+    if (sharedInput == 0)
+        draft.setRegions(index, regions);
     std::vector<LiteralWrite> writes;
+    if (sharedInput != 0)
+        writes.push_back({PortStage::Inputs, sharedInput, DataRef<ROI>(ROI{std::move(regions)})});
     for (const auto &mapping : parameterLocator()->parameters)
     {
-        const auto &value = outcome.outputs.at(mapping.sourcePort);
+        const auto &value  = outcome.outputs.at(mapping.sourcePort);
         const auto *target = parameter(mapping.target.id, mapping.target.stage == PortStage::Init);
         try
         {
@@ -536,9 +585,10 @@ void AppController::Impl::trainingEdited()
 
 void AppController::Impl::commitTrainingRoi(const RoiEditTarget &target, const EncodedRegion *value)
 {
-    if (!trainingMode || target.kind != RoiTargetKind::Training || target.session != trainingSerial
+    if (!trainingMode || target.kind != RoiTargetKind::Training || target.session != roiSession.id()
         || target.nodeSeq != training->node())
         return;
+    roiSession.cancelPreview();
     const int index = training->selected();
     if (index < 0 || index >= static_cast<int>(training->records().size()))
         return;
@@ -577,6 +627,7 @@ void AppController::Impl::leaveTraining()
     if (!trainingMode)
         return;
     clearTrainingFit();
+    roiSession.end();
     if (auto *viewport = presentation.viewport())
         viewport->endRoiEdit();
     presentation.setSuspended(false);

@@ -16,8 +16,7 @@
 
 using namespace visionrt;
 
-namespace
-{
+namespace {
 
 void require(bool condition, const std::string &message)
 {
@@ -54,9 +53,20 @@ struct FakeHost final : PresentationHost
     const FlowDefinition *flow = nullptr;
     const ToolDefinition *tool = nullptr;
 
-    const NodeDefinition *selectedNode() const override { return node; }
-    const FlowDefinition *currentFlow() const override { return flow; }
-    const ToolDefinition *effectiveTool() const override { return tool; }
+    const NodeDefinition *selectedNode() const override
+    {
+        return node;
+    }
+
+    const FlowDefinition *currentFlow() const override
+    {
+        return flow;
+    }
+
+    const ToolDefinition *effectiveTool() const override
+    {
+        return tool;
+    }
 
     const PortDefinition *parameter(PortId id, bool init) const override
     {
@@ -72,17 +82,43 @@ struct FakeHost final : PresentationHost
     {
         return nullptr;
     }
-    Availability toolAvailability(std::string_view) const override { return {ToolAvailability::Available, {}}; }
-    bool        runtimeIdle() const override { return true; }
-    bool        closing() const override { return false; }
-    bool        contextCurrent(const QVariantMap &) const override { return true; }
-    QVariantMap portContext(PortId) const override { return {}; }
-    void        deliverText(const QString &) override {}
-    void        resultsChanged() override {}
-    void        runtimeChanged() override {}
-    void        endRoiEdit() override {}
-    void        reportDiagnostic(const ApplicationDiagnostic &) override {}
-    void        reportFailure(const std::exception &, const QString &) override {}
+
+    Availability toolAvailability(std::string_view) const override
+    {
+        return {ToolAvailability::Available, {}};
+    }
+
+    bool runtimeIdle() const override
+    {
+        return true;
+    }
+
+    bool closing() const override
+    {
+        return false;
+    }
+
+    bool contextCurrent(const QVariantMap &) const override
+    {
+        return true;
+    }
+
+    QVariantMap portContext(PortId) const override
+    {
+        return {};
+    }
+
+    void deliverText(const QString &) override {}
+
+    void resultsChanged() override {}
+
+    void runtimeChanged() override {}
+
+    void endRoiEdit() override {}
+
+    void reportDiagnostic(const ApplicationDiagnostic &) override {}
+
+    void reportFailure(const std::exception &, const QString &) override {}
 };
 
 } // namespace
@@ -94,17 +130,23 @@ try
 
     // Two hidden inputs and one visible output, exactly the shape the specification names.
     ToolDefinition tool;
-    tool.nameEn  = "test.visibility";
-    tool.nameZh  = "可见性测试";
-    tool.kind    = ToolKind::PythonFunction;
-    tool.inputs  = {imagePort(1, "隐藏图像一", false), imagePort(2, "隐藏图像二", false), roiPort(3, "编辑区域", 1)};
+    tool.nameEn = "test.visibility";
+    tool.nameZh = "可见性测试";
+    tool.kind   = ToolKind::PythonFunction;
+    tool.inputs = {imagePort(1, "隐藏图像一", false), imagePort(2, "隐藏图像二", false), roiPort(3, "编辑区域", 1)};
     tool.outputs = {imagePort(2, "结果图像", true)};
 
     NodeDefinition node;
-    node.id     = 1;
-    node.toolId = tool.nameEn;
-    node.signatures.inputs  = {{1, TypeSpec{Type::Image}}, {2, TypeSpec{Type::Image}}, {3, TypeSpec{Type::ROI}}};
-    node.signatures.outputs = {{2, TypeSpec{Type::Image}}};
+    node.id                = 1;
+    node.toolId            = tool.nameEn;
+    node.signatures.inputs = {
+        {1, TypeSpec{Type::Image}},
+        {2, TypeSpec{Type::Image}},
+        {3,   TypeSpec{Type::ROI}}
+    };
+    node.signatures.outputs = {
+        {2, TypeSpec{Type::Image}}
+    };
 
     FlowDefinition flow;
     flow.id    = "flow_1";
@@ -115,14 +157,13 @@ try
     host.flow = &flow;
     host.tool = &tool;
 
-    ProjectEditor  editor;
-    RoiEditSession session(editor);
-    OutputModel    outputs;
+    ProjectEditor      editor;
+    RoiEditSession     session(editor);
+    OutputModel        outputs;
     ResultPresentation presentation(host, outputs, session, nullptr);
 
     // Nothing is offered while every image input is hidden: the selector lists the visible output only.
-    require(presentation.imageOutputs().size() == 1,
-            "hidden images entered the selector without an ROI session");
+    require(presentation.imageOutputs().size() == 1, "hidden images entered the selector without an ROI session");
     require(presentation.selectedImageOutput().isEmpty(), "an image was selected with nothing open");
 
     // The session edits input 3, whose background is the hidden image 1. Editing it is legitimate;
@@ -134,14 +175,14 @@ try
     start.type  = TypeSpec{Type::ROI};
     session.begin(start);
     require(session.active() && session.input() == 3, "the ROI session did not start on its declared input");
-    require(presentation.selectedImageOutput().isEmpty(),
-            "a hidden ROI background was reported as the selected image");
+    require(presentation.selectedImageOutput().isEmpty(), "a hidden ROI background was reported as the selected image");
     require(presentation.imageOutputs().size() == 1, "a hidden ROI background was listed as a candidate");
 
     // The author publishes the edited image: selector and reported image agree again.
     tool.inputs[0].imageVisible = true;
     const auto selected         = presentation.selectedImageOutput();
-    require(selected == QStringLiteral("inputs:1"), "a published ROI background was not reported: " + selected.toStdString());
+    require(selected == QStringLiteral("inputs:1"),
+            "a published ROI background was not reported: " + selected.toStdString());
     const auto choices = presentation.imageOutputs();
     require(choices.size() == 2, "the published ROI background did not join the selector");
     bool listed = false;
@@ -167,7 +208,9 @@ try
     presentation.setSuspended(true);
     QImage reference(13, 9, QImage::Format_RGB32);
     reference.fill(Qt::green);
-    viewport.setHostImage(reference);
+    DisplayFrame referenceFrame;
+    referenceFrame.image = reference;
+    viewport.setHostFrame(referenceFrame);
     require(QTest::qWaitFor([&] { return presentation.drainReady(); }, 3000), "processing conversion did not finish");
     require(viewport.displayedImage() == reference, "a queued processing frame replaced the training reference");
     presentation.setSuspended(false);

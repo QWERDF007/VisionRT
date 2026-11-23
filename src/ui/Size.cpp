@@ -15,7 +15,6 @@ VisionRTSize *VisionRTSize::create(QQmlEngine *, QJSEngine *)
     return instance;
 }
 
-
 VisionRTSize::VisionRTSize(QObject *parent)
     : QObject(parent)
 {
@@ -39,6 +38,19 @@ VisionRTSize::VisionRTSize(QObject *parent)
     ParamLabelWidth(120);
     Spacing(5);
     NavbarWidth(160);
+    ROICenterHandleSize(16);
+    ROIHandleSize(8);
+    ROIInputStrokeWidth(2);
+    ROIOutputStrokeWidth(1.5);
+    ROIGuideStrokeWidth(1);
+    ROIGuideOffset(10);
+    ROIRotationArrowSize(14);
+    ROIArrowHeadSize(6);
+    ROIHandleHitRadius(8);
+    ROIEdgeHitTolerance(6);
+    ROILabelOffset(12);
+    ROILabelHorizontalPadding(4);
+    ROILabelVerticalPadding(2);
 }
 
 } // namespace visionrt

@@ -1,7 +1,9 @@
 #include "WorkbenchFixtures.h"
+#include "core/ValueJson.h"
 #include "log/LogModel.h"
 #include "log/LogService.h"
 #include "ui/AppController.h"
+#include "ui/Color.h"
 #include "ui/ImageViewport.h"
 #include "ui/UiTypes.h"
 
@@ -152,19 +154,34 @@ try
     require(QTest::qWaitForWindowExposed(window), "workbench window was not exposed");
     auto *viewport = window->findChild<ImageViewport *>("imageViewport");
     require(viewport != nullptr, "training viewport is missing");
-    const auto   outputColor = viewport->outputRoiColor();
+    settle();
+    const auto focusBeforeProbe = window->activeFocusItem();
+    QTest::mouseMove(window, viewport->mapToScene(viewport->imageToItem({1500, 900})).toPoint(), 20);
+    auto *pixelTooltip = window->findChild<QObject *>("pixelTooltip");
+    require(pixelTooltip && QTest::qWaitFor([&] { return pixelTooltip->property("visible").toBool(); }, 3000),
+            "pixel tooltip did not appear on the real processing image");
+    require(viewport->pixelText().contains("R:") && window->activeFocusItem() == focusBeforeProbe,
+            "pixel tooltip lost raw colour values or stole focus");
+    window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/roi-workbench-tooltip.png"));
+    QTest::mouseMove(window, {1, 1}, 20);
+    require(QTest::qWaitFor([&] { return viewport->pixelText().isEmpty(); }, 1000),
+            "leaving the image retained a pixel reading");
+    const auto   outputColor = VisionRTColor::getInstance()->ROIOutput();
     const QColor processingMarker(255, 0, 255);
-    viewport->setOutputRoiColor(processingMarker);
+    VisionRTColor::getInstance()->setROIOutput(processingMarker);
     viewport->setOverlays({}, {makeCircle({300, 300}, 80)});
     const auto hasProcessingOverlay = [&]
     {
         auto capture = viewport->grabToImage();
         require(capture && QTest::qWaitFor([&] { return !capture->image().isNull(); }, 3000),
                 "the actual viewport could not be captured");
-        const auto image = capture->image();
-        for (int y = 0; y < image.height(); ++y)
-            for (int x = 0; x < image.width(); ++x)
-                if (image.pixelColor(x, y) == processingMarker)
+        const auto image    = capture->image();
+        const auto location = viewport->imageToItem({380, 300}) * (image.width() / viewport->width());
+        for (int y = std::max(0, qRound(location.y()) - 3); y < std::min(image.height(), qRound(location.y()) + 4); ++y)
+            for (int x = std::max(0, qRound(location.x()) - 3); x < std::min(image.width(), qRound(location.x()) + 4);
+                 ++x)
+                if (image.pixelColor(x, y).red() > 200 && image.pixelColor(x, y).blue() > 200
+                    && image.pixelColor(x, y).green() < 50)
                     return true;
         return false;
     };
@@ -177,7 +194,7 @@ try
                                  + " records=" + std::to_string(app.trainingRecords().size()) + " "
                                  + app.diagnostics().join(" | ").toStdString());
     require(!hasProcessingOverlay(), "processing overlays leaked onto the training reference image");
-    viewport->setOutputRoiColor(outputColor);
+    VisionRTColor::getInstance()->setROIOutput(outputColor);
     require(app.trainingParameters().isEmpty(), "business inputs were duplicated as training parameters");
     auto *apply = textButton(window->contentItem(), QStringLiteral("应用训练数据"));
     require(apply && apply->isVisible() && apply->isEnabled(), "apply button is not usable");
@@ -200,9 +217,25 @@ try
     require(fit != nullptr, "fit button is missing");
     QTest::mouseClick(window, Qt::LeftButton, {}, fit->mapToScene(fit->boundingRect().center()).toPoint());
     require(std::abs(viewport->zoom() - zoomBefore) < 1e-6, "toolbar fit did not restore the viewport");
+    const auto searchRegionCount = [&]
+    {
+        for (const auto &value : app.parameters())
+        {
+            const auto row = value.toMap();
+            if (!row.value("init").toBool() && row.value("id").toInt() == 6)
+            {
+                const auto groups
+                    = std::get<DataRef<ROI>>(ValueJson::parse(row.value("literal").toString(), {Type::ROI})).get();
+                return groups.empty() ? std::size_t{0} : groups.front().size();
+            }
+        }
+        return std::size_t{0};
+    };
     app.removeTrainingDraftRecord(app.selectedTrainingDraftRecord());
     app.setTrainingMode(false);
     app.setImageOutput("inputs:1");
+    settle();
+    require(app.clearRoi(6), "the shared runtime search input could not be cleared for point selection");
     settle();
     require(app.addTrainingImage(), "the reference frame could not start a new training record");
     settle();
@@ -217,12 +250,12 @@ try
     settle();
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                       viewport->mapToScene(viewport->imageToItem({1350, 1614})).toPoint());
-    require(QTest::qWaitFor([&] { return app.trainingRecords().front().toMap().value("regions").toInt() == 1; }, 5000),
+    require(QTest::qWaitFor([&] { return searchRegionCount() == 1; }, 5000),
             "straight-edge click did not replace the reference");
     settle();
     QTest::mouseClick(window, Qt::LeftButton, Qt::ControlModifier,
                       viewport->mapToScene(viewport->imageToItem({2046, 1150})).toPoint());
-    require(QTest::qWaitFor([&] { return app.trainingRecords().front().toMap().value("regions").toInt() == 2; }, 5000),
+    require(QTest::qWaitFor([&] { return searchRegionCount() == 2; }, 5000),
             "Ctrl-click did not add the second reference");
     settle();
     for (const auto &value : app.parameters())
@@ -352,6 +385,7 @@ try
     require(!app.trainingSavable(), "an unlabelled image without regions must not be applicable");
     app.applyTraining();
     require(app.trainingDirty(), ("failed apply discarded the draft: " + app.diagnostic().toStdString()).c_str());
+
     app.removeTrainingDraftRecord(app.selectedTrainingDraftRecord());
     app.applyTraining();
     settle();

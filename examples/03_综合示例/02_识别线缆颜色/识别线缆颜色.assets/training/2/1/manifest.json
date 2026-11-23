@@ -4,7 +4,7 @@
       "file": "models/edge-model.bin",
       "format": "visiontools.straight-edge-model",
       "id": "edge-model",
-      "version": 1
+      "version": 2
     }
   ],
   "images": [
@@ -16,28 +16,7 @@
   "parameters": {},
   "records": [
     {
-      "fields": {
-        "1": [
-          [
-            [
-              2,
-              1118.802,
-              1592.07,
-              462.396,
-              44,
-              5.8351
-            ],
-            [
-              2,
-              1593.603,
-              1128,
-              905.068,
-              44,
-              96.0662
-            ]
-          ]
-        ]
-      },
+      "fields": {},
       "id": "9e289c2b-e1b5-4090-b502-4ce3077a2e88",
       "image": 1
     }

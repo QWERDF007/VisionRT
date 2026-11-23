@@ -28,6 +28,9 @@
 - [通用主题颜色](../3rdparty/QuickUI/src/Color.cpp)、[字体属性](../3rdparty/QuickUI/src/Font.cpp)、[工作台滚动条](../src/ui/qml/WorkbenchScrollBar.qml)、[滚动容器](../src/ui/qml/BoundedScrollView.qml)、[训练字段编辑器](../src/ui/qml/TrainingValueEditor.qml)。
 - [下拉框属性](../3rdparty/QuickUI/src/controls/QuiComboBox.qml)、[分组下拉框](../3rdparty/QuickUI/src/controls/QuiGroupComboBox.qml)、[参数下拉框](../src/ui/qml/ParameterComboBox.qml)。
 - [值的中文类型](../src/ui/DisplayTypes.cpp)、[参数投影](../src/ui/AppControllerMetadata.cpp)、[完整输出数据](../src/ui/OutputModel.cpp)、[值编解码](../src/core/ValueJson.cpp)、[几何编辑验证](../tests/workbench_roi.cpp)、[输出数据验证](../tests/output_value_contract.cpp)。
+- [ROI 手势](../src/ui/ImageViewportRoi.cpp)、[装饰绘制](../src/ui/RoiOverlay.cpp)、[几何与命中](../src/ui/RoiGeometry.h)、[数值字段](../src/ui/qml/RoiGeometryEditor.qml)、[交互验证](../tests/roi_interaction_contract.cpp)。
+- [ROI 显示与焦点验证](../tests/workbench_roi_persistence_contract.cpp)、[输入和输出绘制验证](../tests/viewport_contract.cpp)。
+- [像素来源与显示转换](../src/ui/DisplayConverter.cpp)、[像素读取](../src/ui/ImageViewport.cpp)、[指针提示](../src/ui/qml/ResultsImageView.qml)、[像素验证](../tests/viewport_pixel_contract.cpp)、[实际窗口与截图验证](../tests/viewport_contract.cpp)。
 
 ## 构建与发行
 

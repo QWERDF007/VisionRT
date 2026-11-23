@@ -1,10 +1,11 @@
 #pragma once
 
-#include "ui/Export.h"
-#include <QColor>
-#include <QObject>
 #include "common/Singleton.h"
 #include "ui/Def.h"
+#include "ui/Export.h"
+
+#include <QColor>
+#include <QObject>
 
 namespace visionrt {
 class VISIONRT_UI_API VisionRTColor final : public QObject
@@ -17,9 +18,14 @@ class VISIONRT_UI_API VisionRTColor final : public QObject
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeLine)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeInputLine)
     VISIONRT_Q_PROPERTY_AUTO(QColor, NodeOutputLine)
-    VISIONRT_Q_PROPERTY_AUTO(QColor, InputROI)
-    VISIONRT_Q_PROPERTY_AUTO(QColor, OutputROI)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, ROIInput)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, ROIOutput)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, ROIGuide)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, ROICrosshair)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, ROILabelText)
+    VISIONRT_Q_PROPERTY_AUTO(QColor, ROIPreview)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROISelectionFillOpacity)
 private:
     explicit VisionRTColor(QObject *parent = nullptr);
 };
-}
+} // namespace visionrt

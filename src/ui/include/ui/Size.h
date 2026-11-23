@@ -1,9 +1,10 @@
 #pragma once
 
-#include "ui/Export.h"
-#include <QObject>
 #include "common/Singleton.h"
 #include "ui/Def.h"
+#include "ui/Export.h"
+
+#include <QObject>
 
 namespace visionrt {
 class VISIONRT_UI_API VisionRTSize final : public QObject
@@ -30,7 +31,20 @@ class VISIONRT_UI_API VisionRTSize final : public QObject
     VISIONRT_Q_PROPERTY_AUTO(int, ParamLabelWidth)
     VISIONRT_Q_PROPERTY_AUTO(int, Spacing)
     VISIONRT_Q_PROPERTY_AUTO(int, NavbarWidth)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROICenterHandleSize)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIHandleSize)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIInputStrokeWidth)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIOutputStrokeWidth)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIGuideStrokeWidth)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIGuideOffset)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIRotationArrowSize)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIArrowHeadSize)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIHandleHitRadius)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROIEdgeHitTolerance)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROILabelOffset)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROILabelHorizontalPadding)
+    VISIONRT_Q_PROPERTY_AUTO(qreal, ROILabelVerticalPadding)
 private:
     explicit VisionRTSize(QObject *parent = nullptr);
 };
-}
+} // namespace visionrt

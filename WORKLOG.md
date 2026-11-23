@@ -30,6 +30,49 @@
 - ...
 -->
 
+### 2026-11-23 — 输入 ROI 持久显示与交互归属
+
+**目标**
+- 修复绘制后的输入 ROI 在退出编辑、切换焦点或选择时消失，并按输入蓝色、输出紫色区分交互权限。
+
+**当前状态**
+- 已修复：输入底图的叠加不再依赖仅为同坐标输出图像采集的输入快照；实现入口为 src/ui/ResultPresentation.cpp。
+- 颜色和描边改由输入、输出归属决定，退选只淡出填充；输出不参与点击选中。统一样式与交互入口见 src/ui/RoiOverlay.cpp、ImageViewportRoi.cpp 及 include/ui/Color.h、Size.h。
+- 真实创建圆工具可在退出编辑、失焦和切换节点后继续显示、选中和编辑；现有上游显式复制规则保持一致。已重建 build/bin/VisionRT.exe，本次主仓提交包含此前 ROI 实现及本次修复。
+- 共享 Contracts 已提交为 a8db53c，两份检出已统一；VisionTools 已本地提交为 3d0cfaf。主仓固定同一 SDK 引用，各仓最终身份以 `git log -1` 为准。
+
+**验证证据**
+- `ctest --test-dir build -C Release -R '^workbench_roi_persistence_contract$' --output-on-failure` 修复前稳定报“committed ROI disappeared after leaving its editor”，见 build/roi-persistence-red.log、roi-persistence-probe.log；颜色和输出点击断言也先失败，见 build/roi-ownership-red.log。
+- 最终十项定向测试全部通过，涵盖视口、像素、手势、实际工作台焦点、输入编辑、训练与发布，见 build/roi-persistence-final.log、build/evidence/roi-persistence-final.xml。
+- `QT_SCALE_FACTOR=1` 和 `2` 下各两项真实渲染及工作台测试通过，见 build/evidence/roi-persistence-dpi-1.xml、roi-persistence-dpi-2.xml；截图 roi-persistence-focus-dpi-1.png 与 roi-output-click-dpi-1.png 已检查，分别确认失焦后蓝色输入保留、输出点击后仍为紫色且无编辑手柄。
+- 构建见 build/roi-ownership-fix-build.log、roi-persistence-validation-build.log、roi-persistence-final-build.log、roi-persistence-viewport-build.log；临时诊断代码及旧的活动/退选颜色属性已清除，`git diff --check` 通过。
+
+**下一步**
+- 运行 build/bin/VisionRT.exe 验收；显示与焦点测试入口见 docs/README.md。AOCI 对齐以本轮 terminal_proof 为准；需要远端交付时按 Contracts、VisionTools、宿主的顺序推送，本轮仅本地提交。
+
+### 2026-11-23 — ROI 工具、编辑画布与像素取值
+
+**目标**
+- 实施已确认的直边输入和模型归属、五个 ROI 创建工具、六处原图透传清理、参考页画布交互及原始像素提示。
+
+**当前状态**
+- VisionTools 实际源码位于 F:/Projects/VisionTools。五个创建工具已注册，支持无图像的结构化几何输出；直边运行读取 inputs.6，模型 v2 只存实测参考边，训练与运行共用近似平行判据；六处原图透传已移除。
+- Contracts 的 training.region_input 已同步两份检出，训练画布复用业务输入。宿主画布按图像显示、几何交互和叠加绘制拆分，使用统一样式、基于按下状态的手势和单一 ROI 草稿；数值字段实时预览，确认时一次提交，Esc 撤销。
+- 原始像素提示支持 Gray、RGB 和 BGR，保留来源类型；非 8 位或四通道图像仅显示坐标。随包工程更新端口与连线，线缆区域归 inputs.6，参考清单不再保存区域，模型资产为 v2。
+- 32 工具包已安装到 build/bin/tools-package；文档只索引源码和测试。两个父仓及 Contracts 改动尚未提交，跨工作区编辑临时文件仅在忽略的 build/visiontools-edit。
+- 真实 Qt 窗口的交互与截图已验收。原生桌面控制管道不可用；未操作 Windows 系统 DPI 设置，DPI 验证使用 Qt 有效缩放 1 和 2。
+
+**验证证据**
+- 真实失败用例覆盖运行搜索区域、创建工具注册、近似平行拒绝、声明区域引用和视口外像素提示；对应修正后均通过。
+- `tools/build.cmd cmake --build build --config Release` 的定向目标构建成功，见 build/roi-final-build.log；15 项定向测试全部通过，含 SDK 声明、实际创建工具、工作台编辑、训练发布、线缆五工位和已有 GPU 引擎推理，见 build/roi-final-tests.log、build/evidence/roi-final.xml。
+- VisionTools 的 test_recognition_contract、test_module_contract、test_preprocess_contract、test_geometry_contract 四项通过，见 build/evidence/roi-tools-final.xml。`package_tools.py --profile rtx40-build --allow-dirty --verify-runtime` 经真实宿主校验器接受 32 个声明，安装消费者实际执行全部 13 个 CPU 工具，见 build/roi-tools-package.log。
+- `QT_SCALE_FACTOR=1` 和 `2` 下各 4 项视口及工作台定向测试通过，见 build/evidence/roi-dpi-1.xml、roi-dpi-2.xml；三档缩放下单次和 1,000 次移动结果一致，圆参数草稿刷新实测 2 ms。
+- 已检查真实窗口截图 build/evidence/roi-rectangle.png、roi-line.png、roi-circles.png、roi-rectangle-dpi-1.png、roi-rectangle-dpi-2.png、roi-workbench-tooltip.png，包含固定大小手柄、数值同步、原始像素提示及焦点保持。
+- 两个父仓及两份 Contracts 检出的 `git diff --check --ignore-submodules` 均退出 0。
+
+**下一步**
+- 运行入口为 build/bin/VisionRT.exe，实现与验证入口见 docs/README.md；如需提交或推送，先提交共享 Contracts 并同步两父仓引用。AOCI 对齐证据以本次工具返回的 terminal_proof 为准；后续受管理内容改变时再维护。
+
 ### 2026-11-23 — 完整数据展示与点几何统一
 
 **目标**
