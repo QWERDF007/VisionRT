@@ -18,14 +18,17 @@ int main(int argc, char **argv)
         registry.registerPackage(visionrt::readToolsPackage(std::filesystem::u8path(argv[1])));
         visionrt::ProjectStorage storage(registry);
         std::size_t checked = 0;
-        for (const auto &file : std::filesystem::recursive_directory_iterator(std::filesystem::u8path(argv[2])))
+        for (auto file = std::filesystem::recursive_directory_iterator(std::filesystem::u8path(argv[2]));
+             file != std::filesystem::recursive_directory_iterator{}; ++file)
         {
-            if (!file.path().filename().generic_string().ends_with(".vrt.json"))
+            if (file.depth() == 2 && file->is_directory())
+                file.disable_recursion_pending();
+            if (file.depth() != 2 || !file->is_regular_file() || file->path().extension() != ".json")
                 continue;
-            const auto loaded = storage.load(file.path());
+            const auto loaded = storage.load(file->path());
             for (const auto &diagnostic : loaded.diagnostics)
                 if (diagnostic.code == visionrt::ProjectStorageCode::SchemaChanged)
-                    throw std::runtime_error(file.path().filename().string() + ": " + diagnostic.field
+                    throw std::runtime_error(file->path().filename().string() + ": " + diagnostic.field
                                              + " requires schema reconciliation");
             for (const auto &flow : loaded.project.flows)
                 for (const auto &node : flow.nodes)
@@ -34,7 +37,7 @@ int main(int argc, char **argv)
                     if (std::abs(static_cast<long long>(node.position.x) - anchor.x) > 4
                         || std::abs(static_cast<long long>(node.position.y) - anchor.y) > 4)
                         throw std::runtime_error(
-                            file.path().filename().string()
+                            file->path().filename().string()
                             + ": compact examples must use canvas grid cells, not pixel coordinates");
                     const auto *definition = registry.find(node.toolId);
                     if (!definition)
@@ -45,7 +48,7 @@ int main(int argc, char **argv)
                             return;
                         if (std::none_of(parameter.options.begin(), parameter.options.end(),
                                          [&](const auto &option) { return visionrt::equalValues(option, value); }))
-                            throw std::runtime_error(file.path().filename().string() + ": " + node.toolId + "."
+                            throw std::runtime_error(file->path().filename().string() + ": " + node.toolId + "."
                                                      + visionrt::portLabel(parameter.id) + " is not a declared option");
                         ++checked;
                     };

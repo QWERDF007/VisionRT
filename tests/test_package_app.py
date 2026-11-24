@@ -269,6 +269,28 @@ class ToolsDeploymentContract(unittest.TestCase):
         self.assertIn('"commit": "abc"', content)
 
 
+class ExampleProjectsContract(unittest.TestCase):
+    def test_json_projects_are_checked_without_reading_training_assets(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="visionrt-example-json-") as directory:
+            root = Path(directory)
+            sample = root / "03_综合示例" / "02_识别线缆颜色"
+            sample.mkdir(parents=True)
+            project = sample / "识别线缆颜色.json"
+            project.write_text(json.dumps({
+                "format_version": 8, "project": {"name": "识别线缆颜色"},
+                "flows": [{"image": "C:/outside/image.png"}],
+            }), encoding="utf-8")
+            assets = sample / "识别线缆颜色.assets" / "training"
+            assets.mkdir(parents=True)
+            (assets / "manifest.json").write_text(
+                '{"source": "C:/training/source.png"}', encoding="utf-8")
+
+            problems = package_app.example_project_problems(root)
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("识别线缆颜色.json", problems[0])
+            self.assertIn("C:/outside/image.png", problems[0])
+
+
 class InstallationContract(unittest.TestCase):
     def test_qt_deployment_prefers_the_selected_build(self) -> None:
         with tempfile.TemporaryDirectory(prefix="visionrt-qt-") as temporary:
@@ -358,7 +380,7 @@ class InstallationContract(unittest.TestCase):
             (root / "VisionRT.exe").write_text("old program", encoding="utf-8")
             (root / "scripts").mkdir()
             (root / "scripts" / "my_post_step.py").write_text("print('mine')", encoding="utf-8")
-            (root / "project.vrt.json").write_text('{"name": "mine"}', encoding="utf-8")
+            (root / "project.json").write_text('{"name": "mine"}', encoding="utf-8")
             (root / package_app.MANIFEST_FILE).write_text(
                 json.dumps({"schema_version": package_app.MANIFEST_SCHEMA_VERSION, "files": ["VisionRT.exe"]}),
                 encoding="utf-8")
@@ -368,7 +390,7 @@ class InstallationContract(unittest.TestCase):
             self.assertFalse((root / "VisionRT.exe").exists(), "the package did not replace its own file")
             self.assertEqual((root / "scripts" / "my_post_step.py").read_text(encoding="utf-8"), "print('mine')",
                              "an upgrade deleted a user script")
-            self.assertEqual((root / "project.vrt.json").read_text(encoding="utf-8"), '{"name": "mine"}',
+            self.assertEqual((root / "project.json").read_text(encoding="utf-8"), '{"name": "mine"}',
                              "an upgrade deleted a user project file")
 
     def test_clean_without_manifest_refuses_to_guess(self) -> None:

@@ -449,7 +449,7 @@ void roiParameterContract()
                             3000),
             "the selected input frame did not arrive");
     viewport.setDrawShape(2);
-    const auto project = directory.filePath("roi.vrt.json");
+    const auto project = directory.filePath("roi.json");
     require(app.save(project) && !app.dirty(), "ROI baseline could not be saved");
     require(QTest::qWaitFor([&] { return app.workspaceEnabled(); }, 5000), "saved ROI workspace did not settle");
     require(QTest::qWaitFor([&] { return !app.busy(); }, 5000), "saved project instances did not synchronize");

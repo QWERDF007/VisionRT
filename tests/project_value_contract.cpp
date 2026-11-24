@@ -243,7 +243,7 @@ void allValuesSurviveRealProjectFiles()
     ProjectEditor editor;
     editor.addNode("flow_1", *registry.find(tool.nameEn), {});
     auto           project  = editor.project();
-    const auto     filename = directory.filePath("完整 工程.vrt.json");
+    const auto     filename = directory.filePath("完整 工程.json");
     ProjectStorage storage(registry);
     storage.save(project, std::filesystem::path(filename.toStdWString()));
     require(!project.dirty, "successful project commit did not install saved identity");

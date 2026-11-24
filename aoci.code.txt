@@ -39,51 +39,51 @@ WriteBuildInfo.cmake[OV7S]: F:在构建完成阶段写入组件版本、Git身�
 check_git_workspace.py[XV6S]: F:用NUL分隔Git状态判定组件提交、分支及生产输入是否干净 | R:code:cmake/WriteBuildInfo.cmake | A:check_git_workspace,is_whitelisted | S:同时检查重命名前后路径与未跟踪文件；只豁免指定账本和文档路径，查询失败保留unknown
 
 ===/<repository>/docs/===
-README.md[SG7T]: F:索引共享契约、工作台数值和类型展示、ROI交互及构建验证入口 | R:code:WORKLOG.md,code:CMakePresets.json,code:src/ui/ValueDisplay.cpp,code:src/ui/DisplayTypes.cpp | A:- | S:只维护入口，运行证据归任务账本；实现事实指向源码，避免第二套定义
+README.md[SG7T]: F:索引共享契约、工程文件、工作台数值类型展示、ROI及构建验证入口 | R:code:WORKLOG.md,code:CMakePresets.json,code:src/ui/ValueDisplay.cpp,code:src/ui/DisplayTypes.cpp | A:- | S:只维护入口，运行证据归任务账本；实现事实指向源码，避免第二套定义
 
 ===/<repository>/examples/01_基础入门/01_图像读取/===
 README.md[SA3T]: F:说明双图批次读取示例的操作及预期索引与总数 | R:- | A:- | S:-
-图像读取.vrt.json[FA4S]: F:配置单节点ReadImage一次顺序读取两幅示例图片 | R:- | A:- | S:图像路径按产品资源目录解释
+图像读取.json[FA4S]: F:配置ReadImage顺序读取两幅示例图片并发布图像批次、索引和总数 | R:- | A:- | S:资源使用软件数据根下的示例相对路径
 
 ===/<repository>/examples/02_工具示例/01_ROI定位与裁剪/===
 README.md[SA3T]: F:索引亮条投影裁剪工程并说明输出尺寸及阈值调节的观察结果 | R:- | A:- | S:-
-ROI定位与裁剪.vrt.json[FA4M]: F:配置读图、亮条投影和裁剪，裁剪同时读取原始图像与投影ROI | R:- | A:- | S:-
+ROI定位与裁剪.json[FA4M]: F:配置读图、亮条投影与图像裁剪，裁剪同时读取原图和投影ROI | R:- | A:- | S:-
 
 ===/<repository>/examples/02_工具示例/02_图像预处理/===
 README.md[SA3T]: F:说明增益偏移与自适应二值化示例的调参效果 | R:- | A:- | S:-
-图像预处理.vrt.json[FA4M]: F:配置读图后调整亮度并执行自适应二值化的节点链 | R:- | A:- | S:-
+图像预处理.json[FA4M]: F:配置图像读取、增益偏移亮度调整和自适应二值化的节点链 | R:- | A:- | S:-
 
 ===/<repository>/examples/02_工具示例/03_圆测量/===
 README.md[SA3T]: F:说明圆ROI引导卡尺拟合及有效点参数的预期影响 | R:- | A:- | S:-
-圆测量.vrt.json[FA4L]: F:以标称圆ROI和64个卡尺配置读图后的圆测量，保留几何与测量输出 | R:- | A:- | S:-
+圆测量.json[FA4L]: F:配置读图后的圆ROI卡尺测量，使用标称圆及64个卡尺拟合圆形 | R:- | A:- | S:-
 
 ===/<repository>/examples/02_工具示例/04_行间距测量/===
 README.md[SA3T]: F:说明矩形区域内亮条宽度、间隙与节距测量 | R:- | A:- | S:-
-行间距测量.vrt.json[FA4L]: F:配置读图后在矩形ROI测量亮条并按宽度范围判定 | R:- | A:- | S:-
+行间距测量.json[FA4L]: F:配置读图后在矩形ROI内测量亮条宽度、间隙及节距并按宽度范围判定 | R:- | A:- | S:-
 
 ===/<repository>/examples/03_综合示例/01_多分支视觉检测/===
 README.md[SA3T]: F:说明同源图像分支裁剪二值化与圆测量的独立结果 | R:- | A:- | S:-
-多分支视觉检测.vrt.json[FA4L]: F:将原图分接投影裁剪二值化和圆拟合两条检测分支，裁剪读取投影几何 | R:- | A:- | S:-
+多分支视觉检测.json[FA4L]: F:将同一原图分接投影裁剪二值化与圆测量，裁剪区域取投影几何 | R:- | A:- | S:-
 
 ===/<repository>/examples/03_综合示例/02_识别线缆颜色/===
 README.md[SA5T]: F:索引线缆双边对齐与五工位识色的工程资产、训练交互、发布及真实结果验证 | R:code:tests/example_pipelines.cpp,code:tests/workbench_training_publish_contract.cpp | A:- | S:复制工程需携带资产目录
-识别线缆颜色.vrt.json[FA5L]: F:编排原图读取、直边对齐及五工位识色，独立保存训练参数和模型路径 | R:code:src/core/NodeContracts.cpp,code:src/ui/TrainingSession.cpp,code:tests/example_pipelines.cpp | A:- | S:训练搜索框在参考记录，运行搜索框在inputs.6；模型路径按工程目录解析
+识别线缆颜色.json[FA5L]: F:编排原图读取、双直边对齐与五工位识色，分别保存训练参数及模型引用 | R:code:tests/example_pipelines.cpp,code:src/ui/TrainingAssets.cpp | A:- | S:模型与训练修订使用工程内相对路径，复制工程需携带资产目录
 
 ===/<repository>/examples/04_扩展示例/01_Python图像统计/===
-Python图像统计.vrt.json[FA4L]: F:将读图结果分接ROI预处理和Python原图均值统计，图像消费者直接连接实际图像来源 | R:- | A:- | S:均值分支取裁剪前原图
+Python图像统计.json[FA4L]: F:将同源图像分接ROI裁剪和灰度二值化以及Python原图均值统计 | R:- | A:- | S:均值分支直接连接读图输出，取裁剪前原图
 README.md[SA3T]: F:说明Python图像均值示例的解释器前提与结果 | R:- | A:- | S:需要用户选择含NumPy的解释器
 
 ===/<repository>/examples/04_扩展示例/02_逻辑表达式与条件分支/===
 README.md[SA3T]: F:说明均值表达式、偏差与亮暗条件分支的调试方法 | R:- | A:- | S:逻辑节点也需要Python环境
-逻辑表达式与条件分支.vrt.json[FA4L]: F:配置图像均值与亮度阈值表达式并将布尔结果绑定条件分支 | R:- | A:- | S:-
+逻辑表达式与条件分支.json[FA4L]: F:配置读图、原图均值和亮度阈值表达式，并将布尔结果绑定到条件分支 | R:- | A:- | S:-
 
 ===/<repository>/examples/04_扩展示例/03_GPU目标检测/===
-GPU目标检测.vrt.json[FA4L]: F:配置YOLO权重建引擎、目标检测和结果过滤，过滤器复用读图源及检测业务输出 | R:- | A:- | S:依赖外部权重及GPU环境
+GPU目标检测.json[FA4L]: F:配置图像读取、YOLO推理及检测结果过滤，过滤器复用源图和检测输出 | R:- | A:- | S:需要额外准备图片、权重与GPU运行环境
 README.md[SA3T]: F:说明GPU示例的设备、图片、权重前提及首轮引擎构建 | R:- | A:- | S:此示例不属于免配置集合
 
 ===/<repository>/examples/04_扩展示例/04_错误诊断/===
 README.md[SR3T]: F:说明缺输入、缺模型与缺工具定义的预期失败示例 | R:- | A:- | S:失败是示例目的，不计成功运行示例
-错误诊断.vrt.json[FR4L]: F:配置空裁剪ROI、缺失YOLO引擎及未定义工具的诊断负例 | R:- | A:- | S:未定义工具流程默认不选中运行
+错误诊断.json[FR4L]: F:配置读图后缺少裁剪ROI、缺失YOLO模型和未定义工具的诊断负例 | R:- | A:- | S:这是预期失败工程，不属于成功运行集合
 
 ===/<repository>/examples/===
 README.md[SA5T]: F:索引CPU、Python、GPU与诊断示例及验证入口 | R:code:tests/example_pipelines.cpp,code:src/core/ExampleProject.cpp | A:- | S:安装示例按只读产品资源处理，修改应另存到用户目录
@@ -107,7 +107,7 @@ InputNormalizer.cpp[DD7S]: F:按端口类型、默认值、范围和选项归一
 ModuleIndex.cpp[IE6T]: F:解析工具包模块、定义路径、运行资源及工作台定位登记 | R:code:src/core/include/core/ModuleIndex.h,code:src/core/ToolIntegrations.cpp | A:parseModuleIndexJson,parseModuleIndexFile | S:索引版本独立于工具声明；拒绝越包路径、重复身份、未知模块引用及无工具模块
 NodeContracts.cpp[DD8M]: F:派生动态节点契约、跨节点输出类型和初始化参数，并独立解析训练模型引用 | R:code:src/core/include/core/NodeContracts.h,code:src/core/include/core/Project.h,code:src/core/ProjectStorage.cpp | A:nodeContract,nodeParameters,nodeModelReferences,resolveOutputTypes,setOutputDeclarations | S:动态输出整体解析后才发布并推进修订；动态端口保留Missing并统一分组；模型路径取工具级训练参数，相对路径按工程目录解析，不读取训练清单
 ProjectEditor.cpp[DW9L]: F:执行工程节点、绑定、表达式、训练参数和发布修订引用的受约束编辑事务 | R:code:src/core/include/core/ProjectEditor.h,code:src/core/NodeContracts.cpp,code:src/core/include/core/Project.h | A:ProjectEditor,setLiteralWrites,validateBinding,deriveEdges,effectiveSource | S:运行或管理期间禁改；全部目标、类型和修订上限校验后才准备训练资产，一次提交；布局移动不改执行修订，复制清理外部引用
-ProjectStorage.cpp[PD9L]: F:读写格式8工程，协调工具契约并独立持久化训练参数、类型签名和发布目录引用 | R:code:src/core/NodeContracts.cpp,code:src/core/ValueJsonDocument.cpp,code:src/core/include/core/Sequence.h | A:ProjectStorage::load,ProjectStorage::reconcile,ProjectStorage::save,projectDestination | S:节点序号用十进制文本；只将Tool级训练参数存入节点；训练目录在内存解析、工程内资产存相对引用；原子保存成功才替换工程状态，缺失定义保留原JSON
+ProjectStorage.cpp[PD9L]: F:读写格式8工程，协调工具契约并独立持久化训练参数、类型签名和发布目录引用 | R:code:src/core/NodeContracts.cpp,code:src/core/ValueJsonDocument.cpp,code:src/core/include/core/Sequence.h | A:ProjectStorage::load,ProjectStorage::reconcile,ProjectStorage::save,projectDestination | S:无扩展名默认补.json，保存和资产复制共用目的路径；节点序号用十进制文本；只将Tool级训练参数存入节点；工程内资产存相对引用；原子保存成功才替换工程状态，缺失定义保留原JSON
 ProjectValues.cpp[DD6T]: F:深拷贝工程字面量及节点的初始化参数、训练参数和输入绑定 | R:code:src/core/include/core/Project.h | A:copyProjectLiteral,copyNodeConfiguration | S:非空图像禁止作为工程字面量；Array克隆数据，ROI复制内容而非共享可变存储
 ToolDefinition.cpp[DC8L]: F:归一和校验统一端口、训练声明及分组页签，协调端口改型、删除和关联约束 | R:code:src/core/include/core/ToolDefinition.h,code:src/core/include/core/ToolPaths.h | A:normalizeToolDefinition,validateToolDefinition,retypePort,erasePort,nextFreePortId,toolTabs | S:阶段独立编号并统一注入宿主端口；训练必须恰有一个Record级画布ROI；模型产物唯一关联Tool级String训练路径参数和可由训练发布的String输出；叠加引用可由训练发布的ROI输出
 ToolIntegrations.cpp[IE7S]: F:共用读写检测和训练画布的定位算法、目标端口及参数建议登记 | R:code:src/core/include/core/ToolIntegrations.h,code:src/core/ModuleIndex.cpp,code:src/core/CustomToolStore.cpp | A:readToolIntegrations,writeToolIntegrations | S:登记独立于工具声明；目标明确分属input、init或train；省略limit表示精确匹配，未知字段和约束拒绝
@@ -299,7 +299,7 @@ FlowTabs.qml[IU4S]: F:显示可滚动流程页签并发出选择、新增、删�
 FlowToolbar.qml[IU5M]: F:提供节点搜索定位、执行流程选择和画布适应入口 | R:code:src/ui/AppController.cpp,code:src/ui/qml/WorkbenchScrollBar.qml | A:focusSearch,locateRequested,flowSelectionRequested | S:运行流程选择由控制器持有，工具栏仅发出请求
 IntegerParameterEditor.qml[IU5T]: F:以文本草稿编辑整数并把步进交给C++精确计算 | R:code:src/ui/AppControllerParameters.cpp | A:sync | S:拒绝后保留草稿，不用JS Number重算int64
 LogDialog.qml[IU5S]: F:展示可选择复制的日志文本与清空操作 | R:code:src/log/LogModel.cpp,code:src/ui/LogHighlighter.cpp,code:src/ui/qml/BoundedScrollView.qml | A:- | S:文本为PlainText，日志可见性驱动服务的窗口批量投递
-Main.qml[AU7L]: F:装配主窗口、菜单、工作台区域及工程和设置对话入口 | R:code:src/ui/qml/MainToolbar.qml,code:src/ui/qml/FlowCanvas.qml,code:src/ui/qml/ParameterPanel.qml,code:src/ui/qml/ResultsPanel.qml | A:saveProject | S:工程与执行行为委托app控制器，不在QML维护第二份业务状态
+Main.qml[AU7L]: F:装配主窗口、菜单、工作台区域及工程和设置对话入口 | R:code:src/ui/qml/MainToolbar.qml,code:src/ui/qml/FlowCanvas.qml,code:src/ui/qml/ParameterPanel.qml,code:src/ui/qml/ResultsPanel.qml | A:saveProject | S:工程对话框共用.json筛选，保存默认补json；工程和执行行为委托app控制器，不在QML维护第二份业务状态
 MainToolbar.qml[IU4S]: F:显示文件、设置、工具、帮助菜单及重置入口 | R:code:src/ui/qml/Main.qml | A:openFileMenu,openToolsMenu,resetRequested | S:-
 NodeDelegate.qml[IU5M]: F:渲染节点卡片状态、图标与选择框，传递指针交互及局部悬停位置 | R:code:src/ui/NodeListModel.cpp,code:src/ui/qml/FlowCanvas.qml | A:executeRequested,pointerPressed,pointerMoved,pointerReleased,hoverEntered,hoverExited | S:运行边框独立于选择层；悬停信号传节点局部坐标，画布负责空间转换
 OutputPanel.qml[IU6L]: F:展示当前训练或运行的共享输出表，提供结果复制和连接关系菜单 | R:code:src/ui/OutputModel.cpp,code:src/ui/AppControllerBindings.cpp,code:src/ui/qml/WorkbenchScrollBar.qml | A:showNameMenu,showDataMenu | S:标题取控制器当前结果阶段；复制在菜单关闭后读取，过期上下文或Missing不能生成伪数据
@@ -346,7 +346,7 @@ build.cmd[XV7M]: F:初始化MSVC x64环境并代理命令或编排配置、分�
 dependencies.json[FV6T]: F:集中声明Qt、OpenCV和开发Python的本机默认路径及部署模式 | R:code:cmake/ConfigDependencyDefaults.cmake,code:tools/dependency_utils.py | A:dependencies | S:Python默认值是构建依赖，不代表发行应用运行环境
 dependency_utils.py[XV6M]: F:共享严格JSON、依赖路径解析、文件链接与DLL配置筛选原语 | R:code:tools/dependencies.json | A:load_dependencies,resolve_dependency_root,link_file,link_dir,dll_matches_config | S:成对识别Debug与Release库，避免把名称尾部d误判为调试依赖
 link_dependencies.py[OV5M]: F:把开发依赖、Qt运行资源和工具包链接到构建bin目录 | R:code:tools/dependency_utils.py,code:tools/dependencies.json | A:link_external_dependencies,link_qt_runtime,link_tools | S:仅用于开发运行树，不等同可分发安装包
-package_app.py[OV8L]: F:生成并校验便携安装，部署工具ZIP、Qt与运行依赖并记录文件所有权 | R:code:tools/runtime_dependencies.py,code:tools/dependency_utils.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,main | S:清理只处理已验证的旧清单且保留用户目录；ZIP先暂存校验再替换；拒绝捆绑解释器及启动链导入CPython；校验成功才写正式安装清单
+package_app.py[OV8L]: F:生成并校验便携安装，部署工具ZIP、Qt、运行依赖和JSON示例并记录文件所有权 | R:code:tools/runtime_dependencies.py,code:tools/dependency_utils.py,code:tools/visionrt_validate_tool.cpp | A:InstallOwnership,deploy_tools_package,verify_package,example_project_problems,main | S:清理只处理已验证旧清单且保留用户目录；ZIP先暂存校验再替换；拒绝捆绑解释器及启动链导入CPython；校验成功才写安装清单；示例检查只读分类和示例两级目录中的JSON
 release_evidence.py[XV7M]: F:汇总双仓提交、Contracts身份、构建事实、包证据及解释器实际加载报告 | R:code:tools/package_app.py,code:src/main.cpp | A:audit,summarize_report,main | S:缺少必要场景、Contracts不同或实际NumPy与解释器越出所选环境时不标记complete并退出2；allow-dirty只能作本地核对
 runtime_dependencies.py[XV7S]: F:读取模块清单和PE导入表，计算随包依赖闭包与CPython启动链违规 | R:code:tools/package_app.py,code:cmake/AddModule.cmake | A:load_modules,runtime_closure,read_pe_imports,python_runtime_imports | S:同时读取普通和延迟导入；仅从宿主可达的链判断启动CPython，动态加载的桥接不自动算违规
 verify_ui_notifications.cjs[TU6T]: F:从CTest环境启动CDB取证静默通知、像素读取、视口销毁和训练写入调用 | R:code:tests/ui_notifications_contract.cpp,code:tests/viewport_lifetime_contract.cpp,code:tests/workbench_training_publish_contract.cpp | A:capture | S:要求Windows及匹配PDB；像素访问含负对照，草稿和拒绝阶段训练写入为零、成功发布一次，不能只看退出码

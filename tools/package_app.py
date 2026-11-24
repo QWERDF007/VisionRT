@@ -124,12 +124,12 @@ EXAMPLES_DIRECTORY = "examples"
 # without prerequisites. Packaging compares source and installation byte for byte, which cannot
 # notice a project that is missing from both sides, so the shipped set is stated here once.
 REQUIRED_EXAMPLE_PROJECTS = (
-    "01_基础入门/01_图像读取/图像读取.vrt.json",
-    "02_工具示例/01_ROI定位与裁剪/ROI定位与裁剪.vrt.json",
-    "02_工具示例/02_图像预处理/图像预处理.vrt.json",
-    "02_工具示例/03_圆测量/圆测量.vrt.json",
-    "02_工具示例/04_行间距测量/行间距测量.vrt.json",
-    "03_综合示例/01_多分支视觉检测/多分支视觉检测.vrt.json",
+    "01_基础入门/01_图像读取/图像读取.json",
+    "02_工具示例/01_ROI定位与裁剪/ROI定位与裁剪.json",
+    "02_工具示例/02_图像预处理/图像预处理.json",
+    "02_工具示例/03_圆测量/圆测量.json",
+    "02_工具示例/04_行间距测量/行间距测量.json",
+    "03_综合示例/01_多分支视觉检测/多分支视觉检测.json",
 )
 
 # A developer machine path in a shipped project is a broken example on every other machine.
@@ -564,7 +564,7 @@ def example_texts(value: object) -> Iterator[str]:
 def example_project_problems(source: Path) -> list[str]:
     """Each shipped project's resources use relative paths."""
     problems = []
-    for project in sorted(source.rglob("*.vrt.json")):
+    for project in sorted(source.glob("*/*/*.json")):
         relative = project.relative_to(source).as_posix()
         try:
             document = json.loads(project.read_text(encoding="utf-8"))

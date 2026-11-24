@@ -71,18 +71,18 @@ try
     const auto root     = std::filesystem::path(temporary.path().toStdWString()) / u8"安装 目录";
     const auto appDir   = root / "VisionRT";
     const auto examples = ExampleProject::directory(appDir);
-    const auto example  = examples / u8"01_基础入门" / u8"演示" / u8"演示.vrt.json";
+    const auto example  = examples / u8"01_基础入门" / u8"演示" / u8"演示.json";
     write(example.parent_path() / "images" / "input_01.png", "first-image-bytes");
 
     // Recognition is a prefix of the installed examples, never the source tree or a user folder.
     require(ExampleProject::owns(appDir, example), "installed example was not recognised");
-    require(!ExampleProject::owns(appDir, root / "用户" / "我的工程.vrt.json"),
+    require(!ExampleProject::owns(appDir, root / "用户" / "我的工程.json"),
             "a user project was mistaken for an installed example");
     require(!ExampleProject::owns(appDir, {}), "an unsaved project was reported as an installed example");
 
     // A copy of an example is an ordinary save: the literal travels unchanged, the resource stays in
     // the installation, and nothing is collected into the user folder behind the user's back.
-    const auto     userProject = root / u8"用户" / u8"我的工程.vrt.json";
+    const auto     userProject = root / u8"用户" / u8"我的工程.json";
     require(std::filesystem::create_directories(userProject.parent_path()), "cannot create the user folder");
     ProjectStorage storage(registry);
     auto           copied = exampleProject(example);
@@ -95,7 +95,7 @@ try
 
     // The controller rule: an installed example never writes itself, and its copy leaves the
     // installation as an ordinary project that saves in place again.
-    const auto installedProject = ExampleProject::directory(appDir) / u8"演示.vrt.json";
+    const auto installedProject = ExampleProject::directory(appDir) / u8"演示.json";
     write(installedProject,
           R"({"format_version":8,"project":{"name":"演示","next_node_seq":"1","next_flow_seq":"2"},)"
           R"("flows":[{"flow_id":"flow_1","name":"演示","run_selected":true,"nodes":[]}]})");
@@ -113,7 +113,7 @@ try
     require(!controller.save(), "Ctrl+S wrote an installed example");
     require(asked, "Ctrl+S did not ask for another location");
 
-    const auto copy = root / u8"用户" / u8"示例副本.vrt.json";
+    const auto copy = root / u8"用户" / u8"示例副本.json";
     require(controller.save(QString::fromStdWString(copy.wstring())), "saving the example elsewhere failed");
     require(std::filesystem::is_regular_file(copy), "the user copy was not written");
     require(read(installedProject) == before, "the installation changed while saving a copy");

@@ -40,7 +40,7 @@ void startupProjectContract()
         visionrt::testing::WorkbenchInstallation installation;
         visionrt::AppController                  app(1, installation.directory());
         require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "startup catalog did not become ready");
-        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
+        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
         app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         if (projectReadyBeforeWindow)
             require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
@@ -57,6 +57,25 @@ void startupProjectContract()
         require(window && QTest::qWaitForWindowExposed(window), "startup main window was not exposed");
         require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 20000),
                 "startup main window did not receive the real project");
+
+        int projectDialogs = 0;
+        for (auto *dialog : window->findChildren<QObject *>())
+        {
+            if (!dialog->property("nameFilters").isValid())
+                continue;
+            const auto title = dialog->property("title").toString();
+            if (title != QStringLiteral("打开工程") && title != QStringLiteral("打开示例")
+                && title != QStringLiteral("保存工程"))
+                continue;
+            require(dialog->property("nameFilters").toStringList()
+                        == QStringList{QStringLiteral("VisionRT 工程 (*.json)")},
+                    "project dialogs must offer the .json project format");
+            if (title == QStringLiteral("保存工程"))
+                require(dialog->property("defaultSuffix").toString() == QStringLiteral("json"),
+                        "saving without an extension must append only .json");
+            ++projectDialogs;
+        }
+        require(projectDialogs == 3, "open, example and save project dialogs must all be available");
 
         // Verify recent projects submenu is configured directly as a child QuiMenu in fileMenu,
         // with subMenu correctly bound so the secondary expansion arrow and hover menu operate.
@@ -141,7 +160,7 @@ void startupProjectContract()
         {
             QTemporaryDir directory;
             require(directory.isValid(), "project diagnostic directory is unavailable");
-            const auto badPath = directory.filePath(QStringLiteral("错误 工程.vrt.json"));
+            const auto badPath = directory.filePath(QStringLiteral("错误 工程.json"));
             QFile      badProject(badPath);
             require(badProject.open(QIODevice::WriteOnly), "cannot write malformed project fixture");
             require(badProject.write(R"json({
@@ -175,7 +194,7 @@ void startupProjectContract()
                     "the project failure has no log surface");
             require(window->grabWindow().save(QStringLiteral(VISIONRT_BINARY_DIR "/evidence/project_load_failure.png")),
                     "cannot capture project failure diagnostic");
-            QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
+            QFile example(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
             require(example.open(QIODevice::ReadOnly), "cannot read project warning fixture");
             auto document     = QJsonDocument::fromJson(example.readAll()).object();
             auto projectFlows = document.value("flows").toArray();
@@ -198,7 +217,7 @@ void startupProjectContract()
             projectFlow.insert("nodes", projectNodes);
             projectFlows[0] = projectFlow;
             document.insert("flows", projectFlows);
-            const auto warningPath = directory.filePath(QStringLiteral("越界 工程.vrt.json"));
+            const auto warningPath = directory.filePath(QStringLiteral("越界 工程.json"));
             QFile      warningProject(warningPath);
             require(
                 warningProject.open(QIODevice::WriteOnly) && warningProject.write(QJsonDocument(document).toJson()) > 0,

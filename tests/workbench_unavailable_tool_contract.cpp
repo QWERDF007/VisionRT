@@ -213,7 +213,7 @@ try
     require(library->property("selectedTool").toString() == QStringLiteral("RoiGeometry"),
             "tool was not chosen by click");
 
-    const auto savedPath = std::filesystem::path(installation.directory().toStdWString()) / "unavailable.vrt.json";
+    const auto savedPath = std::filesystem::path(installation.directory().toStdWString()) / "unavailable.json";
     require(controller.save(QString::fromStdWString(savedPath.wstring())), "project with unavailable tool was not saved");
     controller.requestOpen(QString::fromStdWString(savedPath.wstring()));
     require(QTest::qWaitFor([&] { return !controller.busy() && controller.nodes().size() == 4; }, 5000),

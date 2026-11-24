@@ -250,7 +250,7 @@ void pendingContract()
     app.resolveUnsaved(visionrt::UnsavedDecision::Cancel);
     require(closes == 0 && app.dirty(), "cancel changes project or closes");
     app.requestClose();
-    app.resolveUnsaved(visionrt::UnsavedDecision::Save, directory.path() + "/absent/project.vrt.json");
+    app.resolveUnsaved(visionrt::UnsavedDecision::Save, directory.path() + "/absent/project.json");
     require(closes == 0 && app.dirty(), "failed save permits close");
     app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return closes == 1; }, 2000), "discard does not finish pending close exactly once");
@@ -269,7 +269,7 @@ void pendingContract()
         saveApp.addFlow(QStringLiteral("流程2"));
         saveApp.requestClose();
         require(saveApp.dirty(), "edited project should be dirty");
-        const QString validSavePath = saveDir.path() + "/saved_on_close.vrt.json";
+        const QString validSavePath = saveDir.path() + "/saved_on_close.json";
         saveApp.resolveUnsaved(visionrt::UnsavedDecision::Save, validSavePath);
         require(QTest::qWaitFor([&] { return saveCloses == 1; }, 2000), "resolveUnsaved save did not complete close");
         require(QFile::exists(validSavePath), "resolveUnsaved save did not write file");
@@ -534,7 +534,7 @@ void nodeDiagnosticsContract()
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    QFile projectFile(directory.path() + "/initial.vrt.json");
+    QFile projectFile(directory.path() + "/initial.json");
     if (projectFile.open(QIODevice::WriteOnly))
     {
         projectFile.write(
@@ -635,7 +635,7 @@ void nodeDiagnosticsContract()
 })json");
         projectFile.close();
     }
-    app.requestOpen(directory.path() + "/initial.vrt.json");
+    app.requestOpen(directory.path() + "/initial.json");
     app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 3; }, 5000),
             "project with unfulfilled tool did not open");
@@ -1050,7 +1050,7 @@ void packageDrivenCatalogAndRefreshContract()
         indexFile.close();
     }
 
-    const QString projectFile = dirPath + "/test_project.vrt.json";
+    const QString projectFile = dirPath + "/test_project.json";
     {
         AppController app(1, dirPath);
         for (int i = 0; i < 50 && app.busy(); ++i)

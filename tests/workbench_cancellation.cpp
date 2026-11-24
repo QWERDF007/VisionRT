@@ -111,7 +111,7 @@ def tail(inputs):
     const auto    child  = editor.addNode(flow, *definitions.find(tail.nameEn), {2, 2});
     editor.bindFreeInput(flow, {parent, 2}, {child, 2});
     auto project = editor.project();
-    project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.vrt.json";
+    project.path = std::filesystem::path(root.toStdU16String()) / "cancellation.json";
     ProjectStorage(definitions).save(project);
     qmlRegisterType<ImageViewport>("VisionRT.View", 1, 0, "ImageViewport");
     {

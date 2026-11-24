@@ -116,7 +116,7 @@ try
 
     // S06: every other key survives a settings commit, because each writer merges its own keys.
     const QByteArray seeded = R"({"schema_version":1,
-        "recentProjects": [{"path": "F:/work/a.vrt.json"}],
+        "recentProjects": [{"path": "F:/work/a.json"}],
         "interaction": {"easyTouchEnabled": false},
         "future": {"kept": 7}
     })";

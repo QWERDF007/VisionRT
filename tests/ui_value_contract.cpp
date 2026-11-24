@@ -251,7 +251,7 @@ try
     const auto values = QJsonDocument::fromJson(OutputModel::fullText(*outputs->capture(3)).toUtf8()).array();
     require(values[0].toArray()[0].toInteger() == 9007199254740993LL && values[1].toArray().isEmpty(),
             "workbench lost nested native output values");
-    const auto projectPath = directory.path() + "/project.vrt.json";
+    const auto projectPath = directory.path() + "/project.json";
     require(app.save(projectPath), "initial project save failed");
     idle();
     {

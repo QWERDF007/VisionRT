@@ -31,7 +31,7 @@ inline QString copyCableExample(const std::filesystem::path &source, const QStri
     const auto root = std::filesystem::path(installation.toStdWString());
     std::filesystem::create_directories((root / sample).parent_path());
     std::filesystem::copy(source / sample, root / sample, std::filesystem::copy_options::recursive);
-    const auto fileName = root / sample / std::filesystem::path(u8"识别线缆颜色.vrt.json");
+    const auto fileName = root / sample / std::filesystem::path(u8"识别线缆颜色.json");
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (!file.open(QIODevice::ReadOnly)) throw std::runtime_error("example could not be read");
     auto content = file.readAll();

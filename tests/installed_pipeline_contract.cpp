@@ -277,7 +277,7 @@ def execute(inputs):
     editor.bindFreeInput(flow, {before, 2}, {builtin, 1});
     ProjectStorage storage(registry);
     auto           project = editor.project();
-    project.path           = root / "pipeline.vrt.json";
+    project.path           = root / "pipeline.json";
     storage.save(project);
     auto reopened = storage.load(project.path);
     require(reopened.diagnostics.empty(), "Installed project reload diagnostics");

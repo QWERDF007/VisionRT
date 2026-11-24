@@ -8,7 +8,7 @@
 
 ## 训练
 
-训练配置与搜索区域见 [工程](识别线缆颜色.vrt.json)，参考图与模型见 [资产目录](识别线缆颜色.assets/training)。交互入口见 [参数页](../../../src/ui/qml/ParameterPanel.qml)、[训练记录](../../../src/ui/qml/ResultsTrainingRecords.qml)、[EasyTouch](../../../src/ui/AppControllerAssist.cpp)。
+训练配置与搜索区域见 [工程](识别线缆颜色.json)，参考图与模型见 [资产目录](识别线缆颜色.assets/training)。交互入口见 [参数页](../../../src/ui/qml/ParameterPanel.qml)、[训练记录](../../../src/ui/qml/ResultsTrainingRecords.qml)、[EasyTouch](../../../src/ui/AppControllerAssist.cpp)。
 
 训练、模型保存和发布见 [工作台接线](../../../src/ui/AppControllerTraining.cpp)、[资产准备](../../../src/ui/TrainingAssets.cpp)；真实操作验收见 [训练发布测试](../../../tests/workbench_training_publish_contract.cpp)。
 

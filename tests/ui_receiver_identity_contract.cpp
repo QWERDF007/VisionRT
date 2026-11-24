@@ -118,8 +118,8 @@ try
     editor.setInitParam("flow_1", target, ReceiveInitPorts::Timeout, std::int64_t{5000});
     ProjectStorage storage(registry);
     auto           project = editor.project();
-    const auto     input   = root + "/宽 ID 工程.vrt.json";
-    const auto     output  = root + "/已选择来源.vrt.json";
+    const auto     input   = root + "/宽 ID 工程.json";
+    const auto     output  = root + "/已选择来源.json";
     storage.save(project, std::filesystem::path(input.toStdU16String()));
     AppController app(2, root);
     const auto    idle = [&]
@@ -283,7 +283,7 @@ try
     flow.insert("nodes", nodes);
     flows[0] = flow;
     document.insert("flows", flows);
-    const auto legacyPath = root + "/待重新选择的来源.vrt.json";
+    const auto legacyPath = root + "/待重新选择的来源.json";
     QFile      legacy(legacyPath);
     const auto bytes = QJsonDocument(document).toJson();
     require(legacy.open(QIODevice::WriteOnly) && legacy.write(bytes) == bytes.size(),
@@ -345,7 +345,7 @@ try
                 && renamedChoice->property("displayText").toString().startsWith("已改名的来源-"),
             "source rename changed the receiver identity or left its selector label stale");
     run("17");
-    const auto renamedPath = root + "/改名后的稳定引用.vrt.json";
+    const auto renamedPath = root + "/改名后的稳定引用.json";
     require(app.save(renamedPath), "renamed receiver project save failed");
     const auto renamed = storage.load(std::filesystem::path(renamedPath.toStdU16String())).project;
     const auto &renamedReceiver = renamed.flows[0].nodes[0];

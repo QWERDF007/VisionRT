@@ -5,6 +5,7 @@
 - [任务账本](../WORKLOG.md)：实际进度、运行证据与后续入口。
 - [工作台训练](../tests/workbench_training_contract.cpp)、[训练发布](../tests/workbench_training_publish_contract.cpp)、[点选交互](../tests/workbench_assist_contract.cpp)、[随包示例](../tests/example_pipelines.cpp)。
 - [动态节点与事务](../tests/logic_node_execution_test.cpp)、[表达式工作台](../tests/workbench_expression_contract.cpp)。
+- [工程保存与重开](../tests/project_storage_contract.cpp)、[工程文件对话框](../tests/workbench_startup.cpp)、[示例另存](../tests/example_project_contract.cpp)、[随包示例检查](../tests/example_metadata_contract.cpp)、[发行示例检查](../tests/test_package_app.py)。
 
 ## 契约与核心模块
 

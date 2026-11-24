@@ -122,7 +122,7 @@ void popupSessionsContract()
     visionrt::testing::WorkbenchInstallation installation;
     visionrt::AppController                  app(1, installation.directory());
     require(QTest::qWaitFor([&] { return !app.busy(); }, 20000), "popup catalog did not become ready");
-    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
+    app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
     app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
     require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
             "popup contract could not open the real project");
@@ -270,7 +270,7 @@ void popupSessionsContract()
     // Reopening a project invalidates every captured context without touching the new graph.
     const auto openProject = [&]
     {
-        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.vrt.json"));
+        app.requestOpen(QStringLiteral(VISIONRT_SOURCE_DIR "/examples/04_扩展示例/01_Python图像统计/Python图像统计.json"));
         app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         require(QTest::qWaitFor([&] { return !app.busy() && app.nodes().size() == 5; }, 5000),
                 "cannot reopen popup project");

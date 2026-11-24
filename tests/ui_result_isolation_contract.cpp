@@ -115,7 +115,7 @@ def scalar(inputs):
         editor.setLiteral(flow, parent, kLevelInput, level);
         editor.setLiteral(flow, parent, kMarkerInput, (root + "/" + name + ".released").toStdString());
         auto project = editor.project();
-        project.path = std::filesystem::path((root + "/" + name + ".vrt.json").toStdU16String());
+        project.path = std::filesystem::path((root + "/" + name + ".json").toStdU16String());
         ProjectStorage(definitions).save(project);
     }
     bool forbidImages        = false;
@@ -145,7 +145,7 @@ def scalar(inputs):
     const auto scalarNode = QString::number(scalarId);
     const auto open       = [&](const char *name)
     {
-        app.requestOpen(root + "/" + name + ".vrt.json");
+        app.requestOpen(root + "/" + name + ".json");
         app.resolveUnsaved(visionrt::UnsavedDecision::Discard);
         idle();
         require(app.nodes().size() == 2, "isolation project did not load");

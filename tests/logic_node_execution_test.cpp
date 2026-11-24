@@ -428,7 +428,7 @@ void projectRoundtrip()
 
     ProjectStorage storage(registry);
     auto           project = editor.project();
-    const auto     path    = std::filesystem::path(directory.path().toUtf8().toStdString()) / "models.vrt.json";
+    const auto     path    = std::filesystem::path(directory.path().toUtf8().toStdString()) / "models.json";
     storage.save(project, path);
     const auto loaded = storage.load(path);
     for (const auto &diagnostic : loaded.diagnostics)

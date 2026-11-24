@@ -146,14 +146,14 @@ void candidateAndRawPreservation(const QString &directory)
 {
     ToolRegistry   registry;
     ProjectStorage storage(registry);
-    const auto     source = directory + "/缺失.vrt.json";
+    const auto     source = directory + "/缺失.json";
     put(source, QJsonDocument(savedProject({savedNode()})).toJson());
     auto loaded = storage.load(path(source));
     require(!loaded.project.dirty && has(loaded.diagnostics, ProjectStorageCode::DefinitionMissing),
             "missing node was not retained cleanly");
     require(has(loaded.diagnostics, ProjectStorageCode::Cycle), "loaded cycle not diagnosed");
     loaded.project.flows[0].nodes[0].alias = "可编辑备注";
-    const auto saved                       = directory + "/保留.vrt.json";
+    const auto saved                       = directory + "/保留.json";
     storage.save(loaded.project, path(saved));
     const auto root = QJsonDocument::fromJson(get(saved)).object();
     const auto raw  = root.value("flows").toArray()[0].toObject().value("nodes").toArray()[0].toObject();
@@ -170,7 +170,7 @@ void candidateAndRawPreservation(const QString &directory)
     bool failed          = false;
     try
     {
-        storage.save(loaded.project, path(directory + "/absent/failed.vrt.json"));
+        storage.save(loaded.project, path(directory + "/absent/failed.json"));
     }
     catch (const std::exception &)
     {
@@ -185,7 +185,7 @@ void candidateAndRawPreservation(const QString &directory)
     duplicate.inputs.at(1).source = SourcePort{9, 2};
     copied.flows[0].nodes.push_back(std::move(duplicate));
     copied.nextNodeId = 10;
-    storage.save(copied, path(directory + "/copied.vrt.json"));
+    storage.save(copied, path(directory + "/copied.json"));
     const auto reopened = storage.load(copied.path);
     require(reopened.project.flows[0].nodes[1].id == 9
                 && reopened.project.flows[0].nodes[1].inputs.at(1).source->node == 9
@@ -228,7 +228,7 @@ void reconciliationAndIdentities(const QString &directory)
     const auto   tool = scalarTool();
     registry.addDefinition(tool);
     ProjectStorage storage(registry);
-    const auto     file     = directory + "/reconcile.vrt.json";
+    const auto     file     = directory + "/reconcile.json";
     const auto     document = savedProject({savedNode()}, "1", "1");
     put(file, QJsonDocument(document).toJson());
     auto        recovered = storage.load(path(file));
@@ -346,7 +346,7 @@ void typedArraysAndRanges(const QString &directory)
     tool.inputs[0].defaultValue = Missing{};
     ToolRegistry registry;
     registry.addDefinition(tool);
-    const auto file = directory + "/array.vrt.json";
+    const auto file = directory + "/array.json";
     put(file, QJsonDocument(savedProject({node})).toJson());
     const auto  changed = ProjectStorage(registry).load(path(file));
     const auto &retyped = changed.project.flows[0].nodes[0].inputs.at(1).literal;
@@ -457,14 +457,14 @@ void saveAsPaths(const QString &directory)
     project.nextNodeId = 1;
     require(QDir().mkpath(oldDirectory) && QDir().mkpath(newDirectory), "cannot create save-as directories");
     storage.save(project, path(oldDirectory + "/首次"));
-    require(project.path.filename() == std::filesystem::path(u8"首次.vrt.json") && !project.dirty,
+    require(project.path.filename() == std::filesystem::path(u8"首次.json") && !project.dirty,
             "first save did not append extension or clear dirty");
     require(std::get<std::string>(project.flows[0].nodes[0].inputs.at(1).literal) == "图像/不存在.png",
             "unnamed relative path was resolved using a fabricated old directory");
     require(std::get<std::string>(project.flows[0].nodes[0].inputs.at(5).literal) == absolutePath,
             "unnamed project guessed a relative base for an absolute path");
     project.dirty = true;
-    storage.save(project, path(newDirectory + "/另存.vrt.json"));
+    storage.save(project, path(newDirectory + "/另存.json"));
     const auto &saved = project.flows[0].nodes[0];
     // Save As keeps every literal exactly as the user entered it: a path is interpreted by the tool
     // against the product directory, so moving the project never rewrites one.
@@ -489,7 +489,7 @@ void saveAsPaths(const QString &directory)
     bool failed        = false;
     try
     {
-        storage.save(project, path(directory + "/not-created/failed.vrt.json"));
+        storage.save(project, path(directory + "/not-created/failed.json"));
     }
     catch (const std::exception &)
     {
@@ -573,8 +573,8 @@ void retiredInitialization(const QString &directory)
                    {     "inputs",                                                                         QJsonArray{}},
                    {    "outputs",         QJsonArray{savedType(2, QJsonObject{{"type", static_cast<int>(Type::Int)}})}}
     });
-    const auto input  = directory + "/retired.vrt.json";
-    const auto output = directory + "/retained.vrt.json";
+    const auto input  = directory + "/retired.json";
+    const auto output = directory + "/retained.json";
     put(input, QJsonDocument(savedProject({raw}, "9007199254740994")).toJson());
     ToolRegistry registry;
     registry.addDefinition(tool);
@@ -624,7 +624,7 @@ void retiredInitialization(const QString &directory)
     ProjectEditor editor(reconciled.project);
     editor.copyFlow("flow_1");
     auto       copied     = editor.project();
-    const auto copiedPath = directory + "/copied-retained.vrt.json";
+    const auto copiedPath = directory + "/copied-retained.json";
     storage.save(copied, path(copiedPath));
     const auto copiedProject = storage.load(path(copiedPath)).project;
     require(
@@ -633,8 +633,8 @@ void retiredInitialization(const QString &directory)
         "copying a flow lost opaque initialization metadata");
     auto relocated = reloaded.project;
     require(QDir().mkpath(directory + "/迁移"), "cannot create retired-parameter relocation directory");
-    storage.save(relocated, path(directory + "/迁移/retained.vrt.json"));
-    const auto movedNode = QJsonDocument::fromJson(get(directory + "/迁移/retained.vrt.json"))
+    storage.save(relocated, path(directory + "/迁移/retained.json"));
+    const auto movedNode = QJsonDocument::fromJson(get(directory + "/迁移/retained.json"))
                                .object()["flows"]
                                .toArray()[0]
                                .toObject()["nodes"]
@@ -668,7 +668,7 @@ void wideIdsAndCycleMembership(const QString &directory)
 {
     ToolRegistry   registry;
     ProjectStorage storage(registry);
-    const auto     file = directory + "/wide.vrt.json";
+    const auto     file = directory + "/wide.json";
     for (const auto &id : {QString("0"), QString("1"), QString("9007199254740993"), QString("18446744073709551615")})
     {
         const auto next = id == "18446744073709551615" ? id : QString::number(id.toULongLong() + 1);
@@ -728,7 +728,7 @@ void dormantLiteralSources(const QString &directory)
     binding.literal = std::int64_t{42};
     binding.source  = SourcePort{pA, 2}; // If upstream, this would violate Y < Y
 
-    const auto filePath = std::filesystem::path((directory + "/dormant_literal.vrt.json").toStdString());
+    const auto filePath = std::filesystem::path((directory + "/dormant_literal.json").toStdString());
     ProjectStorage(registry).save(project, filePath);
 
     const auto loaded                 = ProjectStorage(registry).load(filePath);
@@ -752,7 +752,7 @@ void canonicalSequences(const QString &directory)
 {
     ToolRegistry   registry;
     ProjectStorage storage(registry);
-    const auto     file = directory + "/非规范序号.vrt.json";
+    const auto     file = directory + "/非规范序号.json";
     for (const auto &field :
          {QString("node_seq"), QString("next_node_seq"), QString("next_flow_seq"), QString("source.node_seq")})
         for (const auto &value :
@@ -776,7 +776,7 @@ void canonicalSequences(const QString &directory)
             catch (const ContractError &error)
             {
                 const auto message = QString::fromUtf8(error.what());
-                require(message.contains(field) && message.contains("非规范序号.vrt.json"),
+                require(message.contains(field) && message.contains("非规范序号.json"),
                         "sequence rejection lost the project file or field context");
                 rejected = true;
             }
@@ -835,7 +835,7 @@ void toolUpdatesCutIncompatibleWires(const QString &directory)
         {     "inputs", QJsonArray{savedType(1, ValueJson::encodeType({Type::Int}))}},
         {    "outputs", QJsonArray{savedType(2, ValueJson::encodeType({Type::Int}))}}
     };
-    const auto file = directory + "/tool-update.vrt.json";
+    const auto file = directory + "/tool-update.json";
     const auto project
         = savedProject({node("7", "unavailable", "上游", "1.0.0", 0, sourceSnapshot, QJsonArray{}),
                         node("8", "sink", "下游", "1.0.0", 1, sinkSnapshot, QJsonArray{savedInput(1, "7")})},
@@ -1027,7 +1027,7 @@ void trainingAssets(const QString &directory)
     require(editor.setLiteralWrites("flow_1", nodeId, writes, [&] { return revision; }),
             "the revision reference was not stored");
 
-    const auto file    = directory + "/assets.vrt.json";
+    const auto file    = directory + "/assets.json";
     auto       project = editor.project();
     ProjectStorage(registry).save(project, path(file));
     const auto saved  = QJsonDocument::fromJson(get(file)).object();

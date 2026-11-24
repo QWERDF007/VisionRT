@@ -30,6 +30,26 @@
 - ...
 -->
 
+### 2026-11-24 — 工程文件统一使用 JSON 后缀
+
+**目标**
+- 工程文件统一为“识别线缆颜色.json”格式，同步默认保存、打开与示例筛选、随包工程及引用。
+
+**当前状态**
+- 默认保存只补 .json；三个工程对话框共用同一筛选定义。11 个随包工程已改名，源码、测试、发行入口和文档引用同步；训练资产目录不变。
+- 示例校验只读取分类下的工程文件，不将训练资产中的 JSON 清单和像素文件当成工程。已重建 build/bin/VisionRT.exe 并同步默认目录的示例。
+- 全部改动及默认程序截图验收完成，已纳入本次提交；提交身份以 Git 历史为准，尚未推送。
+
+**验证证据**
+- project_storage_contract 先因默认补旧后缀失败，改动后通过，见 build/project-json-save-red.log、project-json-save-green.log；真实 QML 对话框及发行扫描测试也先失败，见 build/project-json-dialog-red.log、project-json-package-red.log。
+- `tools/build.cmd cmake --build build --config Release --target VisionRT project_storage_contract workbench_contract example_project_contract example_metadata_contract example_pipelines_contract workbench_training_publish_contract training_session_contract` 通过，见 build/project-json-final-build.log；`python -B tests/test_package_app.py ExampleProjectsContract InstallationContract -v` 的发行与安装 14 项测试通过，见 build/project-json-package-final.log。
+- `ctest --test-dir build -C Release --tests-from-file build/project-json-selection.txt --timeout 60 --output-on-failure` 的八项回归已全部验证通过，覆盖保存重开、示例元数据、训练资产、发布、示例另存、真实对话框、路径选择和流程执行。该批使用 QSG_RENDER_LOOP=basic，其中路径选择器首次未显示 Unicode 夹具，恢复默认渲染后独立重试通过；证据分别为 build/project-json-final-tests.log、build/project-json-paths-retry.log 及对应 JUnit。此前默认启动回归卡在 Qt 渲染等待，调试栈见 build/project-json-dialog-passive-stack.log。
+- 11 个改名工程的 Git 内容哈希与改名前 HEAD 一致；build/bin/examples 中的 11 个工程与源码 SHA256 一致，旧文件名为零。源码、测试、工具与当前文档的旧后缀检索为零，差异检查通过。
+- 默认 VisionRT.exe 使用新的随包“识别线缆颜色.json”打开、执行并截图，以 0 退出，见 build/project-json-smoke.log；已检查 build/evidence/project-json-workbench.png，线缆图像、三个工具执行和运行成功状态正常。
+
+**下一步**
+- 验收使用 build/bin/VisionRT.exe；实现及测试入口见 docs/README.md，AOCI 对齐以本轮 terminal_proof 为准。
+
 ### 2026-11-23 — 汇总提交现有改动
 
 **目标**

@@ -1034,7 +1034,7 @@ ProjectLoadResult ProjectStorage::reconcile(const ProjectDefinition &project) co
 std::filesystem::path projectDestination(std::filesystem::path destination)
 {
     if (!destination.has_extension())
-        destination += ".vrt.json";
+        destination += ".json";
     // Load accepts any casing of the suffix, so save has to accept the same spellings.
     if (qtPath(destination.extension()).toLower() != ".json")
         invalid("工程保存路径必须使用 .json 扩展名：" + utf8Path(destination));

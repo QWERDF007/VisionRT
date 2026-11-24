@@ -163,7 +163,7 @@ try
             auto       project = editor.project();
             const auto density = dense ? "dense" : "sparse";
             const auto projectPath
-                = output.parent_path() / ("routing-" + std::to_string(count) + "-" + density + ".vrt.json");
+                = output.parent_path() / ("routing-" + std::to_string(count) + "-" + density + ".json");
             ProjectStorage(registry).save(project, projectPath);
             const auto targetId = QString::number(ids.back());
             app.requestOpen(QString::fromStdU16String(projectPath.u16string()));

@@ -188,7 +188,7 @@ class Gate:
     require(captured.has_value(), "lifecycle image output was not captured");
     require(std::holds_alternative<DataRef<Image>>(captured->value), "captured value is not DataRef<Image>");
 
-    require(app.save(root + "/lifecycle.vrt.json"), "lifecycle project could not be saved");
+    require(app.save(root + "/lifecycle.json"), "lifecycle project could not be saved");
     require(QTest::qWaitFor([&] { return !app.busy() && !app.dirty(); }, 5000),
             "lifecycle project did not become clean");
 
@@ -203,9 +203,9 @@ class Gate:
     require(app.isClosing(), "app must report isClosing() while in AwaitOwners");
     const int constructsBeforeSave = countPrefix("construct:");
     const int initsBeforeSave = countPrefix("initialize:");
-    const bool directSaveResult = app.save(root + "/illegal_save.vrt.json");
+    const bool directSaveResult = app.save(root + "/illegal_save.json");
     require(!directSaveResult, "app.save() with path must be rejected during AwaitOwners");
-    require(!QFile::exists(root + "/illegal_save.vrt.json"), "save during AwaitOwners must not create file");
+    require(!QFile::exists(root + "/illegal_save.json"), "save during AwaitOwners must not create file");
 
     const bool emptySaveResult = app.save();
     require(!emptySaveResult, "app.save() without path must be rejected during AwaitOwners");

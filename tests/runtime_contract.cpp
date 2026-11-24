@@ -1121,7 +1121,7 @@ void singleReceiverResolvesAllValueTypes(const std::filesystem::path &toolsRoot)
         QTemporaryDir temporary;
         assert(temporary.isValid());
         auto project = editor.project();
-        const auto file = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / std::filesystem::path(u8"工程.vrt.json");
+        const auto file = std::filesystem::u8path(temporary.path().toUtf8().toStdString()) / std::filesystem::path(u8"工程.json");
         storage.save(project, file);
         const auto loaded = storage.load(file);
         for (const auto &d : loaded.diagnostics) std::cerr << "DIAG " << d.message << "\n";

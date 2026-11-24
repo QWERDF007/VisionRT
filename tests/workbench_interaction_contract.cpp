@@ -62,7 +62,7 @@ try
     const auto                     directory  = QFileInfo(script).absolutePath();
     const auto                     permission = directory + "/allow";
     const auto                     entered    = directory + "/entered";
-    const auto                     saveTarget = directory + "/interaction.vrt.json";
+    const auto                     saveTarget = directory + "/interaction.json";
     const auto write = [](const QString &path, const QByteArray &bytes)
     {
         require(QDir().mkpath(QFileInfo(path).absolutePath()), "interaction fixture parent unavailable");

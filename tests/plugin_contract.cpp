@@ -386,7 +386,7 @@ void cppFunctionLifecycleAndNodeRuntime(const std::filesystem::path &modulePath)
     finish(engine);
     assert(initializeCount() == initializations + 2);
 
-    project.path = modulePath.parent_path() / "managed.vrt.json";
+    project.path = modulePath.parent_path() / "managed.json";
     assert(engine.requestSynchronize(project, registry));
     // Only the project location changed: no plugin instance configuration depends on it, so the
     // request is a no-op and publishes no completion. The instances stay exactly as they were.
@@ -825,7 +825,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.nodes().size() == 1 && instances() == 1);
     app.selectNode(nodeAId);
-    const auto saved = temp.filePath("node-lifecycle.vrt.json");
+    const auto saved = temp.filePath("node-lifecycle.json");
     assert(app.save(saved));
     waitForIdle();
     app.requestNew();
@@ -1087,7 +1087,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     waitForIdle();
     assert(app.nodes().first().toMap().value("state").toInt() == static_cast<int>(NodeState::Succeeded));
     assert(QDir(temp.path()).mkpath("moved"));
-    assert(app.save(temp.filePath("moved/lifecycle.vrt.json")));
+    assert(app.save(temp.filePath("moved/lifecycle.json")));
     waitForIdle();
     const auto released = app.nodes().first().toMap();
     assert(released.value("state").toInt() == static_cast<int>(NodeState::Succeeded) && released.value("statusCode").toInt() == 0);
@@ -1104,7 +1104,7 @@ void appControllerToolsPackageIntegration(const std::filesystem::path &modulePat
     }
     assert(app.diagnostics().size() == reported);
     assert(QDir(temp.path()).mkpath("again"));
-    assert(app.save(temp.filePath("again/lifecycle.vrt.json")));
+    assert(app.save(temp.filePath("again/lifecycle.json")));
     waitForIdle();
     assert(app.diagnostics().size() == reported);
     const auto applicationLog = QJsonDocument::fromJson(app.diagnosticsJson().toUtf8()).array();

@@ -45,7 +45,7 @@ try
     app.requestOpen(source);
     app.resolveUnsaved(UnsavedDecision::Discard);
     settle();
-    const auto saved = installation.directory() + "/working/project.vrt.json";
+    const auto saved = installation.directory() + "/working/project.json";
     require(app.save(saved), "example and model assets could not be saved as a working project");
     settle();
     app.runOnce();

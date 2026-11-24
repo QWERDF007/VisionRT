@@ -27,6 +27,7 @@ ApplicationWindow {
     property real leftRatio: 0.362
     property real libraryRatio: 0.38
     property real resultsRatio: 0.59
+    readonly property list<string> projectNameFilters: ["VisionRT 工程 (*.json)"]
 
     function localPath(url) {
         let text = decodeURIComponent(url.toString());
@@ -526,13 +527,13 @@ ApplicationWindow {
     FileDialog {
         id: openFile
         title: "打开工程"
-        nameFilters: ["VisionRT JSON 工程 (*.vrt.json *.json)"]
+        nameFilters: window.projectNameFilters
         onAccepted: app.requestOpen(window.localPath(selectedFile))
     }
     FileDialog {
         id: exampleFile
         title: "打开示例"
-        nameFilters: ["VisionRT 工程 (*.vrt.json)"]
+        nameFilters: window.projectNameFilters
         onAccepted: app.requestOpen(window.localPath(selectedFile))
     }
     WorkbenchDialog {
@@ -557,8 +558,8 @@ ApplicationWindow {
         id: saveFile
         title: "保存工程"
         fileMode: FileDialog.SaveFile
-        nameFilters: ["VisionRT JSON 工程 (*.vrt.json)"]
-        defaultSuffix: "vrt.json"
+        nameFilters: window.projectNameFilters
+        defaultSuffix: "json"
         onAccepted: {
             if (window.unsavedSaving)
                 app.resolveUnsaved(UnsavedDecision.Save, window.localPath(selectedFile));

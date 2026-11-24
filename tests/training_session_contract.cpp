@@ -223,7 +223,7 @@ int main(int argc, char **argv)
         try
         {
             ToolRegistry registry;
-            training::SaveAssets assets(bundle, copyRoot / L"project.vrt.json", registry);
+            training::SaveAssets assets(bundle, copyRoot / L"project.json", registry);
         }
         catch (const std::exception &)
         {
